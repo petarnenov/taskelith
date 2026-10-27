@@ -21,4 +21,4 @@
 - [x] 4.2 `npm run openspec -- validate back-off-relaunch-after-pre-w2-failure --strict`, archive in a scratch copy
 - [x] 4.3 `make verify`
 - [x] 4.4 Independent review: pass 1, one Low fixed unreviewed (`a6241671`, `d8a3a535`)
-- [ ] 4.5 Archive under worker step 7
+- [x] 4.5 Archive under worker step 7

@@ -1,10 +1,10 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, `make verify`, and review pass 1 are recorded below; the archive is pending.
+Date: 2026-10-27. The author's verification, `make verify`, review pass 1, and the archive checks are recorded below.
 
 ## Scope and source
 
-Defect found by Zaki in task 24c and briefed by the coordinator, Niki: a worker launch that fails before W2, such as on an unreadable deadline clock, is relaunched at once in a loop of microtasks that starves the event loop. On 2026-10-27, while the task was in progress, Niki widened the scope to a W2 commit that fails and rolls back, which ended the launch the same way; the section 7 rules for a W2 commit refused for space and for one that stops the journal stay as they were. The task was developed in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)) in worktree `taskelith-worktrees/back-off-relaunch-after-pre-w2-failure` on branch `back-off-relaunch-after-pre-w2-failure`.
+Defect found by Zaki in task 24c and briefed by the coordinator, Niki: a worker launch that fails before W2, such as on an unreadable deadline clock, is relaunched at once in a loop of microtasks that starves the event loop. On 2026-10-27, while the task was in progress, Niki widened the scope to a W2 commit that fails and rolls back, which ended the launch the same way; the section 7 rules for a W2 commit refused for space and for one that stops the journal stay as they were. The task was developed in a briefed subagent ([subagent execution](../../../../docs/agent-task-protocol.md#subagent-execution)) in worktree `taskelith-worktrees/back-off-relaunch-after-pre-w2-failure` on branch `back-off-relaunch-after-pre-w2-failure`.
 
 - **Base revision:** `9c0c1706` (`origin/dev`, merge of pull request #334).
 - **Revisions, first scope:** contract and spec delta `84d88e52`, failing tests `c88325d8`, fix `cb450d6d`, record `5b4e22b2`, which also worded the first scenario's last clause precisely.
@@ -104,7 +104,7 @@ The reviewer concluded that every path before W2 defers and nothing after W2 cha
 
 - **Low 1 (fixed, UNREVIEWED, test `a6241671`, fix `d8a3a535`):** `Launch.run` deferred a `#nextExecution` failure even when the journal read found the journal stopped, so a launch on a stopped journal logged a deferral every back-off until the worker stopped, while a W2 commit that stops the journal ends the launch. `run` now ends the launch when `isJournalStop` holds for the failure (`launch-orchestrator.ts:468`). The requirement's exception reads "unless the commit was refused for space or the failure stopped the journal" (433 characters) with a new scenario, "Journal stopped at a read"; worker journal contract sections 5 (`:118`) and 13 (`:216`) and design D3, D5, and the risks say the same. Test `a journal read before W2 that finds the journal stopped ends the launch without a deferral` (`launch-orchestrator.test.ts:483`): at `a6241671`, after `npm run build`, it failed with deferrals `3` against `0` (55 tests, 54 pass, 1 fail); after the fix and a rebuild the worker suite passes (250 tests, 248 pass, 0 fail, 2 skipped). The worker journal adapter (97 tests) and `@taskelith/execution` (158 tests) pass; `npm run build`, `npm run check:boundaries`, `npm run verify:comments`, and `npm run openspec -- validate back-off-relaunch-after-pre-w2-failure --strict` pass.
 
-The pass had only a Low finding, so under the [independent review process](../../../docs/governance.md#independent-review-process) it was fixed without another pass, and the fix is unreviewed. The task was briefed before pull request #340 (alternate reviewers per pass) landed, so it finishes under the one-reviewer rule (coordinator, Niki, 2026-10-27).
+The pass had only a Low finding, so under the [independent review process](../../../../docs/governance.md#independent-review-process) it was fixed without another pass, and the fix is unreviewed. The task was briefed before pull request #340 (alternate reviewers per pass) landed, so it finishes under the one-reviewer rule (coordinator, Niki, 2026-10-27).
 
 ## Limitations
 
@@ -113,7 +113,19 @@ The pass had only a Low finding, so under the [independent review process](../..
 - The back-off has no limit on the number of tries, as the authorization retries have none; its upper bound is the 60 s delay, and a cancellation or a stop ends it.
 - A W2 commit that keeps failing on a precondition, which no runtime path should produce, keeps the launch registered and retrying at most every 60 s; while it lives the orchestrator does not reconcile the intent's executions (design, risks).
 
+## Archive checks
+
+Checked state: the tree of the archive commit, `docs: archive the back-off-relaunch-after-pre-w2-failure change`, on top of `e0cc47b6` (after the merge of `origin/dev` `d3e9e636`), with every task ticked.
+
+- `npm run openspec -- archive back-off-relaunch-after-pre-w2-failure --yes`: `worker-runtime` gained 1 requirement (`Totals: + 1, ~ 0, - 0, → 0`); the change moved to `openspec/changes/archive/2026-10-27-back-off-relaunch-after-pre-w2-failure`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-back-off-relaunch-after-pre-w2-failure`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only the added requirement "Launch failure before W2 commits" in `openspec/specs/worker-runtime/spec.md` (27 lines added).
+- The archived change holds `findings.jsonl` (1 finding); `make findings ARGS="validate"`: "Every findings file is valid: 18 file(s)."
+- `npm run verify:comments`: "Every comment is within the comment length rule."
+- The two relative links of this file were deepened by one level for the archive directory.
+- `make verify` on this tree, 2026-10-27 11:02:54–11:05:42 UTC, exit 0, with `DOCKER_CONFIG` pointed at a scratch directory holding an empty `config.json` (Docker Desktop's credential helper hangs on this host; anonymous pulls of the pinned public images, no credentials read): 2091 tests, 2089 passed, 0 failed, 2 skipped; coverage 99.29% lines, 92.10% branches, 99.00% functions; 0 breaking changes in all four contract documents against `d3e9e636de5f`, "Contract documents have no undeclared breaking change."; "Verified 731 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)"; OpenSpec `Totals: 69 passed, 0 failed (69 items)`; "No active OpenSpec change; nothing to archive."; "Every findings file is valid: 18 file(s)."; "Every comment is within the comment length rule."; "Packed file allowlist and installed CLI verification passed."
+
 ## Remaining gates
 
-- Archive under worker step 7.
 - Integration into `dev` by the coordinator (single pull request).
