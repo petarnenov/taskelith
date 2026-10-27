@@ -1,0 +1,1 @@
+{"change": "stop-placement-pass-at-fleet-decline", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/kimi-k3.1-pro", "variant": "high"}, "session": "ses_e829d343fffey5N1BJbRlYhcC3", "counts": {"critical": 0, "high": 0, "medium": 1, "low": 3}}
