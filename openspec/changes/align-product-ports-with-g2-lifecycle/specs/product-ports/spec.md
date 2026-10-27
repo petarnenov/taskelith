@@ -27,18 +27,18 @@ When every stage of a card's run has completed, the card SHALL show as its curre
 - **THEN** the card moves to that stage's column
 
 ### Requirement: Merge readiness by passed stages
-A card SHALL be merge-ready only when every stage before its Close stage has completed and has at least one gate with every gate passed at the current head; without a merge request or after a withdrawal, the merge gate SHALL follow the current readiness, showing not-ready when not merge-ready, and otherwise withdrawn, awaiting-manual-merge, or ready as the contract maps them.
+A card SHALL be merge-ready only when every stage other than its Close stage and the stages depending on it has completed and has at least one gate with every gate passed at the current head; without a merge request or after a withdrawal, the merge gate SHALL follow the current readiness, showing not-ready when not merge-ready, and otherwise withdrawn, awaiting-manual-merge, or ready as the contract maps them.
 
 #### Scenario: Stage without a gate
-- **WHEN** a stage before the Close stage has no gate
+- **WHEN** a stage other than the Close stage that does not depend on it has no gate
 - **THEN** the card is not-ready and no merge request is enqueued
 
 #### Scenario: Gate stale after a manual-merge withdrawal
-- **WHEN** a request was withdrawn for manual-merge and a gate before the Close stage then goes stale
+- **WHEN** a request was withdrawn for manual-merge and a gate of a pre-merge stage then goes stale
 - **THEN** the card shows not-ready, not awaiting-manual-merge
 
 #### Scenario: Gate stale after an auto-merge-off withdrawal
-- **WHEN** a request was withdrawn for auto-merge-off and a gate before the Close stage then goes stale
+- **WHEN** a request was withdrawn for auto-merge-off and a gate of a pre-merge stage then goes stale
 - **THEN** the card shows not-ready until the stage passes again
 
 #### Scenario: Ready before enqueue
@@ -49,8 +49,28 @@ A card SHALL be merge-ready only when every stage before its Close stage has com
 - **WHEN** a merge-ready card's request for the current head was withdrawn for cancelled
 - **THEN** the card shows withdrawn
 
+#### Scenario: Stage after the closure stage in graph order
+- **WHEN** a stage that follows the Close stage in graph order and does not depend on it has not passed
+- **THEN** the card is not-ready
+
+#### Scenario: Re-queue at the same head
+- **WHEN** a merge-ready card with auto-merge on is enqueued at the head of a request withdrawn for gate-not-passed or auto-merge-off
+- **THEN** that request moves back to queued with its conflict attempts kept
+
+#### Scenario: Chosen withdrawal at the same head
+- **WHEN** a card is enqueued at the head of a request withdrawn for cancelled, manual-merge, or maintainer-withdrew
+- **THEN** the existing request is returned and stays withdrawn
+
 ### Requirement: Placement obstacle projection
 The card and its detail SHALL show why a task is not placed as the view's own value with a reason, a disposition waiting or rejected, a source, and the time it was observed, built from the fleet read, an automatic retry backing off, a worker refusal, and the task's placement outcome record, and SHALL show a waiting obstacle only for a task that waits for placement and a rejected one only at the ownership generation its attempt ended in; a standing reason SHALL never be shown.
+
+#### Scenario: Placed, not yet launched
+- **WHEN** a task's active attempt has an assignment with a held reservation and no execution yet, and the fleet is full
+- **THEN** the task shows no placement obstacle
+
+#### Scenario: Record of an earlier attempt
+- **WHEN** a task's waiting record names an attempt other than its active attempt
+- **THEN** the record is not shown
 
 #### Scenario: Cancelled while waiting
 - **WHEN** a task with a waiting placement outcome record is cancelled
@@ -77,7 +97,7 @@ The card and its detail SHALL show why a task is not placed as the view's own va
 - **THEN** the task shows no obstacle
 
 ### Requirement: Task end without merge
-A task whose last attempt ended without an automatic retry and that is not active SHALL show a task end of kind cancelled, rejected, retries-exhausted, or uncertain-exit with the attempt's outcome, a clean exit SHALL not be a task end, and a re-admission of the task SHALL clear its end.
+A task whose last attempt ended without an automatic retry and that is not active SHALL show a task end of kind cancelled, rejected, retries-exhausted, or uncertain-exit with the attempt's outcome, a clean exit, exit code 0 after a proven start, SHALL not be a task end, and a re-admission of the task SHALL clear its end.
 
 #### Scenario: Unknown exit
 - **WHEN** a task's attempt exits with an unknown status
@@ -132,6 +152,10 @@ A standing rule SHALL record its author, scope as a normalized operation, policy
 #### Scenario: Unclassified request
 - **WHEN** a native permission request cannot be classified into a normalized operation
 - **THEN** no standing rule answers it, and it waits in the inbox
+
+#### Scenario: Push in a run at another revision
+- **WHEN** auto-merge is on and a push request comes from an unclosed run whose current policy revision differs from the project's current one
+- **THEN** the auto-merge rule recorded at that run's revision answers it
 
 #### Scenario: Other policy revision
 - **WHEN** a rule's policy revision differs from the current policy revision of the request's run
