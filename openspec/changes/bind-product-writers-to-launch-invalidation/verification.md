@@ -81,6 +81,7 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 - Snapshot: `315688f150f02a0005f6830589aa9688281b2c7ebe7030b87cd01f1d46d3a1b2` before and after, unchanged.
 - Pass 1 fixes M1 to M4, L1, and L2: confirmed resolved.
 - Findings: critical 0, high 0, medium 4, low 7. All but M3 and L7 fixed in `d9589bdb`; L7 in `d1644fa4`; M3 in `12aa98e6`.
+- After the fixes, `make verify` on `e4cb4b0b`: exit 0; tests 2289, pass 2286, fail 0, skipped 3.
 
 | Finding | Resolution |
 | --- | --- |
@@ -105,8 +106,7 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 
 ## Remaining gates
 
-- Owner confirmation of the item 44 plan amendment
-- `make verify` after the review pass 2 fixes.
+- Owner confirmation of the item 44 plan amendment.
 - Independent review pass 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
