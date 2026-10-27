@@ -1,5 +1,6 @@
 import type { Instant } from '@taskelith/kernel';
 import type { ProjectId } from './capacity-reservation.js';
+import { byCodeUnits } from './code-unit-order.js';
 
 export interface WaitingPlacement<Item> {
   readonly projectId: ProjectId;
@@ -7,21 +8,36 @@ export interface WaitingPlacement<Item> {
   readonly item: Item;
 }
 
-// Round-robin across projects, oldest waiting first within each, so that one
-// project's retry loop cannot take every offer (contract section 5).
-export function fairPlacementOrder<Item>(waiting: readonly WaitingPlacement<Item>[]): readonly Item[] {
-  const byProject = new Map<ProjectId, WaitingPlacement<Item>[]>();
-  for (const entry of [...waiting].sort(byWaitingSince)) {
-    byProject.set(entry.projectId, [...(byProject.get(entry.projectId) ?? []), entry]);
-  }
-  const queues = [...byProject.values()];
-  const order: Item[] = [];
-  for (let round = 0; order.length < waiting.length; round++) {
-    for (const queue of queues) if (queue[round] !== undefined) order.push(queue[round]!.item);
-  }
-  return order;
+// The items of `fairWaitingOrder`, in the order capacity is offered.
+export function fairPlacementOrder<Item extends string>(
+  waiting: readonly WaitingPlacement<Item>[], after: ProjectId | undefined,
+): readonly Item[] {
+  return fairWaitingOrder(waiting, after).map((entry) => entry.item);
 }
 
-function byWaitingSince<Item>(left: WaitingPlacement<Item>, right: WaitingPlacement<Item>): number {
-  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince) || left.projectId.localeCompare(right.projectId);
+// Rounds of each project's next oldest task, each from the projects after
+// `after`, then wrapped, by id, as the waiting read (contract section 5).
+export function fairWaitingOrder<Item extends string>(
+  waiting: readonly WaitingPlacement<Item>[], after: ProjectId | undefined,
+): readonly WaitingPlacement<Item>[] {
+  const rank = ranksWithinProject(waiting);
+  const wrapped = (entry: WaitingPlacement<Item>) => (after !== undefined && byCodeUnits(entry.projectId, after) <= 0 ? 1 : 0);
+  return [...waiting].sort((left, right) => rank.get(left)! - rank.get(right)!
+    || wrapped(left) - wrapped(right) || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
+}
+
+function ranksWithinProject<Item extends string>(waiting: readonly WaitingPlacement<Item>[]): Map<WaitingPlacement<Item>, number> {
+  const ranks = new Map<WaitingPlacement<Item>, number>();
+  const counts = new Map<ProjectId, number>();
+  for (const entry of [...waiting].sort(byWaitingSince)) {
+    const rank = (counts.get(entry.projectId) ?? 0) + 1;
+    counts.set(entry.projectId, rank);
+    ranks.set(entry, rank);
+  }
+  return ranks;
+}
+
+function byWaitingSince<Item extends string>(left: WaitingPlacement<Item>, right: WaitingPlacement<Item>): number {
+  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince)
+    || byCodeUnits(left.projectId, right.projectId) || byCodeUnits(left.item, right.item);
 }

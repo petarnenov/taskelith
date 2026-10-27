@@ -4,11 +4,11 @@ import { checkGeneration, checkNextGeneration, type Generation, type TaskId } fr
 import type { Assignment } from '../domain/assignment.js';
 import type { ProjectId } from '../domain/capacity-reservation.js';
 import type { DelegationId, DelegationRecord } from '../domain/delegation-request.js';
-import type { WaitingPlacement } from '../domain/fair-order.js';
+import { fairWaitingOrder, type WaitingPlacement } from '../domain/fair-order.js';
 import type { DelegationRequests } from '../ports/delegation-requests.js';
 import type { PlacementQueue } from '../ports/placement-queue.js';
 import type { TaskLineage } from '../ports/task-lineage.js';
-import { byCodeUnits } from './in-memory-capacity.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
 
 // Reads the waiting tasks from task, lineage, and assignment stores, as the
 // database queue does with its query columns.
@@ -26,7 +26,7 @@ export class InMemoryPlacementQueue implements PlacementQueue {
   async waiting(limit: number, excluding: readonly TaskId[], after: ProjectId | undefined): Promise<readonly WaitingPlacement<TaskId>[]> {
     const excluded = new Set(excluding);
     const waiting = await this.#linkedWaiting((task) => !excluded.has(task.id));
-    return Object.freeze(rankedByProject(waiting, after).slice(0, limit));
+    return Object.freeze(fairWaitingOrder(waiting, after).slice(0, limit));
   }
 
   async stillWaiting(taskIds: readonly TaskId[]): Promise<readonly TaskId[]> {
@@ -49,26 +49,6 @@ export class InMemoryPlacementQueue implements PlacementQueue {
     const held = this.#assignments().some((assignment) => assignment.attemptId === attemptId && assignment.reservation.state === 'held');
     return placementNeed(task) !== undefined && !held;
   }
-}
-
-// As the database queue: each task's rank within its project, oldest first,
-// then the projects after `after` first, wrapping, order it before the limit.
-function rankedByProject(waiting: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): WaitingPlacement<TaskId>[] {
-  const ranks = new Map<WaitingPlacement<TaskId>, number>();
-  const counts = new Map<string, number>();
-  for (const entry of [...waiting].sort(byWaitingSince)) {
-    const rank = (counts.get(entry.projectId) ?? 0) + 1;
-    counts.set(entry.projectId, rank);
-    ranks.set(entry, rank);
-  }
-  const wrapped = (entry: WaitingPlacement<TaskId>) => (after !== undefined && byCodeUnits(entry.projectId, after) <= 0 ? 1 : 0);
-  return [...waiting].sort((left, right) => ranks.get(left)! - ranks.get(right)! || wrapped(left) - wrapped(right)
-    || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
-}
-
-function byWaitingSince(left: WaitingPlacement<TaskId>, right: WaitingPlacement<TaskId>): number {
-  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince)
-    || byCodeUnits(left.projectId, right.projectId) || byCodeUnits(left.item, right.item);
 }
 
 // Checks and writes without awaiting, so concurrent writers cannot both

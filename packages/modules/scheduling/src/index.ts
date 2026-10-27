@@ -164,7 +164,7 @@ export {
   type DelegationState,
   type DelegationValues,
 } from './domain/delegation-request.js';
-export { fairPlacementOrder, type WaitingPlacement } from './domain/fair-order.js';
+export { fairPlacementOrder, fairWaitingOrder, type WaitingPlacement } from './domain/fair-order.js';
 export { placementBackoff } from './domain/placement-backoff.js';
 export {
   decidePlacement,
