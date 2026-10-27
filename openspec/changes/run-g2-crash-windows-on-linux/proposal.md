@@ -9,7 +9,7 @@ The G2 crash window and duplicate delivery scenarios of item 24b (`run-g2-crash-
 - **Harness.** The scenarios run on macOS as before and on Linux only when those three settings are present, so a plain `make verify` on Linux still skips them, now with a reason that names the target. On Linux the harness passes the settings to the composed worker, the armed supervisor gets the containment parent as CP4 passes it, and the scripted child, which runs as the execution account, can reach its release file and append to the spawn and order traces.
 - **Linux expectations.** CP7 to CP9 expect the Linux rows of section 6: an empty containment ends the execution with an exit of unknown status (CP7, start unproven), and a populated one is adopted until it empties, then exits unknown (CP8 start unproven, CP9 start proven). Every other window keeps its outcome.
 - **Commit of a record.** The container has no git metadata, so the scenario recorder takes the commit from `TASKELITH_SCENARIO_COMMIT` when set, which the target reads from the checkout.
-- **Evidence.** `results.jsonl` of a run with seed `2776760789`. CP9 fails: after its unknown exit the control plane opens an automatic retry. It is recorded as candidate defect L1 for the coordinator's decision and not fixed here.
+- **Evidence.** `results.jsonl` of a run with seed `2776760789`. CP9 fails: after its unknown exit the control plane opens an automatic retry. It is recorded as candidate defect L1 and not fixed here; by the coordinator's decision CP9 on Linux is an expected failure matched on L1's signature, as 24b did for D1, until the separate change `stop-automatic-retry-of-unknown-exit` fixes L1 and removes it.
 
 ## Capabilities
 
@@ -23,4 +23,4 @@ None.
 
 ## Impact
 
-Tests of `apps/control-plane` (the scenario file, its composition, and the worker fixture), `packages/testing` (`TASKELITH_SCENARIO_COMMIT`), the Makefile, `scripts/linux-crash-windows.sh`, and `tools/linux-cgroup`. No product code, contract, OpenAPI, AsyncAPI, JSON schema, Compose file, or dependency changes. The commits use `test`, `build`, or `docs`.
+`docs/local-installation.md` gains the new target. Tests of `apps/control-plane` (the scenario file, its composition, and the worker fixture), `packages/testing` (`TASKELITH_SCENARIO_COMMIT`), the Makefile, `scripts/linux-crash-windows.sh`, and `tools/linux-cgroup`. No product code, contract, OpenAPI, AsyncAPI, JSON schema, Compose file, or dependency changes. The commits use `test`, `build`, or `docs`.

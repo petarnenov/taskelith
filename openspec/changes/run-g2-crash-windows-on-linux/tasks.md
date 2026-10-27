@@ -9,10 +9,12 @@
 
 - [x] 2.1 Share the cgroup layout of the Linux test image between `verify-linux-cgroup` and the crash windows
 - [x] 2.2 Add `make verify-linux-crash-windows`: the privileged image on the host network of its own services, out of `make verify`
+- [x] 2.3 Document the target in `docs/local-installation.md`, beside `make verify-linux-cgroup`
 
 ## 3. Records
 
 - [x] 3.1 Evidence run with seed `2776760789` into `results.jsonl`, `verification.md`, and an empty `findings.jsonl`
 - [x] 3.2 Record the CP9 failure as candidate defect L1 without a product fix
-- [x] 3.3 `make verify`, `make verify-linux-cgroup`, strict validation, and the comment check
-- [ ] 3.4 Independent review (Claude Code `claude-fable-5-1`)
+- [x] 3.3 Mark CP9 on Linux `expectFailure` on L1's signature (coordinator decision) and rerun the evidence
+- [x] 3.4 `make verify`, `make verify-linux-cgroup`, strict validation, and the comment check
+- [ ] 3.5 Independent review (Claude Code `claude-fable-5-1`)
