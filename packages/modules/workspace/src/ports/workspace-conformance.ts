@@ -199,8 +199,11 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
       const refused = await fixture.provider.prepare(request(fixture, atHead));
       expectReason(problems, 'unsafe task at a head', refused, 'forbidden', 'credential-out-of-scope');
       expectSame(problems, 'listed', await fixture.provider.list(), named.map(([text]) => text).sort());
-      expectSuccess(problems, 'remove', await fixture.provider.remove(attempt('../attempt')));
-      expectSame(problems, 'listed after removal', await fixture.provider.list(), ['..', 'a/b', 'a_b']);
+      const [first, ...rest] = named.map(([text]) => attempt(text));
+      expectSuccess(problems, `remove ${first}`, await fixture.provider.remove(first!));
+      expectSame(problems, 'listed after one removal', await fixture.provider.list(), ['..', 'a/b', 'a_b']);
+      for (const attemptId of rest) expectSuccess(problems, `remove ${attemptId}`, await fixture.provider.remove(attemptId));
+      expectSame(problems, 'listed after every removal', await fixture.provider.list(), []);
       expectSame(problems, 'leftovers', await fixture.leftovers(), []);
       return problems;
     },

@@ -6,7 +6,7 @@
 ## 2. Code and tests
 
 - [x] 2.1 Derive names in the `@taskelith/workspace` domain with a Node-free SHA-256, add `WORKSPACE_NAME_RULES`, and remove `unsafe-name`
-- [x] 2.2 Replace the suite's unsafe-name rows with the name derivation case, and make the test double derive its names, keep the attempt identifier in its record, and carry the two new defects
+- [x] 2.2 Replace the suite's unsafe-name rows with the name derivation case, and make the test double derive its names, keep the attempt identifier in its record, and carry the four new defects
 - [x] 2.3 Domain tests for the form, safety, determinism, Git branch validity, shared prefixes, and the digest, with a fail-before run on the pre-change code
 
 ## 3. Verification and review

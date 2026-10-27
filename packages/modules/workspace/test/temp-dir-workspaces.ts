@@ -144,6 +144,7 @@ export interface DoubleDefects {
   readonly acceptsMismatchedTree?: boolean;
   readonly namesBranchByRawTaskId?: boolean;
   readonly namesDirectoryByEncoding?: boolean;
+  readonly removesDigestOnlyNameWithDash?: boolean;
   readonly rejectsUnsafeNames?: boolean;
   readonly snapshotsCommit?: boolean;
   readonly snapshotsWithoutMetadata?: boolean;
@@ -230,7 +231,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   async remove(attemptId: AttemptId): Promise<Result<void>> {
-    const target = join(this.root, this.directoryName(attemptId));
+    const target = join(this.root, this.removalName(attemptId));
     if (!(await exists(target))) return ok(undefined);
     const current = await this.inspect(attemptId);
     if (!current.ok) return current;
@@ -385,6 +386,12 @@ export class TempDirWorkspaces implements WorkspaceProvider {
 
   directoryName(attemptId: AttemptId): string {
     return this.defects.namesDirectoryByEncoding ? percentEncoded(attemptId) : workspaceDirectoryName(attemptId);
+  }
+
+  // The defect writes a digest-only name as an empty prefix and a `-`.
+  private removalName(attemptId: AttemptId): string {
+    const name = this.directoryName(attemptId);
+    return this.defects.removesDigestOnlyNameWithDash && !name.includes('-') ? `-${name}` : name;
   }
 
   async checkoutOf(attemptId: AttemptId): Promise<Result<string>> {
@@ -593,7 +600,7 @@ function credential(credentialId: string, repositories: string[], permissions: s
 
 // A fresh data root with control records, a service, and the fixture.
 export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
-  const dataRoot = await mkdtemp(join(tmpdir(), 'taskelith-workspace-'));
+  const dataRoot = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-workspace-')));
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
     await writeFile(join(dataRoot, path), text);
