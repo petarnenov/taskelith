@@ -57,6 +57,6 @@
 
 ## 9. Follow-ups and records
 
-- [ ] 9.1 Complete "Follow-up changes": a proposed name, item, size, and findings for every deferred finding, and hand the list to the coordinator
-- [ ] 9.2 `npm run openspec -- validate revalidate-g3-foundations --strict`, `npm run verify:links`, `npm run verify:findings`, and `make verify`, recorded in `verification.md`
+- [x] 9.1 Complete "Follow-up changes": a proposed name, item, size, and findings for every deferred finding, and hand the list to the coordinator
+- [x] 9.2 `npm run openspec -- validate revalidate-g3-foundations --strict`, `npm run verify:links`, `npm run verify:findings`, and `make verify`, recorded in `verification.md`
 - [ ] 9.3 Archive under worker step 7, with the checks of the archived tree

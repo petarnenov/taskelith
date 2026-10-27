@@ -55,11 +55,13 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 | `align-account-pool-placement-baseline` | 5 | M | Pass 2 M3, L3, L4 |
 | `align-slot-credential-delivery` | 5 | M | Pass 2 M5, M6, M7, L6, L7, L8, L9. M7 depends on the `@taskelith/secrets` shape that `align-scm-port-with-g2-credentials` sets |
 | `align-git-workspace-with-execution-boundary` | 6 | L | Pass 1 H1, M1; pass 2 M1, L1, L2. Assigned to Liki |
-| `derive-workspace-names-from-task-ids` | 6 | To be sized by the coordinator | Pass 2 M2. Decision: encode the names (a readable prefix and a digest); the API does not restrict task identifiers |
+| `derive-workspace-names-from-task-ids` | 6 | S | Pass 2 M2. Decision: encode the names (a readable prefix and a digest); the API does not restrict task identifiers |
 | `align-scm-port-with-g2-credentials` | 7 | M | Pass 1 H1, M1, L1; pass 2 H1, M1, M2, L1. Assigned to Desi |
 | `bind-product-writers-to-launch-invalidation` | 8 | M | Pass 1 H1 (Medium after pass 2 M1); pass 2 M1. Links the re-admission of plan item 44 |
 | `align-product-ports-with-g2-lifecycle` | 8 | M | Pass 1 M1, M3, M4; pass 2 H1, M2 (parts b and c), M3, M4, M5, L1, L2. Depends on `record-placement-outcome`; to Desi |
 | `record-placement-outcome` | 8 | L | Pass 1 M2 (its G2 part); pass 2 M2 (part a). Scheduling and PostgreSQL |
+
+The summary per item and this list are complete and were handed to the coordinator, Niki, on 2026-10-27, who sized `derive-workspace-names-from-task-ids` as S.
 
 ## Independent review
 
@@ -272,6 +274,5 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 - `make verify` on the final records
 - Archive of this change, with the checks of the archived tree
-- Summary per item and follow-up list complete, handed to the coordinator
 - Integration into dev by the coordinator (single pull request)
 - Follow-up fixes land before any other G3 item starts
