@@ -12,15 +12,17 @@ Gate (step 0): the omission is a known limitation, not a decision. `openspec/cha
 
 ## Plan checklist
 
-From `make findings ARGS="checklist --capability native-worker-acceptance,linux-crash-windows --files Makefile,scripts/native-acceptance*,scripts/*crash*,docs/**acceptance**"`:
+The brief's checklist named the capability `linux-crash-windows`, which does not exist (the crash windows live in `g2-failure-scenarios`), and the glob `docs/**acceptance**`, which matches no document. After review pass 1 the checklist was run again with the real names: `make findings ARGS="checklist --capability native-worker-acceptance,g2-failure-scenarios --files Makefile,scripts/native-acceptance*,scripts/*crash*,docs/local-installation.md"`. Its output, with how this change meets each line:
 
-1. error-handling (2): a failure swallowed or misreported, for example a script that mounted secrets without checking their variable. Here: a not-applicable proof must neither fail the run nor hide a failed one; the failure line also lists it.
-2. contract-drift (1): the runner, the spec delta, and `docs/local-installation.md` must say the same.
-3. docs (1): the docs name the new proofs, the macOS report, `SKIP_PATTERN`, and `TASKELITH_ACCEPTANCE`.
-4. missing-fail-before-test (1): every new test is run on `bd6108d4` and fails there.
-5. process (1): OpenSpec change, empty `findings.jsonl` and `passes.jsonl` (the rule of `dev` since #343, merged here), conventional commits.
+1. error-handling (7), example "The file guard closed leftover installations without killing their processes": a not-applicable proof neither fails a run nor hides a failed one; the failure line also lists it, tested.
+2. docs (5), example "The design did not name the Linux-only skip or the scenario bounds": `docs/local-installation.md` and this design name the Linux-only proofs, the macOS report, `SKIP_PATTERN`, and `TASKELITH_ACCEPTANCE`.
+3. naming (4), example "The partition file bypassed journalOf, duplicated the control plane state check, and had its own delay": the Linux proofs reuse the macOS scenario names and `duplicate_pattern`.
+4. evidence-mismatch (3), example "The records said only verification.md and results.jsonl change after the evidence commit, though tasks.md changed too": every count and revision in `verification.md` is checked against the logs.
+5. concurrency-race (2), example "Scenario f took the first answer of a round, which a re-placement could give": the proofs run one after another, as every proof does.
+6. scope (2), example "Unused revokeWorker and ScenarioWorker.executions in the scenario helpers": only the runner, the target, the container script, the docs, and their tests change.
+7. test-flakiness (2), example "CrashingWorker.start and exited() had no bound": the new tests use stubs and the runner's 20 s bound.
 
-Record quality: docs (18), evidence-mismatch (16), stale-citation (10), spec-wording (9). Every count, result, and `file:line` in `verification.md` is checked against the tree and the logs.
+Record quality: docs (18), evidence-mismatch (16), stale-citation (10), spec-wording (9), contract-drift (4), process (2). Every count, result, and `file:line` in `verification.md` is checked against the tree and the logs; `findings.jsonl` and `passes.jsonl` follow the merged schemas.
 
 ## Risks
 

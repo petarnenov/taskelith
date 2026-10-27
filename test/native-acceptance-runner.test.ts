@@ -124,3 +124,17 @@ ENTRIES=linux main results.jsonl`);
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stderr, /every proof passed; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery; see /);
 });
+
+test('a failed run names its failed and its not-applicable proofs', () => {
+  const run = linuxEntry('Darwin', `tool() {
+  case "$1" in
+    seed) echo 7 ;;
+    platform) echo '{"entry":"linux-ubuntu-24.04-arm64"}' ;;
+  esac
+}
+prove() { failed_proofs="$failed_proofs $entry/$2"; }
+make_command=true
+ENTRIES=linux main results.jsonl`);
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /failed proofs: linux-ubuntu-24.04-arm64\/acceptance-worker-lifecycle .*; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery; see /);
+});
