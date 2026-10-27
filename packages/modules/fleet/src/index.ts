@@ -51,3 +51,19 @@ export type { EnrollmentClient } from './ports/enrollment-client.js';
 export type { FleetRegistry } from './ports/fleet-registry.js';
 export type { IdentifierSource } from './ports/identifier-source.js';
 export type { InstallationRecord, InstallationTable } from './ports/installation-records.js';
+export {
+  AUTHORITY_VALIDITY_DAYS,
+  SERVER_CERTIFICATE_BACKDATE_MILLISECONDS,
+  SERVER_CERTIFICATE_VALIDITY_DAYS,
+  authorityValidity,
+  hasExpired,
+  serverCertificateValidity,
+  type CertificateValidity,
+} from './domain/installation-certificates.js';
+export type {
+  AuthorityRequest,
+  CertificateIssuer,
+  IssuedCertificate,
+  ServerCertificateRequest,
+  ServerHost,
+} from './ports/certificate-issuer.js';
