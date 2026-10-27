@@ -54,7 +54,23 @@ After the fixes, on `77f8c2a3` with this record and the pass 1 lines of `finding
 - Tests of the findings tooling: `test/findings.test.ts` 19, the other three files unchanged in count, all passing.
 - `make verify`: exit 0. `npm run verify:findings`: `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).` `npm test`: 2118 tests, 2071 passed, 0 failed, 47 skipped; coverage of all files 99.22% lines, 92.06% branches, 98.86% functions. Contract compatibility: 0 breaking changes in each of the four documents. `validate --all --strict --no-interactive`: 70 passed, 0 failed. `verify:archive`, `verify:comments`, and `verify:package` passed.
 
-Next: pass 2 by reviewer B, a full, independent review that also checks the pass 1 fixes.
+### Pass 2 (reviewer B)
+
+Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, editing tools disallowed, on `3826ce09`, session `b9dd8328-a3f9-4019-8a8f-34bf26340389`, run by the coordinator:
+
+`claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`
+
+Model confirmation: the JSON `modelUsage` named only `claude-opus-5-5`. Read-only proof: the SHA-256 snapshot of all tracked and untracked files was the same before and after the pass. The pass confirmed both pass 1 fixes, which keep the outcome `fixed`. Result: 0 Critical, 0 High, 0 Medium, 5 Low, recorded in `findings.jsonl` and summarized in `passes.jsonl`. A Low-only pass ends the review under governance "Low findings are fixed", so there is no pass 3; the five fixes, in `b58d380c`, are unreviewed fixes with the outcome `fixed-unreviewed`:
+
+- Low, error-handling: an archived change with `passes.jsonl` but no `findings.jsonl` skipped the cross-file checks. A missing `findings.jsonl` beside `passes.jsonl` now counts as empty and the checks run; a new test in `test/findings.test.ts` fails before the fix and passes after it. `design.md` decisions 4 and 5, the "Pass summary consistency" requirement, and the protocol say so.
+- Low, contract-drift: the proposal and this record said the index and checklist commands were unchanged; they now say their output is unchanged and that they refuse to run on invalid or disagreeing pass summaries.
+- Low, docs: the protocol and the "Reviewer statistics" requirement now name misses of a pass without a record, which are counted apart.
+- Low, naming: `loadRepository` in `scripts/findings.ts` derives the missing files from the loaded records instead of listing the directories twice.
+- Low, naming: the record source type is `RecordSource`, and `validOutput` takes `changes`. The vocabulary has no clean-code category, so this finding and the previous one are recorded as `naming`.
+
+Requirement bodies after the fixes: "Review pass summaries" 445, "Pass summary consistency" 329, "Missed finding attribution" 318, "Reviewer statistics" 467, and "Review findings in the task flow" 416 characters.
+
+After the fixes, on `b58d380c` with this record and the pass 2 lines of `findings.jsonl` and `passes.jsonl`: `test/findings.test.ts` 20 tests, all passing; `make verify` exit 0, with `npm run verify:findings` `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).`, `npm test` 2119 tests, 2072 passed, 0 failed, 47 skipped, coverage of all files 99.22% lines, 92.09% branches, 98.86% functions, no undeclared breaking contract change, `validate --all --strict --no-interactive` 70 passed, 0 failed, and `verify:archive`, `verify:comments`, and `verify:package` passed.
 
 ## Limitations
 
@@ -62,7 +78,6 @@ Next: pass 2 by reviewer B, a full, independent review that also checks the pass
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B, pass 3 by reviewer A if needed, and their records in `passes.jsonl`, `findings.jsonl`, and this file.
 - Archive of the change by the worker (worker step 7).
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
