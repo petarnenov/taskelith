@@ -43,9 +43,15 @@ Linux 7.0.0-38-generic x86_64, Node.js v24.22.1 through `nvm use`, Git 2.55.0, D
 | `temp-dir-workspaces.test.ts`: a reclaim never opens a hard-linked special file (pass 2 finding 7) | Hangs: the reclaim opened the named pipe and blocked; killed by `timeout 60` | Passes |
 | Conformance case "refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested" (pass 2 finding 3) | Fails: a gitfile below the top was not refused | Passes; still fails for the defective variant that follows links |
 | Conformance case "holds one handed-off workspace at a time where executions share a separate account" (pass 2 finding 1) | Fails: a second hand-off succeeded | Passes; fails for the defective variant that hands off a second workspace |
+| Conformance case "lets one of two concurrent hand-offs through where executions share a separate account" (pass 3 finding 1) | Fails: both concurrent hand-offs succeeded; the defective variant that races them keeps the old double's unserialized check and write and fails the case in 20 of 20 runs | Passes; fails for the defective variants that race the hand-offs or hand off a second workspace |
 | Conformance cases "hands the checkout to the execution and takes it back without outside links" and "refuses Git work on a checkout whose Git directory holds a link" | Did not exist: the port had no `handOff` or `reclaim` | Pass for the double; each fails for its defective variants (Git on a handed-off checkout, outside hard links kept, a link followed in `.git`) |
 
 ## Checks and results
+
+After the pass 3 fix, on the working tree of `d0c8177d`:
+
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed; 2223 tests, 2176 passed, 0 failed, 47 skipped; coverage of all files 99.25 % lines, 92.16 % branches, 98.93 % functions.
+- `npm run openspec -- validate align-git-workspace-with-execution-boundary --strict`: valid; the requirement "One handed-off workspace per Linux worker" is 489 characters. `npm run verify:comments`: every comment within the rule. `make findings ARGS="validate"`: valid.
 
 After the pass 2 fixes, on the working tree of `07c24b3f`:
 
@@ -121,7 +127,23 @@ Findings 2 and 8 are fixed at the contract level; their tests need the Git adapt
 | 10 | Low | The inherited-settings scenario did not test the configuration scope | Scenario with `GIT_CONFIG_COUNT` and a global `insteadOf`; item 16 test | `07c24b3f` |
 | 11 | Low | The list of ignored `.git/config` keys was open | `.git/config` written anew before each Git call; scenario; item 16 test | `07c24b3f` |
 
-Findings 2, 10, and 11 are fixed at the contract and spec level; their tests need the Git adapter and are item 16's, as is the worker's slot accounting of finding 1. The ten fixed findings await confirmation by pass 3.
+Findings 2, 10, and 11 are fixed at the contract and spec level; their tests need the Git adapter and are item 16's, as is the worker's slot accounting of finding 1. Pass 3 confirmed all but finding 1, which its Low finding completes.
+
+### Pass 3, reviewer A
+
+- Reviewer: Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, reviewed head `ad1307a3`.
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: the output header names model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
+- Session: `01a17e4d-3958-7ac1-8df5-2cd6de118af0`.
+- Snapshot: the worktree snapshot was unchanged before and after the pass.
+- Counts: Critical 0, High 0, Medium 0, Low 1.
+- Verdicts on pass 2: findings 2, 3, 4, 6, 7, 8, 9, 10, and 11 resolved; finding 5 declined as recorded; finding 1 not resolved, because concurrent hand-offs in the double could hand off two workspaces. The pass 3 finding below completes finding 1.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low | The double's hand-off checked for another record and wrote its own in separate steps, so two concurrent hand-offs both succeeded | The check and the write are serialized per workspace root, and the contract and the spec require them atomic per worker; conformance case of two concurrent hand-offs and a defective variant that races them | `d0c8177d` |
+
+A Low-only pass ends the review (governance "Two alternating reviewers per task"): this fix is unreviewed, and its finding is recorded as `fixed-unreviewed`.
 
 ## Limitations
 
@@ -133,7 +155,6 @@ Findings 2, 10, and 11 are fixed at the contract and spec level; their tests nee
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A (Codex, `gpt-6.1-sol`), which confirms the pass 2 fixes.
 - The owner's confirmation of the away delegate's decisions on open questions 1 and 2 and the round 2 decision on item 41.
 - Before item 41 starts: if the D14 remote worker is not eligible for the acceptance task (wrong harness or platform), escalate to the owner.
 - Later work, not in this change: (i) a uid pool, an execution account per slot, which lifts the one-workspace cap; (ii) the shared execution account uid 10003 lets executions of one Linux worker signal each other's processes, an exposure since G2.

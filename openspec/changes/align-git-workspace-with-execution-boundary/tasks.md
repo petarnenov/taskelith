@@ -14,8 +14,8 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify` and `make verify-linux-cgroup`
-- [ ] 3.2 Independent review under the governance process: pass 1 by reviewer A (done), pass 2 by reviewer B (done), and pass 3 by reviewer A, which confirms the pass 2 fixes
-- [ ] 3.3 Record the review evidence in `verification.md`, `findings.jsonl`, and `passes.jsonl`
+- [x] 3.2 Independent review under the governance process: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A, which confirmed the pass 2 fixes
+- [x] 3.3 Record the review evidence in `verification.md`, `findings.jsonl`, and `passes.jsonl`
 
 ## 4. Review pass 1 and scope addition
 
@@ -25,3 +25,7 @@
 ## 5. Review pass 2
 
 - [x] 5.1 Fix or decline the eleven pass 2 findings, with fail-before tests for the double
+
+## 6. Review pass 3
+
+- [x] 6.1 Fix the pass 3 Low finding: serialize the double's hand-off per worker, with a concurrent conformance case and a defective variant
