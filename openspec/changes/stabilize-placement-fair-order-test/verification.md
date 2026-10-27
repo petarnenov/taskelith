@@ -34,6 +34,7 @@ MacBook Air, macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1, Docker 29.6.
 - `npm run verify:comments`: every comment is within the rule.
 - `npm run openspec -- validate stabilize-placement-fair-order-test --strict`: valid.
 - `make verify` passed (exit 0) on `673e22f`: 2,018 tests, 2,016 passed, 0 failed, 2 skipped; coverage 99.29 % lines, 92.14 % branches, 99.05 % functions; strict OpenSpec validation 70 passed, 0 failed; contract compatibility, archive dry run, and package verification passed.
+- After the pass-1 fix, `make verify` passed again (exit 0) on `1f84c7b`: 2,018 tests, 2,016 passed, 0 failed, 2 skipped; coverage 99.29 % lines, 92.14 % branches, 99.05 % functions; strict OpenSpec validation 70 passed, 0 failed; contract compatibility, archive dry run, and package verification passed.
 
 ## Independent review
 
