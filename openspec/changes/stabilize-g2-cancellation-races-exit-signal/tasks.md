@@ -15,7 +15,8 @@
 - [x] 3.2 Run `npm run openspec -- validate stabilize-g2-cancellation-races-exit-signal --strict` and `make verify`.
 - [x] 3.3 Record an evidence run of the suite in `results.jsonl` (requirement "Recorded scenario results").
 - [x] 3.4 Review pass 1 (reviewer A), its findings resolved and recorded in `verification.md`, `findings.jsonl`, and `passes.jsonl`.
-- [ ] 3.5 Review pass 2 (reviewer B), recorded in `verification.md`.
+- [x] 3.5 Review pass 2 (reviewer B), its Low findings fixed without another review and recorded in `verification.md`, `findings.jsonl`, and `passes.jsonl`; pass 3 not needed (Low-only pass 2).
+- [x] 3.6 Rerun the evidence run and a 10-run loop on the pass 2 test fixes.
 
 ## Review checklist
 
