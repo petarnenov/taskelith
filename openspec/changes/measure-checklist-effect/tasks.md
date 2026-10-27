@@ -20,7 +20,8 @@
 
 - [x] 5.1 Save this change's `checklist.json` with the new command and create its empty `findings.jsonl` and `passes.jsonl`.
 - [x] 5.2 Run `npm run openspec -- validate measure-checklist-effect --strict`, `validate --all --strict`, `make findings ARGS="validate"`, `make findings ARGS="effect"`, and `make verify`.
-- [ ] 5.3 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.
+- [x] 5.3 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.
   - [x] 5.3.1 Pass 1 by reviewer A, and its fixes with fail-before tests: `--at`, the landing rule, record consistency, the reserved `archive` name, and the `Makefile` comment.
   - [x] 5.3.2 Pass 2 by reviewer B, and its fixes with fail-before tests: dev commit ranking, shallow clones, unreadable snapshots, directory lookup in the effect, the brief duties in the spec, and record corrections.
+  - [x] 5.3.3 Pass 3 by reviewer A, Low only: tests for unreadable archives and a hook's `GIT_DIR`, fixed without another pass.
 - [ ] 5.4 Archive the change.

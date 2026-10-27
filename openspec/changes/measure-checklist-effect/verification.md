@@ -6,7 +6,7 @@ Coordinator brief from Niki of 2026-10-27, owner priority, size S-M: measure whe
 
 ## Revision
 
-Contract (spec deltas and `docs/review-findings/checklist.schema.json`): `7408813b`. Tests: `b3f0faf7` and `c8c66414`. Implementation: `d320ea08` and `643f387b`. Protocol and skill: `6bb2369e`. This change's `checklist.json`, `findings.jsonl`, and `passes.jsonl`: `ea3610e7`. Proposal, design, tasks, and the schema description fix: `4d32cab7`, which the checks of "Checks" ran on. Verification record `e43cfc55`. The coordinator merged `origin/dev` `99333004` into the branch as `8cc4459e`, which review pass 1 ran on. Pass 1 fixes: tests `abd0d26c`, code and `Makefile` `e2efb487`, documentation, spec deltas, and change records `eb0ad015`; pass 1 record `c5c86462`. The coordinator merged `origin/dev` `10eeab69` (documentation only, #367) as `163f0635`, which review pass 2 ran on. Pass 2 fixes: tests `d778371f`, code `a9b1fc35`, documentation and deltas `a24d8156`; the pass 2 record follows them. The checks of each pass section ran on the tree they name.
+Contract (spec deltas and `docs/review-findings/checklist.schema.json`): `7408813b`. Tests: `b3f0faf7` and `c8c66414`. Implementation: `d320ea08` and `643f387b`. Protocol and skill: `6bb2369e`. This change's `checklist.json`, `findings.jsonl`, and `passes.jsonl`: `ea3610e7`. Proposal, design, tasks, and the schema description fix: `4d32cab7`, which the checks of "Checks" ran on. Verification record `e43cfc55`. The coordinator merged `origin/dev` `99333004` into the branch as `8cc4459e`, which review pass 1 ran on. Pass 1 fixes: tests `abd0d26c`, code and `Makefile` `e2efb487`, documentation, spec deltas, and change records `eb0ad015`; pass 1 record `c5c86462`. The coordinator merged `origin/dev` `10eeab69` (documentation only, #367) as `163f0635`, which review pass 2 ran on. Pass 2 fixes: tests `d778371f`, code `a9b1fc35`, documentation and deltas `a24d8156`; pass 2 record `e07b965c`, which review pass 3 ran on. The worker merged `origin/dev` `d21838c3` (#368 and #369, which includes `dc9f1b66`) as `1f373f83`, without conflicts and without changes to this change's files. Pass 3 fixes: tests `5f705685`; the pass 3 record follows it. The checks of each pass section ran on the tree they name.
 
 ## Environment
 
@@ -106,6 +106,25 @@ After the fixes, on `a24d8156` with the pass 2 lines of `findings.jsonl` and `pa
 - Coverage of the new modules (the command of pass 1): 44 tests; all files 100.00% lines, 97.79% branches, 100.00% functions (`checklist-commands.ts` 97.37% branches, `checklist-effect.ts` 95.35%, `checklist-environment.ts` 100%, `checklist-record.ts` 100%, `findings.ts` 97.87%).
 - `make verify` (with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp`): exit 0. `npm test`: 2330 tests, 2283 passed, 0 failed, 47 skipped; coverage of all files 99.28% lines, 92.34% branches, 98.94% functions. Contract compatibility: 0 breaking changes in each of the four documents against `10eeab69`. `validate --all --strict`: 70 passed, 0 failed. `verify:comments`, `verify:findings` (45 and 25 files), `verify:links`, `verify:archive`, and `verify:package` passed.
 
+### Pass 3 (reviewer A)
+
+Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, on `e07b965c`, session `01a17f25-8fb8-7ac2-9deb-2303077c280b`, run by the coordinator, with the invocation of pass 1. Model confirmation and read-only proof, as the coordinator reported them: model `gpt-6.1-sol` with reasoning effort `medium`; the SHA-256 snapshot was `1f29c26afc3b5686120f77ed100b7abbc4cc69804b2eab024cebfeafe3ca5955` before and after the pass. Reviewer A confirmed all 14 pass 2 fixes and found no defect they introduced. Result: 0 Critical, 0 High, 0 Medium, 2 Low, recorded in `findings.jsonl` without `missedBy`, because both concern tests of the pass 2 fixes, and summarized in `passes.jsonl`. The pass had only Low findings, so the review ends: both were fixed in `5f705685` without another pass, with outcome `fixed-unreviewed`.
+
+| Id | Severity | Category | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| P3-1 | Low | missing-fail-before-test | `test/checklist-git.test.ts:144`: the L-2 test called `archiveSnapshot` directly, so an `archiveAt` that swallowed git failures again would still pass. | A test removes the loose object of the archive tree, or of the archived `findings.jsonl` blob, in a real repository, and asserts that `--save --at` fails and writes nothing. |
+| P3-2 | Low | missing-fail-before-test | `scripts/checklist-environment.ts:32`: the scrubbing of inherited `GIT_*` variables had no targeted regression test. | A test sets `GIT_DIR` to another fixture repository and asserts that `devCommit` reads the requested root and that `archiveAt` does not see the other repository's commit. |
+
+Fail-before evidence: in a scratch worktree of `163f0635`, the code before the pass 2 fixes, with the test file and fixture of `5f705685` and only a stub of the `archiveSnapshot` export, both new tests fail: the save writes a record from an archive git could not read, and the adapter follows the foreign `GIT_DIR`.
+
+After the fixes, on `5f705685` with the pass 3 lines of `findings.jsonl` and `passes.jsonl`:
+
+- `npm run openspec -- validate measure-checklist-effect --strict`: valid. `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
+- `make findings ARGS="validate"`: `Every findings file is valid: 47 file(s); every pass summary file is valid: 27 file(s).`
+- `make findings ARGS="effect"`: `Checklist effect over archived changes with checklist.json: 0 change(s); 220 archived change(s) without one are excluded.`
+- Coverage of the new modules (the command of pass 1): 46 tests; all files 100.00% lines, 97.78% branches, 100.00% functions (`checklist-commands.ts` 97.30% branches, `checklist-effect.ts` 95.35%, `checklist-environment.ts`, `checklist-record.ts` 100%, `findings.ts` 97.86%).
+- `make verify` (with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp`): exit 0. `npm test`: 2332 tests, 2285 passed, 0 failed, 47 skipped; coverage of all files 99.28% lines, 92.34% branches, 98.94% functions. Contract compatibility: 0 breaking changes in each of the four documents against `d21838c3`. `validate --all --strict`: 70 passed, 0 failed. `verify:comments`, `verify:findings` (47 and 27 files), `verify:links`, `verify:archive`, and `verify:package` passed.
+
 ### Coordinator scope addition
 
 After review pass 1 the coordinator added the `taskelith-coordinator` skill to the scope: its brief paragraph now names the exact checklist invocation, the dev commit for `--at`, and the task size, consistent with `docs/agent-task-protocol.md` coordinator step 1 and the `taskelith-task-protocol` skill (`eb0ad015`). The `taskelith-worker` skill has no plan-time step, only a pointer to the worker steps, so it is unchanged. This is not a review finding.
@@ -118,7 +137,6 @@ After review pass 1 the coordinator added the `taskelith-coordinator` skill to t
 
 ## Remaining gates
 
-- Independent review: pass 3 by reviewer A, which confirms the pass 2 fixes.
 - Archive of the change on its branch.
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
