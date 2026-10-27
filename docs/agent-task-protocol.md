@@ -113,3 +113,7 @@ A reviewer with a pause longer than the 30 minutes of "Unavailable reviewer" is 
 | Reviewer | Paused until | Reason |
 | --- | --- | --- |
 | Antigravity CLI | about 2026-10-31 13:25 local time | Quota limit (HTTP 429) |
+| OpenCode CLI (kimi-k3.1-pro) | about 2026-11-02 02:00 local time | OpenCode Go weekly quota (HTTP 429 `GoUsageLimitError`) |
+| OpenCode CLI (deepseek-v4-pro) | about 2026-11-02 02:00 local time | OpenCode Go weekly quota (HTTP 429 `GoUsageLimitError`) |
+| OpenCode CLI (kimi-k2.7-code) | about 2026-11-02 02:00 local time | OpenCode Go weekly quota (HTTP 429 `GoUsageLimitError`) |
+| OpenCode CLI (qwen3.8-max) | about 2026-11-02 02:00 local time | OpenCode Go weekly quota (HTTP 429 `GoUsageLimitError`) |

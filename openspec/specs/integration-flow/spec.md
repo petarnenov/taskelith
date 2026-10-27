@@ -48,7 +48,7 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 - **THEN** the hook refuses it and names the ref to check out and push separately
 
 ### Requirement: Promotion flow and releases
-`dev` SHALL be the default branch for development; GitHub SHALL run the workflow only for pull requests into `main`, pushes to `main`, and manual dispatch; promotions from `dev` to `main` SHALL use a merge commit or rebase, not a squash; and pushes to `main` SHALL keep releasing qualifying Conventional Commits.
+`dev` SHALL be the default branch for development; GitHub SHALL run the release workflow only for pull requests into `main`, pushes to `main`, and manual dispatch, and any other workflow, such as the Linux acceptance workflow, only on manual dispatch; promotions from `dev` to `main` SHALL use a merge commit or rebase, not a squash; and pushes to `main` SHALL keep releasing qualifying Conventional Commits.
 
 #### Scenario: Push to dev
 - **WHEN** a commit is pushed to `dev`
@@ -57,6 +57,10 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 #### Scenario: Promotion merged
 - **WHEN** a promotion pull request from `dev` is merged into `main` with a merge commit
 - **THEN** `make verify` runs and the release job analyzes every promoted Conventional Commit
+
+#### Scenario: Linux acceptance workflow
+- **WHEN** a commit is pushed to `main` or a pull request into `main` is opened
+- **THEN** the Linux acceptance workflow does not start; it starts only when someone dispatches it manually
 
 ### Requirement: Protected promotion branches
 The `main` branch SHALL accept changes only through a pull request whose `verify` check passed on an up-to-date branch, with administrators included and force pushes and deletion blocked; the `dev` branch SHALL block force pushes and deletion; and squash merging SHALL be disabled for the repository.
