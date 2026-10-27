@@ -11,21 +11,21 @@ export function automaticRetryOf(task: Task, attemptId: AttemptId): boolean {
 }
 
 // Not started, or exited with a known status after a proven start; anything
-// else is uncertain, with a retry budget of 0 (supervisor contract 6).
-export function endedWithoutUncertainty(outcome: AttemptOutcome): boolean {
+// else is not certain enough for an automatic retry (supervisor contract 6).
+export function isCertainEnd(outcome: AttemptOutcome): boolean {
   if (outcome.kind === 'not-started') return true;
-  return outcome.kind === 'exited' && outcome.startProven && exitVerdict(outcome.status) !== 'unknown';
+  return outcome.kind === 'exited' && outcome.startProven && classifyExit(outcome.status) !== 'unknown';
 }
 
 function isRetryableOutcome(outcome: AttemptOutcome): boolean {
   if (outcome.kind === 'not-started') return true;
-  return outcome.kind === 'exited' && outcome.startProven && exitVerdict(outcome.status) === 'failed';
+  return outcome.kind === 'exited' && outcome.startProven && classifyExit(outcome.status) === 'failed';
 }
 
 type ExitVerdict = 'clean' | 'failed' | 'unknown';
 
 // A clean exit is not acceptance, and the gates decide it (invariant 11).
-function exitVerdict(status: ExitStatus): ExitVerdict {
+function classifyExit(status: ExitStatus): ExitVerdict {
   switch (status.kind) {
     case 'code': return status.code === 0 ? 'clean' : 'failed';
     case 'signal': return 'failed';
