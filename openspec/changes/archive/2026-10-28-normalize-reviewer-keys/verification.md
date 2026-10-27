@@ -145,6 +145,16 @@ On 2026-10-28 `origin/dev` was merged into the branch with a merge commit, done 
 
 On 2026-10-28, after review pass 3, `origin/dev` `9b82cd9d` (pull requests #373 and #375) was merged into the branch with merge commit `3802a229`, base `579c227d`, without conflicts. It changed no living spec, script, or test and none of this change's requirements or contracts: only the Claude Code rows of the protocol's "Reviewer invocations" table, now `--output-format stream-json --verbose` as dev has them, `docs/foundation.md`, and `docs/g3-plan.md`. So it needs no delta reconciliation and no renewed review ([evidence freshness](/docs/governance.md#evidence-freshness)); only the checks are repeated, in the archive checks. Pass 2's recorded invocation with `--output-format json` is historical and stays.
 
+## Archive
+
+The change was archived on 2026-10-28 with `npm run openspec -- archive normalize-reviewer-keys --yes` (`review-process`: 2 added, 4 modified) after every task in `tasks.md` was ticked. The checks below ran on the resulting working tree, which is the tree of the archive commit `docs: archive the normalize reviewer keys change`, with Node.js 24.22.0 and `TMPDIR` on disk, after `git fetch` showed `origin/dev` still at `9b82cd9d`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0. Tests 2364, 2317 pass, 0 fail, 0 cancelled, 47 skipped (the same platform-bound skips); coverage of all files lines 99.29%, branches 92.32%, functions 98.94%; every findings file is valid, 52 files, and every pass summary file, 32 files; every active OpenSpec change archives into strictly valid specs; 0 breaking changes in the four contract documents against `9b82cd9d`; 731 package paths verified, 41 with reviewed license coverage gaps; the comment, link, boundary, and package checks passed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-28-normalize-reviewer-keys`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `9b82cd9d`): only `openspec/specs/review-process/spec.md`, 61 insertions and 15 deletions, which add "Canonical reviewer key" and "Reviewer assignment" and change "Authorized alternating reviewers", "Rotation order", "Unavailable reviewer", and "No reviewer of another harness"; dev's "Findings index and checklist", "Checklist record", "Checklist record validation", and "Checklist effect" are intact.
+- The moved change has `findings.jsonl` with 9 findings and `passes.jsonl` with 3 passes; `make findings ARGS="validate"` passes.
+
 ## Limitations
 
 - The rule checks the provider prefix of a model, not that the model exists (`design.md`, D3).
@@ -152,5 +162,4 @@ On 2026-10-28, after review pass 3, `origin/dev` `9b82cd9d` (pull requests #373 
 
 ## Remaining gates
 
-- Archive of the change on its branch.
 - Integration into dev by the coordinator (single pull request).
