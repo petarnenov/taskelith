@@ -7,7 +7,7 @@ Date: 2026-10-27. The author's verification and review pass 1 are recorded below
 Coordinator Niki assigned `fix-platform-probe-filesystem-label` after another worker session saw the native acceptance platform probe name an ext4 file system `ext2/ext3` on its Ubuntu host. The session developed it in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/fix-platform-probe-filesystem-label` on branch `fix-platform-probe-filesystem-label`.
 
 - **Base revision:** `fe64386` on `dev`.
-- **Revision verified:** `c87ada8` (the probe, its tests, and the OpenSpec records before this file), on which `make verify` ran; after review pass 1, `082ff61` with the M1 fix, on which `make verify` ran again with these records.
+- **Revision verified:** `c87ada8` (the probe, its tests, and the OpenSpec records before this file), on which `make verify` ran; after review pass 1, `082ff61` with the M1 fix and `d7537a7` with its records, on which `make verify` ran again.
 - **Scope:** the file system probe of `linuxPlatform` in `scripts/native-acceptance.ts` and of `platform` and `volume_of` in `scripts/installation-scenarios.sh`, their tests, and the `native-worker-acceptance` delta.
 - **Out of scope:** the macOS entry (`diskutil`), the other platform facts, and any record already written with `ext2/ext3`.
 
@@ -38,6 +38,7 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 - `npm run openspec -- validate fix-platform-probe-filesystem-label --strict`: valid.
 - `npm run verify:comments`: every comment is within the comment length rule.
 - `make verify` at `c87ada8`: exit 0; 2021 tests, 1975 pass, 0 fail, 46 skipped (the macOS-only native supervision suites, skipped on this Linux host); coverage lines 99.19%, branches 91.88%, functions 98.80%; comment length, findings validation, `validate --all --strict` (70 passed), archive dry run, and package verification passed. No flaky rerun was needed. Only this file changed afterwards.
+- After review pass 1, at `d7537a7`: `npm run openspec -- validate fix-platform-probe-filesystem-label --strict` valid; `npm run verify:comments` passed; `make findings ARGS="validate"`: every findings file is valid (3 files); `make verify` exit 0, 2022 tests, 1976 pass, 0 fail, 46 skipped (the same macOS-only suites); coverage lines 99.19%, branches 91.86%, functions 98.80%; `validate --all --strict` 70 passed; archive dry run and package verification passed; no flaky rerun was needed. Only this file changed afterwards.
 
 ## Independent review
 
