@@ -1,0 +1,1 @@
+{"change": "align-scm-port-with-g2-credentials", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17e30-c2d5-7432-a273-61e226b7223f", "counts": {"critical": 0, "high": 2, "medium": 2, "low": 1}}

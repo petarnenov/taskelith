@@ -50,7 +50,7 @@ A refreshed credential SHALL reach its running run, and the run SHALL adopt it. 
 - **THEN** the run keeps working with the previous secret, which ends only after the run confirms adoption of the new one
 
 ### Requirement: Conformance findings without payloads
-A conformance finding SHALL name a thrown value only by a fixed category and SHALL NOT carry its message, name, stack, or other payload, nor the value of a malformed or unknown result field.
+A conformance finding SHALL NOT carry a value that the plugin or the fixture supplied: it SHALL name a thrown value only by a fixed category, without its message, name, stack, or other payload, and a malformed, unknown, or mismatched field, of a plugin or fixture result, only by its path and the kind of problem.
 
 #### Scenario: Secret in a thrown error
 - **WHEN** a plugin operation, a fixture step, or a getter on a returned value throws an error whose message holds a secret
@@ -59,3 +59,7 @@ A conformance finding SHALL name a thrown value only by a fixed category and SHA
 #### Scenario: Unknown failure code
 - **WHEN** a plugin fails with a code that is not a kernel failure code
 - **THEN** the finding names the field and its problem, and not the code
+
+#### Scenario: Secret in a returned field
+- **WHEN** a plugin returns a well-formed value whose permissions, identifiers, or expiry differ from the request and hold a secret, or a fixture value or fixture result holds one
+- **THEN** the report has a finding for each mismatch, and no finding contains the secret

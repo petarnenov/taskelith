@@ -20,5 +20,6 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review (reviewer A passes 1 and 3, reviewer B pass 2)
-- [ ] 4.2 Archive the change
+- [x] 4.1 Independent review pass 1 (reviewer A) and its fixes
+- [ ] 4.2 Independent review pass 2 (reviewer B) and pass 3 (reviewer A)
+- [ ] 4.3 Archive the change
