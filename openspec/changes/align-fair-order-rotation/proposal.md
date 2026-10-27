@@ -9,7 +9,7 @@ With one free slot, project `p-a` waiting with `a1`, `a2`, and `a3` since `t0`, 
 - `fairPlacementOrder(waiting, after)` implements the rotation of the queues: each task's rank within its project, by waiting time and then task id in code-unit order; rounds by rank; within a round the projects after the cursor first, then the wrapped ones, by project id in code-unit order. A new domain function `fairWaitingOrder(waiting, after)` returns the ordered entries; `fairPlacementOrder` returns their items.
 - `InMemoryPlacementQueue.waiting` orders with `fairWaitingOrder` before its limit instead of its own copy of the rule (`rankedByProject`).
 - `PlacementService` offers in `fairPlacementOrder(waiting, after)` with the cursor value it passed to the read, captured before it moves the cursor.
-- The capacity reservation contract (section 5 and section 13, item 18 "Fair order") describes the rotation; section 12's guarantee is kept.
+- The capacity reservation contract (section 5 and section 13, item 18 "Fair order") describes the rotation. The change makes the offer order equal the read order; it does not by itself establish section 12's guarantee for every backlog, because the cursor rule is unchanged (see the design's out of scope).
 - The `execution-placement` requirement "Waiting placements" describes the offer order as the rotation; its scenario "Equal oldest waiting times across projects" is rewritten for the rotation, and the scenario "Round order across projects" is added.
 
 ## Capabilities

@@ -19,4 +19,5 @@
 
 - [x] 4.1 Run `npm run openspec -- validate align-fair-order-rotation --strict`, `npm run verify:comments`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
 - [x] 4.2 Review pass 1: state the round order relative to a cursor between two projects, with a domain test and a shared conformance case.
-- [ ] 4.3 Independent review pass 2 and record it in `verification.md`.
+- [x] 4.3 Review pass 2: narrow the section 12 claim to the proven case and widen the cursor follow-up, in the records only.
+- [ ] 4.4 Independent review pass 3 and record it in `verification.md`.

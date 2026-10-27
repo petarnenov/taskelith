@@ -16,7 +16,9 @@ Base: `e66d0d72` `docs: archive the fair order tie-break change`, the head of th
 - `172bace0` `test: expect the fair placement order to follow the project rotation` (the failing tests alone).
 - `5cd4fe2b` `chore: offer waiting placements in the project rotation order` (the fix).
 - `4fbd8c77` `docs: record the verification of the fair order rotation change` (this record; the revision review pass 1 read).
-- Pass 1 fixes: `b3cf9293` `test: cover a rotation cursor between two waiting projects`, `e039b771` `docs: state the round order relative to the cursor in the waiting placements scenario`, and the commit that records these results.
+- `f92c2653` `docs: record review pass 1 of the fair order rotation change` (the revision review pass 2 read).
+- Pass 1 fixes: `b3cf9293` `test: cover a rotation cursor between two waiting projects`, `e039b771` `docs: state the round order relative to the cursor in the waiting placements scenario`.
+- Pass 2 fix: the commit that records pass 2 (records only).
 
 ## Environment
 
@@ -27,7 +29,7 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 - **One rule.** `fairWaitingOrder(waiting, after)` sorts by rank within the project (computed over waiting time, project id, task id), then by whether the project wraps (`byCodeUnits(projectId, after) <= 0`; nothing wraps without a cursor), then project id, then waiting time, project id, and task id. These are the keys of the SQL `ORDER BY project_rank, (project_id COLLATE "C" <= $3) IS TRUE, project_id COLLATE "C", placement_waiting_since, id COLLATE "C"` in the same order, with `PARTITION BY project_id ORDER BY placement_waiting_since, id COLLATE "C"` for the rank. `byCodeUnits` matches `"C"` for the ASCII identifiers the kernel admits, as the tie-break change argued. The SQL treats a null cursor as "nothing wraps" (`IS TRUE`), as the domain does for `undefined`.
 - **Adapter uses the domain.** `InMemoryPlacementQueue.waiting` returns `fairWaitingOrder(waiting, after).slice(0, limit)`; its copy (`rankedByProject`, `byWaitingSince`) is removed. The domain imports no adapter; `npm run check:boundaries` passed.
 - **Service.** `#placeDue` captures `const after = this.#after` before the read, passes it to the read and to `fairPlacementOrder(waiting, after)`, and moves the cursor afterwards as before. The cursor's update rule is unchanged.
-- **Kept behavior.** Rank-first rounds, the cursor, the wrap-around, and the task id and project id tie-breaks stay; only the order of the projects within a round changes from "oldest task first" to "after the cursor, then wrapped, by id". The 1200-blocked-projects test still passes. Section 12's guarantee (`docs/contracts/capacity-reservation.md:226`) is kept, and now holds for a backlog too.
+- **Kept behavior.** Rank-first rounds, the cursor, the wrap-around, and the task id and project id tie-breaks stay; only the order of the projects within a round changes from "oldest task first" to "after the cursor, then wrapped, by id". The 1200-blocked-projects test still passes. Proven here: the domain offer order now equals the SQL read order, so a cursor that points past a project's backlog is honoured, as the one-slot service test shows. Section 12's guarantee (`docs/contracts/capacity-reservation.md:226`) is not claimed for every backlog: the cursor rule is unchanged, and review pass 2 showed reads that always end with the same project starve the rotation (follow-ups).
 - **Spec.** The `MODIFIED` delta copies the living "Waiting placements" (with the archived tie-break text) in full, describes the offer order as the rotation, rewrites "Equal oldest waiting times across projects" to fit (same name, required by strict validation, which refuses dropping a scenario), and adds "Round order across projects". The requirement text is 467 characters. "Project rotation" already states the read's rotation and is consistent; it is unchanged.
 - **Comments.** New comments are at most two lines of at most 80 characters; `npm run verify:comments` passed.
 - Evidence check: no external link; the results below come from the commands listed.
@@ -61,20 +63,26 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 
 ### Pass 2
 
-Pending: the same reviewer, on the pass 1 fixes.
+- **Codex CLI v0.163.0, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only` (session header), session `01a17c43-f117-7ac2-b935-55609da80904`, revision `f92c2653` (diff `e66d0d72..f92c2653`), run by the coordinator.** Same invocation as pass 1. The snapshot was `7de913a7f0f1af2b23c9bb158aba1529f78beb9589b2ece01a9e880be4756184` before and after the pass. The reviewer ran 121 tests and strict OpenSpec validation, both passing, and the comment checker with an explicit file list (the standard command again failed with `spawnSync git EPERM`); it did not run the PostgreSQL tests or `make verify`. It confirmed M1 as resolved, and that the domain follows the SQL keys for valid ASCII identifiers with an equal, absent, or `undefined` cursor, and that the service uses the read's cursor.
+- Findings: 0 Critical, 0 High, 1 Medium, 0 Low. M1 is now `fixed` in `findings.jsonl`.
+  2. Medium (`verification.md:30`, docs): the self-check claimed that section 12's guarantee now held for a backlog. The reviewer added `task-b2` and `task-b3` to the one-slot service test: six passes place `a1`, `a2`, `a3`, `b1`, `b2`, `b3`, because `#after` is the last row's project, a full read always ends with `p-b`, and each next read wraps to `p-a`. The coordinator decided (option C) to fix it in the records only, with no code change in this change. Fixed, unreviewed, in the commit that records pass 2: the self-check and the proposal claim only the proven case, and the follow-up in the design and below covers reads that end with the same project, including full batches, queued as `advance-placement-rotation-cursor`. `findings.jsonl` records it as `fixed-unreviewed`.
+
+### Pass 3
+
+Pending: the same reviewer, on the pass 2 fixes.
 
 ## Limitations
 
 - The new conformance cases cover two cursor examples on both queues; the agreement of the domain with the SQL for other inputs is argued from the query text above.
 - The red runs used a temporary signature-only edit, not a committed revision, because the tests do not compile against the old signature.
 
-## Follow-ups (out of scope, for `close-g2`)
+## Follow-ups (out of scope)
 
 - `#after` lives only in the placement service's memory and resets when the control plane restarts.
-- The cursor is the last row's project, not the last project of the first round, which weakens the rotation when a batch is cut by its limit inside a round.
+- A cursor at the last row's project starves the rotation whenever reads end with the same project, including full batches (reproduced in review pass 2: with one slot, `a1` to `a3` and `b1` to `b3` place `a1`, `a2`, `a3`, `b1`, `b2`, `b3`); queued as the change `advance-placement-rotation-cursor`.
 
 ## Remaining gates
 
-- Independent review pass 2 (Codex CLI `gpt-6.1-sol`) of the pass 1 fixes.
+- Independent review pass 3 (Codex CLI `gpt-6.1-sol`) of the pass 2 fixes.
 - Archive by the author after review, as the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).

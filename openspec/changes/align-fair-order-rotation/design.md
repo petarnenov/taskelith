@@ -13,9 +13,9 @@ A placement pass reads at most `PLACEMENT_BATCH` waiting tasks. Both queues orde
 ## Out of scope
 
 - `#after` lives only in memory and resets when the control plane restarts.
-- The cursor is the last row's project, not the last project of the first round, which weakens the rotation when a batch is cut by its limit inside a round.
+- A cursor at the last row's project starves the rotation whenever reads end with the same project, including full batches (reproduced in review pass 2: with one slot, `a1` to `a3` and `b1` to `b3` place `a1`, `a2`, `a3`, `b1`, `b2`, `b3`); queued as the change `advance-placement-rotation-cursor`.
 
-Both are follow-ups for `close-g2`.
+Both are follow-ups: the first for `close-g2`, the second in its queued change.
 
 ## Risks
 
