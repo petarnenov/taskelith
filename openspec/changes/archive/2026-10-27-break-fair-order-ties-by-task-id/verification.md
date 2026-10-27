@@ -43,21 +43,32 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 ### Pass 1
 
 - **OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`, agent `reviewer`, session `ses_e83e7b61effeASBme1Dnw3tReZ`, revision `a1e6fca9` (diff `33d341a9..a1e6fca9`), run by the coordinator.** Invocation: `opencode run --standalone --agent reviewer -m 'opencode-go/qwen3.8-max#medium' --format json --title break-fair-order-ties-by-task-id "$(cat <prompt-file>)" < /dev/null > <log>`. The snapshot was `4f6945ecf6bcc5e70cb11888ed5462ebbe688f28d31b54ed7aa9ce519237c441` before and after the pass. The reviewer's shell allowlist refused `node --test`, so it checked the test's failing-before and passing-after outcome analytically and against this record. It confirmed the collation argument for task ids, the kept keys, the test, the instant precision, the boundaries, the delta, and the comment rule.
-- Findings: 0 Critical, 0 High, 1 Medium, 2 Low. The coordinator decided to fix all three in this change; the fixes are unreviewed until pass 2:
+- Findings: 0 Critical, 0 High, 1 Medium, 2 Low. The coordinator decided to fix all three in this change; pass 2 confirmed the fixes:
   1. Medium (`fair-order.ts`, contract drift): the project-id key used `localeCompare` while both queues use `"C"`. Fixed in `0d22bbc1` with the failing-before test `e00223e8`; the delta, proposal, and design state it, and the out-of-scope note is removed.
   2. Low (`fair-order.ts` and `in-memory-capacity.ts`): `byCodeUnits` was duplicated. Fixed in `182a38d0`: one exported helper in `domain/code-unit-order.ts`, imported by the domain and the in-memory adapters.
   3. Low (`docs/contracts/capacity-reservation.md:235`): the contract did not state the tie-breaks. Fixed in `ea15330c`; the proposal's impact no longer says "no contract change".
 
 ### Pass 2
 
-Pending: the same reviewer, on the pass 1 fixes.
+- **OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`, agent `reviewer`, session `ses_e83db1221ffec8yyfuGP06rF6g`, revision `e296c501` (diff `33d341a9..e296c501`, including the pass 1 fixes `a1e6fca9..e296c501`), run by the coordinator.** Same invocation as pass 1. The snapshot was `df7f447415f242bb8fc480f68db0276121a389fa3072901c983f4248d4a2493a` before and after the pass. The shell was again denied, so the reviewer checked the tests analytically and against this record.
+- It confirmed M1, L2, and L3 as resolved, and in a full re-review the agreement of the domain, SQL, and in-memory orders for every valid id, the kept keys, the failing-before tests, the agreement of code, contract, and delta, the boundaries, and the comment rule.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low. The three pass 1 lines of `findings.jsonl` are now `fixed`.
 
 ## Limitations
 
 - The new test covers the domain order; the agreement with the PostgreSQL queue is argued from its query text above, not by a new integration test.
-- Review pass 1 could not run tests; its outcome on the tests is analytical.
+- Review passes 1 and 2 could not run tests; their outcome on the tests is analytical.
 
 ## Remaining gates
 
-- Independent review pass 2 (OpenCode CLI, `opencode-go/qwen3.8-max#medium`) of the pass 1 fixes, and its record.
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, after review pass 2. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive break-fair-order-ties-by-task-id --yes` (base `33d341a9`; `origin/dev` had not moved).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 2,023 tests, 1,977 passed, 0 failed, 46 skipped; coverage 99.19 % lines, 91.88 % branches, 98.80 % functions; strict OpenSpec validation 69 passed, 0 failed; findings validation, archive dry run, and package verification passed.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-break-fair-order-ties-by-task-id` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `execution-placement`, requirement "Waiting placements": the tie-break sentence and the scenarios "Equal waiting times" and "Equal oldest waiting times across projects", as intended.
+- The moved change has its `findings.jsonl` with the three pass 1 lines, and `make findings ARGS="validate"` passed.

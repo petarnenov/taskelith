@@ -6,7 +6,7 @@ The control plane's placement loop, which opens and places the attempts of waiti
 ## Requirements
 
 ### Requirement: Waiting placements
-A task SHALL wait for placement while it has no attempt, or while its active attempt is not cancelled, owns no execution that can still run, and holds no reservation. The control plane SHALL read the waiting tasks in fair order across projects, oldest first within each.
+A task SHALL wait for placement while it has no attempt, or while its active attempt is not cancelled, owns no execution that can still run, and holds no reservation. The control plane SHALL read the waiting tasks in fair order across projects, oldest first within each, and SHALL order tasks that started waiting at the same instant by project id, then task id, by code unit as PostgreSQL's "C" collation does.
 
 #### Scenario: Submitted task
 - **WHEN** a task is submitted and has no attempt
@@ -15,6 +15,14 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 #### Scenario: Placed attempt
 - **WHEN** the active attempt of a task holds a reservation
 - **THEN** the task is not read as waiting
+
+#### Scenario: Equal waiting times
+- **WHEN** tasks of one project started waiting at the same instant and are read in any order
+- **THEN** the fair order takes them in task id order by code unit
+
+#### Scenario: Equal oldest waiting times across projects
+- **WHEN** the oldest waiting tasks of two projects started waiting at the same instant
+- **THEN** the fair order takes the project whose id is first by code unit first
 
 ### Requirement: Project rotation
 Each waiting read SHALL take each project's oldest task before any project's next, and SHALL start with the projects after the last project the previous read returned, wrapping around, so that every project with a waiting task is read within a bounded number of passes.

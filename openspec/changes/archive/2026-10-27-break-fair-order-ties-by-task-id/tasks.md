@@ -12,4 +12,4 @@
 ## 3. Verify
 
 - [x] 3.1 Run `npm run openspec -- validate break-fair-order-ties-by-task-id --strict`, `npm run verify:comments`, `make findings ARGS="validate"`, and `make verify`.
-- [ ] 3.2 Independent review and record it in `verification.md`.
+- [x] 3.2 Independent review and record it in `verification.md`.
