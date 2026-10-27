@@ -132,11 +132,15 @@ The Scheduling module SHALL name a slot's harness with the Execution module's `H
 - **THEN** it stores a `SubscriptionMechanismId` without importing the agent harness port's mechanism type, and the "Harness-neutral slot records" requirement still holds
 
 ### Requirement: Admitted credential deliveries only
-A slot's credential SHALL be delivered only through a delivery admitted for the slot's harness and mechanism: the add-slot command SHALL reject a slot whose mechanism has no admitted delivery for its harness with `invalid`, and the delivery SHALL reveal nothing for such a slot. By G3 decision D6, the only delivery admitted for Claude Code, the only harness G3 admits, SHALL be `subscription-token`.
+A slot's credential SHALL be delivered only through a delivery admitted for the slot's harness and mechanism: the add-slot command SHALL reject a slot whose mechanism has no admitted delivery for its harness with `invalid`, and the delivery SHALL reveal nothing for such a slot. By G3 decision D6, the only delivery admitted for Claude Code, the only harness G3 admits, SHALL be `subscription-token`, with at most one non-removed slot (account pool contract section 7.1).
 
 #### Scenario: Device login slot without an admitted delivery
 - **WHEN** an operator adds a slot whose mechanism is `device-login` and its harness has no admitted `device-login` delivery, as Claude Code has none under D6
 - **THEN** the command fails with `invalid` and no slot or credential is stored
+
+#### Scenario: Slot beyond its pair's limit
+- **WHEN** an operator adds a Claude Code `subscription-token` slot while another Claude Code slot is active or revoked
+- **THEN** the command fails with `invalid` and no slot or credential is stored; a removed slot does not count
 
 ### Requirement: Credential rotation only on an unreserved revoked slot
 A rotation SHALL store the new credential under a new version and then, in one capacity transaction, switch the slot record to it by compare-and-set only while the slot is revoked, no held reservation names it, and its version is still the one the rotation read; otherwise it SHALL fail with `conflict` and leave the new version unnamed, so that every delivery to a run, a re-delivery included, reveals the credential that the run started with.
