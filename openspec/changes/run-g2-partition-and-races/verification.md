@@ -139,11 +139,23 @@ Each was a node:test `todo` that runs, records `failed`, and does not fail `make
 | L10: `pressured()` used the throwing `running` getter | A flag set while the worker runs | `91f79ea` |
 | L11: B1 detail without the request trail | The failure detail carries the last four (requestId, snapshot) pairs | `b38b8a6` |
 
-These 11 findings are recorded in `findings.jsonl`, L8 as `deferred` and the others as `fixed-unreviewed` until pass 2 checks them.
+These 11 findings are recorded in `findings.jsonl`, L8 as `deferred` and the others as `fixed`, since pass 2 confirmed them.
 
 ### Pass 2
 
-pending: independent review by Claude Code (claude-fable-5-1)
+- Reviewer: Claude Code, model `claude-fable-5-1` (confirmed by the coordinator from `modelUsage` in the run's JSON output), effort medium, plan mode; session `d6f04263-a8b0-46bc-af22-1904001b1b47`. Invocation as in pass 1: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- Reviewed revision: `3cadaa4`. The worktree snapshots before and after the review are identical (`55ddcede4a3d0935ab091b28a242f5cda89d35b148ee153f414c4edfaaca3b21`).
+- Pass 1: all 11 resolutions confirmed, L8 as deferred and recorded. The scenario b fix (`c8039da`), the removed `todo` flags (`0de75d3`), and the evidence at `56e2b21` were checked as correct.
+- Findings: 0 Critical, 0 High, 0 Medium, 6 Low. A Low-only pass is fixed without another review, so these fixes are not reviewed by a further pass; `findings.jsonl` records them as `fixed-unreviewed`.
+
+| Finding | Resolution | Commit |
+| --- | --- | --- |
+| L1: scenario f took `answered[sent]`, which a re-placement's grant could be | The round waits for the answer to its held request, as scenario b does | `e2907eb` (unreviewed) |
+| L2: the postgres while-running row named the start kinds by run age | Historical start at seed `20261026`, current start at seed `7` | `8e58a4f` (unreviewed) |
+| L3: merge `72003c4` described only as the UI proof-of-concept documents | Also names the G3 foundation revalidation (#290 to #293) | `8e58a4f` (unreviewed) |
+| L4: `proposal.md` and `design.md` still described `todo` tests for B1 to B4 | Both state that the fixed defects have regular tests now | `8e58a4f` (unreviewed) |
+| L5: unused `ScenarioInstallation.revokeWorker` and `ScenarioWorker.executions` | Removed | `e2907eb` (unreviewed) |
+| L6: `test/g2-partition.test.ts` bypassed `journalOf`, duplicated the control plane state check, and had its own delay | `journalOf`, one `controlPlaneState` helper, `setTimeout` from `node:timers/promises` | `e2907eb` (unreviewed) |
 
 ## Limitations and remaining gates
 
@@ -151,4 +163,4 @@ pending: independent review by Claude Code (claude-fable-5-1)
 - The scenarios run on a test-side composition against the `make` services, not on the Compose installation, with scaled worker timers and the process-group launch host; the Linux cgroup supervisor and macOS adoption are not exercised.
 - The unauthorized start and the epoch advance are test-side writes; no G2 product path writes either.
 - Duplicate delivery is out of scope; the coordinator decided it stays with 24b. It appears here only as the redelivered cancellation of e and the redelivered observations of the database partitions.
-- Remaining gates: the independent review (pass 2), integration by the coordinator, and the archive. Merged with `9dc068a`, and no longer gates of this change: the B1 and B5 fixes, D1, and the B6 follow-up, whose `fix-control-plane-api-keep-alive-race` addresses the `ECONNRESET` above and the "the control plane did not answer" failure of `apps/control-plane/test/control-plane-api.integration.test.ts`. Not covered by B6 and not seen again after the merge: the start timeout of scenario e.
+- Remaining gates: integration by the coordinator, and the archive. Merged with `9dc068a`, and no longer gates of this change: the B1 and B5 fixes, D1, and the B6 follow-up, whose `fix-control-plane-api-keep-alive-race` addresses the `ECONNRESET` above and the "the control plane did not answer" failure of `apps/control-plane/test/control-plane-api.integration.test.ts`. Not covered by B6 and not seen again after the merge: the start timeout of scenario e.
