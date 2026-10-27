@@ -23,7 +23,7 @@ test('the authority is valid for ten years from now', () => {
 test('a server certificate is valid for 397 days, from one hour back', () => {
   const validity = value(serverCertificateValidity(NOW));
   assert.equal(validity.notBefore, '2026-10-28T11:00:00.000Z');
-  assert.equal(Date.parse(validity.notAfter) - Date.parse(NOW), SERVER_CERTIFICATE_VALIDITY_DAYS * DAY);
+  assert.equal(Date.parse(validity.notAfter) - Date.parse(validity.notBefore), SERVER_CERTIFICATE_VALIDITY_DAYS * DAY);
   assert.equal(SERVER_CERTIFICATE_VALIDITY_DAYS, 397);
 });
 

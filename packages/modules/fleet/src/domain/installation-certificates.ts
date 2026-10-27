@@ -25,9 +25,10 @@ export function hasExpired(notAfter: Date, now: Instant): boolean {
   return notAfter.getTime() <= Date.parse(now);
 }
 
+// The period runs `days` from its start, which is `backdate` before `now`.
 function validity(now: Instant, backdate: number, days: number): Result<CertificateValidity> {
-  const start = Date.parse(now);
-  const notBefore = instantFromEpochMilliseconds(start - backdate);
+  const start = Date.parse(now) - backdate;
+  const notBefore = instantFromEpochMilliseconds(start);
   const notAfter = instantFromEpochMilliseconds(start + days * DAY_MILLISECONDS);
   if (!notBefore.ok || !notAfter.ok) return err(failure('invalid', 'the certificate validity is outside the representable time range'));
   return ok({ notBefore: notBefore.value, notAfter: notAfter.value });
