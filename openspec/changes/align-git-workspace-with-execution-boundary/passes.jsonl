@@ -1,0 +1,1 @@
+{"change": "align-git-workspace-with-execution-boundary", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17e1d-56d3-7a12-8034-fef675ef6ad3", "counts": {"critical": 0, "high": 2, "medium": 7, "low": 2}}
