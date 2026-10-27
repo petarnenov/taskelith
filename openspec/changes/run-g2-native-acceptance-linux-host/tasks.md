@@ -10,10 +10,10 @@
 ## 3. Evidence
 
 - [x] 3.1 Dry run of the Linux entry after `npm run build`
-- [ ] 3.2 Evidence run of the Linux entry into `openspec/changes/run-g2-native-acceptance-linux-host/results.jsonl`
-- [ ] 3.3 Run `make scenario-worker-namespace-confinement` on `x86_64` and record it
-- [ ] 3.4 Write `acceptance.md`, the acceptance table, labelled native-host evidence
-- [ ] 3.5 Record `verification.md`
+- [x] 3.2 Evidence run of the Linux entry into `openspec/changes/run-g2-native-acceptance-linux-host/results.jsonl`
+- [x] 3.3 Run `make scenario-worker-namespace-confinement` on `x86_64` and record it
+- [x] 3.4 Write `acceptance.md`, the acceptance table, labelled native-host evidence
+- [x] 3.5 Record `verification.md`
 
 ## 4. Review and archive
 
