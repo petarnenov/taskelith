@@ -1,10 +1,10 @@
 # Verification: run-g2-native-acceptance-x86-64 (25c)
 
-Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight of the evidence run and the checks of the merged tree; the evidence, the confinement extra, and the review are pending.
+Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight of the evidence run, the checks of the merged tree, and review pass 1; the evidence, the confinement extra, and pass 2 are pending.
 
 ## Scope and source
 
-G2 work item 25, part 25c, `run-g2-native-acceptance-x86_64`, assigned by the coordinating session and developed in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)). OpenSpec refuses underscores in change names, so the change is `run-g2-native-acceptance-x86-64` on the branch `run-g2-native-acceptance-x86_64`. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 25 and D11; [docs/worker-platforms.md](../../../docs/worker-platforms.md#native-acceptance-gates) "Native acceptance gates"; the archive of 25b ([run-g2-native-acceptance-arm64](../archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)), whose runner this change runs unchanged.
+G2 work item 25, part 25c, `run-g2-native-acceptance-x86_64`, assigned by the coordinating session and developed in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)). OpenSpec refuses underscores in change names, so the change is `run-g2-native-acceptance-x86-64` on the branch `run-g2-native-acceptance-x86_64`. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 25 and D11; [docs/worker-platforms.md](../../../docs/worker-platforms.md#native-acceptance-gates) "Native acceptance gates"; the archive of 25b ([run-g2-native-acceptance-arm64](../archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)), whose runner this change runs unchanged except for the build before the seed (design decision 6).
 
 - **In scope:** the x86_64 evidence of `macos-26-x86_64` (natively) and `linux-ubuntu-24.04-x86_64` (worker image and its base under Docker Desktop for x86_64), the acceptance table ([acceptance.md](acceptance.md), pending), and the x86_64 observations in the platform documents.
 - **In-scope fix:** the runner builds the checkout before its seed (design decision 6), assigned by the coordinator after the preflight found the failure; the seccomp line of `docs/local-installation.md` cites 25a's x86_64 evidence.
@@ -15,7 +15,7 @@ G2 work item 25, part 25c, `run-g2-native-acceptance-x86_64`, assigned by the co
 ## Revision and environment
 
 - Base: `origin/dev` at `843e293`. Branch `run-g2-native-acceptance-x86_64`.
-- Dev merge: `origin/dev` at `1847570` was merged into the branch as `e14b2ed` (clean merge; no `package.json` or lockfile change, so the dependency inventory is current). `git diff 843e293 1847570` changes suites the runner executes: `packages/adapters/worker-journal/src/journal-reads.ts` and its test, `apps/worker/test/command-intake.test.ts`, the control-plane code under the crash-window proofs (`apps/control-plane/src/application/observation-effects.ts`, `observation-service.ts`, `inventory-reconciliation.ts`, and `packages/modules/execution`), and `scripts/installation-scenarios.sh`, which the confinement extra uses. The evidence run therefore runs on `e14b2ed` or later.
+- Dev merge: `origin/dev` at `1847570` was merged into the branch as `e14b2ed` (clean merge; no `package.json` or lockfile change, so the dependency inventory is current). `git diff 843e293 1847570` changes suites the runner executes: `packages/adapters/worker-journal/src/journal-reads.ts` and its test, `apps/worker/test/command-intake.test.ts`, the control-plane code under the crash-window proofs (`apps/control-plane/src/application/observation-effects.ts`, `observation-service.ts`, `inventory-reconciliation.ts`, `packages/modules/execution`, and `apps/control-plane/src/api/api-server.ts` from PR #317), and `scripts/installation-scenarios.sh`, which the confinement extra uses. The evidence run therefore runs on `e14b2ed` or later.
 - Host: 2020 Intel iMac, Intel Core i7-10700K, 16 logical CPUs, 40 GiB memory; macOS 26.6.2 (build 25G83, Darwin 25.6.0), `x86_64`; Node.js 24.22.1 and npm 12.2.1 from `.nvmrc` via `nvm use`; GNU bash 3.2.57 as `/bin/bash`; GNU Make 3.81; git 2.33.0; jq 1.7.1.
 - Engine: Docker Desktop 4.75.0 (227598), Docker Engine 29.5.2, client and server `amd64`, server architecture `x86_64`, kernel 6.12.76-linuxkit, storage driver overlay2, cgroup v2, seccomp `builtin` and `cgroupns`; Docker Compose 5.1.3; 16 CPUs and 31.3 GiB memory in the VM; context `desktop-linux`.
 - Boot volume: APFS (case-insensitive), 931.5 GiB with 504.5 GiB available. Docker Desktop's VM disk: about 251.7 GiB with 229 GiB available.
@@ -42,7 +42,7 @@ For the work up to `e14b2ed`: the runner fix, its test, the seccomp line, and th
 - Scope: `scripts/native-acceptance.sh` moves `npm run --silent build` from `macos_entry` into `build_checkout`, which `main` calls before the seed, so every entry, not only macOS, gets the built harness (design decision 6). The proofs, their order, and the recorder are unchanged. `docs/local-installation.md` changes one paragraph: the design link points at the archived change, and the line cites 25a's x86_64 confinement evidence.
 - Comment rule: the one new comment, above `build_checkout`, is one line within 80 characters; `npm run verify:comments` passes.
 - ADR 0004: Clean Code (one small named step, one call site; the test stubs it like the runner's other tools); SOLID, hexagonal architecture, and microkernel untouched (no product module change); Docker and contract-first OpenAPI untouched; Makefile-driven operation (`make native-acceptance` unchanged); SDLC through this change; coverage stays above 75 % (figures below).
-- Tests: the order test fails before the fix and passes after it, and asserts the build before the seed line.
+- Tests: the order test fails before the fix and passes after it. Its stubs of `build_checkout` and `tool seed` each print a mark on standard error, and it asserts that the build's mark directly precedes the seed's, so a build after the `tool seed` call fails it (review pass 1, finding M1).
 - Evidence check: neither the change's files nor `git diff 843e293 784f3ef` contain an external link. Every link is relative to the repository: `docs/agent-task-protocol.md#subagent-execution`, `docs/g2-plan.md`, `docs/worker-platforms.md#native-acceptance-gates`, the 25b archive (`design.md`, `proposal.md`, `acceptance.md`), the 25a archive (`design.md`, `verification.md`), and this change's `acceptance.md` and `verification.md`.
 
 ## Checks and results
@@ -58,12 +58,31 @@ For the work up to `e14b2ed`: the runner fix, its test, the seccomp line, and th
 | `npm run openspec -- validate run-g2-native-acceptance-x86-64 --strict` on `e14b2ed` | Valid |
 | `make verify` on `e14b2ed`, first run | Exit 2 after 2 min 43 s: 1955 tests, 1953 passed, 0 failed, 2 skipped; the `test` target failed only because Node's test runner could not report coverage: `ERR_OPERATION_FAILED: coverage file is empty` for `coverage-66529-1793076310303-0.json` in its temporary node-coverage directory |
 | `make verify` on `e14b2ed`, rerun | Exit 0 in 2 min 48 s: 1955 tests, 1953 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.10 % branches, 99.04 % functions; package allowlist and installed CLI verification passed |
+| Order test of review pass 1 (M1) in a scratch copy of the runner and its test, outside the worktree | Real runner: 8 of 8 passed. Variant with `build_checkout` after the `tool seed` call: 8 tests, 7 passed, 1 failed, the order test. The test of `53b5b19` passes that variant 8 of 8 |
+| Runner tests (the two files above) on `354258b` | 18 of 18 passed |
+| `npm run verify:comments` on `354258b` | Pass |
+| `npm run openspec -- validate run-g2-native-acceptance-x86-64 --strict` on `354258b` | Valid (`skip_specs`) |
+| `npx tsc -p tsconfig.check.json`, the type check of `npm run check:boundaries`, which includes `test/**/*.ts`, on `354258b` | Exit 0, no diagnostics |
 
 The evidence run and the confinement extra are pending; the coordinator held them while the host runs its integration queue. `make verify` runs again after the evidence (task 2.6).
 
 ## Independent review
 
-Reviewer: Claude Code (claude-fable-5-1), assigned by the coordinator. Pending.
+### Pass 1
+
+- Reviewer: Claude Code (claude-fable-5-1), assigned by the coordinator. Invocation, run from the worktree: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- Model confirmation: the JSON result's `modelUsage` lists `claude-fable-5-1`, and also `claude-opus-5-5`, which the CLI uses internally.
+- Session `ce36db0f-4a5b-4036-b905-5f140f511cae`, started 2026-10-27 06:52; result `success`. Reviewed head `53b5b19`: the branch diff `843e293..784f3ef` and `53b5b19`.
+- Snapshot: SHA-256 `459af8553d1ce191cf777abb2fbf3a1a71275b3152325ee17e4dff8396e9246e` before and after, unchanged.
+- The reviewer's own checks included a simulated failing build: `main` stops before the seed with npm's exit code.
+- Findings: 0 Critical, 0 High, 1 Medium, 3 Low. M1 and the three Lows are fixed in `354258b` and the commit that records this pass; pass 2 confirms M1 and checks the Low fixes with it.
+
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| M1 | Medium | `test/native-acceptance-runner.test.ts:70-74`: the order test compares the build with the seed line that `scripts/native-acceptance.sh:133` prints, not with the `tool seed` call at line 131, so a build between the call and the line passes | In `354258b` the `tool seed` stub prints `drew the seed` on standard error, and the test asserts that `built the checkout` directly precedes it; the variant now fails (Checks and results); `design.md` decision 6 and the self-check say what the test proves. To be confirmed in pass 2 |
+| L1 | Low | `proposal.md:3`, `design.md:3`, `verification.md:7`: 25c runs the runner "unchanged", though decision 6 edits it | Each says unchanged except for the build before the seed (design decision 6). Checked in pass 2 |
+| L2 | Low | `verification.md:18`: the dev-changed inputs omit `apps/control-plane/src/api/api-server.ts` (PR #317), which the crash-window proofs exercise | Added. Checked in pass 2 |
+| L3 | Low | `design.md:5`: 24c is said to be absent only at the base `843e293` | Also absent at the merged `1847570`: no `run-g2-partition-and-races` change is active or archived there. Checked in pass 2 |
 
 ## Candidate product defects
 
@@ -79,5 +98,5 @@ Pending the evidence run.
 
 ## Remaining gates
 
-- The evidence run, the confinement extra, `acceptance.md`, the document updates, the final `make verify`, and the independent review.
+- The evidence run, the confinement extra, `acceptance.md`, the document updates, the final `make verify`, and the independent review (pass 2 confirms M1 of pass 1 and checks its Low fixes).
 - Integration into dev by the coordinator (single pull request).
