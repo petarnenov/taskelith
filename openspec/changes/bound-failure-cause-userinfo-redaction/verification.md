@@ -15,6 +15,7 @@ A coordinator brief from Niki: fix the ReDoS in the scheme-less user-information
 
 - `origin/dev` at `fe643864` merged cleanly as `071822b`. It brings #325, which changes the requirements "Journaled launch authorization" and "Execution ownership", not "Control-plane failure cause", and no file of `@taskelith/worker-control-plane-client`.
 - `origin/dev` at `33d341a9` merged cleanly as `c021a0f9`. It brings #326 and #327, which keep coverage out of killed test processes, add a requirement to `deterministic-test-harness`, and change tests; not "Control-plane failure cause", no file of `@taskelith/worker-control-plane-client` or `@taskelith/observability`, and no dependency.
+- `origin/dev` at `2a26714b` merged cleanly as `bc4956c8`. It brings #328, which archives the G2 native acceptance x86_64 change, builds the checkout once in `scripts/native-acceptance.sh` with its test, and updates three documents; no specification, no file of `@taskelith/worker-control-plane-client` or `@taskelith/observability`, and no dependency.
 
 ## Rules
 
