@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 19 ([docs/g2-plan.md](../../../docs/g2-plan.md)) delivers the `EvidenceStore` of architecture section 8 and serves R31. Before this change, nothing stored evidence. Item 8 defined the contract operations `publishEvidence`, `readEvidence`, and `downloadEvidence`, but no service implemented them. `readTaskResult` returned `evidence: []`, an obligation item 16 left to this item.
+G2 work item 19 ([docs/g2-plan.md](/docs/g2-plan.md)) delivers the `EvidenceStore` of architecture section 8 and serves R31. Before this change, nothing stored evidence. Item 8 defined the contract operations `publishEvidence`, `readEvidence`, and `downloadEvidence`, but no service implemented them. `readTaskResult` returned `evidence: []`, an obligation item 16 left to this item.
 
 ## What Changes
 

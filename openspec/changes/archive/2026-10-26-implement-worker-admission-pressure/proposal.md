@@ -1,6 +1,6 @@
 ## Why
 
-[G2 work plan](../../../docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20e. The control plane already consumes `worker.admission-pressure.changed` and pressure refusals (21b), but the worker never reports pressure: it accepts offers and requests launch authorizations below the disk floor and with an unbounded journal backlog. The [capacity reservation contract](../../../docs/contracts/capacity-reservation.md) section 8 and the [worker journal contract](../../../docs/contracts/worker-journal.md) sections 6 and 7 require the worker-side limits.
+[G2 work plan](/docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20e. The control plane already consumes `worker.admission-pressure.changed` and pressure refusals (21b), but the worker never reports pressure: it accepts offers and requests launch authorizations below the disk floor and with an unbounded journal backlog. The [capacity reservation contract](/docs/contracts/capacity-reservation.md) section 8 and the [worker journal contract](/docs/contracts/worker-journal.md) sections 6 and 7 require the worker-side limits.
 
 ## What Changes
 

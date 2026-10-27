@@ -1,6 +1,6 @@
 ## Context
 
-The [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) section 9 (data root lost, Linux column, line 146) says: "the worker lists populated containments without a record as unrecorded processes to reconcile, never as current work", and section 11 (line 178) defines `unrecorded-process` as "A populated containment of this worker without an execution record (Linux, after data loss)". The execution record is the directory `worker/executions/<executionId>/` (section 3). The control plane already records and lists the observation (`inventory-reconciliation` "Unrecorded process", `launch-reconciliation` "Reconciliation queue"). Start reconciliation left this scan to a follow-up (archived `implement-worker-start-reconciliation`, design D5 and Q2).
+The [supervisor identity contract](/docs/contracts/supervisor-identity.md) section 9 (data root lost, Linux column, line 146) says: "the worker lists populated containments without a record as unrecorded processes to reconcile, never as current work", and section 11 (line 178) defines `unrecorded-process` as "A populated containment of this worker without an execution record (Linux, after data loss)". The execution record is the directory `worker/executions/<executionId>/` (section 3). The control plane already records and lists the observation (`inventory-reconciliation` "Unrecorded process", `launch-reconciliation` "Reconciliation queue"). Start reconciliation left this scan to a follow-up (archived `implement-worker-start-reconciliation`, design D5 and Q2).
 
 ## Owner decision (2026-10-26)
 
@@ -37,7 +37,7 @@ The coordinator named section 3 of the wire contracts; the observation identity 
 
 ### D4: macOS does not scan
 
-No containment exists on macOS. [Worker journal](../../../docs/contracts/worker-journal.md) section 11 (line 191): "on Linux, populated containments without an execution record are reported as unrecorded processes, never as current work; on macOS they cannot be found". [Supervisor identity](../../../docs/contracts/supervisor-identity.md) section 9 (line 146), macOS column: "Records are gone; surviving processes cannot be found, and every execution the worker held is reconciled at the control plane as `uncertain`". `containmentScan` returns no port for a darwin platform, and the orchestrator then skips the scan.
+No containment exists on macOS. [Worker journal](/docs/contracts/worker-journal.md) section 11 (line 191): "on Linux, populated containments without an execution record are reported as unrecorded processes, never as current work; on macOS they cannot be found". [Supervisor identity](/docs/contracts/supervisor-identity.md) section 9 (line 146), macOS column: "Records are gone; surviving processes cannot be found, and every execution the worker held is reconciled at the control plane as `uncertain`". `containmentScan` returns no port for a darwin platform, and the orchestrator then skips the scan.
 
 ### D5: wire mapping
 

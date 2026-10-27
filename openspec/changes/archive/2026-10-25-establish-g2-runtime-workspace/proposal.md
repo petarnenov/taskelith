@@ -1,6 +1,6 @@
 ## Why
 
-G2 item 9 of the [G2 work plan](../../../docs/g2-plan.md). Runtime code for the control plane and the worker needs its own workspaces, integration tests against real PostgreSQL and NATS (D8 (a)), and a boundary that keeps process-launching worker code out of API and browser bundles (architecture section 6). The owner started G2, decided D1, D2, D5, and D8 on 2026-10-25, and approved the item 1 proposals of the [G2 infrastructure evaluation](../../../docs/g2-infrastructure.md) the same day; by D14 (a) items run in dependency order.
+G2 item 9 of the [G2 work plan](/docs/g2-plan.md). Runtime code for the control plane and the worker needs its own workspaces, integration tests against real PostgreSQL and NATS (D8 (a)), and a boundary that keeps process-launching worker code out of API and browser bundles (architecture section 6). The owner started G2, decided D1, D2, D5, and D8 on 2026-10-25, and approved the item 1 proposals of the [G2 infrastructure evaluation](/docs/g2-infrastructure.md) the same day; by D14 (a) items run in dependency order.
 
 ## What Changes
 

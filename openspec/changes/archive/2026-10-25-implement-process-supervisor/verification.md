@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 15, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `78362da` on `dev`, with `origin/dev` at `a286c5b` merged after item 14 (`implement-worker-journal`) landed, so the file store and the lock use item 14's helpers.
+[G2 work plan](/docs/g2-plan.md) item 15, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `78362da` on `dev`, with `origin/dev` at `a286c5b` merged after item 14 (`implement-worker-journal`) landed, so the file store and the lock use item 14's helpers.
 
 ## Decisions
 

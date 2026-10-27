@@ -1,6 +1,6 @@
 ## Scope and source
 
-G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coordinator on 2026-10-26: a crash at each launch window W1 to W6 of the [worker journal contract](../../../docs/contracts/worker-journal.md) and each step CP1 to CP12 of the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md), each followed by a restart and recovery, and duplicate delivery of an offer, run through the harness with recorded results. Excluded: the 24a scenarios (composition happy path, results recorder, disk loss, container `SIGKILL`), the 24c scenarios (partition and reconnect, cancellation races, stale generation and epoch), product code, contracts, and Compose overrides. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 24; the 24a change `run-g2-failure-scenarios-composition` (its recorder, cherry-picked as `d060900`, since merged into `dev` with PR #288 and archived, its requirement "Recorded scenario results", and its design decision 6, the owner's delegate's decision on "through the harness").
+G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coordinator on 2026-10-26: a crash at each launch window W1 to W6 of the [worker journal contract](/docs/contracts/worker-journal.md) and each step CP1 to CP12 of the [supervisor identity contract](/docs/contracts/supervisor-identity.md), each followed by a restart and recovery, and duplicate delivery of an offer, run through the harness with recorded results. Excluded: the 24a scenarios (composition happy path, results recorder, disk loss, container `SIGKILL`), the 24c scenarios (partition and reconnect, cancellation races, stale generation and epoch), product code, contracts, and Compose overrides. Sources: [docs/g2-plan.md](/docs/g2-plan.md) item 24; the 24a change `run-g2-failure-scenarios-composition` (its recorder, cherry-picked as `d060900`, since merged into `dev` with PR #288 and archived, its requirement "Recorded scenario results", and its design decision 6, the owner's delegate's decision on "through the harness").
 
 ## Revision and environment
 
@@ -86,8 +86,8 @@ Seed `2776760789` for every row, on macOS natively.
   - `apps/worker/src/launch-orchestrator.ts:225` (`#reconcile`) and `:239` (`#sealUnwritten`). The runtime relaunch after a `not-started`, `#afterNotStarted` (`:561`), is a separate path that these scenarios do not reach; it may race the same way.
   - `packages/modules/execution/src/domain/launch-authorization.ts:239-248` (`applyOwnershipRule`, the `execution-conflict` rejection).
   - `packages/adapters/worker-journal/src/sqlite-worker-journal.ts:149` (a rejection that is not retryable is journaled `rejected-final`).
-  - [Launch authorization contract](../../../docs/contracts/launch-authorization.md) section 4 (another execution is rejected until the owning one is `not-started`) and section 9 (`execution-conflict` is not retryable).
-  - [Worker journal contract](../../../docs/contracts/worker-journal.md) section 5, recovery row "W2 without an outcome, or W3 with a grant, and no W4".
+  - [Launch authorization contract](/docs/contracts/launch-authorization.md) section 4 (another execution is rejected until the owning one is `not-started`) and section 9 (`execution-conflict` is not retryable).
+  - [Worker journal contract](/docs/contracts/worker-journal.md) section 5, recovery row "W2 without an outcome, or W3 with a grant, and no W4".
   - `worker-runtime` spec, requirement "Start reconciliation", scenario "Pending W2 on start".
 - Expected: the execution is sealed and reported `not-started`, and the intent launches under a new execution that is granted, spawns once, and exits 0, so the attempt ends `exited`.
 - Observed: E1 `not-started` in the control plane, no second execution there; in the worker journal E2 with one operation, `rejected-final`, `execution-conflict`; no spawn; no attempt outcome after 240 s.
@@ -166,7 +166,7 @@ Confirmation of pass 2:
 | 3 | Resolved |
 | 4 | Resolved |
 
-Decision ([governance](../../../docs/governance.md#independent-review-process), at most three passes): Medium findings remained after the third pass, so the options went to the owner's delegate, who chose option A, fix them without review, recorded as unreviewed fixes, in away run `20261026T173845Z-opencode-14187`. No further pass runs.
+Decision ([governance](/docs/governance.md#independent-review-process), at most three passes): Medium findings remained after the third pass, so the options went to the owner's delegate, who chose option A, fix them without review, recorded as unreviewed fixes, in away run `20261026T173845Z-opencode-14187`. No further pass runs.
 
 | # | Severity | Finding | Resolution (UNREVIEWED) |
 | --- | --- | --- | --- |

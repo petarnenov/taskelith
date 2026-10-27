@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](../../../docs/g2-plan.md)), is the G2 exit evidence for R05 to R08 and R27 of [docs/architecture.md](../../../docs/architecture.md). The coordinator split it in three; this change is 24c, `run-g2-partition-and-races`: partition and reconnect through Toxiproxy, the cancellation races, and stale ownership generations and recovery epochs, each run through the harness with a recorded result. 24a, `run-g2-failure-scenarios-composition`, provides the results recorder that this change adopts; 24b, `run-g2-crash-windows`, runs the process-launch crash windows. The coordinator decided that duplicate delivery stays with 24b and is out of scope here.
+G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](/docs/g2-plan.md)), is the G2 exit evidence for R05 to R08 and R27 of [docs/architecture.md](/docs/architecture.md). The coordinator split it in three; this change is 24c, `run-g2-partition-and-races`: partition and reconnect through Toxiproxy, the cancellation races, and stale ownership generations and recovery epochs, each run through the harness with a recorded result. 24a, `run-g2-failure-scenarios-composition`, provides the results recorder that this change adopts; 24b, `run-g2-crash-windows`, runs the process-launch crash windows. The coordinator decided that duplicate delivery stays with 24b and is out of scope here.
 
 ## What Changes
 

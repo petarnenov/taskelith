@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G1 item 7 of the [G1 work plan](../../../docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `2890be6` on `dev`. Scope: new files `domain/task-admission.ts`, `ports/admission-repository.ts`, `ports/clock.ts`, `application/task-admission-service.ts`, and `adapters/in-memory-admission-repository.ts` in `packages/modules/sdlc/src/`, the root exports in `src/index.ts`, two new test files in `packages/modules/sdlc/test/`, the type-only rule in `scripts/check-coverage-scope.ts` with its test in `test/check-coverage-scope.test.ts`, and this change. Prepared in a git worktree.
+G1 item 7 of the [G1 work plan](/docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `2890be6` on `dev`. Scope: new files `domain/task-admission.ts`, `ports/admission-repository.ts`, `ports/clock.ts`, `application/task-admission-service.ts`, and `adapters/in-memory-admission-repository.ts` in `packages/modules/sdlc/src/`, the root exports in `src/index.ts`, two new test files in `packages/modules/sdlc/test/`, the type-only rule in `scripts/check-coverage-scope.ts` with its test in `test/check-coverage-scope.test.ts`, and this change. Prepared in a git worktree.
 
 ## Author self-check before review
 

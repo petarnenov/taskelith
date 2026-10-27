@@ -4,17 +4,17 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, split by the coordinator; this is 20e2, named in the Non-Goals of the archived `implement-worker-admission-pressure` design (20e). It was developed by an implementation subagent that the worker session briefed and checks.
+[G2 work plan](/docs/g2-plan.md) item 20, split by the coordinator; this is 20e2, named in the Non-Goals of the archived `implement-worker-admission-pressure` design (20e). It was developed by an implementation subagent that the worker session briefed and checks.
 
 - Base revision: `a698f11` on `dev`.
-- Scope: the daemon overhead causes (`daemon-memory`, `event-loop-lag`) on the 20e pressure path through injected sensors, and the log truncation and retry of a journal write refused for lack of space ([worker journal contract](../../../docs/contracts/worker-journal.md) section 7).
+- Scope: the daemon overhead causes (`daemon-memory`, `event-loop-lag`) on the 20e pressure path through injected sensors, and the log truncation and retry of a journal write refused for lack of space ([worker journal contract](/docs/contracts/worker-journal.md) section 7).
 - Out of scope: 20d2 (`implement-worker-contact-and-offline`), the `unrecorded-process` scan, supervisor test hygiene, UI, and any contract change.
 
 ### Values used
 
 Every value comes from an existing document or constant; none was invented.
 
-- `512 MiB` resident and event-loop lag `p99` at most `200ms`: [capacity reservation contract](../../../docs/contracts/capacity-reservation.md) section 8, [operational targets](../../../docs/operational-targets.md) section 1; `DAEMON_MEMORY_MEBIBYTES` in `apps/worker/src/settings.ts`.
+- `512 MiB` resident and event-loop lag `p99` at most `200ms`: [capacity reservation contract](/docs/contracts/capacity-reservation.md) section 8, [operational targets](/docs/operational-targets.md) section 1; `DAEMON_MEMORY_MEBIBYTES` in `apps/worker/src/settings.ts`.
 - The sample window of `15s` and the histogram resolution of `20ms`: operational targets section 4 (`event-loop.lag`, "of each process over the sample window"); `SAMPLE_INTERVAL_MILLISECONDS` and `EVENT_LOOP_RESOLUTION_MILLISECONDS` in `@taskelith/node-observability`.
 - The command redelivery backoff after a failed commit (`5s` doubling to `60s`, jitter): operational targets section 2; `TRANSPORT_LIMITS`, unchanged.
 - The fact retry backoff (`5s` to `60s` with jitter): operational targets section 1, automatic retry row; `LAUNCH_RETRY_DELAY`.
@@ -76,7 +76,7 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, sessio
 OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, session `ses_e87a00282ffeJ2WIkjxWFTuWep`, invoked as in pass 1 with a pass-3 prompt, on the merged state. The model was set by `-m` only, as in pass 1 (a limitation). The snapshots before and after the pass matched (`06a0adbf396e25c0619f26a2d07dd17d2290b34bbfe1ff13c9dd6775cae673a2`). Findings: 0 Critical, 0 High, 0 Medium, 1 Low. The reviewer's read-only shell refused its attempts to run the OpenSpec validation and the comment check, so it did not run them.
 
 - **Pass 2 High:** confirmed resolved (`launch-orchestrator.ts` W2, W3, and W4 through `commitWrite`, `space-retry.ts`, and the tests of `start-reconciliation.test.ts`).
-- **Low (fixed in `6833e4b`, not reviewed again under the [review pass cap](../../../docs/governance.md#independent-review-process)):** the failed-close test of `daemon-overhead.test.ts` waited a fixed 30 ms and assumed that a close had failed by then, which a slow runner could miss. `ScriptedHistogram` now counts its failed reads, and the test waits for the first failed close before it makes the histogram readable again.
+- **Low (fixed in `6833e4b`, not reviewed again under the [review pass cap](/docs/governance.md#independent-review-process)):** the failed-close test of `daemon-overhead.test.ts` waited a fixed 30 ms and assumed that a close had failed by then, which a slow runner could miss. `ScriptedHistogram` now counts its failed reads, and the test waits for the first failed close before it makes the histogram readable again.
 - **make verify:** passed at `a88d7b2` (1730 tests: 1728 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.27% lines, 91.88% branches, 98.88% functions).
 
 The review is complete in three passes; the Low fix of pass 3 is unreviewed, as the governance rule allows for a Low-only pass.

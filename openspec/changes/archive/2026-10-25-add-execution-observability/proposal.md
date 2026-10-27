@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 22 ([docs/g2-plan.md](../../../docs/g2-plan.md)): structured logs with command and attempt correlation and no secrets, and the architecture section 12 signals that G2 produces. It serves "Observability and security foundations begin in G0–G2" (section 13). Owner decision D13 (a) puts the logs and signals behind a module-owned port and leaves any metrics library for later. Items 24 and 27 need the signals as evidence. Before this change no product code logged anything or measured a signal. The PostgreSQL adapter (item 11) and the NATS transport (item 12) swallowed connection and pull errors silently, and item 12 left their visibility to this item.
+G2 work item 22 ([docs/g2-plan.md](/docs/g2-plan.md)): structured logs with command and attempt correlation and no secrets, and the architecture section 12 signals that G2 produces. It serves "Observability and security foundations begin in G0–G2" (section 13). Owner decision D13 (a) puts the logs and signals behind a module-owned port and leaves any metrics library for later. Items 24 and 27 need the signals as evidence. Before this change no product code logged anything or measured a signal. The PostgreSQL adapter (item 11) and the NATS transport (item 12) swallowed connection and pull errors silently, and item 12 left their visibility to this item.
 
 ## What Changes
 

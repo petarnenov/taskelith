@@ -83,9 +83,9 @@ export const MAPPING_FIXTURES: readonly OpenSpecMappingFixture[] = [
     kind: 'feature',
     change: 'draft-sdlc-framework-port',
     files: [
-      { artifactId: 'proposal', path: 'proposal.md', sha256: 'e8a94f5fcb5b18c307d1936561beaf8eda04be7331244793f9b5d81762fdd10c' },
+      { artifactId: 'proposal', path: 'proposal.md', sha256: 'fe912bab7e2c2b78898a3e47b9e5cf21df775178dec6b1d4d6360c69f0f6d891' },
       { artifactId: 'specs', path: 'specs/sdlc-framework-port/spec.md', sha256: 'ed28c5d9b019f3583b037fcb67c944fe80018b9070c1e45e32fc60f257bfea4e' },
-      { artifactId: 'design', path: 'design.md', sha256: 'c29cd0b9b89fbd5045e5d50d5b16c78e89003b4234496beb733f22c5dcd45f20' },
+      { artifactId: 'design', path: 'design.md', sha256: '6cdd4f3273afaaca42bbeba80460105e7a7331a2839b800d273c974b42a92cae' },
       { artifactId: 'tasks', path: 'tasks.md', sha256: '4b6bdba94e2b66bc6d0a22093db32d7ba41c3363dc04d206f0aac38349479798' },
     ],
     instructions: { stageId: 'specs', inputs: ['proposal'] },

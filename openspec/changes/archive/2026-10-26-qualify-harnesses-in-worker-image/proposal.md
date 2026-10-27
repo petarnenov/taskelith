@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 26 ([docs/g2-plan.md](../../../docs/g2-plan.md)) carries out the qualification that [ADR 0007](../../../docs/decisions/0007-g0-closure.md) deferred until the worker image exists: Claude Code and Codex on Linux inside the worker image, on the architectures decision D11 selects. It depends only on item 23, whose first part, 23a, delivered `infra/installation/Dockerfile` with the digest-pinned Ubuntu 24.04 base and the Linux worker target. The work qualifies; it does not admit. Both harnesses stay `candidate`.
+G2 work item 26 ([docs/g2-plan.md](/docs/g2-plan.md)) carries out the qualification that [ADR 0007](/docs/decisions/0007-g0-closure.md) deferred until the worker image exists: Claude Code and Codex on Linux inside the worker image, on the architectures decision D11 selects. It depends only on item 23, whose first part, 23a, delivered `infra/installation/Dockerfile` with the digest-pinned Ubuntu 24.04 base and the Linux worker target. The work qualifies; it does not admit. Both harnesses stay `candidate`.
 
 On 2026-10-25 the owner decided to run only the steps that need no credentials. Every scenario that calls a model needs a subscription login, and no login is authorized, so those scenarios are recorded as not run. They stay open for G3 item 35.
 

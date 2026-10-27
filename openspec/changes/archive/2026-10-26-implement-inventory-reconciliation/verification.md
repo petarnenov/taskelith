@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This is part 21c of item 21 of the [G2 work plan](../../../docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The rotation assigns the reviewer, Codex CLI `gpt-6.1-sol` at medium effort.
+This is part 21c of item 21 of the [G2 work plan](/docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The rotation assigns the reviewer, Codex CLI `gpt-6.1-sol` at medium effort.
 - **Base revision:** `898d107` on `dev`. `dev` was merged twice before review pass 1, as the coordinator asked:
   - `854465b` merged `190e2cc`, which brought 20b's `FleetRegistry.activeWorkerIds()`;
   - `575706d` merged `aba18f5`, which brought the removal of revoked workers' consumers (#230).

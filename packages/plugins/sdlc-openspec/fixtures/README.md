@@ -12,6 +12,7 @@ Shared mapping fixtures for OpenSpec 1.14.3 (G1 item 10). The expected normalize
 | Fix | `fix-boundary-entrypoint` | `2026-10-24-fix-boundary-entrypoint` (archive commit `0729388`) |
 | Documentation | `document-worktree-pitfalls` | `2026-10-24-document-worktree-pitfalls` (archive commit `4f78d29`) |
 
+- `repair-archived-record-links` rewrote three link destinations of the archived feature change, in `proposal.md`, `design.md`, and `verification.md`, as root-relative links; the copies follow it, so they still equal the archive.
 - `openspec/config.yaml` is this repository's configuration.
 - `openspec/specs/trust-and-operational-foundation/spec.md` and `openspec/specs/integration-flow/spec.md` are the living specs that the fix and documentation deltas modify, as they were in the parent of each archive commit (`0729388^` and `4f78d29^`). The feature change adds a new capability and needs no base spec.
 - `expected/instructions/<stage>.md` is the `instruction` field of `openspec instructions <stage> --change <change> --json`, run with the pinned CLI in `working-copy/`.

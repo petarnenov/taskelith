@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 13 in the [G1 work plan](../../../docs/g1-plan.md), after items 3 (contract tooling) and 7 (task admission). Its exit evidence is the wire schemas. ADR 0004 principle 6 requires versioned OpenAPI 3.1 documents for HTTP APIs and AsyncAPI documents for messages, written before the implementation, with types and runtime validation generated from them and a failure on an unversioned breaking change. Architecture section 9 names the fields every command and event carries. The owner decided that contracts live in a `packages/contracts` package (D2 (b)) and are document-first (D3 (a)).
+G1 item 13 in the [G1 work plan](/docs/g1-plan.md), after items 3 (contract tooling) and 7 (task admission). Its exit evidence is the wire schemas. ADR 0004 principle 6 requires versioned OpenAPI 3.1 documents for HTTP APIs and AsyncAPI documents for messages, written before the implementation, with types and runtime validation generated from them and a failure on an unversioned breaking change. Architecture section 9 names the fields every command and event carries. The owner decided that contracts live in a `packages/contracts` package (D2 (b)) and are document-first (D3 (a)).
 
 ## What Changes
 

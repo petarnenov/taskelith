@@ -1,6 +1,6 @@
 ## Why
 
-G1 work item 2 ([docs/g1-plan.md](../../../docs/g1-plan.md)). Architecture section 6 keeps the shared kernel "deliberately small: opaque identifiers, basic error vocabulary, and stable event metadata". The workflow model (item 4), the SDLC framework port (item 6), and task admission (item 7) need these shared types, and the port's typed results need a result shape, which the plan adds to the kernel.
+G1 work item 2 ([docs/g1-plan.md](/docs/g1-plan.md)). Architecture section 6 keeps the shared kernel "deliberately small: opaque identifiers, basic error vocabulary, and stable event metadata". The workflow model (item 4), the SDLC framework port (item 6), and task admission (item 7) need these shared types, and the port's typed results need a result shape, which the plan adds to the kernel.
 
 ## What Changes
 

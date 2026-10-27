@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-Split off from [G2 work plan](../../../docs/g2-plan.md) item 17 by the coordinating session (Niki), so that item 17 (`authorizeLaunch`) and item 19 (`publishEvidence`) share one worker authentication. The worker session is Pepi. The reviewer is OpenCode `opencode/deepseek-v4.1-flash` (high), next in the rotation.
+Split off from [G2 work plan](/docs/g2-plan.md) item 17 by the coordinating session (Niki), so that item 17 (`authorizeLaunch`) and item 19 (`publishEvidence`) share one worker authentication. The worker session is Pepi. The reviewer is OpenCode `opencode/deepseek-v4.1-flash` (high), next in the rotation.
 - Base revision: `7d0bd7b` on `dev`.
 - Scope:
   - the lookup by credential hash in `FleetRegistry`;
