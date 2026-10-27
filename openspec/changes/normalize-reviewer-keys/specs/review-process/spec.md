@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Canonical reviewer key
-In an active change, each reviewer of `findings.jsonl` and `passes.jsonl` SHALL use the canonical key: harness `claude`, `codex`, `opencode`, or `agy`; the model as its CLI takes it, with a provider prefix for OpenCode only; and a `variant`, the effort, `default` when the harness default ran. Validation SHALL reject other keys with file and line. Archived records SHALL NOT be rewritten; reports SHALL map their legacy keys through one alias table.
+In an active change, each reviewer of `findings.jsonl` and `passes.jsonl` SHALL use the canonical key: harness `claude`, `codex`, `opencode`, or `agy`; the model as its CLI takes it, as `<provider>/<model>` with both parts non-empty for OpenCode only; and a `variant`, the effort, `default` when the harness default ran. Validation SHALL reject other keys with file and line. Archived records SHALL NOT be rewritten; reports SHALL map their legacy keys through one alias table.
 
 #### Scenario: Harness spelled another way
 - **WHEN** a line of an active change's `findings.jsonl` names the harness `claude-code`
@@ -10,6 +10,10 @@ In an active change, each reviewer of `findings.jsonl` and `passes.jsonl` SHALL 
 #### Scenario: OpenCode model without its provider
 - **WHEN** a line of an active change's `passes.jsonl` names the OpenCode model `kimi-k2.7-code`
 - **THEN** validation fails, names the file and line, and asks for the model with its provider prefix
+
+#### Scenario: OpenCode model with an empty part
+- **WHEN** a line of an active change's `findings.jsonl` or `passes.jsonl` names the OpenCode model `opencode-go/`
+- **THEN** validation fails and names the file and line
 
 #### Scenario: Reviewer without an effort
 - **WHEN** a line of an active change's `passes.jsonl` names a reviewer without `variant`
@@ -20,14 +24,14 @@ In an active change, each reviewer of `findings.jsonl` and `passes.jsonl` SHALL 
 - **THEN** validation passes, the archived file is not rewritten, and `reviewers` and `index` count its passes and findings under the canonical key, in one row with that reviewer's other passes and findings
 
 ### Requirement: Reviewer assignment
-The coordinator SHALL assign each new change the reviewers A and B that the governance policy's reviewer assignment names for the change, not the next ones in the rotation. The pair it names for a change that needs network access MAY share a harness. An OpenCode reviewer SHALL NOT be reviewer A, also not as a replacement, and MAY be reviewer B only of a documentation-only change.
+The coordinator SHALL assign each new change the reviewers A and B that the governance policy's reviewer assignment names for the change, not the next ones in the rotation. The pair it names for a change whose review depends on external facts, which needs network access, MAY share a harness. An OpenCode reviewer SHALL NOT be reviewer A, also not as a replacement, and MAY be reviewer B only of a documentation-only change.
 
 #### Scenario: Assigned reviewers available
 - **WHEN** a new change is assigned and the reviewers that the assignment names for it are available
 - **THEN** its reviewers A and B are those reviewers
 
 #### Scenario: Change that needs network access
-- **WHEN** a new change needs network access
+- **WHEN** a new change's review depends on external facts, so it needs network access
 - **THEN** its reviewers are the pair that the assignment names for such a change, also when both are of one harness
 
 #### Scenario: OpenCode reviewer for a code change

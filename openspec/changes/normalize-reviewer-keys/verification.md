@@ -41,7 +41,7 @@ Run on the working tree of `0968b548` with Node.js 24.22.0 and npm 11.19.1:
 
 - `npm run openspec -- validate normalize-reviewer-keys --strict`: `Change 'normalize-reviewer-keys' is valid`.
 - `make findings ARGS="validate"`, inside `make verify`: every findings file is valid, 43 files; every pass summary file is valid, 23 files.
-- `make verify` (with `TMPDIR` on disk): exit 0. Tests: 2317, 2270 pass, 0 fail, 0 cancelled, 47 skipped (the skips are the platform-bound tests that the suite names, such as the composed worker's crash windows that run natively on macOS and on Linux in `make verify-linux-crash-windows`). Coverage of all files: lines 99.28%, branches 92.30%, functions 98.94%. `validate --all --strict`: 70 passed, 0 failed. Every comment is within the comment length rule; every checked link conforms; every active OpenSpec change archives into strictly valid specs; workspace and hexagonal boundary checks passed; 0 breaking changes in both contract documents against `b87abe75`; 731 package paths verified, 41 with reviewed license coverage gaps; the package verification passed.
+- `make verify` (with `TMPDIR` on disk): exit 0. Tests: 2317, 2270 pass, 0 fail, 0 cancelled, 47 skipped (the skips are the platform-bound tests that the suite names, such as the composed worker's crash windows that run natively on macOS and on Linux in `make verify-linux-crash-windows`). Coverage of all files: lines 99.28%, branches 92.30%, functions 98.94%. `validate --all --strict`: 70 passed, 0 failed. Every comment is within the comment length rule; every checked link conforms; every active OpenSpec change archives into strictly valid specs; workspace and hexagonal boundary checks passed; 0 breaking changes in the four contract documents against `b87abe75`; 731 package paths verified, 41 with reviewed license coverage gaps; the package verification passed.
 
 `make findings ARGS="reviewers"`, section "By reviewer", on `b87abe75` (before):
 
@@ -105,7 +105,7 @@ Not run yet: reviewer A confirms the pass 2 fixes, if pass 2 has findings above 
 ## Limitations
 
 - The rule checks the provider prefix of a model, not that the model exists (`design.md`, D3).
-- Coverage: `make verify` measures coverage over the built `dist` files of the packages and apps; the scripts under `scripts/` run from source and are not in that measure. The new module's branches are each exercised by `test/reviewer-keys.test.ts` and `test/findings.test.ts`.
+- Coverage: `make verify` measures coverage over the built `dist` files of the packages and apps, which leaves out the scripts under `scripts/`, because they run from source. Measured apart (review pass 2, L5), after the pass 2 fixes: `node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='scripts/reviewer-keys.ts' --test-coverage-include='scripts/findings.ts' test/findings.test.ts test/reviewer-keys.test.ts` gives 33 tests, 33 pass; `scripts/reviewer-keys.ts` lines 100%, branches 100%, functions 100%; `scripts/findings.ts` lines 100%, branches 97.20%, functions 100%.
 
 ## Remaining gates
 

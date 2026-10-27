@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -481,13 +481,16 @@ for (const { legacy, canonical } of LEGACY_SPELLINGS) {
       [`openspec/changes/archive/2026-10-09-${change}/findings.jsonl`]: `${line(change, 'docs', 'Finding', { reviewer })}\n`,
       [`openspec/changes/archive/2026-10-09-${change}/passes.jsonl`]: `${summary(change, 1, { low: 1 }, { reviewer })}\n`,
     });
-    const root = repository({ ...records('legacy', legacy), ...records('canonical', canonical) });
+    const files = { ...records('legacy', legacy), ...records('canonical', canonical) };
+    const root = repository(files);
     const key = `${canonical.harness} ${canonical.model}#${canonical.variant}`;
     try {
+      assert.equal(runFindings(['validate'], root).exitCode, 0);
       const statistics = JSON.parse(runFindings(['reviewers', '--json'], root).stdout) as { reviewers: { key: string; passes: number }[] };
       assert.deepEqual(statistics.reviewers.map(({ key, passes }) => [key, passes]), [[key, 2]]);
       const index = JSON.parse(runFindings(['index', '--json'], root).stdout) as { reviewer: { key: string; total: number }[] };
       assert.deepEqual(index.reviewer.map(({ key, total }) => [key, total]), [[key, 2]]);
+      for (const [path, text] of Object.entries(files)) assert.equal(readFileSync(join(root, path), 'utf8'), text, path);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

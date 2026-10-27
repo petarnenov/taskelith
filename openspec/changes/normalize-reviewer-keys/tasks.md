@@ -1,7 +1,7 @@
 ## 1. Contract and spec
 
 - [x] 1.1 Scan every archived `findings.jsonl` and `passes.jsonl` for reviewer spellings and record them in `design.md`.
-- [x] 1.2 Add the `review-process` requirements "Canonical reviewer key" and "Reviewer assignment", modify "Authorized alternating reviewers" and "Rotation order", and validate the change strictly.
+- [x] 1.2 Add the `review-process` requirements "Canonical reviewer key" and "Reviewer assignment", modify "Authorized alternating reviewers", "Rotation order" (with the new scenario "Replacement from the rotation"), "Unavailable reviewer", and "No reviewer of another harness" (with the new scenario "Barred reviewer of another harness"), and validate the change strictly.
 
 ## 2. Tests first
 
