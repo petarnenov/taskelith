@@ -30,14 +30,6 @@ Out of scope: slot selection code and its tests (G3 item 12, [design](design.md)
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
 | `make findings ARGS="validate"` | `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).` |
 | `make verify` on `2d94cf63`, before pass 1 | Exit 0; `npm run openspec -- validate --all --strict` inside it: `Totals: 70 passed, 0 failed (70 items)`; last line `Packed file allowlist and installed CLI verification passed.` Run on the Apple M3 host |
-| `make verify` on `9477eb83`, after the pass 1 fix and its records | Exit 0; `Totals: 70 passed, 0 failed (70 items)`; `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).`; last line `Packed file allowlist and installed CLI verification passed.` Run on the Apple M3 host |
-| `git fetch origin` before archiving | `origin/dev` still at `b87abe75`; no merge needed |
-| `npm run openspec -- archive align-account-pool-placement-baseline --yes` | `Totals: + 3, ~ 1, - 0, → 0`; `Change 'align-account-pool-placement-baseline' archived as '2026-10-27-align-account-pool-placement-baseline'.` |
-| `npm run openspec -- validate --all --strict` on the tree of the archive commit | `Totals: 69 passed, 0 failed (69 items)` |
-| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-27-align-account-pool-placement-baseline` |
-| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only `openspec/specs/account-pool-port/spec.md`: the three added requirements and the modified "Deterministic least-loaded order" (30 insertions, 1 deletion) |
-| Moved change files | `findings.jsonl` (1 line) and `passes.jsonl` (1 line) present; `make findings ARGS="validate"`: `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).` |
-| `make verify` on the tree of the archive commit | Exit 0 on the fourth run; `Totals: 69 passed, 0 failed (69 items)`; last line `Packed file allowlist and installed CLI verification passed.` The three runs before it failed only `a provider that races two concurrent hand-offs fails the suite` (`packages/modules/workspace/test/workspace-conformance.test.ts:76`) while the host's load average was about 10 to 12; the change touches no code, and the workspace test files passed alone twice (68 of 68) and that test alone three times. Run on the Apple M3 host |
 
 ## Independent review
 
