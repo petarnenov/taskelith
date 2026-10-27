@@ -80,6 +80,8 @@ After the pass-1 fix, on `3b29f979`, the same runner without `yes` processes ran
 - `node --experimental-strip-types --test --test-timeout=20000 packages/modules/workspace/test/*.test.ts` on `3b29f979`: 72 tests, 71 passed, 0 failed, 1 skipped.
 - `npm run verify:comments`: every comment is within the rule.
 - `make findings ARGS="validate"`: every findings file and pass summary file is valid.
+- `npm run openspec -- validate stabilize-workspace-handoff-race-conformance --strict`: valid.
+- `make verify` passed (exit 0) on `9c80be8b`, started at a load average of 4.61 (1 minute): 2,292 tests, 2,289 passed, 0 failed, 3 skipped; coverage 99.34 % lines, 92.28 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed.
 
 ## Independent review
 
