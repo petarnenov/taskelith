@@ -57,8 +57,8 @@ export class PlacementService {
     this.#passes = new RetrySchedule(timing);
   }
 
-  // A pass that backs off after an outage reads nothing. A task not placed
-  // is not read until due; its backoff ends once it is placed or not waiting.
+  // After an outage the passes back off; a task declined for its own reason
+  // is not read until due, and its backoff ends once placed or not waiting.
   async placeWaiting(): Promise<Result<PlacementPass>> {
     if (!this.#passes.due(PASS)) return ok({ waiting: 0, placed: 0 });
     const pass = await this.#placeDue();
@@ -80,12 +80,8 @@ export class PlacementService {
     if (!read.ok) return read;
     const { anyCandidate, waiting, stillWaiting } = read.value;
     this.#forgetUnless(checked, stillWaiting);
-    const order = fairWaitingOrder(waiting, after);
-    if (!anyCandidate) {
-      for (const { item: taskId } of order) this.#settle(taskId, NO_CANDIDATE);
-      return ok({ waiting: waiting.length, placed: 0 });
-    }
-    const { outcome, next } = await this.#offer(order, after);
+    if (!anyCandidate) return ok({ waiting: waiting.length, placed: 0 });
+    const { outcome, next } = await this.#offer(fairWaitingOrder(waiting, after), after);
     this.#after = next;
     return outcome.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : outcome;
   }
@@ -101,7 +97,7 @@ export class PlacementService {
       if (outcome.ok && outcome.value.kind === 'placed') {
         cursor.placed(projectId);
         placed++;
-      } else if (!outcome.ok && lacksFleetCapacity(outcome.error.details.reason)) {
+      } else if (isFleetCapacityDecline(outcome)) {
         cursor.ranOutOfCapacity();
       } else {
         cursor.declined(projectId);
@@ -111,9 +107,10 @@ export class PlacementService {
     return { outcome: ok(placed), next: cursor.next };
   }
 
-  // A retry that backs off is not read until due; a task placed or no
-  // longer waiting keeps no delay; any other one backs off once more.
+  // A fleet capacity decline keeps the wait, a backing-off retry waits until
+  // due, a task placed or not waiting has none; any other backs off again.
   #settle(taskId: TaskId, outcome: Result<TaskPlacement>): void {
+    if (isFleetCapacityDecline(outcome)) return;
     if (outcome.ok && outcome.value.kind === 'backing-off') this.#tasks.delayUntil(taskId, outcome.value.dueAt);
     else if (outcome.ok || noLongerWaits(outcome.error)) this.#forget(taskId);
     else this.#tasks.failed(taskId);
@@ -158,7 +155,6 @@ interface Offers {
 
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
-const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: NO_CANDIDATE_REASON }));
 
 // What a placement transaction committed: an assignment, the end of an
 // attempt that a rejecting reason refused, or nothing while a retry waits.
@@ -273,6 +269,12 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
     providerCredentials: [],
     ...(retryOf === undefined ? {} : { automaticRetryOf: retryOf }),
   };
+}
+
+// Contract section 5: such a task keeps its wait unchanged and is offered
+// again in the next pass, in rotation order.
+function isFleetCapacityDecline(outcome: Result<TaskPlacement>): boolean {
+  return !outcome.ok && lacksFleetCapacity(outcome.error.details.reason);
 }
 
 function noLongerWaits(error: Failure): boolean {
