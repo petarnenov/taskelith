@@ -1,1 +1,2 @@
 {"change": "persist-placement-rotation-cursor", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17d94-0ac4-7cd2-a59b-f90929daeb30", "counts": {"critical": 0, "high": 1, "medium": 0, "low": 2}}
+{"change": "persist-placement-rotation-cursor", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "77d00a2d-1c7b-47bc-b192-479e3435e270", "counts": {"critical": 0, "high": 0, "medium": 1, "low": 6}}
