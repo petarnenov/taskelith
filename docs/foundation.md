@@ -56,7 +56,7 @@ G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin 
 
 ## G2 status
 
-> **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below. Four items block the closure: 24c `run-g2-partition-and-races`, returned to its worker for a macOS hang; the fix of the Linux CP9 defect L1 (`stop-automatic-retry-of-unknown-exit`); the failure-cause ReDoS fix; and the re-run of the macOS arm64 process ownership row ([ADR 0015](decisions/0015-g2-closure.md) decision 5).
+> **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below. Three items block the closure: 24c `run-g2-partition-and-races` (Zaki, in review); the fix of the Linux CP9 defect L1, `stop-automatic-retry-of-unknown-exit` (Liki, in review); and Maki's re-run of the macOS arm64 process ownership row ([ADR 0015](decisions/0015-g2-closure.md) decision 5).
 
 G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). **PLACEHOLDER:** its exit evidence was reproduced from a fresh clone (change `close-g2`), and G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)).
 
