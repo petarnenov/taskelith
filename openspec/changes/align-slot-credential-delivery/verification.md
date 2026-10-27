@@ -28,7 +28,7 @@ A worker task the coordinator (Niki) assigned on 2026-10-27, developed in a brie
 - `cec2c009` `docs: record make verify after review pass 2 of align-slot-credential-delivery` (tasks and this record).
 - `b0aaa3f0` `docs: order slot credential versions and discard only older ones after review pass 3` (contract, spec delta, design, and proposal, before the code; not reviewed).
 - `72eaff8e` `chore(scheduling): assign ordered slot credential versions and discard only older ones` (code and tests; not reviewed).
-- A later `docs` commit records review pass 3 and its unreviewed fixes (passes, tasks, and this record), and the `docs` commit after it adds the two pass 3 records to `findings.jsonl`, naming that commit for the record finding.
+- A later `docs` commit records review pass 3 and its unreviewed fixes (passes, tasks, and this record), and the `docs` commit after it adds the two pass 3 records to `findings.jsonl`, naming that commit for the record finding; a last `docs` commit names the ordered discard in task 4.2.2 and lists itself here.
 
 ## Environment
 

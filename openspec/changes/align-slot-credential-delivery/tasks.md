@@ -28,7 +28,7 @@
 - [x] 4.1.1 Keep removal draining or rejecting per ADR 0005 decision 6; only a revocation cancels (coordinator decision, Niki, 2026-10-27)
 - [x] 4.2 Independent review pass 2 (reviewer B) and its fixes
 - [x] 4.2.1 Scope the device-login refusal per harness by admitted delivery, without a second revisit trigger or an ADR edit (coordinator decision, Niki, 2026-10-27)
-- [x] 4.2.2 Discard every superseded credential version after a rotation's switch, orphans of crashed or refused rotations included, through `SlotCredentials.discardAllExcept` (coordinator requirement, Niki, 2026-10-27)
+- [x] 4.2.2 Discard every superseded credential version after a rotation's switch, orphans of crashed or refused rotations included, through one `SlotCredentials` command, since review pass 3 `discardOlderThan` (coordinator requirement, Niki, 2026-10-27)
 - [x] 4.2.3 Record the item 12 sweep of credential versions left by a rotate crashed after its switch or an add-slot crashed between store and add, with a test per crash point, as a remaining gate (coordinator decision, Niki, 2026-10-27)
 - [x] 4.3 Independent review pass 3 (reviewer A)
 - [x] 4.3.1 Fix both pass 3 findings without another review, recorded `fixed-unreviewed`: ordered credential versions that `store` assigns from a per-slot counter, `discardOlderThan` instead of discarding every other version, orphans left to a later rotation, the item 12 gate tests, and the stale citations (away delegate (claude fallback; OpenCode out of quota) on behalf of the owner, 2026-10-27)
