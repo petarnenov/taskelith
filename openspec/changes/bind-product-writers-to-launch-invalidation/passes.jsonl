@@ -1,0 +1,1 @@
+{"change": "bind-product-writers-to-launch-invalidation", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17eee-d6f8-7763-9617-f04c0007e6f1", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 2}}
