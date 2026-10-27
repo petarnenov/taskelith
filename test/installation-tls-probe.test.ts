@@ -9,7 +9,7 @@ import { X509CertificateIssuer } from '@taskelith/certificates';
 import { authorityValidity, serverCertificateValidity, type IssuedCertificate } from '@taskelith/fleet';
 import { parseInstant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
-import { acceptsPlainClient, parseEndpoint, reissueProblems } from '../scripts/installation-tls-probe.ts';
+import { parseEndpoint, refusesPlainClient, reissueProblems } from '../scripts/installation-tls-probe.ts';
 
 const NOW = value(parseInstant(new Date().toISOString()));
 const issuer = new X509CertificateIssuer();
@@ -65,9 +65,57 @@ function plainNatsServer(): Server {
   });
 }
 
-test('a broker that requires TLS refuses a plain client, and one that does not is named', async () => {
-  assert.equal(await acceptsPlainClient(parseEndpoint(await listening(natsServer(nats)))), false);
-  assert.equal(await acceptsPlainClient(parseEndpoint(await listening(plainNatsServer()))), true);
+// A broker with allow_non_tls and authentication: the probe's first NATS
+// connection upgrades to TLS, a later plain one is refused for its login.
+function plainAuthNatsServer(presented: IssuedCertificate): Server {
+  const secureContext = createSecureContext({ cert: presented.certificatePem, key: presented.privateKeyPem });
+  let connections = 0;
+  return createTcpServer((socket) => {
+    socket.write('INFO {"tls_required":false,"tls_available":true,"auth_required":true}\r\n');
+    if (connections++ === 0) {
+      new TLSSocket(socket, { isServer: true, secureContext }).on('error', () => socket.destroy());
+      return;
+    }
+    socket.once('data', () => socket.end("-ERR 'Authorization Violation'\r\n"));
+  });
+}
+
+test('a broker that refuses a plain client only for its login fails the probe', async () => {
+  const problems = await reissueProblems(parseEndpoint(await listening(tlsServer(api))), parseEndpoint(await listening(plainAuthNatsServer(nats))), directory);
+  assert.deepEqual(problems, ['NATS does not refuse a plain client as requiring TLS']);
+});
+
+// A NATS stand-in that sends `info`, then answers the first data.
+function scriptedNatsServer(info: object, answer: string): Server {
+  return createTcpServer((socket) => {
+    socket.write(`INFO ${JSON.stringify(info)}\r\n`);
+    socket.once('data', () => socket.end(answer));
+  });
+}
+
+// A server that sends `text` and closes, reading to the client's end.
+function closingServer(text: string): Server {
+  return createTcpServer((socket) => socket.resume().end(text));
+}
+
+test('only a refusal for TLS counts as refusing a plain client', async () => {
+  const refuses = async (server: Server) => refusesPlainClient(parseEndpoint(await listening(server)));
+  assert.equal(await refuses(natsServer(nats)), true);
+  assert.equal(await refuses(scriptedNatsServer({ tls_required: true }, "-ERR 'Secure Connection - TLS Required'\r\n")), true);
+  assert.equal(await refuses(plainNatsServer()), false);
+  assert.equal(await refuses(scriptedNatsServer({ tls_required: true }, "-ERR 'Authorization Violation'\r\n")), false);
+  assert.equal(await refuses(scriptedNatsServer({ tls_required: true }, '+OK\r\n')), false);
+  assert.equal(await refuses(scriptedNatsServer({ tls_required: false }, '')), false);
+  assert.equal(await refuses(scriptedNatsServer({}, '')), false);
+  assert.equal(await refuses(closingServer('INFO {not json}\r\n')), false);
+  assert.equal(await refuses(closingServer('')), false);
+});
+
+test('a connection that fails is no refusal for TLS', async () => {
+  const closed = createTcpServer();
+  const address = await listening(closed);
+  await new Promise<void>((resolve) => closed.close(() => resolve()));
+  assert.equal(await refusesPlainClient(parseEndpoint(address)), false);
 });
 
 test('an address without a port is refused', () => {

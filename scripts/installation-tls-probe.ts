@@ -73,29 +73,51 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Whether a NATS server answers a plain client's PING with a PONG; one that
-// requires TLS sends an error or closes the connection instead.
-export function acceptsPlainClient(endpoint: Endpoint): Promise<boolean> {
+// The refusal that nats-server sends when a client must use TLS; 2.15.1
+// itself only advertises tls_required and closes on the failed handshake.
+const TLS_REQUIRED_ERROR = "-ERR 'Secure Connection - TLS Required'";
+
+// Whether NATS refuses a plain client because it requires TLS; a login
+// refusal, any other reply, a timeout, or a failed connection is not that.
+export async function refusesPlainClient(endpoint: Endpoint): Promise<boolean> {
+  const reply = await plainClientReply(endpoint).catch(() => undefined);
+  return reply !== undefined && isTlsRefusal(reply);
+}
+
+function isTlsRefusal(reply: string): boolean {
+  const [info = '', ...rest] = reply.split('\r\n');
+  const after = rest.join('\r\n').trim();
+  return advertisesTlsRequired(info) && (after === '' || after === TLS_REQUIRED_ERROR);
+}
+
+function advertisesTlsRequired(infoLine: string): boolean {
+  if (!infoLine.startsWith('INFO ')) return false;
+  try {
+    return (JSON.parse(infoLine.slice('INFO '.length)) as { tls_required?: unknown }).tls_required === true;
+  } catch {
+    return false;
+  }
+}
+
+// What the server sends to a plain CONNECT and PING without credentials,
+// up to its close or its PONG.
+function plainClientReply(endpoint: Endpoint): Promise<string> {
   const socket = connectTcp(endpoint.port, endpoint.host);
-  return withTimeout(new Promise<boolean>((resolve) => {
+  return withTimeout(new Promise<string>((resolve, reject) => {
     let text = '';
-    let connected = false;
     socket.on('data', (chunk: Buffer) => {
+      const first = !text.includes('\n');
       text += chunk.toString('latin1');
-      if (!connected && text.includes('\n')) {
-        connected = true;
-        socket.write('CONNECT {"verbose":false,"tls_required":false}\r\nPING\r\n');
-      }
-      if (text.includes('PONG')) resolve(true);
-      if (text.includes('-ERR')) resolve(false);
+      if (first && text.includes('\n')) socket.write('CONNECT {"verbose":false,"tls_required":false}\r\nPING\r\n');
+      if (text.includes('PONG')) resolve(text);
     });
-    socket.once('close', () => resolve(false));
-    socket.once('error', () => resolve(false));
+    socket.once('close', () => resolve(text));
+    socket.once('error', reject);
   })).finally(() => socket.destroy());
 }
 
 // Problems: a server presenting another certificate than its file, and a
-// NATS server that accepts a plain client.
+// NATS server that does not refuse a plain client as requiring TLS.
 export async function reissueProblems(api: Endpoint, nats: Endpoint, directory: string): Promise<string[]> {
   const read = (name: string) => readFileSync(join(directory, name), 'utf8');
   const ca = read('installation-ca.pem');
@@ -105,7 +127,7 @@ export async function reissueProblems(api: Endpoint, nats: Endpoint, directory: 
     const presented = await presentedFingerprint(endpoint, ca, natsInfoFirst);
     if (presented !== fileFingerprint(read(file))) problems.push(`${name} presents another certificate than ${file}`);
   }
-  if (await acceptsPlainClient(nats)) problems.push('NATS accepts a plain client');
+  if (!(await refusesPlainClient(nats))) problems.push('NATS does not refuse a plain client as requiring TLS');
   return problems;
 }
 
