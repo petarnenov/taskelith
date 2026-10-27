@@ -24,7 +24,7 @@ Out of scope: new owner decisions, changes to D1 to D18, starting any G3 item, e
 
 ## Checks
 
-Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers, again after the pass 1 fixes (`1682cddd`) with the pass 1 records, and again after the pass 2 fixes (`5328dd84`) with the pass 2 records, with the same results; `verify:findings` was run as `make findings ARGS="validate"`.
+Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers, again after the pass 1 fixes (`1682cddd`) with the pass 1 records, again after the pass 2 fixes (`5328dd84`) with the pass 2 records, and again after the pass 3 fixes (`28f5baca`) with the pass 3 records, with the same results except the counts the rows name; `verify:findings` was run as `make findings ARGS="validate"`.
 
 | Check | Result |
 | --- | --- |
@@ -72,7 +72,14 @@ Reviewers assigned by the coordinator: reviewer A, Claude Code `claude-fable-5-1
 
 ### Pass 3 (reviewer A)
 
-Not yet run.
+- Reviewer A: Claude Code `claude-fable-5-1`, effort `medium`, run by the worker session; reviewed head `e8cdeb44a752d89a0c02629586069d6b0ca6ef11`.
+- Invocation as in pass 1.
+- Model confirmation: `claude-fable-5-1` in the JSON `modelUsage`. Session `60f97e1e-001d-4976-acb3-7504b8c5e606`. Snapshot before and after: equal. Both as relayed by the worker session.
+- The reviewer confirmed the fixes of G1, G2, and G3 and that the merge of `origin/dev` at `af558eb0` kept the records valid.
+- Findings: 0 Critical, 0 High, 0 Medium, 2 Low, matching its `passes.jsonl` line. As a Low-only pass, both were fixed in `28f5baca` without another review; these are unreviewed fixes:
+  - **H1 (Low, evidence-mismatch; fixed, unreviewed):** the `verify:findings` row kept 27 and 7 files after the merge of `af558eb0`. It now gives the counts at each base, 28 and 8 after `af558eb0`.
+  - **H2 (Low, docs; fixed, unreviewed):** the deferral row "Archived records with the `ext2/ext3` label and broken relative links" omitted #350. It now says that, by owner decision B1 (2026-10-27), #350 `repair-archived-record-links` repaired the links and the `ext2/ext3` labels keep their disposition (ADR 0015 at `af558eb0`, line 140).
+- Out-of-scope note of the reviewer, fixed in the same commit (unreviewed): task 2.2 said `make verify` is run by the coordinator's session; it is run by the worker session.
 
 ## Limitations
 
@@ -82,7 +89,7 @@ Not yet run.
 
 ## Remaining gates
 
-- `make verify` after the pass 2 fixes, before pass 3, and on the archive commit (task 2.2 stays open until then).
+- `make verify` on the archive commit (task 2.2 stays open until then).
 - Independent review passes 1 to 3 and their records.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).

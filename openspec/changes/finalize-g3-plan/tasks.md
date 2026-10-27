@@ -13,7 +13,7 @@
 - [ ] 2.2 `make verify`, run by the worker session
 - [x] 2.3 Independent review pass 1 by reviewer A, Claude Code `claude-fable-5-1`
 - [x] 2.4 Independent review pass 2 by reviewer B, Codex `gpt-6.1-sol`
-- [ ] 2.5 Independent review pass 3 by reviewer A, if needed
+- [x] 2.5 Independent review pass 3 by reviewer A, if needed
 
 ## 3. Archive
 
