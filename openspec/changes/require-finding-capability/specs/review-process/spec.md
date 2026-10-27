@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Review findings record
-Each finding of an independent review pass SHALL be one line of its change's `findings.jsonl`, matching the finding schema and category vocabulary, with bounded lines, no unknown properties, and no secret-like values. In an active change, a finding outside `openspec/changes/` SHALL name an existing capability. `make verify` SHALL validate every findings file and require one in every active change, but not in changes archived before the record existed.
+Each finding of an independent review pass SHALL be one line of its change's `findings.jsonl`, matching the finding schema and categories, with bounded lines, no unknown properties, and no secret-like values. In an active change, a finding outside `openspec/changes/` SHALL name a capability, and any named capability SHALL exist under `openspec/specs`. `make verify` SHALL validate every findings file and require one in every active change, but not in changes archived before the record existed.
 
 #### Scenario: Finding with an unknown category
 - **WHEN** a line of a `findings.jsonl` names a category that the vocabulary does not list
@@ -30,6 +30,10 @@ Each finding of an independent review pass SHALL be one line of its change's `fi
 #### Scenario: Record finding without a capability
 - **WHEN** a finding of an active change concerns a file under `openspec/changes/`, such as the change's own `verification.md`, and names no capability
 - **THEN** validation passes for that line
+
+#### Scenario: Record finding with an unknown capability
+- **WHEN** a finding of an active change concerns a file under `openspec/changes/` and names a capability without a directory under `openspec/specs`
+- **THEN** validation fails and names the file and line
 
 #### Scenario: Archived finding without a capability
 - **WHEN** an archived change holds a finding outside `openspec/changes/` without a capability

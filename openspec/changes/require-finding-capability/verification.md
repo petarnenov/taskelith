@@ -6,10 +6,10 @@ Owner-approved task relayed by the coordinator brief on 2026-10-27: record findi
 
 ## Archived findings on the base
 
-`npm run findings -- index --json` on `477a423e` counts 51 archived findings, all fixed, of which 21 have the capability `(none)`. The brief cited 20 of 50; `dev` gained one finding without a capability since. Of the 21:
+`npm run findings -- index --json` on `477a423e` counts 51 archived findings, all fixed, of which 21 have the capability `(none)`. The brief cited 20 of 50, as at merge `92f0830b`; `dev` gained one record finding without a capability since, in `stabilize-placement-fair-order-test` (PR #331). Of the 21:
 
 - 17 concern a change's own records under `openspec/changes/` (`verification.md`, `design.md`, `proposal.md`, `tasks.md`, or a spec delta). The path rule makes them record findings without a rewrite.
-- 4 concern other files and stay without a capability: `tools/linux-cgroup/crash-windows.sh` and `scripts/linux-crash-windows.sh` (`run-g2-crash-windows-on-linux`), and `docs/worker-platforms.md` and `docs/dependencies.md` (`run-g2-native-acceptance-x86-64`). The brief cited 3; the fourth, `docs/dependencies.md`, is the added one.
+- 4 concern other files and stay without a capability: `tools/linux-cgroup/crash-windows.sh` and `scripts/linux-crash-windows.sh` (`run-g2-crash-windows-on-linux`), and `docs/worker-platforms.md` and `docs/dependencies.md` (`run-g2-native-acceptance-x86-64`). All four already existed at `92f0830b` (the last two since `5af2f9f8`, PR #328), so the brief's 20 split as 16 record and 4 code or doc findings; its "3 others" was off by one.
 
 In all, 26 archived findings are record findings (9 of them name a capability): evidence-mismatch 9, docs 8, stale-citation 5, spec-wording 3, process 1. Every capability that an archived finding names exists under `openspec/specs`.
 

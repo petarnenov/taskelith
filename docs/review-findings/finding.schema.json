@@ -73,7 +73,7 @@
       "maximum": 1000000
     },
     "capability": {
-      "description": "Name of the OpenSpec capability (spec) the finding concerns. npm run findings requires an existing one under openspec/specs for a finding of an active change whose file is outside openspec/changes/; a change that skips specs names the closest capability.",
+      "description": "Name of the OpenSpec capability (spec) the finding concerns. npm run findings requires an existing one under openspec/specs for a finding of an active change whose file is outside openspec/changes/; a change that skips specs names the closest capability. In an active change any named capability must exist.",
       "$ref": "#/$defs/identifier"
     },
     "outcome": {
