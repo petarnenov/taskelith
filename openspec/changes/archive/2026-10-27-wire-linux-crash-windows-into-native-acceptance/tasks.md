@@ -19,4 +19,4 @@
 ## 4. Review and archive
 
 - [x] 4.1 Independent review (pass 1, reviewer A, Low-only)
-- [ ] 4.2 Archive the change
+- [x] 4.2 Archive the change

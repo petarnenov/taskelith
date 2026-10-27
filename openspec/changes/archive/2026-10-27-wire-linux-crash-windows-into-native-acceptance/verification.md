@@ -49,6 +49,17 @@ Criteria: the ADR 0004 principles and the plan checklist of [design.md](design.m
 
 Pass 1 found only Low findings, so they are fixed without another pass (governance, "Low findings are fixed"); these fixes are unreviewed. Reviewer B (Claude Code `claude-fable-5-1`) did not run, because pass 1 was Low-only. `findings.jsonl` holds the three findings with outcome `fixed-unreviewed`, and `passes.jsonl` the summary of pass 1.
 
+## Archive checks
+
+Worker step 7, after review pass 1 and its unreviewed fixes, 2026-10-27. The checked state is the tree of the archive commit (`docs: archive the wire Linux crash windows into native acceptance change`): the working tree these checks ran on after `npm run openspec -- archive wire-linux-crash-windows-into-native-acceptance --yes` on `b2d093cd` (merge base with `origin/dev`: `34af90f4`, which had not moved), with the paths in `findings.jsonl` moved to the archive.
+
+- Archive: `Totals: + 1, ~ 0, - 0, → 0`; archived as `2026-10-27-wire-linux-crash-windows-into-native-acceptance`, with `findings.jsonl` (three rows), `passes.jsonl` (one row), and `results.jsonl` (42 rows).
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: the line `✓ change/2026-10-27-wire-linux-crash-windows-into-native-acceptance` passes; only this change's line counts.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/native-worker-acceptance/spec.md`, 11 lines added: the requirement "Linux crash windows in native acceptance" with its two scenarios.
+- `make findings ARGS="validate"`: every findings file is valid (21 files), and every pass summary file is valid (2 files).
+- `make verify`: passed; tests 2137, pass 2090, fail 0, skipped 47; all files 99.24% lines, 92.18% branches, 98.92% functions; OpenSpec 69 passed; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
+
 ## Limitations
 
 - On a macOS host the Linux entry still leaves the Linux crash windows and duplicate delivery unproven; it reports them, and the scenario recorder has no outcome for a not-applicable proof (design decision 4).
@@ -56,5 +67,4 @@ Pass 1 found only Low findings, so they are fixed without another pass (governan
 
 ## Remaining gates
 
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
