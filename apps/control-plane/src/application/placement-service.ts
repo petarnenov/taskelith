@@ -67,9 +67,10 @@ export class PlacementService {
   // that no candidate accepts rolls back and keeps waiting unchanged.
   async #placeDue(): Promise<Result<PlacementPass>> {
     const checked = this.#tasks.pastDue();
+    const after = this.#after;
     const read = await this.#store.readCommitted(async (tx) => ok({
       anyCandidate: (await tx.workers.candidates()).length > 0,
-      waiting: await tx.placements.waiting(PLACEMENT_BATCH, this.#tasks.notDue(), this.#after),
+      waiting: await tx.placements.waiting(PLACEMENT_BATCH, this.#tasks.notDue(), after),
       stillWaiting: await stillWaitingAmong(tx.placements, checked),
     }));
     if (!read.ok) return read;
@@ -77,7 +78,7 @@ export class PlacementService {
     this.#forgetUnless(checked, stillWaiting);
     this.#after = waiting.at(-1)?.projectId ?? this.#after;
     let placed = 0;
-    for (const taskId of fairPlacementOrder(waiting)) {
+    for (const taskId of fairPlacementOrder(waiting, after)) {
       const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff)) : NO_CANDIDATE;
       if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
       if (outcome.ok && outcome.value.kind === 'placed') placed++;

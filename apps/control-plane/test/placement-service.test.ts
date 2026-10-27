@@ -258,3 +258,46 @@ test('a placeable task after 1200 older blocked projects is placed within a boun
   assert.equal(placed, 1);
   assert.ok(passes <= bound, `placed after ${passes} passes`);
 });
+
+// Project p-a has an older backlog than p-b; one slot frees per pass, and a
+// placed task no longer waits.
+async function oneSlotStore(placed: string[]): Promise<ControlPlaneStore> {
+  const lineage = new InMemoryTaskLineage();
+  let waiting: Task[] = [];
+  const backlog = [['task-a1', 'p-a', 0], ['task-a2', 'p-a', 1], ['task-a3', 'p-a', 2], ['task-b1', 'p-b', 5]] as const;
+  for (const [taskId, projectId, seconds] of backlog) {
+    waiting.push(Object.freeze({
+      id: taskId as TaskId, admissionId: `admission-${taskId}` as AdmissionId, ownershipGeneration: value(parseOwnershipGeneration(1)),
+      attempts: [], generation: FIRST_GENERATION, changedAt: value(parseInstant(new Date(seconds * 1_000).toISOString())),
+    }));
+    value(await lineage.add({ taskId: taskId as TaskId, rootTaskId: taskId as TaskId, depth: 0, projectId: projectId as ProjectId, runId: 'run-1' as RunId }));
+  }
+  const placements = new InMemoryPlacementQueue(() => waiting, lineage, () => []);
+  let slotFree = false;
+  return {
+    readCommitted: (work) => {
+      slotFree = true;
+      return work({ workers: { candidates: async () => ['worker-a'] }, placements } as never);
+    },
+    transaction: async (work) => {
+      const asked: string[] = [];
+      await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) } } as never);
+      if (!slotFree) return UNPLACED as never;
+      slotFree = false;
+      placed.push(...asked);
+      waiting = waiting.filter((task) => !asked.includes(task.id));
+      return PLACED as never;
+    },
+  };
+}
+
+test('with one free slot, the next project is offered before the older backlog of the last one', async () => {
+  const clock = { at: 0 };
+  const placed: string[] = [];
+  const service = new PlacementService(await oneSlotStore(placed), { now: () => clock.at, draw: () => 0 });
+  for (let pass = 0; pass < 4; pass++) {
+    value(await service.placeWaiting());
+    clock.at += 60_000;
+  }
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-a2', 'task-a3']);
+});
