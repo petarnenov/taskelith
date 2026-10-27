@@ -90,12 +90,15 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 | 15 | Low | docs | The design said CI is never stamped | `31184e8b`: "CI never reuses a stamp" |
 
 - **Checks after the fixes:** under "Checks and results"; `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 50 findings files and 30 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`. The generated part above still shows the state of `f726edbf` and no review pass; `make record` after the next `make verify` regenerates it.
+- **Note, found after pass 1:** `make record` and `make record-check` let `make` expand `CHANGE` and `LOG`, the class of finding 1; the worker found it after pass 1, not a reviewer, so `findings.jsonl` has no line for it. The fix applies the `make integrate` pattern, and a real `make` run in `test/verification-record.test.ts` proves the arguments arrive as typed (it fails against the old `Makefile`: `make record ran a $(shell) of the arguments`). It is unreviewed until pass 2.
 
 ## Limitations
 
 - `make integrate` was never run against GitHub; its tests use a local bare origin and stubs of `make`, `npm`, and `gh`.
 - A stamp is local to one clone, so another machine runs `make verify` again. The stamp rarely spares a worker's handoff push: once the worker records the `make verify` result in `verification.md`, the tree differs from the stamped one, so the handoff push still runs `make verify`.
 - A change under `docs/review-findings/**` or `docs/qualification/**`, which tests read, gets the full profile; a test that reads another file under `docs/` runs on a docs-only branch only in the full `make verify` at integration.
+- The Docker slot holder runs in a new session (Node.js `detached: true`, `setsid`), so the wrapped command has no controlling terminal; `services.sh` needs none. A new process group in the same session (Perl `setpgrp`) was rejected for its `SIGTTOU` and `SIGTTIN` risk; the worker (Pepi) decided this.
+- The stamp key does not cover the branch's own history: two histories with the same tree and merge base with `origin/dev` count as equivalent, a theoretical residual of finding 4 for the findings validation, which reads branch commits. Keying on the HEAD commit would defeat stamp reuse across the record commit and is not adopted.
 - The context hook depends on Claude Code's transcript format; it was tried once, read-only, against a real transcript on this machine.
 
 ## Follow-ups
