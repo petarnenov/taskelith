@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, the checks without Docker, and `make verify` after the merge of `dev` are recorded below; review passes 1 and 2 and their fixes follow, and pass 3 confirms them.
+Date: 2026-10-27. The author's verification, the checks without Docker, and `make verify` after the merge of `dev` are recorded below; review passes 1 and 2 and their fixes follow, pass 3 confirms them, and the archive is checked.
 
 ## Scope and source
 
@@ -57,6 +57,8 @@ Run on the working tree of `a4fe70b1` with Node.js 24.22.1 and npm 12.2.1, witho
 - Unit tests of every workspace package and app, every non-integration test file under `packages/` and `apps/` (123 files), without coverage: 1401 tests, 1399 pass, 0 fail, 2 skipped.
 
 `make verify` at `cb7c50de`, run by the coordinator with the Docker test services, after the failed first run above: exit 0; 2250 tests, 2247 pass, 0 fail, 3 skipped; coverage of all files lines 99.32%, branches 92.23%, functions 99.02%; `placement-service.js` lines 100%, branches 91.28%, functions 100%; `placement-outcome-record.js`, `placement-outcome-records.js` (PostgreSQL), `in-memory-placement.js`, and `capacity-reasons.js` 100% each; `placement-outcome-conformance.js` lines 100%, branches 90.91%, functions 100%; `validate --all --strict` 70 passed, 0 failed; every active OpenSpec change archives into strictly valid specs; the package verification passed. The author checked these numbers against the run's log.
+
+Archive (worker step 7), on the tree of the archive commit, on top of `18d035e1`: `npm run openspec -- archive record-placement-outcome --yes` moved the change to `openspec/changes/archive/2026-10-27-record-placement-outcome/` and applied its deltas, capacity-reservation one requirement added, execution-placement two added and one modified; `validate --all --strict` 69 passed, 0 failed; in `validate --archived --no-interactive` the line `change/2026-10-27-record-placement-outcome` passes (the 13 failures of that run are older archived changes with open tasks); `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` changes only the two specs, adding the three requirements and replacing the THEN of the scenario "No capacity"; the moved change keeps `findings.jsonl` and `passes.jsonl`; `verify:findings`, `verify:links`, and `verify:comments` pass. `make verify` on that tree, run by the coordinator with the Docker test services: exit 0; 2258 tests, 2255 pass, 0 fail, 3 skipped; coverage of all files lines 99.32%, branches 92.25%, functions 99.02%; the package verification passed. The author checked these numbers against the run's log.
 
 After review pass 1, on the working tree of `7a67e921` with this record and the pass 1 review records, without Docker: `npm run openspec -- validate record-placement-outcome --strict`: valid; `validate --all --strict --no-interactive`: 70 passed, 0 failed; `npm run verify:comments`, `verify:links`, and `verify:archive` pass; `npm run verify:findings`: every findings file is valid, 37 files; every pass summary file is valid, 17 files; `npm run verify:dependencies`: verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only); `make contract-compatibility`: 0 breaking changes in the four contract documents against `93b5065b`; `npm run build` and `npm run check:boundaries`: boundary checks passed; every non-integration test file under `packages/` and `apps/` (126 files): 1448 tests, 1445 pass, 0 fail, 3 skipped.
 
@@ -122,6 +124,5 @@ The coordinator assigns reviewers A and B; each pass that runs to a report adds 
 
 ## Remaining gates
 
-- Archive of the change on the branch (worker step 7).
 - Later outcome sources, delegation admission (`delegation-awaiting-capacity`) and worker refusals, need new `source` values and a migration of the table's `source` check, in a separate task (coordinator, Niki, 2026-10-27).
 - Integration into dev by the coordinator (single pull request).
