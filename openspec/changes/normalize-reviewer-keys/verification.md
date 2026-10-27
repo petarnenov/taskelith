@@ -12,6 +12,8 @@ The coordinator's brief of 2026-10-27 for the change `normalize-reviewer-keys` (
 - **Changed command output:** `validate` rejects non-canonical keys of active changes; the "By reviewer" sections of `index` and `reviewers` show each reviewer once. The `checklist` output is unchanged, because it shows no reviewer.
 - **Out of scope:** rewriting archived records; changing the schema's validation; `AGENTS.md`, whose review bullet names no reviewer or harness and points to the governance review process, which holds the assignment.
 
+- **Coordinator decisions (Niki, 2026-10-27)** on the author's readings of the owner's table: for a task that needs network access, Claude Code (claude-fable-5-1) is reviewer A, passes 1 and 3, and Claude Code (claude-opus-5-5), effort `high`, stays reviewer B, the same harness being allowed by this assignment and named in `verification.md`; the turn orders only the replacements under "Unavailable reviewer", starting after the replaced reviewer and skipping reviewers that the table bars from that role; the statistics are given as measured, over all archived passes of each reviewer, not pass 1 only, naming only OpenCode CLI (deepseek-v4-pro) and OpenCode CLI (kimi-k3.1-pro); and the spec scope additions ("Reviewer assignment", the modified "Authorized alternating reviewers" and "Rotation order") are accepted. `docs/governance.md`, the spec delta, and `design.md` D6 already state these readings; the commit of these decisions changes only this record and `design.md`.
+
 ## Author self-check
 
 - **Contract first.** `b737c9fc` holds the spec delta, proposal, and design before the scripts and tests (`8cfe024c`) and the governance text (`0968b548`).
@@ -82,7 +84,6 @@ Not run yet. The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for
 
 - The rule checks the provider prefix of a model, not that the model exists (`design.md`, D3).
 - Coverage: `make verify` measures coverage over the built `dist` files of the packages and apps; the scripts under `scripts/` run from source and are not in that measure. The new module's branches are each exercised by `test/reviewer-keys.test.ts` and `test/findings.test.ts`.
-- Two governance points are the author's reading of the owner's table, for the review to check: the network row replaces reviewer A, with Claude Code (claude-opus-5-5) staying B, so that pair shares a harness; and a replacement's turn starts after the replaced reviewer.
 
 ## Remaining gates
 
