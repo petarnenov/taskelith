@@ -29,7 +29,7 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
   if (!browserTls.ok) return browserTls;
   const workflows = readWorkflows(environment.TASKELITH_WORKFLOWS);
   if (!workflows.ok) return workflows;
-  const natsTls = readBrokerTls(environment, dataRoot.value);
+  const natsTls = readBrokerTls(environment, dataRoot.value, ownerUid);
   if (!natsTls.ok) return natsTls;
   const transportLimits = readTransportLimits(environment.TASKELITH_STREAM_MAX_BYTES);
   if (!transportLimits.ok) return transportLimits;

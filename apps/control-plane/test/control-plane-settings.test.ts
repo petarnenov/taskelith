@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -60,19 +60,55 @@ test('the browser endpoint binds loopback on 8443 and takes both TLS files or no
   assert.equal(variable({ TASKELITH_BROWSER_PORT: 'https' }), 'TASKELITH_BROWSER_PORT');
 });
 
+const ownerUid = process.getuid!();
+
 test('without TASKELITH_NATS_CA the broker trusts the installation CA once it exists', () => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-broker-trust-'));
   try {
-    assert.equal(value(readBrokerTls({}, root)), undefined, 'before init the connection stays plain');
+    assert.equal(value(readBrokerTls({}, root, ownerUid)), undefined, 'before init the connection stays plain');
     mkdirSync(join(root, 'control-plane'), { mode: 0o700 });
     writeFileSync(join(root, 'control-plane', 'installation-ca.pem'), 'INSTALLATION CA', { mode: 0o600 });
-    assert.deepEqual(value(readBrokerTls({}, root)), { ca: 'INSTALLATION CA' });
-    assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_DATA_DIR: root }, 'linux', 501)).natsTls, { ca: 'INSTALLATION CA' });
+    assert.deepEqual(value(readBrokerTls({}, root, ownerUid)), { ca: 'INSTALLATION CA' });
+    assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_DATA_DIR: root }, 'linux', ownerUid)).natsTls, { ca: 'INSTALLATION CA' });
     writeFileSync(join(directory, 'ca.pem'), 'PEM');
-    assert.deepEqual(value(readBrokerTls({ TASKELITH_NATS_CA: join(directory, 'ca.pem') }, root)), { ca: 'PEM' }, 'the setting wins');
-    rmSync(join(root, 'control-plane', 'installation-ca.pem'));
-    mkdirSync(join(root, 'control-plane', 'installation-ca.pem'));
-    assert.equal(failed(readBrokerTls({}, root)).details.path, join(root, 'control-plane', 'installation-ca.pem'));
+    assert.deepEqual(value(readBrokerTls({ TASKELITH_NATS_CA: join(directory, 'ca.pem') }, root, ownerUid)), { ca: 'PEM' }, 'the setting wins');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// A data root whose control-plane namespace holds the installation record.
+function initializedRoot(): { root: string; ca: string } {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-broker-trust-'));
+  mkdirSync(join(root, 'control-plane'), { mode: 0o700 });
+  const record = JSON.stringify({ format: 1, installationId: '0123abcd', recoveryEpoch: 1 });
+  writeFileSync(join(root, 'control-plane', 'installation'), record, { mode: 0o600 });
+  return { root, ca: join(root, 'control-plane', 'installation-ca.pem') };
+}
+
+test('an initialized installation without its CA refuses a plain broker connection', () => {
+  const { root, ca } = initializedRoot();
+  try {
+    const lost = failed(readBrokerTls({}, root, ownerUid));
+    assert.deepEqual([lost.code, lost.details.path], ['precondition-failed', ca]);
+    assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_DATA_DIR: root }, 'linux', ownerUid)).details.path, ca);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the installation CA is read only as an owner-only file of the owner', () => {
+  const { root, ca } = initializedRoot();
+  try {
+    writeFileSync(join(directory, 'outside-ca.pem'), 'OUTSIDE CA', { mode: 0o600 });
+    symlinkSync(join(directory, 'outside-ca.pem'), ca);
+    assert.equal(failed(readBrokerTls({}, root, ownerUid)).details.reason, 'unsafe-path', 'a symbolic link');
+    rmSync(ca);
+    writeFileSync(ca, 'INSTALLATION CA', { mode: 0o644 });
+    assert.equal(failed(readBrokerTls({}, root, ownerUid)).details.reason, 'unsafe-path', 'readable by others');
+    chmodSync(ca, 0o600);
+    assert.equal(failed(readBrokerTls({}, root, ownerUid + 1)).details.reason, 'unsafe-path', 'another owner');
+    assert.deepEqual(value(readBrokerTls({}, root, ownerUid)), { ca: 'INSTALLATION CA' });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

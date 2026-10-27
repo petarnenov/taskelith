@@ -8,6 +8,7 @@ import { after, test } from 'node:test';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import {
   Administration,
+  adminMain,
   LOCAL_SERVER_HOSTS,
   MINIMUM_TLS_VERSION,
   checkServerTls,
@@ -171,4 +172,20 @@ test('re-issue needs an initialized installation and touches no database', async
   } finally {
     await admin.close();
   }
+});
+
+test('an initialized installation without its CA refuses a broker command before connecting', async () => {
+  const dataRoot = join(base, 'lost-ca');
+  const store = value(ControlPlaneNamespace.open({ dataRoot, ownerUid }));
+  value(store.create('installation', { installationId: '0123abcd', recoveryEpoch: 1 }));
+  const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: 'postgres://u:p@127.0.0.1:1/none', TASKELITH_NATS_URL: 'nats://127.0.0.1:1' };
+  const run = async (argv: string[]) => {
+    const lines: string[] = [];
+    const status = await adminMain(argv, { environment, platform: process.platform, ownerUid, write: (line) => lines.push(line) });
+    return { status, error: (JSON.parse(lines.join('\n')) as { error: { code: string; message: string; details: Record<string, string> } }).error };
+  };
+  const refused = await run(['expire-grace-windows']);
+  assert.deepEqual([refused.status, refused.error.code, refused.error.details.path], [1, 'precondition-failed', join(store.directory, 'installation-ca.pem')]);
+  const reissue = await run(['issue-installation-certificates']);
+  assert.deepEqual([reissue.status, reissue.error.message], [1, 'the installation has lost its certificate authority; it stays closed']);
 });

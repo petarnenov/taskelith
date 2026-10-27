@@ -41,7 +41,7 @@ export async function adminMain(argv: readonly string[], io: AdminIo): Promise<n
 }
 
 async function runCommand(command: Command, io: AdminIo): Promise<number> {
-  const opened = openAdministration(io);
+  const opened = openAdministration(io, command.name);
   if (!opened.ok) return fail(io, opened.error);
   try {
     const outcome = await run(opened.value, command, io.environment);
@@ -64,6 +64,8 @@ const OPTIONS = {
   platform: { type: 'string' }, architecture: { type: 'string' }, hostname: { type: 'string' },
 } as const;
 const WORKER_COMMANDS = new Set(['rotate-worker', 'revoke-worker']);
+// It restores a lost installation-ca.pem, so it must not need the broker CA.
+const BROKERLESS_COMMANDS = new Set(['issue-installation-certificates']);
 const PLATFORMS = new Set<string>(['linux', 'darwin']);
 const ARCHITECTURES = new Set<string>(['x64', 'arm64']);
 const COMMANDS = new Set([
@@ -87,12 +89,12 @@ function parse(argv: readonly string[]): Result<Command> {
   return ok({ name, ...(worker === undefined ? {} : { worker }), values: parsed.values });
 }
 
-function openAdministration(io: AdminIo): Result<Administration> {
+function openAdministration(io: AdminIo, commandName: string): Result<Administration> {
   const endpoints = readServiceEndpoints(io.environment);
   if (!endpoints.ok) return endpoints;
   const dataRoot = resolveDataRoot({ environment: io.environment, platform: io.platform });
   if (!dataRoot.ok) return dataRoot;
-  const natsTls = readBrokerTls(io.environment, dataRoot.value);
+  const natsTls = BROKERLESS_COMMANDS.has(commandName) ? ok(undefined) : readBrokerTls(io.environment, dataRoot.value, io.ownerUid);
   if (!natsTls.ok) return natsTls;
   const serverHosts = readServerHosts(io.environment);
   if (!serverHosts.ok) return serverHosts;
