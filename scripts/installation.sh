@@ -24,6 +24,8 @@ esac
 export TASKELITH_IMAGE_TAG="$project"
 control_plane_image="taskelith-control-plane:$project"
 worker_image="taskelith-worker:$project"
+# Covers the worker's broker reconnect after a restart and a 10 s heartbeat.
+CONTACT_SECONDS=90
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -277,7 +279,8 @@ finish_verify() {
 # A throwaway project: a random database password, ephemeral host ports,
 # and no leftovers of an earlier run.
 fresh_project() {
-  export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT=''
+  export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT='' \
+    TASKELITH_BROWSER_PUBLISH_PORT=''
   TASKELITH_POSTGRES_PASSWORD="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
   remove_leftovers
 }
@@ -315,11 +318,42 @@ verify() {
   broker_config
   start
   enroll
-  certificates
   stop
   start
   check_running
-  remove_throwaway "built, bootstrapped, started, enrolled, certificates re-issued, restarted, removed"
+  certificates
+  check_reissued_certificates
+  remove_throwaway "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"
+}
+
+# Right after `certificates`, with no restart of its own: the API and NATS
+# present the new certificates, and a worker heartbeat crosses both again.
+check_reissued_certificates() {
+  local since file files
+  since="$(sql 'SELECT now()')"
+  files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-certificates.XXXXXX")"
+  for file in installation-ca.pem api-certificate.pem nats-certificate.pem; do
+    compose run --rm --no-deps -T --entrypoint cat admin "/var/lib/taskelith/control-plane/$file" > "$files/$file"
+  done
+  if ! node --experimental-strip-types "$repository/scripts/installation-tls-probe.ts" \
+    "$(compose port control-plane 8080)" "$(compose port nats 4222)" "$files"; then
+    rm -rf "$files"
+    exit 1
+  fi
+  rm -rf "$files"
+  await_contact_since "$since"
+}
+
+# A heartbeat of the enrolled worker, recorded at database time after SINCE.
+await_contact_since() {
+  local deadline=$((SECONDS + CONTACT_SECONDS))
+  until [ "$(sql "SELECT count(*) FROM workers WHERE last_contact_at > '$1'")" -gt 0 ]; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "installation.sh: no worker heartbeat within ${CONTACT_SECONDS}s after the re-issue" >&2
+      exit 1
+    fi
+    sleep 2
+  done
 }
 
 # The control plane's published API port, for example 127.0.0.1:55012.
