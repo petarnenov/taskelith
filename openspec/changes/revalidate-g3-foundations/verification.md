@@ -10,7 +10,8 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 - Reviewed revision of pass 1: `e6d86a67`, the merge of `dev` `71c6ce70` into this branch, which carries the prerequisite `scope-review-passes-by-artifact` (#353).
 - Merge of `dev` `a00cbe3a` (#354, finalized G3 work plan) into this branch: `d28ed3ec`, tree `d68e0a6539e8330fad01d6e4bbc8e19ca6b3f433`.
 - Reviewed revision of wave 2 (pass 1 of items 1, 5, and 8; pass 2 of items 2, 5, 6, 7, and 8): `b71f19ff`.
-- Change records: `e9f35c5d` corrects the Dockerfile lines of design D1 (item 2 pass 1 L2); the pass 1 records follow in one commit. `4977b240` makes the record corrections of wave 2; the wave 2 records follow in one commit.
+- Reviewed revision of pass 3 (items 2, 5, 6, 7, and 8): `ef633b2e`.
+- Change records: `e9f35c5d` corrects the Dockerfile lines of design D1 (item 2 pass 1 L2); the pass 1 records follow in one commit. `4977b240` makes the record corrections of wave 2; the wave 2 records follow in one commit. `19a12442` fixes the three pass 3 record findings; the pass 3 records follow in one commit.
 
 ## Environment
 
@@ -30,18 +31,19 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 - **`make verify`** (2026-10-27) ran on the merge of `dev` `a00cbe3a`, tree `d68e0a6539e8330fad01d6e4bbc8e19ca6b3f433`, in a temporary detached worktree, because reviews were running in this one: exit 0. Coverage over all files: 99.29 % lines, 92.15 % branches, 99.01 % functions. OpenSpec: 70 passed, 0 failed. Findings: 32 findings files and 12 pass summary files valid. Links conform. The merge `d28ed3ec` of this branch has the same tree, `d68e0a6539e8330fad01d6e4bbc8e19ca6b3f433`, as observed with `git rev-parse HEAD^{tree}`.
 - **Pass 1 records** (2026-10-27): `npm run verify:findings`, `npm run verify:links`, `npm run openspec -- validate revalidate-g3-foundations --strict`, and `npm run verify:comments` pass.
 - **Wave 2 records** (2026-10-27): the same four checks pass. Each report's listed findings match its own counts per severity, so `passes.jsonl` carries the reported counts.
+- **Pass 3 records** (2026-10-27): `npm run openspec -- validate revalidate-g3-foundations --strict`, `make findings ARGS="validate"`, `npm run verify:links`, and `npm run verify:comments` pass.
 
 ## Summary per item
 
 | Item | Capability | Result: current / needs a fix | Follow-ups |
 | --- | --- | --- | --- |
 | 1 | `g3-dependency-evaluation` | Needs a fix, Low only (review complete) | `refresh-g3-dependency-observations` |
-| 2 | `harness-qualification`, `scm-qualification` | Needs a fix (pass 3 planned) | `recheck-provider-terms-pages` |
+| 2 | `harness-qualification`, `scm-qualification` | Needs a fix (review complete after pass 3) | `recheck-provider-terms-pages` |
 | 3 | `agent-harness-port` | Current (review complete) | None |
-| 5 | `account-pool-port` | Needs a fix (pass 3 planned) | `align-account-pool-signals`, `align-account-pool-placement-baseline`, `align-slot-credential-delivery` |
-| 6 | `git-workspace-port` | Needs a fix (pass 3 planned) | `align-git-workspace-with-execution-boundary`, `derive-workspace-names-from-task-ids` |
-| 7 | `scm-port` | Needs a fix (pass 3 planned) | `align-scm-port-with-g2-credentials` |
-| 8 | `product-ports` | Needs a fix (pass 3 planned) | `bind-product-writers-to-launch-invalidation`, `align-product-ports-with-g2-lifecycle`, `record-placement-outcome` |
+| 5 | `account-pool-port` | Needs a fix (review complete after pass 3) | `align-account-pool-signals`, `align-account-pool-placement-baseline`, `align-slot-credential-delivery` |
+| 6 | `git-workspace-port` | Needs a fix (review complete after pass 3) | `align-git-workspace-with-execution-boundary`, `derive-workspace-names-from-task-ids` |
+| 7 | `scm-port` | Needs a fix (review complete after pass 3) | `align-scm-port-with-g2-credentials` |
+| 8 | `product-ports` | Needs a fix (review complete after pass 3) | `bind-product-writers-to-launch-invalidation`, `align-product-ports-with-g2-lifecycle`, `record-placement-outcome` |
 
 ## Follow-up changes
 
@@ -62,6 +64,8 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 ## Independent review
 
 Criteria: `AGENTS.md`, the ADR 0004 principles, the governance review process, the artifact's living spec and contract, and the checks of [design](design.md) D2. Per item, under design D4: reviewer A makes pass 1, reviewer B pass 2, and reviewer A pass 3. A substantive finding is `deferred` to a follow-up change; a correction of these records is `fixed`.
+
+Common facts of pass 3 (items 2, 5, 6, 7, and 8): reviewed revision `ef633b2e`, read-only. Snapshot `036f28fe3bbf6c9676ccc91be2cc56de147441c13e53825fb8d42bce0a0bbc58` before each pass, identical after each. Pass 3 confirms the pass 2 resolutions only; its findings are Low and fixed without another review.
 
 Common facts of wave 2 (pass 1 of items 1, 5, and 8, and pass 2 of items 2, 5, 6, 7, and 8): reviewed revision `b71f19ff`. Snapshot `1b3625fb3c45062ea4a8ef99c08861b0e710f88c80ad13f9b71e42c4c127eb93` before each pass, identical after each. The passes started between about 17:36 and 17:44 and ended between 17:41 and 17:52 local time on 2026-10-27. Prompts and logs stayed outside the worktree.
 
@@ -117,7 +121,7 @@ Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `c
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/deepseek-v4-pro#high`, session `ses_e820b5099ffe47tEDDDalELhZs`, with the common facts above. The reviewer checked the cited provider pages on the web, accessed 2026-10-27. Findings: critical 0, high 2, medium 1, low 2. Verdict: needs a fix.
 - Pass 2 (reviewer B): Claude Code `claude-opus-5-5`, effort `high`, session `ff2a68bc-e0a5-4a3d-9808-2c3823e8daf9`, with the common facts of wave 2. Invocation: the Claude Code (`claude-opus-5-5`) row of the [reviewer invocations](/docs/agent-task-protocol.md#reviewer-invocations). Model confirmation: `claude-opus-5-5` in the JSON `modelUsage`. The reviewer checked the provider pages live and through Wayback snapshots, accessed 2026-10-27. Findings: critical 0, high 1, medium 3, low 5. Verdict: needs a fix.
-- Pass 3 (reviewer A): planned, Claude Code `claude-fable-5-1`, the same harness as reviewer B because only Claude Code has network access among the available reviewers.
+- Pass 3 (reviewer A): Claude Code `claude-fable-5-1`, effort `medium`, the same harness as reviewer B because only Claude Code has network access among the available reviewers, session `a2a9395c-2b85-4e8e-a103-2ac9ca088bde`, with the common facts of pass 3. Invocation and model confirmation as for item 1 pass 1. Findings: critical 0, high 0, medium 0, low 1. Verdict: Low only, so the item's review is complete; the item needs a fix through its follow-ups.
 
 | Finding | Resolution |
 | --- | --- |
@@ -135,6 +139,7 @@ Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `c
 | Pass 2 L3 (Low, record; missed by pass 1): Design D3 shows the confirmed pass 3 reviewers as proposed, and verification keeps a gate for their confirmation (`openspec/changes/revalidate-g3-foundations/design.md:108`) | Fixed in `4977b240`: Design D3 no longer marks them proposed, and the gate is removed |
 | Pass 2 L4 (Low, record; missed by pass 1): Design D5 and the risks say the record tooling is not merged (`openspec/changes/revalidate-g3-foundations/design.md:137`) | Fixed in `4977b240`: D5 now says the tooling was merged before the first line, and the risk is removed |
 | Pass 2 L5 (Low, record; missed by pass 1): The Environment and Author self-check sections are still unfilled (`openspec/changes/revalidate-g3-foundations/verification.md:16`) | Fixed in `4977b240`: Both sections are filled, including each reviewer's network access |
+| Pass 3 L1 (Low, record): The follow-up row of recheck-provider-terms-pages omits that the OpenAI pages return HTTP 403 and the Wayback snapshots stay necessary (`openspec/changes/revalidate-g3-foundations/verification.md:51`) | Fixed in `19a12442`, not re-reviewed: the row now says that the OpenAI pages return HTTP 403 and that the snapshots are kept |
 
 Pass 1 found the GitHub terms unchanged and no GitHub finding. Pass 2 confirmed pass 1 L2 and its fix, and found the other Anthropic, OpenAI, and GitHub quotes current; it also found that the cited OpenAI pages refuse plain requests with HTTP 403, so the Wayback snapshots remain necessary.
 
@@ -155,7 +160,7 @@ Reviewer A: Codex `gpt-6.1-sol`, replacing OpenCode `qwen3.8-max`. Reviewer B: C
 
 - Pass 1 (reviewer A): Codex `gpt-6.1-sol`, reasoning effort `medium`, session `01a17e03-828f-7ff2-b4f2-96b1e27c8dfe`, with the common facts of wave 2. Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the output header shows the model, the reasoning effort, and the read-only sandbox. Findings: critical 0, high 0, medium 2, low 2. Verdict: needs a fix.
 - Pass 2 (reviewer B): Claude Code `claude-opus-5-5`, effort `high`, session `73bd11ab-9a1c-472e-b96e-9ddffb4ce10f`, with the common facts of wave 2. Invocation and model confirmation as for item 2 pass 2. Findings: critical 0, high 0, medium 5, low 13. Verdict: needs a fix.
-- Pass 3 (reviewer A): planned, Codex `gpt-6.1-sol`.
+- Pass 3 (reviewer A): Codex `gpt-6.1-sol`, reasoning effort `medium`, session `01a17e17-519a-7cd3-b887-fafc1e826f9a`, with the common facts of pass 3. Invocation and model confirmation as for item 5 pass 1. Findings: critical 0, high 0, medium 0, low 1. Verdict: Low only, so the item's review is complete; the item needs a fix through its follow-ups.
 
 | Finding | Resolution |
 | --- | --- |
@@ -181,6 +186,7 @@ Reviewer A: Codex `gpt-6.1-sol`, replacing OpenCode `qwen3.8-max`. Reviewer B: C
 | Pass 2 L13 (Low; missed by pass 1): The usage window also governs the tie-breaker test of the pool contract and this spec, places that pass 1 M1 did not list (`openspec/specs/harness-account-pools/spec.md:24`) | Deferred to the follow-up change align-account-pool-signals |
 | Pass 2 R1 (Low, record; missed by pass 1): Design D5 and the risks say the record tooling is not merged and the record files are empty (`openspec/changes/revalidate-g3-foundations/design.md:137`) | Fixed in `4977b240`: D5 now says the tooling was merged before the first line, and the risk is removed |
 | Pass 2 R2 (Low, record): The size of the account pool signals follow-up depends on whether the window fix reaches the harness port (`openspec/changes/revalidate-g3-foundations/verification.md:44`) | Fixed in `4977b240`: The follow-up table records the coordinator's size M and the grouping of all item 5 findings. The coordinator's decision for M1, added after pass 3 L1: the pool derives the window end from its slot records, the observed usage times plus a per-harness window length in the pool configuration; an unknown or expired end skips the tie-breaker; the harness port does not change |
+| Pass 3 L1 (Low, record): No concrete decision limits the pass 1 M1 window fix to the pool, on which the size M of align-account-pool-signals rests (`openspec/changes/revalidate-g3-foundations/verification.md:52`) | Fixed in `19a12442`, not re-reviewed: the follow-up row, the pass 2 R2 row, and its finding line record the coordinator's decision; the size stays M |
 
 Pass 2 confirmed the four pass 1 findings and widened M1 and M2 by the places that its L12 and L13 name. It numbered its own Low findings from L3 and its two record findings R1 and R2; its L1 and L2 confirm pass 1. The coordinator confirmed the grouping of the reviewer into three follow-ups. Both passes found the aligned identifiers, the PostgreSQL schema, and the serializable reservation transaction as design D1 states them.
 
@@ -190,7 +196,7 @@ Reviewer A: OpenCode `kimi-k3.1-pro`, variant `high`; pass 3 by Codex `gpt-6-ast
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/kimi-k3.1-pro#high`, session `ses_e820b523fffeM2gZJeWSk2ZIaJ`, with the common facts above. Findings: critical 0, high 1, medium 1, low 0. Verdict: needs a fix.
 - Pass 2 (reviewer B): Claude Code `claude-fable-5-1`, effort `medium`, session `844d632e-c11b-442f-ac39-31c68a9b34a2`, with the common facts of wave 2. Invocation and model confirmation as for item 1 pass 1. Findings: critical 0, high 0, medium 3, low 3. Verdict: needs a fix.
-- Pass 3 (reviewer A): planned, Codex `gpt-6-astra`.
+- Pass 3 (reviewer A): Codex `gpt-6-astra`, reasoning effort `medium`, session `01a17e17-519f-7002-a342-30e5c1331a1f`, with the common facts of pass 3. Invocation and model confirmation as for item 7 pass 2. Findings: critical 0, high 0, medium 0, low 0. Verdict: no findings, so the item's review is complete; the item needs a fix through its follow-ups.
 
 | Finding | Resolution |
 | --- | --- |
@@ -211,7 +217,7 @@ Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `c
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/deepseek-v4-pro#high`, session `ses_e820b51e7ffe7wuRbbCB2OJ9La`, with the common facts above. Findings: critical 0, high 1, medium 1, low 1. Verdict: needs a fix.
 - Pass 2 (reviewer B): Codex `gpt-6-astra`, reasoning effort `medium`, session `01a17e03-8299-7773-bfdb-6a8bfca0a20a`, with the common facts of wave 2. Invocation: `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the output header shows the model, the reasoning effort, and the read-only sandbox. The reviewer ran the existing SCM tests on the existing build, with no build of its own. Findings: critical 0, high 1, medium 2, low 3. Verdict: needs a fix.
-- Pass 3 (reviewer A): planned, Claude Code `claude-fable-5-1`.
+- Pass 3 (reviewer A): Claude Code `claude-fable-5-1`, effort `medium`, session `0cf7897e-a64a-4ac9-a2b6-96cab9a52779`, with the common facts of pass 3. Invocation and model confirmation as for item 1 pass 1. Findings: critical 0, high 0, medium 0, low 1. Verdict: Low only, so the item's review is complete; the item needs a fix through its follow-ups.
 
 | Finding | Resolution |
 | --- | --- |
@@ -224,6 +230,7 @@ Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `c
 | Pass 2 L1 (Low; missed by pass 1): Repository entries and the status commit also accept empty values, and the local identifier check is not the kernel one (`packages/modules/integrations/src/ports/source-control-readers.ts:31`) | Deferred to the follow-up change align-scm-port-with-g2-credentials |
 | Pass 2 L2 (Low, record): The records still show the merged tooling and the confirmed reviewers as pending (`openspec/changes/revalidate-g3-foundations/design.md:137`) | Fixed in `4977b240`: Design D3, D5, and the risks now match verification, and the confirmation gate is removed |
 | Pass 2 L3 (Low, record): The SCM follow-up is sized S although it changes runtime readers and their tests (`openspec/changes/revalidate-g3-foundations/verification.md:46`) | Fixed in `4977b240`: The follow-up is resized to M by the coordinator |
+| Pass 3 L1 (Low, record): Design D6 defines size M as a contract, its spec, and its port types, while the SCM follow-up also changes the port's readers and conformance case (`openspec/changes/revalidate-g3-foundations/verification.md:57`) | Fixed in `19a12442`, not re-reviewed: by the coordinator's decision, D6 now counts a port's own readers and conformance cases under `src/ports/**` as port types; the size stays M |
 
 Pass 1 proposed two follow-ups; the worker grouped all three findings into one, as the coordinator named it. Pass 2 confirmed the three pass 1 findings and proposed a separate Forgejo change for its M2; the coordinator kept M2 in `align-scm-port-with-g2-credentials` and resized it to M.
 
@@ -233,7 +240,7 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 - Pass 1 (reviewer A): Codex `gpt-6-astra`, reasoning effort `medium`, session `01a17e03-8299-7c10-89cb-290230c1c8b7`, with the common facts of wave 2. Invocation and model confirmation as for item 7 pass 2. Findings: critical 0, high 1, medium 4, low 1. Verdict: needs a fix.
 - Pass 2 (reviewer B): Claude Code `claude-opus-5-5`, effort `high`, session `6af8a2c9-577b-40bb-86e1-c675ed6c99e1`, with the common facts of wave 2. Invocation and model confirmation as for item 2 pass 2. Findings: critical 0, high 1, medium 5, low 4. Verdict: needs a fix.
-- Pass 3 (reviewer A): planned, Codex `gpt-6-astra`.
+- Pass 3 (reviewer A): Codex `gpt-6-astra`, reasoning effort `medium`, session `01a17e17-51a6-7a80-b957-4fe4844c64ce`, with the common facts of pass 3. Invocation and model confirmation as for item 7 pass 2. Findings: critical 0, high 0, medium 0, low 0. Verdict: no findings, so the item's review is complete; the item needs a fix through its follow-ups.
 
 | Finding | Resolution |
 | --- | --- |
@@ -263,8 +270,8 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 ## Remaining gates
 
-- Pass 3 of items 2, 5, 6, 7, and 8, which confirms that the pass 2 findings are recorded and assigned; fixes land in the follow-ups
 - `make verify` on the final records
+- Archive of this change, with the checks of the archived tree
 - Summary per item and follow-up list complete, handed to the coordinator
 - Integration into dev by the coordinator (single pull request)
 - Follow-up fixes land before any other G3 item starts
