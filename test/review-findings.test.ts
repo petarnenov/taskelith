@@ -338,3 +338,24 @@ test('the record checklist text names record quality, and an empty one says so',
   assert.match(text, /\n1\. docs \(1\): .+ Example: "Missing doc"\n2\. stale-citation \(1\): .+ Example: "Old citation"$/);
   assert.equal(formatRecordChecklist([]), 'Record quality (archived findings under openspec/changes/): no archived findings match.');
 });
+
+test('missedBy names an earlier pass with its role, or the integration', () => {
+  const lines = [
+    JSON.stringify(finding({ pass: 2, missedBy: { pass: 1, role: 'A' } })),
+    JSON.stringify(finding({ pass: 3, missedBy: 'integration' })),
+    JSON.stringify(finding({ pass: 2, missedBy: { pass: 2, role: 'B' } })),
+    JSON.stringify(finding({ pass: 1, missedBy: { pass: 3, role: 'A' } })),
+    JSON.stringify({ ...finding({ pass: 2 }), missedBy: { pass: 1, role: 'C' } }),
+    JSON.stringify({ ...finding({ pass: 2 }), missedBy: { pass: 1 } }),
+    JSON.stringify({ ...finding({ pass: 2 }), missedBy: 'review' }),
+  ];
+  const messages = messagesOf(lines);
+  assert.deepEqual(messages.slice(0, 2), [
+    "findings.jsonl:3: missedBy pass 2 is not earlier than this finding's pass 2",
+    "findings.jsonl:4: missedBy pass 3 is not earlier than this finding's pass 1",
+  ]);
+  for (const line of [5, 6, 7]) {
+    assert.ok(messages.some((message) => message.startsWith(`findings.jsonl:${line}: /missedBy`)), String(line));
+  }
+  assert.ok(messages.every((message) => !/^findings\.jsonl:[12]:/.test(message)));
+});
