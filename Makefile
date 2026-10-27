@@ -252,11 +252,19 @@ speckit-lock:
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
 
+# make would expand these arguments when it exports them, so they reach
+# the script under other names, as typed; its makes get no MAKEFLAGS.
+unexport BRANCH TITLE BODY RESUME
+
 # Coordinator: integrates the archived change BRANCH into dev with one pull
 # request (scripts/integrate.sh); RESUME=1 continues a stopped integration.
+integrate: export TASKELITH_INTEGRATE_BRANCH := $(value BRANCH)
+integrate: export TASKELITH_INTEGRATE_TITLE := $(value TITLE)
+integrate: export TASKELITH_INTEGRATE_BODY := $(value BODY)
 integrate:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
-		bash scripts/integrate.sh $(if $(RESUME),--resume) "$$BRANCH" "$$TITLE" "$$BODY"
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		bash scripts/integrate.sh $(if $(value RESUME),--resume) \
+		"$$TASKELITH_INTEGRATE_BRANCH" "$$TASKELITH_INTEGRATE_TITLE" "$$TASKELITH_INTEGRATE_BODY"
 
 # Writes the generated part of CHANGE's verification.md from LOG, a make
 # verify log; record-check fails when that part differs from the tree.

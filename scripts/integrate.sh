@@ -40,14 +40,70 @@ wait_while_paused() {
   while [ -f "$pause_file" ]; do sleep "$poll_seconds"; done
 }
 
-# Runs a command under the alarm; 0 seconds means no alarm.
-with_alarm() {
-  if [ "$timeout_seconds" -eq 0 ]; then "$@"; return; fi
-  perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$timeout_seconds" "$@"
+# Runs a command as a new process group; on the alarm (0: none) and at its
+# end it stops what is left of the group and waits until the group is gone.
+GROUP_ALARM='
+use strict;
+my ($seconds, @command) = @ARGV;
+my $pid = fork() // die "fork: $!\n";
+if ($pid == 0) { setpgrp(0, 0); exec { $command[0] } @command or die "exec: $!\n"; }
+setpgrp($pid, $pid);
+my $alarms = 0;
+$SIG{ALRM} = sub { kill($alarms++ ? "KILL" : "TERM", -$pid); alarm 10; };
+alarm $seconds if $seconds > 0;
+waitpid($pid, 0);
+my $status = $?;
+alarm 0;
+for my $tick (0 .. 600) {
+  last unless kill 0, -$pid;
+  kill("TERM", -$pid) if $tick == 0;
+  kill("KILL", -$pid) if $tick == 100;
+  select undef, undef, undef, 0.1;
+}
+if ($alarms) { print "integrate.sh: make verify exceeded $seconds s\n"; exit 124; }
+exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);
+'
+
+run_verify() {
+  perl -e "$GROUP_ALARM" "$timeout_seconds" make verify
 }
 
 verify_stamp() {
   node --experimental-strip-types "$scripts/verify-stamp.ts" "$@"
+}
+
+# The main clone is updated after the merge, so it must be on a clean dev
+# that origin/dev fast-forwards before anything changes on the remote.
+check_main_clone() {
+  local reason=""
+  if [ "$(git -C "$main" symbolic-ref --short -q HEAD || true)" != dev ]; then
+    reason="is not on dev"
+  elif [ -n "$(git -C "$main" status --porcelain)" ]; then
+    reason="has uncommitted or untracked changes"
+  elif ! git -C "$main" merge-base --is-ancestor dev origin/dev; then
+    reason="has dev commits that origin/dev lacks"
+  fi
+  if [ -n "$reason" ]; then
+    echo "MAIN NOT READY $main $reason"
+    exit 8
+  fi
+}
+
+# The pull request of an earlier attempt: an open one, or one merged at
+# HEAD; prints its state and URL, or none.
+existing_pull_request() {
+  local prs head pr_state oid pr_url merged=""
+  prs="$(gh pr list --base dev --head "$branch" --state all --json state,headRefOid,url \
+    --jq '.[] | [.state, .headRefOid, .url] | @tsv')" || return 1
+  head="$(git rev-parse HEAD)" || return 1
+  while IFS=$'\t' read -r pr_state oid pr_url; do
+    if [ "$pr_state" = OPEN ]; then
+      echo "open $pr_url"
+      return 0
+    fi
+    if [ "$pr_state" = MERGED ] && [ "$oid" = "$head" ]; then merged="merged $pr_url"; fi
+  done <<<"$prs"
+  echo "${merged:-none}"
 }
 
 wait_while_paused
@@ -57,6 +113,7 @@ log="$state/integrate-$(printf '%s' "$branch" | tr '/' '_')-verify.log"
 mkdir -p "$state"
 
 git -C "$main" fetch -q origin
+check_main_clone
 if [ "$resume" = true ]; then
   if [ ! -d "$worktree" ]; then
     echo "integrate.sh: no integration worktree to resume: $worktree" >&2
@@ -82,29 +139,67 @@ if ! git merge -q --no-ff --no-edit origin/dev >/dev/null 2>&1; then
 fi
 make setup >/dev/null
 
+# Only a clean, committed tree is stamped, and only it may be pushed.
+if [ -n "$(git status --porcelain)" ]; then
+  git status --short >&2
+  echo "NOT CLEAN $branch"
+  exit 7
+fi
+
 # Integration always needs a full stamp of the merged tree (decision D5).
 export TASKELITH_VERIFY_PROFILE=full
 if verify_stamp check full >/dev/null; then
   echo "integrate.sh: reusing the full make verify stamp of the merged tree"
-elif ! with_alarm make verify >"$log" 2>&1; then
-  echo "VERIFY FAIL $branch"
-  tail -30 "$log"
-  exit 4
+else
+  if ! run_verify >"$log" 2>&1; then
+    echo "VERIFY FAIL $branch"
+    tail -30 "$log"
+    exit 4
+  fi
+  if ! verify_stamp check full >/dev/null; then
+    echo "VERIFY FAIL $branch"
+    echo "integrate.sh: make verify passed but left no full stamp of the merged tree"
+    tail -5 "$log"
+    exit 4
+  fi
 fi
 
 git push -q origin "HEAD:$branch"
-url="$(gh pr create --base dev --head "$branch" --title "$title" --body "$body")"
-gh pr merge "$url" --merge
+pull_request="$(existing_pull_request)"
+read -r pr_state url <<<"$pull_request"
+case "$pr_state" in
+  merged)
+    echo "integrate.sh: the pull request $url is already merged"
+    ;;
+  open)
+    echo "integrate.sh: continuing with the open pull request $url"
+    gh pr merge "$url" --merge
+    ;;
+  *)
+    url="$(gh pr create --base dev --head "$branch" --title "$title" --body "$body")"
+    gh pr merge "$url" --merge
+    ;;
+esac
 
 cd "$main"
 git worktree remove "$worktree"
 git branch -D "itg-$branch" >/dev/null
 git pull -q --ff-only origin dev
 npm ci --silent >/dev/null
-git push -q origin --delete "$branch"
-if git ls-remote --heads origin "refs/heads/$branch" | grep -q .; then
+
+# A failed delete push is fine only when origin no longer has the branch.
+delete_failed=false
+git push -q origin --delete "$branch" || delete_failed=true
+if ! remote_ref="$(git ls-remote --heads origin "refs/heads/$branch")"; then
+  echo "DELETE UNCONFIRMED $branch"
+  exit 9
+fi
+if [ -n "$remote_ref" ]; then
   echo "DELETE FAILED $branch"
   exit 6
+fi
+if [ "$delete_failed" = true ]; then
+  echo "integrate.sh: the delete push failed, but origin has no $branch" >&2
 fi
 rm -f "$log"
 echo "LANDED $branch $url $(git log --oneline -1)"
