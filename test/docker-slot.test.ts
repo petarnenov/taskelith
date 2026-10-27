@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import {
-  describeHolder, HOLDER_FILE, isStale, liveQueue, lockDirectory, LOG_FILE, main, QUEUE, releaseTicket,
+  describeHolder, HOLDER_FILE, isStale, liveQueue, lockDirectory, LOG_FILE, QUEUE, releaseTicket,
   stateDirectory, systemProcesses, takeTicket, UNRECORDED_TICKET_MS, waitForTurn, type Holder, type Processes,
 } from '../scripts/docker-slot.ts';
 
@@ -132,16 +132,11 @@ test('the system probes see this process and no exited one', () => {
 });
 
 test('invalid arguments print the usage', async () => {
-  const written: string[] = [];
-  const write = process.stderr.write;
-  process.stderr.write = ((chunk: string) => written.push(chunk)) as typeof process.stderr.write;
-  try {
-    assert.equal(await main(['run', 'true'], {}), 2);
-    assert.equal(await main([], {}), 2);
-  } finally {
-    process.stderr.write = write;
+  for (const args of [['run', 'true'], ['run', '--'], ['status', 'extra'], []]) {
+    const run = spawnSync(process.execPath, ['--experimental-strip-types', script, ...args], { encoding: 'utf8' });
+    assert.equal(run.status, 2, JSON.stringify(args));
+    assert.match(run.stderr, /^usage: docker-slot\.ts run -- <command>/);
   }
-  assert.match(written.join(''), /^usage: docker-slot\.ts run -- <command>/);
 });
 
 interface Run {
