@@ -58,7 +58,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Limitations
 
 - A failed append to the log loses that run's line from `integrations.jsonl`; it remains only in the script's output and the pull request body (design.md "Risks").
-- A resume that continues an open pull request does not add the line to that pull request's body (design.md D2).
 - The stamp time is read from the message of `verify-stamp.ts check full` (design.md D4); the reused-path test guards that coupling.
 - The tests use stubbed `make`, `gh`, and `npm` against a local bare origin; no real integration ran.
 

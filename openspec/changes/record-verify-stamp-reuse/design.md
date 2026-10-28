@@ -33,8 +33,11 @@ is UTC to the second, taken when the run starts after any pause.
 
 The script prints the line once its verify step passed, before the push. It
 adds the line after `BODY`, separated by a blank line, to the body of a pull
-request it creates; a resume that continues an open pull request does not
-edit that pull request's body. It appends the same fields as one JSON object,
+request it creates; a resume that continues an open pull request reads that
+body with `gh pr view` and appends the new line, after a blank line, with
+`gh pr edit --body` before it merges, keeping the coordinator's text and the
+lines of earlier attempts. A failed read or edit stops the resume before the
+merge, so the pull request never merges without the line of its last run. It appends the same fields as one JSON object,
 `{"tree", "verify", "profile", "verifySeconds", "change", "branch",
 "started"}` with `verifySeconds` a number, to
 `${XDG_STATE_HOME:-~/.local/state}/taskelith/integrations.jsonl`, the
@@ -46,7 +49,8 @@ valid JSON.
 
 A run that fails or is interrupted in its verify step records nothing. A
 resume after a failed merge passes the verify step again, usually by reusing
-the stamp, and records a second line; each line is one attempt, and a report
+the stamp, and records a second line in the log and in the open pull
+request's body; each line is one attempt, and a report
 over the log can group lines by change. A run that finds the branch already
 in `origin/dev` skips the verify step and records nothing.
 

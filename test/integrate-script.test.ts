@@ -50,7 +50,7 @@ function commit(cwd: string, message: string): void {
 }
 
 // make verify of the stub stamps the tree, as the real one does; gh keeps its
-// pull request in GH_STATE and merges it with a merge commit, as GitHub does.
+// pull request and body in GH_STATE and merges with a merge commit as GitHub.
 function writeStubs(bin: string): void {
   write(join(bin, 'make'), `#!/bin/sh
 echo "make $*" >> "$CALLS"
@@ -73,9 +73,18 @@ echo "npm $*" >> "$CALLS"
 `, 0o755);
   write(join(bin, 'gh'), `#!/bin/sh
 echo "gh $*" >> "$CALLS"
+save_body() {
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --body ]; then printf '%s' "$2" > "$GH_STATE.body"; fi
+    shift
+  done
+}
 case "$1 $2" in
   "pr list") if [ -f "$GH_STATE" ]; then cat "$GH_STATE"; fi ;;
+  "pr view") cat "$GH_STATE.body" ;;
+  "pr edit") save_body "$@" ;;
   "pr create")
+    save_body "$@"
     printf 'OPEN\\t%s\\t%s\\n' "$(git rev-parse HEAD)" "${URL}" > "$GH_STATE"
     echo "${URL}" ;;
   "pr merge")
@@ -413,7 +422,9 @@ test('a resume after a failed merge merges the open pull request', async () => {
     const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body']);
     assert.equal(resumed.status, 0, resumed.stderr);
     assert.match(resumed.stdout, /continuing with the open pull request https:\/\/example\.invalid\/pull\/1/);
-    assert.deepEqual(calls(fixture).filter((call) => call.startsWith('gh ')), [PR_LIST, `gh pr merge ${URL} --merge`]);
+    const ghCalls = calls(fixture).filter((call) => call.startsWith('gh '));
+    assert.deepEqual(ghCalls.slice(0, 2), [PR_LIST, `gh pr view ${URL} --json body --jq .body`]);
+    assert.equal(ghCalls.at(-1), `gh pr merge ${URL} --merge`);
     assert.match(resumed.stdout, /LANDED feature /);
   });
 });
@@ -508,6 +519,24 @@ test('an integration that ran make verify records its line in the pull request a
     assert.equal(integrationLine(run), lineOf(record));
     const create = calls(fixture).join('\n');
     assert.ok(create.includes(`--body Coordinator body\n\n${lineOf(record)}\ngh pr merge`), create);
+  });
+});
+
+// Review pass 1 finding 1: a resume adds its line to the open pull request.
+test('a resume with an open pull request appends its line to the body', async () => {
+  await withFixture((fixture) => {
+    const failed = integrate(fixture, [BRANCH, 'title', 'Coordinator body'], { FAKE_MERGE: 'fail' });
+    assert.equal(failed.status, 1);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'Coordinator body']);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const [first, second, ...more] = integrationRecords(fixture);
+    assert.deepEqual(more, []);
+    assert.ok(first !== undefined && second !== undefined);
+    assert.equal(integrationLine(resumed), lineOf(second));
+    const body = `Coordinator body\n\n${lineOf(first)}\n\n${lineOf(second)}`;
+    const edit = calls(fixture).join('\n');
+    assert.ok(edit.includes(`gh pr edit ${URL} --body ${body}\ngh pr merge`), edit);
+    assert.equal(readFileSync(join(fixture.root, 'gh-state.body'), 'utf8'), body);
   });
 });
 

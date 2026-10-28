@@ -133,6 +133,16 @@ record_integration() {
   fi
 }
 
+# Appends the integration line to the body of the open pull request $1,
+# after the coordinator's text and the lines of earlier attempts.
+append_integration_line() {
+  local current
+  current="$(gh pr view "$1" --json body --jq .body)"
+  gh pr edit "$1" --body "$current
+
+$integration_line" >/dev/null
+}
+
 # The main clone is updated after the merge, so it must be on a clean dev
 # that origin/dev fast-forwards before anything changes on the remote.
 check_main_clone() {
@@ -290,6 +300,7 @@ case "$pr_state" in
     ;;
   open)
     echo "integrate.sh: continuing with the open pull request $url"
+    append_integration_line "$url"
     gh pr merge "$url" --merge
     ;;
   *)
