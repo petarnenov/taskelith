@@ -1,5 +1,6 @@
 import { err, failure, ok, parseIdentifier, type Identifier, type Instant, type Result } from '@taskelith/kernel';
 import type { ArtifactRevision } from './artifact-revision.js';
+import { codeHeadField, isSameCodeHead, type CodeHeadIdentity } from './code-head.js';
 import { isDisplayText } from './display-text.js';
 import { fieldFailure } from './field-failure.js';
 import { isPassingEvidence, parseEvidenceKind, type EvidenceKind, type GateEvidence } from './gate-evidence.js';
@@ -31,13 +32,14 @@ export type BlockReason = string & { readonly [blockReasonBrand]: true };
 
 export const MAX_BLOCK_REASON_LENGTH = 1024;
 
-// A stage gate that requires one evidence kind about an exact subject; its
-// decision stays when the gate goes stale and is cleared when it reopens.
+// A gate requires one evidence kind about an exact subject, at its code head
+// if head-bound; a stale gate keeps its decision, and reopening clears it.
 export interface Gate {
   readonly id: GateId;
   readonly stageId: StageId;
   readonly requiredEvidence: EvidenceKind;
   readonly subject: GateSubject;
+  readonly codeHead?: CodeHeadIdentity;
   readonly state: GateState;
   readonly generation: Generation;
   readonly changedAt: Instant;
@@ -50,6 +52,7 @@ export interface GateInput {
   readonly stageId: string;
   readonly requiredEvidence: string;
   readonly subject: readonly ArtifactRevision[];
+  readonly codeHead?: CodeHeadIdentity;
 }
 
 export function openGate(input: GateInput, openedAt: Instant): Result<Gate> {
@@ -66,6 +69,7 @@ export function openGate(input: GateInput, openedAt: Instant): Result<Gate> {
     stageId: stageId.value,
     requiredEvidence: requiredEvidence.value,
     subject: subject.value,
+    ...codeHeadField(input.codeHead),
     state: 'pending',
     generation: FIRST_GENERATION,
     changedAt: openedAt,
@@ -80,7 +84,7 @@ export function parseBlockReason(text: string): Result<BlockReason> {
 }
 
 // Passes or fails a pending gate. Only evidence of the required kind about
-// exactly the gate's subject decides it.
+// exactly the gate's subject, and at its code head if any, decides it.
 export function recordGateEvidence(
   gate: Gate,
   expectedGeneration: Generation,
@@ -98,6 +102,9 @@ export function recordGateEvidence(
   if (!isSameGateSubject(evidence.subject, gate.subject)) {
     return gateFailure(gate, 'accepts only evidence about exactly its subject revisions');
   }
+  if (!isAtGateCodeHead(gate, evidence)) {
+    return gateFailure(gate, 'accepts only evidence recorded at its code head');
+  }
   return ok(changedGate(gate, { state: allowed.value, subject: gate.subject, decision: evidence }, at));
 }
 
@@ -109,8 +116,8 @@ export function blockGate(gate: Gate, expectedGeneration: Generation, reason: st
   return ok(changedGate(gate, { state: 'blocked', subject: gate.subject, blockReason: blockReason.value }, at));
 }
 
-// Returns a failed, stale, or blocked gate to pending for a new decision about
-// the given subject, which replaces the old one.
+// Returns a failed, stale, or blocked gate without a code head to pending
+// for a new decision about the given subject, which replaces the old one.
 export function reopenGate(
   gate: Gate,
   expectedGeneration: Generation,
@@ -119,9 +126,27 @@ export function reopenGate(
 ): Result<Gate> {
   const allowed = checkTransition(gate, expectedGeneration, 'pending');
   if (!allowed.ok) return allowed;
+  if (gate.codeHead !== undefined) return gateFailure(gate, 'is head-bound and reopens only at a code head');
   const parsedSubject = parseGateSubject(subject);
   if (!parsedSubject.ok) return parsedSubject;
   return ok(changedGate(gate, { state: 'pending', subject: parsedSubject.value }, at));
+}
+
+// Returns a head-bound gate to pending for a new decision about the subject
+// at the given head, which replace the old ones.
+export function reopenGateAtCodeHead(
+  gate: Gate,
+  expectedGeneration: Generation,
+  target: { readonly subject: readonly ArtifactRevision[]; readonly codeHead: CodeHeadIdentity },
+  at: Instant,
+): Result<Gate> {
+  const allowed = checkTransition(gate, expectedGeneration, 'pending');
+  if (!allowed.ok) return allowed;
+  if (gate.codeHead === undefined) return gateFailure(gate, 'is not head-bound and reopens without a code head');
+  const parsedSubject = parseGateSubject(target.subject);
+  if (!parsedSubject.ok) return parsedSubject;
+  const change = { state: 'pending', subject: parsedSubject.value, ...codeHeadField(target.codeHead) } as const;
+  return ok(changedGate(gate, change, at));
 }
 
 // A revision outdates a gate when it is a different revision of an artifact in
@@ -145,6 +170,30 @@ export function markGateStale(
   return ok(changedGate(gate, { state: 'stale', subject: gate.subject, ...decision }, at));
 }
 
+// A head outdates a head-bound gate when it is any other head, even one with
+// the same tree, so no edit that restores content restores a decision.
+export function isGateOutdatedByCodeHead(gate: Gate, head: CodeHeadIdentity): boolean {
+  return gate.codeHead !== undefined && !isSameCodeHead(gate.codeHead, head);
+}
+
+export function markGateStaleByCodeHead(
+  gate: Gate,
+  expectedGeneration: Generation,
+  head: CodeHeadIdentity,
+  at: Instant,
+): Result<Gate> {
+  const allowed = checkTransition(gate, expectedGeneration, 'stale');
+  if (!allowed.ok) return allowed;
+  if (!isGateOutdatedByCodeHead(gate, head)) return gateFailure(gate, 'is not outdated by that code head');
+  const decision = gate.decision === undefined ? {} : { decision: gate.decision };
+  return ok(changedGate(gate, { state: 'stale', subject: gate.subject, ...decision }, at));
+}
+
+function isAtGateCodeHead(gate: Gate, evidence: GateEvidence): boolean {
+  if (gate.codeHead === undefined) return true;
+  return evidence.codeHead !== undefined && isSameCodeHead(gate.codeHead, evidence.codeHead);
+}
+
 function checkTransition(gate: Gate, expectedGeneration: Generation, to: GateState): Result<GateState> {
   const generation = checkGeneration(`gate ${gate.id}`, gate.generation, expectedGeneration);
   if (!generation.ok) return generation;
@@ -158,13 +207,15 @@ function gateFailure(gate: Gate, message: string, details: Readonly<Record<strin
   return err(failure('precondition-failed', `gate ${gate.id} ${message}`, { gate: gate.id, ...details }));
 }
 
-type GateChange = Pick<Gate, 'state' | 'subject' | 'decision' | 'blockReason'>;
+type GateChange = Pick<Gate, 'state' | 'subject' | 'codeHead' | 'decision' | 'blockReason'>;
 
+// A change keeps the gate's code head unless it names a new one.
 function changedGate(gate: Gate, change: GateChange, at: Instant): Gate {
   return Object.freeze({
     id: gate.id,
     stageId: gate.stageId,
     requiredEvidence: gate.requiredEvidence,
+    ...codeHeadField(gate.codeHead),
     ...change,
     generation: nextGeneration(gate.generation),
     changedAt: at,

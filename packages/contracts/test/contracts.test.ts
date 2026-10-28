@@ -15,6 +15,9 @@ import {
   recordGateEvidence,
   useAdmission,
   type ArtifactRevision,
+  type CodeHeadIdentity,
+  type CodeObjectId,
+  type RepositoryId,
 } from '@taskelith/sdlc';
 
 function document(name: string): { components: { schemas: Record<string, unknown> } } {
@@ -84,6 +87,24 @@ function decidedGate() {
   return result.value;
 }
 
+const CODE_HEAD = {
+  repository: 'acme/project' as RepositoryId,
+  commit: '1'.repeat(40) as CodeObjectId,
+  tree: 'a'.repeat(40) as CodeObjectId,
+} satisfies CodeHeadIdentity;
+
+function headBoundGate() {
+  const gate = { id: 'code-review', stageId: 'review', requiredEvidence: 'semantic-approval', subject: [SPEC], codeHead: CODE_HEAD };
+  const pending = openGate(gate, AT);
+  assert.ok(pending.ok);
+  const approval = { approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], codeHead: CODE_HEAD, recordedAt: AT, reference: 'review-2' };
+  const evidence = parseSemanticApproval(approval);
+  assert.ok(evidence.ok);
+  const result = recordGateEvidence(pending.value, pending.value.generation, evidence.value, AT);
+  assert.ok(result.ok);
+  return result.value;
+}
+
 function eventMetadata(eventType: string) {
   return { eventId: 'event-1', eventType, schemaVersion: 1, occurredAt: AT, correlationId: 'correlation-1', producerId: 'control-plane-1', sequence: 1 };
 }
@@ -132,6 +153,17 @@ test('admission and gate events carry the event envelope and their own event typ
   assert.ok(checkMessageSchema('AdmissionAdmittedEvent', JSON.parse(JSON.stringify(admitted))).ok);
   assert.ok(checkMessageSchema('GateDecidedEvent', decided).ok);
   assert.ok(violations(checkMessageSchema('AdmissionInvalidatedEvent', JSON.parse(JSON.stringify(admitted)))).some((text) => text.includes('/metadata/eventType')));
+});
+
+test('a head-bound gate and its evidence carry the full code head on the wire', () => {
+  const gate = JSON.parse(JSON.stringify(headBoundGate()));
+  const decided = { metadata: eventMetadata('sdlc.gate.decided'), payload: { runId: 'run-1', gate } };
+
+  assert.deepEqual(gate.codeHead, CODE_HEAD);
+  assert.deepEqual(gate.decision.codeHead, CODE_HEAD);
+  assert.ok(checkMessageSchema('GateDecidedEvent', decided).ok);
+  const abbreviated = { ...gate, codeHead: { ...CODE_HEAD, commit: '1234567' } };
+  assert.ok(violations(checkMessageSchema('Gate', abbreviated)).some((text) => text.includes('/codeHead/commit')));
 });
 
 test('an event without its producer sequence or with an unknown field is rejected', () => {

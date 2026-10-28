@@ -1,5 +1,6 @@
 import { err, failure, ok, parseIdentifier, type Identifier, type Instant, type Result } from '@taskelith/kernel';
 import type { ArtifactRevision } from './artifact-revision.js';
+import { codeHeadField, type CodeHeadIdentity } from './code-head.js';
 import { fieldFailure } from './field-failure.js';
 import { isDisplayText } from './display-text.js';
 import { parseGateSubject, type GateSubject } from './gate-subject.js';
@@ -30,9 +31,11 @@ export type EvidenceReference = string & { readonly [evidenceReferenceBrand]: tr
 
 export const MAX_EVIDENCE_REFERENCE_LENGTH = 1024;
 
+// `codeHead` is the head that head-bound evidence was recorded at.
 interface EvidenceFacts<Verdict extends string> {
   readonly verdict: Verdict;
   readonly subject: GateSubject;
+  readonly codeHead?: CodeHeadIdentity;
   readonly recordedAt: Instant;
   readonly reference: EvidenceReference;
 }
@@ -57,6 +60,7 @@ export type GateEvidence = StructuralValidation | SemanticApproval | PlatformRec
 interface EvidenceFactsInput {
   readonly verdict: string;
   readonly subject: readonly ArtifactRevision[];
+  readonly codeHead?: CodeHeadIdentity;
   readonly recordedAt: Instant;
   readonly reference: string;
 }
@@ -138,6 +142,7 @@ function parseEvidenceFacts<Verdict extends string>(
   return ok({
     verdict: input.verdict as Verdict,
     subject: subject.value,
+    ...codeHeadField(input.codeHead),
     recordedAt: input.recordedAt,
     reference: reference.value,
   });
