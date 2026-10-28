@@ -38,8 +38,15 @@ export function classifyPaths(paths: readonly string[]): VerifyProfile {
   return paths.length > 0 && paths.every(isDocsPath) ? 'docs-only' : 'full';
 }
 
+// Hooks export GIT_DIR and the like; dropping them makes git read cwd.
 export function gitIn(cwd: string): Git {
-  return (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return (args) => execFileSync('git', args, {
+    cwd, env: withoutGitVariables(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+function withoutGitVariables(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
 }
 
 function attempt(git: Git, args: readonly string[]): string | undefined {

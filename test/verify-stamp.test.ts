@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
   checkStamp, classifyPaths, decideProfile, DIRTY, finishVerify, gitIn, headRevision, isDocsPath, isDryRun, mergeBase, NO_MERGE_BASE,
   PROFILE_VARIABLE, runCommand,
-  satisfyingProfiles, serviceImages, stampDirectory, stampFields, stampKey, startTree, writeStamp, type Git,
+  satisfyingProfiles, serviceImages, STAMP_DIRECTORY, stampDirectory, stampFields, stampKey, startTree, writeStamp, type Git,
   type StampContext,
 } from '../scripts/verify-stamp.ts';
 import { fixtureEnv } from './git-fixture-env.ts';
@@ -189,6 +189,25 @@ test('a stamp lives under the common git directory, shared by worktrees', () => 
     } finally {
       rmSync(worktree, { recursive: true, force: true });
     }
+  });
+});
+
+test('git reads the given root, whatever GIT_DIR a pre-push hook exported', () => {
+  withRepository((root, context) => {
+    const ownTree = git(root, 'rev-parse', 'HEAD^{tree}').trim();
+    withRepository((other) => {
+      write(other, 'src/other.ts', 'export {};\n');
+      commitAll(other, 'other');
+      const saved = process.env.GIT_DIR;
+      process.env.GIT_DIR = join(other, '.git');
+      try {
+        assert.equal(headRevision(context.git).tree, ownTree);
+        assert.equal(stampDirectory(context.git), join(realpathSync(root), '.git', STAMP_DIRECTORY));
+      } finally {
+        if (saved === undefined) delete process.env.GIT_DIR;
+        else process.env.GIT_DIR = saved;
+      }
+    });
   });
 });
 
