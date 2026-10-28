@@ -4,6 +4,19 @@ import type { Result } from '@taskelith/kernel';
 // data, which the module parses: plugin output is untrusted.
 export const AGENT_HARNESS_PORT_VERSION = '0.1.0';
 
+// Values the session timeline shares with the port live in the domain.
+export {
+  DELEGATION_OUTCOMES,
+  HARNESS_FAILURES,
+  MAX_HARNESS_TEXT_LENGTH,
+  PERMISSION_DECISIONS,
+  TURN_OUTCOMES,
+  type DelegationOutcome,
+  type HarnessFailure,
+  type PermissionDecision,
+  type TurnOutcome,
+} from '../domain/harness-values.js';
+
 export const HARNESS_CAPABILITIES = Object.freeze([
   'chat',
   'prompt-correlation',
@@ -40,39 +53,15 @@ export const HARNESS_PLATFORMS = Object.freeze(['linux-x64', 'linux-arm64', 'dar
 
 export type HarnessPlatform = (typeof HARNESS_PLATFORMS)[number];
 
-export const TURN_OUTCOMES = Object.freeze([
-  'completed',
-  'interrupted',
-  'turn-limit-reached',
-  'account-limit-reached',
-  'failed',
-] as const);
-
-export type TurnOutcome = (typeof TURN_OUTCOMES)[number];
-
-export const HARNESS_FAILURES = Object.freeze(['authentication', 'transport', 'harness-exited', 'protocol', 'internal'] as const);
-
-export type HarnessFailure = (typeof HARNESS_FAILURES)[number];
-
 export const SESSION_END_REASONS = Object.freeze(['closed', 'exited', 'failed'] as const);
 
 export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
-
-export const PERMISSION_DECISIONS = Object.freeze(['allow', 'deny'] as const);
-
-export type PermissionDecision = (typeof PERMISSION_DECISIONS)[number];
-
-export const DELEGATION_OUTCOMES = Object.freeze(['completed', 'rejected', 'failed', 'cancelled'] as const);
-
-export type DelegationOutcome = (typeof DELEGATION_OUTCOMES)[number];
 
 // Native actions a plugin may classify; the host maps them to standing rule
 // operations, so a push to the task's branch becomes push-to-task-branch.
 export const CLASSIFIED_OPERATION_KINDS = Object.freeze(['push'] as const);
 
 export type ClassifiedOperationKind = (typeof CLASSIFIED_OPERATION_KINDS)[number];
-
-export const MAX_HARNESS_TEXT_LENGTH = 65_536;
 
 // `path` locates the binary inside the plugin's installed package, so the
 // host can check its digest before it hands the path to a start or resume.
