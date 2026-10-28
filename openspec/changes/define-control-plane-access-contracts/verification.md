@@ -1,12 +1,12 @@
 # Verification: define-control-plane-access-contracts
 
-Status: developed and verified by the author; review pass 1 done and its findings fixed; pass 2 pending.
+Status: developed and verified by the author; review passes 1 and 2 done; the pass 2 findings fixed except H1, which waits for an architect decision; pass 3 by reviewer A required.
 
 ## Scope and source
 
 - G3 item 9 ([G3 work plan](/docs/g3-plan.md), row 9), sub-change 9a, size M, assigned by the coordinator on 2026-10-28 and developed in a briefed subagent. The coordinator and architect split item 9 on 2026-10-28 into 9a to 9d; this sub-change is contract-first only: the new OpenAPI document, its generated types, contract tests, the contract page, and the spec deltas. No adapter and no handler (items 10 to 15).
 - The architect's decision of 2026-10-28 on the security schemes, as the brief gives it: a session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) with a CSRF header on every mutation, the existing `operatorToken` bearer for the CLI and the owner, and only the schemes and their 401, 403, and CSRF failure responses here.
-- Sources: [ADR 0004](/docs/decisions/0004-first-class-engineering-principles.md) principle 6, [architecture section 11](/docs/architecture.md#11-spa-authentication-and-live-traffic), [ADR 0015](/docs/decisions/0015-g2-closure.md) decision 5, G2 items 8 and 16, and the contracts of items 3 to 8 and 27 under `docs/contracts/`. Where they are silent, [design](design.md) decisions 3 to 19 record the minimal shape chosen and the source it relies on.
+- Sources: [ADR 0004](/docs/decisions/0004-first-class-engineering-principles.md) principle 6, [architecture section 11](/docs/architecture.md#11-spa-authentication-and-live-traffic), [ADR 0015](/docs/decisions/0015-g2-closure.md) decision 5, G2 items 8 and 16, and the contracts of items 3 to 8 and 27 under `docs/contracts/`. Where they are silent, [design](design.md) decisions 3 to 20 record the minimal shape chosen and the source it relies on.
 - Excluded: the 9b to 9d operations and messages, principal administration, worker credential rotation and worker revocation over HTTP (design decision 12), the project policy revision (decision 9), and the slot usage window and cooldown settings (decision 13).
 
 ## Revision
@@ -18,7 +18,10 @@ Status: developed and verified by the author; review pass 1 done and its finding
 - `f369da91` `docs: record the route of the control-plane access contracts` (`route.json`, unedited). The `make verify` run below checked this commit's tree.
 - `b0e76d0c` `docs: record the verification of the control-plane access contracts` (this record), the head that review pass 1 reviewed.
 - Pass 1 fixes: `d63cc174` `chore: add the remote URL to the repository binding and accept Git branch names` (document and contract tests) and `cfde4f9b` `docs: scope the bearer, order, compare-and-set, and paging rules of the control plane` (spec delta, contract page, design).
-- The commit that records pass 1 changes only this record, `findings.jsonl`, and `passes.jsonl`, and the `make verify` run of the pass 1 fixes checked its tree.
+- `13b9b2fb` `docs: record review pass 1 of the control-plane access contracts` (this record, `findings.jsonl`, and `passes.jsonl`) and `425a6ca9` `docs: correct the route note of review pass 1` (this record). The `make verify` run of the pass 1 fixes checked the tree of `425a6ca9`, `518dfdf0`.
+- `e9daeef1` `docs: record the checks of the pass 1 fixes of the control-plane access contracts` (this record), the head that review pass 2 reviewed.
+- Pass 2 fixes: `8bfdcd79` `chore: fix the webhook rejection, path parameter failures, and token revocation answers of the control plane` (document and contract tests) and `977fab30` `docs: ground member reassignment, token revocation, request logs, and the binding check of the control plane` (spec delta, contract page, design).
+- The commit that records pass 2 changes only this record, `findings.jsonl`, and `passes.jsonl`; the `make verify` run of the pass 2 fixes checked its tree, as the generated part below names it.
 
 ## Environment
 
@@ -52,7 +55,13 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 | Same | The `BranchName` pattern against `git check-ref-format --branch` (Git 2.43.0) over 43 names, among them `release/версия`, `@`, `HEAD`, `a..b`, `x.lock`, and `a@{b` | Same verdict for every name |
 | Same | Spec delta requirement body lengths, in characters | Browser session and CSRF schemes 470, Access failures 427, Project setup operations 464, Webhook receiver 399, Identifiers and pages 407; the others unchanged |
 | Pass 1 records | `make findings ARGS="validate"` | Every findings file is valid |
-| `425a6ca9`, clean tree | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` (log `cpac-verify-3.log` in the session scratchpad) | Passed, profile full, tree `518dfdf0`, stamp written; generated part below |
+| `425a6ca9`, clean tree | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` (log `cpac-verify-3.log` in the session scratchpad) | Passed, profile full, tree `518dfdf0`, stamp written; superseded by the pass 2 run |
+| Pass 2 fixes, working tree | `npm run openspec -- validate define-control-plane-access-contracts --strict`; `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments`; `npx tsc -p tsconfig.check.json` | Valid; every checked link conforms; every active change archives into strictly valid specs; every comment is within the rule; `tsc` exit 0 |
+| Same, after `npm run build` | `node --experimental-strip-types --test packages/contracts/test/control-plane-contracts.test.ts` | 22 tests, all passed |
+| Same, document of `e9daeef1` with the new tests | Same | Fail-before: 3 of 22 failed, `authentication, authorization, and CSRF failures are distinct responses`, `every operation with a path parameter but the receiver answers 400 to an invalid one`, and the webhook receiver test; the `no-store` and paging checks of L9 pass on both, because they add coverage of rules the document already met |
+| Same | Spec delta requirement body lengths, in characters | Access failures 472, Operation roles 444, Account slot operations 385, SCM integration setup 345, Secrets in responses 463; the others unchanged |
+| Pass 2 records | `make findings ARGS="validate"` | Every findings file is valid |
+| Pass 2 record commit, clean tree | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` (log `cpac-verify-4.log` in the session scratchpad) | Passed, stamp written; generated part below |
 
 ## Limitations
 
@@ -91,10 +100,21 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   - L3, evidence-mismatch: the limitation on the routed effort now cites governance "Routed effort" instead of the coordinator.
 - The findings outside this directory name the capability `control-plane-api`, the closest existing one, because `make findings` accepts only directories under `openspec/specs` and this change creates `control-plane-wire-contracts`; the spec delta findings name it too, because they concern the contract rather than this record.
 - Route: `route.json` is kept. The fixes change 104 lines (81 added, 23 removed) in five files the change already touched, with no new file, capability, or touched area, so its features keep their triggers (`lines`, `contracts`) and its tier `elevated`.
-- Pass 2, reviewer B: Claude Code `claude-opus-5-5`, effort `high`; pending.
+- Pass 2, reviewer B: Claude Code `claude-opus-5-5`, effort `high`, plan mode with `Edit`, `Write`, and `NotebookEdit` disallowed, session `cb157568-8906-453c-8fd2-df2e21c2aae4`, invoked on 2026-10-28 on the reviewed head `e9daeef1` as `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`; the `modelUsage` of the result line names `claude-opus-5-5`. The SHA-256 snapshot was `beacb1e7a5ac5211f00a74f9cce192a6518bb271985c6d087e1ef550fdf9e38b` before and after the pass, so the reviewer changed nothing. 0 critical, 1 high, 5 medium, 10 low; 15 fixed and H1 deferred ([findings](findings.jsonl), [passes](passes.jsonl)):
+  - H1, redaction: a `project-maintainer` sets `remoteUrl` freely, so a run's SCM credential can reach a host that the integration does not confirm. Pending an architect decision; `remoteUrl` is unchanged, and no fix of this pass narrows the options of the later fix.
+  - M1, concurrency-race: "idempotent" member assignment contradicted product ports section 2, rule 7. The word is dropped; design decision 7, contract page section 4, and the document state last-writer-wins as an explicit exception to rule 7 with its reason. No source requires a compare-and-set.
+  - M2, contract-drift: the revoked token state had no redemption rule. Redemption treats a revoked token as `token-invalid`, an obligation on G3 plan row 33 (page sections 4 and 9, decision 12), because the redemption requirement lives in `installation-enrollment`, not `control-plane-api`; revoking a revoked or expired token answers 204.
+  - M3, redaction: shape-based redaction missed the session values and write-only bodies. Request logs hold only allowlisted parts, never such a body or the `Cookie`, `X-CSRF-Token`, or `Authorization` header: requirement "Secrets in responses" with scenario "Logged login request", page section 7, decision 20.
+  - M4, contract-drift: the `bindRepository` 422 is now an undeclared merge method, from source control section 2, rule 5, and section 4; the ungrounded reachability check is removed (decision 11, page section 4).
+  - M5, contract-drift: the receiver's 401 is the fixed `WebhookRejection` (`signature-invalid`); requirement "Access failures" names the exception and the failures test now checks the receiver.
+  - L1 to L9: the `logOut` 401 names only the cookie; the `rotateSlotCredential` 200 describes the record after the final revision advance; five update 409s name only the revision; eight operations declare 400, with a test; the roles requirement says assigning and removing members; the slot and SCM requirements name their compare-and-set; revoking a rotated token answers 422 `token-rotated` with the replacement; a verified unparseable payload answers 400; tests check `no-store` on `readSession` and `logIn` and the page bound and `next`.
+  - L10, evidence-mismatch: the Revision list names `13b9b2fb`, `425a6ca9`, and `e9daeef1`, and says the run of the pass 1 fixes checked `425a6ca9`.
+- Route after pass 2: `route.json` is kept. The fixes change 231 lines (198 added, 33 removed) in five files the change already touched, with no new file, capability, or touched area, so the triggers (`lines`, `contracts`) and the tier `elevated` stay.
+- Pass 3: required by governance "Conditional third pass", because pass 2 reported a High finding and its fixes change the document and its tests. Reviewer A, Codex `gpt-6.1-sol` at `medium`, confirms the pass 2 fixes.
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B, Claude Code `claude-opus-5-5` at `high` (the brief); pass 3 by reviewer A, Codex `gpt-6.1-sol` at `medium`, only as governance "Conditional third pass" requires.
+- H1 (an unconstrained `remoteUrl`): pending an architect decision, then its fix.
+- Review pass 3 by reviewer A, Codex `gpt-6.1-sol` at `medium`, required by governance "Conditional third pass".
 - The archive (task 5.1).
 - Integration into dev by the coordinator (single pull request).
