@@ -49,7 +49,8 @@ Coordinator decision Q3, the reclaim program's window for `go`: on the tree of `
 
 | Check | Revision | Result |
 | --- | --- | --- |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `254cf2d7`, tree `275cb48f` | Passed, profile full, stamp written: tests 3230, suites 46, pass 3183, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `ae323e15`, tree `56041e78` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `254cf2d7`, tree `275cb48f` | Passed, profile full, stamp written: tests 3230, suites 46, pass 3183, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `34a9773d`, tree `ad07be3e` | Passed, profile full: the same counts; 98.95 % functions |
 | Coverage of `packages/adapters/git-workspace/dist/**`, summed from `coverage/lcov.info` of the recorded run | `254cf2d7` | lines 1610 of 1635 (98.47 %), branches 773 of 839 (92.13 %), functions 229 of 235 (97.45 %) |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify-worker-image-reproducible` | `db767f8f` with the uncommitted records | Failed: `installation.sh: two builds of one revision gave sha256:036dad823c49… and sha256:abc511323824…`. Diagnosis: two full `docker build --no-cache --target worker` builds of an archive of `db767f8f` with the `Makefile` pins and its commit time as `SOURCE_DATE_EPOCH` gave one image manifest, `sha256:e20064fc9b01…`, with one config, `sha256:606bd09d676a…`, and the same 7 layers, the Git layer included. Only the provenance attestation manifest that BuildKit attaches by default differed (`sha256:8d880a23f93f…` and `sha256:b4d0c9179ba7…`), and on this host's Docker 29.8.2 with the containerd image store, buildx 0.37.1, `docker image inspect .Id` is the digest of the index that holds both. So the Git step is reproducible, and the check fails on this host for every revision; it is not fixed here (out of scope) |
@@ -61,7 +62,7 @@ Coordinator decision Q3, the reclaim program's window for `go`: on the tree of `
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `275cb48fa1cd13f6a7f41e65ba5389a4fe37bf7f`; tests 3230, pass 3183, fail 0, skipped 47; all files 99.38% lines, 92.80% branches, 98.93% functions.
+- `make verify`: passed, profile full, tree `56041e789a748bd495ae4e3ee81bb99897972103`; tests 3233, pass 3186, fail 0, skipped 47; all files 99.38% lines, 92.80% branches, 98.93% functions.
 - `npm run openspec -- validate implement-workspace-handoff-and-reclaim --strict`: passed, `Change 'implement-workspace-handoff-and-reclaim' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
 - Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
