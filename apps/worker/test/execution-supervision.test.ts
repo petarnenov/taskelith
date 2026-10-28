@@ -183,7 +183,7 @@ for (const { name, processes } of UNLISTABLE_SURVIVORS) {
   });
 }
 
-const LINUX_ONLY = process.platform === 'linux' ? {} : { skip: 'the host platform of supervisionHost is Linux here' };
+const LINUX_ONLY = process.platform === 'linux' ? {} : { skip: 'supervisionHost composes the Linux platform only on Linux' };
 
 function hostSettings(overrides: Partial<WorkerSettings>): WorkerSettings {
   return {
@@ -203,9 +203,12 @@ test('the supervision host of a Linux launch prepares the program as the executi
   assert.deepEqual(value(host.containments!()), [], 'an absent parent holds no containment');
 });
 
-test('the supervision host without a launch prepares nothing and runs without an account', LINUX_ONLY, async () => {
+test('the supervision host without a launch prepares nothing', LINUX_ONLY, async () => {
   const host = value(supervisionHost(hostSettings({ containmentParent: '/sys/fs/cgroup/absent-parent' }), executions, '4.5.6'));
-  assert.equal((await host.supervision(EXECUTION).prepare(PLAN)).ok, false);
+  assert.equal(failed(await host.supervision(EXECUTION).prepare(PLAN)).code, 'precondition-failed');
+});
+
+test('the supervision host of a launch without an account prepares none', LINUX_ONLY, async () => {
   const accountless = value(supervisionHost(hostSettings({ containmentParent: '/sys/fs/cgroup/absent-parent', launch: { command: PROGRAM.command } }), executions, '4.5.6'));
   value(await accountless.supervision(EXECUTION).prepare(PLAN));
   assert.equal(recordFile(RECORD_FILES.intent).executionAccount, undefined);
