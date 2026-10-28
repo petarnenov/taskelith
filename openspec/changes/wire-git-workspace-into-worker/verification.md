@@ -196,11 +196,13 @@ The coordinator (Niki) returned the archived branch (archive commit `fde11070`):
 1. `666525ea` reverted the archive commit `fde11070`, which restored the active change and the living specs.
 2. The base is `git merge-base fde11070 origin/dev`, `16667399`. The merge `64c681c6` of `origin/dev` `8b18c540` had no conflict, and no hook reported the dependency inventory stale.
 3. `git diff 16667399 8b18c540 -- openspec/specs` changes only `agent-task-protocol` and `integration-flow`, no file of `worker-runtime` or `git-workspace-port`, so the deltas needed no reconciliation and are unchanged.
-4. `81875115` `chore: keep empty option lists valid under set -u in bash 3.2`, unreviewed, pending the coordinator's architect check: the entrypoint's `setpriv` takes `${groups[@]+"${groups[@]}"}`, as the architect decided. A search of `infra/` and `scripts/` for `[@]}` found one more empty-array expansion under `set -u` in a script that host tests run: `scripts/installation.sh` `enrollment_token` expanded an empty `"${options[@]}"` when no platform, architecture, or hostname is set, now guarded the same way. The other expansions are of arrays that are never empty (`compose_files`, the `options` of `scripts/linux-crash-windows.sh`) or are guarded by a count (`built`, `running`, `platforms`).
+4. `81875115` `chore: keep empty option lists valid under set -u in bash 3.2`, unreviewed, checked by the coordinator as architect (below): the entrypoint's `setpriv` takes `${groups[@]+"${groups[@]}"}`, as the architect decided. A search of `infra/` and `scripts/` for `[@]}` found one more empty-array expansion under `set -u` in a script that host tests run: `scripts/installation.sh` `enrollment_token` expanded an empty `"${options[@]}"` when no platform, architecture, or hostname is set, now guarded the same way. The other expansions are of arrays that are never empty (`compose_files`, the `options` of `scripts/linux-crash-windows.sh`) or are guarded by a count (`built`, `running`, `platforms`).
 5. Fail-before, in the image `bash:3.2` (`GNU bash, version 3.2.57(1)-release`) with fakes for `id`, `stat`, `mount`, `chown`, and `setpriv` (script `repro-entrypoint.sh` in the session scratchpad): the entrypoint of `64c681c6` without a launch command printed `line 47: groups[@]: unbound variable` and exited 1; after the fix it ran `setpriv` without `--groups`, and with a launch command and group `10003` with `--groups 10003`. `installation.sh enrollment-token` with a fake `docker` and no option set printed `line 281: options[@]: unbound variable` and exited 1 before the fix, and ran `issue-enrollment-token` without options after it. No host test runs on bash 3.2 here; the iMac run above is the test-level fail-before.
 6. The first `make verify` on `a56b58a3` failed one test, `installation-composition.test.ts` "long-running services run unprivileged; only the worker entrypoint starts as root", whose pattern still named the unguarded `setpriv` line; `af44f063` (unreviewed, with `81875115`) matches the guarded line.
 
-No reviewer pass ran on the return: the coordinator checks the unreviewed fix as solution architect before the archive.
+No reviewer pass ran on the return: the coordinator checked the unreviewed fixes as solution architect before the archive.
+
+- Architect check (Niki, 2026-10-29): 81875115 and af44f063 passed; reconciliation none, no reviewer A pass by coordinator decision
 
 ## Limitations
 
@@ -216,5 +218,4 @@ No reviewer pass ran on the return: the coordinator checks the unreviewed fix as
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
-- The architect check of the unreviewed return fixes `81875115` and `af44f063`, then the archive again.
 - Integration into dev by the coordinator (single pull request).
