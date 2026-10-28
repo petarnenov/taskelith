@@ -1,7 +1,7 @@
 import { err, failure, ok, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
-import { expectCode, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
+import { expectCode, expectRead, expectSame, expectSuccess, type Clock, type ConformanceCase } from '@taskelith/sdlc';
 import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
 import { installationIdentity } from '../domain/installation.js';
 import type { FleetRegistry, RotationOrder } from './fleet-registry.js';
@@ -21,6 +21,9 @@ const LATER = at('2026-10-25T09:10:00.000Z');
 // expires far ahead and an expired one long ago.
 const FAR_AHEAD = at('2100-01-01T00:00:00.000Z');
 const LONG_AGO = at('2000-01-01T00:00:00.000Z');
+
+// A registry reads it after its row lock, as a renewal or confirmation does.
+const clockAt = (instant: Instant): Clock => ({ now: () => instant });
 
 export function fleetToken(hash: string, constraints: EnrollmentToken['constraints'] = {}, expiresAt: Instant = FAR_AHEAD): EnrollmentToken {
   return Object.freeze({ hash: hash as SecretHash, issuedAt: LONG_AGO, expiresAt, constraints });
@@ -59,7 +62,7 @@ function order(requestedAt: Instant, deadline: Instant): RotationOrder {
 // Requests and renews generation 2 with the deadline `deadline`.
 async function renewed(registry: FleetRegistry, worker: EnrolledWorker, next = generation(2), deadline = LATER): Promise<void> {
   must(await registry.requestRotation(worker.workerId, order(AT, deadline)));
-  must(await registry.renew(worker.workerId, next, 'jwt-2', AT));
+  must(await registry.renew(worker.workerId, next, 'jwt-2', clockAt(AT)));
 }
 
 async function auditKinds(registry: FleetRegistry, worker: EnrolledWorker): Promise<readonly string[]> {
@@ -194,14 +197,14 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     async check(registry) {
       const problems: string[] = [];
       const worker = await enrolled(registry);
-      expectReason(problems, 'not requested', await registry.renew(worker.workerId, generation(2), 'jwt-2', AT), 'rotation-not-requested');
+      expectReason(problems, 'not requested', await registry.renew(worker.workerId, generation(2), 'jwt-2', clockAt(AT)), 'rotation-not-requested');
       must(await registry.requestRotation(worker.workerId, order(AT, LATER)));
-      expectReason(problems, 'other generation', await registry.renew(worker.workerId, generation(3), 'jwt-3', AT), 'rotation-not-requested');
+      expectReason(problems, 'other generation', await registry.renew(worker.workerId, generation(3), 'jwt-3', clockAt(AT)), 'rotation-not-requested');
       const renewedRequest = { generation: 2, requestedAt: AT, deadline: LATER, brokerUserJwt: 'jwt-2' };
-      expectRead(problems, 'renewed', await registry.renew(worker.workerId, generation(2), 'jwt-2', AT), renewedRequest);
-      expectRead(problems, 'repeat', await registry.renew(worker.workerId, generation(2), 'jwt-other', LATER), renewedRequest);
+      expectRead(problems, 'renewed', await registry.renew(worker.workerId, generation(2), 'jwt-2', clockAt(AT)), renewedRequest);
+      expectRead(problems, 'repeat', await registry.renew(worker.workerId, generation(2), 'jwt-other', clockAt(LATER)), renewedRequest);
       const otherKey = { ...generation(2), brokerUserKey: 'U-other' };
-      expectReason(problems, 'other key', await registry.renew(worker.workerId, otherKey, 'jwt-x', AT), 'renewal-mismatch');
+      expectReason(problems, 'other key', await registry.renew(worker.workerId, otherKey, 'jwt-x', clockAt(AT)), 'renewal-mismatch');
       expectRead(problems, 'stored', await registry.worker(worker.workerId), {
         ...worker, credentials: { current: generation(2), previous: { ...generation(1), validUntil: LATER }, rotation: renewedRequest },
       });
@@ -215,10 +218,10 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       const problems: string[] = [];
       const worker = await enrolled(registry);
       await renewed(registry, worker);
-      expectReason(problems, 'old generation', await registry.confirm(worker.workerId, 1, AT), 'confirmation-mismatch');
-      expectRead(problems, 'confirmed', await registry.confirm(worker.workerId, 2, AT), true);
+      expectReason(problems, 'old generation', await registry.confirm(worker.workerId, 1, clockAt(AT)), 'confirmation-mismatch');
+      expectRead(problems, 'confirmed', await registry.confirm(worker.workerId, 2, clockAt(AT)), true);
       expectRead(problems, 'dropped', await registry.worker(worker.workerId), { ...worker, credentials: { current: generation(2) } });
-      expectRead(problems, 'repeat', await registry.confirm(worker.workerId, 2, LATER), false);
+      expectRead(problems, 'repeat', await registry.confirm(worker.workerId, 2, clockAt(LATER)), false);
       const { pushes, push } = recordingPush();
       expectRead(problems, 'published', await registry.publishRevocations(push), 1);
       expectSame(problems, 'pushed', pushes, [['U-w1-1']]);
@@ -238,8 +241,8 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       expectSuccess(problems, 'revoke again', await registry.revoke(worker.workerId, LATER));
       const stored = must(await registry.worker(worker.workerId));
       expectSame(problems, 'revoked at', stored?.revokedAt, AT);
-      expectCode(problems, 'renew revoked', await registry.renew(worker.workerId, generation(2), 'jwt-2', AT), 'forbidden');
-      expectCode(problems, 'confirm revoked', await registry.confirm(worker.workerId, 2, AT), 'forbidden');
+      expectCode(problems, 'renew revoked', await registry.renew(worker.workerId, generation(2), 'jwt-2', clockAt(AT)), 'forbidden');
+      expectCode(problems, 'confirm revoked', await registry.confirm(worker.workerId, 2, clockAt(AT)), 'forbidden');
       const { pushes, push } = recordingPush();
       expectRead(problems, 'published', await registry.publishRevocations(push), 2);
       expectSame(problems, 'pushed', pushes, [['U-w1-1', 'U-w1-2']]);
@@ -319,6 +322,55 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'a first renewal at the deadline is forbidden and leaves the rotation to the sweep',
+    async check(registry) {
+      const problems: string[] = [];
+      const worker = await enrolled(registry);
+      must(await registry.requestRotation(worker.workerId, order(AT, LATER)));
+      const late = await registry.renew(worker.workerId, generation(2), 'jwt-2', clockAt(LATER));
+      expectCode(problems, 'late', late, 'forbidden');
+      expectSame(problems, 'reason', !late.ok && late.error.details.reason, 'rotation-expired');
+      expectRead(problems, 'unchanged', await registry.worker(worker.workerId), {
+        ...worker, credentials: { current: generation(1), rotation: { generation: 2, requestedAt: AT, deadline: LATER } },
+      });
+      expectSame(problems, 'kinds', await auditKinds(registry, worker), ['worker-credential.rotation-requested']);
+      expectRead(problems, 'due', await registry.unrenewedRotations(LATER), [worker.workerId]);
+      expectRead(problems, 'revoked', await registry.expireRotation(worker.workerId, LATER), true);
+      return problems;
+    },
+  },
+  {
+    name: 'a confirmation past the deadline expires the predecessor as unconfirmed, in either order with the sweep',
+    async check(registry) {
+      const problems: string[] = [];
+      const first = await enrolled(registry, 'w1', 'j1');
+      const second = await enrolled(registry, 'w2', 'j2');
+      await renewed(registry, first);
+      await renewed(registry, second, generation(2, 'w2'));
+      expectRead(problems, 'confirm first', await registry.confirm(first.workerId, 2, clockAt(LATER)), true);
+      expectRead(problems, 'sweep after', await registry.expirePredecessors(LATER), 1);
+      expectRead(problems, 'confirm after', await registry.confirm(second.workerId, 2, clockAt(LATER)), false);
+      expectRead(problems, 'repeat', await registry.confirm(first.workerId, 2, clockAt(LATER)), false);
+      for (const worker of [first, second]) {
+        const label = worker.workerId;
+        const current = generation(2, label);
+        expectRead(problems, `${label} dropped`, await registry.worker(worker.workerId), { ...worker, credentials: { current } });
+        expectSame(problems, `${label} kinds`, await auditKinds(registry, worker), [
+          'worker-credential.rotation-requested', 'worker-credential.renewed', 'worker-credential.rotation-expired',
+        ]);
+        const trail = must(await registry.credentialAuditTrail(worker.workerId));
+        expectSame(problems, `${label} reason`, trail.at(-1)?.reason, 'unconfirmed');
+      }
+      let pushed: readonly BrokerRevocation[] = [];
+      must(await registry.publishRevocations(async (revocations) => {
+        pushed = revocations;
+        return ok(undefined);
+      }));
+      expectSame(problems, 'pushed', pushed.map(({ userKey, revokedAt }) => [userKey, revokedAt]).sort(), [['U-w1-1', LATER], ['U-w2-1', LATER]]);
+      return problems;
+    },
+  },
+  {
     name: 'at the deadline a rotation never renewed revokes the worker with all its broker users',
     async check(registry) {
       const problems: string[] = [];
@@ -350,7 +402,7 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       const problems: string[] = [];
       const worker = await enrolled(registry);
       await renewed(registry, worker);
-      must(await registry.confirm(worker.workerId, 2, LATER));
+      must(await registry.confirm(worker.workerId, 2, clockAt(AT)));
       const trail = must(await registry.credentialAuditTrail(worker.workerId));
       expectSame(problems, 'trail', trail.map(({ kind, subject, generation: named, actor, reason }) => [kind, subject, named, actor, reason]), [
         ['worker-credential.rotation-requested', 'w1', 2, 'admin@host', 'scheduled'],

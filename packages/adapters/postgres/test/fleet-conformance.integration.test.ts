@@ -115,6 +115,43 @@ test('a publisher that waited for the lock pushes every entry committed meanwhil
   assert.equal(value(await registry.publishRevocations(push)), 0);
 });
 
+test('a renewal that waits for the row lock until past the deadline is refused', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const worker = fleetWorker('w1', 'j1');
+  await enrollAll(registry, worker);
+  const deadline = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
+  value(await registry.requestRotation(worker.workerId, { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' }));
+  let now = worker.enrolledAt;
+  const holder = new pg.Client({ connectionString: url.href });
+  await holder.connect();
+  await holder.query('BEGIN');
+  await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
+  const renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
+  // The barrier: the renewal is waiting for the row lock.
+  await waitForWaitingRowLock(holder);
+  now = deadline;
+  await holder.query('COMMIT');
+  await holder.end();
+
+  const late = await renewing;
+  assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
+  assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
+  assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+});
+
+async function waitForWaitingRowLock(client: pg.Client): Promise<void> {
+  for (let tries = 0; tries < 200; tries++) {
+    const { rows } = await client.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+         WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`,
+    );
+    if (rows[0]!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('the renewal never waited for the row lock');
+}
+
 async function waitForWaitingLock(client: pg.Client): Promise<void> {
   for (let tries = 0; tries < 200; tries++) {
     const { rows } = await client.query<{ waiting: number }>(
@@ -149,7 +186,7 @@ function nextGeneration(worker: ReturnType<typeof fleetWorker>): CredentialGener
 async function renewed(registry: CommittingFleetRegistry, worker: EnrolledWorker, next: CredentialGeneration, deadline: Instant) {
   const order = { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' };
   value(await registry.requestRotation(worker.workerId, order));
-  value(await registry.renew(worker.workerId, next, 'jwt', worker.enrolledAt));
+  value(await registry.renew(worker.workerId, next, 'jwt', { now: () => worker.enrolledAt }));
 }
 
 const predecessorColumn = (workerId: string) =>

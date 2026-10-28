@@ -288,7 +288,7 @@ test('a predecessor credential before its confirmation authenticates but launche
   const next = { ...WORKER.credentials.current, generation: 2, controlPlaneHash: 'cp-next' as never, brokerUserKey: 'U-next' };
   const order = { requestedAt: WORKER.enrolledAt, deadline: '2100-01-01T00:00:00.000Z' as never, actor: 'ops', reason: 'test' };
   value(await fleet.requestRotation(WORKER.workerId, order));
-  value(await fleet.renew(WORKER.workerId, next, 'jwt', WORKER.enrolledAt));
+  value(await fleet.renew(WORKER.workerId, next, 'jwt', { now: () => WORKER.enrolledAt }));
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized');
   const current = { ...request, operationId: id('OperationId', 'operation-2') as never };
   assert.equal(kindOf(await authority.authorize({ ...PRINCIPAL, generation: 2 }, current)), 'granted');

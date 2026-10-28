@@ -316,6 +316,52 @@ test('at the deadline a rotation that was never renewed revokes the worker', asy
   assert.deepEqual(consumers.removed, [enrolled.workerId]);
 });
 
+test('a first renewal after the deadline is refused before the sweep, which then revokes the worker', async () => {
+  const { clock, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds);
+  const late = failed(await service.renew(principal, material(2)));
+  assert.deepEqual([late.code, late.details.reason], ['forbidden', 'worker-not-authorized']);
+  assert.equal(failed(await service.authenticateWorkerBearer('worker-next-2')).code, 'forbidden', 'nothing was renewed');
+  assert.deepEqual(value(await service.expireGraceWindows()), 1);
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
+});
+
+test('a renewal whose registry write waits past the deadline is refused', async () => {
+  const { clock, registry, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds - 1);
+  const renew = registry.renew.bind(registry);
+  // The deadline passes while the write waits for the worker's row lock.
+  registry.renew = (...write) => {
+    clock.advance(1);
+    return renew(...write);
+  };
+  const late = failed(await service.renew(principal, material(2)));
+  assert.deepEqual([late.code, late.details.reason], ['forbidden', 'worker-not-authorized']);
+  assert.deepEqual(value(await service.expireGraceWindows()), 1, 'the sweep revokes the worker');
+});
+
+test('a confirmation after the deadline expires the predecessor as unconfirmed, before or after the sweep', async () => {
+  const kinds = async (registry: InMemoryFleetRegistry, workerId: WorkerId) =>
+    value(await registry.credentialAuditTrail(workerId)).map(({ kind, reason }) => `${kind}:${reason}`);
+  for (const sweepFirst of [false, true]) {
+    const { clock, broker, registry, service, enrolled, principal } = await enrolledWorker();
+    value(await service.requestRotation(enrolled.workerId, OPERATOR));
+    value(await service.renew(principal, material(2)));
+    const next = value(await service.authenticateWorkerBearer('worker-next-2'));
+    clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds);
+    if (sweepFirst) assert.deepEqual(value(await service.expireGraceWindows()), 1);
+    assert.deepEqual(value(await service.confirm(next, 2)), { credentialGeneration: 2, revocationsPublished: true });
+    assert.deepEqual(value(await service.expireGraceWindows()), 0, 'nothing is left to expire');
+    assert.deepEqual((await kinds(registry, enrolled.workerId)).slice(1), [
+      'worker-credential.renewed:renewed', 'worker-credential.rotation-expired:unconfirmed',
+    ], `sweep first: ${sweepFirst}`);
+    assert.deepEqual(broker.revoked, ['U-worker-1-1']);
+    assert.equal(value(await service.authenticateWorkerBearer('worker-next-2')).generation, 2);
+  }
+});
+
 test('a revoked worker gets no rotation, and a consumer the sweep cannot remove is reported', async () => {
   const { clock, consumers, service, enrolled } = await enrolledWorker();
   value(await service.requestRotation(enrolled.workerId, OPERATOR));

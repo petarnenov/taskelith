@@ -1,6 +1,7 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { OPERATOR_AUDIT_SUBJECT, type AuditEvent, type OperatorCredential, type OperatorCredentials, type SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
+import type { Clock } from '@taskelith/sdlc';
 import {
   confirmationStep,
   credentialGenerations,
@@ -146,19 +147,19 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(step.request);
   }
 
-  async renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>> {
+  async renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>> {
     const worker = await this.#activeWorker(workerId);
     if (!worker.ok) return worker;
-    const step = renewalStep(worker.value, next, brokerUserJwt, at);
+    const step = renewalStep(worker.value, next, brokerUserJwt, clock.now());
     if (!step.ok) return step;
     await this.#apply(step.value);
     return ok(step.value.request);
   }
 
-  async confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>> {
+  async confirm(workerId: WorkerId, generation: number, clock: Clock): Promise<Result<boolean>> {
     const worker = await this.#activeWorker(workerId);
     if (!worker.ok) return worker;
-    const step = confirmationStep(worker.value, generation, at);
+    const step = confirmationStep(worker.value, generation, clock.now());
     if (!step.ok) return step;
     await this.#apply(step.value);
     return ok(step.value.dropped);

@@ -165,7 +165,7 @@ export class EnrollmentService {
     const next = Object.freeze({
       generation, controlPlaneHash: request.controlPlaneSecretSha256, brokerUserKey: request.brokerUserPublicKey, brokerIssuedAt: signed.value.issuedAt,
     });
-    const renewed = await this.#deps.registry.renew(principal.workerId, next, signed.value.jwt, this.#deps.clock.now());
+    const renewed = await this.#deps.registry.renew(principal.workerId, next, signed.value.jwt, this.#deps.clock);
     if (!renewed.ok) return renewed.error.code === 'forbidden' ? err(notAuthorized()) : renewed;
     return ok(renewal(renewed.value));
   }
@@ -174,7 +174,7 @@ export class EnrollmentService {
   // generation it confirms, after its broker connection used it.
   async confirm(principal: WorkerPrincipal, generation: number): Promise<Result<ConfirmedCredentials>> {
     if (principal.generation !== generation) return err(rotationConflict('confirmation-mismatch'));
-    const confirmed = await this.#deps.registry.confirm(principal.workerId, generation, this.#deps.clock.now());
+    const confirmed = await this.#deps.registry.confirm(principal.workerId, generation, this.#deps.clock);
     if (!confirmed.ok) return confirmed.error.code === 'forbidden' ? err(notAuthorized()) : confirmed;
     // The confirmation is committed; a failed publication is retried later.
     const revocationsPublished = confirmed.value ? await this.#publishedAfterCommit() : true;

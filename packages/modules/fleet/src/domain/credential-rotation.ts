@@ -48,6 +48,7 @@ export function renewalStep(
   brokerUserJwt: string,
   at: Instant,
 ): Result<RotationStep & { readonly request: RotationRequest }> {
+  if (unrenewedPastDeadline(worker.credentials, at)) return err(lateRenewal());
   const renewed = renewCredentials(worker.credentials, next, brokerUserJwt);
   if (!renewed.ok) return err(rotationConflict(renewed.error));
   const request = renewed.value.rotation!;
@@ -58,9 +59,13 @@ export function renewalStep(
   return ok({ worker: Object.freeze({ ...worker, credentials: renewed.value }), revocations: [], event, request });
 }
 
+// Past the deadline the predecessor expires first, as the sweep would
+// drop it, and the confirmation is then a repeat.
 export function confirmationStep(worker: EnrolledWorker, generation: number, at: Instant): Result<RotationStep & { readonly dropped: boolean }> {
-  const confirmed = confirmCredentials(worker.credentials, generation);
+  const expiry = predecessorExpiryStep(worker, at);
+  const confirmed = confirmCredentials((expiry?.worker ?? worker).credentials, generation);
   if (!confirmed.ok) return err(rotationConflict(confirmed.error));
+  if (expiry !== undefined) return ok({ ...expiry, dropped: true });
   const { dropped, credentials } = confirmed.value;
   if (dropped === undefined) return ok({ worker, revocations: [], dropped: false });
   const event = credentialEvent('worker-credential.confirmed', {
@@ -93,6 +98,11 @@ const CONFLICT_MESSAGES: Readonly<Record<RotationConflict, string>> = Object.fre
   'renewal-mismatch': 'the generation was renewed with another key or secret',
   'confirmation-mismatch': 'the generation is not the renewed or current one of this bearer',
 });
+
+// The sweep revokes such a worker; until then its bearer renews nothing.
+function lateRenewal(): Failure {
+  return failure('forbidden', 'the rotation passed its deadline before it was renewed', { reason: 'rotation-expired' });
+}
 
 export function rotationConflict(reason: RotationConflict): Failure {
   return failure('conflict', CONFLICT_MESSAGES[reason], { reason });

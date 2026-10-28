@@ -1,6 +1,7 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AuditEvent, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
+import type { Clock } from '@taskelith/sdlc';
 import {
   confirmationStep,
   predecessorExpiryStep,
@@ -105,19 +106,19 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return settle(ok(step.request));
   }
 
-  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>> {
+  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>> {
     const worker = this.#activeWorker(workerId);
     if (!worker.ok) return settle(worker);
-    const step = renewalStep(worker.value, next, brokerUserJwt, at);
+    const step = renewalStep(worker.value, next, brokerUserJwt, clock.now());
     if (!step.ok) return settle(step);
     this.#apply(step.value);
     return settle(ok(step.value.request));
   }
 
-  confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>> {
+  confirm(workerId: WorkerId, generation: number, clock: Clock): Promise<Result<boolean>> {
     const worker = this.#activeWorker(workerId);
     if (!worker.ok) return settle(worker);
-    const step = confirmationStep(worker.value, generation, at);
+    const step = confirmationStep(worker.value, generation, clock.now());
     if (!step.ok) return settle(step);
     this.#apply(step.value);
     return settle(ok(step.value.dropped));

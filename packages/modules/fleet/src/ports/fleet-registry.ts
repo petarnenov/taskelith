@@ -1,6 +1,7 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AuditEvent, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
+import type { Clock } from '@taskelith/sdlc';
 import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken, RotationRequest } from '../domain/enrollment.js';
 
 // Tokens, enrolled workers, and the durable list of broker users to revoke;
@@ -28,10 +29,11 @@ export interface FleetRegistry {
   requestRotation(workerId: WorkerId, request: RotationOrder): Promise<Result<RotationRequest>>;
   // Makes `next` current under the open rotation and audits it once; a
   // repeat answers the stored request. `conflict` with the domain's reason.
-  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>>;
-  // Drops the predecessor of the renewed `generation`, records its broker
-  // user, and audits it; answers whether it dropped one.
-  confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>>;
+  // `clock` is read after the row lock: past the deadline it is `forbidden`.
+  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>>;
+  // Drops the predecessor of the renewed `generation`, confirmed, or past
+  // the deadline read from `clock` after the lock, expired; answers whether.
+  confirm(workerId: WorkerId, generation: number, clock: Clock): Promise<Result<boolean>>;
   // Marks the worker revoked and records all its broker users for
   // revocation; revoking twice keeps the first time. `not-found` if unknown.
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>>;

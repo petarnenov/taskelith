@@ -35,6 +35,7 @@ import type {
   AdmissionRepository,
   ArtifactId,
   ArtifactRevision,
+  Clock,
   CurrentRevisions,
   ContentDigest,
   Gate,
@@ -250,12 +251,12 @@ export class CommittingFleetRegistry implements FleetRegistry {
     return this.#database.transaction((tx) => tx.fleet.requestRotation(workerId, order));
   }
 
-  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>> {
-    return this.#database.transaction((tx) => tx.fleet.renew(workerId, next, brokerUserJwt, at));
+  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>> {
+    return this.#database.transaction((tx) => tx.fleet.renew(workerId, next, brokerUserJwt, clock));
   }
 
-  confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>> {
-    return this.#database.transaction((tx) => tx.fleet.confirm(workerId, generation, at));
+  confirm(workerId: WorkerId, generation: number, clock: Clock): Promise<Result<boolean>> {
+    return this.#database.transaction((tx) => tx.fleet.confirm(workerId, generation, clock));
   }
 
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
