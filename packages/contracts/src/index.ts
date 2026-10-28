@@ -2,6 +2,7 @@ export { checkHttpSchema, checkMessageSchema, type HttpSchemas, type MessageSche
 export {
   commonProtocolVersion,
   EXECUTION_PROTOCOL_VERSION,
+  SESSION_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
   supportsProtocolVersion,
   type ProtocolVersionWindow,

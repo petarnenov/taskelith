@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith control-plane API",
-    "version": "0.2.0",
-    "description": "Login and sessions, projects with their members, defaults, auto-merge setting, and repository binding, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver (G3 item 9a); the board, task detail, and inbox views, inbox answers, agent sessions with their turns, native requests, responses, and output, and the server-sent event streams (G3 item 9b). A browser authenticates with the session cookie and sends the CSRF token on every mutation; the CLI and the owner use the operator credential. No response carries a stored secret; only issuing or rotating an enrollment token reveals its secret, once."
+    "version": "0.3.0",
+    "description": "Login and sessions, projects with their members, defaults, auto-merge setting, and repository binding, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver (G3 item 9a); the board, task detail, and inbox views, inbox answers, agent sessions with their turns, native requests, responses, and output, and the server-sent event streams (G3 item 9b). A browser authenticates with the session cookie and sends the CSRF token on every mutation; the CLI and the owner use the operator credential. No response carries a stored secret; only issuing or rotating an enrollment token reveals its secret, once. The terminal WebSocket upgrade (G3 item 9d), whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
     "/session": {
@@ -5480,6 +5480,230 @@
           }
         }
       }
+    },
+    "/projects/{projectId}/agent-sessions/{sessionId}/terminal": {
+      "get": {
+        "operationId": "openTerminal",
+        "summary": "Open or reattach the terminal of a session's active attempt as a WebSocket",
+        "description": "Requires `project-operator` or above on the project; an `installation-owner` needs a project role. The control plane authenticates, checks the `Origin` of a session-authenticated upgrade, and checks the role before it reads the session. A browser cannot send the CSRF header on a WebSocket handshake, so a cookie-authenticated connection sends its CSRF token in its first frame, `terminal.attach`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "The agent session.",
+            "schema": {
+              "$ref": "#/components/schemas/AgentSessionId"
+            }
+          },
+          {
+            "name": "attemptId",
+            "in": "query",
+            "required": true,
+            "description": "The session's active bound attempt, as the caller read it.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "ownershipGeneration",
+            "in": "query",
+            "required": true,
+            "description": "The attempt's ownership generation, as the caller read it.",
+            "schema": {
+              "$ref": "#/components/schemas/Generation"
+            }
+          },
+          {
+            "name": "generation",
+            "in": "query",
+            "required": true,
+            "description": "The session's running generation, as the caller read it.",
+            "schema": {
+              "$ref": "#/components/schemas/AgentSessionGeneration"
+            }
+          },
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": true,
+            "description": "The WebSocket upgrade.",
+            "schema": {
+              "type": "string",
+              "const": "websocket"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Version",
+            "in": "header",
+            "required": true,
+            "description": "The WebSocket version of RFC 6455.",
+            "schema": {
+              "type": "string",
+              "const": "13"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Key",
+            "in": "header",
+            "required": true,
+            "description": "The client's handshake nonce, 16 random bytes in base64.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]{22}==$"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Protocol",
+            "in": "header",
+            "required": true,
+            "description": "The frame protocol of this connection.",
+            "schema": {
+              "type": "string",
+              "const": "taskelith.terminal.v1"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "description": "The page's origin, which a browser always sends; a session-authenticated upgrade from another origin than the installation's is refused with 403 `csrf-token-invalid`.",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols: the connection is a WebSocket that carries the frames of `terminal.asyncapi.json`.",
+            "headers": {
+              "Upgrade": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "websocket"
+                }
+              },
+              "Connection": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Upgrade"
+                }
+              },
+              "Sec-WebSocket-Accept": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9+/]{27}=$"
+                }
+              },
+              "Sec-WebSocket-Protocol": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "taskelith.terminal.v1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A path or query parameter or a handshake header is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or a session-authenticated upgrade came from another origin (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such agent session in the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The attempt is not current, or no terminal is offered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable, or the worker's relay connection is not open; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10066,6 +10290,43 @@
             "$ref": "#/components/schemas/StreamEndedEvent"
           }
         ]
+      },
+      "TerminalRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `openTerminal`, checked in this order: `attempt-not-current` when the attempt, its ownership generation, or the session generation that the request names is not the session's active bound attempt and running generation; `terminal-not-offered` when the session's harness declares no terminal, the worker runs on macOS, or the worker's common protocol version is below 2. Nothing was opened.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "attempt-not-current",
+                  "terminal-not-offered"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "securitySchemes": {

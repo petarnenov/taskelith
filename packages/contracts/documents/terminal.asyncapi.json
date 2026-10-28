@@ -1,0 +1,829 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Taskelith terminal frames",
+    "version": "0.1.0",
+    "description": "The frames of the web terminal (G3 decision D13 (c), G3 sub-change 9d): one JSON text frame per message on the browser terminal WebSocket, which `openTerminal` of the control-plane document upgrades, and on the worker relay connection, which `openWorkerRelay` of the execution document upgrades. Operations are described from the control plane. Terminal input and output are never logged, recorded, journaled, published to the broker, or sent on an event stream; output is redacted on the worker before it leaves the host."
+  },
+  "channels": {
+    "browserTerminal": {
+      "address": null,
+      "description": "The WebSocket that `openTerminal` upgrades for one agent session's active attempt, after it authenticated the caller and checked its role. The client's first frame is `terminal.attach`.",
+      "messages": {
+        "terminalAttach": {
+          "$ref": "#/components/messages/terminalAttach"
+        },
+        "terminalInput": {
+          "$ref": "#/components/messages/terminalInput"
+        },
+        "terminalResize": {
+          "$ref": "#/components/messages/terminalResize"
+        },
+        "terminalClose": {
+          "$ref": "#/components/messages/terminalClose"
+        },
+        "terminalAttached": {
+          "$ref": "#/components/messages/terminalAttached"
+        },
+        "terminalOutput": {
+          "$ref": "#/components/messages/terminalOutput"
+        },
+        "terminalEnded": {
+          "$ref": "#/components/messages/terminalEnded"
+        }
+      }
+    },
+    "workerRelay": {
+      "address": null,
+      "description": "The worker's one outbound relay connection, which `openWorkerRelay` upgrades with the worker credential; it multiplexes the worker's terminals by `terminalId`.",
+      "messages": {
+        "relayOpen": {
+          "$ref": "#/components/messages/relayOpen"
+        },
+        "relayInput": {
+          "$ref": "#/components/messages/relayInput"
+        },
+        "relayResize": {
+          "$ref": "#/components/messages/relayResize"
+        },
+        "relayClose": {
+          "$ref": "#/components/messages/relayClose"
+        },
+        "relayOpened": {
+          "$ref": "#/components/messages/relayOpened"
+        },
+        "relayRefused": {
+          "$ref": "#/components/messages/relayRefused"
+        },
+        "relayOutput": {
+          "$ref": "#/components/messages/relayOutput"
+        },
+        "relayEnded": {
+          "$ref": "#/components/messages/relayEnded"
+        }
+      }
+    }
+  },
+  "operations": {
+    "receiveTerminalFrame": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/browserTerminal"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalAttach"
+        },
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalInput"
+        },
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalResize"
+        },
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalClose"
+        }
+      ]
+    },
+    "sendTerminalFrame": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/browserTerminal"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalAttached"
+        },
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalOutput"
+        },
+        {
+          "$ref": "#/channels/browserTerminal/messages/terminalEnded"
+        }
+      ]
+    },
+    "sendRelayFrame": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/workerRelay"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/workerRelay/messages/relayOpen"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayInput"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayResize"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayClose"
+        }
+      ]
+    },
+    "receiveRelayFrame": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/workerRelay"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/workerRelay/messages/relayOpened"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayRefused"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayOutput"
+        },
+        {
+          "$ref": "#/channels/workerRelay/messages/relayEnded"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[\\x21-\\x7e]+$",
+        "description": "An opaque identifier of 1-128 printable ASCII characters without whitespace."
+      },
+      "Generation": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "A compare-and-set generation that starts at 1."
+      },
+      "AgentSessionId": {
+        "$ref": "#/components/schemas/Identifier",
+        "description": "A session of the session timeline (`SessionId`), one task's agent session; not a login session."
+      },
+      "AgentSessionGeneration": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "A generation of an agent session, one native process, from 1 (`SessionGeneration`)."
+      },
+      "CsrfToken": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "description": "The CSRF token of the caller's server-side session: 256 random bits in base64url. It authenticates nothing without the session cookie; the client sends it in the `X-CSRF-Token` header of every mutation."
+      },
+      "TerminalColumns": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "description": "The terminal width in character cells."
+      },
+      "TerminalRows": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "description": "The terminal height in character cells."
+      },
+      "TerminalSequence": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "The number of an output chunk of one terminal, from 1 without gaps as the worker sends them; a gap that a reader sees is output dropped by a bounded buffer."
+      },
+      "TerminalCursor": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "`0` before any output, or the sequence of the last output chunk the client holds."
+      },
+      "TerminalInputText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "description": "Keystrokes or pasted text for the terminal, at most 4,096 characters per frame. Never logged or recorded."
+      },
+      "TerminalOutputText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "description": "One chunk of terminal output, at most 65,536 characters, redacted on the worker before it leaves the host (account pool contract section 7.4). Never logged or recorded."
+      },
+      "TerminalEndReason": {
+        "type": "string",
+        "enum": [
+          "program-exited",
+          "closed",
+          "idle-timeout",
+          "attempt-ended",
+          "generation-ended",
+          "refused",
+          "relay-lost"
+        ],
+        "description": "Why a terminal ended: its program exited, a client closed it, no client was attached for the idle timeout, its attempt ended or was cancelled, its session generation ended, the worker refused to open it, or the worker's relay connection was lost."
+      },
+      "TerminalRefusalReason": {
+        "type": "string",
+        "enum": [
+          "attempt-not-held",
+          "execution-not-running",
+          "generation-not-running",
+          "terminal-not-offered"
+        ],
+        "description": "Why the worker refused to open a terminal: it does not hold the attempt at that ownership generation, the execution is not its running, owning execution, the session generation is not running, or the harness or platform offers no terminal (agent harness port contract section 8)."
+      },
+      "TerminalCloseReason": {
+        "type": "string",
+        "enum": [
+          "invalid-frame",
+          "unauthenticated",
+          "csrf-token-invalid",
+          "role-changed",
+          "attach-timeout",
+          "superseded",
+          "terminal-ended",
+          "rate-limited",
+          "relay-unavailable"
+        ],
+        "description": "The reason text of a WebSocket close frame that the control plane sends; each has its own close code (terminal wire contract)."
+      },
+      "TerminalAttachFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The first and only first client frame; nothing is relayed before it.",
+        "required": [
+          "type",
+          "cols",
+          "rows"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.attach"
+          },
+          "csrfToken": {
+            "$ref": "#/components/schemas/CsrfToken",
+            "description": "Required on a connection authenticated by the session cookie, absent on one authenticated by the operator bearer."
+          },
+          "cols": {
+            "$ref": "#/components/schemas/TerminalColumns"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/TerminalRows"
+          },
+          "after": {
+            "$ref": "#/components/schemas/TerminalCursor",
+            "description": "On a reattach, the last sequence the client holds; the retained output after it follows."
+          }
+        }
+      },
+      "TerminalInputFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.input"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TerminalInputText"
+          }
+        }
+      },
+      "TerminalResizeFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "cols",
+          "rows"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.resize"
+          },
+          "cols": {
+            "$ref": "#/components/schemas/TerminalColumns"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/TerminalRows"
+          }
+        }
+      },
+      "TerminalCloseFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Ends the terminal's program; the attempt and its execution go on.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.close"
+          }
+        }
+      },
+      "TerminalClientFrame": {
+        "description": "A frame that a browser or the CLI sends on the terminal WebSocket.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TerminalAttachFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TerminalInputFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TerminalResizeFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TerminalCloseFrame"
+          }
+        ]
+      },
+      "TerminalAttachedFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The answer to an attach: the terminal of the session's active attempt, opened or reattached.",
+        "required": [
+          "type",
+          "terminalId",
+          "attemptId",
+          "ownershipGeneration",
+          "generation",
+          "lastSequence"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.attached"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "lastSequence": {
+            "$ref": "#/components/schemas/TerminalCursor",
+            "description": "The sequence of the last output chunk sent so far, `0` before any."
+          },
+          "earliestRetained": {
+            "$ref": "#/components/schemas/TerminalSequence",
+            "description": "The earliest output chunk still retained, absent while none is; older chunks are gone."
+          }
+        }
+      },
+      "TerminalOutputFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "sequence",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "terminal.output"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/TerminalSequence"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TerminalOutputText"
+          }
+        }
+      },
+      "TerminalEndedFrame": {
+        "description": "The terminal ended; a refusal names its reason exactly when the reason is `refused`. The control plane closes the connection with `terminal-ended` after it.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "reason"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "terminal.ended"
+              },
+              "reason": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TerminalEndReason"
+                  },
+                  {
+                    "not": {
+                      "const": "refused"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "reason",
+              "refusal"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "terminal.ended"
+              },
+              "reason": {
+                "type": "string",
+                "const": "refused"
+              },
+              "refusal": {
+                "$ref": "#/components/schemas/TerminalRefusalReason"
+              }
+            }
+          }
+        ]
+      },
+      "TerminalServerFrame": {
+        "description": "A frame that the control plane sends on the terminal WebSocket.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TerminalAttachedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TerminalOutputFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TerminalEndedFrame"
+          }
+        ]
+      },
+      "RelayOpenFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Asks the worker to start the harness's terminal program for a running session generation of an attempt it holds.",
+        "required": [
+          "type",
+          "terminalId",
+          "attemptId",
+          "ownershipGeneration",
+          "executionId",
+          "sessionId",
+          "generation",
+          "cols",
+          "rows"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.open"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The attempt's owning execution, whose process set the terminal joins."
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "cols": {
+            "$ref": "#/components/schemas/TerminalColumns"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/TerminalRows"
+          }
+        }
+      },
+      "RelayInputFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "terminalId",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.input"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TerminalInputText"
+          }
+        }
+      },
+      "RelayResizeFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "terminalId",
+          "cols",
+          "rows"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.resize"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "cols": {
+            "$ref": "#/components/schemas/TerminalColumns"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/TerminalRows"
+          }
+        }
+      },
+      "RelayCloseFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Asks the worker to end the terminal's program.",
+        "required": [
+          "type",
+          "terminalId",
+          "reason"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.close"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "closed",
+              "idle-timeout"
+            ]
+          }
+        }
+      },
+      "RelayControlFrame": {
+        "description": "A frame that the control plane sends to the worker on the relay connection.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RelayOpenFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayInputFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayResizeFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayCloseFrame"
+          }
+        ]
+      },
+      "RelayOpenedFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "terminalId"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.opened"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "RelayRefusedFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "terminalId",
+          "reason"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.refused"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/TerminalRefusalReason"
+          }
+        }
+      },
+      "RelayOutputFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "terminalId",
+          "sequence",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.output"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/TerminalSequence"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TerminalOutputText"
+          }
+        }
+      },
+      "RelayEndedFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The terminal's program ended and every process of its pseudo-terminal is gone.",
+        "required": [
+          "type",
+          "terminalId",
+          "reason"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "relay.terminal.ended"
+          },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "program-exited",
+              "closed",
+              "idle-timeout",
+              "attempt-ended",
+              "generation-ended"
+            ]
+          }
+        }
+      },
+      "RelayWorkerFrame": {
+        "description": "A frame that the worker sends to the control plane on the relay connection.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RelayOpenedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayRefusedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayOutputFrame"
+          },
+          {
+            "$ref": "#/components/schemas/RelayEndedFrame"
+          }
+        ]
+      }
+    },
+    "messages": {
+      "terminalAttach": {
+        "name": "terminalAttach",
+        "title": "terminal.attach",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachFrame"
+        }
+      },
+      "terminalInput": {
+        "name": "terminalInput",
+        "title": "terminal.input",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalInputFrame"
+        }
+      },
+      "terminalResize": {
+        "name": "terminalResize",
+        "title": "terminal.resize",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalResizeFrame"
+        }
+      },
+      "terminalClose": {
+        "name": "terminalClose",
+        "title": "terminal.close",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalCloseFrame"
+        }
+      },
+      "terminalAttached": {
+        "name": "terminalAttached",
+        "title": "terminal.attached",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalAttachedFrame"
+        }
+      },
+      "terminalOutput": {
+        "name": "terminalOutput",
+        "title": "terminal.output",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalOutputFrame"
+        }
+      },
+      "terminalEnded": {
+        "name": "terminalEnded",
+        "title": "terminal.ended",
+        "payload": {
+          "$ref": "#/components/schemas/TerminalEndedFrame"
+        }
+      },
+      "relayOpen": {
+        "name": "relayOpen",
+        "title": "relay.terminal.open",
+        "payload": {
+          "$ref": "#/components/schemas/RelayOpenFrame"
+        }
+      },
+      "relayInput": {
+        "name": "relayInput",
+        "title": "relay.terminal.input",
+        "payload": {
+          "$ref": "#/components/schemas/RelayInputFrame"
+        }
+      },
+      "relayResize": {
+        "name": "relayResize",
+        "title": "relay.terminal.resize",
+        "payload": {
+          "$ref": "#/components/schemas/RelayResizeFrame"
+        }
+      },
+      "relayClose": {
+        "name": "relayClose",
+        "title": "relay.terminal.close",
+        "payload": {
+          "$ref": "#/components/schemas/RelayCloseFrame"
+        }
+      },
+      "relayOpened": {
+        "name": "relayOpened",
+        "title": "relay.terminal.opened",
+        "payload": {
+          "$ref": "#/components/schemas/RelayOpenedFrame"
+        }
+      },
+      "relayRefused": {
+        "name": "relayRefused",
+        "title": "relay.terminal.refused",
+        "payload": {
+          "$ref": "#/components/schemas/RelayRefusedFrame"
+        }
+      },
+      "relayOutput": {
+        "name": "relayOutput",
+        "title": "relay.terminal.output",
+        "payload": {
+          "$ref": "#/components/schemas/RelayOutputFrame"
+        }
+      },
+      "relayEnded": {
+        "name": "relayEnded",
+        "title": "relay.terminal.ended",
+        "payload": {
+          "$ref": "#/components/schemas/RelayEndedFrame"
+        }
+      }
+    }
+  }
+}
