@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Killed reclaim containment
-After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`, the adapter SHALL first record the failure durably, then kill the program's containment, `cgroup.kill` on Linux or the process group with `SIGKILL` while its leader is not yet reaped on one account, prove it empty, and free it; it SHALL never retry the program, and a containment still populated at the proof's bound SHALL stay.
+After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`, the adapter SHALL record the failure durably, then kill the program's containment (`cgroup.kill` on Linux, `SIGKILL` to its process group while its leader is unreaped on one account), prove it empty, and free it. Such a reclaim SHALL fail with `reclaim-failed` even when a fault interrupts that cleanup, which a later `reclaim` SHALL finish. It SHALL never retry the program.
 
 #### Scenario: Program past its run bound on Linux
 - **WHEN** a Linux reclaim program still runs at its run bound
@@ -10,6 +10,10 @@ After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`
 #### Scenario: Failed program's containment
 - **WHEN** a reclaim program exits with a failure after `go`
 - **THEN** its empty containment is freed, and the record keeps the failure
+
+#### Scenario: Interrupted cleanup
+- **WHEN** a fault interrupts the kill, the proof, or the freeing of a failed program's containment
+- **THEN** `reclaim` fails with reason `reclaim-failed`, and a later `reclaim`, also after a restart, kills what the recorded cgroup still holds, proves it empty, and frees it without running the program again
 
 ### Requirement: Handed-off workspace refusal in the adapter
 An adapter composed with a separate execution account SHALL hold at most one handed-off workspace per worker: `handOff` SHALL refuse while another workspace is handed off with `precondition-failed` and reason `other-workspace-handed-off`, checking and recording atomically per worker. The worker's slot rules are the worker runtime's (`worker-runtime`, "Slot held by a handed-off workspace").
