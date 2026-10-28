@@ -1407,8 +1407,8 @@
     "/executions/{executionId}/slot-credentials/{slotId}": {
       "get": {
         "operationId": "fetchSlotCredential",
-        "summary": "Fetch a slot credential again for an execution",
-        "description": "Re-delivery of account pool contract section 7.3: the worker that owns the execution fetches the credential of the slot its reservation names, for example after it adopted the execution. The response is never cached, and a log of the request never holds its body.",
+        "summary": "Fetch the credential of a reserved slot for an execution",
+        "description": "Slot credential delivery of account pool contract sections 7 and 7.3, first and repeated: after its launch authorization, and again whenever it starts or adopts the execution, the worker that owns the execution fetches the credential of a slot that the reservation of the execution's attempt names. The first fetch returns the slot's current credential version; a later fetch re-delivers that version. `LaunchGrant` carries no credential. The response is never cached, and a log of the request never holds its body.",
         "security": [
           {
             "workerCredential": []
@@ -1419,7 +1419,7 @@
             "name": "executionId",
             "in": "path",
             "required": true,
-            "description": "The execution.",
+            "description": "The execution, whose attempt holds the run's reservation.",
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
@@ -1428,7 +1428,7 @@
             "name": "slotId",
             "in": "path",
             "required": true,
-            "description": "The slot.",
+            "description": "A slot that the reservation of the execution's attempt names.",
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
@@ -1463,7 +1463,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The slot credential for the execution.",
+            "description": "The slot credential for the execution, at the first or a later fetch.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1513,7 +1513,7 @@
             }
           },
           "422": {
-            "description": "The re-delivery is refused; nothing is revealed.",
+            "description": "The delivery is refused; nothing is revealed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3692,12 +3692,12 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 65536,
-        "description": "A slot credential revealed to the run that reserved the slot. Secret: only in the response of `fetchSlotCredential`, never cached, logged, journaled, or written to disk (account pool contract section 7.3)."
+        "description": "A slot credential revealed to the run that reserved the slot. Secret: only in the response of `fetchSlotCredential`, never cached, logged, journaled, or written to disk (account pool contract sections 7 and 7.3)."
       },
       "SlotCredentialDelivery": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The credential of a slot for one execution, at the version the slot record names; every delivery to the same execution and slot carries the same version (account pool contract section 8.1).",
+        "description": "The credential of a slot that the execution's reservation names, at the version the slot record names; the first and every later delivery to the same execution and slot carry the same version (account pool contract section 8.1).",
         "required": [
           "executionId",
           "slotId",
@@ -3729,7 +3729,7 @@
       "SlotCredentialRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `fetchSlotCredential`, checked in the order of account pool contract section 7.3: the ownership reasons of launch authorization contract section 9, `execution-conflict` and `capacity-not-reserved`, then the slot's ineligibility (`revoked`, `removed`), then `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Nothing is revealed.",
+        "description": "Status 422 of `fetchSlotCredential`, at the first fetch or a later one, checked in the order of account pool contract section 7.3: the ownership reasons of launch authorization contract section 9, `execution-conflict`, and `capacity-not-reserved` for a reservation that is released, held for another attempt, or does not name the slot, then the slot's ineligibility (`revoked`, `removed`), then `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Nothing is revealed.",
         "required": [
           "code",
           "message",

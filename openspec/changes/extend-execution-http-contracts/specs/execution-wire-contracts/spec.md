@@ -39,6 +39,10 @@ The OpenAPI document, at version 0.6.0, SHALL define `retireEvidence`, `readDele
 - **WHEN** a `project-viewer` of the record's project downloads its content
 - **THEN** the content whose digest is the record's `contentDigest` is served
 
+#### Scenario: Reader without a role
+- **WHEN** a principal with no role on any project and no installation role reads an evidence record
+- **THEN** the answer is 404, as for an unknown record, and nothing of the record is disclosed
+
 ### Requirement: Evidence retirement
 `retireEvidence` SHALL let a `project-maintainer` of the record's project remove a record once 365 days have passed since its capture, and its content once no record refers to the digest. Before then it SHALL answer 422 with reason `retention-not-elapsed` and change nothing; a retired or unknown record SHALL answer 404.
 
@@ -83,16 +87,24 @@ The OpenAPI document, at version 0.6.0, SHALL define `retireEvidence`, `readDele
 - **WHEN** two operators re-admit the same task, naming the same generation
 - **THEN** exactly one answers 201 and the other 409
 
-### Requirement: Slot credential re-delivery
-`fetchSlotCredential` SHALL reveal a slot credential to the worker that owns the execution only after the checks of account pool contract section 7.3, refusing with 422 and the reason of the first failing check, and SHALL carry the version that the slot record names, so that every delivery to the same execution and slot carries the same credential.
+### Requirement: Slot credential delivery
+`fetchSlotCredential` SHALL deliver the credential of a slot that the reservation of the execution's attempt names, at its first fetch after the launch authorization and at every later one, to the worker that owns the execution, only after the checks of account pool contract section 7.3, refusing with 422 and the reason of the first failing check. Every delivery SHALL carry the version that the slot record names, and `LaunchGrant` SHALL carry no credential.
+
+#### Scenario: First fetch after the launch authorization
+- **WHEN** the owning worker fetches the slot credential of an execution for the first time after its launch authorization
+- **THEN** the answer carries the slot's current credential version, and the launch grant carried none
+
+#### Scenario: Later fetch re-delivers the version
+- **WHEN** the owning worker fetches the slot credential of the same execution again after it adopted the execution
+- **THEN** the answer carries the same credential version as the first fetch
+
+#### Scenario: Slot outside the reservation
+- **WHEN** the owning worker fetches the credential of a slot that the reservation of the execution's attempt does not name
+- **THEN** the answer is 422 with reason `capacity-not-reserved` and nothing is revealed
 
 #### Scenario: Revoked slot
 - **WHEN** an adopted execution fetches the credential of a slot revoked since its launch
 - **THEN** the answer is 422 with reason `revoked` and nothing is revealed
-
-#### Scenario: Repeated re-delivery
-- **WHEN** the owning worker fetches the slot credential of the same execution twice
-- **THEN** both deliveries carry the same credential version
 
 ### Requirement: Per-run SCM credential delivery
 `issueRunScmCredential` SHALL return the run's current SCM credential version, issuing the first when the run has none, and `fetchRunScmCredential` the version that a refresh notice names, which never changes once written. Both SHALL serve only a worker that holds an attempt of a task of the run, refusing otherwise with 422 and the reason of launch authorization contract section 9.

@@ -119,7 +119,7 @@ G3 sub-change 9c (`extend-execution-http-contracts`, [G3 work plan](../g3-plan.m
 | `listUnrecordedProcesses` | Session or operator bearer | `installation-owner` |
 | `readmitTask` | Session with CSRF, or operator bearer | `project-operator` or above on the task's project |
 | `readDelegationResult` | Worker | The worker that holds the active attempt of the delegation's parent task (section 8.3) |
-| `fetchSlotCredential` | Worker | The worker that owns the execution (section 8.6) |
+| `fetchSlotCredential` | Worker | The worker that owns the execution, for a slot that its reservation names (section 8.6) |
 | `issueRunScmCredential`, `fetchRunScmCredential` | Worker | The worker that holds an attempt of a task of the run (section 8.7) |
 
 ### 8.2 Evidence
@@ -151,15 +151,15 @@ The reads map the G2 `ReconciliationQueue` (`wire-launch-authority-reconciliatio
 - **Role.** A `project-operator` or above, who may trigger retries (trust model section 3).
 - **Automatic re-admission.** Item 44 also re-admits, in place of the G2 release, an attempt whose launch was rejected under a stale admission (`wire-launch-authority-reconciliation` decision 2). That writer runs inside the control plane with the same checks and has no wire operation.
 
-### 8.6 Slot credential re-delivery
+### 8.6 Slot credential delivery
 
-The architect decided on 2026-10-28 that a slot credential is re-delivered by the same pattern as a refreshed SCM credential (section 8.7): a fetch over HTTPS with the worker credential, scoped to the run and the slot, written once, read only by its owner, and logged without its value. A credential travels only in an API response, never in a broker message or stream ([account pool contract](account-pool.md) section 7).
+The architect decided on 2026-10-28 that a slot credential is delivered, first and again, by the same pattern as a refreshed SCM credential (section 8.7): a fetch over HTTPS with the worker credential, scoped to the run and the slot, written once, read only by its owner, and logged without its value. A credential travels only in an API response, never in a broker message or stream ([account pool contract](account-pool.md) section 7).
 
-- **Fetch.** `fetchSlotCredential` takes the execution and the slot in its path and, as query parameters, the attempt, the ownership generation, and the recovery epoch that the worker holds. It needs no notice, because the worker asks when it starts or adopts an execution (account pool section 7.3).
-- **Checks.** The checks of account pool section 7.3, in its order, refuse with 422 `SlotCredentialRefusal` and reveal nothing: `quarantined`, `stale-recovery-epoch`, `worker-not-authorized`, `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, `execution-conflict`, `capacity-not-reserved`, then the slot's ineligibility, `revoked` or `removed`, and `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Section 7.3 names that last refusal `invalid`; on this API a 400 means a malformed request, so it is a typed 422 reason. A slot that the execution's reservation does not name is `capacity-not-reserved`; 404 means only an unknown execution.
+- **Fetch.** `fetchSlotCredential` takes the execution and the slot in its path and, as query parameters, the attempt, the ownership generation, and the recovery epoch that the worker holds. Its scope is the run's reservation and the slot: the execution names the attempt, whose reservation must name the slot. It needs no notice, because the worker asks when it starts or adopts an execution (account pool section 7.3).
+- **First fetch and later fetches.** One operation makes both deliveries (architect, 2026-10-28). The first fetch, after the launch authorization that made the execution `authorized`, returns the slot's current credential version; a later fetch, for example after the worker adopted the execution, re-delivers that version. `LaunchGrant` carries no credential, because the worker journals the grant (account pool section 7.3). The checks below stand in for account pool section 7's launch authorization condition at the first fetch too: they admit only the owning execution, `authorized` or `started`, without a `revoked` grant.
+- **Checks.** The checks of account pool section 7.3, in its order, refuse with 422 `SlotCredentialRefusal` and reveal nothing: `quarantined`, `stale-recovery-epoch`, `worker-not-authorized`, `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, `execution-conflict`, `capacity-not-reserved`, then the slot's ineligibility, `revoked` or `removed`, and `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Section 7.3 names that last refusal `invalid`; on this API a 400 means a malformed request, so it is a typed 422 reason. A reservation that is released or held for another attempt, or that does not name the slot, is `capacity-not-reserved`; 404 means only an unknown execution.
 - **Written once.** The delivery carries the version that the slot record names. A rotation switches it only while no held reservation names the slot (account pool section 8.1), so every delivery to the same execution and slot carries the same version and value.
 - **Owner only and never kept.** Only the worker that owns the execution passes the checks. The response has `Cache-Control: no-store`; the worker holds the credential only in memory (account pool section 7.3), and no log holds the response body (section 8.8).
-- **First delivery.** Account pool section 7 sends the first delivery with a valid launch authorization; `LaunchGrant` carries no credential, and this sub-change defines only the re-delivery (architect, 2026-10-28). The first delivery's wire form stays with item 12.
 
 ### 8.7 Per-run SCM credential
 
@@ -188,8 +188,8 @@ The items without a prefix are those of the [G2 work plan](../g2-plan.md); the G
 - **Item 20:** the order of section 3 for every delivered command, the observations of section 5, and the heartbeat of section 6 (20d).
 - **Item 21:** the confirmation, the inventory, and the inventory request with its rollback rule of section 6, and the heartbeat's contact and the lost-contact timeout (change `add-worker-heartbeat`).
 - **G3 item 10:** the per-project authorization of `readEvidence` and `downloadEvidence`, the session on the operations of section 8.1, and the retirement entry of section 8.2.
-- **G3 item 12:** `fetchSlotCredential` with the checks of section 8.6, and the wire form of the first slot credential delivery.
+- **G3 item 12:** `fetchSlotCredential` with the checks of section 8.6, for the first delivery and every re-delivery; it implements this wire form and defines no other.
 - **G3 item 21:** `issueRunScmCredential` and `fetchRunScmCredential` with their versions, the remote re-check, and the refusal records of section 8.7.
 - **G3 item 38:** the delegation result of section 8.3: the outcome mapped from the child task's end and its summary.
 - **G3 item 44:** the reconciliation reads of section 8.4, with the port's read by project after an identifier, and `readmitTask` and the automatic re-admission of section 8.5.
-- **G3 sub-change 9d:** the refresh notice names the run, the credential, and the version that `fetchRunScmCredential` takes, and the response command reuses `DelegationResult`, `DelegationResultOutcome`, and `DelegationSummary` unchanged.
+- **G3 sub-change 9d:** the refresh notice carries `runId`, `credentialId`, and `version`, which `fetchRunScmCredential` takes, and adds no SCM credential operation, because `issueRunScmCredential` and `fetchRunScmCredential` with their re-check and refusal order stay here, and the response command reuses `DelegationResult`, `DelegationResultOutcome`, and `DelegationSummary` unchanged.

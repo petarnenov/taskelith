@@ -225,13 +225,15 @@ test('a re-admission names the generation it read and is refused with a typed re
   for (const reason of reasonsOf('ReadmissionRefusal')) assert.ok(checkHttpSchema('ReadmissionRefusal', refusal(reason)).ok, reason);
 });
 
-test('a slot credential re-delivery is scoped to the execution and slot and refused by its checks', () => {
+test('a slot credential delivery is scoped to the execution and slot and refused by its checks', () => {
   const delivery: HttpComponents['schemas']['SlotCredentialDelivery'] = {
     executionId: 'execution-1', slotId: 's1', mechanismId: 'subscription-token', credentialVersion: 3, credential: 'subscription token',
   };
-  const query = operation('fetchSlotCredential').parameters!.filter(({ in: place }) => place === 'query');
+  const { parameters } = operation('fetchSlotCredential');
+  const placed = (where: string) => parameters!.filter(({ in: place }) => place === where);
 
-  assert.deepEqual(query.map(({ name, required }) => [name, required]), [['attemptId', true], ['ownershipGeneration', true], ['recoveryEpoch', true]]);
+  assert.deepEqual(placed('path').map(({ name }) => name), ['executionId', 'slotId']);
+  assert.deepEqual(placed('query').map(({ name, required }) => [name, required]), [['attemptId', true], ['ownershipGeneration', true], ['recoveryEpoch', true]]);
   assert.ok(checkHttpSchema('SlotCredentialDelivery', delivery).ok);
   assert.ok(violations(checkHttpSchema('SlotCredentialDelivery', { ...delivery, attemptId: 'attempt-1' })).some((text) => text.includes('attemptId')));
   assert.deepEqual(reasonsOf('SlotCredentialRefusal'), [
@@ -239,6 +241,14 @@ test('a slot credential re-delivery is scoped to the execution and slot and refu
     'attempt-not-launchable', 'execution-conflict', 'capacity-not-reserved', 'revoked', 'removed', 'delivery-not-admitted',
   ]);
   for (const reason of reasonsOf('SlotCredentialRefusal')) assert.ok(checkHttpSchema('SlotCredentialRefusal', refusal(reason)).ok, reason);
+});
+
+test('the first slot credential delivery is a fetch, and the launch grant carries no credential', () => {
+  const delivering = OPERATIONS.filter(({ responses }) =>
+    Object.values(responses).some(({ content }) => Object.values(content ?? {}).some(({ schema }) => reachableNames(schema).has('SlotCredentialDelivery'))));
+
+  assert.deepEqual(delivering.map(({ operationId }) => operationId), ['fetchSlotCredential']);
+  assert.equal(reachableNames({ $ref: '#/components/schemas/LaunchGrant' }).has('RevealedSlotCredential'), false);
 });
 
 const SCM_DELIVERY: HttpComponents['schemas']['ScmCredentialDelivery'] = {
