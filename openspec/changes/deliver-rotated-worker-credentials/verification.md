@@ -84,6 +84,7 @@ Each finding was checked against the code before its fix and is real. Each fail-
 | F4 Medium, `enrollment-service.ts:180`: a repeated confirmation answered `revocationsPublished: true` without publishing | Every confirmation publishes the recorded revocations and reports that result | `ced43fa0` | the old `confirmed.value ? publish : true` restored | 1 fail: `fleet.test.ts` "a repeated confirmation retries a revocation publication that failed" |
 | F5 Medium, `credential-rotation-files.ts:87`: a crash after the identity dropped the predecessor left its files and the pending file for good | `removeSupersededGeneration` removes the files of the generation before the current one and the current one's pending file when the identity keeps no predecessor; `finishAdoption` calls it after the identity replacement and `CredentialRotation.open` at every start | `cf21ed73` | (a) `open` skips the removal; (b) `removeSupersededGeneration` removes nothing | (a) 1 fail: `credential-rotation.test.ts` "a start after a crash in the removal of the confirmed predecessor removes its files", which recreates the crash after the identity replacement and two partial removals; (b) 2 fail: that test and `credential-rotation-files.test.ts` "only a confirmed generation has its predecessor and its pending file removed; the next pending file stays" |
 
+- **Checks after the fixes.** `make verify` on the clean tree of `7bd76051` passed with the full profile (generated checks below). F5 changed the worker's start path (`CredentialRotation.open`), so `make verify-installation` ran on that commit: exit 0, "installation.sh: built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed", and its log holds no `PRIVATE KEY` line and no `tken_` token. `make findings ARGS="validate"` passes.
 - **Follow-on fixes.** The two PostgreSQL sweep tests whose helper renewed exactly at a deadline equal to the request time renew 1 ms before the deadline (`29e2ba49`); a port comment over two lines was shortened (`25db37ee`).
 - **Contracts and specs** (`e3432b30`). The execution OpenAPI document stays 0.7.0: only the descriptions of the renewal's 401, the confirmation's 200, and `CredentialConfirmation` change, since a late first renewal answers the existing 401. `make contract-compatibility` reports 0 breaking changes for `execution.openapi.json` against `7efc48d330b4`, the AsyncAPI document's 3 declared ones unchanged, and "Contract documents have no undeclared breaking change." The installation contract (section 6 renewal, confirmation, and retry; section 10 rotation), the worker journal contract's retention row, the design, and the deltas `installation-enrollment` (scenarios "First renewal after the deadline", "Repeated confirmation after a failed publication", "Confirmation after the deadline"; the confirmation requirement), `worker-runtime` (scenarios "Notice before the confirmation finished", "Crash during the removal of the predecessor's files"; the start requirement), and `worker-journal-adapter` (scenario "Crash after the identity dropped the predecessor") state the new rules.
 
@@ -92,11 +93,15 @@ Each finding was checked against the code before its fix and is real. Each fail-
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `5abca8629b6f6def56b77221b1ce249e5a27271a`; tests 3217, pass 3202, fail 0, skipped 15; all files 99.43% lines, 92.63% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `31725070946cbf67b3302dec6317f04ad07ebc26`; tests 3229, pass 3214, fail 0, skipped 15; all files 99.43% lines, 92.64% branches, 99.08% functions.
 - `npm run openspec -- validate deliver-rotated-worker-credentials --strict`: passed, `Change 'deliver-rotated-worker-credentials' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
 - Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f` | 0 | 2 | 3 | 0 |
 <!-- make record: end -->
 
 ## Limitations
