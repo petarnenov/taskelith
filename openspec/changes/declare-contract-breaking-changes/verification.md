@@ -78,6 +78,22 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
+## Independent review
+
+Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: Claude Code (`claude-opus-5-5`).
+
+### Review pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, session `01a18236-3ca3-7db2-9678-9e40b1ea808a`; run by the coordinator.
+- **Revision reviewed:** `5820ce71`.
+- **Invocation:** `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, as in the protocol's "Reviewer invocations".
+- **Model confirmation:** model, reasoning effort, read-only sandbox, and session ID in the output header.
+- **Snapshot:** before and after the pass identical, as the coordinator reported it.
+- **Result:** Critical 0, High 0, Medium 1, Low 2, as in `passes.jsonl` line 1 and `findings.jsonl` lines 1 to 3. File lines are those of `5820ce71`. The reviewer ran the 21 tests of the script (pass) and `verify:comments` (pass), and found that the 306 seeded changes equal those computed against `9196804b` and are history against `24d25938`; it ran neither Docker nor `make verify`.
+- **M1, contract-drift** (`scripts/check-contract-compatibility.ts:41`, also lines 53 and 69): the version components and numeric prerelease identifiers were compared as `Number`, which loses precision above 2^53. With base and head `0.4.9007199254740992`, an entry for `0.4.9007199254740993` counted as history instead of stale, against "Stale and historical declarations"; adjacent large prerelease identifiers compared equal. Resolution: see "Pass 1 fixes".
+- **L1, contract-drift** (`scripts/check-contract-compatibility.ts:184`): entries for one path with versions `0.5.0+linux` and `0.5.0+mac`, equal in precedence, were rejected as `repeats`, though their path and version differ, against "Breaking-change declarations". Resolution: see "Pass 1 fixes".
+- **L2, spec-wording** (`specs/sdlc-wire-contracts/spec.md:22`): the scenario "Matching entry" accepted the listed changes "in any order", while `readDeclarations` rejects an entry whose `breakingChanges` are not sorted; the test called `declarationProblems` directly and so bypassed that validation. Resolution: see "Pass 1 fixes".
+
 ## Remaining gates
 
 - Independent review passes and their records.
