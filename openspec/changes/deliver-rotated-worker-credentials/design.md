@@ -43,4 +43,5 @@ How the change guards against them: both documents, the route table, the specs, 
 - A worker that crashed after the renewal answer and before its adoption, and stays offline past the cap, has the seed of N+1 but no JWT and no valid bearer to renew with; it stops with `credentials-expired` and must re-enroll.
 - A worker offline past the cap without a renewal is revoked; re-enrollment is the documented recovery.
 - The 7-day cap and the 10-minute floor are provisional, verified in G6.
+- The catch-up path of an offline worker needs the command stream's maximum age (`streamMaxAgeMilliseconds`, 7 days, also provisional) to be at least the rotation's deadline; `control-plane-settings.test.ts` asserts that order. The streams discard new messages, so a full stream or a full command backlog of the worker (`streamMaxBytes`, `commandBacklogPerWorker`) makes the outbox retry the notice: it is delayed, possibly past the deadline, but not dropped (review pass 2, L10).
 - The Linux suites and the native scenarios depend on hosts this change could not fully exercise (see `verification.md`).
