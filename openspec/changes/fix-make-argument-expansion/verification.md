@@ -39,11 +39,15 @@ Hosts: macOS on Intel, `/usr/bin/make` GNU Make 3.81, `/usr/local/bin/gmake` GNU
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7440b84ec029c509dcad15f0d598d988c8dc0f7d`; tests 2650, pass 2643, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `500b0f70428365c19c7df992269672c1a85a3cef`; tests 2650, pass 2643, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
 - `npm run openspec -- validate fix-make-argument-expansion --strict`: passed, `Change 'fix-make-argument-expansion' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s).`.
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18170-2d21-7473-b894-3e58f95f8cd3` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Review
