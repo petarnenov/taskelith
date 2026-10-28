@@ -65,6 +65,15 @@ test('a standard tier with a fired trigger is inconsistent', () => {
   const rule = { ...ruleDecision(QUIET_FEATURES), triggers: ['lines' as const] };
   assert.deepEqual(routeRecordProblems(roundTrip(record({ rule })), 'route-me', checkSchema), [
     'rule tier standard does not match 1 fired trigger(s)',
+    'rule triggers are not those of rule version 1 for the features',
+  ]);
+});
+
+test('rule triggers that the features do not fire are inconsistent', () => {
+  const features = featuresWith({ linesChanged: 4099 });
+  const rule = ruleDecision(QUIET_FEATURES);
+  assert.deepEqual(routeRecordProblems(roundTrip(record({ features, rule })), 'route-me', checkSchema), [
+    'rule triggers are not those of rule version 1 for the features',
   ]);
 });
 

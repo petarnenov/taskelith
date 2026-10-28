@@ -293,6 +293,24 @@ test('--rule-only never consults the shadow router', withHistory(async (history)
   assert.match(run.stdout, /shadow: no answer \(answered 0, failed 0, skipped 2\)/);
 }));
 
+test('a refused shadow stops the evaluation before more requests', withHistory(async (history) => {
+  for (const httpStatus of [401, 402, 403]) {
+    const shadow = new FakeRouter<ShadowDecision>({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus, latencyMs: 1 });
+    const run = await runInHistory(history, ['--save', SAVE_CHANGE], { shadow });
+    assert.equal(run.exitCode, 1);
+    assert.equal(run.stderr, `route-evaluation: the shadow router was refused (HTTP ${httpStatus}); nothing written\n`);
+    assert.equal(shadow.calls.length, 1);
+    assert.equal(existsSync(join(history.root, `openspec/changes/${SAVE_CHANGE}/evaluation.jsonl`)), false);
+  }
+}));
+
+test('another shadow failure is recorded and the evaluation goes on', withHistory(async (history) => {
+  const shadow = new FakeRouter<ShadowDecision>({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus: 500, latencyMs: 1 });
+  const run = await runInHistory(history, ['--save', SAVE_CHANGE], { shadow });
+  assert.equal(run.exitCode, 0, run.stderr);
+  assert.equal(shadow.calls.length, 2);
+}));
+
 test('the composed evaluation without a credential runs only the rule', withHistory(async (history) => {
   cpSync(join(process.cwd(), 'docs/review-findings'), join(history.root, 'docs/review-findings'), { recursive: true });
   const dependencies = routeEvaluationDependencies(history.root, {});
