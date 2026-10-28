@@ -23,4 +23,4 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Archive the change in the last commit of the branch and record the archive checks
+- [x] 5.1 Archive the change in the last commit of the branch and record the archive checks

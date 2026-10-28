@@ -1,6 +1,6 @@
 # Verification: define-board-session-and-event-stream-contracts
 
-Status: developed and verified by the author; review passes 1 to 3 done and their findings fixed; the pass 3 fixes, Low only, are not reviewed again under governance; not archived.
+Status: developed and verified by the author; review passes 1 to 3 done and their findings fixed; the pass 3 fixes, Low only, are not reviewed again under governance; `dev` merged before the archive; archived on the branch under worker step 7.
 
 ## Scope and source
 
@@ -160,9 +160,19 @@ The pass 2 fixes change the document, a port type, and tests, not only records a
 
 The fixes change wording only and add no behavior, so no fail-before test applies.
 
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the define board session and event stream contracts change`, the working tree the checks ran on (tree `4f9461ce` before this record was written into it). Before the archive, the same archive ran in a scratch copy of the merged head `69a1a4d9`, and `npm run openspec -- validate --all --strict` passed there, 71 of 71.
+
+- `npm run openspec -- archive define-board-session-and-event-stream-contracts --yes`: `control-plane-wire-contracts` + 16 added, ~ 2 modified ("Operation roles", "Identifiers and pages"); `product-ports` + 1 added ("Acknowledgement of an uncertain delivery"), ~ 1 modified ("Needs you items answered once by their source"); archived as `2026-10-28-define-board-session-and-event-stream-contracts`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-define-board-session-and-event-stream-contracts`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `a3a0ac4c`): only this change's intended edits, `control-plane-wire-contracts/spec.md` 198 lines and `product-ports/spec.md` 25 lines, 217 insertions and 6 deletions, the 17 added requirements and the 3 modified ones above.
+- Moved change's files: `findings.jsonl` 25 lines, `passes.jsonl` 3 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s). `npm run verify:links`: passed.
+- `make verify` on tree `4f9461ce` (log `bsec-verify-7.log` in the session scratchpad), one run, no rerun: passed, profile full, uncommitted working tree, so no stamp; tests 3174, pass 3121, fail 0, skipped 53; all files 99.41% lines, 92.76% branches, 99.00% functions; 0 breaking changes of each document against `a3a0ac4c`. `make record` takes only the log of a stamped clean tree, so "Generated checks" keeps the run of `69a1a4d9`'s tree `9f0b849b`; the archive commit differs from tree `4f9461ce` only in this record.
+
 ## Remaining gates
 
-- Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-ups
