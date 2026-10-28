@@ -139,14 +139,30 @@ The Docker runs of phase 2 ran without the coordinator's Docker slot, which the 
 
 ## Limitations
 
-- `make verify-installation` and `make verify-linux-cgroup` did not run: the real `linux-containment` check runs only in the Linux worker image with a delegated cgroup, so its pass in production is not shown here (task 5.6).
+- `make verify-installation` and `make verify-linux-cgroup` passed on `8f03b701` (section Docker gates), but neither asserts admission: `scripts/installation.sh` checks build, bootstrap, start, enrollment, restart, and removal, not the worker's admission state, and the cgroup suite runs `checkLinuxContainment` in a privileged container, not the worker image's composed self-check. That the real Linux worker image reports `linux-containment` as passed and is admitted is therefore not shown here.
 - The fail-before run reverted lines in a working tree, not at a commit; the reverted sources were restored and rebuilt before the checks above.
 - `make verify` starts Docker containers for the integration services, which the phase 2 brief's "no Docker" rule did not foresee; see Sequence deviation.
-- The fixes of review passes 2 and 3 have no passing `make verify` run yet: the PostgreSQL migration test for existing rows, the changed launch authority and API integration tests, and the PostgreSQL run of the new conformance case wait for the coordinator's next run.
+- The fixes of review passes 2 and 3 have no `make verify` run before the archive: by the coordinator's ruling, the one `make verify` after them runs on the tree of the archive commit (section Archive).
 - The fix of the pass 3 finding is unreviewed, by the owner's delegate decision (section Unreviewed fix).
+
+## Docker gates
+
+Run by Desi in the coordinator's Docker slot on `8f03b701`, the head before the archive (task 5.6):
+
+- `make verify-installation`: exit 0; `installation.sh: built, bootstrapped, started, enrolled, restarted, removed`.
+- `make verify-linux-cgroup`: exit 0; 17 tests, 17 pass, 0 fail, including "the self-check proves a delegated containment that the execution account cannot leave".
 
 ## Remaining gates
 
-- `make verify-installation` and `make verify-linux-cgroup` with Docker, by the developing worker (Desi) before the handoff (task 5.6), and again by the coordinator at integration.
-- `make verify` on the head after review pass 3, by the coordinator in its Docker slot.
-- Archive, handoff, and integration into dev by the coordinator (single pull request) (task 5.7).
+- `make verify-installation` and `make verify-linux-cgroup` again by the coordinator at integration.
+- Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+The checks below ran on the tree of the archive commit, the working tree after `npm run openspec -- archive implement-worker-self-check-admission --yes` on `8f03b701`; by the coordinator's ruling it is the one `make verify` after the fixes of review passes 2 and 3.
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes (`change/2026-10-28-implement-worker-self-check-admission`).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's edits, in `installation-enrollment`, `product-ports`, `resource-admission`, `worker-journal-adapter`, and `worker-runtime` (128 insertions, 1 deletion).
+- The archived change has `findings.jsonl` (18 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"` passes.
+- `make verify`: exit 0; 2388 tests, 2385 pass, 0 fail, 3 skipped; coverage 99.35% lines, 92.29% branches, 99.02% functions; contract compatibility reports the 112 declared AsyncAPI breaking changes and 0 elsewhere.
