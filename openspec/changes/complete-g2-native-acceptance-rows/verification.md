@@ -11,7 +11,7 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 - `a20ebb2e` `chore: export the worker's Linux launch host`.
 - `767b832c` `test: launch the G2 scenario workers through the Linux cgroup host`.
 - `c8e624d6` `test: run the G2 races and partitions in native acceptance on Linux` (the evidence runs are on this commit).
-- The change documents, `results.jsonl`, and `acceptance.md` come after it and change no input of the runs.
+- `09a62b39` `docs: record the Linux x86_64 rows of G3 item 43` and the commit after it (links, this record) change no input of the runs.
 
 ## Environment
 
@@ -54,7 +54,11 @@ The iMac's Docker Desktop gives no host network outside its virtual machine, whi
 
 ## Checks
 
-CHECKS
+- `npm run openspec -- validate complete-g2-native-acceptance-rows --strict`: valid. Spec bodies: 409, 457, and 256 characters.
+- `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid.
+- `make verify` on `09a62b39` failed only in `npm run verify:links`: the docs linked the active change's `acceptance.md`. The links became plain mentions, to be linked at the archive (task 5.1).
+- `make verify` on that working tree, the commit after `09a62b39`: exit 0; tests 2363, pass 2316, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.40 % branches, 98.95 % functions; comments within the length rule; OpenSpec 70 passed; every checked link conforms.
+- Coverage of the changed product files (lines, branches, functions): `packages/testing` `linux-launch.js` 100, 100, 100; `apps/worker` `execution-supervision.js` 97.96, 87.67, 91.67; `apps/worker` `main.js` 91.23, 91.67, 84.21 (uncovered: the entry under `import.meta.main` and the launch failure report, which the move did not touch).
 
 ## Follow-ups
 
