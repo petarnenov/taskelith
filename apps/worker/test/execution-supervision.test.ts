@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { failed, id, value } from '@taskelith/testing';
-import { fileRecordListing, fileSupervision, type ExecutionSupervision, type LaunchProgram } from '@taskelith/worker';
+import { fileRecordListing, fileSupervision, supervisionHost, type ExecutionSupervision, type LaunchProgram, type WorkerSettings } from '@taskelith/worker';
 import { encodeEvent, encodeRecord, RECORD_FILES, type Platform } from '@taskelith/worker-supervisor';
 import { BOOT } from './launch-fakes.ts';
 
@@ -182,3 +182,35 @@ for (const { name, processes } of UNLISTABLE_SURVIVORS) {
     assert.deepEqual(value(await supervision().read()).survivors, []);
   });
 }
+
+const LINUX_ONLY = process.platform === 'linux' ? {} : { skip: 'the host platform of supervisionHost is Linux here' };
+
+function hostSettings(overrides: Partial<WorkerSettings>): WorkerSettings {
+  return {
+    dataRoot: join(executions, '..'), controlPlaneUrl: new URL('http://127.0.0.1:1/'), natsUrl: new URL('nats://127.0.0.1:2'),
+    host: { platform: 'linux', architecture: 'x64', hostname: 'host-1' },
+    capacity: { slots: 1, cpuMillicores: 1_000, memoryMebibytes: 1_024, controls: [] }, ...overrides,
+  };
+}
+
+test('the supervision host of a Linux launch prepares the program as the execution account', LINUX_ONLY, async () => {
+  const launch = { command: PROGRAM.command, executionAccount: { uid: 2000, gid: 2001 } };
+  const host = value(supervisionHost(hostSettings({ containmentParent: '/sys/fs/cgroup/absent-parent', launch }), executions, '4.5.6'));
+  value(await host.supervision(EXECUTION).prepare(PLAN));
+  assert.equal(recordFile(RECORD_FILES.intent).supervisorVersion, '4.5.6');
+  assert.deepEqual(recordFile(RECORD_FILES.intent).executionAccount, { uid: 2000, gid: 2001 });
+  assert.deepEqual(value(await host.records!()), [EXECUTION]);
+  assert.deepEqual(value(host.containments!()), [], 'an absent parent holds no containment');
+});
+
+test('the supervision host without a launch prepares nothing and runs without an account', LINUX_ONLY, async () => {
+  const host = value(supervisionHost(hostSettings({ containmentParent: '/sys/fs/cgroup/absent-parent' }), executions, '4.5.6'));
+  assert.equal((await host.supervision(EXECUTION).prepare(PLAN)).ok, false);
+  const accountless = value(supervisionHost(hostSettings({ containmentParent: '/sys/fs/cgroup/absent-parent', launch: { command: PROGRAM.command } }), executions, '4.5.6'));
+  value(await accountless.supervision(EXECUTION).prepare(PLAN));
+  assert.equal(recordFile(RECORD_FILES.intent).executionAccount, undefined);
+});
+
+test('the supervision host on Linux needs a containment parent', LINUX_ONLY, () => {
+  assert.equal(failed(supervisionHost(hostSettings({}), executions, '4.5.6')).code, 'invalid');
+});

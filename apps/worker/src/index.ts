@@ -25,7 +25,7 @@ export { ProcessDaemonOverhead, type DaemonOverheadSource } from './daemon-overh
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
-export { containmentScan, fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
+export { containmentScan, fileRecordListing, fileSupervision, supervisionHost, type LaunchProgram } from './execution-supervision.js';
 export type {
   ContainmentScan,
   DeadlineClock,
