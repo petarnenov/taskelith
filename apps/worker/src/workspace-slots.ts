@@ -13,9 +13,8 @@ export interface WorkspaceSlotsOptions {
   readonly logger: Logger;
 }
 
-// The attempts whose workspace is handed off, each holding its slot until
-// its reclaim removes the hand-off record (Git workspace contract section
-// 3); the worker process is the only writer of those records.
+// Handed-off attempts, each holding its slot until its reclaim removes the
+// record (Git workspace contract sec. 3); only this process writes them.
 export class WorkspaceSlots {
   readonly #options: WorkspaceSlotsOptions;
   readonly #held: Set<AttemptId>;
