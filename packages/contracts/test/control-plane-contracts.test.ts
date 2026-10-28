@@ -1,88 +1,32 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { checkHttpSchema, type HttpComponents, type HttpOperations, type SchemaViolations } from '@taskelith/contracts';
+import { checkHttpSchema, type HttpComponents, type HttpOperations } from '@taskelith/contracts';
 import { SPEC_APPROVERS } from '@taskelith/execution';
 import { WORKER_ADMISSION_STATES } from '@taskelith/fleet';
 import { MERGE_METHODS } from '@taskelith/integrations/port';
-import type { Result } from '@taskelith/kernel';
 import { COOLDOWN_SOURCES, SLOT_HEALTH, SLOT_STATES } from '@taskelith/scheduling';
+import {
+  AT,
+  CONTROL_PLANE,
+  document,
+  holdsKey,
+  type Json,
+  OPERATIONS,
+  operation,
+  reachable,
+  referencesIn,
+  responseSchemas,
+  schemaName,
+  SCHEMAS,
+  violations,
+  WEBHOOK,
+} from './control-plane-document.ts';
 
-type Json = Record<string, unknown>;
-type SecurityRequirement = Record<string, string[]>;
-
-interface Operation {
-  readonly operationId: string;
-  readonly security: SecurityRequirement[];
-  readonly parameters?: { readonly name: string; readonly in: string }[];
-  readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
-  readonly responses: Record<string, { headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
-}
-
-interface Document {
-  readonly openapi: string;
-  readonly info: { readonly version: string };
-  readonly paths: Record<string, Record<string, Operation>>;
-  readonly components: { readonly schemas: Record<string, Json>; readonly securitySchemes: Record<string, Json> };
-}
-
-function document(name: string): Document {
-  return JSON.parse(readFileSync(new URL(`../documents/${name}`, import.meta.url), 'utf8'));
-}
-
-function violations<T>(result: Result<T, SchemaViolations>): SchemaViolations {
-  assert.equal(result.ok, false);
-  return result.ok ? [] : result.error;
-}
-
-const CONTROL_PLANE = document('control-plane.openapi.json');
-const SCHEMAS = CONTROL_PLANE.components.schemas;
-const WEBHOOK = 'receiveScmWebhook';
-const AT = '2026-10-28T10:00:00.000Z';
 const CSRF = 'A'.repeat(43);
 
-const OPERATIONS = Object.values(CONTROL_PLANE.paths).flatMap((item) =>
-  Object.entries(item).map(([method, operation]) => ({ method, ...operation })),
-);
-
-function operation(id: string): Operation & { method: string } {
-  const found = OPERATIONS.find((candidate) => candidate.operationId === id);
-  assert.ok(found, id);
-  return found;
-}
-
-function referencesIn(node: unknown): string[] {
-  if (Array.isArray(node)) return node.flatMap(referencesIn);
-  if (node === null || typeof node !== 'object') return [];
-  const own = typeof (node as Json).$ref === 'string' ? [(node as Json).$ref as string] : [];
-  return [...own, ...Object.values(node).flatMap(referencesIn)];
-}
-
-// Every schema a node reaches, following component references.
-function reachable(node: unknown, seen = new Set<string>()): unknown[] {
-  const nodes: unknown[] = [node];
-  for (const reference of referencesIn(node)) {
-    const name = reference.replace('#/components/schemas/', '');
-    if (seen.has(name)) continue;
-    seen.add(name);
-    nodes.push(...reachable(SCHEMAS[name], seen));
-  }
-  return nodes;
-}
-
-function holdsKey(node: unknown, key: string, value: unknown): boolean {
-  if (Array.isArray(node)) return node.some((item) => holdsKey(item, key, value));
-  if (node === null || typeof node !== 'object') return false;
-  return (node as Json)[key] === value || Object.values(node).some((item) => holdsKey(item, key, value));
-}
-
-function responseSchemas(candidate: Operation): unknown[] {
-  return Object.values(candidate.responses).flatMap((response) => Object.values(response.content ?? {}).map(({ schema }) => schema));
-}
-
-test('the control-plane document is OpenAPI 3.1.0 at version 0.1.0 and every reference resolves', () => {
+test('the control-plane document is OpenAPI 3.1.0 at version 0.2.0 and every reference resolves', () => {
   assert.equal(CONTROL_PLANE.openapi, '3.1.0');
-  assert.equal(CONTROL_PLANE.info.version, '0.1.0');
+  assert.equal(CONTROL_PLANE.info.version, '0.2.0');
   for (const reference of referencesIn(CONTROL_PLANE)) {
     assert.match(reference, /^#\/components\/schemas\//);
     assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
@@ -91,7 +35,7 @@ test('the control-plane document is OpenAPI 3.1.0 at version 0.1.0 and every ref
     Object.values(document(name).paths).flatMap((item) => Object.values(item).map(({ operationId }) => operationId)));
   const ids = [...others, ...OPERATIONS.map(({ operationId }) => operationId)];
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(OPERATIONS.length, 34);
+  assert.equal(OPERATIONS.length, 51);
 });
 
 test('every security requirement names a scheme of the document', () => {
@@ -340,26 +284,40 @@ test('only an installation owner sets the allowed origin of an SCM integration, 
 
 interface PageSchema {
   readonly required: string[];
-  readonly properties: Record<string, { maxItems?: number; $ref?: string }>;
+  readonly properties: Record<string, { type?: string; maxItems?: number; $ref?: string }>;
 }
 
-function pageName(schema: Json): string {
-  return (schema.$ref as string).replace('#/components/schemas/', '');
-}
+// Unpaged reads: the workers view and the stamped product views, each one
+// snapshot as its port returns it.
+const SNAPSHOTS = [
+  'listWorkers', 'readBoard', 'readTaskDetail', 'readInbox', 'readInboxCounts', 'readInstallationInbox', 'readInstallationInboxCounts',
+];
 
-test('every list but the workers snapshot pages by identifier', () => {
+test('every list but the workers snapshot pages by its key', () => {
   const lists = OPERATIONS.filter(({ method, operationId }) => method === 'get' && operationId.startsWith('list'));
   const paged = lists.filter(({ parameters }) => (parameters ?? []).some(({ name }) => name === 'after'));
 
   assert.deepEqual(lists.filter((candidate) => !paged.includes(candidate)).map(({ operationId }) => operationId), ['listWorkers']);
-  for (const { operationId, responses } of paged) {
-    const page = SCHEMAS[pageName(responses['200']!.content!['application/json']!.schema)] as unknown as PageSchema;
-    const items = Object.entries(page.properties).filter(([name]) => name !== 'next');
+  for (const { operationId, parameters, responses } of paged) {
+    const page = SCHEMAS[schemaName(responses['200']!.content!['application/json']!.schema)] as unknown as PageSchema;
+    const items = Object.values(page.properties).filter(({ type }) => type === 'array');
+    const after = parameters!.find(({ name }) => name === 'after')!.schema!;
+    const key = schemaName(after) === 'TimelineCursor' ? 'TimelinePosition' : schemaName(after);
 
     assert.equal(items.length, 1, operationId);
-    assert.equal(items[0]![1].maxItems, 100, operationId);
-    assert.deepEqual(page.properties.next!.$ref, '#/components/schemas/Identifier', operationId);
+    assert.equal(items[0]!.maxItems, 100, operationId);
+    assert.deepEqual(page.properties.next!.$ref, `#/components/schemas/${key}`, operationId);
     assert.ok(!page.required.includes('next'), operationId);
+  }
+});
+
+test('the snapshot reads are unpaged and carry the time of their state', () => {
+  for (const id of SNAPSHOTS) {
+    const { parameters, responses } = operation(id);
+    const view = SCHEMAS[schemaName(responses['200']!.content!['application/json']!.schema)] as unknown as PageSchema;
+
+    assert.ok(!(parameters ?? []).some(({ name }) => name === 'after'), id);
+    assert.ok(view.required.includes('asOf'), id);
   }
 });
 
