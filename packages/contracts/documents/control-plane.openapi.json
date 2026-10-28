@@ -1507,7 +1507,7 @@
       "put": {
         "operationId": "bindRepository",
         "summary": "Bind a project to one repository of an SCM integration, or change the binding by compare-and-set",
-        "description": "Requires `project-maintainer` on the project, who manages project integrations (trust model section 3).",
+        "description": "Requires `project-maintainer` on the project, who manages project integrations (trust model section 3). The control plane normalizes the remote URL's origin and compares it with the integration's allowed origin; it re-checks a bound remote URL against the integration's current origin every time it issues or re-delivers a per-run SCM credential.",
         "security": [
           {
             "browserSession": [],
@@ -1607,11 +1607,11 @@
             }
           },
           "422": {
-            "description": "The integration's plugin does not declare the merge method in its `SourceControlCapabilities`, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
+            "description": "The remote URL is not HTTPS, holds user information, a query, or a fragment, or lies outside the integration's allowed origin; or the integration's plugin does not declare the merge method, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Failure"
+                  "$ref": "#/components/schemas/BindingRefusal"
                 }
               }
             }
@@ -3130,7 +3130,7 @@
       "post": {
         "operationId": "createScmIntegration",
         "summary": "Set up an SCM integration with its write-only secrets",
-        "description": "Requires `installation-owner`, who manages installation settings (trust model section 3). The plugin checks its settings and secrets.",
+        "description": "Requires `installation-owner`, who manages installation settings (trust model section 3). The plugin checks its settings and secrets. The control plane normalizes the allowed origin.",
         "security": [
           {
             "browserSession": [],
@@ -4268,8 +4268,67 @@
       "RemoteUrl": {
         "type": "string",
         "maxLength": 2048,
-        "pattern": "^https://[^/?#@\\s]+(?:[/?#]\\S*)?$",
-        "description": "The repository's HTTPS remote URL without user information, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. The control plane also refuses one that `checkRemoteTransport` refuses under the policy `https-only`."
+        "pattern": "^https://[^/?#@\\s]+(?:/[^?#\\s]*)?$",
+        "description": "A bound remote URL: HTTPS without user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
+      },
+      "RemoteUrlCandidate": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://\\S+$",
+        "description": "A remote URL that `bindRepository` checks: an absolute URL with an authority and no white space. A URL that is not HTTPS, holds user information, a query, or a fragment, or whose normalized origin is not the integration's allowed origin is refused with 422 `BindingRefusal`."
+      },
+      "AllowedOrigin": {
+        "type": "string",
+        "maxLength": 300,
+        "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$",
+        "description": "The origin that the integration's remote URLs must have: the scheme https, a host, and an optional port, with no user information, path, query, or fragment. Only an `installation-owner` sets it. The control plane stores it normalized as `NormalizedOrigin`."
+      },
+      "NormalizedOrigin": {
+        "type": "string",
+        "maxLength": 300,
+        "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\\[[0-9a-f:.]+\\]):[0-9]{1,5}$",
+        "description": "An origin after normalization: scheme and host in lower case and the port explicit, 443 when none was given. Origins are compared only in this form."
+      },
+      "BindingRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `bindRepository`, checked in this order: the remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the integration's allowed origin; or the integration's plugin does not declare the merge method in its `SourceControlCapabilities`.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "remote-not-https",
+                  "remote-userinfo",
+                  "remote-query",
+                  "remote-fragment",
+                  "remote-origin-mismatch",
+                  "merge-method-undeclared"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
       },
       "MergeMethod": {
         "type": "string",
@@ -4298,7 +4357,7 @@
             "$ref": "#/components/schemas/ExternalId"
           },
           "remoteUrl": {
-            "$ref": "#/components/schemas/RemoteUrl"
+            "$ref": "#/components/schemas/RemoteUrlCandidate"
           },
           "integrationBranch": {
             "$ref": "#/components/schemas/BranchName",
@@ -4848,6 +4907,7 @@
           "integrationId",
           "pluginId",
           "label",
+          "allowedOrigin",
           "settings",
           "secretNames",
           "revision"
@@ -4862,6 +4922,9 @@
           },
           "label": {
             "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/NormalizedOrigin"
           },
           "settings": {
             "$ref": "#/components/schemas/ScmSettings"
@@ -4907,6 +4970,7 @@
         "required": [
           "pluginId",
           "label",
+          "allowedOrigin",
           "settings",
           "secrets"
         ],
@@ -4916,6 +4980,9 @@
           },
           "label": {
             "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/AllowedOrigin"
           },
           "settings": {
             "$ref": "#/components/schemas/ScmSettings"
@@ -4937,6 +5004,10 @@
           },
           "label": {
             "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/AllowedOrigin",
+            "description": "Replaces the allowed origin; the next credential issue for each binding re-checks it."
           },
           "settings": {
             "$ref": "#/components/schemas/ScmSettings",
