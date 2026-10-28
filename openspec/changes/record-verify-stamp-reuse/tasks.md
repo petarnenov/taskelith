@@ -18,5 +18,5 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review passes, assigned by the coordinator
-- [ ] 4.2 Archive the change
+- [x] 4.1 Independent review passes, assigned by the coordinator
+- [x] 4.2 Archive the change
