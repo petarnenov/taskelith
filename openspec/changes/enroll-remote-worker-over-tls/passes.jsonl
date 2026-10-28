@@ -1,1 +1,2 @@
 {"change": "enroll-remote-worker-over-tls", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18109-0d4c-7b40-b983-958c59614519", "counts": {"critical": 0, "high": 1, "medium": 1, "low": 1}}
+{"change": "enroll-remote-worker-over-tls", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "d1b442e8-b185-40c4-944d-e331072e0281", "counts": {"critical": 0, "high": 0, "medium": 1, "low": 9}}

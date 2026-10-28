@@ -53,7 +53,7 @@ Each test below failed before its fix and passed after it; each item names the r
 
 ## Review
 
-The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`. Passes 2 and 3 are pending.
+The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`. Pass 3 is pending.
 
 ### Review pass 1
 
@@ -82,6 +82,40 @@ Fails before the fixes, each run before its fix was written:
 `make findings ARGS="validate"` after recording: "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)."
 
 After pass 1, `make verify` on `648a227e` with these records: exit 0; `ℹ tests 2548`, `ℹ suites 45`, `ℹ pass 2541`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.50 | 99.06`; "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The four new tests account for 2548 against 2544.
+
+### Review pass 2
+
+- **Reviewer:** B, Claude Code `claude-opus-5-5`, effort `high`, plan mode.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, run by the coordinator.
+- **Confirmation:** session `d1b442e8-b185-40c4-944d-e331072e0281`; the result line's `modelUsage` names `claude-opus-5-5`, as the coordinator relayed it.
+- **Revision reviewed:** `b538f0b3`.
+- **Snapshot:** identical before and after the pass, as the coordinator relayed it.
+- **Scope:** static review only; the reviewer ran no tests. It confirmed the three fixes of pass 1 and their fail-before evidence.
+- **Result:** Critical 0, High 0, Medium 1, Low 9; `findings.jsonl` records each finding in the author's words.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| M1 | Medium | No test covered the control plane refusing an `installation-ca.pem` with a key beside the certificate, two certificates, or a leaf | `installation-tls.test.ts` checks `readInstallationCa`, and `control-plane-api.integration.test.ts` the start, for each case: `precondition-failed`, `details.path`, no `BEGIN` text; a start that wrongly succeeds is stopped | `82cfb921` |
+| L1 | Low | This record said review had not run | The status names passes 1 and 2 | `55b7e5e6` |
+| L2 | Low | The fail-before section said every test ran against the base | Each item names its revision or its mutation | `55b7e5e6` |
+| L3 | Low | No test set `NODE_EXTRA_CA_CERTS`, though the design and spec claimed one did | A child-process test in `pinned-tls.test.ts` sets it to the foreign CA: an unpinned `fetch` gets 201 from the foreign server, the pinned enrollment fails with `installation-ca-untrusted`, and only the unpinned probe arrives | `e5fe1428` |
+| L4 | Low | A refused pinned certificate was `unavailable`, which contract section 10 treats as a possibly spent token | `HttpEnrollmentClient` maps Node's certificate verification codes to `precondition-failed`, reason `installation-ca-untrusted`; the launch and evidence calls keep `unavailable`, which the launch contract retries; section 10 and the `worker-runtime` scenario say the token is not spent | `3e45b6dc` |
+| L5 | Low | `readInstallationCa` could answer 400 and 401, which its document does not declare | Statuses 503 and 500 only; a test checks every route of the execution document against its declared responses | `54f4574d` |
+| L6 | Low | The server-only TLS sentence had no scenario | Scenario "Server-only TLS"; `enrollment-tls.test.ts` also checks the endpoint's `.creds` | `b508fbbb` |
+| L7 | Low | The register said one runtime dependency | "one third-party runtime dependency" | `b508fbbb` |
+| L8 | Low | The 2026-10-28 delegate decisions were only in this record | The design's context and the contract's decisions table name them | `b508fbbb` |
+| L9 | Low | `readInstallationCa` named four things | The broker helper is `brokerTlsOf`; the journal's pin functions are `readInstallationCaPin` and `writeInstallationCaPin` | `903c71ec` |
+
+Fails before the fixes:
+
+- **M1**, by mutation, since the refusal existed: with `if (text !== '') return true;` at the top of `isCaCertificate` in `installation-authority.ts`, the unit test failed with `AssertionError [ERR_ASSERTION]: expected a failure` at `installation-tls.test.ts:118:21`, and the start test with the same assertion at `control-plane-api.integration.test.ts:247:25` (1 test, 0 pass, 1 fail each). That first start run held the process, as the wrongly started control plane kept running; the test now stops such a start. The mutation was reverted with `git checkout`; the unit file gives 11 of 11 and the integration file 25 of 25.
+- **L3**, by mutation, since the pin already held: with the pinned `Agent` built as `{ rejectUnauthorized: true }` without `ca` in `undici-fetch.ts`, the child-process test failed at `pinned-tls.test.ts:223:10`, `code: 'ok'` instead of `code: 'precondition-failed', reason: 'installation-ca-untrusted'`: the enrollment reached the foreign server. Reverted with `git checkout`.
+- **L4**, on `903c71ec` with the new expectations: 11 tests, 8 pass, 3 fail, each `actual: [ 'unavailable', undefined ]`, at `enrollment-tls.test.ts:166:10` and `pinned-tls.test.ts:150:10` and `:176:10`. With `3e45b6dc` the adapter and worker files give 87 of 87.
+- **L5**, on `82cfb921` with the new test and the old route: `AssertionError [ERR_ASSERTION]: readInstallationCa` at `api-server.test.ts:90:12`, `actual: [ '400', '401' ]`.
+
+`make findings ARGS="validate"` after recording: "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)."
+
+After pass 2, `make verify` on `55b7e5e6` with these records: exit 0; `ℹ tests 2552`, `ℹ suites 45`, `ℹ pass 2545`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.52 | 99.06`; `installation-authority` branches 83.33% (78.57% before M1); "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The four new tests (M1 twice, L3, L5) account for 2552 against 2548.
 
 ## Limitations
 
