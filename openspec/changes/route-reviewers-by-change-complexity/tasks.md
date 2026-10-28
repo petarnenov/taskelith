@@ -19,7 +19,7 @@
 - [x] 2.8 Tests committed before the module, then `scripts/review-route-evaluation.ts` with `test/review-route-evaluation.test.ts` (no future history, the shadow router only as a fake), its git adapter in `scripts/review-route-environment.ts`, and `docs/review-findings/route-evaluation.schema.json`; `runRouteEvaluation` is the entry and `routeEvaluationDependencies` the composition root, wired live but never run.
 - [x] 2.9 Run the offline evaluation with `--rule-only` at `3f23516a`, save `evaluation.jsonl`, and compare it with the in-sample figures of `design.md` "Archived statistics" in `verification.md`.
 - [x] 2.11 Resolve `design.md` open question 1 as option (a), never an OpenCode reviewer, and move it into "Decisions" (7).
-- [ ] 2.10 Pending with the owner (hard floor): the TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the data consent. Only after the owner confirms them and sets `JEV_MAF_LAB`: run the offline evaluation with the shadow router, record `evaluation.jsonl` and the figures in `verification.md`, and replace the constructed response fixture with a captured one. Until then no live call is made from any host.
+- [ ] 2.10 Owner hard floor confirmed on 2026-10-28 via the coordinator (the TypeSafe account, the Master Customer Agreement with paid credits, and the data consent), and `JEV_MAF_LAB` set on this host. After the merge of `dev` in phase 3: run the offline evaluation with the shadow router, record `evaluation.jsonl` and the figures in `verification.md`, and replace the constructed response fixture with a captured one.
 
 ## 3. Phase 3: integration after `adopt-process-performance-recommendations` reaches `dev`
 

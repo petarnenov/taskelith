@@ -92,7 +92,7 @@ Both figures remain in-sample: the thresholds were read off these records. As of
 
 ## Remaining gates
 
-- Owner hard floor, pending with the owner: the TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the data consent (`design.md` "Owner actions" and "Decisions" 6). Until the owner confirms them, `JevRouter` is tested only with a fake and the constructed response, no live call is made from any host, and the offline evaluation is not run live (`tasks.md` 2.10).
+- Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation waits for the merge of `dev` in phase 3 (`tasks.md` 2.10).
 - A later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
 - Phase 3 integration (`tasks.md` 3.1 to 3.5), including the dispatch of `route` and `route-evaluation` from `scripts/findings.ts` and the per-change routing rows of `effect`; author self-check and evidence check; independent review; archive.
 - Integration into dev by the coordinator (single pull request).
