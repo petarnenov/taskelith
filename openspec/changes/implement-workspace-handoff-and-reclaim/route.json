@@ -1,8 +1,8 @@
 {
   "change": "implement-workspace-handoff-and-reclaim",
-  "generatedAt": "2026-10-28T14:03:47.812Z",
+  "generatedAt": "2026-10-28T14:04:49.682Z",
   "devCommit": "10fc3bbe6b7c46089e74ea32dc6d70bf79cdbe8d",
-  "headCommit": "e33d2c5f040244f973da24e445284ff6523b66ea",
+  "headCommit": "2c03859151af5e77b0d9bb6a8860155157d26eff",
   "features": {
     "linesChanged": 1801,
     "filesChanged": 23,
@@ -67,7 +67,7 @@
       "standard": 0,
       "elevated": 1
     },
-    "expectedPasses": 2.69,
+    "expectedPasses": 2.76,
     "passes": [
       {
         "pass": 1,
@@ -88,6 +88,6 @@
         }
       }
     ],
-    "latencyMs": 221
+    "latencyMs": 218
   }
 }
