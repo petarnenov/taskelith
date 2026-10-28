@@ -306,7 +306,7 @@ export function ReviewsScreen() {
             <Badge variant="default">Assigned reviewer per pass</Badge>
             <Badge variant="default">At most 3 passes</Badge>
             <Badge variant="default">Low-only: fixed without another pass</Badge>
-            <Badge variant="default">After pass 3 the owner decides open Critical, High, Medium</Badge>
+            <Badge variant="default">After pass 3: fixes checked by the architect</Badge>
             <LaterGate>review runtime · G3 item 21</LaterGate>
           </Group>
         }
