@@ -1,6 +1,6 @@
 # Verification: extend-execution-http-contracts
 
-Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A pending, which governance "Conditional third pass" requires; not archived.
+Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A done without findings; not archived.
 
 ## Scope and source
 
@@ -24,7 +24,8 @@ Status: developed and verified by the author; review passes 1 and 2 done and the
 - The commit `docs: record review pass 2 of the execution HTTP contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record fixes of findings 17 to 20; `make verify` on `98859f2b` (log `eehc-verify-6.log`) checked its tree, and `9040fd6e` `docs: record the verification of review pass 2 fixes of the execution HTTP contracts` records that run.
 - `617926ca` merges `origin/dev` at `a3a0ac4c` (`declare-contract-breaking-changes`, #393, and the other changes since `ff7ab7a0`), without conflicts.
 - `fa36b9e1` `chore: record that the evidence read narrowing has no computed breaking change` (design decision 2, contract page section 8.2).
-- The commit `docs: record the merge of dev and the breaking-change check of the execution HTTP contracts` updates this record; the `make verify` run below (log `eehc-verify-8.log`) checks its tree, and the commit after it records that run.
+- The commit `docs: record the merge of dev and the breaking-change check of the execution HTTP contracts` (`bfc8f9cd`) updates this record; the `make verify` run below (log `eehc-verify-8.log`) checks its tree, and `a50bd344` records that run; `a50bd344` is the head that review pass 3 reviewed.
+- The commit `docs: record review pass 3 and the architect follow-ups of the execution HTTP contracts` adds the pass 3 line of `passes.jsonl` and the pass 3 section, and, as the architect accepted on 2026-10-28 after pass 3, names the evidence exception in the contract page section 8.2 and the semantic breaking-change gap under "Remaining gates"; the `make verify` run of pass 3 (log `eehc-verify-9.log`) checks its tree, and the commit after it records that run.
 
 ## Environment
 
@@ -157,6 +158,13 @@ The fixes change contracts, not only records, and pass 1 found a High finding, s
 
 The pass 2 fixes change the document, contracts, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, variant `medium`, sandbox `read-only`, session `01a18299-898a-7f02-9758-9ddb732a97f7`, on `a50bd344`. Scope: the pass 2 fixes `git diff e31e6481..a872b982`, plus `fa36b9e1`, `bfc8f9cd`, and `a50bd344` and the records `98859f2b` and `9040fd6e`, with the whole change `a3a0ac4c...HEAD` as context. The snapshot (`git ls-files -co --exclude-standard | xargs sha256sum | sha256sum`) before and after the review was `993750b3ddeff9fb4fcd314864f6350ecaaeb24dd059b96feb0c0321bb78322b`, unchanged.
+- Invocation: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -o <report> - < <prompt-file>`, the Codex CLI (gpt-6.1-sol) row of the [agent task protocol](/docs/agent-task-protocol.md). Model confirmation: the Codex log header showed `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only`, and the session ID above.
+- Result: Critical 0, High 0, Medium 0, Low 0; no lines in `findings.jsonl`. The reviewer confirmed that all 20 pass 2 findings are resolved and that the fixes introduce no new problem, and accepted both deviations: `readmitTask` requires `projectId` and checks the role before the read with 403 `role-required`, as 9a does; and `packages/contracts/breaking-changes.json` has no entry, because it lists only computed changes, while the version 0.6.0 and the contract page declare the authorization narrowing. Its own checks: 76 of 76 contract tests passed, links and the comment rule conform, all 14 requirement bodies are under 500 characters, no shared schema differs and no path is duplicated, and `git diff --check` is clean. It did not rerun `make verify` or the Docker compatibility checks; it checked their recorded results and the code.
+- After pass 3, as the architect (coordinator Niki) accepted on 2026-10-28: the contract page section 8.2 names the evidence paths as the one exception to the control-plane rule and `readmitTask` as checking the role first with 403, and "Remaining gates" names the semantic breaking-change gap. Both are documentation and record edits, unreviewed under governance "Conditional third pass", which allows no fourth pass.
+
 ## Merge of dev and the breaking-change check
 
 As the architect asked on 2026-10-28, after pass 2 the branch merged `origin/dev` at `a3a0ac4c` (no rebase) in `617926ca`, with no conflict, and checked the breaking-change declaration that `declare-contract-breaking-changes` added. The gate of design decision 2 is met: the check computes no breaking change for the narrowing, so the file has no entry.
@@ -170,7 +178,7 @@ As the architect asked on 2026-10-28, after pass 2 the branch merged `origin/dev
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, which governance "Conditional third pass" requires, with its fixes and records.
+- An authorization (semantic) narrowing such as that of the evidence reads cannot be declared in `packages/contracts/breaking-changes.json`, because the compatibility check of #393 sees only schema changes; the architect takes a follow-up to let semantic breaking changes be declared.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
