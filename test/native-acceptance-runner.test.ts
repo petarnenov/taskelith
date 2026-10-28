@@ -118,6 +118,17 @@ test('the linux entry reports the G2 races and partitions not applicable off Lin
   assert.match(run.stderr, /connectivity: acceptance-partition is not applicable on Darwin: make verify-linux-g2-scenarios needs a Linux Docker host/);
 });
 
+test('the macos entry runs the G2 races and partitions through the macOS supervisor', () => {
+  const run = runner(`make_command=make
+node_test=node-test
+prove() { echo "prove $*"; }
+macos_entry`);
+  assert.equal(run.status, 0, run.stderr);
+  const races = 'FILES=test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts';
+  assert.match(run.stdout, new RegExp(`^prove cancellation acceptance-cancellation-races harness-composition make --no-print-directory verify-macos-g2-scenarios ${races}$`, 'm'));
+  assert.match(run.stdout, /^prove connectivity acceptance-partition harness-composition make --no-print-directory verify-macos-g2-scenarios FILES=test\/g2-partition.test.ts$/m);
+});
+
 test('the linux entry reports the Linux crash windows not applicable off Linux', () => {
   const run = linuxEntry('Darwin', `linux_entry
 echo "not applicable:[$not_applicable_proofs]"`);

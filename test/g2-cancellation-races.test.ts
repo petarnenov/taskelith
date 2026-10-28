@@ -8,7 +8,7 @@ import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
 import { processesNaming } from './g2-scenarios/leftover-processes.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
-import { CANCEL_SIGNAL, assertContained } from './g2-scenarios/scenario-launch.ts';
+import { CANCEL_SIGNAL, SCENARIO_LAUNCH_HOST, assertWorkerSupervised, supervisorProcesses } from './g2-scenarios/scenario-launch.ts';
 import { SCENARIO_LIMITS, type ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import {
   assertExitedOnce,
@@ -31,6 +31,12 @@ const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 guardScenarioFile();
+
+// Adoption observes only on macOS (spec worker-supervisor), so race g
+// runs only through the worker's own macOS supervisor.
+const ADOPTION_HOST = SCENARIO_LAUNCH_HOST === 'macos-supervisor'
+  ? { timeout: 120_000 }
+  : { skip: 'not applicable off macOS: only a macOS adopter leaves a cancel unapplied' };
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
 
@@ -170,7 +176,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         const latest = () => journaledUnder(worker, cancelled.assignmentId).at(-1);
         const reached = afterStart ? () => latest()?.state === 'started' : () => latest()?.recordWritten === true;
         await waitFor(reached, 20_000, afterStart ? 'the start' : 'W4');
-        if (afterStart) assertContained(worker.containmentParent, scriptedPids(worker));
+        if (afterStart) assertWorkerSupervised(worker, scriptedPids(worker));
         await cancelAssignment(installation, cancelled.assignmentId);
         const atCancel = latest()!;
         assert.equal(atCancel.recordWritten, true, 'the cancel lands after W4');
@@ -329,9 +335,43 @@ describe('cancellation races', SCENARIO_HOST, () => {
     }));
   });
 
-  test('g. an adopting macOS supervisor does not apply a cancel', {
-    skip: 'N/A on Linux: adoption is macOS observe-only; native acceptance item 25 covers it',
-  }, () => undefined);
+  // Seed: whether the cancel lands before the adopter starts or while it
+  // observes. A macOS adopter is not the child's parent and signals nothing.
+  test('g. an adopting macOS supervisor does not apply a cancel', ADOPTION_HOST, async () => {
+    const random = new SeededRandom(SEED);
+    const cancelBeforeAdoption = random.nextInt(2) === 1;
+    await recordScenario({ scenario: 'adopting-supervisor-ignores-cancel', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
+      const worker = await startedWorker(installation, 'adopter-cancel', random, { runMilliseconds: HELD_RUN });
+      try {
+        await installation.submitTask('task-g');
+        await waitFor(async () => (await startedExecutions(installation, 'task-g')) === 1, 20_000, 'the start');
+        const children = scriptedPids(worker);
+        assertWorkerSupervised(worker, children);
+        killFirstSupervisor(worker);
+        const cancelled = await firstAssignment(installation, 'task-g');
+        if (cancelBeforeAdoption) await cancelAssignment(installation, cancelled.assignmentId);
+        await waitFor(() => supervisorProcesses(worker.dataRoot, 'adopt').length === 1, 30_000, 'the adopting supervisor');
+        if (!cancelBeforeAdoption) await cancelAssignment(installation, cancelled.assignmentId);
+        await waitFor(async () => notAppliedEvidence(await installation.task('task-g')) === 1, 30_000, 'the not-applied evidence');
+        assert.deepEqual(scriptedPids(worker), children, 'the adopter signalled nothing: the child still runs');
+        worker.releaseScriptedProcesses();
+        await waitFor(() => scriptedProcesses(worker).length === 0, 10_000, 'no scripted process remains');
+        // Without a containment nothing proves the descendants gone, so the
+        // execution stays started for reconciliation (supervisor identity 6).
+        await waitFor(async () => evidenceKinds(await installation.task('task-g')).includes('uncertain'), 60_000, 'the uncertain evidence');
+        const [execution] = (await installation.task('task-g')).attempts[0]!.executions;
+        assert.equal(execution!.state, 'started', 'the execution stays started');
+        assert.deepEqual(evidenceKinds(await installation.task('task-g')), ['cancellation-not-applied', 'uncertain']);
+        assert.equal((await installation.result('task-g')).state, 'pending', 'nothing ends the task automatically');
+        const when = cancelBeforeAdoption ? 'before the adopter started' : 'while the adopter observed';
+        return `cancel ${when}: not applied, child ${children.join(', ')} ran on until released; `
+          + 'the execution stayed started with evidence cancellation-not-applied then uncertain, the result pending';
+      } finally {
+        worker.releaseScriptedProcesses();
+        await worker.stop();
+      }
+    }));
+  });
 
   // Guards the B2 fix (#304): a cancel naming one execution stops only it.
   test('h. an unauthorized start cancels only that execution', { timeout: 90_000 }, async () => {
@@ -341,7 +381,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       try {
         await installation.submitTask('task-h');
         await waitFor(async () => (await startedExecutions(installation, 'task-h')) === 1, 20_000, 'the authorized start');
-        assertContained(worker.containmentParent, scriptedPids(worker));
+        assertWorkerSupervised(worker, scriptedPids(worker));
         const forged = forgeStartUnderOwningGrant(worker, await installation.task('task-h'));
         await waitFor(async () => (await cancellationsTo(installation, worker)).length === 1, 20_000, 'the cancellation of the unauthorized start');
         assert.deepEqual((await cancellationsTo(installation, worker))[0]!.executionId, forged, 'it names only that execution');
@@ -356,6 +396,22 @@ describe('cancellation races', SCENARIO_HOST, () => {
 });
 
 const CANCELLATION = 'execution.cancellation.request';
+
+// SIGKILL of the launching supervisor only; its child keeps running.
+function killFirstSupervisor(worker: ScenarioWorker): void {
+  const supervisors = supervisorProcesses(worker.dataRoot, 'launch');
+  assert.equal(supervisors.length, 1, `one launching supervisor: ${JSON.stringify(supervisors)}`);
+  process.kill(supervisors[0]!.pid, 'SIGKILL');
+}
+
+function evidenceKinds(task: Task): string[] {
+  return task.attempts.flatMap((attempt) => attempt.executions).flatMap((execution) => execution.evidence).map(({ kind }) => kind);
+}
+
+function notAppliedEvidence(task: Task): number {
+  return task.attempts.flatMap((attempt) => attempt.executions)
+    .flatMap((execution) => execution.evidence).filter(({ kind }) => kind === 'cancellation-not-applied').length;
+}
 const RACE_ROUNDS = 3;
 const RACE_WINDOW_MILLISECONDS = 25;
 
@@ -383,7 +439,8 @@ function forgeStartUnderOwningGrant(worker: ScenarioWorker, task: Task): Executi
   }));
   value(journal.recordGrant({ ...grant, operationId, executionId: forged }));
   value(journal.recordExecutionRecordWritten(forged));
-  const process = { platform: 'linux' as const, bootId: 'forged', pid: 2 ** 22, startTime: 1, processGroupId: 2 ** 22 };
+  const platform = SCENARIO_LAUNCH_HOST === 'macos-supervisor' ? 'darwin' as const : 'linux' as const;
+  const process = { platform, bootId: 'forged', pid: 2 ** 22, startTime: 1, processGroupId: 2 ** 22 };
   value(journal.recordStart(forged, grant.launchAuthId as LaunchAuthId, process));
   return forged;
 }
