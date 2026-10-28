@@ -2,7 +2,7 @@
 
 # Exported arguments get expanded, by make 4.4 already for the $(shell) calls
 # below, so these reach scripts under other names, as typed, without MAKEFLAGS.
-unexport BRANCH TITLE BODY RESUME CHANGE LOG
+unexport BRANCH TITLE BODY RESUME CHANGE LOG PASS ROLE REVIEWER PROMPT
 
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
@@ -30,7 +30,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check review \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -308,6 +308,19 @@ record:
 record-check:
 	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
 		node --experimental-strip-types scripts/verification-record.ts check "$$TASKELITH_RECORD_CHANGE"
+
+# Runs reviewer REVIEWER for PASS of CHANGE in a clean environment, routes
+# a stamped tree before pass 1, and appends the pass line to passes.jsonl.
+review: export TASKELITH_REVIEW_CHANGE := $(value CHANGE)
+review: export TASKELITH_REVIEW_PASS := $(value PASS)
+review: export TASKELITH_REVIEW_ROLE := $(value ROLE)
+review: export TASKELITH_REVIEW_REVIEWER := $(value REVIEWER)
+review: export TASKELITH_REVIEW_PROMPT := $(value PROMPT)
+review: export TASKELITH_REVIEW_LOG := $(value LOG)
+review:
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/review-run.ts "$$TASKELITH_REVIEW_CHANGE" "$$TASKELITH_REVIEW_PASS" \
+		"$$TASKELITH_REVIEW_ROLE" "$$TASKELITH_REVIEW_REVIEWER" "$$TASKELITH_REVIEW_PROMPT" "$$TASKELITH_REVIEW_LOG"
 
 # Checks that this clone can build and verify; changes nothing.
 # Uses the .nvmrc Node.js when nvm has it.
