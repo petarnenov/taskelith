@@ -1,17 +1,18 @@
 import { randomBytes } from 'node:crypto';
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
-import { ok } from '@taskelith/kernel';
+import { ok, type Result } from '@taskelith/kernel';
 import { connectWorkerTransport, type TransportConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
-import { seededUuids, value, type SeededRandom } from '@taskelith/testing';
-import { startWorker, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
+import { executionAccountOf, seededUuids, value, type SeededRandom } from '@taskelith/testing';
+import { startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
+import { SCENARIO_LAUNCH, cgroupHost, workerContainmentParent } from './scenario-launch.ts';
 import { within } from './waiting.ts';
 
 // The worker's own timers (heartbeats, broker retries, lost contact) and
@@ -56,14 +57,15 @@ export interface ScenarioWorkerOptions {
   readonly transport?: (transport: TransportConnection) => TransportConnection;
 }
 
-// A worker composed by the product's startWorker, with test-side scaled
-// timers, seeded draws and identities, and the process-group launch host.
+// The product's startWorker with scaled timers, seeded draws and IDs, and
+// the cgroup launch host under SCENARIO_LAUNCH, else the process-group one.
 export class ScenarioWorker {
   readonly logs = new InMemoryLogSink();
   readonly dataRoot: string;
   readonly #releaseFile: string;
   readonly #site: WorkerSite;
   readonly #options: ScenarioWorkerOptions;
+  readonly #containmentParent: string | undefined;
   #running: RunningWorker | undefined;
 
   constructor(site: WorkerSite, options: ScenarioWorkerOptions) {
@@ -71,6 +73,7 @@ export class ScenarioWorker {
     this.#options = options;
     this.dataRoot = join(site.base, options.name);
     this.#releaseFile = `${this.dataRoot}.released`;
+    this.#containmentParent = SCENARIO_LAUNCH === undefined ? undefined : workerContainmentParent(SCENARIO_LAUNCH, site.base, options.name);
   }
 
   get running(): RunningWorker {
@@ -97,6 +100,7 @@ export class ScenarioWorker {
   }
 
   async start(): Promise<RunningWorker> {
+    if (this.#containmentParent !== undefined) mkdirSync(this.#containmentParent, { recursive: true });
     this.#running = value(await startWorker(this.#settings(), this.#dependencies()));
     runningWorkers.add(this);
     return this.#running;
@@ -116,13 +120,25 @@ export class ScenarioWorker {
       dataRoot: this.dataRoot, controlPlaneUrl: this.#site.apiUrl, natsUrl: this.#options.nats,
       host: { platform: 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
       capacity: { slots: this.#options.slots ?? 2, cpuMillicores: 4_000, memoryMebibytes: 8_192, controls: [] },
-      launch: { command: this.#scriptedProcess(runMilliseconds) },
+      launch: this.#launch(runMilliseconds),
+      ...(this.#containmentParent === undefined ? {} : { containmentParent: this.#containmentParent }),
       ...(enrollmentToken === undefined ? {} : { enrollmentToken }),
     };
   }
 
+  #launch(runMilliseconds: ScriptedRun): LaunchSettings {
+    const command = this.#scriptedProcess(runMilliseconds);
+    return SCENARIO_LAUNCH === undefined ? { command } : { command, executionAccount: executionAccountOf(SCENARIO_LAUNCH) };
+  }
+
   #scriptedProcess(runMilliseconds: ScriptedRun) {
     return runMilliseconds === HELD_RUN ? heldProcess(this.dataRoot, this.#releaseFile) : scriptedProcess(runMilliseconds, this.dataRoot);
+  }
+
+  #launchHost(settings: WorkerSettings, executions: string): Result<LaunchHost> {
+    const beforeStart = this.#options.beforeSupervisorStart ?? (async () => undefined);
+    if (SCENARIO_LAUNCH !== undefined) return cgroupHost(settings, executions, beforeStart);
+    return ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), beforeStart));
   }
 
   #dependencies(): WorkerDependencies {
@@ -151,7 +167,7 @@ export class ScenarioWorker {
       sleep: scaledSleep, draw, logger,
       launching: {
         authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),
-        host: (_settings, executions) => ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), this.#options.beforeSupervisorStart)),
+        host: (settings, executions) => this.#launchHost(settings, executions),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),
       },

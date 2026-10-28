@@ -11,7 +11,8 @@ import { InMemoryLogSink } from '@taskelith/observability';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { integrationEndpoint, integrationSecret, requestFailure, value } from '@taskelith/testing';
+import { admitExecutionAccount, integrationEndpoint, integrationSecret, requestFailure, value } from '@taskelith/testing';
+import { SCENARIO_LAUNCH } from './scenario-launch.ts';
 import { waitFor } from './waiting.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
@@ -85,6 +86,8 @@ export class ScenarioInstallation {
     const database = withDatabase(server, databaseName);
     const routed = withDatabase(options.postgres === 'proxied' ? integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL') : server, databaseName);
     const base = mkdtempSync(join(tmpdir(), `taskelith-${name}-`));
+    // The held scripted process, as the execution account, polls a file here.
+    if (SCENARIO_LAUNCH !== undefined) admitExecutionAccount(base, SCENARIO_LAUNCH);
     const dataRoot = join(base, 'control-plane');
     const authority = await registerAccount(dataRoot);
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: integrationEndpoint('TASKELITH_NATS_URL').href };
