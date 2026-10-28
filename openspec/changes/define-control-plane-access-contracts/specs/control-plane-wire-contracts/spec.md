@@ -62,6 +62,20 @@ The document SHALL define creating, reading, listing, and renaming projects, ass
 - **WHEN** two installation owners assign different roles to the same principal on one project
 - **THEN** both succeed and the role of the assignment serialized last stays
 
+### Requirement: Remote origin of a binding
+An integration's allowed origin, https with a host and an optional port, SHALL be set only by an `installation-owner` and stored with a lower-case host and an explicit port, 443 by default. `bindRepository` SHALL refuse with 422 a remote URL that is not HTTPS, holds user information, a query, or a fragment, or whose origin, normalized the same way, is not that origin.
+
+#### Scenario: Remote URL outside the integration's origin
+- **WHEN** a maintainer binds a remote URL whose host is not that of the integration's allowed origin
+- **THEN** the answer is 422 with reason `remote-origin-mismatch` and the binding is unchanged
+
+### Requirement: Remote origin at credential issue
+Each issue or re-delivery of a per-run SCM credential SHALL first re-check the bound remote URL against the integration's current allowed origin, so that narrowing the origin covers existing bindings. On a mismatch the control plane SHALL issue no credential and record the reason `remote-origin-mismatch`.
+
+#### Scenario: Credential issue after the origin changes
+- **WHEN** an installation owner changes an integration's allowed origin so that a bound remote URL lies outside it, and a run of that project then needs its per-run SCM credential
+- **THEN** the control plane issues no credential and records the reason `remote-origin-mismatch`
+
 ### Requirement: Workers view operation
 `listWorkers` SHALL return the worker admission view: every enrolled worker that is not revoked, in identifier order, with its host, enrollment time, admission state, last report time, and stored self-check results, and no credential or credential hash. When a source cannot be read it SHALL answer 503 with no partial data.
 
@@ -84,7 +98,7 @@ The document SHALL define listing, adding, changing, revoking, reinstating, and 
 - **THEN** the project's view shows it as shared and names neither its allowed projects nor its credential
 
 ### Requirement: SCM integration setup
-The document SHALL define listing, reading, creating, and changing SCM integrations, each with an SCM plugin, a label, plugin-defined settings, and plugin-defined write-only secrets. A change SHALL compare-and-set the integration's revision. A response SHALL name the stored secrets and never carry their values, and no schema SHALL name an SCM.
+The document SHALL define listing, reading, creating, and changing SCM integrations, each with an SCM plugin, a label, an allowed origin, plugin-defined settings, and plugin-defined write-only secrets. A change SHALL compare-and-set the integration's revision. A response SHALL name the stored secrets and never carry their values, and no schema SHALL name an SCM.
 
 #### Scenario: Secrets in a response
 - **WHEN** an integration record carries its secrets' values
