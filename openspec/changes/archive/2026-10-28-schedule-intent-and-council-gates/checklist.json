@@ -1,0 +1,97 @@
+{
+  "change": "schedule-intent-and-council-gates",
+  "generatedAt": "2026-10-28T12:50:35.843Z",
+  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
+  "query": {
+    "capabilities": [
+      "delivery-planning"
+    ],
+    "files": [
+      "docs/architecture.md",
+      "docs/g3-plan.md",
+      "docs/decisions/**"
+    ],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 16
+      },
+      {
+        "category": "spec-wording",
+        "count": 4
+      },
+      {
+        "category": "process",
+        "count": 3
+      },
+      {
+        "category": "stale-citation",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      },
+      {
+        "category": "scope",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 513,
+        "inChecklist": 162
+      },
+      "mediumOrWorse": {
+        "findings": 225,
+        "inChecklist": 36
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 93
+      },
+      {
+        "category": "docs",
+        "count": 58
+      },
+      {
+        "category": "spec-wording",
+        "count": 56
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 281,
+        "inChecklist": 277
+      },
+      "mediumOrWorse": {
+        "findings": 48,
+        "inChecklist": 46
+      }
+    }
+  }
+}

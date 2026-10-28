@@ -1,0 +1,100 @@
+# Verification
+
+Record of the author's work before review; it names the checks that have not run yet (Remaining gates).
+
+## Scope and source
+
+- **Source:** the coordinator's brief (Niki, 2026-10-28), recording the owner's decisions of 2026-10-28 that approved the coordinator's three recommendations on the timing of ADR 0013: `schedule-intent-and-council-gates`, size S-M, documentation only.
+- **Base revision:** `a3a0ac4c` (`origin/dev`, merge of pull request #393, `declare-contract-breaking-changes`).
+- **Scope:** ADR 0016; the obligation trace and the scope notes of items 11 and 22 in `docs/g3-plan.md`; the delivery sequence and section 15 of `docs/architecture.md`; the status notes of ADR 0013, ADR 0014, and ADR 0003 and the amendment of ADR 0003 decision 1; the harness order sentence of `docs/integration-candidates.md`; the `delivery-planning` spec delta.
+- **Out of scope:** the G9 and G10 plans, any G3 item other than the scope notes, and the statements design "Not changed" lists.
+
+## Environment
+
+The owner's 2020 Intel iMac: macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through nvm.
+
+## Author self-check
+
+- **Owner decisions.** ADR 0016 decisions 1 to 6 state the brief's three decisions: the trace (1), G9 with its start, overlap, and exit evidence (2), G10 (3), the ADR 0003 amendment (4), the order before G8 (5), and authorization only as gate plans (6). The G10 exit evidence in the architecture row is the author's reading of ADR 0014 (design D5).
+- **Obligation trace.** Every row's citation was read at `a3a0ac4c` and, since pass 2, reread at `10fc3bbe`, the merged `dev` the table now pins: `docs/contracts/product-ports.md:28`, `:33`, `:70`, `:179`, `:211`, `:233`, and `:274`; `docs/contracts/control-plane-wire-contracts.md:61` and the `RepositoryBindingInput` schema of `packages/contracts/documents/control-plane.openapi.json`; `docs/contracts/git-workspace.md:58` and `:89`; `packages/modules/workspace/src/domain/workspace.ts:105`; `apps/control-plane/src/application/task-service.ts:45`; `docs/architecture.md:317`; `openspec/specs/launch-authorization/spec.md:9`; `docs/contracts/capacity-reservation.md:19` to `:31`; `docs/contracts/agent-harness-port.md:89`; `docs/contracts/account-pool.md:33` and `:47`. Open rows: decision records (item 22) and model and effort per session (items 18 and 19); partly covered: council decisions on the board and in the inbox (G10), and, since pass 1, capacity budgets (G9) and the per-change workspace branch (item 16). Since pass 2 the project's integration branch is covered by the item 9a contract and binds item 11.
+- **Spec delta.** `delivery-planning` adds "Intent and council delivery gates" (403 characters; 491 after pass 2), "Authorized plans for G9 and G10" (171), and "Forward-compatibility obligations traced" (284; 452 after pass 1).
+- **Sweep.** `docs/` and `openspec/specs/`, without archives, were searched for "not fixed", "Recorded, not authorized", "authorizes no implementation", "in that order", and the harness lists; the statements changed and those kept are in the proposal and design "Not changed".
+- **Links.** Links in `docs/` are relative within `docs/` except in `docs/architecture.md`, which uses its absolute repository links; this change's records link only root-relative.
+
+## Checks and results
+
+Author checks on the working tree before the first commit:
+
+- `npm run openspec -- validate schedule-intent-and-council-gates --strict`: `Change 'schedule-intent-and-council-gates' is valid`.
+- `npm run openspec -- validate --all --strict`: `Totals: 72 passed, 0 failed (72 items)`.
+- `npm run verify:links`: `Every checked link conforms.`
+
+## Route and make verify
+
+- `make findings ARGS="route --change schedule-intent-and-council-gates"` on `f36f7e74`, committed unedited as `route.json` in `445b30a4`: `standard (no trigger), rule version 1`; pass 1, reviewer A: `codex gpt-6.1-sol#medium`; pass 2, reviewer B: `claude claude-opus-5-5#high`; shadow `jev-1.14.0` standard (0.88), agrees with the rule; recommendation only.
+- `make verify` on `445b30a4` (tree `018b2687`), docs-only profile: the first run failed in `npm run verify:package` because `dist/cli.js` was missing, since the profile skips `make test`, which builds, and this fresh worktree had no build. After `npm run build`, which changes no tracked file, the second run passed, exit 0; the docs-only profile skips the test suites, so it reports no test totals.
+
+## Review pass 1
+
+Reviewer A, Codex CLI (gpt-6.1-sol, effort medium), session `01a18294-e032-78a1-8c38-e7bb8a42d960`: 0 Critical, 0 High, 2 Medium, 0 Low, all fixed in `f03d178f` after merging `origin/dev` at `10fc3bbe` (`3b37c6c8`, no conflict).
+
+- **M1 (docs).** The workspace row of the obligation trace is now partly covered: the base branch passed with each prepare (`docs/contracts/git-workspace.md:58`) is met; the per-change branch is open, because the contract names one branch per task (`:89`) while a card is one run of many tasks (`docs/contracts/product-ports.md:70`) and the push rule names the branch of the card's change (`:208`). Item 16 closes it through a versioned change of the item 6 contract. The citations were reread at `a3a0ac4c`; pass 2 re-pinned them to `10fc3bbe`.
+- **M2 (spec-wording).** The requirement "Forward-compatibility obligations traced" names the four statuses the table uses, covered, partly covered, open, and not a G3 item, each with what it carries, and adds the scenario "Partly met obligation". The table's legend defines the same names; the capacity row became partly covered and the scheduling row covered.
+
+Checks after the fixes:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 72 passed, 0 failed (72 items)`.
+- `make findings ARGS="validate"`: `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`
+- `npm run verify:links`: `Every checked link conforms.`
+- `make verify` on `f17bcee8` (tree `70668be2`), docs-only profile: passed, exit 0.
+
+## Review pass 2
+
+Reviewer B, Claude Code (claude-opus-5-5, effort high), session `5a0c0907-4313-477f-a00a-94241fca3a1e`, read-only at `2b058a2d`: 0 Critical, 0 High, 3 Medium, 6 Low, all fixed in `077a26ee`. Pass 1 missed M1, M3, L1, and L4. Every claim was checked against the files before the fix.
+
+- **M1 (docs).** The project's integration branch row is covered by the item 9a contract (`docs/contracts/control-plane-wire-contracts.md:61` at `10fc3bbe`) and the `RepositoryBindingInput` schema, which requires `integrationBranch`, and binds item 11. Item 11's scope note stays; it does not call the row open.
+- **M2 (stale-citation).** The table is pinned to `10fc3bbe`. Every citation of the table and of the design was reread there: only `docs/contracts/product-ports.md` moved, `:208` to `:211`, `:230` to `:233`, and `:271` to `:274`.
+- **M3 (spec-wording).** "Intent and council delivery gates" states that the council is not constituted and human approvals apply until OpenCode is admitted; the requirement is 491 characters.
+- **L1 to L6.** The G6 pilot scenario, the design's D2 and D6, ADR 0016 decision 1, the workspace row's base branch, the architecture's first integrations row, and this record, as `findings.jsonl` states.
+
+No pass 3 runs, under governance "Conditional third pass": pass 2 reported no Critical or High finding, and its fixes change only documentation, records, and the spec delta. The fixes are recorded as `fixed-unreviewed`.
+
+Checks after the fixes:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 72 passed, 0 failed (72 items)`.
+- `make findings ARGS="validate"`: `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`
+- `npm run verify:links`: `Every checked link conforms.`
+- An archive in a scratch copy of the tree: `+ 3` requirements in `delivery-planning`, then `Totals: 71 passed, 0 failed (71 items)`.
+- `make verify` on `d9dac478` (tree `1f38bfd9`), docs-only profile: passed, exit 0; `make record` wrote the generated part below from its log.
+
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the schedule intent and council gates change`, the working tree the checks ran on (tree `81ae2659` before this record was written into it):
+
+- `npm run openspec -- archive schedule-intent-and-council-gates --yes`: `delivery-planning` + 3 added; archived as `2026-10-28-schedule-intent-and-council-gates`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-schedule-intent-and-council-gates`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `10fc3bbe`): only this change's intended edits, `delivery-planning/spec.md` 37 insertions, the three added requirements and their seven scenarios.
+- Moved change's files: `findings.jsonl` 11 lines, `passes.jsonl` 2 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s). `npm run verify:links`: passed.
+- `make verify` on tree `81ae2659`: passed, profile docs-only; no test totals, because the profile skips the test suites; 0 breaking changes of each contract document against the merge base `10fc3bbe`. `make record CHANGE=schedule-intent-and-council-gates LOG=<log>` wrote "Generated checks" from its log, and `make record-check` matched it. The archive commit differs from that tree only in this record.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile docs-only, tree `81ae26599be5063529b67908343d6efe6f67feb7`; no test totals in the log; no coverage totals.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 71 passed, 0 failed (71 items)`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
+- Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: `openspec/specs/delivery-planning/spec.md | 37 ++++++++++++++++++++++++++++++++`, `1 file changed, 37 insertions(+)`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18294-e032-78a1-8c38-e7bb8a42d960` | 0 | 0 | 2 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `5a0c0907-4313-477f-a00a-94241fca3a1e` | 0 | 0 | 3 | 6 |
+<!-- make record: end -->
+
+## Remaining gates
+
+- Integration into dev by the coordinator (single pull request).
