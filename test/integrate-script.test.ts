@@ -82,7 +82,9 @@ save_body() {
 case "$1 $2" in
   "pr list") if [ -f "$GH_STATE" ]; then cat "$GH_STATE"; fi ;;
   "pr view") cat "$GH_STATE.body" ;;
-  "pr edit") save_body "$@" ;;
+  "pr edit")
+    if [ "\${FAKE_EDIT:-}" = fail ]; then echo "edit failed" >&2; exit 1; fi
+    save_body "$@" ;;
   "pr create")
     save_body "$@"
     printf 'OPEN\\t%s\\t%s\\n' "$(git rev-parse HEAD)" "${URL}" > "$GH_STATE"
@@ -263,6 +265,21 @@ test('a branch without its archived change is not integrated', async () => {
     const run = integrate(fixture, ['unarchived', 'title', 'body']);
     assert.equal(run.status, 5);
     assert.equal(run.stdout.trim(), 'NOT ARCHIVED unarchived');
+    assert.deepEqual(calls(fixture), []);
+  });
+});
+
+// Review pass 2 finding 1: the check and the change name share one pattern.
+test('a branch whose name only ends another archived change is not integrated', async () => {
+  await withFixture((fixture) => {
+    git(fixture.main, 'switch', '-q', '-c', 'foo', 'origin/dev');
+    write(join(fixture.main, 'openspec/changes/archive/2026-10-27-bar-foo/proposal.md'), 'archived\n');
+    commit(fixture.main, 'docs: archive the bar-foo change');
+    git(fixture.main, 'push', '-q', 'origin', 'foo');
+    git(fixture.main, 'switch', '-q', 'dev');
+    const run = integrate(fixture, ['foo', 'title', 'body']);
+    assert.equal(run.status, 5, run.stderr);
+    assert.equal(run.stdout.trim(), 'NOT ARCHIVED foo');
     assert.deepEqual(calls(fixture), []);
   });
 });
@@ -537,6 +554,21 @@ test('a resume with an open pull request appends its line to the body', async ()
     const edit = calls(fixture).join('\n');
     assert.ok(edit.includes(`gh pr edit ${URL} --body ${body}\ngh pr merge`), edit);
     assert.equal(readFileSync(join(fixture.root, 'gh-state.body'), 'utf8'), body);
+  });
+});
+
+// Review pass 2 finding 3: a resume merges only a body with its line.
+test('a resume whose body edit fails stops before the merge', async () => {
+  await withFixture((fixture) => {
+    const failed = integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_MERGE: 'fail' });
+    assert.equal(failed.status, 1);
+    rmSync(fixture.calls);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body'], { FAKE_EDIT: 'fail' });
+    assert.notEqual(resumed.status, 0);
+    const ghCalls = calls(fixture).filter((call) => call.startsWith('gh '));
+    assert.ok(ghCalls.at(-1)?.startsWith(`gh pr edit ${URL} --body `), ghCalls.join('\n'));
+    assert.equal(ghCalls.some((call) => call.startsWith('gh pr merge')), false);
+    assert.doesNotMatch(resumed.stdout, /LANDED/);
   });
 });
 

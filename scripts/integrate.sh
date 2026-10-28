@@ -119,13 +119,16 @@ const record = { tree, verify, profile, verifySeconds: Number(seconds), change, 
 console.log(JSON.stringify(record));
 '
 
+# The integration line of the merged tree $1.
+format_integration_line() {
+  local line="Integration: tree $1; verify $verify_outcome; profile $TASKELITH_VERIFY_PROFILE"
+  echo "$line; verify seconds $verify_seconds; change $change; branch $branch; started $started"
+}
+
 # Prints the integration line and appends it as JSON to the shared log; a
 # failed append only warns, so it never fails the integration.
 record_integration() {
-  local tree
-  tree="$(git rev-parse 'HEAD^{tree}')"
-  integration_line="Integration: tree $tree; verify $verify_outcome; profile $TASKELITH_VERIFY_PROFILE"
-  integration_line+="; verify seconds $verify_seconds; change $change; branch $branch; started $started"
+  local tree="$1"
   echo "$integration_line"
   if ! node -e "$INTEGRATION_JSON" "$tree" "$verify_outcome" "$TASKELITH_VERIFY_PROFILE" \
     "$verify_seconds" "$change" "$branch" "$started" 2>/dev/null >>"$integrations"; then
@@ -224,11 +227,12 @@ fi
 cd "$worktree"
 
 # The branch must end with its own archived change (protocol step 7).
-if [ -d "openspec/changes/$branch" ] || ! compgen -G "openspec/changes/archive/*-$branch" >/dev/null; then
+archived="openspec/changes/archive/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$branch"
+if [ -d "openspec/changes/$branch" ] || ! compgen -G "$archived" >/dev/null; then
   echo "NOT ARCHIVED $branch"
   exit 5
 fi
-change="$(compgen -G "openspec/changes/archive/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$branch" | tail -1)"
+change="$(compgen -G "$archived" | tail -1)"
 change="${change##*/}"
 
 # An earlier attempt whose pull request merged left HEAD in origin/dev; a
@@ -289,7 +293,9 @@ else
   fi
 fi
 verify_seconds=$((SECONDS - verify_started))
-record_integration
+merged_tree="$(git rev-parse 'HEAD^{tree}')"
+integration_line="$(format_integration_line "$merged_tree")"
+record_integration "$merged_tree"
 
 git push -q origin "HEAD:$branch"
 pull_request="$(existing_pull_request)"
