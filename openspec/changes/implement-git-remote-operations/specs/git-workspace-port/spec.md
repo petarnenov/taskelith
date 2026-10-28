@@ -12,11 +12,15 @@ The Git workspace adapter SHALL implement `readRemoteHead` and `push` with the p
 - **THEN** it fails with `read-only-workspace`, `credential-out-of-scope`, or `workspace-handed-off`, and the remote receives no request
 
 ### Requirement: Leased push outcome
-`push` SHALL fail with `remote-moved` when the remote head differs from the expected one, with `not-fast-forward` when the head does not descend from it through verified commits, then run exactly `taskBranchPushArguments` in the checkout; a refused push SHALL fail with `remote-moved` when the remote head then differs from the lease, else with `unavailable`.
+`push` SHALL fail with `remote-moved` when the remote head differs from the expected one, with `not-fast-forward` when the head does not descend from it through verified commits, then run exactly `taskBranchPushArguments` in the checkout; after a push process fails other than at its time limit, it SHALL read the remote head again and return the head when the remote holds it, fail with `remote-moved` when the remote differs from the lease, else with `unavailable`.
 
 #### Scenario: Remote moved between the read and the push
 - **WHEN** another party creates the task branch after the push read it as absent and before the push process reaches the remote
 - **THEN** the push fails with `remote-moved`, and the remote task branch stays at the other party's commit
+
+#### Scenario: Answer lost after the remote took the push
+- **WHEN** the remote updates the task branch to the head and the push process fails because the answer is lost
+- **THEN** the push returns the head
 
 #### Scenario: Forged parent in the history
 - **WHEN** a commit between the head and the expected remote head is forged in a pack to name the expected head as its parent
@@ -37,8 +41,8 @@ The adapter SHALL send the run credential's header only to the binding's remote 
 Every Git process of the adapter SHALL run in a process group of its own and SHALL be killed with its whole group by `SIGKILL` after a wall-clock limit of 10 minutes by default, set through `GitWorkspacesOptions`; a process that reaches the remote SHALL then fail its operation with `unavailable`, a local one with `internal`.
 
 #### Scenario: Stalled remote
-- **WHEN** the remote accepts a remote head read or a clone and never answers
-- **THEN** the operation fails with `unavailable` at the time limit, and no process of the Git process's group remains
+- **WHEN** the remote accepts a remote head read, a clone, or a push and never answers
+- **THEN** the operation fails with `unavailable` at the time limit, no process of the Git process's group remains, and a push runs no further Git process
 
 #### Scenario: Stalled local process
 - **WHEN** a Git process without a credential and a child of its own outlive the time limit
@@ -71,3 +75,22 @@ The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, 
 #### Scenario: Renamed suite case
 - **WHEN** a skipped case's name no longer names a case of the suite
 - **THEN** the adapter's tests fail
+
+### Requirement: Scrubbed Git output
+The adapter SHALL scrub every non-empty credential form, however short, the secret, the `Authorization` value, its parts after the scheme, and the base64 of each, from the standard output and standard error of a process that carries the credential and from every whole failure message and its details, keeping every other byte of standard output; a parser in the runner reads the raw output, and only its value leaves unscrubbed.
+
+#### Scenario: Header echoed on both streams
+- **WHEN** a Git process prints its header and the decoded secret on standard output and standard error
+- **THEN** both captured streams hold `<redacted>` and no credential form
+
+#### Scenario: Short secret
+- **WHEN** a credential's secret has three characters
+- **THEN** the scrubbed text holds neither the secret nor its base64
+
+#### Scenario: Short secret in the task branch ref
+- **WHEN** the read credential's secret is a short part of the task branch name
+- **THEN** `readRemoteHead` still returns the remote task branch head
+
+#### Scenario: Short secret in a failure message
+- **WHEN** a Git process that carries the credential fails and the secret is its exit code
+- **THEN** the failure message holds `<redacted>` in place of the exit code
