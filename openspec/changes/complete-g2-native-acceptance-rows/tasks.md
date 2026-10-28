@@ -22,8 +22,8 @@
 
 - [x] 4.1 Run strict validation of this change, `make findings ARGS="validate"`, and `make verify`; record `verification.md`
 - [x] 4.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`
-- [ ] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
-- [ ] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm
+- [x] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
+- [x] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm
 
 ## 5. Archive
 

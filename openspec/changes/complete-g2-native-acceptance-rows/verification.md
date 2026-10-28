@@ -117,4 +117,5 @@ Checks after the fixes:
 ## Independent review
 
 - Pass 1 (reviewer A): Codex `gpt-6.1-sol`, recorded by the coordinator in `passes.jsonl` and `findings.jsonl`: Critical 0, High 0, Medium 2, Low 1. Fixed in `de099e67` (finding 1), `f4044cd0` (finding 2), and `e6229c44` and `75aa2b99` (finding 3); see "Review pass 1 fixes".
-- Pass 2 (reviewer B), at `759dbc21`: in progress; the coordinator records its counts. Its fixes: "Review pass 2 fixes".
+- Pass 2 (reviewer B), at `759dbc21`: Claude Code `claude-opus-5-5` (high): Critical 0, High 0, Medium 1, Low 14, all fixed; see "Review pass 2 fixes" and `findings.jsonl`.
+- Pass 3 (reviewer A), at `bae620b2`: Codex `gpt-6.1-sol` confirmed the pass 2 fixes and found Low 3 only (a stale design summary of the partial launch environment, the re-run difference in `acceptance.md`, and this section). They were fixed without another review, as the process sets for a Low-only pass; the review is complete.
