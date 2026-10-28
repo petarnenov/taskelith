@@ -92,16 +92,17 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `6ac5a938dde138770fbe94c71a884b34474197da`; tests 3420, pass 3367, fail 0, skipped 53; all files 99.45% lines, 92.72% branches, 99.02% functions.
+- `make verify`: passed, profile full, tree `320481fcd29cd9c5f77326d5a162e08ba4e4d35d`; tests 3526, pass 3479, fail 0, skipped 47; all files 99.39% lines, 92.75% branches, 98.88% functions.
 - `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`: passed, `Change 'define-worker-messages-and-terminal-contracts' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 77 file(s); every pass summary file is valid: 57 file(s); every route file is valid: 13 file(s).`.
-- Spec diff against the merge base `7442b1bbd4f1` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 79 file(s); every pass summary file is valid: 59 file(s); every route file is valid: 15 file(s).`.
+- Spec diff against the merge base `5c5af9447e6c` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a182e0-3947-77e3-851c-7879eb0bfb88` | 0 | 3 | 4 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `b4e6196d-e292-42e3-a914-24fb27b8bca1` | 0 | 1 | 6 | 13 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a183c1-e959-78e1-a15f-4b519f9bc165` | 0 | 0 | 6 | 3 |
 <!-- make record: end -->
 
 ## Independent review
@@ -229,6 +230,11 @@ The pass 2 fixes change contracts, the agent harness port, and tests, not only r
 | `make contract-breaking-changes BASE=7442b1bb`, then `make contract-compatibility` | 110 for `execution.asyncapi.json`, 0 for the others, `terminal.asyncapi.json` absent at the base; `Contract documents have no undeclared breaking change.` |
 | `npm run openspec -- validate --all --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | 72 passed, 0 failed; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 77 file(s); every pass summary file is valid: 57 file(s); every route file is valid: 13 file(s).` |
+
+## Merge of dev 5c5af944
+
+- `63e48faf` merges `dev` `5c5af944` (#401 `improve-jev-route-request` and #402 `implement-workspace-handoff-and-reclaim`) into the branch after the pass 3 fixes and their record `3f2fd5f0`; the merge base was `7442b1bb`. Git merged without conflict, and `dev` changed no contract document, control-plane source, or contract page, so `make contract-compatibility` against the new merge base still finds no undeclared breaking change and the 0.9.0 entry stays correct.
+- `make verify` on `63e48faf`, clean tree (log `9d-verify-12.log` in the session scratchpad), one run, no rerun: passed, profile full, tree `320481fcd29cd9c5f77326d5a162e08ba4e4d35d`, 3526 tests, 3479 passed, 0 failed, 47 skipped; generated part above.
 
 ## Remaining gates
 
