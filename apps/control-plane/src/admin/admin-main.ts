@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { readStandardInputLine } from './secret-input.js';
+import { readConfirmedSecret } from './secret-input.js';
 import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostConstraints, HostPlatform, WorkerAdmissionSnapshot } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -29,8 +29,8 @@ export interface AdminIo {
   readonly platform: NodeJS.Platform;
   readonly ownerUid: number;
   write(line: string): void;
-  // One line of standard input, read without echo on a terminal; only
-  // set-password needs it. A cancelled input is a failure.
+  // A new secret, unechoed and typed twice on a terminal; only set-password
+  // needs it. A cancelled or mistyped input is a failure.
   readSecret?(prompt: string): Promise<Result<string>>;
 }
 
@@ -198,6 +198,6 @@ if (import.meta.main) {
     platform: process.platform,
     ownerUid: process.getuid?.() ?? 0,
     write: (line) => process.stdout.write(`${line}\n`),
-    readSecret: (prompt) => readStandardInputLine(prompt),
+    readSecret: (prompt) => readConfirmedSecret(prompt, 'repeat the new password: '),
   });
 }

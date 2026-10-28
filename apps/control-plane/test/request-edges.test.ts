@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
-import { SESSION_COOKIE, readStandardInputLine, requestLogFields, sessionCookie } from '@taskelith/control-plane';
+import { SESSION_COOKIE, readConfirmedSecret, readStandardInputLine, requestLogFields, sessionCookie } from '@taskelith/control-plane';
 import { failure } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 
@@ -83,4 +83,53 @@ test('Ctrl-C on a terminal cancels the input and restores the terminal mode', as
   const typed = readStandardInputLine('Password: ', terminal as never);
   terminal.write('a partial password\u0003');
   assert.deepEqual([failed(await typed).details.reason, terminal.modes], ['cancelled', [true, false]]);
+});
+
+async function typedOnTerminal(keys: string): Promise<ReturnType<typeof readStandardInputLine>> {
+  const terminal = input(true);
+  const typed = readStandardInputLine('Password: ', terminal as never);
+  terminal.write(keys);
+  return typed;
+}
+
+test('on a terminal, backspace and delete drop the last character and Ctrl-U clears the line', async () => {
+  assert.equal(value(await typedOnTerminal('secrex\u007ft\r')), 'secret');
+  assert.equal(value(await typedOnTerminal('secré\bet\r')), 'secret');
+  assert.equal(value(await typedOnTerminal('\u{1F511}\u007fkey\r')), 'key', 'a whole code point goes');
+  assert.equal(value(await typedOnTerminal('typo\u0015secret\r')), 'secret');
+  assert.equal(value(await typedOnTerminal('\u007fsecret\r')), 'secret', 'nothing to delete');
+});
+
+test('on a terminal, Ctrl-D ends only an empty line, and other controls refuse the input', async () => {
+  assert.equal(value(await typedOnTerminal('sec\u0004ret\r')), 'secret', 'Ctrl-D mid-line is ignored');
+  assert.equal(failed(await typedOnTerminal('\u0004')).details.reason, 'cancelled');
+  for (const keys of ['left\u001b[Dkey\r', 'tab\tbed\r', 'nul\u0000\r']) {
+    assert.equal(failed(await typedOnTerminal(keys)).details.reason, 'control-character', JSON.stringify(keys));
+  }
+});
+
+// A terminal that types the next line each time raw mode starts.
+function typist(lines: string[]) {
+  const terminal = input(true);
+  return Object.assign(terminal, {
+    setRawMode: (mode: boolean) => {
+      terminal.modes.push(mode);
+      if (mode) terminal.write(lines.shift()!);
+    },
+  });
+}
+
+test('a new secret on a terminal is typed twice and both entries must match', async () => {
+  const terminal = typist(['secret\r', 'secret\r']);
+  assert.equal(value(await readConfirmedSecret('Password: ', 'Again: ', terminal as never)), 'secret');
+  assert.deepEqual(terminal.modes, [true, false, true, false]);
+  const mistyped = typist(['secret\r', 'secrte\r']);
+  assert.equal(failed(await readConfirmedSecret('Password: ', 'Again: ', mistyped as never)).details.reason, 'entries-differ');
+  const cancelled = typist(['\u0003']);
+  assert.equal(failed(await readConfirmedSecret('Password: ', 'Again: ', cancelled as never)).details.reason, 'cancelled');
+  assert.deepEqual(cancelled.modes, [true, false], 'a cancelled first entry asks no second');
+  const piped = input(false);
+  const once = readConfirmedSecret('Password: ', 'Again: ', piped as never);
+  piped.write('secret\n');
+  assert.equal(value(await once), 'secret', 'piped input is read once');
 });

@@ -8,7 +8,7 @@ export {
   type EnrollmentBundle,
   type Initialization,
 } from './admin/administration.js';
-export { readStandardInputLine } from './admin/secret-input.js';
+export { readConfirmedSecret, readStandardInputLine } from './admin/secret-input.js';
 export {
   INSTALLATION_CA_FILE,
   SERVER_CERTIFICATES,
