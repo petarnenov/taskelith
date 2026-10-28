@@ -2,20 +2,20 @@ import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import { parseRecoveryEpoch } from '@taskelith/execution';
 import { parseInstallationId, parseWorkerId, type Enrollment, type EnrollmentClient, type EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
+import { pinnedTarget, postJson, statusFailure, type ControlPlaneEndpoint, type HttpTarget } from './control-plane-http.js';
 import { sanitizeFailureText } from './failure-cause.js';
 
-// `enrollWorker` over HTTP. An `unavailable` answer may still have used the
-// token, so a retry can fail with `token-invalid`.
+// `enrollWorker` over TLS pinned to the checked installation CA. An
+// `unavailable` answer may have used the token; a retry gets `token-invalid`.
 export class HttpEnrollmentClient implements EnrollmentClient {
-  readonly #endpoint: ControlPlaneEndpoint;
+  readonly #target: HttpTarget;
 
   constructor(endpoint: ControlPlaneEndpoint) {
-    this.#endpoint = endpoint;
+    this.#target = pinnedTarget(endpoint);
   }
 
   async enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>> {
-    const answered = await postJson(this.#endpoint, 'workers/enrollments', tokenSecret, wireRequest(request));
+    const answered = await postJson(this.#target, 'workers/enrollments', tokenSecret, wireRequest(request));
     if (!answered.ok) return answered;
     if (answered.value.status !== 201) return err(statusFailure('enrollWorker', answered.value));
     const { body } = answered.value;

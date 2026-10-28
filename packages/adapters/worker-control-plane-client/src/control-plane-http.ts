@@ -1,12 +1,43 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import { Agent, type Dispatcher } from 'undici';
 import { describeFailureCause, sanitizeFailureText } from './failure-cause.js';
 
 // Where the control-plane API is and how long one call may take.
-export interface ControlPlaneEndpoint {
+export interface ControlPlaneAddress {
   // The API's base, such as `https://control-plane:8443/`.
   readonly baseUrl: URL;
   readonly timeoutMilliseconds: number;
-  readonly fetch?: typeof fetch;
+  readonly fetch?: HttpFetch;
+}
+
+// The part of fetch the client uses; tests stand in.
+export type HttpFetch = (url: URL, init: HttpInit) => Promise<{ readonly status: number; json(): Promise<unknown> }>;
+
+export interface HttpInit {
+  readonly method: 'GET' | 'POST';
+  readonly headers: Record<string, string>;
+  readonly body?: string | FormData;
+  readonly signal: AbortSignal;
+  // Its TLS: the pinned CA, or none verified for the CA read.
+  readonly dispatcher: Dispatcher;
+}
+
+// An address with the pinned installation CA in PEM, the only CA that a
+// call trusts (installation contract section 10).
+export interface ControlPlaneEndpoint extends ControlPlaneAddress {
+  readonly installationCa: string;
+}
+
+// An address with the TLS that its calls use.
+export interface HttpTarget extends ControlPlaneAddress {
+  readonly dispatcher: Dispatcher;
+}
+
+// With a CA, Node's TLS trusts only it: neither the system roots nor
+// NODE_EXTRA_CA_CERTS, so a certificate they issued is refused.
+export function pinnedTarget(endpoint: ControlPlaneEndpoint): HttpTarget {
+  const { installationCa, ...address } = endpoint;
+  return { ...address, dispatcher: new Agent({ connect: { ca: installationCa } }) };
 }
 
 export interface HttpAnswer {
@@ -16,23 +47,30 @@ export interface HttpAnswer {
 
 // One JSON POST with a bearer. A timeout or lost connection reached no
 // known decision, so it is `unavailable`.
-export function postJson(endpoint: ControlPlaneEndpoint, path: string, bearer: string, body: unknown): Promise<Result<HttpAnswer>> {
-  return post(endpoint, path, { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, JSON.stringify(body));
+export function postJson(target: HttpTarget, path: string, bearer: string, body: unknown): Promise<Result<HttpAnswer>> {
+  return send(target, path, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 }
 
 // One `multipart/form-data` POST with a bearer; fetch sets the boundary.
-export function postForm(endpoint: ControlPlaneEndpoint, path: string, bearer: string, form: FormData): Promise<Result<HttpAnswer>> {
-  return post(endpoint, path, { authorization: `Bearer ${bearer}` }, form);
+export function postForm(target: HttpTarget, path: string, bearer: string, form: FormData): Promise<Result<HttpAnswer>> {
+  return send(target, path, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
 }
 
-async function post(endpoint: ControlPlaneEndpoint, path: string, headers: Record<string, string>, body: string | FormData): Promise<Result<HttpAnswer>> {
-  const send = endpoint.fetch ?? fetch;
+// One GET without a credential.
+export function getJson(target: HttpTarget, path: string): Promise<Result<HttpAnswer>> {
+  return send(target, path, { method: 'GET', headers: {} });
+}
+
+type Exchange = Pick<HttpInit, 'method' | 'headers' | 'body'>;
+
+// Node's fetch takes an undici dispatcher, which its types do not declare.
+const nodeFetch: HttpFetch = (url, init) => fetch(url, init as RequestInit);
+
+async function send(target: HttpTarget, path: string, exchange: Exchange): Promise<Result<HttpAnswer>> {
+  const fetchWith = target.fetch ?? nodeFetch;
   try {
-    const response = await send(new URL(path, withTrailingSlash(endpoint.baseUrl)), {
-      method: 'POST',
-      headers,
-      body,
-      signal: AbortSignal.timeout(endpoint.timeoutMilliseconds),
+    const response = await fetchWith(new URL(path, withTrailingSlash(target.baseUrl)), {
+      ...exchange, signal: AbortSignal.timeout(target.timeoutMilliseconds), dispatcher: target.dispatcher,
     });
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {

@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.package.json",
   "references": [
+    { "path": "../../packages/adapters/certificates" },
     { "path": "../../packages/adapters/data-root" },
     { "path": "../../packages/adapters/nats" },
     { "path": "../../packages/adapters/node-observability" },
