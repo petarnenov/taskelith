@@ -25,11 +25,15 @@ On the clean committed tree of `b350f8ce` (tree `b70e5885`), profile full: passe
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `c25a668d88b5f72920c0c96d00e711c964364d55`; tests 3370, pass 3355, fail 0, skipped 15; all files 99.45% lines, 92.62% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `15e222cccca2958a2c69b04fe90505c42f3c1110`; tests 3370, pass 3355, fail 0, skipped 15; all files 99.45% lines, 92.63% branches, 99.07% functions.
 - `npm run openspec -- validate drain-tar-pipes-in-installation-script --strict`: passed, `Change 'drain-tar-pipes-in-installation-script' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 77 file(s); every pass summary file is valid: 57 file(s); every route file is valid: 13 file(s).`.
 - Spec diff against the merge base `7442b1bbd4f1` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a183c1-6e45-7fe2-8a95-1004b07050ad` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Review sequence
