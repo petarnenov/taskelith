@@ -102,12 +102,28 @@ test('the linux entry runs the Linux crash windows on a Linux host', () => {
   assert.match(run.stdout, /^prove connectivity acceptance-duplicate-delivery harness-composition make --no-print-directory verify-linux-crash-windows PATTERN=redelivered$/m);
 });
 
+test('the linux entry runs the G2 races and partitions through the cgroup supervisor on a Linux host', () => {
+  const run = linuxEntry('Linux');
+  assert.equal(run.status, 0, run.stderr);
+  const races = 'FILES=test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts';
+  assert.match(run.stdout, new RegExp(`^prove cancellation acceptance-cancellation-races harness-composition make --no-print-directory verify-linux-g2-scenarios ${races}$`, 'm'));
+  assert.match(run.stdout, /^prove connectivity acceptance-partition harness-composition make --no-print-directory verify-linux-g2-scenarios FILES=test\/g2-partition.test.ts$/m);
+});
+
+test('the linux entry reports the G2 races and partitions not applicable off Linux', () => {
+  const run = linuxEntry('Darwin');
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.stdout, /verify-linux-g2-scenarios/);
+  assert.match(run.stderr, /cancellation: acceptance-cancellation-races is not applicable on Darwin: make verify-linux-g2-scenarios needs a Linux Docker host/);
+  assert.match(run.stderr, /connectivity: acceptance-partition is not applicable on Darwin: make verify-linux-g2-scenarios needs a Linux Docker host/);
+});
+
 test('the linux entry reports the Linux crash windows not applicable off Linux', () => {
   const run = linuxEntry('Darwin', `linux_entry
 echo "not applicable:[$not_applicable_proofs]"`);
   assert.equal(run.status, 0, run.stderr);
   assert.doesNotMatch(run.stdout, /verify-linux-crash-windows/);
-  assert.match(run.stdout, /^not applicable:\[ macos-26-arm64\/acceptance-crash-windows macos-26-arm64\/acceptance-duplicate-delivery\]$/m);
+  assert.match(run.stdout, /^not applicable:\[ macos-26-arm64\/acceptance-crash-windows macos-26-arm64\/acceptance-duplicate-delivery macos-26-arm64\/acceptance-cancellation-races macos-26-arm64\/acceptance-partition\]$/m);
   assert.match(run.stderr, /process-ownership: acceptance-crash-windows is not applicable on Darwin: make verify-linux-crash-windows needs a Linux Docker host/);
   assert.match(run.stderr, /connectivity: acceptance-duplicate-delivery is not applicable on Darwin/);
 });
@@ -122,7 +138,7 @@ test('a run names the proofs that were not applicable in its last line', () => {
 make_command=true
 ENTRIES=linux main results.jsonl`);
   assert.equal(run.status, 0, run.stderr);
-  assert.match(run.stderr, /every proof passed; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery; see /);
+  assert.match(run.stderr, /every proof passed; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery linux-ubuntu-24.04-arm64\/acceptance-cancellation-races linux-ubuntu-24.04-arm64\/acceptance-partition; see /);
 });
 
 test('a failed run names its failed and its not-applicable proofs', () => {
@@ -136,5 +152,5 @@ prove() { failed_proofs="$failed_proofs $entry/$2"; }
 make_command=true
 ENTRIES=linux main results.jsonl`);
   assert.equal(run.status, 1);
-  assert.match(run.stderr, /failed proofs: linux-ubuntu-24.04-arm64\/acceptance-worker-lifecycle .*; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery; see /);
+  assert.match(run.stderr, /failed proofs: linux-ubuntu-24.04-arm64\/acceptance-worker-lifecycle .*; not applicable on Darwin: linux-ubuntu-24.04-arm64\/acceptance-crash-windows linux-ubuntu-24.04-arm64\/acceptance-duplicate-delivery linux-ubuntu-24.04-arm64\/acceptance-cancellation-races linux-ubuntu-24.04-arm64\/acceptance-partition; see /);
 });

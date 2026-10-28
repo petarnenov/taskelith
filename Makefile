@@ -120,14 +120,14 @@ verify-linux-crash-windows:
 		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
 
 # Opt-in G2 races, stale generations, and partitions through the Linux
-# cgroup supervisor (privileged, host network); PATTERN selects by name.
+# cgroup supervisor (privileged, host network); FILES and PATTERN select.
 G2_SCENARIO_FILES := test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts test/g2-partition.test.ts
 verify-linux-g2-scenarios:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
 	@$(MAKE) --no-print-directory linux-test-image
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
-		$(G2_SCENARIO_FILES)
+		$(or $(FILES),$(G2_SCENARIO_FILES))
 
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.
