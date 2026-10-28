@@ -112,7 +112,7 @@ Each observation is an `ObservationMetadata` envelope with its attempt and owner
 | Generation started | `session.generation.started` | `startGeneration` | The session, the generation, and the fact |
 | Generation ended | `session.generation.ended` | `endGeneration` | The session, the generation, and the fact |
 | Turn delivered | `session.turn.delivered` | `deliverTurn` | The turn, the generation, and the fact; also on a refusal that names the turn as the running one (section 3) |
-| Turn not delivered | `session.turn.not-delivered` | None; the turn stays queued | The command's `commandId` |
+| Turn not delivered | `session.turn.not-delivered` | By reason (section 3): `turn-invalid` through `recordTurnRefused`, the turn final `refused` and the queue moving on; `port-refused`, whose generation the host stopped, and `generation-not-running` none, the turn queued for the next generation | The command's `commandId` |
 | Turn acceptance unknown | `session.turn.acceptance-unknown` | `recordTurnAcceptanceUnknown` | The command's `commandId` |
 | Turn ended | `session.turn.ended` | `recordTurnOutcome` | The turn and the fact |
 | Request recorded | `session.request.recorded` | `recordRequest` | The session and the request key |
