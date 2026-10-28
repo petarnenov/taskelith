@@ -12,9 +12,10 @@ G3 item 10 (`implement-operator-login-and-roles`, plan row 10, size M-L) closes 
 - The control plane serves `readSession`, `logIn`, and `logOut` on the browser endpoint, accepts the session cookie with the CSRF header or the operator bearer as each operation declares, checks the role after authentication and CSRF and before reading the body, and logs only an allowlist of request parts.
 - The installation's operator credential authenticates one principal, the first `installation-owner`, created once from the G2 bootstrap credential and audited.
 - `readEvidence` and `downloadEvidence` are authorized per project by the evidence record's project.
-- Administrative commands for the owner principal's password, subject to the coordinator questions of [design](design.md).
+- Administrative commands that create principals, set a principal's password, and assign and remove project roles, as the coordinator decided ([design](design.md) "Coordinator decisions").
+- [Control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 2 names `details.requiredRole` of a role denial.
 
-Excluded: OpenID Connect, project setup and the member handlers (item 11), the SPA (item 28), the UI event stream (item 14), and the evidence retirement entry, whose wire operation belongs to sub-changes 9b to 9d and is built only after it lands in `dev`. No contract document changes.
+Excluded: OpenID Connect, project setup and the member handlers (item 11), the SPA (item 28), the UI event stream (item 14), and the evidence retirement entry, whose wire operation belongs to sub-changes 9b to 9d and is built only after it lands in `dev`. No contract document changes. The HTTP operations for account self-service, the browser first run, and the caller's project roles belong to the follow-up contract change `add-account-self-service-operations`.
 
 ## Capabilities
 

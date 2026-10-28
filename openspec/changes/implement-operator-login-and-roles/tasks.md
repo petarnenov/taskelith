@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create the change with empty `findings.jsonl` and `passes.jsonl`, save the brief's checklist as `checklist.json`, and summarize it in `design.md`
 - [x] 1.2 Write the design with the coordinator questions
-- [ ] 1.3 Apply the coordinator's answers to the design and the spec deltas
+- [x] 1.3 Apply the coordinator's answers to the design and the spec deltas
 
 ## 2. Access module
 

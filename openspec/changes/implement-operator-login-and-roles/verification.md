@@ -33,6 +33,8 @@ Not started.
 
 ## Remaining gates
 
-- The coordinator's answers to the design's coordinator questions.
+- The temporary G2 bridge, under which an `installation-owner` passes the project requirements of the G2 operator operations, is retired by item 11 ([design](design.md) decision 6, Q5).
+- Follow-up contract change `add-account-self-service-operations`, planned by the coordinator before item 28: account self-service HTTP operations, the browser first run, and the caller's project roles (Q1, Q2, Q12).
+- Change 10b: the evidence retirement entry once its 9b to 9d operation is in `dev` (Q13).
 - Implementation, `make verify`, and review passes.
 - Integration into dev by the coordinator (single pull request)

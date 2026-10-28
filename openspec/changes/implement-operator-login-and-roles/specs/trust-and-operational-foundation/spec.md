@@ -18,16 +18,24 @@ The principal that the operator credential authenticates SHALL be created exactl
 - **WHEN** two control-plane starts create the owner principal at once
 - **THEN** exactly one principal and one audit event exist
 
+#### Scenario: Repeated bootstrap
+- **WHEN** the owner principal already exists and the control plane starts again
+- **THEN** no principal and no audit event is added
+
 #### Scenario: Credential reset
 - **WHEN** the operator credential is reset
 - **THEN** the new bearer authenticates the same principal
 
 ### Requirement: Password storage
-Passwords SHALL be stored only as argon2id PHC strings with at least m=19456 KiB, t=2, and p=1, verified in constant time, and rehashed at login when stored parameters are weaker. The control plane SHALL fail its start when `crypto.argon2` is missing.
+Passwords SHALL be normalized to Unicode NFC before the length check and before hashing, stored only as argon2id PHC strings with at least m=19456 KiB, t=2, and p=1, verified in constant time, and rehashed at login when stored parameters are weaker. An unknown login name SHALL cost the same hash computation as a wrong password. The control plane SHALL fail its start when `crypto.argon2` is missing.
 
 #### Scenario: Known vector
 - **WHEN** the hasher computes the RFC 9106 section 5.3 argon2id test vector
 - **THEN** the tag equals the published one
+
+#### Scenario: Normalization
+- **WHEN** a password is set in one Unicode normalization form and presented at login in another
+- **THEN** the login succeeds
 
 #### Scenario: Weaker stored parameters
 - **WHEN** a principal logs in with a hash of weaker parameters
