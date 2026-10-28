@@ -17,7 +17,7 @@ Before this change the scenario files skipped outside Linux (`test/g2-scenarios/
 ## Risks
 
 - A macOS run of `make native-acceptance` takes about five minutes longer.
-- The guard covers races c and h only; the other scenarios rely on the same host composition.
+- The guard covers races c, g, and h only; the other scenarios rely on the same host composition.
 - Race g relies on the worker's liveness check finding the killed supervisor; its waits are 30 s and 60 s, wide for the loaded iMac.
 
 ## Review checklist
