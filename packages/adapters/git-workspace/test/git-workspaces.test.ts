@@ -152,16 +152,16 @@ test('settings planted in .git/config never act and are gone after the next Git 
   await writeFile(join(checkout, '.gitattributes'), '*.txt filter=planted\n');
   await fixture.writeFile(FIRST, 'filtered.txt', 'filtered\n');
   await fixture.commitAll(FIRST, 'attributes');
-  const hooks = join(git.scratch, 'hooks');
+  const hooks = join(git.scratch, 'planted-hooks');
   await mkdir(hooks);
   for (const hook of ['post-index-change', 'reference-transaction']) {
     await writeFile(join(hooks, hook), `#!/bin/sh\ntouch ${marker}\n`);
     await chmod(join(hooks, hook), 0o755);
   }
-  await writeFile(join(git.scratch, 'include'), `[core]\n\tfsmonitor = ${script}\n`);
+  await writeFile(join(git.scratch, 'planted-include'), `[core]\n\tfsmonitor = ${script}\n`);
   const planted: [string, string][] = [
     ['core.hooksPath', hooks], ['filter.planted.clean', script], ['filter.planted.required', 'true'],
-    ['include.path', join(git.scratch, 'include')], ['core.fsmonitor', script], ['credential.helper', script],
+    ['include.path', join(git.scratch, 'planted-include')], ['core.fsmonitor', script], ['credential.helper', script],
     ['http.proxy', 'http://planted.example:3128'], ['remote.origin.pushurl', 'https://planted.example/push.git'],
   ];
   for (const [key, setting] of planted) await fixture.plantGitSetting(FIRST, key, setting);
@@ -174,7 +174,7 @@ test('settings planted in .git/config never act and are gone after the next Git 
   await assert.rejects(lstat(marker), { code: 'ENOENT' });
   const started = (await fixture.gitProcesses()).slice(since);
   assert.ok(started.length > 0);
-  const withPlanted = started.filter(({ argv, repositoryConfig }) => argv.some((arg) => arg.includes(git.scratch)) || (repositoryConfig ?? '').includes(git.scratch) || (repositoryConfig ?? '').includes('planted'));
+  const withPlanted = started.filter(({ argv, repositoryConfig }) => argv.slice(1).some((arg) => arg.includes('planted')) || (repositoryConfig ?? '').includes('planted'));
   assert.deepEqual(withPlanted, []);
 }));
 

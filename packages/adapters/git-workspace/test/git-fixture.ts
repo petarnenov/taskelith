@@ -74,6 +74,8 @@ export function runProcess(command: string, args: readonly string[], options: { 
     child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
     child.on('error', fail);
     child.on('close', (code) => done({ code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr).toString('utf8') }));
+    // A process that exits before reading its input closes the pipe early.
+    child.stdin.on('error', () => {});
     child.stdin.end(options.input ?? new Uint8Array());
   });
 }
