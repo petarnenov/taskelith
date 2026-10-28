@@ -123,12 +123,14 @@ test('the rewrite replaces planted settings and never writes through a link', as
   assert.deepEqual((await readdir(join(checkout, '.git'))).filter((entry) => entry.startsWith('config')), ['config']);
 });
 
-test('the rewritten configuration is readable by the execution group, as the harness needs', async () => {
-  const previous = process.umask(0o007);
-  try {
-    await writeRepositoryConfig(checkout, 'sha1');
-  } finally {
-    process.umask(previous);
-  }
-  assert.equal((await lstat(join(checkout, '.git', 'config'))).mode & 0o777, 0o660);
-});
+for (const umask of [0o007, 0o022]) {
+  test(`the rewritten configuration is readable by the execution group under umask ${umask.toString(8).padStart(4, '0')}`, async () => {
+    const previous = process.umask(umask);
+    try {
+      await writeRepositoryConfig(checkout, 'sha1');
+    } finally {
+      process.umask(previous);
+    }
+    assert.equal((await lstat(join(checkout, '.git', 'config'))).mode & 0o777, 0o660);
+  });
+}

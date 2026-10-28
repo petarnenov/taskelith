@@ -16,7 +16,7 @@ export function repositoryConfigText(format: ObjectFormat): string {
 }
 
 // A new file, created exclusively without following a link, renamed over
-// `.git/config`; the group may read it, as the harness's Git must.
+// `.git/config`; whatever the umask, the group reads it, as Git must.
 export async function writeRepositoryConfig(checkout: string, format: ObjectFormat): Promise<void> {
   const gitDirectory = join(checkout, '.git');
   const temporary = join(gitDirectory, `config.taskelith-${randomBytes(8).toString('hex')}`);
@@ -24,6 +24,7 @@ export async function writeRepositoryConfig(checkout: string, format: ObjectForm
   const handle = await open(temporary, flags, CONFIG_MODE);
   try {
     await handle.writeFile(repositoryConfigText(format));
+    await handle.chmod(CONFIG_MODE);
   } finally {
     await handle.close();
   }
