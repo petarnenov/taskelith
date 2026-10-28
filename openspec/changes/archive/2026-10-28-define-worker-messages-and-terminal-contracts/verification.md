@@ -236,6 +236,18 @@ The pass 2 fixes change contracts, the agent harness port, and tests, not only r
 - `63e48faf` merges `dev` `5c5af944` (#401 `improve-jev-route-request` and #402 `implement-workspace-handoff-and-reclaim`) into the branch after the pass 3 fixes and their record `3f2fd5f0`; the merge base was `7442b1bb`. Git merged without conflict, and `dev` changed no contract document, control-plane source, or contract page, so `make contract-compatibility` against the new merge base still finds no undeclared breaking change and the 0.9.0 entry stays correct.
 - `make verify` on `63e48faf`, clean tree (log `9d-verify-12.log` in the session scratchpad), one run, no rerun: passed, profile full, tree `320481fcd29cd9c5f77326d5a162e08ba4e4d35d`, 3526 tests, 3479 passed, 0 failed, 47 skipped; generated part above.
 
+## Archive
+
+Checked state: the tree of the archive commit, the working tree that these checks ran on after `npm run openspec -- archive define-worker-messages-and-terminal-contracts --yes` on `6f25951a`, every task of `tasks.md` ticked. A scratch copy of `6f25951a` (`git archive` with a `node_modules` link) archived and validated strictly first, 71 passed.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-28-define-worker-messages-and-terminal-contracts` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `5c5af944`) | Only this change's deltas: `agent-harness-port`, `control-plane-wire-contracts`, `execution-wire-contracts`, `scm-port`, and `session-turn-model`, 317 insertions and 6 deletions, the six modified requirements replaced by their delta text |
+| `findings.jsonl` and `passes.jsonl` in the moved change; `make findings ARGS="validate"` | Both present; `Every findings file is valid: 79 file(s); every pass summary file is valid: 59 file(s); every route file is valid: 15 file(s).` |
+| `make verify` on the archive working tree (log `9d-verify-13-archive.log`), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3526 tests, 3479 passed, 0 failed, 47 skipped; all files 99.39% lines, 92.74% branches, 98.85% functions |
+
 ## Remaining gates
 
 - The architect's check of the nine unreviewed pass 3 fixes before integration.
