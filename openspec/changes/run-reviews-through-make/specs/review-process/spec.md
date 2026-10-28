@@ -9,11 +9,11 @@
 
 #### Scenario: Unknown key
 - **WHEN** `REVIEWER` is no key of the table
-- **THEN** the command lists the keys, exits 2, and runs no reviewer
+- **THEN** `scripts/review-run.ts` lists the keys, exits 2, and runs no reviewer
 
 #### Scenario: Failed attempt
 - **WHEN** the reviewer exits non-zero, reports no session ID, or reports another model
-- **THEN** the command exits 4 and writes no pass line
+- **THEN** `scripts/review-run.ts` exits 4 and writes no pass line
 
 #### Scenario: Pass line
 - **WHEN** a pass runs to a report
@@ -24,11 +24,11 @@ Before pass 1, when the change's `route.json` is missing or was made for another
 
 #### Scenario: No stamp
 - **WHEN** pass 1 starts with a missing or stale `route.json` and no stamp of the tree
-- **THEN** the command exits 1, routes nothing, and runs no reviewer
+- **THEN** `scripts/review-run.ts` exits 1, routes nothing, and runs no reviewer
 
 #### Scenario: Stamped tree
 - **WHEN** pass 1 starts with a missing `route.json` on a stamped clean tree
-- **THEN** the command writes `route.json`, exits 3, and runs no reviewer
+- **THEN** `scripts/review-run.ts` writes `route.json`, exits 3, and runs no reviewer
 
 ### Requirement: Reviewer environment
 `make review` SHALL start the reviewer with no inherited environment except `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`, and the variables that the reviewer's row declares, so that no secret reaches a reviewer.
