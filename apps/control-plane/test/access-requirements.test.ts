@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { OWNER_ONLY, projectRead, projectRequirement } from '@taskelith/access';
+import { checkNewPassword, OWNER_ONLY, parseLoginName, PASSWORD_POLICY, projectRead, projectRequirement } from '@taskelith/access';
+import { checkHttpSchema } from '@taskelith/contracts';
+import { value } from '@taskelith/testing';
 import { ACCESS_REQUIREMENTS, ROUTES, requirementBeforeBody, ruleOf } from '@taskelith/control-plane';
 
 type Operation = { operationId: string; security?: Array<Record<string, string[]>>; parameters?: Array<{ in?: string; name?: string }> };
@@ -98,4 +100,16 @@ test('a path-project requirement names the path project, and a resource-project 
   assert.deepEqual(requirementBeforeBody('submitTurn', ['alpha', 's-1']), projectRequirement('alpha', 'project-operator'));
   assert.equal(requirementBeforeBody('readEvidence', ['e-1']), undefined);
   assert.equal(requirementBeforeBody('logIn', []), undefined);
+});
+
+test('the password policy maximum is Password.maxLength, and a password it sets passes the login schema', () => {
+  const document = JSON.parse(readFileSync(new URL('../../../packages/contracts/documents/control-plane.openapi.json', import.meta.url), 'utf8'));
+  assert.equal(PASSWORD_POLICY.maximumCodePoints, document.components.schemas.Password.maxLength);
+  const name = value(parseLoginName('alice'));
+  for (const password of ['\u00E9'.repeat(512), '\u{1F600}'.repeat(1024)]) {
+    const set = value(checkNewPassword(password, name));
+    for (const spelling of [set, set.normalize('NFD')]) {
+      assert.ok(checkHttpSchema('LoginRequest', { loginName: 'alice', password: spelling }).ok, `${[...spelling].length} code points`);
+    }
+  }
 });
