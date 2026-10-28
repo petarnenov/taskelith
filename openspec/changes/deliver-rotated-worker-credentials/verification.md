@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. Review passes 1 and 2 ran and their five and eleven findings are fixed (section "Review"); pass 3 is required and pending.
+Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. Review passes 1, 2, and 3 ran and their findings are fixed (section "Review"); the fixes of pass 3 are unreviewed. After the second merge of `dev`, reviewer A reviewed the reconciliation and confirmed its Medium fix (section "Merge of dev").
 
 ## Scope and source
 
@@ -91,7 +91,17 @@ The M1 fail-before run deleted the line `renewWorkerCredentials: NONE, confirmWo
 | L1 Low, `specs/installation-enrollment/spec.md:97` of this change (capability `installation-enrollment`): "Every audit event SHALL name its subject", though #398's access audit events in `access_audit_events` carry a principal, a project, and a role, not a subject | "Credential audit events" requires the subject of every credential event in `audit_events` and says that access audit events have their own table and model | `19b0c152` | spec only | none |
 
 - **Checks of the fixes.** `npm run openspec -- validate deliver-rotated-worker-credentials --strict` passes. In a scratch copy of the worktree, `npm run openspec -- archive deliver-rotated-worker-credentials --yes` applied 11 added and 6 modified requirements, and `npm run openspec -- validate --all --strict` then passed 71 of 71; both changed requirement texts stay under 500 characters (492 and 486). `make findings ARGS="validate"` passes. `make verify` on the clean tree is in "Generated checks" below.
-- **Next.** Reviewer A confirms the M1 fix in a short targeted check; L1 is Low and stays `fixed-unreviewed`.
+- **Next.** Reviewer A confirmed the M1 fix in a short targeted check (below); L1 is Low and stays `fixed-unreviewed`.
+
+### Confirmation of the reconciliation fix
+
+Reviewer A checked only the M1 fix, recorded as artifact `merge-reconciliation`, pass 2, role A, in `passes.jsonl`.
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, effort `medium`, session `01a18391-3ba8-7c40-b255-bdb8ad12e31e`, run by this worker session with `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt file>`; the log's header confirms `model: gpt-6.1-sol`, `sandbox: read-only`, and `reasoning effort: medium`.
+- **Reviewed range:** `abfd5c4b..886437d9`, only the files of the M1 fix: the `control-plane-api` delta, `apps/control-plane/test/access-requirements.test.ts`, this record, and `proposal.md:26`.
+- **Snapshot:** identical before and after the pass, `b8f6ce65057793c37de828e8ec619940c9e88d165f0961b195b00fe8c13d97a7`.
+- **Counts:** Critical 0, High 0, Medium 0, Low 0. The reviewer ran no tests.
+- **Result:** M1 is fixed. The delta keeps the living text and every living scenario word for word except the clause "if the operation requires one", adds the scenario of the two worker operations, and agrees with their `none` rule and their OpenAPI security `workerCredential`; the new test fails without the `none` entries. M1 stays `fixed`, now confirmed.
 
 ## Review
 
@@ -180,6 +190,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | B | `claude claude-opus-5-5#high` | `b988b3f4-7dc5-41bb-831b-8a3deb380f2e` | 0 | 0 | 1 | 10 |
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a18374-c2a8-7410-bc4f-b538fbacc7cd` | 0 | 0 | 0 | 2 |
 | merge-reconciliation 1 | A | `codex gpt-6.1-sol#medium` | `01a18388-216a-7f03-9ef8-ad645c82c77a` | 0 | 0 | 1 | 1 |
+| merge-reconciliation 2 | A | `codex gpt-6.1-sol#medium` | `01a18391-3ba8-7c40-b255-bdb8ad12e31e` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Limitations
@@ -191,6 +202,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Reviewer A's targeted confirmation of the M1 fix of the reconciliation review.
 - Archive under worker step 7.
 - Integration into dev by the coordinator (single pull request).
