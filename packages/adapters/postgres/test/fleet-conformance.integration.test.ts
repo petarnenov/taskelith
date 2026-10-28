@@ -182,11 +182,12 @@ function nextGeneration(worker: ReturnType<typeof fleetWorker>): CredentialGener
 }
 
 // The registry's two steps that make `next` current and keep generation 1
-// as the predecessor until `deadline`.
+// as the predecessor until `deadline`; the renewal is just before it.
 async function renewed(registry: CommittingFleetRegistry, worker: EnrolledWorker, next: CredentialGeneration, deadline: Instant) {
   const order = { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' };
   value(await registry.requestRotation(worker.workerId, order));
-  value(await registry.renew(worker.workerId, next, 'jwt', { now: () => worker.enrolledAt }));
+  const renewedAt = value(parseInstant(new Date(Date.parse(deadline) - 1).toISOString()));
+  value(await registry.renew(worker.workerId, next, 'jwt', { now: () => renewedAt }));
 }
 
 const predecessorColumn = (workerId: string) =>
