@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmodSync, mkdirSync, rmSync } from 'node:fs';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,9 +9,11 @@ import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
+  GitWorkspaces,
   OperationChains,
   ProcessGroupReclaimHost,
   RECLAIM_PROGRAM_MAIN,
+  RECLAIM_READY_BOUND_MS,
   parseHandOffRecord,
   type GitWorkspaceCrashPoint,
   type LaunchedReclaim,
@@ -206,6 +209,7 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
     }
     assert.equal(host.launched.length, 1);
     assert.deepEqual(await readRecord(git), { containment: host.launched[0], reclaimFailed: true });
+    assert.deepEqual(host.released[0], host.launched[0], 'the empty containment of the failed program is freed');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
     value(await git.local.handOff(FIRST));
@@ -213,6 +217,52 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
     assert.equal(failed(await git.local.handOff(SECOND)).code, 'not-found');
   }, { reclaimHost: host });
 });
+
+type CleanupStep = 'kill' | 'populated' | 'release';
+
+// A file system fault as Node raises it, with a path in its message.
+const cleanupFault = (syscall: string) => Object.assign(new Error(`EIO: i/o error, ${syscall} '/private/checkout'`), { code: 'EIO', syscall });
+
+// The first call of `step` meets a file system fault; every other call
+// goes to the counting host it wraps.
+function faultingOnce(step: CleanupStep, inner: CountingHost): ReclaimHost {
+  let faulted = false;
+  const once = <T>(name: CleanupStep, call: () => Promise<T>): Promise<T> => {
+    if (name !== step || faulted) return call();
+    faulted = true;
+    return Promise.reject(cleanupFault(name));
+  };
+  return {
+    executionAccount: inner.executionAccount,
+    launch: async (checkout, containmentName) => {
+      const launched = await inner.launch(checkout, containmentName);
+      return launched.ok ? ok({ ...launched.value, kill: () => once('kill', () => launched.value.kill()) }) : launched;
+    },
+    populated: (containment) => once('populated', () => inner.populated(containment)),
+    release: (containment) => once('release', () => inner.release(containment)),
+    killRecorded: (containment) => inner.killRecorded(containment),
+  };
+}
+
+for (const step of ['kill', 'populated', 'release'] as const) {
+  test(`a fault at ${step} after a failed program still fails as reclaim-failed, and a later reclaim cleans up`, () => {
+    const host = failingHost();
+    return withFixture(async (git) => {
+      value(await git.local.prepare(request(git)));
+      value(await git.local.handOff(FIRST));
+      const interrupted = failed(await git.local.reclaim(FIRST));
+      assert.deepEqual([interrupted.details.reason, interrupted.message.includes('/private')], ['reclaim-failed', false]);
+      assert.match(interrupted.message, /cleanup of its containment is unfinished/);
+      const containment = host.launched[0]!;
+      assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
+      assert.deepEqual(host.released, []);
+      assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
+      assert.deepEqual([host.killedRecorded, host.released], [[containment], [containment]], 'the restarted reclaim cleans up');
+      assert.equal(host.launched.length, 1, 'the program never runs again');
+      assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    }, { reclaimHost: faultingOnce(step, host) });
+  });
+}
 
 test('a worker killed after a failed program and before its record runs the program once more', () => {
   const host = failingHost();
@@ -324,7 +374,7 @@ test('a program that is not ready within its bound fails the reclaim as unavaila
   }, { reclaimHost: host });
 });
 
-test('a program still running at the run bound fails the reclaim and is left running', { timeout: 30_000 }, async () => {
+test('a program still running at the run bound is killed and freed, and the workspace stays handed off', { timeout: 30_000 }, async () => {
   const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
   const hold = join(holdDirectory, 'hold');
   await writeFile(hold, '');
@@ -335,14 +385,104 @@ test('a program still running at the run bound fails the reclaim and is left run
     assert.equal(failed(await git.local.reclaim(FIRST)).details.reason, 'reclaim-failed');
     const containment = host.launched[0]!;
     assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
-    assert.equal(await host.populated(containment), true, 'the program is never killed');
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
     assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
-    assert.equal(host.launched.length, 1);
+    assert.equal(host.launched.length, 1, 'no retry');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
-    await rm(hold);
-    assert.equal(await waitUntilEmpty(host, containment), true);
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('a failure record that cannot be written still kills the overrunning program, and a later reclaim runs it again', { timeout: 30_000 }, async () => {
+  const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
+  const hold = join(holdDirectory, 'hold');
+  await writeFile(hold, '');
+  const host = holdingHost(hold);
+  await withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const attempt = join(git.checkout(FIRST), '..');
+    const mode = await modeOf(attempt);
+    const unwritable = git.reopen({
+      reach: (point) => {
+        if (point === 'WS8.after') chmodSync(attempt, 0o500);
+      },
+    });
+    const reclaimed = await unwritable.reclaim(FIRST).finally(() => chmod(attempt, mode));
+    assert.equal(failed(reclaimed).code, 'unavailable');
+    const containment = host.launched[0]!;
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
+    assert.deepEqual(await readRecord(git), { containment, reclaimFailed: false });
+    await rm(hold);
+    value(await git.local.reclaim(FIRST));
+    assert.equal(host.launched.length, 2, 'the later reclaim runs the program once more');
+    assert.deepEqual(await git.local.handedOff(), []);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('a failure record whose rename throws still kills, proves empty, and frees the overrunning program', { timeout: 30_000 }, async () => {
+  const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
+  const hold = join(holdDirectory, 'hold');
+  await writeFile(hold, '');
+  const host = holdingHost(hold);
+  await withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    // A directory at the record's name makes the rename into place throw.
+    const blocked = git.reopen({
+      reach: (point) => {
+        if (point !== 'WS8.after') return;
+        rmSync(recordPath(git));
+        mkdirSync(recordPath(git));
+      },
+    });
+    const reclaimed = failed(await blocked.reclaim(FIRST));
+    assert.deepEqual([reclaimed.code, reclaimed.message], ['unavailable', 'the file system call rename failed with EISDIR']);
+    const containment = host.launched[0]!;
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('a failure record renamed into place before its directory flush fails keeps the failure, so no reclaim runs the program again', () => {
+  const host = failingHost();
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const attempt = join(git.checkout(FIRST), '..');
+    const mode = await modeOf(attempt);
+    // Without read permission the directory cannot be opened for its flush.
+    const unflushable = git.reopen({
+      reach: (point) => {
+        if (point === 'WS8.after') chmodSync(attempt, 0o300);
+      },
+    });
+    const reclaimed = await unflushable.reclaim(FIRST).finally(() => chmod(attempt, mode));
+    assert.equal(failed(reclaimed).code, 'unavailable');
+    const containment = host.launched[0]!;
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
+    assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
+    assert.equal(failed(await git.local.reclaim(FIRST)).details.reason, 'reclaim-failed');
+    assert.equal(host.launched.length, 1, 'the program never runs again');
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+  }, { reclaimHost: host });
+});
+
+test('on one account a later reclaim of a failed program signals no recorded process group', () => {
+  const signals: [number, NodeJS.Signals][] = [];
+  const recording = new ProcessGroupReclaimHost(FAILING_PROGRAM, RECLAIM_READY_BOUND_MS, (pid, signal) => void signals.push([pid, signal]));
+  const host = new CountingHost(recording);
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    for (const provider of [git.local, git.reopen()]) {
+      assert.equal(failed(await provider.reclaim(FIRST)).details.reason, 'reclaim-failed');
+    }
+    assert.deepEqual(host.killedRecorded, [host.launched[0]], 'the later reclaim finishes the cleanup');
+    assert.deepEqual(signals, [], 'no process group is signalled');
+  }, { reclaimHost: host });
 });
 
 interface Signal {
@@ -367,7 +507,9 @@ class GatedReleaseHost implements ReclaimHost {
   #inRelease = false;
 
   async launch() {
-    const launched: LaunchedReclaim = { containment: { kind: 'process-group', id: 424242 }, go: async () => 'succeeded', abandon: () => {} };
+    const launched: LaunchedReclaim = {
+      containment: { kind: 'process-group', id: 424242 }, go: async () => 'succeeded', abandon: () => {}, kill: async () => {},
+    };
     return ok(launched);
   }
 
@@ -377,6 +519,8 @@ class GatedReleaseHost implements ReclaimHost {
     await this.reclaimed;
     return false;
   }
+
+  async killRecorded(): Promise<void> {}
 
   async release(): Promise<void> {
     this.#inRelease = true;
@@ -441,6 +585,48 @@ test('a hand-off record that cannot be read fails the operations without guessin
   assert.equal(failed(await git.local.reclaim(FIRST)).code, 'internal');
   assert.deepEqual(await git.local.handedOff(), [FIRST]);
   assert.equal(failed(await git.local.reclaim(SECOND)).code, 'not-found');
+}));
+
+const HANDED_OFF_RECORD = { containment: null, reclaimFailed: false };
+
+test('the hand-off records are read from disk, also by a restarted adapter', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.prepare(request(git, SECOND)));
+  assert.deepEqual(await git.local.handOffRecords(), []);
+  value(await git.local.handOff(FIRST));
+  value(await git.local.handOff(SECOND));
+  const failedRecord = { containment: { kind: 'cgroup', name: 'reclaim-attempt-2' }, reclaimFailed: true };
+  await writeFile(recordPath(git, SECOND), JSON.stringify(failedRecord));
+  const expected = [{ attemptId: FIRST, record: HANDED_OFF_RECORD }, { attemptId: SECOND, record: failedRecord }];
+  assert.deepEqual(await git.local.handOffRecords(), expected);
+  assert.deepEqual(await git.reopen().handOffRecords(), expected);
+}));
+
+test('a malformed or unreadable hand-off record rejects the read of the records', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.handOff(FIRST));
+  await writeFile(recordPath(git), '{"containment":');
+  await assert.rejects(git.local.handOffRecords(), /is malformed/);
+  await rm(recordPath(git));
+  await mkdir(recordPath(git));
+  await assert.rejects(git.local.handOffRecords(), { code: 'EISDIR' });
+}));
+
+test('a hand-off record removed between the listing and its read is left out', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.prepare(request(git, SECOND)));
+  value(await git.local.handOff(FIRST));
+  value(await git.local.handOff(SECOND));
+  // Removes a listed record before the records are read, as a reclaim may.
+  class Vanishing extends GitWorkspaces {
+    override async handedOff() {
+      const listed = await super.handedOff();
+      await rm(recordPath(git, FIRST));
+      return listed;
+    }
+  }
+  const vanishing = new Vanishing({ dataRoot: git.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http', reclaimHost: new ProcessGroupReclaimHost() });
+  assert.deepEqual(await vanishing.handOffRecords(), [{ attemptId: SECOND, record: HANDED_OFF_RECORD }]);
 }));
 
 test('a hand-off record parses only its own shapes', () => {

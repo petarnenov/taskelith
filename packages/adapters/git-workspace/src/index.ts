@@ -27,6 +27,7 @@ export {
   readHandOffRecord,
   removeHandOffRecord,
   writeHandOffRecord,
+  type HandedOffWorkspace,
   type HandOffRecord,
   type ReclaimContainment,
 } from './hand-off-record.js';
@@ -40,6 +41,7 @@ export {
   type ReclaimHost,
   type ReclaimOutcome,
   type ReclaimProgram,
+  type SendSignal,
 } from './reclaim-host.js';
 export {
   RECLAIM_EXIT,

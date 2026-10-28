@@ -49,6 +49,9 @@ export interface WorkerJournal {
   recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void>;
   // Journals a declaration only when it differs from the last one.
   recordCapacity(capacity: DeclaredCapacity): Result<void>;
+  // The next recordCapacity journals even an unchanged declaration; the
+  // debt survives a restart, as a reclaim's must (Git workspace sec. 3).
+  oweCapacityDeclaration(): Result<void>;
   // The current causes of admission pressure; an empty list clears it.
   recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void>;
   // The worker admission check results of this start.

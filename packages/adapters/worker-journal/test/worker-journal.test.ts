@@ -448,6 +448,21 @@ test('a capacity declaration is journaled only when it changes, each with its ow
   assert.notEqual(otherJournal, entries[0]!.position.observationId);
 });
 
+test('an owed capacity declaration is journaled once, also when unchanged and after a restart', () => {
+  value(journal.recordCapacity(CAPACITY));
+  value(journal.oweCapacityDeclaration());
+  root.close();
+  root = value(openWorkerRoot(rootOptions(root.paths.dataRoot)));
+  journal = root.journal;
+  value(journal.recordCapacity(CAPACITY));
+  value(journal.recordCapacity(CAPACITY));
+  const entries = value(journal.dueForPublication(T0));
+  assert.deepEqual(entries.map((entry) => entry.fact), [
+    { kind: 'capacity-declared', declaration: 1, capacity: CAPACITY },
+    { kind: 'capacity-declared', declaration: 2, capacity: CAPACITY },
+  ]);
+});
+
 test('a refusal for admission pressure is journaled with its causes', () => {
   const { assignmentId, attemptId, ownershipGeneration } = intent(2);
   const refused: JournaledCommand = {

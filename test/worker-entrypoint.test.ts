@@ -40,6 +40,7 @@ interface Options {
   readonly readOnly?: boolean;
   readonly cgroupV2?: boolean;
   readonly dataOwner?: string;
+  readonly environment?: NodeJS.ProcessEnv;
 }
 
 interface Exit {
@@ -69,7 +70,7 @@ async function runEntrypoint(options: Options = {}): Promise<Run> {
       PATH: [BIN, '/usr/bin', '/bin'].join(':'), FAKE_UID: options.uid ?? '0', FAKE_CALLS: calls,
       FAKE_DATA_OWNER: options.dataOwner ?? '10001', TASKELITH_TEST_CGROUP_ROOT: cgroup,
       TASKELITH_CONTAINMENT_PARENT: (options.parent ?? ((base) => `${base}/executions`))(cgroup),
-      TASKELITH_DATA_DIR: '/var/lib/taskelith',
+      TASKELITH_DATA_DIR: '/var/lib/taskelith', ...options.environment,
     });
     const made = ['init', 'executions'].filter((name) => existsSync(join(cgroup, name))).join(' ');
     const home = existsSync(join(cgroup, 'init', 'cgroup.procs')) ? readFileSync(join(cgroup, 'init', 'cgroup.procs'), 'utf8').trim() : '';
@@ -87,6 +88,17 @@ test('the entrypoint delegates the subtree and runs the worker with three capabi
     'chown -R 0:0 /var/lib/taskelith',
     'setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs -- node apps/worker/dist/main.js',
   ]);
+});
+
+test('a launching worker holds the execution group as its supplementary group', async () => {
+  const launching = { TASKELITH_WORKER_COMMAND: '["/usr/bin/harness"]', TASKELITH_EXECUTION_GID: '10003' };
+  const run = await runEntrypoint({ environment: launching });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.calls.at(-1), 'setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs --groups 10003 -- node apps/worker/dist/main.js');
+  for (const environment of [{ TASKELITH_EXECUTION_GID: '10003' }, { ...launching, TASKELITH_EXECUTION_GID: '' }]) {
+    const without = await runEntrypoint({ environment });
+    assert.equal(without.calls.at(-1), 'setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs -- node apps/worker/dist/main.js');
+  }
 });
 
 test('a read-only cgroup mount is remounted read-write first', async () => {

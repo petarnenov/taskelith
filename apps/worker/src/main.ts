@@ -23,6 +23,7 @@ import {
   type WorkerSettings,
 } from './settings.js';
 import { startWorker, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
+import { composeWorkspace } from './workspace-composition.js';
 
 // A journal identity is 128 random bits (worker journal contract sec. 8).
 const JOURNAL_ID_BYTES = 16;
@@ -48,6 +49,7 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     launching: productionLaunching(settings, logger),
     logger,
     admissionChecks: [linuxContainmentCheck(settings)],
+    workspace: composeWorkspace,
   };
 }
 

@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import { mkdir, readFile, rmdir } from 'node:fs/promises';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdir, readFile, rmdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ReclaimContainment } from './hand-off-record.js';
@@ -17,6 +17,9 @@ export interface LaunchedReclaim {
   go(): Promise<ReclaimOutcome>;
   // Ends the program before `go`; it exits without a change.
   abandon(): void;
+  // Kills every process of the containment after the run bound or a
+  // failure; the adapter then proves it empty (contract section 3).
+  kill(): Promise<void>;
 }
 
 // Starts the reclaim program and reads its containment (contract
@@ -30,6 +33,9 @@ export interface ReclaimHost {
   populated(containment: ReclaimContainment): Promise<boolean>;
   // Frees what `launch` made, once the containment is proven empty.
   release(containment: ReclaimContainment): Promise<void>;
+  // Kills what a recorded containment still holds, so that a later
+  // reclaim finishes the cleanup of a failed program (section 3).
+  killRecorded(containment: ReclaimContainment): Promise<void>;
 }
 
 // The program and the arguments before the reclaim's own; a test may
@@ -41,6 +47,11 @@ export interface ReclaimProgram {
 
 export const FIXED_RECLAIM_PROGRAM: ReclaimProgram = Object.freeze({ executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN] });
 
+// Sends a signal as `process.kill` does; a test may inject a recorder.
+export type SendSignal = (pid: number, signal: NodeJS.Signals) => void;
+
+const sendSignal: SendSignal = (pid, signal) => void process.kill(pid, signal);
+
 // Nothing of the worker's environment; Node adds no coverage variable.
 const PROGRAM_ENVIRONMENT = { PATH: '/usr/bin:/bin', LC_ALL: 'C', NODE_V8_COVERAGE: undefined };
 
@@ -48,6 +59,7 @@ interface StartedProgram {
   readonly pid: number;
   go(): Promise<ReclaimOutcome>;
   abandon(): void;
+  killGroup(send: SendSignal): void;
 }
 
 interface ProgramStart {
@@ -81,9 +93,21 @@ function startProgram(program: ReclaimProgram, args: readonly string[], readyBou
           return exited;
         },
         abandon,
+        killGroup: (send) => killUnreapedGroup(child, send),
       }));
     });
   });
+}
+
+// Only while Node has not reaped the leader, so its group identifier
+// cannot belong to another group yet; a reaped leader's group is not killed.
+function killUnreapedGroup(child: ChildProcess, send: SendSignal): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  try {
+    send(-child.pid!, 'SIGKILL');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
 }
 
 type Readiness = 'ready' | 'ended' | 'late';
@@ -151,7 +175,10 @@ export class LinuxReclaimHost implements ReclaimHost {
     const { uid, gid } = this.executionAccount;
     const args = ['--checkout', checkout, '--cgroup', cgroup, '--uid', String(uid), '--gid', String(gid)];
     const { started, exited } = await startProgram(this.#program, args, this.#readyBoundMs);
-    if (started.ok) return ok({ ...started.value, containment: { kind: 'cgroup', name: containmentName } });
+    if (started.ok) {
+      const { go, abandon } = started.value;
+      return ok({ containment: { kind: 'cgroup', name: containmentName }, go, abandon, kill: () => killCgroup(cgroup) });
+    }
     await removeIfEmpty(cgroup);
     // A program still in its cgroup frees it on exit; a fault keeps it.
     void exited.then(() => removeIfEmpty(cgroup)).catch(() => {});
@@ -175,6 +202,18 @@ export class LinuxReclaimHost implements ReclaimHost {
       if (error.code !== 'ENOENT') throw error;
     });
   }
+
+  killRecorded(containment: ReclaimContainment): Promise<void> {
+    return killCgroup(join(this.#parent, cgroupName(containment)));
+  }
+}
+
+// `cgroup.kill` kills every process of the cgroup and its descendants; a
+// cgroup that is gone holds none.
+async function killCgroup(cgroup: string): Promise<void> {
+  await writeFile(join(cgroup, 'cgroup.kill'), '1').catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') throw error;
+  });
 }
 
 // The kernel refuses to remove a populated cgroup (`EBUSY`), so only an
@@ -196,15 +235,19 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
   readonly executionAccount = null;
   readonly #program: ReclaimProgram;
   readonly #readyBoundMs: number;
+  readonly #send: SendSignal;
 
-  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM, readyBoundMs = RECLAIM_READY_BOUND_MS) {
+  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM, readyBoundMs = RECLAIM_READY_BOUND_MS, send = sendSignal) {
     this.#program = program;
     this.#readyBoundMs = readyBoundMs;
+    this.#send = send;
   }
 
   async launch(checkout: string): Promise<Result<LaunchedReclaim>> {
     const { started } = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
-    return started.ok ? ok({ ...started.value, containment: { kind: 'process-group', id: started.value.pid } }) : started;
+    if (!started.ok) return started;
+    const { pid, go, abandon, killGroup } = started.value;
+    return ok({ containment: { kind: 'process-group', id: pid }, go, abandon, kill: async () => killGroup(this.#send) });
   }
 
   async populated(containment: ReclaimContainment): Promise<boolean> {
@@ -221,4 +264,8 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
   }
 
   async release(): Promise<void> {}
+
+  // A recorded group identifier may be another group's by now, so it is
+  // only proven, never signalled (contract section 3, reused group).
+  async killRecorded(): Promise<void> {}
 }
