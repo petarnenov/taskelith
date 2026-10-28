@@ -109,7 +109,7 @@ test('approvals follow the decision body: only a maintainer of the project appro
 
 const INVOCATION = { actor: 'control-plane', reason: 'bootstrap owner from the G2 operator credential' };
 
-test('the owner is created once with its role, binding, and one audit event, also under concurrency', async () => {
+test('the owner is created once with its role and binding, and every repeat is audited, also under concurrency', async () => {
   const store = new InMemoryAccessStore();
   const service = new OwnerBootstrapService({ store, random: countingRandom(), clock: new ManualClock() });
   const results = await Promise.all([service.ensureOwner(INVOCATION), service.ensureOwner(INVOCATION)]);
@@ -118,12 +118,30 @@ test('the owner is created once with its role, binding, and one audit event, als
   assert.equal(value(results[1]!).principalId, owner);
   assert.deepEqual(value(await service.ensureOwner(INVOCATION)), { principalId: owner, created: false });
   const trail = value(await store.transaction((tx) => tx.audit.trail()));
+  const repeated = { kind: 'access.owner-bootstrap-repeated', principalId: owner, role: 'installation-owner', ...INVOCATION };
   assert.deepEqual(trail.map(({ kind, principalId, role, actor, reason }) => ({ kind, principalId, role, actor, reason })), [
-    { kind: 'access.owner-created', principalId: owner, role: 'installation-owner', ...INVOCATION },
+    { kind: 'access.owner-created', principalId: owner, role: 'installation-owner', ...INVOCATION }, repeated, repeated,
   ]);
+  assert.equal(value(await store.transaction((tx) => tx.principals.findByLoginName('owner' as LoginName)))?.principalId, owner);
   const principal = value(await store.transaction((tx) => tx.principals.get(owner)));
   assert.deepEqual([principal?.loginName, principal?.kind, principal?.passwordHash], ['owner', 'operator', undefined]);
   assert.equal(value(await store.transaction((tx) => tx.principals.isInstallationOwner(owner))), true);
+});
+
+test('a refused bootstrap is audited with the bound owner, or with none, and never a secret', async () => {
+  const store = new InMemoryAccessStore();
+  const service = new OwnerBootstrapService({ store, random: countingRandom(), clock: new ManualClock() });
+  value(await service.recordRefusedBootstrap(INVOCATION));
+  const owner = value(await service.ensureOwner(INVOCATION)).principalId;
+  value(await service.recordRefusedBootstrap(INVOCATION));
+  assert.equal(failed(await service.recordRefusedBootstrap({ actor: ' ', reason: 'x' })).code, 'invalid');
+  const trail = value(await store.transaction((tx) => tx.audit.trail()));
+  assert.deepEqual(trail.map(({ kind, principalId, actor, reason }) => ({ kind, principalId, actor, reason })), [
+    { kind: 'access.owner-bootstrap-refused', principalId: undefined, ...INVOCATION },
+    { kind: 'access.owner-created', principalId: owner, ...INVOCATION },
+    { kind: 'access.owner-bootstrap-refused', principalId: owner, ...INVOCATION },
+  ]);
+  assert.deepEqual(Object.keys(trail[0]!).sort(), ['actor', 'kind', 'occurredAt', 'reason', 'role']);
 });
 
 test('a bootstrap with an invalid invocation, identifier, or store writes nothing', async () => {

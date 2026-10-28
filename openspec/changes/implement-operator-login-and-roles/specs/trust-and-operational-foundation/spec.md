@@ -12,15 +12,19 @@ The `Access` module SHALL keep operator principals, the `installation-owner` rol
 - **THEN** the answer is 403 with reason `role-required` and nothing takes effect
 
 ### Requirement: First installation-owner from the bootstrap credential
-The principal that the operator credential authenticates SHALL be created exactly once, with the `installation-owner` role, in one transaction with an audit event that names the actor and reason. A reset of the operator credential SHALL keep that principal.
+The principal that the operator credential authenticates SHALL be created exactly once, with the `installation-owner` role, in one transaction with an audit event that names the actor and reason. Every refused or no-op repeat of that bootstrap SHALL write an audit event that holds no secret. A reset of the operator credential SHALL keep that principal.
 
 #### Scenario: Concurrent creation
 - **WHEN** two control-plane starts create the owner principal at once
-- **THEN** exactly one principal and one audit event exist
+- **THEN** exactly one principal and one creation event exist, and the other start writes a repeat event
 
 #### Scenario: Repeated bootstrap
 - **WHEN** the owner principal already exists and the control plane starts again
-- **THEN** no principal and no audit event is added
+- **THEN** no principal is added, and a repeat event names the owner, the actor, and the reason
+
+#### Scenario: Refused initialization
+- **WHEN** `init` runs again on an initialized installation
+- **THEN** it is refused, and a refusal event names the owner, the actor, and the reason, but no secret
 
 #### Scenario: Credential reset
 - **WHEN** the operator credential is reset

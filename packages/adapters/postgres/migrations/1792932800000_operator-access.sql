@@ -54,7 +54,8 @@ CREATE INDEX browser_sessions_anonymous ON browser_sessions (created_at) WHERE p
 CREATE TABLE access_audit_events (
   position bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   kind text NOT NULL,
-  principal_id text NOT NULL,
+  -- Null only on a refused bootstrap of an installation with no owner.
+  principal_id text,
   project_id text,
   role text,
   actor text NOT NULL,

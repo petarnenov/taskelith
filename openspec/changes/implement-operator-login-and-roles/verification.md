@@ -22,11 +22,12 @@ Review checklist (`checklist.json`):
 
 - **contract-drift.** `test/access-requirements.test.ts` reads `control-plane.openapi.json`: every operation has its own rule, each matches its wire contracts section 3 row, and the served 9a routes accept exactly the document's security alternatives. `details.requiredRole` is accepted unchanged by `AccessDenial` (`additionalProperties` of type string), so no schema changes; wire contracts section 2 now names it (Q10).
 - **missing-fail-before-test.** The change adds behaviour rather than fixing a defect; the session, CSRF, and role tests fail before it, because `/session` had no route and the server checked no role.
-- **docs.** `design.md` records that `createRun` is checked after its body is validated, and that the G2 documents declare no 403 on the operator operations, which only the owner bearer reaches until item 11. The dependency register notes the use of `cookie@2.0.1` and `crypto.argon2`; both stay `candidate`, as the register has no `adopted` status.
+- **docs.** Wire contracts section 2 records the `createRun` exception with its three conditions, which `test/browser-session.test.ts` checks over HTTP (R2); `design.md` records the coordinator answers R1 to R4, that `createRun` is checked after its body is validated, and that the G2 documents declare no 403 on the operator operations, which only the owner bearer reaches until item 11. The dependency register notes the use of `cookie@2.0.1` and `crypto.argon2`; both stay `candidate`, as the register has no `adopted` status.
 - **naming.** One term per concept: principal, installation role, project role, session, requirement, rule.
 - **error-handling.** A store failure is 503, never a refused credential; an unknown operation fails closed to `installation-owner`.
 - **spec-wording.** The deltas follow the coordinator decisions Q1 to Q13.
 - **concurrency-race.** Owner creation under two concurrent pools is tested against PostgreSQL; the in-memory store serializes its transactions.
+- **audit.** A refused `init` and a no-op or losing owner bootstrap each write an audit event without secrets, tested in the module, against PostgreSQL, and end to end through the administrative entry (R3).
 - **redaction.** Tests show that no log line, failure body, or audit event holds a password, session identifier, CSRF token, or the operator bearer, and that a body breaking the login schema names no password.
 
 ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL adapters under one conformance suite; the hasher in `@taskelith/secrets`; contract-first (the document drives the requirement tests); Makefile-driven checks; coverage below.
@@ -40,6 +41,8 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 ## Limitations
 
 - The evidence retirement entry is deferred until its 9b to 9d operation lands in `dev` ([design](design.md) "Non-goals").
+- The G2 execution and SDLC documents declare no 403 on their operator operations, so a `role-required` denial there answers 401 under the route's statuses; only the owner bearer reaches them until item 11, which the G2 bridge passes. Item 11 adds the 403, and the coordinator names it in item 11's brief. The `createRun` test serves the operation on a probe route with that 403.
+- `cookie@2.0.1` and `crypto.argon2` stay `candidate` in the dependency register with their notes (coordinator, 2026-10-28).
 
 <!-- make record: begin -->
 ## Generated checks
@@ -55,12 +58,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending: pass 1 by reviewer A, pass 2 by reviewer B.
+Pending: pass 1 by reviewer A, pass 2 by reviewer B. The brief's efforts run, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, although `route.json` recommended `high` for reviewer A and `xhigh` for reviewer B, because governance does not authorize the routed effort (coordinator R1, 2026-10-28).
 
 ## Remaining gates
 
 - The temporary G2 bridge, under which an `installation-owner` passes the project requirements of the G2 operator operations, is retired by item 11 ([design](design.md) decision 6, Q5).
 - Follow-up contract change `add-account-self-service-operations`, planned by the coordinator before item 28: account self-service HTTP operations, the browser first run, and the caller's project roles (Q1, Q2, Q12).
 - Change 10b: the evidence retirement entry once its 9b to 9d operation is in `dev` (Q13).
+- Item 11: the 403 on the operator operations of the G2 execution and SDLC documents, named in its brief.
 - Review passes.
 - Integration into dev by the coordinator (single pull request)

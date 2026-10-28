@@ -263,9 +263,16 @@ async function validatedBody(request: IncomingMessage, route: RouteDefinition): 
 // Names only the fields at fault: a validator message may quote a value or
 // a property name that the caller sent beside a password.
 function writeOnlyViolation(schema: string, violation: Failure): Failure {
-  const paths = new Set(violation.message.split('; ').map((line) => /^\S+ (\/\S*) /.exec(line)?.[1] ?? '/'));
-  return failure('invalid', `the ${schema} body is not valid at ${[...paths].join(', ')}`, { violations: violation.details.violations ?? '1' });
+  const paths = [...new Set(violation.message.split('; ').map((line) => /^\S+ (\/\S*) /.exec(line)?.[1] ?? '/'))];
+  const rules = paths.flatMap((path) => FIELD_RULES[path] ?? []);
+  const message = [`the ${schema} body is not valid at ${paths.join(', ')}`, ...rules].join('; ');
+  return failure('invalid', message, { violations: violation.details.violations ?? '1' });
 }
+
+// Fixed texts of a field's rule, so a caller learns it without its value.
+const FIELD_RULES: Readonly<Record<string, string>> = Object.freeze({
+  '/loginName': 'the login name must be lowercase: 1-64 letters, digits, ".", "_", or "-", starting with a letter or digit',
+});
 
 // Exactly a JSON `record` part, at most 1 MiB, and a `content` part.
 async function validatedUpload(request: IncomingMessage, schema: keyof HttpSchemas & string): Promise<Result<Upload>> {

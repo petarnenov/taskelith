@@ -115,7 +115,14 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
     assert.equal(statSync(join(dataRoot, 'control-plane', name)).mode & 0o777, 0o600, name);
   }
   assert.equal(new X509Certificate(controlPlaneFile('api-certificate.pem')).checkHost('localhost'), 'localhost');
-  assert.equal((await admin(['init', ...ADMIN])).output.error !== undefined, true, 'a second initialization fails');
+  const again = await admin(['init', ...ADMIN]);
+  assert.equal((again.output.error as { code: string }).code, 'conflict', 'a second initialization fails');
+  const ownerTrail = await rows(database, 'SELECT * FROM access_audit_events ORDER BY position') as Array<Record<string, unknown>>;
+  assert.deepEqual(ownerTrail.map((event) => [event.kind, event.actor]), [
+    ['access.owner-created', 'root@control-plane-1'], ['access.owner-bootstrap-refused', 'root@control-plane-1'],
+  ]);
+  assert.equal(ownerTrail[1]?.principal_id, ownerTrail[0]?.principal_id);
+  assert.doesNotMatch(JSON.stringify(ownerTrail), new RegExp(operatorSecret), 'the refusal names no secret');
 
   const refused = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: 'tkop_wrong' });
   assert.deepEqual([refused.status, (refused.output.error as { code: string }).code], [1, 'forbidden']);
@@ -357,7 +364,8 @@ test('the owner exists from initialization, and only its credential manages prin
   assert.deepEqual(await rows(database, 'SELECT project_id FROM project_roles'), []);
   const audit = await rows(database, 'SELECT kind, actor FROM access_audit_events ORDER BY position') as Array<{ kind: string; actor: string }>;
   assert.deepEqual(audit.map((event) => event.kind), [
-    'access.owner-created', 'access.principal-created', 'access.password-set', 'access.project-role-assigned', 'access.project-role-removed',
+    'access.owner-created', 'access.owner-bootstrap-refused', 'access.principal-created', 'access.password-set',
+    'access.project-role-assigned', 'access.project-role-removed',
   ]);
   const [stored] = await rows(database, "SELECT password_hash FROM principals WHERE login_name = 'bob'") as Array<{ password_hash: string }>;
   assert.match(stored?.password_hash ?? '', /^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);

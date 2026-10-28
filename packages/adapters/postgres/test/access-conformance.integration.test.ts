@@ -18,7 +18,7 @@ for (const conformance of ACCESS_STORE_CONFORMANCE) {
   });
 }
 
-test('two control-plane starts that create the owner at once create one principal and one audit event', { concurrency: false }, async () => {
+test('two control-plane starts that create the owner at once create one principal and audit the repeat', { concurrency: false }, async () => {
   await truncateAll(url);
   const other = new PostgresDatabase(url);
   try {
@@ -29,7 +29,11 @@ test('two control-plane starts that create the owner at once create one principa
     assert.deepEqual(results.map((result) => value(result).created).sort(), [false, true]);
     assert.equal(value(results[0]!).principalId, value(results[1]!).principalId);
     assert.deepEqual(await query(url, 'SELECT login_name FROM principals'), [{ login_name: 'owner' }]);
-    assert.deepEqual(await query(url, 'SELECT kind FROM access_audit_events'), [{ kind: 'access.owner-created' }]);
+    const kinds = await query(url, 'SELECT kind, principal_id FROM access_audit_events ORDER BY position');
+    const owner = value(results[0]!).principalId;
+    assert.deepEqual(kinds, [
+      { kind: 'access.owner-created', principal_id: owner }, { kind: 'access.owner-bootstrap-repeated', principal_id: owner },
+    ]);
     assert.deepEqual(await query(url, 'SELECT role FROM installation_roles'), [{ role: 'installation-owner' }]);
   } finally {
     await other.close();

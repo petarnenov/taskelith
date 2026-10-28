@@ -146,16 +146,19 @@ export const ACCESS_STORE_CONFORMANCE: readonly ConformanceCase<AccessStore>[] =
       expectSuccess(problems, 'first', await run(store, (tx) => tx.audit.append(event('access.project-role-assigned', 1))));
       const passwordSet: AccessAuditEvent = { kind: 'access.password-set', principalId: id('a'), actor: 'root@host', reason: 'test', occurredAt: at(2) };
       expectSuccess(problems, 'second', await run(store, (tx) => tx.audit.append(passwordSet)));
+      const refused: AccessAuditEvent = { kind: 'access.owner-bootstrap-refused', actor: 'root@host', reason: 'test', occurredAt: at(3) };
+      expectSuccess(problems, 'without principal', await run(store, (tx) => tx.audit.append(refused)));
       const failed = await run(store, async (tx) => {
         must(await tx.principals.add(principal('b', 'bob')));
-        must(await tx.audit.append(event('access.principal-created', 3)));
+        must(await tx.audit.append(event('access.principal-created', 4)));
         return err(failure('conflict', 'rolled back'));
       });
       expectCode(problems, 'failed', failed, 'conflict');
       expectSame(problems, 'no principal', must(await run(store, (tx) => tx.principals.get(id('b')))), undefined);
       const trail = must(await run(store, (tx) => tx.audit.trail()));
-      expectSame(problems, 'trail', trail.map((entry) => entry.kind), ['access.project-role-assigned', 'access.password-set']);
-      expectSame(problems, 'entries', trail, [event('access.project-role-assigned', 1), passwordSet]);
+      const kinds = ['access.project-role-assigned', 'access.password-set', 'access.owner-bootstrap-refused'];
+      expectSame(problems, 'trail', trail.map((entry) => entry.kind), kinds);
+      expectSame(problems, 'entries', trail, [event('access.project-role-assigned', 1), passwordSet, refused]);
       return problems;
     },
   },

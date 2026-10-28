@@ -4,6 +4,8 @@ import type { Role } from './roles.js';
 
 export type AccessAuditKind =
   | 'access.owner-created'
+  | 'access.owner-bootstrap-repeated'
+  | 'access.owner-bootstrap-refused'
   | 'access.principal-created'
   | 'access.password-set'
   | 'access.project-role-assigned'
@@ -13,7 +15,8 @@ export type AccessAuditKind =
 // session identifier, or CSRF token (decision 12).
 export interface AccessAuditEvent {
   readonly kind: AccessAuditKind;
-  readonly principalId: PrincipalId;
+  // Absent only on a refused bootstrap of an installation with no owner.
+  readonly principalId?: PrincipalId;
   readonly projectId?: string;
   readonly role?: Role;
   readonly actor: string;

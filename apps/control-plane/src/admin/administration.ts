@@ -28,7 +28,7 @@ import {
   type WorkerCommandConsumers,
   type WorkerRevocation,
 } from '@taskelith/fleet';
-import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   connectSystemAccount,
   connectTransport,
@@ -155,11 +155,18 @@ export class Administration {
     const certificates = installed ? undefined : await this.#issue(authority.value);
     if (certificates !== undefined && !certificates.ok) return certificates;
     const initialized = await this.#installation().initialize(invocation);
-    if (!initialized.ok) return initialized;
+    if (!initialized.ok) return this.#refusedInitialization(initialized.error, invocation);
     const owner = await this.#ownerBootstrap().ensureOwner(invocation);
     if (!owner.ok) return owner;
     const installationCa = join(this.#namespace.directory, INSTALLATION_CA_FILE);
     return ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath, installationCa, ownerPrincipalId: owner.value.principalId });
+  }
+
+  // A rerun of `init` is refused, and the owner bootstrap audits the refusal.
+  async #refusedInitialization(refused: Failure, invocation: AdministrativeInvocation): Promise<Result<never>> {
+    if (refused.code !== 'conflict') return err(refused);
+    const audited = await this.#ownerBootstrap().recordRefusedBootstrap(invocation);
+    return audited.ok ? err(refused) : audited;
   }
 
   // The owner of an installation from before item 10, created once at the

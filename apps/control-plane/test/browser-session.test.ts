@@ -48,12 +48,15 @@ value(await administration.assignProjectRole(owner, { projectId: 'alpha', loginN
 // Evidence and runs of two projects; any other identifier is unknown.
 const EVIDENCE_PROJECTS: Record<string, string> = { 'e-alpha': 'alpha', 'e-beta': 'beta' };
 const RUN_PROJECTS: Record<string, string> = { 'r-alpha': 'alpha', 'r-beta': 'beta' };
+// Every read of run or project state that a handler makes.
+const stateReads: string[] = [];
 const sink = new InMemoryLogSink();
 const api = new ControlPlaneApi({
   operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
   sessions,
   authorization: new AuthorizationService(store),
   runProjects: { projectOf: async (runId: string) => ok(RUN_PROJECTS[runId]) },
+  runs: { createRun: async () => { stateReads.push('createRun'); return err(failure('internal', 'not under test')); } },
   evidence: {
     read: async (evidenceId: string) => {
       const projectId = EVIDENCE_PROJECTS[evidenceId];
@@ -85,7 +88,13 @@ const handlers: ApiHandlers = {
     ? ok(undefined)
     : api.handle(operationId, request, bearer)),
 };
-const server = createApiServer(handlers, { routes: [...ROUTES, ...PROBES], logger: new Logger(sink, { now: () => '2026-10-28T09:00:00.000Z' as never }) });
+// `createRun` as a session would reach it, with the 403 that item 11 adds to
+// its document; its role check follows its body.
+const SESSION_RUN_PROBE: RouteDefinition = {
+  ...ROUTES.find((route) => route.operationId === 'createRun')!, pattern: /^\/session-runs$/,
+  security: ['browserSession', 'operatorToken'], reasons: { 'role-required': 403 },
+};
+const server = createApiServer(handlers, { routes: [...ROUTES, ...PROBES, SESSION_RUN_PROBE], logger: new Logger(sink, { now: () => '2026-10-28T09:00:00.000Z' as never }) });
 let base: string;
 
 before(async () => {
@@ -221,6 +230,14 @@ test('a body that breaks the login schema names no password', async () => {
   }
 });
 
+test('a login name that is not lowercase is 400, which names the rule but not the value', async () => {
+  const browser = remember(await anonymous());
+  const refused = await call('POST', '/session', { cookie: browser.cookie, 'x-csrf-token': browser.csrfToken }, { loginName: 'Alice', password: ALICE_PASSWORD });
+  assert.deepEqual([refused.status, refused.body.code], [400, 'invalid']);
+  assert.match(String(refused.body.message), /^the LoginRequest body is not valid at \/loginName; the login name must be lowercase: /);
+  assert.doesNotMatch(refused.text, /Alice|alice password/);
+});
+
 test('logOut ends only its session with an expired cookie, and a repeat is 401', async () => {
   const browser = remember(await loggedIn('alice', ALICE_PASSWORD));
   const other = remember(await loggedIn('alice', ALICE_PASSWORD));
@@ -252,6 +269,30 @@ test('an operation that no requirement rule names requires the installation-owne
   assert.deepEqual([denied.status, denied.body.details], [403, { reason: 'role-required', requiredRole: 'installation-owner' }]);
   const ownerBrowser = remember(await loggedIn('owner', OWNER_PASSWORD));
   assert.equal((await call('GET', '/unruled', { cookie: ownerBrowser.cookie })).status, 204);
+});
+
+const BINDING = {
+  pluginId: 'p', pluginVersion: '1', upstreamToolVersion: '1', workflowId: 'w', workflowVersion: '1',
+  workflowDigest: `sha256:${'0'.repeat(64)}`, configurationRevision: 'c', policyRevision: 'r',
+};
+
+test('createRun checks CSRF before its body, validates it without storage, then checks the role before any state', async () => {
+  const browser = remember(await loggedIn('alice', ALICE_PASSWORD));
+  const signed = { cookie: browser.cookie, 'x-csrf-token': browser.csrfToken };
+  const unsigned = await call('POST', '/session-runs', { cookie: browser.cookie }, { not: 'a run' });
+  assert.deepEqual([unsigned.status, (unsigned.body.details as Record<string, string>).reason], [403, 'csrf-token-invalid']);
+  const invalid = await call('POST', '/session-runs', signed, { runId: 'r-1', projectId: 'beta' });
+  assert.equal(invalid.status, 400);
+  assert.doesNotMatch(invalid.text, /beta/, 'the schema check names no project');
+  const denials: Answer[] = [];
+  for (const projectId of ['alpha', 'beta', 'project-that-does-not-exist']) {
+    denials.push(await call('POST', '/session-runs', signed, { runId: 'r-1', projectId, binding: BINDING }));
+  }
+  const [viewed] = denials;
+  assert.deepEqual([viewed?.status, viewed?.body.details], [403, { reason: 'role-required', requiredRole: 'project-operator' }]);
+  assert.deepEqual(denials.map((denied) => [denied.status, denied.text]), denials.map(() => [viewed?.status, viewed?.text]),
+    'an existing and a missing project are denied alike');
+  assert.deepEqual(stateReads, [], 'no state is read before the role passes');
 });
 
 function request(principalId: PrincipalId, ...parameters: string[]): ApiRequest {

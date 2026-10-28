@@ -15,12 +15,16 @@ The control plane SHALL serve `readSession`, `logIn`, and `logOut` on the browse
 - **WHEN** `logIn` names an unknown login name or a wrong password
 - **THEN** the answer is 401 with reason `login-failed` and does not say which was wrong
 
+#### Scenario: Login name not lowercase
+- **WHEN** `logIn` names a login name with an uppercase letter
+- **THEN** the answer is 400 `invalid` and says that the login name must be lowercase, without the value
+
 #### Scenario: Logout
 - **WHEN** `logOut` is called with a session cookie and its CSRF token
 - **THEN** the session ends, the cookie is expired, the answer is 204, and a repeat answers 401 `unauthenticated`
 
 ### Requirement: Authentication, CSRF, and role order
-For every operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF header on a session-authenticated operation other than GET, then check the caller's role through the `Access` module, and only then read the request body. The operator bearer SHALL be refused on `logIn` and `logOut`.
+For every operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF header on a session-authenticated operation other than GET, then check the caller's role through the `Access` module, and only then read the request body. `createRun`, whose project is in its body, SHALL validate the body against its schema alone first and read no state before the role check. The bearer SHALL be refused on `logIn` and `logOut`.
 
 #### Scenario: Missing CSRF header
 - **WHEN** a session-authenticated mutation arrives without `X-CSRF-Token` or with another session's token
@@ -29,6 +33,10 @@ For every operation with a session or bearer requirement, the control plane SHAL
 #### Scenario: Role before body
 - **WHEN** a principal without the required role sends a mutation with an invalid body
 - **THEN** the answer is 403 with reason `role-required`, not 400
+
+#### Scenario: Project in the body
+- **WHEN** a principal without `project-operator` on the named project calls `createRun` with a valid body, once for an existing project and once for a missing one
+- **THEN** both answers are the identical `role-required` denial, and no run or project state is read
 
 #### Scenario: Bearer on login
 - **WHEN** `logIn` is called with the operator bearer and no session cookie

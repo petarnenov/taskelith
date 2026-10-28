@@ -289,7 +289,7 @@ class PostgresSessions implements Sessions {
 
 interface AuditRow {
   readonly kind: AccessAuditEvent['kind'];
-  readonly principal_id: string;
+  readonly principal_id: string | null;
   readonly project_id: string | null;
   readonly role: Role | null;
   readonly actor: string;
@@ -308,7 +308,7 @@ class PostgresAccessAudit implements AccessAudit {
     await this.#session.query(
       `INSERT INTO access_audit_events (kind, principal_id, project_id, role, actor, reason, occurred_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [event.kind, event.principalId, event.projectId ?? null, event.role ?? null, event.actor, event.reason, event.occurredAt],
+      [event.kind, event.principalId ?? null, event.projectId ?? null, event.role ?? null, event.actor, event.reason, event.occurredAt],
     );
     return ok(undefined);
   }
@@ -318,7 +318,8 @@ class PostgresAccessAudit implements AccessAudit {
       'SELECT kind, principal_id, project_id, role, actor, reason, occurred_at FROM access_audit_events ORDER BY position',
     );
     return ok(rows.map((row) => Object.freeze({
-      kind: row.kind, principalId: row.principal_id as PrincipalId,
+      kind: row.kind,
+      ...(row.principal_id === null ? {} : { principalId: row.principal_id as PrincipalId }),
       ...(row.project_id === null ? {} : { projectId: row.project_id }),
       ...(row.role === null ? {} : { role: row.role }),
       actor: row.actor, reason: row.reason, occurredAt: instant(row.occurred_at),
