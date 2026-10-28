@@ -294,10 +294,10 @@ Node.js 24.22.1, the `.nvmrc` pin, by its full nvm path. Every command that runs
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `2fe646a8ea72953fd7f8891aed6cd55ed155bd5d`; tests 2824, pass 2777, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
-- `npm run openspec -- validate route-reviewers-by-change-complexity --strict`: passed, `Change 'route-reviewers-by-change-complexity' is valid`.
+- `make verify`: passed, profile full, tree `fbcd94c41eb0c5defb4da519c1ad39ebb35ac9c9`; tests 2824, pass 2777, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 69 passed, 0 failed (69 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`.
-- Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: `openspec/specs/agent-task-protocol/spec.md | 15 ++++`, `openspec/specs/review-process/spec.md | 116 +++++++++++++++++++++++++++++`, `2 files changed, 131 insertions(+)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -313,7 +313,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) ran on 2026-10-28 ("Live shadow evaluation").
 - Outside this change: a later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
 
+## Archive
+
+The change was archived on 2026-10-28 with `npm run openspec -- archive route-reviewers-by-change-complexity --yes` (`agent-task-protocol`: 1 added; `review-process`: 8 added; totals + 9, ~ 0, - 0) after every task in `tasks.md` was ticked. The checks below ran on the resulting tree, which is the tree `fbcd94c41eb0c5defb4da519c1ad39ebb35ac9c9` of the archive commit `docs: archive the route reviewers by change complexity change` before this section and the generated part were written, with Node.js 24.22.0, GNU Make 4.3, `TMPDIR` under the session scratchpad, and the credential variable removed from the environment, after `git fetch` showed `origin/dev` still at `f3a53f17`:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-28-route-reviewers-by-change-complexity`; the command as a whole reports `Totals: 220 passed, 14 failed (234 items)` from older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `f3a53f17`): only additions, 131 insertions and no deletion: `openspec/specs/agent-task-protocol/spec.md` adds "Review route in the task flow"; `openspec/specs/review-process/spec.md` adds "Review route command", "Rule routing floor", "Shadow routing", "Shadow router failure", "Router credential", "Route record", "Route effect", and "Archive routing evaluation". No existing requirement changed.
+- The moved change has `findings.jsonl` (22 findings), `passes.jsonl` (3 passes), `checklist.json`, `route.json`, and `evaluation.jsonl` (50 lines); `make findings ARGS="validate"`, which `make verify` runs, passes.
+- `make verify`, full profile, log at `/tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/rr-verify-archive.log`: exit 0 on the first run, `make verify: passed, profile full, tree fbcd94c41eb0c5defb4da519c1ad39ebb35ac9c9; stamp written`; comments within the rule; `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`; `tests 2824`, `pass 2777`, `fail 0`, `cancelled 0`, `skipped 47`; product coverage all files 99.32 lines, 92.61 branches, 98.98 functions; `Every product module is in the coverage report.`; 0 breaking changes in the four contract documents against `f3a53f172dc2`; `Verified 766 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)`; `Totals: 69 passed, 0 failed (69 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`
+- `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`, which supports an archived change and then records the strict validation of all specs and changes: `make record: wrote the generated part of openspec/changes/archive/2026-10-28-route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`. The archive commit differs from the verified tree only in this file.
+
 ## Remaining gates
 
-- The archive (`tasks.md` 4.3).
 - Integration into dev by the coordinator (single pull request).

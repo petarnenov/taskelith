@@ -33,4 +33,4 @@
 
 - [x] 4.1 Author self-check against the review checklist and ADR 0004, and the evidence check.
 - [x] 4.2 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed, each recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
-- [ ] 4.3 Archive the change in the last commit of the branch.
+- [x] 4.3 Archive the change in the last commit of the branch.
