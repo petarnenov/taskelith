@@ -11,7 +11,7 @@
 ## 3. Evidence
 
 - [x] 3.1 Fail-before and pass-after of the new test, for each of the two pipes
-- [ ] 3.2 `make verify` on the clean committed tree
+- [x] 3.2 `make verify` on the clean committed tree: passed on `b350f8ce`
 
 ## 4. Review and archive
 

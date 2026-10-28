@@ -16,7 +16,10 @@ The owner's request of 2026-10-28, after `make verify` on the iMac failed with s
 - **Fail-before.** With `FAKE_TAR_TRAILER` and the base script, the new test failed in 3 of 3 runs with `141 !== 0`. With only `unpack_context` drained, it failed with status 1 and "the manifest.json of the saved image …-first cannot be read".
 - **Pass-after.** `test/installation-script.test.ts` passed 34 of 34 tests in 3 of 3 runs.
 
+## make verify
+
+On the clean committed tree of `b350f8ce` (tree `b70e5885`), profile full: passed, stamp written. Tests: 3370, passed 3355, failed 0, skipped 15. Coverage of all files: lines 99.45%, branches 92.62%, functions 99.07%.
+
 ## Remaining gates
 
-- `make verify` on the clean committed tree.
 - Review passes 1 and 2, then the archive.
