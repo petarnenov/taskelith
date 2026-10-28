@@ -18,7 +18,7 @@
 
 - [x] 4.1 Run `make verify-worker-image-reproducible` on this host and record the result and the image store
 - [x] 4.2 `npm run openspec -- validate compare-worker-image-manifests --strict` and `make verify`
-- [ ] 4.3 Record `verification.md`
+- [x] 4.3 Record `verification.md`
 
 ## 5. Review and archive
 
