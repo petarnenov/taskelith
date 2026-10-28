@@ -55,13 +55,13 @@ function readCredential(paths: WorkerPaths, reference: string): Result<string> {
 
 // Written once, after the journal and before the identity, so an identity
 // always has its pin.
-export function writeInstallationCa(paths: WorkerPaths, enrollment: WorkerEnrollment): Result<void> {
+export function writeInstallationCaPin(paths: WorkerPaths, enrollment: WorkerEnrollment): Result<void> {
   return createOnce(paths.installationCa, enrollment.installationCa);
 }
 
 // The pinned CA, the only CA of the worker's TLS; a root enrolled without
 // one, before 26b, fails closed: no migration, as nothing was released.
-export function readInstallationCa(paths: WorkerPaths): Result<string> {
+export function readInstallationCaPin(paths: WorkerPaths): Result<string> {
   const missing = 'remove worker/ and enroll again with a new token and its fingerprint';
   return readControlFile(paths, paths.installationCa, 'the pinned installation CA', missing);
 }

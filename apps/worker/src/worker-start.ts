@@ -23,7 +23,7 @@ import {
   claimWorkerRoot,
   failureReason,
   openWorkerRoot,
-  readInstallationCa,
+  readInstallationCaPin,
   readVolumeSpace,
   readWorkerCredentials,
   truncateBufferedLogs,
@@ -199,7 +199,7 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const { identity } = root;
   const credentials = readWorkerCredentials(root.paths, identity);
   if (!credentials.ok) return credentials;
-  const installationCa = readInstallationCa(root.paths);
+  const installationCa = readInstallationCaPin(root.paths);
   if (!installationCa.ok) return installationCa;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;

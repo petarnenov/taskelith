@@ -18,7 +18,7 @@ import { rootFailure } from './journal-failure.js';
 import { checkJournalFault, clearJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
 import { SqliteWorkerJournal, type CommitPointHook, type JournalClock } from './sqlite-worker-journal.js';
 import { checkVolume, probeVolume, type VolumeProbe } from './volume.js';
-import { writeCredentials, writeInstallationCa, type WorkerEnrollment } from './worker-credentials.js';
+import { writeCredentials, writeInstallationCaPin, type WorkerEnrollment } from './worker-credentials.js';
 import { readIdentity, serializeIdentity, type WorkerIdentity } from './worker-identity.js';
 import { ownerUid, workerPaths, type WorkerPaths } from './worker-paths.js';
 
@@ -146,7 +146,7 @@ function createJournalThenIdentity(
   created.value.close();
   const credentials = writeCredentials(paths, enrollment);
   if (!credentials.ok) return credentials;
-  const pinned = writeInstallationCa(paths, enrollment);
+  const pinned = writeInstallationCaPin(paths, enrollment);
   if (!pinned.ok) return pinned;
   const { installationId, workerId, journalId, credentialGeneration } = enrollment;
   const identity: WorkerIdentity = { installationId, workerId, journalId, credentialGeneration, credentials: credentials.value };

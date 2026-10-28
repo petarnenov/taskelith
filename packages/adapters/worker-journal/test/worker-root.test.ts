@@ -21,7 +21,7 @@ import {
   recordJournalFault,
   parseMacMountOptions,
   probeVolume,
-  readInstallationCa,
+  readInstallationCaPin,
   readWorkerCredentials,
   resolveDataRoot,
   startNewIncarnation,
@@ -146,20 +146,20 @@ test('enrollment creates the journal before the identity, with private modes', (
   assert.deepEqual(root.journal.binding, BINDING);
   assert.deepEqual(root.identity.credentials, credentialReferencesOf(1));
   assert.deepEqual(value(readWorkerCredentials(paths, root.identity)), ENROLLMENT.credentials);
-  assert.equal(value(readInstallationCa(paths)), ENROLLMENT.installationCa);
+  assert.equal(value(readInstallationCaPin(paths)), ENROLLMENT.installationCa);
   assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).code, 'conflict');
 });
 
 test('the pinned installation CA is read only while present, nonempty, and safe', () => {
   const { paths } = enroll();
   writeFileSync(paths.installationCa, '');
-  assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
+  assert.equal(reasonOf(readInstallationCaPin(paths)), 'corrupt');
   rmSync(paths.installationCa);
-  const missing = failed(readInstallationCa(paths));
-  assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
+  const missing = failed(readInstallationCaPin(paths));
+  assert.equal(reasonOf(readInstallationCaPin(paths)), 'corrupt');
   assert.equal(missing.message, 'the pinned installation CA is missing; remove worker/ and enroll again with a new token and its fingerprint');
   symlinkSync(paths.identity, paths.installationCa);
-  assert.equal(reasonOf(readInstallationCa(paths)), 'unsafe-path');
+  assert.equal(reasonOf(readInstallationCaPin(paths)), 'unsafe-path');
 });
 
 test('a claim holds the root lock until it completes or is abandoned', () => {
