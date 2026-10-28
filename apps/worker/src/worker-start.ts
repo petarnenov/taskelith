@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
+import type { DeclaredCapacity, JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import {
   parseInstallationId,
   type Enrollment,
@@ -51,6 +51,8 @@ import { checkComposition, hasFailedCheck, runSelfCheck } from './self-check.js'
 import type { WorkerSettings } from './settings.js';
 import { runTogether, TaskGroup } from './task-group.js';
 import { WorkerContact } from './worker-contact.js';
+import type { WorkerWorkspace } from './workspace-composition.js';
+import { WorkspaceSlots } from './workspace-slots.js';
 
 export interface WorkerDependencies {
   // Reads the CA before the token is sent; enrollment then pins it.
@@ -77,6 +79,8 @@ export interface WorkerDependencies {
   readonly logger?: Logger;
   // The worker admission checks of every start (worker admission contract).
   readonly admissionChecks: readonly WorkerAdmissionCheck[];
+  // The Git workspace and its start preconditions; undefined composes none.
+  readonly workspace?: (settings: WorkerSettings) => Promise<Result<WorkerWorkspace | undefined>>;
 }
 
 // What launches need beyond the journal: the launch authority with the
@@ -104,6 +108,8 @@ export interface LaunchHost {
 export interface RunningWorker {
   readonly identity: WorkerIdentity;
   readonly root: WorkerRoot;
+  // The handed-off workspaces' slots, where the worker holds workspaces.
+  readonly workspaceSlots?: WorkspaceSlots;
   // Settles once the worker has stopped, by `stop` or by a runtime
   // failure, which `stop` rejects with; it may be called repeatedly.
   readonly stopped: Promise<void>;
@@ -115,11 +121,13 @@ export interface RunningWorker {
 export async function startWorker(settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<RunningWorker>> {
   const composed = checkComposition(dependencies.admissionChecks);
   if (!composed.ok) return composed;
+  const workspace = (await dependencies.workspace?.(settings)) ?? ok(undefined);
+  if (!workspace.ok) return workspace;
   const options = rootOptions(settings, dependencies);
   const opened = openWorkerRoot(options);
   const root = !opened.ok && failureReason(opened.error) === 'not-enrolled' ? await enroll(settings, dependencies, options) : opened;
   if (!root.ok) return root;
-  const started = await startRuntime(settings, dependencies, root.value);
+  const started = await startRuntime(settings, dependencies, root.value, workspace.value);
   if (!started.ok) root.value.close();
   return started;
 }
@@ -130,7 +138,12 @@ function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies)
   const { clock, probe } = dependencies;
   const truncateLogs = () => truncateBufferedLogs(workerPaths(settings.dataRoot).logs);
   const onSpaceRefused = () => shedBufferedLogs(truncateLogs, dependencies.logger ?? SILENT_LOGGER);
-  return { dataRoot: settings.dataRoot, clock, onSpaceRefused, ...(probe === undefined ? {} : { probe }) };
+  // The group may traverse to the workspaces (Git workspace contract sec. 2).
+  const executionGroup = settings.launch?.executionAccount?.gid;
+  return {
+    dataRoot: settings.dataRoot, clock, onSpaceRefused,
+    ...(probe === undefined ? {} : { probe }), ...(executionGroup === undefined ? {} : { executionGroup }),
+  };
 }
 
 // The first start claims the root before it asks the control plane, so a
@@ -199,7 +212,12 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId, installati
 
 // The launches, reconciliation, and pressure watch run at once; the
 // broker's work runs while a connection is up.
-async function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {
+async function startRuntime(
+  settings: WorkerSettings,
+  dependencies: WorkerDependencies,
+  root: WorkerRoot,
+  workspace: WorkerWorkspace | undefined,
+): Promise<Result<RunningWorker>> {
   const { identity } = root;
   const installationCa = readInstallationCaPin(root.paths);
   if (!installationCa.ok) return installationCa;
@@ -221,8 +239,12 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const selfCheck = await runSelfCheck(dependencies.admissionChecks, startFacts(settings));
   if (!selfCheck.ok) return selfCheck;
   const selfCheckFailed = hasFailedCheck(selfCheck.value);
+  const slots = await openWorkspaceSlots(workspace, settings, root, logger);
+  if (!slots.ok) return slots;
   const bearer = rotation.value.bearer;
-  const launcher = launchOrchestrator({ settings, dependencies, root, bearer, installationCa: installationCa.value, contact, pressure, selfCheckFailed });
+  const launcher = launchOrchestrator({
+    settings, dependencies, root, bearer, installationCa: installationCa.value, contact, pressure, selfCheckFailed, slots: slots.value,
+  });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
@@ -233,13 +255,32 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   session = brokerSession({
     settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, rotation: rotation.value,
     installationCa: installationCa.value, selfCheckFailed, ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
+    ...(slots.value === undefined ? {} : { slots: slots.value }),
   });
   tasks.add(session.run(tasks.signal));
   tasks.add(rotation.value.run(tasks.signal));
   tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
   tasks.add(dependencies.daemon.watch(tasks.signal));
   if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
-  return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
+  return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }, slots.value));
+}
+
+// Section 3 of the Git workspace contract: the sweep before any prepare,
+// then the held slots from the hand-off records; a fault fails the start.
+async function openWorkspaceSlots(
+  workspace: WorkerWorkspace | undefined,
+  settings: WorkerSettings,
+  root: WorkerRoot,
+  logger: Logger,
+): Promise<Result<WorkspaceSlots | undefined>> {
+  if (workspace === undefined) return ok(undefined);
+  try {
+    await workspace.sweep();
+  } catch (error) {
+    return err(failure('unavailable', `the workspaces cannot be swept: ${(error as Error).message}`));
+  }
+  const redeclareCapacity = () => root.journal.redeclareCapacity(declaredCapacity(settings));
+  return WorkspaceSlots.open({ workspace, redeclareCapacity, logger });
 }
 
 // Only the platform and the launch command decide that a check does not
@@ -278,19 +319,21 @@ interface OrchestratorContext {
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
   readonly selfCheckFailed: boolean;
+  readonly slots: WorkspaceSlots | undefined;
 }
 
 // The host reconciles and removes records with or without a launch
 // command; only a command and a passed self-check add the launch authority.
 function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
-  const { settings, dependencies, root, bearer, installationCa, contact, pressure, selfCheckFailed } = context;
+  const { settings, dependencies, root, bearer, installationCa, contact, pressure, selfCheckFailed, slots } = context;
   const { launching } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
   const host = launching.host(settings, root.paths.executions);
   if (!host.ok) return settings.launch === undefined ? deferReconciliation(root, logger, host.error.message) : host;
   const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
-  const { supervision, clock, records, containments } = host.value;
+  const { supervision, clock, records } = host.value;
+  const containments = skippingRecorded(host.value.containments, slots?.recordedContainments);
   return ok(new LaunchOrchestrator({
     journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
     ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(bearer, installationCa) }),
@@ -309,11 +352,25 @@ function deferReconciliation(root: WorkerRoot, logger: Logger, reason: string): 
   return ok(undefined);
 }
 
-// Sorted, so a reordered configuration declares nothing new.
+// A reclaim program's containment that a hand-off record names is no
+// unrecorded process (Git workspace contract section 3, step 7).
+function skippingRecorded(scan: ContainmentScan | undefined, recorded: ReadonlySet<string> | undefined): ContainmentScan | undefined {
+  if (scan === undefined || recorded === undefined) return scan;
+  return () => {
+    const found = scan();
+    return found.ok ? ok(found.value.filter(({ name }) => !recorded.has(name))) : found;
+  };
+}
+
 function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<void> {
+  return root.journal.recordCapacity(declaredCapacity(settings));
+}
+
+// Sorted, so a reordered configuration declares nothing new.
+function declaredCapacity(settings: WorkerSettings): DeclaredCapacity {
   const { controls, ...capacity } = settings.capacity;
   const enforceableControls = [...controls].sort();
-  return root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
+  return { ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS };
 }
 
 interface SessionContext {
@@ -328,6 +385,7 @@ interface SessionContext {
   readonly installationCa: string;
   readonly selfCheckFailed: boolean;
   readonly launcher?: LaunchOrchestrator;
+  readonly slots?: WorkspaceSlots;
 }
 
 interface TransportLink extends BrokerLink {
@@ -377,10 +435,11 @@ function observationPublishing(context: SessionContext, transport: TransportConn
 // The command consumer and the observation publisher of one connection,
 // until its signal aborts.
 async function serveConnection(context: SessionContext, transport: TransportConnection, signal: AbortSignal): Promise<void> {
-  const { settings, dependencies, root, address, launcher } = context;
+  const { settings, dependencies, root, address, launcher, slots } = context;
   const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
     ...publishing, capacity: settings.capacity, pressure: context.pressure, selfCheckFailed: context.selfCheckFailed, newReportId: randomUUID,
+    ...(slots === undefined ? {} : { handedOff: () => slots.held }),
     onRotationRequested: context.rotation.requested, ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
@@ -421,14 +480,14 @@ interface Runtime {
   abort(): void;
 }
 
-function runningWorker(root: WorkerRoot, runtime: Runtime): RunningWorker {
+function runningWorker(root: WorkerRoot, runtime: Runtime, workspaceSlots: WorkspaceSlots | undefined): RunningWorker {
   const closed = closeAfter(root, runtime.finished);
   const stopped = closed.catch(() => undefined);
   const stop = () => {
     runtime.abort();
     return closed;
   };
-  return Object.freeze({ identity: root.identity, root, stopped, stop });
+  return Object.freeze({ identity: root.identity, root, stopped, stop, ...(workspaceSlots === undefined ? {} : { workspaceSlots }) });
 }
 
 // Every task of the runtime ended, after a stop or a failure; the journal

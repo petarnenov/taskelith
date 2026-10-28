@@ -3,6 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, supportsProtocolVersion, type MessageSchem
 import {
   parseRecoveryEpoch,
   parseSequence,
+  type AttemptId,
   type CommandId,
   type AssignmentRefusal,
   type CommandRejectionReason,
@@ -33,6 +34,8 @@ type Versioned = MessageSchemas['VersionedCommand'];
 export interface CommandIntakeOptions {
   readonly journal: WorkerJournal;
   readonly capacity: WorkerCapacity;
+  // The attempts whose workspace is handed off, each holding a slot.
+  readonly handedOff?: () => ReadonlySet<AttemptId>;
   readonly pressure: AdmissionCheck;
   // This start's self-check failed: every new offer is refused.
   readonly selfCheckFailed: boolean;
@@ -123,7 +126,8 @@ export class CommandIntake {
     if (this.#options.selfCheckFailed) return ok({ reason: 'worker-self-check-failed' });
     const journal = this.#options.journal.snapshot();
     if (!journal.ok) return journal;
-    const reason = refusalOf(intent.requested, journal.value, this.#options.capacity);
+    const handedOff = this.#options.handedOff?.() ?? new Set<AttemptId>();
+    const reason = refusalOf(intent.requested, journal.value, this.#options.capacity, handedOff);
     if (reason !== undefined) return ok({ reason });
     const causes = this.#options.pressure.refresh();
     if (!causes.ok) return causes;

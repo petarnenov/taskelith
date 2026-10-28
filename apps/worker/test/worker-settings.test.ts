@@ -124,3 +124,24 @@ test('an invalid launch setting fails startup and names only its variable', () =
     for (const text of Object.values(change)) if (text !== undefined) assert.equal(failure.message.includes(text), false, failure.message);
   }
 });
+
+test('a Linux worker with a separate execution account declares one slot unless told otherwise', () => {
+  assert.equal(value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH }, FACTS)).capacity.slots, 1);
+  assert.equal(value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH, TASKELITH_WORKER_SLOTS: '' }, FACTS)).capacity.slots, 1);
+  assert.equal(value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH, TASKELITH_WORKER_SLOTS: '1' }, FACTS)).capacity.slots, 1);
+});
+
+test('a Linux worker with a separate execution account refuses more than one slot, naming the variable and the account', () => {
+  const refused = failed(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH, TASKELITH_WORKER_SLOTS: '2' }, FACTS));
+  assert.deepEqual([refused.code, refused.details.variable], ['invalid', 'TASKELITH_WORKER_SLOTS']);
+  assert.match(refused.message, /^TASKELITH_WORKER_SLOTS .*uid 2000, gid 2001$/);
+  assert.equal(failed(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH, TASKELITH_WORKER_SLOTS: '0' }, FACTS)).details.variable, 'TASKELITH_WORKER_SLOTS');
+});
+
+test('a worker whose executions run as its own account keeps the slots it is given', () => {
+  const darwin = { ...FACTS, platform: 'darwin' as const };
+  const command = { TASKELITH_WORKER_COMMAND: '["/bin/true"]' };
+  assert.equal(value(readWorkerSettings({ ...BASE, ...command, TASKELITH_WORKER_SLOTS: '2' }, darwin)).capacity.slots, 2);
+  assert.equal(value(readWorkerSettings({ ...BASE, ...command }, darwin)).capacity.slots, DEFAULT_SLOTS);
+  assert.equal(value(readWorkerSettings({ ...BASE, TASKELITH_WORKER_SLOTS: '2' }, FACTS)).capacity.slots, 2);
+});

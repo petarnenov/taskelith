@@ -62,12 +62,12 @@ export function readWorkerSettings(environment: Environment, facts: HostFacts): 
   if (!fingerprint.ok) return fingerprint;
   const host = workerHost(facts);
   if (!host.ok) return host;
-  const capacity = readCapacity(environment, facts);
-  if (!capacity.ok) return capacity;
   const containmentParent = readContainmentParent(environment, facts.platform);
   if (!containmentParent.ok) return containmentParent;
   const launch = readLaunch(environment, facts.platform, containmentParent.value);
   if (!launch.ok) return launch;
+  const capacity = readCapacity(environment, facts, launch.value?.executionAccount);
+  if (!capacity.ok) return capacity;
   const token = environment.TASKELITH_ENROLLMENT_TOKEN;
   return ok({
     dataRoot: dataRoot.value, controlPlaneUrl: controlPlaneUrl.value, natsUrl: natsUrl.value, host: host.value, capacity: capacity.value,
@@ -109,8 +109,8 @@ function workerHost(facts: HostFacts): Result<WorkerHost> {
 
 // The host's capacity less the daemon's own memory, unless configured; no
 // hard control is declared until the supervisor enforces one.
-function readCapacity(environment: Environment, facts: HostFacts): Result<WorkerCapacity> {
-  const slots = readCount(environment, 'TASKELITH_WORKER_SLOTS', DEFAULT_SLOTS);
+function readCapacity(environment: Environment, facts: HostFacts, account: ExecutionAccount | undefined): Result<WorkerCapacity> {
+  const slots = readSlots(environment, account);
   if (!slots.ok) return slots;
   const cpuMillicores = readCount(environment, 'TASKELITH_WORKER_CPU_MILLICORES', facts.cpuMillicores);
   if (!cpuMillicores.ok) return cpuMillicores;
@@ -121,6 +121,17 @@ function readCapacity(environment: Environment, facts: HostFacts): Result<Worker
 }
 
 const MAXIMUM_COUNT = 2_147_483_647;
+const SLOTS_VARIABLE = 'TASKELITH_WORKER_SLOTS';
+
+// Executions under one separate account could reach each other's checkout,
+// so such a worker has one slot (Git workspace contract section 3).
+function readSlots(environment: Environment, account: ExecutionAccount | undefined): Result<number> {
+  if (account === undefined) return readCount(environment, SLOTS_VARIABLE, DEFAULT_SLOTS);
+  const slots = readCount(environment, SLOTS_VARIABLE, 1);
+  if (!slots.ok || slots.value === 1) return slots;
+  const named = `the execution account uid ${account.uid}, gid ${account.gid}`;
+  return err(failure('invalid', `${SLOTS_VARIABLE} must be 1 for a worker whose executions run as ${named}`, { variable: SLOTS_VARIABLE }));
+}
 
 function readCount(environment: Environment, variable: string, fallback: number): Result<number> {
   const text = environment[variable];

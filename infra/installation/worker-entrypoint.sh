@@ -36,5 +36,12 @@ if [ -n "$(cat "$cgroup_root/cgroup.procs")" ]; then fail "processes remain in t
 # The worker checks that root owns its data root; a 23a volume is taskelith's.
 if [ "$(stat -c %u "$data_root")" != 0 ]; then chown -R 0:0 "$data_root"; fi
 
+# A launching worker holds the execution group, so it gives its workspaces
+# that group without CAP_CHOWN (docs/contracts/git-workspace.md section 2).
+groups=()
+if [ -n "${TASKELITH_WORKER_COMMAND:-}" ] && [ -n "${TASKELITH_EXECUTION_GID:-}" ]; then
+  groups=(--groups "$TASKELITH_EXECUTION_GID")
+fi
+
 # A child switches to the execution account, which clears its capabilities.
-exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs -- "$@"
+exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs "${groups[@]}" -- "$@"
