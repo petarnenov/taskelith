@@ -47,7 +47,7 @@ Every Git process of the adapter SHALL run in a process group of its own and SHA
 ## MODIFIED Requirements
 
 ### Requirement: Git configuration scope
-The adapter SHALL run Git without system and global configuration, inherited `GIT_CONFIG_*` values, or `SUDO_UID`, with `http.followRedirects=false` among its command-scope settings, SHALL write `.git/config` anew from the workspace record once per operation, before its first Git call, and SHALL never set `safe.directory`; the harness host SHALL pass the harness's Git `safe.directory` as command-scope configuration, an empty value first, which resets the list, then exactly that checkout, never `*`.
+The adapter SHALL run Git without system or global configuration, inherited `GIT_CONFIG_*` values, or `SUDO_UID`, with `http.followRedirects=false`, SHALL write `.git/config` anew from the workspace record once per operation, before its first Git call, and SHALL never set `safe.directory`; the harness host SHALL pass the harness's `safe.directory` as command-scope configuration, an empty value first, then exactly that checkout, never `*`.
 
 #### Scenario: Inherited safe.directory
 - **WHEN** the system and global configuration set `safe.directory` to `*`, `SUDO_UID` names the execution account, and the agent replaced the checkout's `.git` with its own
