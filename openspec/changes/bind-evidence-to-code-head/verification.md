@@ -7,7 +7,7 @@ Record of the change through review pass 2 and its fixes; later passes are pendi
 - **Source:** the coordinator's brief (Niki, 2026-10-28) for G3 item 17 (`docs/g3-plan.md`, row 17). Size M.
 - **Base revision:** `a899d5d2` (`origin/dev`, merge of pull request #382).
 - **Merge of dev:** `origin/dev` `f3a53f17` (merge of pull request #383, `adopt-process-performance-recommendations`) merged into the branch with merge commit `1206034c`, without conflicts. After review pass 1, `origin/dev` `9196804b` (pull requests #384, `fix-make-argument-expansion`; #385, `route-reviewers-by-change-complexity`, governance policy version 7; #386, `define-session-turn-model`) merged with merge commit `08677e80`, without conflicts.
-- **Revision verified:** `56a63b3b` before review pass 1: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`). After the merge of dev `9196804b` and the pass 1 fix (`ef9b0d27`): `e1fca2ec`, tree `ea31edaa` ("Checks and results").
+- **Revision verified:** `56a63b3b` before review pass 1: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`). After the merge of dev `9196804b` and the pass 1 fix (`ef9b0d27`): `e1fca2ec`, tree `ea31edaa`. After the pass 2 fixes: `e578bfd5`, tree `d8e84155` ("Checks and results").
 - **Scope:** head-bound SDLC gates and gate evidence; the code head owned by the SDLC module and refined by the workspace module (design decision 1); staleness for a new code head; no restored approval after an artifact edit; rejection of evidence from another head; the SDLC AsyncAPI document 0.4.0; a head-bound gate in the gate repository suite; the Git workspace contract sections 5 and 14.
 - **Out of scope:** the review and verification stages (item 21), auto-merge (item 23), the SCM plugin (item 20), the UI, and the evidence record's `codeRevision` and the merge queue's `CodeHead` (design decision 1 (i), chosen by the coordinator: the follow-up change `align-code-head-names`).
 
@@ -42,6 +42,7 @@ Author checks, run on `56a63b3b` and its working tree:
 - `make findings ARGS="route --change bind-evidence-to-code-head"` on `ef9b0d27`, committed unedited as `route.json` in `19fdd475`. The route record arrived with governance policy version 7 in the merge of dev `08677e80`, after review pass 1, so it ran before the `make verify` of the pass 1 fixes instead of before pass 1. Output: `route: elevated (lines, capabilities, contracts), rule version 1`; pass 1, reviewer A: `codex gpt-6.1-sol#high`; pass 2, reviewer B: `claude claude-opus-5-5#xhigh`; shadow `jev-1.14.0` elevated (0.98), agreeing with the rule. It is a recommendation only.
 - `make verify` after the pass 1 fix, on `19fdd475` (tree `b47faba3`): passed, profile full; tests 2903, pass 2896, fail 0, skipped 7. Its `make contract-compatibility` reported 219 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0, which made design decision 7's count stale; `e1fca2ec` updated it, and `make verify` ran again.
 - `make verify` on `e1fca2ec` (tree `ea31edaa`), ended 11:38 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2903, pass 2896, fail 0, cancelled 0, skipped 7; coverage 99.37% lines, 92.66% branches, 99.08% functions; 219 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0; the head-bound gate of the gate repository suite passed against PostgreSQL (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log.
+- `make verify` after the pass 2 fixes, on `e578bfd5` (tree `d8e84155`), ended 12:07 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2908, pass 2901, fail 0, cancelled 0, skipped 7; coverage 99.37% lines, 92.68% branches, 99.08% functions; 306 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0, as the breakdown in "Breaking changes of the SDLC AsyncAPI document" counts them; the gate repository suite passed against PostgreSQL (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log. No fresh route record: the protocol routes once, before pass 1 (worker step 4).
 
 ## Fails before the change
 
@@ -53,7 +54,7 @@ Author checks, run on `56a63b3b` and its working tree:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `ea31edaa2df9af7cd2e97e227a42010b7d5804e6`; tests 2903, pass 2896, fail 0, skipped 7; all files 99.37% lines, 92.66% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `d8e84155d11ebdc4fb225eb090c97661a4c3d6c1`; tests 2908, pass 2901, fail 0, skipped 7; all files 99.37% lines, 92.68% branches, 99.08% functions.
 - `npm run openspec -- validate bind-evidence-to-code-head --strict`: passed, `Change 'bind-evidence-to-code-head' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
 - Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
@@ -62,6 +63,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18144-6e30-7fd3-b8e6-1788fa5b1766` | 0 | 1 | 0 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `c3aae8d2-0f3a-49f9-a676-1d81016d7b40` | 0 | 0 | 3 | 7 |
 <!-- make record: end -->
 
 ## Independent review
@@ -156,6 +158,6 @@ No group is unintended. The 16 `edit` changes are text only; the 290 `add` chang
 ## Remaining gates
 
 - `make verify` again after each round of review fixes.
-- Review pass 2 by reviewer B, which also checks the unreviewed pass 1 fix, and pass 3 if governance "Conditional third pass" requires it, with their records.
+- Review pass 3 by reviewer A of the unreviewed pass 2 fixes, which change code as well as records, as governance "Conditional third pass" requires, with its record.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
