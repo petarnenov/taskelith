@@ -1,0 +1,1 @@
+{"change": "schedule-intent-and-council-gates", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18294-e032-78a1-8c38-e7bb8a42d960", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 0}}
