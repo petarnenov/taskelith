@@ -36,6 +36,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16d, developed by a briefed s
 - `70c665f5` `test: check the reclaim program's full identity, the worker capabilities, and the freed cgroup in the Linux tests` (N4, N5, N7, N8, N20).
 - `5bd54589` `chore: build the installation images and the worker image through one helper` (N19).
 - `eb3e3430` `docs: list make verify-linux-git-workspace and the modified reclaim requirements` (N14, N18).
+- The records of the pass 2 fixes, the commit names of N15 and N16 (`e4e1b3f2`), and this record of their `make verify`.
 
 ## Environment
 
@@ -86,6 +87,7 @@ Review pass 2, each with only the named source restored, rebuilt, and then resto
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `e4e1b3f2`, after the pass 2 fixes, tree `a4b9e286` | Passed, profile full, stamp written: tests 3296, suites 46, pass 3249, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.82 % branches, 98.88 % functions. `git fetch origin` showed `origin/dev` still at `a10ceaaf`, so no merge was needed. `make record` of this run is under "Generated checks" |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `5bad0cc4`, after the pass 1 fixes and the merge `f33090db`, tree `e88eafd3` | Passed, profile full, stamp written: tests 3271, suites 46, pass 3224, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.93 % functions. `make record` of this run is under "Generated checks" |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `d7a1b785`, after the merge `1bdc5bab`, tree `e1c9f859` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.95 % functions |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `ae323e15`, tree `56041e78` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
@@ -101,7 +103,7 @@ Review pass 2, each with only the named source restored, rebuilt, and then resto
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e88eafd3192b7f793410e95bb83eda281ae12394`; tests 3271, pass 3224, fail 0, skipped 47; all files 99.38% lines, 92.82% branches, 98.93% functions.
+- `make verify`: passed, profile full, tree `a4b9e286a52188def6a81615d849eec42db270e2`; tests 3296, pass 3249, fail 0, skipped 47; all files 99.36% lines, 92.82% branches, 98.88% functions.
 - `npm run openspec -- validate implement-workspace-handoff-and-reclaim --strict`: passed, `Change 'implement-workspace-handoff-and-reclaim' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 74 file(s); every pass summary file is valid: 54 file(s); every route file is valid: 10 file(s).`.
 - Spec diff against the merge base `a10ceaaf860c` with `origin/dev`: no change under `openspec/specs`.
@@ -110,6 +112,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a182da-55e4-7800-adb1-5c516c82d86f` | 0 | 1 | 6 | 1 |
+| 2 | B | `claude claude-opus-5-5#high` | `61a1d4a6-99ed-4830-8b00-9f5ff4d90fc2` | 0 | 0 | 4 | 16 |
 <!-- make record: end -->
 
 ## Contract amendments
