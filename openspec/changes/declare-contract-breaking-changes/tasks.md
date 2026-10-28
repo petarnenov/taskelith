@@ -12,4 +12,5 @@
 
 - [x] 3.1 `npm run openspec -- validate declare-contract-breaking-changes --strict` and the checks without Docker
 - [x] 3.2 `make verify`, `make record`, and `make record-check`
-- [ ] 3.3 Independent review and its records
+- [x] 3.3 Independent review and its records
+- [ ] 3.4 Archive

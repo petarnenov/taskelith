@@ -71,7 +71,7 @@ Author checks on `34d99f3a` and its working tree, without Docker:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `9579d89e899731ef3b08dac1e898bd40f31987c3`; tests 3064, pass 3040, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `5c70c8b2de0360aece26f0243957add7f541998e`; tests 3066, pass 3042, fail 0, skipped 24; all files 99.38% lines, 92.68% branches, 99.07% functions.
 - `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s).`.
 - Spec diff against the merge base `24d259385778` with `origin/dev`: no change under `openspec/specs`.
@@ -80,6 +80,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18236-3ca3-7db2-9678-9e40b1ea808a` | 0 | 0 | 1 | 2 |
+| 2 | B | `claude claude-opus-5-5#high` | `9007bc81-c413-4a77-8d1e-b78c8a4fcc62` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
 ## Independent review
@@ -100,7 +101,7 @@ Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: Claud
 
 ### Pass 1 fixes
 
-Not yet reviewed; reviewer B checks them in pass 2.
+Reviewed by reviewer B in pass 2, which found them correct.
 
 - **M1 fix** (`5809ba1d`): `parseVersion` reads the major, minor, and patch components as `BigInt`, and `compareIdentifiers` compares numeric prerelease identifiers as `BigInt`, through the new `compareNumbers`; `declaresBreakingChange` and `compareVersions` use them. Design decision 5 says so. File: `scripts/check-contract-compatibility.ts`.
 - **L1 fix** (`5809ba1d`, `8ac254f8`): `compareDeclarations` breaks a tie in precedence by the version text, so a repeat is the same path and version string, and `0.5.0+linux` sorts before `0.5.0+mac`. "Breaking-change declarations" (489 characters) now names the order, "path, version precedence, then version text", with the new scenario "Build metadata"; design decision 3 changes with it.
@@ -127,8 +128,24 @@ Not yet reviewed; reviewer B checks them in pass 2.
 - **L6, docs** (`docs/dependencies.md:103`): the oasdiff row named only `make contract-compatibility` as its runner. Resolution: see "Pass 2 fixes".
 - **L7, evidence-mismatch** (`verification.md:30-31`): the author self-check still gave 442 characters for "Breaking-change declarations", 489 after the pass 1 L1 fix, and its scenario list lacked "Build metadata" and the test that reads the file for "Matching entry". Resolution: see "Pass 2 fixes".
 
+### Pass 2 fixes
+
+Unreviewed fixes: pass 2 reported only Low findings, so under the governance rule "Low findings are fixed" they are fixed and recorded with the outcome `fixed-unreviewed`, and the reviewer is not called again. Pass 3 does not run: pass 2 reported no Critical or High finding, and the review of a Low-only pass ends with it, although the L1 and L2 fixes change the script.
+
+- **L1 fix** (`180e3ed7`): `commitOf` returns `undefined` when git cannot resolve `BASE` to a commit, and `printDeclarations` then reports `BASE <rev> is not a commit.`, exit 1, before any comparison. `make contract-breaking-changes BASE=no-such-rev` now prints that line. A value that starts with `-` still gives the usage message with exit 2, as reviewed; the reviewer's optional `--base=` form in the `Makefile` was not adopted.
+- **L2 fix** (`180e3ed7`): the combination moves into the exported pure function `documentProblems(comparisons, reading)`, which `checkDocuments` calls.
+- **L3 fix** (`a5226388`): the scenario "Malformed declarations" names changes not sorted and unique. The requirement keeps its 489 characters: adding the rule to it would pass the 500-character limit of strict validation, and its scenario states it.
+- **L4 fix** (`a5226388`): design decision 3 names the reason's limit of 500 characters.
+- **L5 fix** (`180e3ed7`): the script header cites "ADR 0004 principle 6".
+- **L6 fix** (`a5226388`): the oasdiff row of `docs/dependencies.md` names both `make contract-compatibility` and `make contract-breaking-changes`.
+- **L7 fix** (`a33ee524`): the author self-check gives the character counts as of the pass 2 fixes and maps "Build metadata" and the file-reading test of "Matching entry".
+- **Tests** (`ea490e40`, `test/check-contract-compatibility.test.ts`): `the check adds the declarations to the existing rule, unless the file is malformed` (L2: a matching entry, a minor bump without an entry, a patch bump whose entry is stale next to the existing rule's problem, and a malformed file that skips the declarations); `an unknown --base revision fails with a message, not a stack trace` (L1: runs the script with `--print --base no-such-rev` and expects exit 1, empty standard output, and exactly the message on standard error).
+- **Fails before the fix.** The test file of `ea490e40` against its unchanged script (that of `98fc21c3`): it fails to load, `SyntaxError: ... does not provide an export named 'documentProblems'`. With only the L2 extraction applied: tests 26, pass 25, fail 1, the L1 test (`actual` standard error `Error: Command failed: git rev-parse --verify --quiet --end-of-options no-such-rev^{commit}` with its stack trace). Mutation probes of the extraction, reverted: dropping the `declarationProblems` call, or the guard that skips it for a malformed file, each fails the L2 test (tests 26, fail 2 with the L1 test). After the fix, `180e3ed7`: tests 26, pass 26.
+- **Author checks after the fix:** `npm run verify:comments`: passed; `npx tsc -p tsconfig.check.json`, filtered to the changed script and test: no errors; coverage of `scripts/check-contract-compatibility.ts` over its test file: 82.71% lines, 94.48% branches, 88.33% functions (the spawned script now counts); `npm run openspec -- validate declare-contract-breaking-changes --strict`: valid.
+- **`make verify`** on `a33ee524` (tree `5c70c8b2`), full profile, exit 0, stamp written: tests 3066, pass 3042, fail 0, skipped 24; coverage 99.38% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `24d25938`. `make record` wrote "Generated checks" from its log.
+- **Review complete:** two passes, pass 1 by reviewer A and pass 2 by reviewer B; the Low-only pass 2 ends the review.
+
 ## Remaining gates
 
-- Independent review passes and their records.
 - Archive.
 - Integration into dev by the coordinator (single pull request).
