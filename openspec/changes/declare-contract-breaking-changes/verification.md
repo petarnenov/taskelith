@@ -145,7 +145,15 @@ Unreviewed fixes: pass 2 reported only Low findings, so under the governance rul
 - **`make verify`** on `a33ee524` (tree `5c70c8b2`), full profile, exit 0, stamp written: tests 3066, pass 3042, fail 0, skipped 24; coverage 99.38% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `24d25938`. `make record` wrote "Generated checks" from its log.
 - **Review complete:** two passes, pass 1 by reviewer A and pass 2 by reviewer B; the Low-only pass 2 ends the review.
 
+## Dev merge
+
+- **Return.** The coordinator returned the branch: merging `origin/dev` `964f0b57` conflicted in the `Makefile`. The archive commit `98db2f4e` was reverted for the merge in `22218409`, which restores the active change and the living specs from before the archive; the change is archived again after the review below.
+- **Merge** `0fdc4cfd` of `origin/dev` `964f0b57`; merge base before it `24d25938`. One conflict, the `.PHONY` line of the `Makefile`: the resolution keeps both sides, this change's `contract-breaking-changes` and dev's `verify-macos-g2-scenarios`; both target bodies merged without conflict. `package-lock.json` is unchanged, so `make setup` did not run again.
+- **Reconciliation.** Between `24d25938` and `964f0b57`, dev changed `openspec/specs/sdlc-wire-contracts/spec.md` only in "Generated types": it adds "or define one security scheme name differently" and the scenario "Security scheme with two meanings". Dev did not change "Breaking-change check", the only requirement this delta modifies, and added no requirement on breaking-change declarations, so the delta stays unchanged. A trial archive in a scratch copy of the merged tree applied `+ 4, ~ 1`, kept dev's "Generated types" text, and `npm run openspec -- validate --all --strict` passed 71 of 71; the copy was deleted.
+- **Contracts.** Dev added `packages/contracts/documents/control-plane.openapi.json` (0.1.0) to `CONTRACT_DOCUMENTS` in `scripts/generate-contracts.ts`; the declarations reader takes its known paths from that list and the schema has no path enum, so no change was needed. The other four documents keep their versions. `make contract-breaking-changes` against the new merge base `964f0b57` and with `BASE=24d25938`: 0 breaking changes of each document (control-plane absent at `24d25938`), empty `declarations`; `make contract-compatibility`: `Contract documents have no undeclared breaking change.`
+
 ## Remaining gates
 
-- Archive.
+- Review by reviewer A of the merge resolution and the reconciliation.
+- Archive again.
 - Integration into dev by the coordinator (single pull request).
