@@ -24,6 +24,7 @@ import {
 import { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-repositories.js';
 import { PostgresInventoryReports, PostgresInventoryRequests } from './inventory-repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
+import { PostgresAccessTransaction } from './access-repositories.js';
 import { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
@@ -54,6 +55,7 @@ export class PostgresTransaction {
   readonly catalog: PostgresRunCatalog;
   readonly installationTable: PostgresInstallationTable;
   readonly operatorCredentials: PostgresOperatorCredentials;
+  readonly access: PostgresAccessTransaction;
   readonly signals: PostgresSignalReadings;
   readonly evidence: PostgresEvidenceRecords;
   readonly producers: PostgresEvidenceProducers;
@@ -92,6 +94,7 @@ export class PostgresTransaction {
     this.catalog = new PostgresRunCatalog(session);
     this.installationTable = new PostgresInstallationTable(session);
     this.operatorCredentials = new PostgresOperatorCredentials(session);
+    this.access = new PostgresAccessTransaction(session);
     this.signals = new PostgresSignalReadings(session);
     this.evidence = new PostgresEvidenceRecords(session);
     this.producers = new PostgresEvidenceProducers(session);

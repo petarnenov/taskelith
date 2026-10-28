@@ -9,6 +9,7 @@
     { "path": "../../modules/observability" },
     { "path": "../../modules/scheduling" },
     { "path": "../../modules/sdlc" },
-    { "path": "../../testing" }
+    { "path": "../../testing" },
+    { "path": "../secrets" }
   ]
 }
