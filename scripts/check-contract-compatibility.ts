@@ -10,7 +10,7 @@ import type { SchemaCheck } from './review-findings.ts';
 import { CONTRACT_DOCUMENTS } from './generate-contracts.ts';
 
 // Fails on a breaking contract change since the origin/dev merge base that
-// info.version or the declarations file does not declare (ADR 0004 item 6).
+// info.version and breaking-changes.json do not declare (ADR 0004 principle 6).
 
 export const OASDIFF_IMAGE = 'tufin/oasdiff:v1.34.1@sha256:67a23cfea7d251e2ae34ee703ac8733c5d96bc2e7b90fd0f4d475ec99367b85f';
 const BASE_BRANCH = 'dev';
@@ -337,23 +337,31 @@ async function compareDocuments(base: string, log: (line: string) => void): Prom
 }
 
 // A malformed file reports its own problems instead of every declaration.
-async function checkDocuments(): Promise<string[]> {
-  const reading = readDeclarations(readFileSync(BREAKING_CHANGES_PATH, 'utf8'), CONTRACT_DOCUMENTS.map(({ path }) => path));
-  const { comparisons, problems } = await compareDocuments(mergeBase(), console.log);
-  const documentProblems = comparisons.flatMap((document) => [
+export function documentProblems(comparisons: readonly DocumentComparison[], reading: DeclarationsReading): string[] {
+  return comparisons.flatMap((document) => [
     ...compatibilityProblems(document.path, document.baseVersion, document.headVersion, document.breakingChanges),
     ...(reading.problems.length > 0 ? [] : declarationProblems(document, reading.declarations)),
   ]);
-  return [...reading.problems, ...problems, ...documentProblems];
+}
+
+async function checkDocuments(): Promise<string[]> {
+  const reading = readDeclarations(readFileSync(BREAKING_CHANGES_PATH, 'utf8'), CONTRACT_DOCUMENTS.map(({ path }) => path));
+  const { comparisons, problems } = await compareDocuments(mergeBase(), console.log);
+  return [...reading.problems, ...problems, ...documentProblems(comparisons, reading)];
 }
 
 // Resolves BASE to a commit; --end-of-options keeps it from being an option.
-function commitOf(revision: string): string {
-  return git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${revision}^{commit}`]);
+function commitOf(revision: string): string | undefined {
+  try {
+    return git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${revision}^{commit}`]);
+  } catch {
+    return undefined;
+  }
 }
 
 async function printDeclarations(revision: string | undefined): Promise<string[]> {
   const base = revision === undefined ? mergeBase() : commitOf(revision);
+  if (base === undefined) return [`BASE ${revision} is not a commit.`];
   const { comparisons, problems } = await compareDocuments(base, console.error);
   process.stdout.write(formatDeclarations(listedDeclarations(comparisons)));
   return [...problems];
