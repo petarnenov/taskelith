@@ -160,6 +160,25 @@ After pass 3, `make verify` on `e7d1b3a2` with these records: exit 0; `ℹ tests
   - `make verify`: passed, profile full, tree `1b80fc14ae9bf54edfec4550963f30928e7b0337`, stamp written; 45 suites, tests 2673, pass 2666, fail 0, cancelled 0, skipped 7; all files 99.35% lines, 92.53% branches, 99.06% functions; 60 findings files and 40 pass summary files valid; `validate --all --strict` 70 passed, 0 failed. "Generated checks" below is `make record` of its log.
   - `make verify-installation` (Docker): exit 0, "built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed"; its log holds no `PRIVATE KEY` line and no `tken_` token.
 
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `1b80fc14ae9bf54edfec4550963f30928e7b0337`; tests 2673, pass 2666, fail 0, skipped 7; all files 99.35% lines, 92.53% branches, 99.06% functions.
+- `npm run openspec -- validate enroll-remote-worker-over-tls --strict`: passed, `Change 'enroll-remote-worker-over-tls' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s).`.
+- Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18109-0d4c-7b40-b983-958c59614519` | 0 | 1 | 1 | 1 |
+| 2 | B | `claude claude-opus-5-5#high` | `d1b442e8-b185-40c4-944d-e331072e0281` | 0 | 0 | 1 | 9 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1812f-f208-7491-8982-288e01a74212` | 0 | 0 | 0 | 1 |
+| merge-reconciliation 1 | A | `codex gpt-6.1-sol#medium` | `01a18136-568a-7ba2-a1ed-49935b2cd1f3` | 0 | 0 | 1 | 0 |
+<!-- make record: end -->
+
 ## Limitations
 
 - The Linux scenario runs and the native scenario depend on hosts this change could not exercise here: `make verify-linux-g2-scenarios` and `make verify-linux-crash-windows` need a Linux host network that Docker Desktop on macOS does not give (26a's record shows `ECONNREFUSED`), and `make scenario-native-worker-lifecycle` needs free host disk above the worker's floor. These files changed for them and ran only where `make verify` runs them: `test/g2-scenarios/scenario-worker.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, `test/g2-scenarios/scenario-installation.ts` (a comment), `scripts/installation-scenarios.sh` (the native worker's start), and `apps/control-plane/test/harness-composition.ts` and `apps/control-plane/test/fixtures/worker-composition.ts`, whose Linux paths only the Linux suites run.
