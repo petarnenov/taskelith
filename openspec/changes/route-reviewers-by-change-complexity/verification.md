@@ -286,13 +286,15 @@ Node.js 24.22.1, the `.nvmrc` pin, by its full nvm path. Every command that runs
 - **Result:** Critical 0, High 0, Medium 0, Low 1, as in `passes.jsonl` line 3 and `findings.jsonl` line 22. The reviewer confirmed all eleven pass 2 fixes and the coordinator's correction of the idea date to 2026-10-28.
 - **1, Low, evidence-mismatch** (`findings.jsonl:16`): pass 2 finding 6 did not name the pass that missed it, although the `missing-credential` wording was already in the `route.json` of `939de6b0`, which pass 1 reviewed at `7cecc59a` and cited (L9) without raising it. Fixed in `229e7c64`: the line carries `"missedBy":{"pass":1,"role":"A"}`, and "Review pass 2" bullet 6 says so. Outcome `fixed-unreviewed`.
 - **End of review:** a Low-only pass ends the review under governance "Low findings are fixed", so the finding is fixed without another review; the review is also complete at the three-pass cap.
+- `make verify` with `TMPDIR` under the session scratchpad and the credential variable removed from its environment, on `66f22905`, full profile, log at `/tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/rr-verify-5.log`: exit 0 on the first run, `make verify: passed, profile full, tree 2fe646a8ea72953fd7f8891aed6cd55ed155bd5d; stamp written`; comments within the rule; `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`; `tests 2824`, `pass 2777`, `fail 0`, `cancelled 0`, `skipped 47`; product coverage all files 99.32 lines, 92.61 branches, 98.98 functions; `Every product module is in the coverage report.`; `Verified 766 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)`; `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`
+- `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`: `make record: wrote the generated part of openspec/changes/route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`. `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `ddae6b9a0a33b5632b439e5aecb4214cc89445db`; tests 2824, pass 2777, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
+- `make verify`: passed, profile full, tree `2fe646a8ea72953fd7f8891aed6cd55ed155bd5d`; tests 2824, pass 2777, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
 - `npm run openspec -- validate route-reviewers-by-change-complexity --strict`: passed, `Change 'route-reviewers-by-change-complexity' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`.
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
@@ -302,6 +304,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `claude claude-fable-5-1#medium` | `2312677b-a5e1-4977-8400-cfe1bd02b090` | 0 | 0 | 1 | 9 |
 | 2 | B | `claude claude-opus-5-5#high` | `98cfed23-c7ce-4f50-bd8d-3b1f18c2c6e9` | 0 | 0 | 1 | 10 |
+| 3 | A | `claude claude-fable-5-1#medium` | `284b2a33-2961-4c24-9735-98f6a99f9b3a` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Remaining gates
