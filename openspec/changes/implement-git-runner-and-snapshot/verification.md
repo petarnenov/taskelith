@@ -22,7 +22,12 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16b, developed by a briefed s
 - `4b704d4c` added the `make record` markers and is the head that review pass 3 reviewed.
 - Merge `795b32c4` of `origin/dev` `9196804b` after pass 3, without conflict. The brief named `f6696995` (#384, GNU Make 4.4 argument expansion); the merged dev head also holds #385 (route-reviewers-by-change-complexity) and #386 (define-session-turn-model). It changed no file under `packages/modules/workspace`, `packages/adapters/git-workspace`, `docs/contracts/git-workspace.md`, or `openspec/specs/git-workspace-port`, nor this change's directory (`git diff --name-only 4b704d4c 795b32c4`).
 - Pass 3 fix: `2d7d7ca2` `test: cover directory entries of the head tree before the snapshot checks them` (the fail-before run of pass 3 ran on this commit); `1b797b86` `chore: check the directory entries of the head tree before the snapshot drops them`; then the commit that records pass 3 in `passes.jsonl`, `findings.jsonl`, this file, and `design.md`. The pass 3 checks ran on that commit; `make record` below names its tree. `354ca4c2` recorded that `make verify` run and is the head that review pass 4 reviewed.
-- `docs: record review pass 4 of implement-git-runner-and-snapshot` records pass 4 in `passes.jsonl`, this file, and `tasks.md`; it changes no checked input.
+- `docs: record review pass 4 of implement-git-runner-and-snapshot` records pass 4 in `passes.jsonl`, this file, and `tasks.md`; it changes no checked input. `21a6d16c` is that commit.
+- `ae7a2380` `docs: archive the implement-git-runner-and-snapshot change`, the first archive commit; the coordinator returned the branch ("Return and reconciliation").
+- `fc7c1aa7` `docs: restore the active implement-git-runner-and-snapshot change to merge dev` reverts `ae7a2380`.
+- Merge `2b92eacf` of `origin/dev` `4e3f8224` (#387, item 26b, enroll-remote-worker-over-tls), without conflict; git merged `package-lock.json` automatically.
+- `4119a8a1` `chore: regenerate the dependency inventory after merging dev` (`docs/dependencies`), the head that review pass 5 reviewed and that the reconciliation checks ran on.
+- `docs: record the reconciliation review of implement-git-runner-and-snapshot` records pass 5 in `passes.jsonl` and this file; it changes no checked input.
 
 ## Environment
 
@@ -89,16 +94,18 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 | `npm run openspec -- validate implement-git-runner-and-snapshot --strict` | `5b941461` | "Change 'implement-git-runner-and-snapshot' is valid" |
 | Scratch archive as above | `6e61f97d` | "Totals: + 9, ~ 2"; validation 69 passed, 0 failed |
 | `make findings ARGS="validate"` | `6e61f97d` | "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)." |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `4119a8a1`, tree `58521aa3` | Failed only at the coverage report: "failed to parse coverage file ... Unterminated string in JSON at position 1048576", after tests 3050, pass 2988, fail 0. A coverage file was cut off at 1 MiB, an environment fault; no test failed |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`, rerun | `4119a8a1`, tree `58521aa3` | Passed, profile full, stamp written: tests 3050, pass 2988, fail 0, skipped 62; all files 99.34 % lines, 92.76 % branches, 98.99 % functions. `make record` of this run is under "Generated checks" |
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f188e722308c8c8129f993f2a06e22017728fac9`; tests 3027, pass 2965, fail 0, skipped 62; all files 99.34% lines, 92.72% branches, 98.99% functions.
+- `make verify`: passed, profile full, tree `58521aa328021f8ffbe8200f26ce624774dbe37f`; tests 3050, pass 2988, fail 0, skipped 62; all files 99.34% lines, 92.76% branches, 98.99% functions.
 - `npm run openspec -- validate implement-git-runner-and-snapshot --strict`: passed, `Change 'implement-git-runner-and-snapshot' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 1 file(s).`.
-- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 64 file(s); every pass summary file is valid: 44 file(s); every route file is valid: 1 file(s).`.
+- Spec diff against the merge base `4e3f82242430` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -107,6 +114,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | B | `claude claude-opus-5-5#high` | `3d9ff410-49d2-4b60-bea5-ebe488545c33` | 0 | 4 | 3 | 5 |
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a18140-db5c-7bd1-a3c8-0adcf2124b71` | 0 | 0 | 1 | 0 |
 | 4 | A | `codex gpt-6.1-sol#medium` | `01a181c8-ab62-7ea0-be01-ed095a0e259c` | 0 | 0 | 0 | 0 |
+| 5 | A | `codex gpt-6.1-sol#medium` | `01a181e2-0e0e-7360-bd89-9935ff4746ed` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Review
@@ -117,6 +125,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | Claude Code `claude-opus-5-5`, high | B | `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>` | The last result line's `modelUsage` holds only `claude-opus-5-5` | `3d9ff410-49d2-4b60-bea5-ebe488545c33` | SHA-256 before = after = `d04b1763ac2d977ce5a143201103e97b8cee78f3b6bc38102bc4b1739c7c2bdc` | Reviewed head `55b0fb23`: critical 0, high 4, medium 3, low 5 | All 12 fixed (below) |
 | 3 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a18140-db5c-7bd1-a3c8-0adcf2124b71` | SHA-256 before = after = `25d97d841f00bc73b0732fc8c9697f1d02e8151c78a5c2dc7d6dd87739df2c55`, by the worker's command; the reviewer reported its own computation `d95e9e7c…`, which is not the proof | Reviewed head `4b704d4c`: critical 0, high 0, medium 1, low 0 | Fixed (below) |
 | 4 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a181c8-ab62-7ea0-be01-ed095a0e259c` | SHA-256 before = after = `e97aafc8bc7b52c794bb1151eab8904390fe3300cd71b81c07465dc9d76d36cc` | Reviewed head `354ca4c2`, the M2 fix only: critical 0, high 0, medium 0, low 0 | M2 confirmed fixed; nothing to resolve |
+| 5 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a181e2-0e0e-7360-bd89-9935ff4746ed` | SHA-256 before = after = `9b92bf93447ceafb0903669ce3202b7a49150c232a6a60d3ed8dfb1b8d261c55` | Reviewed head `4119a8a1`, the reconciliation only: critical 0, high 0, medium 0, low 0 | Nothing to resolve |
 
 Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync git EPERM`), so the reviewer ran the checker's logic read-only over the 2682 tracked files, which passed. Findings and resolutions, recorded in `findings.jsonl`:
 
@@ -154,6 +163,18 @@ Pass 3 confirmed the pass 2 fixes H1 to H4, M1, M3, and L1 to L5, and found M2 i
 The owner decided on 2026-10-28 to fix M2 and to have reviewer A review only that fix in pass 4, beyond the three-pass cap, by the owner's permission (design, "Owner decisions").
 
 Pass 4, limited to the M2 fix, confirmed it with no finding, so `findings.jsonl` has no line for it. The reviewer ran no tests.
+
+## Return and reconciliation
+
+The coordinator (Niki) returned the archived branch after `make integrate` reported "Dependency inventory is stale; changed inputs: package-lock.json" on its merge with `origin/dev` `4e3f8224` (#387, item 26b). The coordinator later agreed that coordinator step 2 required it to regenerate the inventory itself and continue with `RESUME=1`, so the protocol did not require this return; the worker completed it at the coordinator's request, under worker step 10:
+
+1. `fc7c1aa7` reverted the archive commit `ae7a2380`, which restored the active change and the living specs.
+2. The base is `git merge-base ae7a2380 origin/dev`, `9196804b`. The merge `2b92eacf` of `origin/dev` `4e3f8224` had no conflict; git merged `package-lock.json` automatically.
+3. `git diff 9196804b 4e3f8224 -- openspec/specs` changes `control-plane-api`, `execution-wire-contracts`, `installation-enrollment`, `local-installation`, and `worker-runtime`, and no file of `git-workspace-port`, so the delta needed no reconciliation and is unchanged.
+4. `4119a8a1` regenerated `docs/dependencies`: the lockfile hash, and `undici` now `development: false`, which 26b's `worker-control-plane-client` brought.
+5. `make verify` on `4119a8a1` (Checks): the first run failed only at the coverage report, the rerun passed.
+
+Pass 5 is the reconciliation review that worker step 10 asks of reviewer A. The pass schema has no form for such a review, so `passes.jsonl` records it as pass 5, role A. Its scope was the merge resolution, the inventory diff, and that the delta still applies cleanly to `dev`'s living specs; it found nothing. Its read-only sandbox refused `npm run verify:dependencies` (`spawnSync npm EPERM`), so it compared the inventory contents directly. It ran no tests.
 
 ## Limitations
 
