@@ -3,6 +3,7 @@ import test from 'node:test';
 import { passPlans, SKIPPED_SHADOW, type ShadowDecision, type Tier } from '../scripts/review-route.ts';
 import {
   agreement,
+  areaUnderCurve,
   formatOutcomeFigures,
   formatRoutingFigures,
   NO_FINDINGS,
@@ -33,6 +34,20 @@ function answered(tier: Tier, elevated: number, expectedPasses: number): ShadowD
     confidence: 0.8,
     probabilities: { standard: 1 - elevated, elevated },
     expectedPasses,
+    passes: passPlans(tier, { externalFacts: false }),
+    latencyMs: 5,
+  };
+}
+
+function thirdPassAnswer(thirdPassProbability: number): ShadowDecision {
+  const tier = thirdPassProbability >= 0.4 ? 'elevated' : 'standard';
+  return {
+    router: 'jev',
+    status: 'answered',
+    model: 'jev-1.14.0',
+    tier,
+    thirdPassProbability,
+    threshold: 0.4,
     passes: passPlans(tier, { externalFacts: false }),
     latencyMs: 5,
   };
@@ -124,5 +139,36 @@ test('the figures print per tier, with the shadow when it answered', () => {
   ]));
   assert.equal(withShadow.length, 6);
   assert.equal(withShadow[4], '  shadow: answered 1, failed network 1, skipped 0; agreement 1 of 1 (100%), kappa n/a');
-  assert.equal(withShadow[5], '  shadow: Brier score of P(elevated) 0.01, mean absolute error of passes 0.00');
+  assert.equal(withShadow[5], '  shadow: tier request of 1 change(s), Brier score of P(elevated) 0.01, mean absolute error of passes 0.00');
+});
+
+test('P(third) answers are scored apart from tier request answers', () => {
+  const figures = routingFigures([
+    routed('elevated', thirdPassAnswer(0.8), outcome(3)),
+    routed('standard', thirdPassAnswer(0.3), outcome(2)),
+    routed('standard', thirdPassAnswer(0.5), outcome(1)),
+    routed('elevated', answered('elevated', 0.9, 3), outcome(3)),
+  ]);
+  const { shadow } = figures;
+  assert.equal(shadow.answered, 4);
+  // (0.04 + 0.09 + 0.25) / 3; the third pass outranks both others.
+  assert.deepEqual(shadow.thirdPass, { changes: 3, brierScore: 0.127, auc: 1 });
+  assert.equal(shadow.brierScore, 0.01);
+  assert.equal(shadow.tiers.elevated.changes, 3);
+  const lines = formatRoutingFigures(figures);
+  assert.equal(lines.at(-2), '  shadow: P(third) of 3 change(s), Brier score 0.13, AUC 1.00');
+  assert.equal(lines.at(-1), '  shadow: tier request of 1 change(s), Brier score of P(elevated) 0.01, mean absolute error of passes 0.00');
+});
+
+test('only P(third) answers print no tier request line', () => {
+  const lines = formatRoutingFigures(routingFigures([routed('standard', thirdPassAnswer(0.2), outcome(1))]));
+  assert.equal(lines.at(-1), '  shadow: P(third) of 1 change(s), Brier score 0.04, AUC n/a');
+});
+
+test('AUC counts ordered pairs, ties as half, and needs both outcomes', () => {
+  const forecast = (probability: number, thirdPass: boolean) => ({ probability, thirdPass });
+  assert.equal(areaUnderCurve([forecast(0.6, true), forecast(0.6, false), forecast(0.2, false)]), 0.75);
+  assert.equal(areaUnderCurve([forecast(0.1, true), forecast(0.9, false)]), 0);
+  assert.equal(areaUnderCurve([forecast(0.5, true)]), null);
+  assert.equal(areaUnderCurve([]), null);
 });

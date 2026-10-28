@@ -6,12 +6,14 @@ import { CHECKLIST_SCHEMA_PATH } from './checklist-record.ts';
 import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings-common.ts';
 import { changeOfDirectory, contentLines, secretLikeStrings, type SchemaCheck } from './review-findings.ts';
 import {
+  LINE_BANDS,
   ROUTE_SCHEMA_PATH,
   SKIPPED_SHADOW,
   type ReviewRouter,
   type RouteFeatures,
   type RuleDecision,
   type ShadowDecision,
+  type ShadowInput,
 } from './review-route.ts';
 import {
   formatOutcomeFigures,
@@ -39,6 +41,7 @@ import {
 } from './review-route-features.ts';
 import { CREDENTIAL_VARIABLE, Credential, JevRouter } from './review-route-jev.ts';
 import { RuleRouter } from './review-route-rules.ts';
+import { archivedReference, shadowInputAt, type ArchivedReference } from './review-route-shadow-input.ts';
 
 // The offline evaluation: routes every archived reviewed change by its
 // features as of its own time and compares the tiers with its passes.
@@ -76,7 +79,7 @@ export interface EvaluationDependencies {
   readonly environment: EvaluationEnvironment;
   readonly rule: ReviewRouter<RuleDecision>;
   // Undefined without a credential; then only --rule-only can run.
-  readonly shadow: ReviewRouter<ShadowDecision> | undefined;
+  readonly shadow: ReviewRouter<ShadowDecision, ShadowInput> | undefined;
   readonly checkSchema: SchemaCheck;
 }
 
@@ -109,12 +112,12 @@ export interface ArchivedRecords extends ReviewRecords {
   readonly directory: string;
 }
 
-export class RetryOnceRouter implements ReviewRouter<ShadowDecision> {
-  readonly #inner: ReviewRouter<ShadowDecision>;
+export class RetryOnceRouter implements ReviewRouter<ShadowDecision, ShadowInput> {
+  readonly #inner: ReviewRouter<ShadowDecision, ShadowInput>;
   readonly #delayMs: number;
   readonly #sleep: (delayMs: number) => Promise<unknown>;
 
-  constructor(inner: ReviewRouter<ShadowDecision>, delayMs: number, wait: (delayMs: number) => Promise<unknown>) {
+  constructor(inner: ReviewRouter<ShadowDecision, ShadowInput>, delayMs: number, wait: (delayMs: number) => Promise<unknown>) {
     this.#inner = inner;
     this.#delayMs = delayMs;
     this.#sleep = wait;
@@ -122,11 +125,11 @@ export class RetryOnceRouter implements ReviewRouter<ShadowDecision> {
 
   // The adapter drops response headers, so a fixed delay stands in for
   // retry-after.
-  async route(features: RouteFeatures): Promise<ShadowDecision> {
-    const first = await this.#inner.route(features);
+  async route(input: ShadowInput): Promise<ShadowDecision> {
+    const first = await this.#inner.route(input);
     if (!isRetryable(first)) return first;
     await this.#sleep(this.#delayMs);
-    return this.#inner.route(features);
+    return this.#inner.route(input);
   }
 }
 
@@ -178,9 +181,10 @@ export async function evaluateArchive(root: string, at: string, dependencies: Ev
   const { environment } = dependencies;
   const { subjects, excluded } = archivedSubjects(root, at, environment);
   const reviewsAt = memoized((commit: string) => archivedReviews(environment, root, commit));
+  const referenceAt = memoized((commit: string) => archivedReference(environment, root, commit));
   const lines: EvaluationLine[] = [];
   for (const subject of subjects) {
-    lines.push(await evaluationLine(root, subject, dependencies, reviewsAt));
+    lines.push(await evaluationLine(root, subject, dependencies, { reviewsAt, referenceAt }));
   }
   return { at, lines, excluded };
 }
@@ -210,13 +214,19 @@ function memoized<Value>(compute: (key: string) => Value): (key: string) => Valu
   };
 }
 
+interface ArchiveReaders {
+  readonly reviewsAt: (commit: string) => readonly ArchivedReview[];
+  readonly referenceAt: (commit: string) => ArchivedReference;
+}
+
 async function evaluationLine(
   root: string,
   subject: Subject,
   { environment, rule, shadow }: EvaluationDependencies,
-  reviewsAt: (commit: string) => readonly ArchivedReview[],
+  { reviewsAt, referenceAt }: ArchiveReaders,
 ): Promise<EvaluationLine> {
   const { revision, features, approximate } = featuresOfItsTime(root, subject, environment, reviewsAt);
+  const shadowInput = () => shadowInputAt(root, environment, revision, features, referenceAt);
   return {
     change: subject.change,
     mergeCommit: subject.merge.sha,
@@ -225,7 +235,7 @@ async function evaluationLine(
     approximate,
     features,
     rule: await rule.route(features),
-    shadow: shadow === undefined ? SKIPPED_SHADOW : unlessRefused(await shadow.route(features)),
+    shadow: shadow === undefined ? SKIPPED_SHADOW : unlessRefused(await shadow.route(shadowInput())),
     outcome: reviewOutcome(subject.records),
   };
 }
@@ -277,12 +287,6 @@ export interface EvaluationGroups {
   readonly withPassSummaries: RoutingFigures;
   readonly lowerBounds: RoutingFigures;
 }
-
-export const LINE_BANDS = [
-  { label: 'under 100 lines', below: 100 },
-  { label: '100 to 399 lines', below: 400 },
-  { label: '400 lines and more', below: Number.POSITIVE_INFINITY },
-] as const;
 
 export interface EvaluationSummary {
   readonly at: string;

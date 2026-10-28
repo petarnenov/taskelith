@@ -40,19 +40,30 @@
       "description": "The shadow router's answer, or why there is none. It decides nothing.",
       "oneOf": [
         {
+          "description": "An answer to the third pass question: P(third) and the tier that the threshold maps it to, elevated at or above it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["router", "status", "model", "tier", "thirdPassProbability", "threshold", "passes", "latencyMs"],
+          "properties": {
+            "router": { "$ref": "#/$defs/router" },
+            "status": { "const": "answered" },
+            "model": { "$ref": "#/$defs/model" },
+            "tier": { "$ref": "#/$defs/tier" },
+            "thirdPassProbability": { "description": "The model's probability that the change needs review pass 3.", "$ref": "#/$defs/probability" },
+            "threshold": { "description": "The probability at or above which the shadow tier is elevated.", "$ref": "#/$defs/probability" },
+            "passes": { "$ref": "#/$defs/passes" },
+            "latencyMs": { "$ref": "#/$defs/latency" }
+          }
+        },
+        {
+          "description": "An answer to the tier and passes questions, which records routed before the third pass question hold.",
           "type": "object",
           "additionalProperties": false,
           "required": ["router", "status", "model", "tier", "confidence", "probabilities", "expectedPasses", "passes", "latencyMs"],
           "properties": {
             "router": { "$ref": "#/$defs/router" },
             "status": { "const": "answered" },
-            "model": {
-              "description": "The versioned model ID that answered, as the response names it.",
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
-            },
+            "model": { "$ref": "#/$defs/model" },
             "tier": { "$ref": "#/$defs/tier" },
             "confidence": { "$ref": "#/$defs/probability" },
             "probabilities": {
@@ -97,6 +108,13 @@
     "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "tier": { "type": "string", "enum": ["standard", "elevated"] },
     "router": { "description": "The shadow adapter.", "const": "jev" },
+    "model": {
+      "description": "The versioned model ID that answered, as the response names it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
     "probability": { "type": "number", "minimum": 0, "maximum": 1 },
     "latency": { "description": "Milliseconds from request to answer or failure.", "type": "integer", "minimum": 0, "maximum": 600000 },
     "count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
@@ -132,7 +150,7 @@
       }
     },
     "features": {
-      "description": "The router input, derived from committed state; all of it, and nothing else, is sent to the shadow router.",
+      "description": "The router input, derived from committed state. The shadow router gets all of it except touches, with reference rates and the redacted proposal, which are not recorded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["linesChanged", "filesChanged", "capabilities", "touches", "externalFacts", "size", "capabilityHistory"],

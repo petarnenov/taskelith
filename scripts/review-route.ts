@@ -64,7 +64,19 @@ export const SHADOW_FAILURES = [
 ] as const;
 export type ShadowFailure = (typeof SHADOW_FAILURES)[number];
 
+// An answer to the third pass question: P(third) and the tier that the
+// threshold maps it to.
 export interface AnsweredShadow extends RouteDecision {
+  readonly router: typeof SHADOW_ROUTER;
+  readonly status: 'answered';
+  readonly model: string;
+  readonly thirdPassProbability: number;
+  readonly threshold: number;
+  readonly latencyMs: number;
+}
+
+// An answer to the tier and passes questions of archived records.
+export interface LegacyAnsweredShadow extends RouteDecision {
   readonly router: typeof SHADOW_ROUTER;
   readonly status: 'answered';
   readonly model: string;
@@ -87,14 +99,56 @@ export interface SkippedShadow {
   readonly status: 'skipped';
 }
 
-export type ShadowDecision = AnsweredShadow | FailedShadow | SkippedShadow;
+export type ShadowDecision = AnsweredShadow | LegacyAnsweredShadow | FailedShadow | SkippedShadow;
+
+export function isThirdPassAnswer(shadow: ShadowDecision): shadow is AnsweredShadow {
+  return shadow.status === 'answered' && 'thirdPassProbability' in shadow;
+}
+
+// The shadow tier of a third pass probability.
+export function tierAt(thirdPassProbability: number, threshold: number): Tier {
+  return thirdPassProbability >= threshold ? 'elevated' : 'standard';
+}
 
 export const SKIPPED_SHADOW: SkippedShadow = { router: SHADOW_ROUTER, status: 'skipped' };
 
+export const LINE_BANDS = [
+  { label: 'under 100 lines', below: 100 },
+  { label: '100 to 399 lines', below: 400 },
+  { label: '400 lines and more', below: Number.POSITIVE_INFINITY },
+] as const;
+
+export interface BandRate {
+  readonly band: string;
+  readonly changes: number;
+  readonly thirdPassShare: number | null;
+}
+
+// Third pass shares of archived reviewed changes, the routed one excluded.
+export interface ReferenceRates {
+  readonly changes: number;
+  readonly thirdPassShare: number | null;
+  readonly byLinesChanged: readonly BandRate[];
+}
+
+// The change's proposal sections, unclipped, and its plan counts.
+export interface ChangeContent {
+  readonly why: string;
+  readonly whatChanges: string;
+  readonly taskCount: number;
+  readonly specRequirementCount: number;
+}
+
+export interface ShadowInput {
+  readonly features: RouteFeatures;
+  readonly reference: ReferenceRates;
+  readonly content: ChangeContent;
+}
+
 // The port. The rule adapter never fails; a shadow adapter resolves to a
 // failed decision instead of rejecting.
-export interface ReviewRouter<Decision> {
-  route(features: RouteFeatures): Promise<Decision>;
+export interface ReviewRouter<Decision, Input = RouteFeatures> {
+  route(input: Input): Promise<Decision>;
 }
 
 // The version of the rule's thresholds and of its reviewer table. A change

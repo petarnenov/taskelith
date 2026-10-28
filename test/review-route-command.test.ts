@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { CHECKLIST_SCHEMA_PATH } from '../scripts/checklist-record.ts';
 import { SCHEMA_PATH } from '../scripts/findings.ts';
-import { ROUTE_SCHEMA_PATH, SKIPPED_SHADOW, type RuleDecision, type ShadowDecision } from '../scripts/review-route.ts';
+import { ROUTE_SCHEMA_PATH, SKIPPED_SHADOW, type RuleDecision, type ShadowDecision, type ShadowInput } from '../scripts/review-route.ts';
 import { routeDependencies, routeSchemaCheck, runRoute, type RouteDependencies } from '../scripts/review-route-command.ts';
 import type { RouteEnvironment } from '../scripts/review-route-features.ts';
 import { CREDENTIAL_VARIABLE, Credential, JevRouter } from '../scripts/review-route-jev.ts';
@@ -58,7 +58,7 @@ async function runIn(args: readonly string[], dependencies: Partial<RouteDepende
     const result = await runRoute(args, root, {
       environment: fakeEnvironment(),
       rule: new RuleRouter(),
-      shadow: new FakeRouter<ShadowDecision>({ router: 'jev', status: 'failed', reason: 'timeout', latencyMs: 2000 }),
+      shadow: new FakeRouter<ShadowDecision, ShadowInput>({ router: 'jev', status: 'failed', reason: 'timeout', latencyMs: 2000 }),
       checkSchema,
       now: () => new Date('2026-10-28T09:30:00.000Z'),
       ...dependencies,
@@ -91,7 +91,7 @@ test('--json prints the record it writes', async () => {
 });
 
 test('--no-shadow skips the shadow router', async () => {
-  const shadow = new FakeRouter<ShadowDecision>(SKIPPED_SHADOW);
+  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(SKIPPED_SHADOW);
   const run = await runIn(['--change', CHANGE, '--no-shadow'], { shadow });
   assert.equal(run.exitCode, 0, run.stderr);
   assert.equal(shadow.calls.length, 0);
@@ -106,22 +106,42 @@ test('a disagreeing shadow is recorded and the rule plans stand', async () => {
     status: 'answered',
     model: 'jev-1.14.0',
     tier: 'elevated',
-    confidence: 0.8,
-    probabilities: { standard: 0.2, elevated: 0.8 },
-    expectedPasses: 2.1,
+    thirdPassProbability: 0.8,
+    threshold: 0.4,
     passes: (await rule.route({ ...QUIET_FEATURES, linesChanged: 900 })).passes,
     latencyMs: 300,
   };
   const quiet = fakeEnvironment({ changedFiles: () => [{ path: 'docs/notes.md', lines: 10 }] });
-  const run = await runIn(['--change', CHANGE], { environment: quiet, shadow: new FakeRouter(shadowDecision) });
+  const run = await runIn(['--change', CHANGE], { environment: quiet, shadow: new FakeRouter<ShadowDecision, ShadowInput>(shadowDecision) });
   const record = JSON.parse(run.route!) as { rule: RuleDecision; shadow: ShadowDecision };
   assert.equal(record.rule.tier, 'standard');
   assert.equal(record.shadow.status === 'answered' && record.shadow.tier, 'elevated');
-  assert.match(run.stdout, /disagrees with the rule/);
+  assert.match(run.stdout, /elevated \(P\(third\) 0\.80, threshold 0\.4\).*disagrees with the rule/);
+});
+
+test('the shadow gets the proposal content and the archive reference', async () => {
+  const files: Readonly<Record<string, string>> = {
+    ...COMMITTED,
+    [`openspec/changes/${CHANGE}/proposal.md`]: '## Why\n\nBecause.\n\n## What Changes\n\n- A fix.\n',
+    'openspec/changes/archive/2026-10-01-earlier/passes.jsonl': '{"pass":1}\n{"pass":2}\n{"pass":3}\n',
+    'openspec/changes/archive/2026-10-01-earlier/route.json': '{"change":"earlier","features":{"linesChanged":420}}',
+  };
+  const environment = fakeEnvironment({
+    listFiles: (_root, _commit, directory) => Object.keys(files).filter((path) => path.startsWith(`${directory}/`)),
+    readFile: (_root, _commit, path) => files[path],
+  });
+  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(SKIPPED_SHADOW);
+  const run = await runIn(['--change', CHANGE], { environment, shadow });
+  assert.equal(run.exitCode, 0, run.stderr);
+  const [input] = shadow.calls;
+  assert.deepEqual(input!.content, { why: 'Because.', whatChanges: '- A fix.', taskCount: 0, specRequirementCount: 0 });
+  assert.equal(input!.reference.thirdPassShare, 1);
+  assert.deepEqual(input!.reference.byLinesChanged.map(({ changes }) => changes), [0, 0, 1]);
+  assert.equal(input!.features.linesChanged, 40);
 });
 
 test('an existing route.json is refused before any router runs', async () => {
-  const shadow = new FakeRouter<ShadowDecision>(SKIPPED_SHADOW);
+  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(SKIPPED_SHADOW);
   const run = await runIn(['--change', CHANGE], { shadow }, (root) => writeFileSync(join(root, ROUTE_PATH), 'kept'));
   assert.equal(run.exitCode, 1);
   assert.match(run.stderr, /route\.json exists; delete it to route again; nothing written/);

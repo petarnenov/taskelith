@@ -4,12 +4,21 @@ import { parseArgs } from 'node:util';
 import { CHECKLIST_SCHEMA_PATH } from './checklist-record.ts';
 import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings-common.ts';
 import type { SchemaCheck } from './review-findings.ts';
-import { ROUTE_FILE, ROUTE_SCHEMA_PATH, SKIPPED_SHADOW, type ReviewRouter, type RuleDecision, type ShadowDecision } from './review-route.ts';
+import {
+  ROUTE_FILE,
+  ROUTE_SCHEMA_PATH,
+  SKIPPED_SHADOW,
+  type ReviewRouter,
+  type RuleDecision,
+  type ShadowDecision,
+  type ShadowInput,
+} from './review-route.ts';
 import { GIT_ROUTE_ENVIRONMENT } from './review-route-environment.ts';
-import { changeDirectory, RouteRefusal, routeSubject, type RouteEnvironment } from './review-route-features.ts';
+import { changeDirectory, RouteRefusal, routeSubject, type RouteEnvironment, type RouteSubject } from './review-route-features.ts';
 import { CREDENTIAL_VARIABLE, Credential, JevRouter } from './review-route-jev.ts';
 import { formatRouteRecord, formatRouteSummary, routeRecordProblems, type RouteRecord } from './review-route-record.ts';
 import { RuleRouter } from './review-route-rules.ts';
+import { archivedReference, shadowInputAt } from './review-route-shadow-input.ts';
 
 // The route command: derives the features of an active change, routes
 // them by the rule and the shadow router, and writes route.json.
@@ -21,7 +30,7 @@ const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 export interface RouteDependencies {
   readonly environment: RouteEnvironment;
   readonly rule: ReviewRouter<RuleDecision>;
-  readonly shadow: ReviewRouter<ShadowDecision>;
+  readonly shadow: ReviewRouter<ShadowDecision, ShadowInput>;
   readonly checkSchema: SchemaCheck;
   readonly now: () => Date;
 }
@@ -75,7 +84,7 @@ async function route(options: RouteOptions, root: string, dependencies: RouteDep
   refuseExistingRoute(root, options.change);
   const subject = routeSubject(root, options.change, dependencies.environment);
   const rule = await dependencies.rule.route(subject.features);
-  const shadow = options.consultShadow ? await dependencies.shadow.route(subject.features) : SKIPPED_SHADOW;
+  const shadow = options.consultShadow ? await dependencies.shadow.route(shadowInput(root, options.change, subject, dependencies)) : SKIPPED_SHADOW;
   const record: RouteRecord = { change: options.change, generatedAt: dependencies.now().toISOString(), ...subject, rule, shadow };
   const problems = routeRecordProblems(record, options.change, dependencies.checkSchema);
   if (problems.length > 0) throw new RouteRefusal(`the route record is invalid: ${problems.join('; ')}`);
@@ -85,6 +94,11 @@ async function route(options: RouteOptions, root: string, dependencies: RouteDep
     stdout: options.json ? formatRouteRecord(record) : `${formatRouteSummary(record)}\n`,
     stderr: shadowNotice(shadow),
   };
+}
+
+function shadowInput(root: string, change: string, subject: RouteSubject, { environment }: RouteDependencies): ShadowInput {
+  const revision = { devCommit: subject.devCommit, revision: subject.headCommit, directory: changeDirectory(change) };
+  return shadowInputAt(root, environment, revision, subject.features, (commit) => archivedReference(environment, root, commit));
 }
 
 function routePath(change: string): string {
