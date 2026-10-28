@@ -15,7 +15,8 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16b, developed by a briefed s
 - `81af575b` `test: keep the coverage variable out of the Git processes of the adapter's tests`, after the first `make verify` (below). The final checks ran on this commit.
 - `3a037731` `docs: record the verification of implement-git-runner-and-snapshot`, the head that review pass 1 reviewed.
 - Pass 1 fixes: `49ec248d` `test: cover the pass 1 findings of the Git workspace adapter before their fixes` (the fail-before run of pass 1 ran on this commit); `8d927f43` (replace objects, scrubbing of both streams and every credential form, the coverage variable); `c982f184` (strict status, tree listing, and object output parsers); `1effb6e6` (index flags, `.git/info`, byte names in the checkout walk, file system faults, revision lookups); `da67f03c` and `8aaae71f` (contract sections 2, 3, 6, and 7, design, proposal, spec delta, tasks); `f3213a6e` (a test type that `make verify`'s type check refused on the first run); `d15954a4` (`passes.jsonl` and `findings.jsonl` of pass 1). The pass 1 checks below ran on `d15954a4`.
-- Author self-check fix before pass 2, at the coordinator's request (design D15): `c5f0b006` (test first), `fbcc1c16` (`core.untrackedCache=false` in `GIT_COMMAND_SCOPE_SETTINGS`), `b713717d` (contract section 7, spec scenario "Forged untracked cache", design, this record's limitation removed). The latest checks ran on `b713717d`.
+- Author self-check fix before pass 2, at the coordinator's request (design D15): `c5f0b006` (test first), `fbcc1c16` (`core.untrackedCache=false` in `GIT_COMMAND_SCOPE_SETTINGS`), `b713717d` (contract section 7, spec scenario "Forged untracked cache", design, this record's limitation removed). `55b0fb23` recorded that fix and is the head that review pass 2 reviewed.
+- Pass 2 fixes: `e20e2f33` `test: cover the pass 2 findings of the Git workspace adapter before their fixes` (the fail-before run of pass 2 ran on this commit); `41da9696` (module: the reason `unsafe-tree-path`, `isSafeTreeName`, `core.commitGraph=false` and `core.multiPackIndex=false`; the deletion of the adapter's `src/index-flags.ts`, which belongs to the next commit, landed here by mistake and is left there because the branch is never rewritten); `3cb0f27c` (adapter: verified objects, the index rebuild and comparison, the Git directory's entry types and `.git` in any case, absence only on `ENOENT` or `ENOTDIR`, the nominal verified client, the prepare's staging cleanup, and the adapted tests); `5b941461` (contract sections 3, 6, 7, 9, and 10, design, proposal, spec delta, tasks); `6e61f97d` (`passes.jsonl` and `findings.jsonl` of pass 2). The latest checks ran on `6e61f97d`.
 - The commit that adds this record changes no checked input other than this file.
 
 ## Environment
@@ -49,6 +50,10 @@ On `49ec248d`, the new tests against the code that pass 1 reviewed: `node --expe
 
 On `c5f0b006`: `node --experimental-strip-types --test --test-reporter=spec packages/adapters/git-workspace/test/git-workspaces.test.ts packages/modules/workspace/test/workspace-domain.test.ts` gave tests 54, pass 52, fail 2: "a forged untracked cache in the index never hides untracked work" (dirty reasons `[]` instead of `untracked`, after the test's own check that the forged cache hides the file from native `git status`) and "the built Git environment holds the contract settings, the header last". On `fbcc1c16` the adapter and module tests gave tests 218, pass 203, fail 0, skipped 15. The `core.fsmonitor` question needs no setting (design D15): on the host Git a hook that reported no change hid a modified file, and after the rewrite of `.git/config` the same index with its `FSMN` extension showed it.
 
+### Pass 2 fixes
+
+On `e20e2f33`: `node --experimental-strip-types --test --test-reporter=spec packages/adapters/git-workspace/test/*.test.ts packages/modules/workspace/test/snapshot-archive.test.ts packages/modules/workspace/test/workspace-domain.test.ts` gave tests 143, pass 113, fail 15, skipped 15, each failure for its finding's reason: "a gitlink added only to the index never hides a directory of work" (H1, dirty reasons `[]`); "forged stat data in the index never hides a modified tracked file" (H2, `[]`); "a forged cache tree never hides a staged change" (H3, `[]`); "an object whose bytes do not hash to its name fails the snapshot" (H4, the snapshot succeeded) and "a forged commit-graph never changes what status reads" (H4, `modified` instead of `[]`); "a FIFO as .git/index" and "a FIFO deeper in .git" (M1); "a path that Git refuses, or a file that is also a directory, is refused" and `git-objects.test.ts`, whose exports did not exist (M2); "a file system error other than absence rejects instead of reading as unsafe" (L1); "a file system fault at the rename into place leaves no staging entry" (L3, the staging entry stayed); "a nested Git directory in another case" and "a second Git directory in another case at the top" (L4); and the module's reason list and "the built Git environment holds the contract settings, the header last". The type check (`npx tsc -p tsconfig.check.json`) reported "Unused '@ts-expect-error' directive" in "only the gate makes a verified client, also for the type checker" (L2). After the fixes the adapter and module tests gave tests 239, pass 224, fail 0, skipped 15, and the type check passed. The test "a fault after the rename into place fails the prepare and keeps the ready workspace" records the L3 decision and passed before and after. M3 and L5 are documentation.
+
 ## After the change
 
 The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration about 3 s).
@@ -70,13 +75,18 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 | Scratch archive as above | `d15954a4` | "+ 8 added, ~ 2 modified"; validation 69 passed, 0 failed |
 | `make findings ARGS="validate"` | `d15954a4` | "Every findings file is valid" |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `b713717d` | Passed, exit 0: tests 2638, suites 45, pass 2576, fail 0, cancelled 0, skipped 62; all files 99.33 % lines, 92.54 % branches, 98.96 % functions; "Every product module is in the coverage report"; findings and pass files valid; `openspec validate --all --strict` 70 passed, 0 failed; "Every checked link conforms"; "Every active OpenSpec change archives into strictly valid specs"; the adapter's `dist/**` lines 832 of 835 (99.64 %), branches 405 of 446 (90.81 %), functions 108 of 110 (98.18 %) |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `6e61f97d` | Passed, exit 0: tests 2659, suites 45, pass 2597, fail 0, cancelled 0, skipped 62 |
+| Coverage of `packages/adapters/git-workspace/dist/**`, summed from `coverage/lcov.info` of that run | `6e61f97d` | lines 926 of 929 (99.68 %), branches 457 of 499 (91.58 %), functions 127 of 129 (98.45 %) |
+| `npm run openspec -- validate implement-git-runner-and-snapshot --strict` | `5b941461` | "Change 'implement-git-runner-and-snapshot' is valid" |
+| Scratch archive as above | `6e61f97d` | "Totals: + 9, ~ 2"; validation 69 passed, 0 failed |
+| `make findings ARGS="validate"` | `6e61f97d` | "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)." |
 
 ## Review
 
 | Pass | Reviewer | Role | Invocation | Model confirmation | Session | Snapshot | Findings | Resolution |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a18102-c0f5-7983-95e3-33e834d7e67a` | SHA-256 before = after = `1d8f06582a26eec18ea9cbeedaa3ebc4e0a6b09b7104b6a3ff2dbf63b9e3d3ce` | Reviewed head `3a037731`: critical 0, high 3, medium 6, low 2 | All 11 fixed (below) |
-| 2 | Claude Code `claude-opus-5-5`, high | B | Pending | Pending | Pending | Pending | Pending | Pending |
+| 2 | Claude Code `claude-opus-5-5`, high | B | `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>` | The last result line's `modelUsage` holds only `claude-opus-5-5` | `3d9ff410-49d2-4b60-bea5-ebe488545c33` | SHA-256 before = after = `d04b1763ac2d977ce5a143201103e97b8cee78f3b6bc38102bc4b1739c7c2bdc` | Reviewed head `55b0fb23`: critical 0, high 4, medium 3, low 5 | All 12 fixed (below) |
 | 3 | Codex `gpt-6.1-sol` | A | Pending | Pending | Pending | Pending | Pending | Pending |
 
 Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync git EPERM`), so the reviewer ran the checker's logic read-only over the 2682 tracked files, which passed. Findings and resolutions, recorded in `findings.jsonl`:
@@ -93,6 +103,21 @@ Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync 
 10. Low, the status parser accepted malformed fields and missing headers: every field and both branch headers validated (`c982f184`).
 11. Low, the tree listing accepted `100644garbage` and an empty path: six octal digits and a non-empty path (`c982f184`).
 
+Pass 2 confirmed all 11 pass 1 fixes. Its brief was read-only and it ran no tests. Findings and resolutions, recorded in `findings.jsonl`:
+
+1. High (H1), a gitlink added only to the index hid a directory of work: the merged index is compared with the verified head tree, gitlinks included; contract section 6 (`3cb0f27c`).
+2. High (H2), forged stat data hid a modified file: every index entry is written anew with `git update-index -z --index-info` (`3cb0f27c`).
+3. High (H3), a forged cache tree hid a staged change: the rebuild invalidates it, and the comparison of H1 also sees the change (`3cb0f27c`).
+4. High (H4), objects were not checked against their names: commit, trees, and blobs read with `cat-file --batch` and hashed; `core.commitGraph=false` and `core.multiPackIndex=false`; requirement "Verified Git objects"; contract sections 7 and 10 (`41da9696`, `3cb0f27c`).
+5. Medium (M1), a FIFO or other special file in `.git`: only directories and regular files are allowed (`3cb0f27c`).
+6. Medium (M2), tree paths that Git refuses: new reason `unsafe-tree-path` (design D16), in the port, the test double, and the adapter; contract sections 9 and 10 (`41da9696`, `3cb0f27c`).
+7. Medium (M3), contract section 9 lacked file system faults and `internal`: rows amended by coordinator decision M3 (`5b941461`).
+8. Low (L1), any `lstat` error read as absence: only `ENOENT` and `ENOTDIR` (`3cb0f27c`).
+9. Low (L2), `VerifiedGitClient` was structural: private `#verified` field and a type test (`3cb0f27c`).
+10. Low (L3), the prepare left its staging entry after a rename fault: deleted after any failure before the rename; a failure after it is `unavailable` with the ready workspace kept; contract section 3 (`3cb0f27c`).
+11. Low (L4), `.git` compared case-sensitively: any case (`3cb0f27c`).
+12. Low (L5), the proposal was stale: updated (`5b941461`).
+
 ## Limitations
 
 - Ran on Linux with the host's Git 2.55.0 behind a recording wrapper, not with the pinned Linux Git 2.43.0 or Apple's 2.50.1, and not natively on macOS; the test that commits names that are not UTF-8 skips on macOS, whose APFS refuses them.
@@ -102,7 +127,7 @@ Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync 
 
 ## Remaining gates
 
-- Independent review passes 2 and 3 (reviewers B and A above), recorded in `passes.jsonl` and `findings.jsonl`; pass 3 confirms the pass 1 fixes.
+- Independent review pass 3 (reviewer A above), recorded in `passes.jsonl` and `findings.jsonl`; pass 3 confirms the pass 2 fixes.
 - The archive of this change in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 (contract section 13, pending gate), run by the owner.
