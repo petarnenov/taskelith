@@ -198,6 +198,41 @@ test('a well-formed declarations file is read', () => {
   assert.deepEqual(readDeclarations(fileText([]), DOCUMENT_PATHS), { declarations: [], problems: [] });
 });
 
+test('versions above 2^53 compare without loss of precision', () => {
+  const large = '9007199254740992';
+  const larger = '9007199254740993';
+  const document = { path: API, baseVersion: `0.4.${large}`, headVersion: `0.4.${large}`, breakingChanges: [] };
+
+  assert.equal(declaresBreakingChange(`${large}.0.0`, `${larger}.0.0`), true);
+  assert.equal(declaresBreakingChange(`0.${large}.0`, `0.${larger}.0`), true);
+  assert.deepEqual(declarationProblems(document, [declaration(`0.4.${larger}`, ['remove /channels/a'])]), [
+    `${API}: stale entry 0.4.${larger} in ${FILE}: 0.4.${large} over 0.4.${large} declares no breaking change of that version`,
+  ]);
+  const prereleases = [declaration(`1.0.0-${large}`, ['a']), declaration(`1.0.0-${larger}`, ['b'])];
+  assert.deepEqual(readDeclarations(fileText(prereleases), DOCUMENT_PATHS), { declarations: prereleases, problems: [] });
+});
+
+test('versions that differ only in build metadata are distinct and ordered by their text', () => {
+  const builds = [declaration('0.5.0+linux', ['a']), declaration('0.5.0+mac', ['b'])];
+
+  assert.deepEqual(readDeclarations(fileText(builds), DOCUMENT_PATHS), { declarations: builds, problems: [] });
+  assert.deepEqual(readDeclarations(fileText([...builds].reverse()), DOCUMENT_PATHS).problems, [
+    `${FILE}: declarations/1: is not sorted by path and version`,
+  ]);
+  assert.deepEqual(readDeclarations(fileText([builds[0], builds[0]]), DOCUMENT_PATHS).problems, [
+    `${FILE}: declarations/1: repeats ${API} 0.5.0+linux`,
+  ]);
+});
+
+test('a valid, sorted entry read from the file matches found changes in any order', () => {
+  const entry = declaration('0.5.0', ['add /channels/a', 'remove /channels/b']);
+  const read = readDeclarations(fileText([entry]), DOCUMENT_PATHS);
+  const document = { path: API, baseVersion: '0.4.0', headVersion: '0.5.0', breakingChanges: ['remove /channels/b', 'add /channels/a'] };
+
+  assert.deepEqual(read.problems, []);
+  assert.deepEqual(declarationProblems(document, read.declarations), []);
+});
+
 test('a malformed declarations file fails and names each problem', () => {
   const cases: readonly [string, readonly string[]][] = [
     ['{', [`${FILE}: is not valid JSON`]],
