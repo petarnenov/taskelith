@@ -1,0 +1,103 @@
+{
+  "change": "show-task-progress",
+  "generatedAt": "2026-10-28T20:12:39.495Z",
+  "devCommit": "1666739982106ec3e9663978b4f86cdd2fb72f1f",
+  "headCommit": "0be1d36a4953df60dfdf49dc5f2cceacc238f193",
+  "features": {
+    "linesChanged": 1112,
+    "filesChanged": 6,
+    "capabilities": [
+      "agent-task-protocol"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "S-M",
+    "capabilityHistory": {
+      "changes": 7,
+      "thirdPassShare": 0.7142857142857143,
+      "mediumOrWorsePerChange": 5.714285714285714
+    }
+  },
+  "rule": {
+    "version": 2,
+    "tier": "elevated",
+    "triggers": [
+      "lines"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.79,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 264
+  }
+}
