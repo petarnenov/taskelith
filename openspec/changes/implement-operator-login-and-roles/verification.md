@@ -38,6 +38,11 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 - The first `make verify`, on the first routed head, failed in `npm run build`: the `packages/adapters/postgres` `tsconfig.json` lacked the `../secrets` reference of its new development dependency. Fixed in the PostgreSQL commit.
 - `make verify` on `15bd48e7`: passed, profile full; tests 3205, pass 3190, fail 0, skipped 15; all files 99.41% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `principal-administration.js` 84.06%, `control-plane-api.js` 81.00%, `administration.js` 77.06% branches.
 
+## Merge of dev
+
+- `a1f0d4af` merged `origin/dev` `10fc3bbe` (9b #394, 9c #395) without a textual conflict. `control-plane.openapi.json` 0.2.0 adds the board, inbox, agent session, and event stream operations; their rules follow wire contracts section 3 as 9b amended it, and `test/access-requirements.test.ts` lists them. The `answerableBy` check of `answerInboxItem` belongs to its handler (section 8).
+- Open for the coordinator: `execution.openapi.json` 0.6.0 and execution wire contracts section 8.2 answer an evidence read by a principal without a role on the record's project with the 404 of an unknown record, where this change answers 403 (Q4), and section 9 there assigns item 10 the session on the evidence operations, the retirement entry, the 404 of a download whose record was retired meanwhile, and an orphan content sweep.
+
 ## Limitations
 
 - The evidence retirement entry is deferred until its 9b to 9d operation lands in `dev` ([design](design.md) "Non-goals").

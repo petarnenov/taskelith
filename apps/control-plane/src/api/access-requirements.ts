@@ -12,6 +12,7 @@ const NONE: RequirementRule = Object.freeze({ kind: 'none' });
 const ANY_PRINCIPAL: RequirementRule = Object.freeze({ kind: 'fixed', requirement: AUTHENTICATED });
 const OWNER: RequirementRule = Object.freeze({ kind: 'fixed', requirement: OWNER_ONLY });
 const PROJECT_READ: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-viewer', ownerReads: true });
+const PROJECT_OPERATOR: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-operator', ownerReads: false });
 const PROJECT_MAINTAINER: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-maintainer', ownerReads: false });
 // The G2 operator operations, which the temporary G2 bridge covers (Q5).
 const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator' });
@@ -24,6 +25,13 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   readAutoMergeSetting: PROJECT_READ, readRepositoryBinding: PROJECT_READ, listProjectAccountSlots: PROJECT_READ,
   updateProject: PROJECT_MAINTAINER, updateProjectDefaults: PROJECT_MAINTAINER, updateAutoMergeSetting: PROJECT_MAINTAINER,
   bindRepository: PROJECT_MAINTAINER,
+  readBoard: PROJECT_READ, readTaskDetail: PROJECT_READ, readInbox: PROJECT_READ, readInboxCounts: PROJECT_READ,
+  listAgentSessions: PROJECT_READ, readAgentSession: PROJECT_READ, listAgentSessionTurns: PROJECT_READ,
+  listAgentSessionRequests: PROJECT_READ, readAgentSessionOutput: PROJECT_READ, streamProjectEvents: PROJECT_READ,
+  // The item's `answerableBy` role is checked by its handler (section 8).
+  submitTurn: PROJECT_OPERATOR, respondToNativeRequest: PROJECT_OPERATOR, answerInboxItem: PROJECT_OPERATOR,
+  readInstallationInbox: OWNER, readInstallationInboxCounts: OWNER, answerInstallationInboxItem: OWNER,
+  streamInstallationEvents: OWNER,
   createProject: OWNER, assignProjectMember: OWNER, removeProjectMember: OWNER, listWorkers: OWNER,
   listEnrollmentTokens: OWNER, issueEnrollmentToken: OWNER, revokeEnrollmentToken: OWNER, rotateEnrollmentToken: OWNER,
   listAccountSlots: OWNER, addAccountSlot: OWNER, updateAccountSlot: OWNER, revokeAccountSlot: OWNER,

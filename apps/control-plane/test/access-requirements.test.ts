@@ -16,6 +16,10 @@ const SECTION_3: Record<string, string> = {
   readProject: 'viewer-or-owner', listProjectMembers: 'viewer-or-owner', readProjectDefaults: 'viewer-or-owner',
   readAutoMergeSetting: 'viewer-or-owner', readRepositoryBinding: 'viewer-or-owner', listProjectAccountSlots: 'viewer-or-owner',
   updateProject: 'maintainer', updateProjectDefaults: 'maintainer', updateAutoMergeSetting: 'maintainer', bindRepository: 'maintainer',
+  readBoard: 'viewer-or-owner', readTaskDetail: 'viewer-or-owner', readInbox: 'viewer-or-owner', readInboxCounts: 'viewer-or-owner',
+  listAgentSessions: 'viewer-or-owner', readAgentSession: 'viewer-or-owner', listAgentSessionTurns: 'viewer-or-owner',
+  listAgentSessionRequests: 'viewer-or-owner', readAgentSessionOutput: 'viewer-or-owner', streamProjectEvents: 'viewer-or-owner',
+  submitTurn: 'operator', respondToNativeRequest: 'operator', answerInboxItem: 'operator',
 };
 
 function rowOf(operationId: string): string {
@@ -62,6 +66,7 @@ test('an operation that no rule names fails closed to the installation-owner', (
 test('a path-project requirement names the path project, and a resource-project one waits for its resource', () => {
   assert.deepEqual(requirementBeforeBody('readProject', ['alpha']), projectRead('alpha'));
   assert.deepEqual(requirementBeforeBody('bindRepository', ['alpha']), projectRequirement('alpha', 'project-maintainer'));
+  assert.deepEqual(requirementBeforeBody('submitTurn', ['alpha', 's-1']), projectRequirement('alpha', 'project-operator'));
   assert.equal(requirementBeforeBody('readEvidence', ['e-1']), undefined);
   assert.equal(requirementBeforeBody('logIn', []), undefined);
 });
