@@ -45,11 +45,15 @@ The new tests' assertions on the request were run against the scripts of `1234e5
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `d130eb6ddb386fe041b4bb89edb60ed71f811aae`; tests 3337, pass 3322, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `2023d48e02a0a0aff8ed2909a99ae21291925e5b`; tests 3340, pass 3325, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions.
 - `npm run openspec -- validate improve-jev-route-request --strict`: passed, `Change 'improve-jev-route-request' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 76 file(s); every pass summary file is valid: 56 file(s); every route file is valid: 12 file(s).`.
 - Spec diff against the merge base `1234e540009a` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a1837a-ac3f-7181-9293-d3a23ffbb5b0` | 0 | 1 | 1 | 0 |
 <!-- make record: end -->
 
 ## Limitations
