@@ -166,18 +166,27 @@ test('the containment check fails when the probe fails for another reason than a
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
 
-// Answers the image ID of a tag ending in -first or -second; a FAKE_ status
-// fails builds or removals, and FAKE_MOVE_HEAD commits during the first build.
+// Models a build of the tag ending in -first or -second: its metadata
+// file, layers, and image ID; FAKE_ statuses fail steps, see the tests.
 const buildDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case "$*" in
+  *-first|*"-first "*) config=$FAKE_FIRST_CONFIG layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
+  *-second|*"-second "*) config=$FAKE_SECOND_CONFIG layers=$FAKE_SECOND_LAYERS id=$FAKE_SECOND_ID ;;
+esac
 case "$*" in
   "build "*)
     case "$*" in *"-first "*) [ -z "$FAKE_MOVE_HEAD" ] || GIT_COMMITTER_DATE='@1800000000 +0000' \\
       git -C "$FAKE_MOVE_HEAD" -c user.name=test -c user.email=test@example.invalid \\
       commit --quiet --allow-empty --message moved ;; esac
+    previous=
+    for argument; do
+      [ "$previous" != --metadata-file ] || printf '{"containerimage.config.digest": "%s"}\\n' "$config" > "$argument"
+      previous=$argument
+    done
     exit "\${FAKE_BUILD_STATUS:-0}" ;;
-  "image inspect --format {{.Id}} "*-first) echo "$FAKE_FIRST_ID" ;;
-  "image inspect --format {{.Id}} "*-second) echo "$FAKE_SECOND_ID" ;;
+  "image inspect --format {{.Id}} "*) echo "$id" ;;
+  "image inspect --format {{range .RootFS.Layers}}"*) echo "$layers"; exit "\${FAKE_LAYERS_STATUS:-0}" ;;
   "image rm "*) exit "\${FAKE_REMOVE_STATUS:-0}" ;;
 esac
 exit 0
@@ -240,9 +249,24 @@ function runInFixture(script: string, args: readonly string[], environment: Reco
   }
 }
 
-function checkReproducible(firstId: string, secondId: string, environment: Record<string, string> = {}): BuildOutcome {
+interface WorkerBuild {
+  readonly config: string;
+  readonly layers: string;
+  // The image ID, which the containerd store makes the index digest.
+  readonly id: string;
+}
+
+const WORKER_BUILD: WorkerBuild = { config: 'sha256:c0f1', layers: 'sha256:base sha256:app ', id: 'sha256:c0f1' };
+
+function checkReproducible(
+  first: Partial<WorkerBuild> = {}, second: Partial<WorkerBuild> = {}, environment: Record<string, string> = {},
+): BuildOutcome {
+  const builds = { FIRST: { ...WORKER_BUILD, ...first }, SECOND: { ...WORKER_BUILD, ...second } };
+  const fakes = Object.entries(builds).flatMap(([name, build]) => [
+    [`FAKE_${name}_CONFIG`, build.config], [`FAKE_${name}_LAYERS`, build.layers], [`FAKE_${name}_ID`, build.id],
+  ]);
   return runInFixture('installation.sh', ['check-reproducible', 'installation-script-test'], {
-    FAKE_FIRST_ID: firstId, FAKE_SECOND_ID: secondId, ...environment,
+    ...Object.fromEntries(fakes), ...environment,
   });
 }
 
@@ -267,25 +291,59 @@ test('the harness variant is built with the commit time of the built tree as SOU
   assert.ok(build?.includes(COMMIT_EPOCH_ARGUMENT), build);
 });
 
-test('the reproducibility check builds the worker twice without the cache and passes on one image ID', () => {
-  const outcome = checkReproducible('sha256:same', 'sha256:same');
+test('the reproducibility check builds the worker twice without the cache and passes on one image config', () => {
+  const outcome = checkReproducible();
   assert.equal(outcome.status, 0, outcome.stderr);
   const [first, second, ...others] = builds(outcome.calls);
   assert.equal(others.length, 0);
   for (const [call, tag] of [[first, 'first'], [second, 'second']] as const) {
-    assert.match(call ?? '', /^build --no-cache .* --target worker --tag taskelith-worker:installation-script-test-/);
+    assert.match(call ?? '', /^build --no-cache --metadata-file \S+ .* --target worker --tag taskelith-worker:installation-script-test-/);
     assert.ok(call?.includes(`-${tag} `), call);
     assert.ok(call?.includes(COMMIT_EPOCH_ARGUMENT), call);
   }
-  assert.match(outcome.stdout, /both builds gave the worker image sha256:same/);
+  assert.match(outcome.stdout, /both builds gave the worker image config sha256:c0f1/);
   assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
 });
 
-test('the reproducibility check fails and names both image IDs when they differ', () => {
-  const outcome = checkReproducible('sha256:one', 'sha256:two');
+test('the reproducibility check passes when only the image IDs differ, as the index digests of the containerd store', () => {
+  const outcome = checkReproducible({ id: 'sha256:036dad823c49' }, { id: 'sha256:abc511323824' });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.match(outcome.stdout, /both builds gave the worker image config sha256:c0f1/);
+});
+
+test('the reproducibility check fails and names the differing layer and both image configs', () => {
+  const outcome = checkReproducible({}, { config: 'sha256:c0f2', layers: 'sha256:base sha256:other ' });
   assert.equal(outcome.status, 1);
-  assert.match(outcome.stderr, /two builds of one revision gave sha256:one and sha256:two/);
+  assert.match(outcome.stderr, /layer 1 differs: sha256:app and sha256:other/);
+  assert.doesNotMatch(outcome.stderr, /layer 0/);
+  assert.match(outcome.stderr, /the image configs differ: sha256:c0f1 and sha256:c0f2/);
   assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
+});
+
+test('the reproducibility check fails on differing image configs over the same layers', () => {
+  const outcome = checkReproducible({}, { config: 'sha256:c0f2' });
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /the image configs differ: sha256:c0f1 and sha256:c0f2/);
+  assert.doesNotMatch(outcome.stderr, /layer/);
+});
+
+test('the reproducibility check names a layer that only one build has', () => {
+  const outcome = checkReproducible({}, { layers: 'sha256:base ' });
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /layer 1 differs: sha256:app and none/);
+});
+
+test('the reproducibility check fails when a build names no image config digest', () => {
+  const outcome = checkReproducible({}, { config: '' });
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /second\.json names no image config digest/);
+  assert.doesNotMatch(outcome.stdout, /both builds gave/);
+});
+
+test('the reproducibility check fails when the layers of an image cannot be read', () => {
+  const outcome = checkReproducible({}, {}, { FAKE_LAYERS_STATUS: '5' });
+  assert.equal(outcome.status, 5);
+  assert.doesNotMatch(outcome.stdout, /both builds gave/);
 });
 
 test('a failed stash of the uncommitted edits stops the build before any image is built', () => {
@@ -297,7 +355,7 @@ test('a failed stash of the uncommitted edits stops the build before any image i
 });
 
 test('the reproducibility check builds one commit when HEAD moves between its builds', () => {
-  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_MOVE_HEAD: '{root}/repository' });
+  const outcome = checkReproducible({}, {}, { FAKE_MOVE_HEAD: '{root}/repository' });
   assert.equal(outcome.status, 0, outcome.stderr);
   const calls = builds(outcome.calls);
   assert.equal(calls.length, 2);
@@ -305,13 +363,13 @@ test('the reproducibility check builds one commit when HEAD moves between its bu
 });
 
 test('a failed removal of the images fails a passing check and reports it', () => {
-  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_REMOVE_STATUS: '1' });
+  const outcome = checkReproducible({}, {}, { FAKE_REMOVE_STATUS: '1' });
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /were not removed/);
 });
 
 test('a failed build keeps its status when the removal of the images fails too', () => {
-  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_BUILD_STATUS: '3', FAKE_REMOVE_STATUS: '1' });
+  const outcome = checkReproducible({}, {}, { FAKE_BUILD_STATUS: '3', FAKE_REMOVE_STATUS: '1' });
   assert.equal(outcome.status, 3);
   assert.match(outcome.stderr, /were not removed/);
 });
