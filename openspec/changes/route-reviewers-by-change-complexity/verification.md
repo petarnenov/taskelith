@@ -171,6 +171,12 @@ Records (`b4898f08`): the new `evaluation.jsonl`; `design.md` "Coverage" names t
 
 Re-route: the fixture, the test, `design.md`, and `evaluation.jsonl` change the diff features (4117 to 4099 changed lines; 36 files, the flags, the triggers, and the tier unchanged), so `7678f6b3` deletes `route.json` and `05f0caec` records the new one from `env -u JEV_MAF_LAB make findings ARGS="route --change route-reviewers-by-change-complexity"`: exit 0, `route: elevated (lines, files), rule version 1`, `pass 1, reviewer A: claude claude-fable-5-1#high`, `pass 2, reviewer B: claude claude-opus-5-5#xhigh`, `shadow: failed (missing-credential); the rule decided alone`, at head `7678f6b3` against `f3a53f17`.
 
+Checks after the live evaluation, on `90d40184`, Node.js 24.22.1:
+
+- `make verify` with `TMPDIR` under the session scratchpad and the credential variable removed from its environment, full profile, log at `/tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/rr-verify-3.log`: exit 0, `make verify: passed, profile full, tree 1f8dc59156d3d770a0ad29ed20a480731c885e6d; stamp written`; comments within the rule; `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`; `tests 2820`, `pass 2773`, `fail 0`, `cancelled 0`, `skipped 47`; product coverage all files 99.32 lines, 92.60 branches, 98.98 functions; `Every product module is in the coverage report.`; `Verified 766 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)`; `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`
+- `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`: `make record: wrote the generated part of openspec/changes/route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`.
+- `npm run openspec -- validate --all --strict`: `Totals: 70 passed, 0 failed (70 items)`. `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
+
 ## Author self-check and evidence check
 
 Task 4.1 was not recorded before review pass 1. The author did it on 2026-10-28, after pass 1 and its fixes and before pass 2, on `05f0caec`; it does not replace the check that governance asks for before the first pass.
@@ -242,7 +248,7 @@ Node.js 24.22.1, the `.nvmrc` pin, called by its full nvm path, because `~/.loca
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `2d70a2309199e0f2d5a186e046ff1b84036ace5f`; tests 2820, pass 2773, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
+- `make verify`: passed, profile full, tree `1f8dc59156d3d770a0ad29ed20a480731c885e6d`; tests 2820, pass 2773, fail 0, skipped 47; all files 99.32% lines, 92.60% branches, 98.98% functions.
 - `npm run openspec -- validate route-reviewers-by-change-complexity --strict`: passed, `Change 'route-reviewers-by-change-complexity' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`.
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
