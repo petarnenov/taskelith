@@ -237,6 +237,25 @@ describe('TLS listeners', () => {
     assert.equal(refused.details.path, join(dataRoot, 'control-plane', 'api-certificate.pem'));
   });
 
+  test('an installation CA that is not exactly one CA certificate fails the start and names its file', async () => {
+    const caPath = join(dataRoot, 'control-plane', 'installation-ca.pem');
+    const api = readFileSync(join(dataRoot, 'control-plane', 'api-certificate.pem'), 'utf8');
+    const key = readFileSync(join(dataRoot, 'control-plane', 'api-key.pem'), 'utf8');
+    try {
+      for (const text of [`${installationCa}${key}`, `${installationCa}${api}`, api]) {
+        writeFileSync(caPath, text);
+        const started = await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0 } });
+        // A start that wrongly succeeds must not keep the test process.
+        if (started.ok) await started.value.stop();
+        const refused = failed(started);
+        assert.deepEqual([refused.code, refused.details.path], ['precondition-failed', caPath]);
+        assert.doesNotMatch(JSON.stringify(refused), /BEGIN/);
+      }
+    } finally {
+      writeFileSync(caPath, installationCa);
+    }
+  });
+
   test('an operator key of another certificate fails the start and names its setting', async () => {
     const mismatched = { certificate: BROWSER_TLS.certificate, key: operatorAuthority.privateKeyPem };
     const refused = failed(await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0, tls: mismatched } }));
