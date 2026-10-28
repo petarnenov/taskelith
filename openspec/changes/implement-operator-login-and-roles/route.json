@@ -1,0 +1,67 @@
+{
+  "change": "implement-operator-login-and-roles",
+  "generatedAt": "2026-10-28T13:38:41.999Z",
+  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
+  "headCommit": "ac79878f92d34a5e8a2cde947cf48ca45c67cee3",
+  "features": {
+    "linesChanged": 4087,
+    "filesChanged": 68,
+    "capabilities": [
+      "control-plane-api",
+      "trust-and-operational-foundation"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": true,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M-L",
+    "capabilityHistory": {
+      "changes": 3,
+      "thirdPassShare": 1,
+      "mediumOrWorsePerChange": 9.666666666666666
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "security",
+      "contracts",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "failed",
+    "reason": "missing-credential",
+    "latencyMs": 0
+  }
+}
