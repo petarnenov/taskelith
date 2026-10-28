@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|certificates|installation-ca|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|certificates|installation-ca|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|check-admission|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
   exit 2
 }
 
@@ -12,6 +12,7 @@ if [ "$#" -ne 2 ]; then usage; fi
 repository="$(cd "$(dirname "$0")/.." && pwd)"
 compose_files=(--file "$repository/infra/installation/compose.yaml")
 smoke_directory="$repository/infra/installation/smoke"
+verify_directory="$repository/infra/installation/verify"
 command="$1"
 project="$2"
 case "$project" in
@@ -26,6 +27,11 @@ control_plane_image="taskelith-control-plane:$project"
 worker_image="taskelith-worker:$project"
 # Covers the restart, the worker's broker reconnect, and a 10 s heartbeat.
 CONTACT_SECONDS=90
+# Minutes, for a loaded host: a start, its self-check, and its report.
+ADMISSION_SECONDS="${TASKELITH_ADMISSION_SECONDS:-300}"
+ADMISSION_POLL_SECONDS=5
+# WAITING of scripts/installation-admission.ts; the wait's timeout status.
+ADMISSION_WAITING=3
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -310,6 +316,8 @@ remove_throwaway() {
 # Opt-in end-to-end check on a fresh throwaway project with random secrets
 # and ephemeral host ports, removed with its volumes and images at the end.
 verify() {
+  local admitted_at
+  compose_files+=(--file "$verify_directory/compose.yaml")
   sentinel=".installation-sentinel-$$"
   fresh_project
   trap 'finish_verify $?' EXIT
@@ -321,12 +329,83 @@ verify() {
   broker_config
   start
   enroll
+  admitted_at="$(await_worker_admission '')" || exit 1
   stop
   start
   check_running
+  await_worker_admission "$admitted_at" > /dev/null || exit 1
   certificates
   check_reissued_certificates
-  remove_throwaway "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"
+  remove_throwaway "built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed"
+}
+
+# The workers view of the administrative entry, as JSON. Run it in the
+# background: it replaces that subshell, so that a kill reaches docker.
+read_worker_admission() {
+  exec docker compose "${compose_files[@]}" --project-name "$project" \
+    run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission
+}
+
+# Reads the view into OUTPUT and its diagnostics into LOG; a read still
+# running at DEADLINE is killed, and the function then fails.
+bounded_admission_read() {
+  local output="$1" log="$2" deadline="$3" reader
+  read_worker_admission > "$output" 2>> "$log" &
+  reader=$!
+  while kill -0 "$reader" 2>/dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      kill "$reader" 2>/dev/null || true
+      wait "$reader" 2>/dev/null || true
+      echo "installation.sh: a read of the workers view did not end in time" >> "$log"
+      return 1
+    fi
+    sleep 1
+  done
+  wait "$reader" || true
+}
+
+# Polls the workers view until the one worker is admitted with a passed
+# linux-containment check reported after AFTER; prints the view's asOf.
+await_worker_admission() (
+  local bound deadline status="$ADMISSION_WAITING" files
+  if ! [[ "$ADMISSION_SECONDS" =~ ^[0-9]+$ ]] || [ "$((10#$ADMISSION_SECONDS))" -eq 0 ]; then
+    echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be positive whole seconds" >&2
+    exit 2
+  fi
+  bound=$((10#$ADMISSION_SECONDS))
+  deadline=$((SECONDS + bound))
+  files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
+  trap 'rm -rf "$files"' EXIT
+  : > "$files/log"
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    : > "$files/log"
+    if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
+    status=0
+    node --experimental-strip-types "$repository/scripts/installation-admission.ts" linux-containment "$1" \
+      < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?
+    if [ "$status" -ne "$ADMISSION_WAITING" ]; then break; fi
+    sleep "$ADMISSION_POLL_SECONDS"
+  done
+  # An admission decided when the bound has passed is a timeout too.
+  if [ "$status" -eq 0 ] && [ "$SECONDS" -ge "$deadline" ]; then status="$ADMISSION_WAITING"; fi
+  report_admission "$status" "$files" "$bound"
+  exit "$status"
+)
+
+# Prints the asOf of an admission, or the last read's diagnostics and why
+# the wait failed.
+report_admission() {
+  local status="$1" files="$2" bound="$3"
+  if [ "$status" -eq 0 ]; then
+    cat "$files/as-of"
+    return
+  fi
+  cat "$files/log" >&2
+  if [ "$status" -eq "$ADMISSION_WAITING" ]; then
+    echo "installation.sh: the worker was not admitted within ${bound}s" >&2
+  else
+    echo "installation.sh: the worker admission check failed" >&2
+  fi
 }
 
 # After `certificates`, with no restart of its own: new certificates served,
@@ -451,6 +530,7 @@ case "$command" in
   check-reproducible) check_reproducible ;;
   smoke) smoke ;;
   check-containment) check_containment ;;
+  check-admission) await_worker_admission '' ;;
   scenario-fresh-composition) fresh_composition_scenario ;;
   scenario-worker-disk-loss) disk_loss_scenario ;;
   scenario-worker-kill) worker_kill_scenario ;;

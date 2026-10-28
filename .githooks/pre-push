@@ -5,4 +5,8 @@ checks=$?
 # 100 is DELETE_ONLY_PUSH_STATUS of scripts/pre-push-checks.ts.
 if [ "$checks" -eq 100 ]; then exit 0; fi
 if [ "$checks" -ne 0 ]; then exit 1; fi
+# A clean HEAD tree with a passing make verify stamp of its profile is done.
+if NODE_PIN="$(cat .nvmrc)" bash scripts/with-pinned-node.sh use bash scripts/run-node-script.sh scripts/verify-stamp.ts check; then
+  exit 0
+fi
 exec make verify

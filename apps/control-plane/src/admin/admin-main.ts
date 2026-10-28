@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { resolveDataRoot } from '@taskelith/data-root';
-import type { HostArchitecture, HostConstraints, HostPlatform } from '@taskelith/fleet';
+import type { HostArchitecture, HostConstraints, HostPlatform, WorkerAdmissionSnapshot } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { readBrokerTls } from '../broker-tls.js';
@@ -15,7 +15,8 @@ export const ADMIN_USAGE = [
   '  issue-installation-certificates',
   '  issue-enrollment-token [--platform linux|darwin] [--architecture x64|arm64] [--hostname NAME]',
   '  rotate-worker WORKER_ID | revoke-worker WORKER_ID | expire-grace-windows',
-  'The last four read the operator credential from TASKELITH_OPERATOR_TOKEN.',
+  '  worker-admission',
+  'The last five read the operator credential from TASKELITH_OPERATOR_TOKEN.',
 ].join('\n');
 
 export interface AdminIo {
@@ -69,7 +70,8 @@ const BROKERLESS_COMMANDS = new Set(['issue-installation-certificates']);
 const PLATFORMS = new Set<string>(['linux', 'darwin']);
 const ARCHITECTURES = new Set<string>(['x64', 'arm64']);
 const COMMANDS = new Set([
-  'init', 'reset-operator-credential', 'issue-installation-certificates', 'issue-enrollment-token', 'expire-grace-windows', ...WORKER_COMMANDS,
+  'init', 'reset-operator-credential', 'issue-installation-certificates', 'issue-enrollment-token', 'expire-grace-windows',
+  'worker-admission', ...WORKER_COMMANDS,
 ]);
 
 function parse(argv: readonly string[]): Result<Command> {
@@ -125,6 +127,8 @@ async function run(admin: Administration, command: Command, environment: Environ
       return mapped(await admin.revokeWorker(operator, command.worker!), (revocation) => revocation.commandConsumerRemoved
         ? { revoked: command.worker }
         : { revoked: command.worker, commandConsumerRemoved: false, retry: 'a control-plane start retries the removal while the worker is among the latest revoked' });
+    case 'worker-admission':
+      return mapped(await admin.workerAdmission(operator), printableWorkerAdmission);
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }
@@ -134,6 +138,18 @@ async function run(admin: Administration, command: Command, environment: Environ
 // yet: its secrets are printed, and the status asks for a retry.
 function isPartial(value: unknown): boolean {
   return typeof value === 'object' && value !== null && (value as { revocationsPublished?: unknown }).revocationsPublished === false;
+}
+
+// The workers view with each detail redacted again, since a worker wrote
+// it (worker admission contract section 3).
+export function printableWorkerAdmission(snapshot: WorkerAdmissionSnapshot): WorkerAdmissionSnapshot {
+  return {
+    ...snapshot,
+    workers: snapshot.workers.map((worker) => ({
+      ...worker,
+      results: worker.results.map((result) => ({ ...result, details: result.details.map((detail) => redactSecrets(detail)) })),
+    })),
+  };
 }
 
 function constraints(values: Command['values']): HostConstraints {

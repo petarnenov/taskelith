@@ -156,6 +156,14 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit'] },
   }));
   assert.equal(enrolled.installationId, identity.installationId);
+  const hiddenView = await admin(['worker-admission'], { TASKELITH_OPERATOR_TOKEN: 'tkop_wrong' });
+  assert.deepEqual([hiddenView.status, (hiddenView.output.error as { code: string }).code], [1, 'forbidden']);
+  const view = await admin(['worker-admission'], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  assert.equal(view.status, 0, JSON.stringify(view.output));
+  const viewed = view.output.workers as ReadonlyArray<{ workerId: string; admission: string; results: unknown[] }>;
+  assert.deepEqual(viewed.map(({ workerId, admission, results }) => [workerId, admission, results]), [
+    [enrolled.workerId, 'awaiting-self-check', []],
+  ]);
   value(await new JetStreamPublisher(controlPlane.js).publish({
     subject: value(address.commandSubject(enrolled.workerId)), body: encodeJson({ hello: 'worker' }), messageId: 'command-1',
   }));
@@ -274,7 +282,7 @@ async function enrollWorker(service: EnrollmentService, journal: string): Promis
 }
 
 test('usage errors exit with 2 before anything is opened', async () => {
-  for (const argv of [[], ['unknown'], ['rotate-worker'], ['init', 'extra'], ['issue-enrollment-token', '--platform', 'windows'], ['init', '--bogus']]) {
+  for (const argv of [[], ['unknown'], ['rotate-worker'], ['init', 'extra'], ['worker-admission', 'worker-1'], ['issue-enrollment-token', '--platform', 'windows'], ['init', '--bogus']]) {
     const outcome = await admin(argv);
     assert.equal(outcome.status, 2, argv.join(' '));
     assert.match(String(outcome.output.usage), /usage: control-plane-admin/);
