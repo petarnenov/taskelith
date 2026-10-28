@@ -69,7 +69,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review pass 3 by reviewer A, which governance "Conditional third pass" requires because the pass 2 fixes change code (passes 1 and 2 are done).
 - Re-evaluation of Jev: after 30 to 40 new changes have been routed with this request and archived, the owner decides to keep or drop Jev from the `effect` report's P(third) Brier score and AUC (design.md D7).
 - Integration into dev by the coordinator (single pull request)
 
@@ -97,3 +96,13 @@ Findings: 0 Critical, 0 High, 1 Medium, 6 Low, all fixed in `e6803d5a`:
 - **L6 (naming).** The legacy Brier score and pass error move into `tierRequest: {changes, brierScore, passesMeanAbsoluteError}`, symmetric with `thirdPass`, in `scripts/review-route-effect.ts`; the tests and the printed line use it.
 
 Pass 3 is required by governance "Conditional third pass", because the pass 2 fixes change code.
+
+## Review pass 3
+
+Reviewer A, Codex CLI `codex gpt-6.1-sol#medium`, session `01a18395-0197-7492-a1db-2affd744e68b`, started 2026-10-28T17:35:42.660Z. `make review CHANGE=improve-jev-route-request PASS=3 ROLE=A REVIEWER='codex gpt-6.1-sol#medium' PROMPT=<scratch> LOG=<scratch>` ran `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C <worktree> -` with the environment `PATH`, `HOME`, `USER`, `LANG`, `TERM`, and `TMPDIR`; the header reported model `gpt-6.1-sol`, effort `medium`, and sandbox `read-only`. Scope: confirm the pass 2 fixes only. The worktree snapshot was `0c96bad89e71c5a9c43c69fded1f4f6ea0a813f2453bf289cebb8035db28bed9` before and after.
+
+Pass 2 fix check: L1 to L6 resolved; M1 only partly resolved (M1 below). The reviewer ran 8 selected route tests, 9 effect tests, and the comment length check, and found no other problem that the fixes introduced.
+
+Findings: 0 Critical, 0 High, 1 Medium, 0 Low:
+
+- **M1 (contract-drift).** With a pass 2 Medium finding fixed only in documentation and a Low finding fixed in code, governance "Conditional third pass" requires pass 3, but the true criterion required the code fix to belong to the Medium finding and the false criterion did not hold either. By the coordinator's decision of 2026-10-28 the true criterion is now "Reviewer B in pass 2 will find a Critical or High issue, or pass 2 will include a Medium issue and its fixes, including fixes for accompanying Low issues, will change files other than records and documentation."; the false criterion stays. The test "the request sends the pinned model and the one third pass question", design.md D1, and the author self-check follow, in `a4a6d2b3`. Pass 2 missed the gap (`missedBy` pass 2, role B). `route.json` stays as recorded. **This fix is unreviewed**: governance caps a task at three passes, so no pass 4 runs, and the finding is marked `fixed-unreviewed`.
