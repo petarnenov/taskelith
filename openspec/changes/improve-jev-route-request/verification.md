@@ -41,14 +41,14 @@ The new tests' assertions on the request were run against the scripts of `1234e5
 
 - `node --experimental-strip-types --test test/review-route*.test.ts test/findings-route.test.ts` before the commit: 184 of 184 passed.
 - `npm run openspec -- validate improve-jev-route-request --strict`: `Change 'improve-jev-route-request' is valid`.
-- `make verify` on the clean tree of `32c920a9` passed on its first run, no rerun. After the coordinator decisions, `make verify` on the clean tree of `23d30381` passed on its first run, no rerun (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/verify-2.log`). After the pass 1 fixes, `make verify` on the clean tree of `681566b7` (tree `2023d48e`) passed with 3,340 tests, 3,325 passed, 0 failed (log `verify-3.log` beside it). After the pass 2 fixes, the generated part below records `make verify` on the clean tree of the pass 2 records (log `verify-4.log` beside it).
+- `make verify` on the clean tree of `32c920a9` passed on its first run, no rerun. After the coordinator decisions, `make verify` on the clean tree of `23d30381` passed on its first run, no rerun (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/verify-2.log`). After the pass 1 fixes, `make verify` on the clean tree of `681566b7` (tree `2023d48e`) passed with 3,340 tests, 3,325 passed, 0 failed (log `verify-3.log` beside it). After the pass 2 fixes, `make verify` passed on the clean tree of the pass 2 records (log `verify-4.log` beside it). After the pass 3 fix, the first `make verify` on the clean tree of `61bc666e` failed one timing test outside this change, `test/installation-script.test.ts` "a bound with a leading zero is read in base 10" (ended after 9.061 s, before its 10 s bound; log `verify-5-flake.log` beside it); the one rerun passed, and the generated part below records it (log `verify-5.log` beside it).
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `10e43326b17beba31a9e427da963f5642f9b6276`; tests 3345, pass 3330, fail 0, skipped 15; all files 99.47% lines, 92.66% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `871069631cd63254e4824f1226a321b6e4c43f70`; tests 3345, pass 3330, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions.
 - `npm run openspec -- validate improve-jev-route-request --strict`: passed, `Change 'improve-jev-route-request' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 76 file(s); every pass summary file is valid: 56 file(s); every route file is valid: 12 file(s).`.
 - Spec diff against the merge base `1234e540009a` with `origin/dev`: no change under `openspec/specs`.
@@ -58,6 +58,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a1837a-ac3f-7181-9293-d3a23ffbb5b0` | 0 | 1 | 1 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `ef651873-a3d9-4e32-bbec-2ab21a5222ee` | 0 | 0 | 1 | 6 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18395-0197-7492-a1db-2affd744e68b` | 0 | 0 | 1 | 0 |
 <!-- make record: end -->
 
 ## Limitations
