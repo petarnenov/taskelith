@@ -6,7 +6,7 @@ import { failed, id, value } from '@taskelith/testing';
 import type { Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
-import { GitWorkspaces, credentialForms, sha256IdentifierDigest } from '@taskelith/git-workspace';
+import { GitWorkspaces, ProcessGroupReclaimHost, credentialForms, sha256IdentifierDigest } from '@taskelith/git-workspace';
 import {
   REDACTED_VALUE,
   WORKSPACE_LAYOUT,
@@ -262,7 +262,7 @@ for (const [operation, { process: stalledProcess, service }] of Object.entries(S
     value(await git.local.prepare(request(git)));
     await committed(git, FIRST, 'change.txt');
     const timer = new ManualGitTimer();
-    const options = { dataRoot: fixture.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http' as const };
+    const options = { dataRoot: fixture.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http' as const, reclaimHost: new ProcessGroupReclaimHost() };
     const limited = new GitWorkspaces({ ...options, gitTimeLimitMs: SHORT_TIME_LIMIT_MS, gitTimer: timer.timer });
     const reached = new Promise<void>((received) => (git.remote.beforeAnswer = async ({ url }) => void (url.includes(service) && received())));
     git.remote.behavior = { kind: 'stall', service };

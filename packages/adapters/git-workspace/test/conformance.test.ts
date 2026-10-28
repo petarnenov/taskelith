@@ -1,34 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { WORKSPACE_CONFORMANCE } from '@taskelith/workspace';
-import { createGitFixture } from './git-fixture.ts';
+import type { ConformanceCase } from '@taskelith/sdlc';
+import { WORKSPACE_CONFORMANCE, type WorkspaceFixture } from '@taskelith/workspace';
+import { createGitFixture, simulatedSeparateAccount, type GitFixtureOptions } from './git-fixture.ts';
 
-// Cases that need the hand-off, each with its reason; the adapter runs
-// every other case of the suite.
-const HAND_OFF = 'needs handOff and reclaim, sub-change 16d';
-const LATER: Readonly<Record<string, string>> = {
-  'reads the handed-off workspaces from their records, also after a restart': HAND_OFF,
-  'hands the checkout to the execution and takes it back without outside links': HAND_OFF,
-  'holds one handed-off workspace at a time where executions share a separate account': HAND_OFF,
-  'lets one of two concurrent hand-offs through where executions share a separate account': HAND_OFF,
-  'writes the repository configuration anew, so settings the agent planted never act': HAND_OFF,
-  'reads the remote head of a handed-off workspace outside every repository': HAND_OFF,
-};
-
-test('every deferred case names a case of the suite', () => {
-  const names = new Set(WORKSPACE_CONFORMANCE.map(({ name }) => name));
-  assert.deepEqual(Object.keys(LATER).filter((name) => !names.has(name)), []);
-  assert.equal(Object.keys(LATER).length, 6);
-});
+async function conforms(conformance: ConformanceCase<WorkspaceFixture>, options: GitFixtureOptions = {}): Promise<void> {
+  const git = await createGitFixture(options);
+  try {
+    assert.deepEqual(await conformance.check(git.fixture), []);
+  } finally {
+    await git.dispose();
+  }
+}
 
 for (const conformance of WORKSPACE_CONFORMANCE) {
-  const skip = LATER[conformance.name] ?? false;
-  test(`the Git adapter: ${conformance.name}`, { skip }, async () => {
-    const git = await createGitFixture();
-    try {
-      assert.deepEqual(await conformance.check(git.fixture), []);
-    } finally {
-      await git.dispose();
-    }
-  });
+  test(`the Git adapter: ${conformance.name}`, () => conforms(conformance));
+}
+
+// The cases that hand a workspace off, again with an execution account,
+// as the worker image composes the adapter (contract section 3).
+const HAND_OFF_CASES = WORKSPACE_CONFORMANCE.filter(({ name }) => /hand/i.test(name));
+
+test('the hand-off cases include both of a separate account', () => {
+  assert.equal(HAND_OFF_CASES.filter(({ name }) => name.endsWith('share a separate account')).length, 2);
+});
+
+for (const conformance of HAND_OFF_CASES) {
+  test(`the Git adapter with an execution account: ${conformance.name}`, () =>
+    conforms(conformance, { reclaimHost: simulatedSeparateAccount() }));
 }

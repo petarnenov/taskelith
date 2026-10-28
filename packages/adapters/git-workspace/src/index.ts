@@ -13,7 +13,45 @@ export {
   type GitOutputParser,
   type GitTimer,
 } from './git-runner.js';
-export { GitWorkspaces, sha256IdentifierDigest, type GitWorkspaceOperations, type GitWorkspacesOptions } from './git-workspaces.js';
+export {
+  GitWorkspaces,
+  RECLAIM_PROOF_BOUND_MS,
+  RECLAIM_PROOF_INTERVAL_MS,
+  sha256IdentifierDigest,
+  type GitWorkspacesOptions,
+} from './git-workspaces.js';
+export {
+  HANDED_OFF,
+  parseHandOffRecord,
+  readHandOffRecord,
+  removeHandOffRecord,
+  writeHandOffRecord,
+  type HandOffRecord,
+  type ReclaimContainment,
+} from './hand-off-record.js';
+export {
+  FIXED_RECLAIM_PROGRAM,
+  LinuxReclaimHost,
+  ProcessGroupReclaimHost,
+  type LaunchedReclaim,
+  type LinuxReclaimHostOptions,
+  type ReclaimHost,
+  type ReclaimOutcome,
+  type ReclaimProgram,
+} from './reclaim-host.js';
+export {
+  RECLAIM_EXIT,
+  RECLAIM_GO,
+  enterReclaimContainment,
+  normalizeCheckout,
+  parseReclaimArguments,
+  receivedGo,
+  runReclaimProgram,
+  sharedMode,
+  type ExecutionAccount,
+  type ReclaimArguments,
+} from './reclaim-program.js';
+export { RECLAIM_PROGRAM_MAIN } from './reclaim-program-main.js';
 export { objectName, parseCommitParents, parseCommitTree, parseTreeObject, type GitObjectType, type TreeObjectEntry } from './git-objects.js';
 export { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 export { entryAt, isPresent } from './presence.js';

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { chmod, chown, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { syncPathAsync } from '@taskelith/data-root';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
@@ -16,6 +17,7 @@ import {
   encodeHeadSnapshot,
   parseCodeHeadIdentity,
   parseGitObjectId,
+  reclaimContainmentName,
   taskBranchName,
   taskBranchPushArguments,
   workspaceDirectoryName,
@@ -41,12 +43,14 @@ import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
 import { exceededTimeLimit, succeeded, type GitRunner, type GitTimer } from './git-runner.js';
+import { HANDED_OFF, readHandOffRecord, removeHandOffRecord, writeHandOffRecord, type HandOffRecord, type ReclaimContainment } from './hand-off-record.js';
 import { parseCommitParents, type GitObjectType } from './git-objects.js';
 import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
 import { isPresent } from './presence.js';
 import { resetRepositoryFiles, type ObjectFormat } from './repository-config.js';
 import { parseBatchObjects, readHeadTree, readVerified, snapshotTree, type ListedEntry, type ObjectRead } from './tree-listing.js';
+import type { LaunchedReclaim, ReclaimHost } from './reclaim-host.js';
 import { readWorkspaceRecord, writeWorkspaceRecord, type WorkspaceRecord } from './workspace-record.js';
 
 export interface GitWorkspacesOptions {
@@ -60,11 +64,17 @@ export interface GitWorkspacesOptions {
   readonly gitTimeLimitMs?: number;
   // Arms each time limit; `systemGitTimer` unless a test fires its own.
   readonly gitTimer?: GitTimer;
+  // Starts the reclaim program; its account decides the modes (section 2).
+  readonly reclaimHost: ReclaimHost;
+  // How long a recorded containment may stay populated before an operation
+  // gives up; `RECLAIM_PROOF_BOUND_MS` by default.
+  readonly reclaimProofBoundMs?: number;
 }
 
-// The operations of sub-changes 16b and 16c; the hand-off and the
-// reclaim come with 16d.
-export type GitWorkspaceOperations = Omit<WorkspaceProvider, 'handOff' | 'reclaim' | 'handedOff'>;
+// The bound of the proof that a recorded containment is empty, and the
+// interval at which it is polled (contract section 3).
+export const RECLAIM_PROOF_BOUND_MS = 30_000;
+export const RECLAIM_PROOF_INTERVAL_MS = 200;
 
 export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
 
@@ -128,12 +138,14 @@ function parseRemoteHead(stdout: Uint8Array, ref: string): Result<GitObjectId | 
 
 // The Git workspace adapter (contract sections 3 and 6 to 10), with the
 // pinned client that passed its gate.
-export class GitWorkspaces implements GitWorkspaceOperations {
+export class GitWorkspaces implements WorkspaceProvider {
   readonly #root: string;
   readonly #git: GitRunner;
   readonly #transport: RemoteTransportPolicy;
   readonly #crashPoints: CrashPointHook;
   readonly #owner: number;
+  readonly #reclaimHost: ReclaimHost;
+  readonly #proofBoundMs: number;
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
@@ -141,6 +153,8 @@ export class GitWorkspaces implements GitWorkspaceOperations {
     this.#transport = options.remoteTransport;
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#owner = process.getuid!();
+    this.#reclaimHost = options.reclaimHost;
+    this.#proofBoundMs = options.reclaimProofBoundMs ?? RECLAIM_PROOF_BOUND_MS;
   }
 
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
@@ -196,6 +210,131 @@ export class GitWorkspaces implements GitWorkspaceOperations {
 
   push(request: PushTaskBranch): Promise<Result<CodeHeadIdentity>> {
     return failingFileSystemAsUnavailable(() => this.#push(request));
+  }
+
+  handOff(attemptId: AttemptId): Promise<Result<void>> {
+    return failingFileSystemAsUnavailable(() => this.#handOff(attemptId));
+  }
+
+  reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    return failingFileSystemAsUnavailable(() => this.#reclaim(attemptId));
+  }
+
+  // Listed attempts whose hand-off record exists, read from the records,
+  // so a restart keeps them; an unreadable record rejects.
+  async handedOff(): Promise<readonly AttemptId[]> {
+    const listed = await this.list();
+    const recorded = await Promise.all(listed.map((attemptId) => isPresent(this.#handOffRecordOf(attemptId))));
+    return listed.filter((_, index) => recorded[index]);
+  }
+
+  // Section 3, step 6: the record first, so that a restart keeps the
+  // hand-off, then the checkout opens to the execution group.
+  async #handOff(attemptId: AttemptId): Promise<Result<void>> {
+    const recorded = await this.#recorded(attemptId);
+    if (!recorded.ok) return recorded;
+    const marked = await inHandOffChain(this.#root, () => this.#recordHandOff(attemptId));
+    if (!marked.ok) return marked;
+    if (this.#reclaimHost.executionAccount === null) return ok(undefined);
+    this.#crashPoints.reach('WS6.before');
+    await chmod(join(recorded.value.directory, WORKSPACE_LAYOUT.checkout), WORKSPACE_MODES.checkoutHandedOff);
+    this.#crashPoints.reach('WS6.after');
+    return ok(undefined);
+  }
+
+  // The check for another hand-off and the write of this one, as one step
+  // of the worker's hand-off chain; a repeated hand-off keeps its record.
+  async #recordHandOff(attemptId: AttemptId): Promise<Result<void>> {
+    const path = this.#handOffRecordOf(attemptId);
+    const current = await readHandOffRecord(path);
+    if (!current.ok) return current;
+    if (current.value !== undefined) return this.#provenEmpty(current.value);
+    if (this.#reclaimHost.executionAccount !== null && (await this.#handedOffElsewhere(attemptId))) {
+      return workspaceFailure('precondition-failed', 'other-workspace-handed-off', 'another workspace is handed off');
+    }
+    this.#crashPoints.reach('WS5.before');
+    const written = await writeHandOffRecord(path, HANDED_OFF);
+    if (!written.ok) return written;
+    this.#crashPoints.reach('WS5.after');
+    return ok(undefined);
+  }
+
+  async #handedOffElsewhere(attemptId: AttemptId): Promise<boolean> {
+    const own = workspaceDirectoryName(attemptId, sha256IdentifierDigest);
+    const others = (await readdir(this.#root)).filter((name) => !name.startsWith('.') && name !== own);
+    const records = await Promise.all(others.map((name) => isPresent(join(this.#root, name, WORKSPACE_LAYOUT.handOffRecord))));
+    return records.includes(true);
+  }
+
+  // Section 3, step 7: no earlier program may still run; the program runs
+  // in the recorded containment, the checkout closes, the record goes last.
+  async #reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    const recorded = await this.#recorded(attemptId);
+    if (!recorded.ok) return recorded;
+    const path = this.#handOffRecordOf(attemptId);
+    const current = await readHandOffRecord(path);
+    if (!current.ok || current.value === undefined) return current.ok ? ok(undefined) : current;
+    if (current.value.reclaimFailed) return reclaimFailed();
+    const proven = await this.#provenEmpty(current.value);
+    if (!proven.ok) return proven;
+    const checkout = join(recorded.value.directory, WORKSPACE_LAYOUT.checkout);
+    const launched = await this.#reclaimHost.launch(checkout, reclaimContainmentName(attemptId, sha256IdentifierDigest));
+    if (!launched.ok) return launched;
+    const ran = await this.#runRecorded(path, launched.value);
+    if (!ran.ok) return ran;
+    await this.#reclaimHost.release(launched.value.containment);
+    if (this.#reclaimHost.executionAccount !== null) {
+      this.#crashPoints.reach('WS9.before');
+      await chmod(checkout, WORKSPACE_MODES.checkoutReclaimed);
+      this.#crashPoints.reach('WS9.after');
+    }
+    this.#crashPoints.reach('WS10.before');
+    const removed = await removeHandOffRecord(path);
+    if (!removed.ok) return removed;
+    this.#crashPoints.reach('WS10.after');
+    return ok(undefined);
+  }
+
+  // Records the containment before the program may start, lets it run,
+  // and records a failure, after which it never runs again by itself.
+  async #runRecorded(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
+    const { containment } = launched;
+    try {
+      this.#crashPoints.reach('WS7.before');
+      const written = await writeHandOffRecord(path, { containment, reclaimFailed: false });
+      if (!written.ok) {
+        launched.abandon();
+        return written;
+      }
+      this.#crashPoints.reach('WS7.after');
+      this.#crashPoints.reach('WS8.before');
+    } catch (error) {
+      launched.abandon();
+      throw error;
+    }
+    const exited = launched.go();
+    this.#crashPoints.reach('WS8');
+    const outcome = await exited;
+    this.#crashPoints.reach('WS8.after');
+    if (outcome === 'succeeded') return this.#provenEmpty({ containment, reclaimFailed: false });
+    const failed = await writeHandOffRecord(path, { containment, reclaimFailed: true });
+    return failed.ok ? reclaimFailed() : failed;
+  }
+
+  // Polls the recorded containment, never killing it, until it is empty;
+  // at the bound the workspace stays handed off for reconciliation.
+  async #provenEmpty({ containment }: HandOffRecord): Promise<Result<void>> {
+    if (containment === null) return ok(undefined);
+    const deadline = Date.now() + this.#proofBoundMs;
+    while (await this.#reclaimHost.populated(containment)) {
+      if (Date.now() >= deadline) return containmentPopulated(containment);
+      await delay(RECLAIM_PROOF_INTERVAL_MS);
+    }
+    return ok(undefined);
+  }
+
+  #handOffRecordOf(attemptId: AttemptId): string {
+    return join(this.#root, workspaceDirectoryName(attemptId, sha256IdentifierDigest), WORKSPACE_LAYOUT.handOffRecord);
   }
 
   // Section 9: repository, remote, credential, sources, tree, then an
@@ -346,10 +485,10 @@ export class GitWorkspaces implements GitWorkspaceOperations {
   // The clone, its configuration, the target, and the record, all inside
   // the staging entry, which nothing reads before its rename.
   async #build(staging: string, request: PrepareWorkspace): Promise<Result<PreparedWorkspace>> {
-    await chmod(staging, WORKSPACE_MODES.attempt);
+    await this.#setGroupAndMode(staging, WORKSPACE_MODES.attempt);
     const checkout = join(staging, WORKSPACE_LAYOUT.checkout);
     await mkdir(checkout, { mode: WORKSPACE_MODES.checkoutReclaimed });
-    await chmod(checkout, WORKSPACE_MODES.checkoutReclaimed);
+    await this.#setGroupAndMode(checkout, WORKSPACE_MODES.checkoutReclaimed);
     const cloned = await this.#clone(checkout, request.binding.remote, request.credential);
     if (!cloned.ok) return cloned;
     const format = await this.#objectFormat(checkout);
@@ -367,6 +506,14 @@ export class GitWorkspaces implements GitWorkspaceOperations {
     const written = await writeWorkspaceRecord(join(staging, WORKSPACE_LAYOUT.metadata), record);
     if (!written.ok) return written;
     return ok({ attemptId, projectId, taskId, kind: target.kind, branch, head: head.value });
+  }
+
+  // The execution group where executions run under their own account, so
+  // they can pass through and reach a handed-off checkout (section 2).
+  async #setGroupAndMode(directory: string, mode: number): Promise<void> {
+    const account = this.#reclaimHost.executionAccount;
+    if (account !== null) await chown(directory, -1, account.gid);
+    await chmod(directory, mode);
   }
 
   // The one process of a prepare that reaches the remote: it starts in
@@ -542,6 +689,30 @@ export class GitWorkspaces implements GitWorkspaceOperations {
       return output.ok ? parseBatchObjects(output.value, names, type) : output;
     };
   }
+}
+
+// One chain of hand-offs per workspace root, so that a hand-off checks
+// for another and records its own before the next one checks.
+const handOffChains = new Map<string, Promise<unknown>>();
+
+function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
+  const run = (handOffChains.get(root) ?? Promise.resolve()).then(work, work);
+  const release = () => {
+    if (handOffChains.get(root) === run) handOffChains.delete(root);
+  };
+  handOffChains.set(root, run);
+  void run.then(release, release);
+  return run;
+}
+
+function reclaimFailed(): Result<never> {
+  return workspaceFailure('precondition-failed', 'reclaim-failed', 'the reclaim program failed; the workspace stays handed off');
+}
+
+// No reason of section 9 fits; the worker reports it for reconciliation.
+function containmentPopulated(containment: ReclaimContainment): Result<never> {
+  const named = containment.kind === 'cgroup' ? containment.name : `process group ${containment.id}`;
+  return err(failure('unavailable', `the reclaim containment ${named} is still populated`));
 }
 
 function remoteMoved(): Result<never> {

@@ -8,11 +8,12 @@ import type { AttemptId } from '@taskelith/execution';
 import {
   GitWorkspaces,
   NO_CRASH_POINTS,
+  ProcessGroupReclaimHost,
   sha256IdentifierDigest,
   verifyGitClient,
   type CrashPointHook,
   type GitTimer,
-  type GitWorkspaceOperations,
+  type ReclaimHost,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
 import {
@@ -29,7 +30,6 @@ import {
   type TreeEntry,
   type WorkspaceCredential,
   type WorkspaceFixture,
-  type WorkspaceProvider,
 } from '@taskelith/workspace';
 
 // A local bare repository served over smart HTTP on 127.0.0.1, a recording
@@ -345,26 +345,14 @@ export function credential(credentialId: string, repositories: string[], permiss
   return { credentialId, secret, authorization, repositories, permissions };
 }
 
-// The operations 16d adds; a case that reaches one fails loudly.
-function later(operation: string) {
-  return async (): Promise<never> => {
-    throw new Error(`${operation} is not implemented before sub-change 16d`);
-  };
-}
-
-export function providerOf(operations: GitWorkspaceOperations): WorkspaceProvider {
+// The one-account host that declares the worker's own account as the
+// execution account, so a test without root meets a separate account.
+export function simulatedSeparateAccount(host: ReclaimHost = new ProcessGroupReclaimHost()): ReclaimHost {
   return {
-    prepare: (request) => operations.prepare(request),
-    list: () => operations.list(),
-    remove: (attemptId) => operations.remove(attemptId),
-    sweep: () => operations.sweep(),
-    inspect: (attemptId) => operations.inspect(attemptId),
-    snapshot: (attemptId) => operations.snapshot(attemptId),
-    readRemoteHead: (request) => operations.readRemoteHead(request),
-    push: (request) => operations.push(request),
-    handOff: later('handOff'),
-    reclaim: later('reclaim'),
-    handedOff: later('handedOff'),
+    executionAccount: { uid: process.getuid!(), gid: process.getgid!() },
+    launch: (checkout, containmentName) => host.launch(checkout, containmentName),
+    populated: (containment) => host.populated(containment),
+    release: (containment) => host.release(containment),
   };
 }
 
@@ -416,11 +404,16 @@ export interface GitFixtureOptions {
   readonly gitTimeLimitMs?: number;
   // The read credential's secret, such as a short one.
   readonly readSecret?: string;
+  // The one-account process group host unless a test passes another.
+  readonly reclaimHost?: ReclaimHost;
+  readonly reclaimProofBoundMs?: number;
+  // The directory the scratch directory goes into; `tmpdir()` by default.
+  readonly scratchParent?: string;
 }
 
 export interface GitFixture {
   readonly fixture: WorkspaceFixture;
-  readonly local: GitWorkspaceOperations;
+  readonly local: GitWorkspaces;
   readonly remote: SmartHttpRemote;
   readonly client: VerifiedGitClient;
   readonly scratch: string;
@@ -447,7 +440,7 @@ async function seedRemote(scratch: string, bare: string): Promise<void> {
 }
 
 export async function createGitFixture(options: GitFixtureOptions = {}): Promise<GitFixture> {
-  const scratch = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-git-workspace-')));
+  const scratch = await realpath(await mkdtemp(join(options.scratchParent ?? tmpdir(), 'taskelith-git-workspace-')));
   const dataRoot = join(scratch, 'data');
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
@@ -470,9 +463,10 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   const grants = new Map<string, readonly Grant[]>([[credentials.read.authorization, ['read']], [credentials.write.authorization, ['read', 'write']]]);
   const remote = await SmartHttpRemote.start(served, grants);
   const others: SmartHttpRemote[] = [];
-  const { gitTimeLimitMs } = options;
-  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) =>
-    new GitWorkspaces({ dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs });
+  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimHost = new ProcessGroupReclaimHost() } = options;
+  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) => new GitWorkspaces({
+    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs,
+  });
   const local = reopen(options.crashPoints);
   const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };
   const nameOf = (attemptId: AttemptId) => workspaceDirectoryName(attemptId, sha256IdentifierDigest);
@@ -490,7 +484,7 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   };
   let remoteCommits = 0;
   const fixture: WorkspaceFixture = {
-    provider: providerOf(local),
+    provider: local,
     dataRoot,
     identifierDigest: sha256IdentifierDigest,
     binding,
@@ -498,10 +492,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
     baseTree: BASE_TREE,
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
-    // 16b composes no execution account; hand-offs come with 16d.
-    separateExecutionIdentity: false,
+    separateExecutionIdentity: reclaimHost.executionAccount !== null,
     gitClient: pin,
-    reopen: () => providerOf(reopen()),
+    reopen: () => reopen(),
     writeFile: (attemptId, path, text) => write(attemptId, path, (target) => writeFile(target, text)),
     writeBytes: (attemptId, path, content) => write(attemptId, path, (target) => writeFile(target, content)),
     writeExecutable: (attemptId, path, text) => write(attemptId, path, async (target) => {
