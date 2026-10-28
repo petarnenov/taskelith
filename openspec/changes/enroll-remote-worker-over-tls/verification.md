@@ -53,7 +53,35 @@ Each test below ran against the base sources and failed, then the tree was resto
 
 ## Review
 
-Passes pending. The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`.
+The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`. Passes 2 and 3 are pending.
+
+### Review pass 1
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run by the coordinator.
+- **Session:** `01a18109-0d4c-7b40-b983-958c59614519`, as the coordinator relayed it.
+- **Revision reviewed:** the branch at `af95ddb1`, its last commit before the pass, against the base `1c73e1a7`.
+- **Snapshot:** identical before and after the pass, as the coordinator relayed it.
+- **Result:** Critical 0, High 1, Medium 1, Low 1; `findings.jsonl` records each finding in the author's words.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | High | The pinned `Agent` set only `ca`; with `NODE_TLS_REJECT_UNAUTHORIZED=0` Node verified nothing, so a foreign server that served the public CA could pass the fingerprint check and get the token | The pinned `Agent` sets `rejectUnauthorized: true` (`undici-fetch.ts`). The broker needed no change: `@nats-io/transport-node` 3.4.0 sets `rejectUnauthorized: true` before it merges the endpoint's `tls` (`node_transport.js` lines 204 and 253); a new test covers it | `4724f166`, `fba0a08b` |
+| 2 | Medium | `fetch` followed redirects, so a 307 or 308 to `http:` sent the token in the clear and the client took the plain answer | `HttpInit` carries `redirect: 'error'` for every request, the CA read included, so every `HttpFetch` sees it | `4724f166` |
+| 3 | Low | The guide's bootstrap step still copied the CA into the removed worker trust volume | The step names only the broker files; the worker gets the fingerprint through the bundle | `648a227e` |
+
+Spec and contract text changed with the fixes (`648a227e`): the `worker-runtime` requirement "Pinned installation CA" says the worker verifies the server whatever `NODE_TLS_REJECT_UNAUTHORIZED` says and follows no redirect, with the scenarios "Verification turned off by the environment" and "Redirect"; its last sentence, on the bearer and broker JWT, moved to "Outbound connections only" to keep the requirement under 500 characters; the installation contract's **Pin** bullet and design decision 5 say the same.
+
+Fails before the fixes, each run before its fix was written:
+
+- **Finding 1, control plane.** `pinned-tls.test.ts`, "NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign server get the token", on `af95ddb1` with the test added: `AssertionError [ERR_ASSERTION]: expected a failure` at `pinned-tls.test.ts:173:19`, `actual: false`, `expected: true`: the enrollment to the foreign server succeeded, so it got the token. It passes with `4724f166`.
+- **Finding 1, broker.** `enrollment-tls.test.ts`, "NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign broker get the credential", passes without a code change, because the client pins `rejectUnauthorized` itself. To show that it can fail, `packages/adapters/nats/src/connection.ts` was mutated to pass `rejectUnauthorized: false`: `AssertionError [ERR_ASSERTION]: the client refused the foreign certificate` at `enrollment-tls.test.ts:207:10`, `actual: 1` (one completed handshake); the mutation was reverted with `git checkout`. Its first form, with an unparsable `.creds` text, also passed under the mutation, because the client failed before the TLS upgrade; it now uses a well-formed `.creds` from `credsFile` and a generated user seed (`@nats-io/nkeys` 2.0.3 as a development dependency of `@taskelith/worker`).
+- **Finding 2.** `pinned-tls.test.ts`, "a 307 redirect to plain HTTP is not followed, for the token or the CA read" and the same for 308: `AssertionError [ERR_ASSERTION]: no enrollment through a redirect` at `pinned-tls.test.ts:189:12`, `actual: true`, `expected: false`, for each. With the three new tests that run was 7 tests, 4 pass, 3 fail; with `4724f166` the adapter's tests give 44 tests, 44 pass.
+- **Finding 3** is documentation only.
+
+`make findings ARGS="validate"` after recording: "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)."
+
+After pass 1, `make verify` on `648a227e` with these records: exit 0; `ℹ tests 2548`, `ℹ suites 45`, `ℹ pass 2541`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.50 | 99.06`; "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The four new tests account for 2548 against 2544.
 
 ## Limitations
 

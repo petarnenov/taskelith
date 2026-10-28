@@ -1,0 +1,1 @@
+{"change": "enroll-remote-worker-over-tls", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18109-0d4c-7b40-b983-958c59614519", "counts": {"critical": 0, "high": 1, "medium": 1, "low": 1}}
