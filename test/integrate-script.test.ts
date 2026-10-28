@@ -286,22 +286,66 @@ function linesOf(path: string, count: number): Promise<string[]> {
   });
 }
 
-// Review pass 2 finding 2: a signal to the script stops make verify too.
-test('a SIGTERM to the script during make verify leaves no process', async () => {
-  await withFixture(async (fixture) => {
-    const child = spawn('bash', [script, BRANCH, 'title', 'body'], {
-      cwd: fixture.main, env: environment(fixture, { FAKE_VERIFY_SECONDS: '300' }), stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-    const exited = new Promise<number | null>((done) => child.on('exit', (code) => done(code)));
-    const pids = (await linesOf(fixture.pids, 2)).map(Number);
-    child.kill('SIGTERM');
-    assert.equal(await exited, 143);
-    assert.match(stdout, /^INTERRUPTED feature$/m);
-    for (const pid of pids) assert.equal(running(pid), false, `process ${pid} survived`);
+interface Interrupted {
+  readonly status: number | null;
+  readonly stdout: string;
+}
+
+function startIntegrate(fixture: Fixture, extra: Record<string, string>) {
+  const child = spawn('bash', [script, BRANCH, 'title', 'body'], {
+    cwd: fixture.main, env: environment(fixture, extra), stdio: ['ignore', 'pipe', 'pipe'],
   });
-});
+  let stdout = '';
+  child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+  const exited = new Promise<Interrupted>((done) => child.on('exit', (status) => done({ status, stdout })));
+  return { child, exited };
+}
+
+// The shell reports a signal as 128 plus its number.
+const SIGNALS = [['SIGINT', 130], ['SIGHUP', 129], ['SIGTERM', 143]] as const;
+
+// Review pass 2 finding 2 and pass 3 finding 1: a signal to the script
+// stops make verify, and the exit status names that signal.
+for (const [signal, status] of SIGNALS) {
+  test(`a ${signal} to the script during make verify exits ${status} and leaves no process`, async () => {
+    await withFixture(async (fixture) => {
+      const { child, exited } = startIntegrate(fixture, { FAKE_VERIFY_SECONDS: '300' });
+      const pids = (await linesOf(fixture.pids, 2)).map(Number);
+      child.kill(signal);
+      const run = await exited;
+      assert.equal(run.status, status);
+      assert.match(run.stdout, /^INTERRUPTED feature$/m);
+      for (const pid of pids) assert.equal(running(pid), false, `process ${pid} survived`);
+    });
+  });
+}
+
+// A perl stub that signals the script as the supervisor starts and starts
+// the supervisor with signals ignored, so a single passed-on signal is lost.
+function writeEarlySignalPerl(fixture: Fixture): void {
+  const perl = execFileSync('sh', ['-c', 'command -v perl'], { encoding: 'utf8' }).trim();
+  write(join(fixture.root, 'bin', 'perl'), `#!/bin/sh
+trap '' INT TERM HUP
+kill -s "$EARLY_SIGNAL" "$PPID"
+exec "${perl}" "$@"
+`, 0o755);
+}
+
+// Review pass 3 finding 2: a signal before the supervisor or its handlers
+// exist still stops make verify and leaves no process.
+for (const [signal, status] of SIGNALS) {
+  test(`a ${signal} as make verify starts exits ${status} and leaves no process`, { timeout: 120_000 }, async () => {
+    await withFixture(async (fixture) => {
+      writeEarlySignalPerl(fixture);
+      const { exited } = startIntegrate(fixture, { FAKE_VERIFY_SECONDS: '300', EARLY_SIGNAL: signal.slice(3) });
+      const run = await exited;
+      assert.equal(run.status, status);
+      assert.match(run.stdout, /^INTERRUPTED feature$/m);
+      const pids = existsSync(fixture.pids) ? readFileSync(fixture.pids, 'utf8').trim().split('\n').filter(Boolean) : [];
+      for (const pid of pids.map(Number)) assert.equal(running(pid), false, `process ${pid} survived`);
+    });
+  });
+}
 
 // Review finding 5: a dirty tree is never verified or pushed.
 test('an integration worktree with uncommitted changes is not verified or pushed', async () => {

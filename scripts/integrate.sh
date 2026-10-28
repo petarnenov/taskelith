@@ -45,16 +45,27 @@ wait_while_paused() {
 # HUP, and at its end it stops the group and waits until the group is gone.
 GROUP_SUPERVISOR='
 use strict;
+use POSIX ();
 my ($seconds, @command) = @ARGV;
 my %number = (HUP => 1, INT => 2, TERM => 15);
-my $pid = fork() // die "fork: $!\n";
-if ($pid == 0) { setpgrp(0, 0); exec { $command[0] } @command or die "exec: $!\n"; }
-setpgrp($pid, $pid);
-my ($stops, $reason) = (0, "");
+my ($pid, $stops, $reason) = (0, 0, "");
 sub stop { kill($stops++ ? "KILL" : "TERM", -$pid); alarm 10; }
+sub signalled { $reason ||= $_[0]; stop() if $pid && !$stops; }
+$SIG{$_} = \&signalled for keys %number;
 $SIG{ALRM} = sub { $reason ||= "ALRM"; stop(); };
-for my $name (keys %number) { $SIG{$name} = sub { $reason ||= $name; stop() unless $stops; }; }
+my $held = POSIX::SigSet->new(POSIX::SIGHUP(), POSIX::SIGINT(), POSIX::SIGTERM());
+POSIX::sigprocmask(POSIX::SIG_BLOCK(), $held);
+$pid = fork() // die "fork: $!\n";
+if ($pid == 0) {
+  $SIG{$_} = "DEFAULT" for keys %number;
+  setpgrp(0, 0);
+  POSIX::sigprocmask(POSIX::SIG_UNBLOCK(), $held);
+  exec { $command[0] } @command or die "exec: $!\n";
+}
+setpgrp($pid, $pid);
 alarm $seconds if $seconds > 0;
+POSIX::sigprocmask(POSIX::SIG_UNBLOCK(), $held);
+stop() if $reason && !$stops;
 waitpid($pid, 0);
 my $status = $?;
 alarm 0;
@@ -69,17 +80,26 @@ exit 128 + $number{$reason} if $reason;
 exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);
 '
 
-# A signal to this script reaches the supervisor, which stops make verify;
-# the wait repeats, because the trap ends the first one early.
+# Notes a signal to this script; run_verify passes it on to the supervisor.
+note_signal() {
+  interrupted=true
+  signal="$1"
+}
+
+# The traps exist before the supervisor starts. The signal repeats until the
+# supervisor ends, since it starts with INT ignored and before its handlers.
 run_verify() {
+  local supervisor signal="" status=0
+  trap 'note_signal INT' INT
+  trap 'note_signal HUP' HUP
+  trap 'note_signal TERM' TERM
   perl -e "$GROUP_SUPERVISOR" "$timeout_seconds" make verify </dev/null &
-  local supervisor=$! status
-  trap 'interrupted=true; kill -TERM "$supervisor" 2>/dev/null || true' INT TERM HUP
-  while :; do
-    status=0
-    wait "$supervisor" || status=$?
-    kill -0 "$supervisor" 2>/dev/null || break
+  supervisor=$!
+  while kill -0 "$supervisor" 2>/dev/null; do
+    if [ -n "$signal" ]; then kill -s "$signal" "$supervisor" 2>/dev/null || true; fi
+    sleep 1
   done
+  wait "$supervisor" || status=$?
   trap - INT TERM HUP
   return "$status"
 }
