@@ -295,7 +295,7 @@ export class GitWorkspaces implements WorkspaceProvider {
     return ok(undefined);
   }
 
-  // Records the containment before the program may start, lets it run,
+  // Records the containment of the ready program before `go`, lets it run,
   // and records a failure, after which it never runs again by itself.
   async #runRecorded(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
     const { containment } = launched;

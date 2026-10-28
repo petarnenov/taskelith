@@ -38,8 +38,9 @@ async function withFixture(run: (git: GitFixture) => Promise<void>, options: Git
   }
 }
 
-// A shell program that waits for `go` like the fixed one, then runs `body`.
-const shellProgram = (body: string) => ({ executable: '/bin/sh', args: ['-c', `read go; ${body}`, 'reclaim'] });
+// A shell program that signals readiness and waits for `go` like the
+// fixed one, then runs `body`.
+const shellProgram = (body: string) => ({ executable: '/bin/sh', args: ['-c', `echo ready; read go; ${body}`, 'reclaim'] });
 const failingHost = () => new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(shellProgram('exit 1'))));
 
 // Runs until the file `hold` is gone; the process group outlives a crash.

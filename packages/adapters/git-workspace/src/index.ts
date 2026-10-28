@@ -43,6 +43,7 @@ export {
   RECLAIM_EXIT,
   RECLAIM_GO,
   RECLAIM_GO_BOUND_MS,
+  RECLAIM_READY,
   enterReclaimContainment,
   normalizeCheckout,
   parseReclaimArguments,

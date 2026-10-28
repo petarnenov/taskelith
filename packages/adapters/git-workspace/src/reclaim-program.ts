@@ -22,6 +22,10 @@ export interface ReclaimArguments {
 // containment; without it the program changes nothing.
 export const RECLAIM_GO = 'go\n';
 
+// Written once the program is in its containment as its account; the
+// worker records the containment only after it.
+export const RECLAIM_READY = 'ready\n';
+
 // Exit codes: 0 done, 1 failed, 2 usage, 3 abandoned before `go`.
 export const RECLAIM_EXIT = Object.freeze({ done: 0, failed: 1, usage: 2, abandoned: 3 });
 
@@ -85,11 +89,13 @@ export function receivedGo(input: NodeJS.ReadableStream, withinMs: number): Prom
   });
 }
 
-export async function runReclaimProgram(argv: readonly string[], input: NodeJS.ReadableStream): Promise<number> {
+// Reads `go` from `input` and signals readiness on `output`.
+export async function runReclaimProgram(argv: readonly string[], input: NodeJS.ReadableStream, output: NodeJS.WritableStream): Promise<number> {
   const parsed = parseReclaimArguments(argv);
   if (!parsed.ok) return RECLAIM_EXIT.usage;
   try {
     if (parsed.value.containment !== undefined) enterReclaimContainment(parsed.value.containment);
+    output.write(RECLAIM_READY);
     if (!(await receivedGo(input, parsed.value.goWithinMs))) return RECLAIM_EXIT.abandoned;
     await normalizeCheckout(parsed.value.checkout, process.getuid!());
     return RECLAIM_EXIT.done;

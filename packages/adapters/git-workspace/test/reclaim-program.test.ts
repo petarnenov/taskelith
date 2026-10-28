@@ -13,11 +13,13 @@ import {
   RECLAIM_GO,
   RECLAIM_GO_BOUND_MS,
   RECLAIM_PROGRAM_MAIN,
+  RECLAIM_READY,
   normalizeCheckout,
   parseReclaimArguments,
   receivedGo,
   runReclaimProgram,
   sharedMode,
+  type ReclaimProgram,
 } from '@taskelith/git-workspace';
 import { launchedByDeadWorker } from './git-fixture.ts';
 
@@ -32,6 +34,10 @@ async function withDirectory(run: (directory: string) => Promise<void>): Promise
 }
 
 const modeOf = async (path: string) => (await lstat(path)).mode & 0o7777;
+
+function makeFifo(path: string): Promise<void> {
+  return new Promise((done, fail) => spawn('mkfifo', [path]).once('close', (code) => (code === 0 ? done() : fail(new Error('mkfifo')))));
+}
 const ACCOUNT = { uid: 10003, gid: 10003 };
 
 test('the reclaim arguments name an absolute checkout and, together, a containment', () => {
@@ -62,16 +68,18 @@ test('the program waits for go and changes nothing without it', async () => {
     await chmod(join(checkout, 'file'), 0o600);
     const abandoned = new PassThrough();
     abandoned.end();
-    assert.equal(await runReclaimProgram(['--checkout', checkout], abandoned), RECLAIM_EXIT.abandoned);
+    const signals = new PassThrough();
+    assert.equal(await runReclaimProgram(['--checkout', checkout], abandoned, signals), RECLAIM_EXIT.abandoned);
+    assert.equal(String(signals.read()), RECLAIM_READY);
     assert.equal(await modeOf(join(checkout, 'file')), 0o600);
-    assert.equal(await runReclaimProgram(['--checkout'], abandoned), RECLAIM_EXIT.usage);
+    assert.equal(await runReclaimProgram(['--checkout'], abandoned, new PassThrough()), RECLAIM_EXIT.usage);
     const go = new PassThrough();
     go.end(RECLAIM_GO);
-    assert.equal(await runReclaimProgram(['--checkout', checkout], go), RECLAIM_EXIT.done);
+    assert.equal(await runReclaimProgram(['--checkout', checkout], go, new PassThrough()), RECLAIM_EXIT.done);
     assert.equal(await modeOf(join(checkout, 'file')), 0o660);
     const missing = new PassThrough();
     missing.end(RECLAIM_GO);
-    assert.equal(await runReclaimProgram(['--checkout', join(checkout, 'missing')], missing), RECLAIM_EXIT.failed);
+    assert.equal(await runReclaimProgram(['--checkout', join(checkout, 'missing')], missing, new PassThrough()), RECLAIM_EXIT.failed);
   });
 });
 
@@ -79,7 +87,7 @@ test('a program that gets no go within its window exits without a change', () =>
   await writeFile(join(checkout, 'file'), 'text');
   await chmod(join(checkout, 'file'), 0o600);
   const started = Date.now();
-  assert.equal(await runReclaimProgram(['--checkout', checkout, '--go-within-ms', '100'], new PassThrough()), RECLAIM_EXIT.abandoned);
+  assert.equal(await runReclaimProgram(['--checkout', checkout, '--go-within-ms', '100'], new PassThrough(), new PassThrough()), RECLAIM_EXIT.abandoned);
   assert.ok(Date.now() - started >= 90, 'the program waits for its window');
   const child = spawn(process.execPath, [RECLAIM_PROGRAM_MAIN, '--checkout', checkout, '--go-within-ms', '200'], { stdio: ['pipe', 'ignore', 'ignore'] });
   assert.equal(await new Promise((done) => child.once('close', done)), RECLAIM_EXIT.abandoned, 'an open input keeps it no longer');
@@ -118,7 +126,7 @@ test('normalization sets exact modes, copies hard-linked files, and never follow
   await writeFile(join(checkout, 'setuid'), '#!/bin/sh\n');
   await chmod(join(checkout, 'setuid'), 0o4755);
   const fifo = join(checkout, 'pipe');
-  await new Promise<void>((done, fail) => spawn('mkfifo', [fifo]).once('close', (code) => (code === 0 ? done() : fail(new Error('mkfifo')))));
+  await makeFifo(fifo);
   await link(fifo, join(outside, 'pipe'));
   await chmod(join(checkout, 'closed', 'deeper'), 0o1700);
   await chmod(join(checkout, 'closed'), 0o000);
@@ -152,7 +160,7 @@ test('the fixed program runs as a process of its own and reports through its exi
 }));
 
 test('a Linux host reads a containment from its cgroup and frees it', () => withDirectory(async (parent) => {
-  const host = new LinuxReclaimHost({ containmentParent: parent, executionAccount: ACCOUNT, program: { executable: '/bin/sh', args: ['-c', 'read go; exit 0', 'reclaim'] } });
+  const host = new LinuxReclaimHost({ containmentParent: parent, executionAccount: ACCOUNT, program: { executable: '/bin/sh', args: ['-c', 'echo ready; read go; exit 0', 'reclaim'] } });
   const containment = { kind: 'cgroup', name: 'reclaim-a' } as const;
   assert.equal(await host.populated(containment), false);
   const launched = value(await host.launch('/nonexistent', 'reclaim-a'));
@@ -175,3 +183,38 @@ test('a Linux host reads a containment from its cgroup and frees it', () => with
   await assert.rejects(host.populated({ kind: 'process-group', id: 42 }), /cgroup/);
   await assert.rejects(new ProcessGroupReclaimHost().populated(containment), /process group/);
 }));
+
+// Holds the fixed program before it starts until the test writes `release`;
+// it writes `arrived` first, which a FIFO makes the test's barrier.
+async function heldProgram(directory: string): Promise<{ program: ReclaimProgram; arrived: string; release: string }> {
+  const [arrived, release] = [join(directory, 'arrived'), join(directory, 'release')];
+  await makeFifo(arrived);
+  await makeFifo(release);
+  const script = 'printf x > "$1"; cat "$2" > /dev/null; shift 2; exec "$@"';
+  return { program: { executable: '/bin/sh', args: ['-c', script, 'held', arrived, release, process.execPath, RECLAIM_PROGRAM_MAIN] }, arrived, release };
+}
+
+test('a launch resolves once the program signals that it is ready, not at its spawn', () => withDirectory(async (directory) => {
+  const checkout = join(directory, 'checkout');
+  await mkdir(checkout);
+  const { program, arrived, release } = await heldProgram(directory);
+  let settled = false;
+  const launching = new ProcessGroupReclaimHost(program).launch(checkout).finally(() => {
+    settled = true;
+  });
+  await readFile(arrived);
+  const settledWhileHeld = settled;
+  await writeFile(release, 'x');
+  const launched = value(await launching);
+  assert.equal(await launched.go(), 'succeeded');
+  assert.equal(settledWhileHeld, false, 'the program ran but was not ready');
+}));
+
+test('a launch fails as unavailable when the program ends before it is ready', async () => {
+  for (const script of ['exit 0', 'echo other; read go']) {
+    const host = new ProcessGroupReclaimHost({ executable: '/bin/sh', args: ['-c', script, 'reclaim'] });
+    const launched = await host.launch('/nonexistent');
+    if (launched.ok) launched.value.abandon();
+    assert.equal(failed(launched).code, 'unavailable', script);
+  }
+});

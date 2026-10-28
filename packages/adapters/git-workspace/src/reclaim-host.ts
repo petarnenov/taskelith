@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ReclaimContainment } from './hand-off-record.js';
 import { RECLAIM_PROGRAM_MAIN } from './reclaim-program-main.js';
-import { RECLAIM_EXIT, RECLAIM_GO, type ExecutionAccount } from './reclaim-program.js';
+import { RECLAIM_EXIT, RECLAIM_GO, RECLAIM_READY, type ExecutionAccount } from './reclaim-program.js';
 
 // `abandoned`: the program got no `go` in its window and changed nothing.
 export type ReclaimOutcome = 'succeeded' | 'failed' | 'abandoned';
 
-// A started reclaim program that changes nothing before `go`.
+// A reclaim program in its containment, as its account, that changes
+// nothing before `go`.
 export interface LaunchedReclaim {
   readonly containment: ReclaimContainment;
   // Lets the program run; resolves once it has exited.
@@ -23,6 +24,7 @@ export interface LaunchedReclaim {
 export interface ReclaimHost {
   // The shared execution account; null where executions run as the worker.
   readonly executionAccount: ExecutionAccount | null;
+  // Resolves once the program has signalled that it is ready.
   launch(checkout: string, containmentName: string): Promise<Result<LaunchedReclaim>>;
   // Whether a process of the containment still runs; a fault rejects.
   populated(containment: ReclaimContainment): Promise<boolean>;
@@ -48,21 +50,44 @@ interface StartedProgram {
   abandon(): void;
 }
 
-// In a process group of its own, waiting on its input for `go`.
+// In a process group of its own; started once it signals that it is
+// ready, so a spawned program never counts before it is contained.
 function startProgram(program: ReclaimProgram, args: readonly string[]): Promise<Result<StartedProgram>> {
   return new Promise((started) => {
-    const child = spawn(program.executable, [...program.args, ...args], { env: PROGRAM_ENVIRONMENT, stdio: ['pipe', 'ignore', 'ignore'], detached: true });
+    const child = spawn(program.executable, [...program.args, ...args], { env: PROGRAM_ENVIRONMENT, stdio: ['pipe', 'pipe', 'ignore'], detached: true });
     const exited = new Promise<ReclaimOutcome>((done) => child.once('close', (code) => done(outcomeOf(code))));
+    const abandon = () => void child.stdin.end();
     child.stdin.on('error', () => {});
     child.once('error', (error) => started(err(failure('unavailable', `cannot start the reclaim program: ${error.message}`))));
-    child.once('spawn', () => started(ok({
-      pid: child.pid!,
-      go: () => {
-        child.stdin.end(RECLAIM_GO);
-        return exited;
-      },
-      abandon: () => void child.stdin.end(),
-    })));
+    void signalledReady(child.stdout).then((ready) => {
+      if (!ready) {
+        abandon();
+        return started(err(failure('unavailable', 'the reclaim program ended before it was ready')));
+      }
+      started(ok({
+        pid: child.pid!,
+        go: () => {
+          child.stdin.end(RECLAIM_GO);
+          return exited;
+        },
+        abandon,
+      }));
+    });
+  });
+}
+
+// True once the output starts with the ready signal, false if it ends
+// first; the rest of the output is drained.
+function signalledReady(output: NodeJS.ReadableStream): Promise<boolean> {
+  return new Promise((resolve) => {
+    let received = '';
+    output.setEncoding('utf8');
+    output.on('data', (chunk: string) => {
+      received += chunk;
+      if (received.length >= RECLAIM_READY.length) resolve(received.startsWith(RECLAIM_READY));
+    });
+    output.once('end', () => resolve(received.startsWith(RECLAIM_READY)));
+    output.once('error', () => resolve(false));
   });
 }
 
