@@ -6,8 +6,8 @@
 
 ## 2. Contract
 
-- [ ] 2.1 Write `docs/contracts/session-timeline.md`: one task's sessions and their attempts, generations, queued turns, native requests and responses, reconciliation, the output stream and cursor, the limit handoff, failure codes, required tests, and what is not in it; link it from the operational targets row of the live session stream buffer
-- [ ] 2.2 Check the spec delta, the contract, and the design against each other
+- [x] 2.1 Write `docs/contracts/session-timeline.md`: one task's sessions and their attempts, generations, queued turns, native requests and responses, reconciliation, the output stream and cursor, the limit handoff, failure codes, required tests, and what is not in it; link it from the operational targets row of the live session stream buffer
+- [x] 2.2 Check the spec delta, the contract, and the design against each other
 
 ## 3. Domain module
 

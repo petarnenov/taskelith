@@ -10,7 +10,7 @@ G2 item 7 (archived `define-execution-domain-model`) delivered the per-task inva
 
 **Goals:**
 
-- A reviewed domain contract, `docs/contracts/session-timeline.md`, and a capability spec that items 9, 13, 14, 18, and 31 build on.
+- A reviewed domain contract, the [session timeline contract](/docs/contracts/session-timeline.md), and a capability spec that items 9, 13, 14, 18, and 31 build on.
 - A pure, harness-neutral domain with unit tests written before it, each shown failing first.
 
 **Non-Goals:**
@@ -59,7 +59,7 @@ Away delegate decision, 2026-10-28, relayed by the coordinator: this applies to 
 28. **A request expires with its turn.** When a turn records its outcome, each of its requests still without a response becomes `expired`, final; a response to it fails with `not-found`. Source: agent harness port contract section 7.3 ("A request expires when its turn ends").
 29. **One attempt, one session.** Because a session holds one task's attempts (decision 20), the check that no other session holds an attempt reads the task's other sessions, which the caller passes; their storage is item 13's. Source: decision 6.
 30. **Text bounds.** A turn's text is 1 to `MAX_HARNESS_TEXT_LENGTH` characters; a request's text, an output entry's text, and the free text of an answer are at most that many characters. Text outside its bound fails with `invalid` before any state is checked. Source: agent harness port contract section 2 rule 2 and its bounds table.
-31. **Failure codes.** `invalid` for text, a cursor, or an answer of the wrong kind or shape; `not-found` for an unknown turn, request, generation, or handoff, or an expired or unresolved request; `conflict` for a repeated key with other content, a repeated turn ID, a second outcome or response, a held attempt, another native session ID, and a second handoff write or take; `precondition-failed` for every other state the operation does not allow. Source: kernel `FAILURE_CODES`; agent harness port contract section 9.3.
+31. **Failure codes.** `invalid` for text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, and an answer of the wrong kind; `not-found` for an unknown attempt, generation, turn, request, or handoff, and an `expired` or `unresolved` request; `conflict` for an attempt of another task, already bound, or held by another session of the task, another native session ID, a repeated idempotency key or request key with other content, a repeated turn ID, a second outcome, response, or handoff, and a handoff taken twice, by its own session, or by a session of another task; `precondition-failed` for every other state the change does not allow. The contract's section 2 lists them. Source: kernel `FAILURE_CODES`; agent harness port contract section 9.3.
 
 ## Source notes
 
