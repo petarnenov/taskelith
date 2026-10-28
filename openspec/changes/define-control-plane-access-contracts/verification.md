@@ -83,7 +83,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `23b071a8f4d3ad8f7d07ac200f42eb7cf772827b`; tests 2936, pass 2889, fail 0, skipped 47; all files 99.36% lines, 92.77% branches, 99.00% functions.
+- `make verify`: passed, profile full, tree `80d1aac18bb7a565c07413ee5edfbc67b936ac26`; tests 2936, pass 2889, fail 0, skipped 47; all files 99.36% lines, 92.74% branches, 99.03% functions.
 - `npm run openspec -- validate define-control-plane-access-contracts --strict`: passed, `Change 'define-control-plane-access-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
 - Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
