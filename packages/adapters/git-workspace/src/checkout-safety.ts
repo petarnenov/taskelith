@@ -10,7 +10,7 @@ const REDIRECTIONS = [['commondir'], ['objects', 'info', 'alternates']] as const
 // Contract section 7, checked without following a link: the checkout and
 // its `.git` belong to the worker, `.git` redirects nowhere, none nests.
 export async function checkCheckoutSafety(checkout: string, owner: number): Promise<Result<void>> {
-  const problem = (await ownProblem(checkout, owner)) ?? (await gitDirectoryProblem(checkout, owner)) ?? (await nestedProblem(checkout));
+  const problem = (await ownProblem(checkout, owner)) ?? (await gitDirectoryProblem(checkout, owner)) ?? (await nestedProblem(Buffer.from(checkout)));
   if (problem === null) return ok(undefined);
   return workspaceFailure('precondition-failed', 'unsafe-checkout', `the checkout is unsafe: ${problem}`);
 }
@@ -29,24 +29,31 @@ async function gitDirectoryProblem(checkout: string, owner: number): Promise<str
   for (const parts of REDIRECTIONS) {
     if ((await lstat(join(gitDirectory, ...parts)).catch(() => undefined)) !== undefined) return `.git holds ${parts.join('/')}`;
   }
-  return (await holdsLink(gitDirectory)) ? '.git holds a symbolic link' : null;
+  return (await holdsLink(Buffer.from(gitDirectory))) ? '.git holds a symbolic link' : null;
 }
 
-async function holdsLink(directory: string): Promise<boolean> {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
+const SEPARATOR = Buffer.from('/');
+const GIT_NAME = Buffer.from(GIT_DIRECTORY);
+// Names stay bytes, so a name that is not UTF-8 names its own entry.
+const entriesOf = (directory: Buffer) => readdir(directory, { withFileTypes: true, encoding: 'buffer' });
+const below = (directory: Buffer, name: Buffer) => Buffer.concat([directory, SEPARATOR, name]);
+
+async function holdsLink(directory: Buffer): Promise<boolean> {
+  for (const entry of await entriesOf(directory)) {
     if (entry.isSymbolicLink()) return true;
-    if (entry.isDirectory() && (await holdsLink(join(directory, entry.name)))) return true;
+    if (entry.isDirectory() && (await holdsLink(below(directory, entry.name)))) return true;
   }
   return false;
 }
 
 // No tracked path can be named `.git`, so any such entry below the top is
 // a nested repository or a submodule's gitfile.
-async function nestedProblem(directory: string, top = true): Promise<string | null> {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === GIT_DIRECTORY && top) continue;
-    if (entry.name === GIT_DIRECTORY) return 'a .git entry below the top';
-    if (entry.isDirectory() && (await nestedProblem(join(directory, entry.name), false)) !== null) return 'a .git entry below the top';
+async function nestedProblem(directory: Buffer, top = true): Promise<string | null> {
+  for (const entry of await entriesOf(directory)) {
+    const isGit = entry.name.equals(GIT_NAME);
+    if (isGit && top) continue;
+    if (isGit) return 'a .git entry below the top';
+    if (entry.isDirectory() && (await nestedProblem(below(directory, entry.name), false)) !== null) return 'a .git entry below the top';
   }
   return null;
 }

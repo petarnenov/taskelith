@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { failed, value } from '@taskelith/testing';
-import { parseBatchObjects, parsePorcelainStatus, parseTreeListing, snapshotTree, type ListedEntry } from '@taskelith/git-workspace';
+import { parseBatchObjects, parseIndexFlags, parsePorcelainStatus, parseTreeListing, snapshotTree, type ListedEntry } from '@taskelith/git-workspace';
 import { nativeGit } from './git-fixture.ts';
 
 const OID = 'a'.repeat(40);
@@ -47,12 +47,11 @@ test('the status parser refuses a record with a malformed field or path', () => 
   const records = [
     ...malformed.map(([index, field]) => `${CHANGED.map((part, at) => (at === index ? field : part)).join(' ')} file`),
     `${CHANGED.join(' ')} `,
-    `${CHANGED.join(' ')}  file`,
     `2 R. N... 100644 100644 100644 ${OID} ${OID} X100 new\x00old`,
     `2 R. N... 100644 100644 100644 ${OID} ${OID} R100 new\x00`,
     `u UU N... 100644 100644 100644 100644 ${OID} ${OID} conflict`,
     '? ',
-    `! ${OID} extra`.slice(0, 1),
+    '!',
   ];
   for (const record of records) {
     assert.equal(failed(parsePorcelainStatus(bytes(HEADERS, `${record}\x00`))).code, 'internal', record);
@@ -153,4 +152,12 @@ test('the snapshot tree refuses a gitlink before text that is not UTF-8', () => 
     assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', reason]);
   }
   assert.equal(failed(snapshotTree([blob('plain', 'c'.repeat(40))], objects)).code, 'internal');
+});
+
+test('the index flag reader finds assume-unchanged and skip-worktree paths', () => {
+  const flags = value(parseIndexFlags(bytes('H plain\x00h assumed\x00S skipped\x00s both\x00')));
+  assert.deepEqual([flags.assumeUnchanged.map(text), flags.skipWorktree.map(text)], [['assumed', 'both'], ['skipped', 'both']]);
+  for (const output of ['H plain', 'H\x00', 'Hplain\x00', '1 plain\x00', '? \x00']) {
+    assert.equal(failed(parseIndexFlags(bytes(output))).code, 'internal', output);
+  }
 });

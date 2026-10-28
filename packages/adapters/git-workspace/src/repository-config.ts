@@ -29,3 +29,10 @@ export async function writeRepositoryConfig(checkout: string, format: ObjectForm
     throw error;
   });
 }
+
+// `.git/info` holds ignore, attribute, and graft rules that Git reads
+// beside the tracked ones, so none that the agent wrote survives.
+export async function resetRepositoryFiles(checkout: string, format: ObjectFormat): Promise<void> {
+  await writeRepositoryConfig(checkout, format);
+  await rm(join(checkout, '.git', 'info'), { recursive: true, force: true });
+}

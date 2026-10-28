@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { replaceFileAsync } from '@taskelith/data-root';
-import { type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import { WORKSPACE_KINDS, type RepositoryBinding, type WorkspaceKind } from '@taskelith/workspace';
 import type { ObjectFormat } from './repository-config.js';
@@ -21,29 +21,34 @@ export function writeWorkspaceRecord(path: string, record: WorkspaceRecord): Pro
   return replaceFileAsync(path, new TextEncoder().encode(JSON.stringify(record)));
 }
 
-// Undefined when the record is absent; a record that cannot be read or
-// parsed rejects, as a disk fault does.
-export async function readWorkspaceRecord(path: string): Promise<WorkspaceRecord | undefined> {
+// Undefined when the record is absent, `internal` when it is malformed;
+// a file system fault rejects.
+export async function readWorkspaceRecord(path: string): Promise<Result<WorkspaceRecord | undefined>> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return undefined;
     throw error;
   });
-  if (handle === undefined) return undefined;
+  if (handle === undefined) return ok(undefined);
   try {
-    return parseRecord(await handle.readFile('utf8'), path);
+    const record = parseRecord(await handle.readFile('utf8'));
+    return record === null ? err(failure('internal', `the workspace record ${path} is malformed`)) : ok(record);
   } finally {
     await handle.close();
   }
 }
 
-function parseRecord(text: string, path: string): WorkspaceRecord {
-  const record = JSON.parse(text) as Partial<WorkspaceRecord>;
-  const { binding } = record;
-  const valid = typeof record.attemptId === 'string'
+function parseRecord(text: string): WorkspaceRecord | null {
+  let record: Partial<WorkspaceRecord>;
+  try {
+    record = JSON.parse(text) as Partial<WorkspaceRecord>;
+  } catch {
+    return null;
+  }
+  const { binding } = record ?? {};
+  const valid = typeof record?.attemptId === 'string'
     && WORKSPACE_KINDS.includes(record.kind as WorkspaceKind)
     && (record.branch === null || typeof record.branch === 'string')
     && typeof binding?.repository === 'string' && typeof binding.remote === 'string' && typeof binding.baseBranch === 'string'
     && (record.objectFormat === 'sha1' || record.objectFormat === 'sha256');
-  if (!valid) throw new Error(`the workspace record ${path} is malformed`);
-  return record as WorkspaceRecord;
+  return valid ? (record as WorkspaceRecord) : null;
 }

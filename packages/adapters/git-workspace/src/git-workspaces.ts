@@ -32,10 +32,12 @@ import {
 } from '@taskelith/workspace';
 import { checkCheckoutSafety } from './checkout-safety.js';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
+import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
 import { succeeded, type GitRunner } from './git-runner.js';
+import { parseIndexFlags } from './index-flags.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
-import { writeRepositoryConfig, type ObjectFormat } from './repository-config.js';
+import { resetRepositoryFiles, type ObjectFormat } from './repository-config.js';
 import { parseBatchObjects, parseTreeListing, snapshotTree, type ListedEntry } from './tree-listing.js';
 import { readWorkspaceRecord, writeWorkspaceRecord, type WorkspaceRecord } from './workspace-record.js';
 
@@ -58,6 +60,7 @@ export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHa
 // revert, or bisect.
 const OPERATION_MARKERS = ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_LOG', 'rebase-merge', 'rebase-apply', 'sequencer'];
 const CLONE_REMOTE = 'origin';
+const NUL = Uint8Array.of(0);
 
 interface OpenedWorkspace {
   readonly record: WorkspaceRecord;
@@ -100,9 +103,49 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     this.#owner = process.getuid!();
   }
 
+  prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
+    return failingFileSystemAsUnavailable(() => this.#prepare(request));
+  }
+
+  // Ready workspaces from their records, in UTF-16 code unit order.
+  async list(): Promise<readonly AttemptId[]> {
+    const names = (await readdir(this.#root)).filter((entry) => !entry.startsWith('.'));
+    const attempts = await Promise.all(names.map(async (name) => {
+      const record = await readWorkspaceRecord(join(this.#root, name, WORKSPACE_LAYOUT.metadata));
+      if (!record.ok) throw new Error(record.error.message);
+      if (record.value === undefined) throw new Error(`the workspace ${name} has no record`);
+      return record.value.attemptId;
+    }));
+    return attempts.sort();
+  }
+
+  remove(attemptId: AttemptId): Promise<Result<void>> {
+    return failingFileSystemAsUnavailable(() => this.#remove(attemptId));
+  }
+
+  // Deletes every staging and removing entry; a link is removed as a link.
+  async sweep(): Promise<void> {
+    for (const entry of await readdir(this.#root)) {
+      const path = join(this.#root, entry);
+      if (entry.startsWith(WORKSPACE_LAYOUT.removingPrefix)) await this.#deleteRemoving(path);
+      else if (entry.startsWith(WORKSPACE_LAYOUT.stagingPrefix)) await rm(path, { recursive: true, force: true });
+    }
+  }
+
+  inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
+    return failingFileSystemAsUnavailable(async () => {
+      const opened = await this.#opened(attemptId);
+      return opened.ok ? this.#status(opened.value) : opened;
+    });
+  }
+
+  snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>> {
+    return failingFileSystemAsUnavailable(() => this.#snapshot(attemptId));
+  }
+
   // Section 9: repository, remote, credential, sources, tree, then an
   // existing workspace, which the rename into place detects atomically.
-  async prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
+  async #prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
     const refused = this.#prepareRefusal(request);
     if (!refused.ok) return refused;
     const name = workspaceDirectoryName(request.attemptId, sha256IdentifierDigest);
@@ -110,7 +153,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (!(await attempt(mkdir(staging, { mode: WORKSPACE_MODES.attempt }), ['EEXIST']))) {
       return err(failure('conflict', `workspace ${request.attemptId} is being prepared`));
     }
-    const built = await this.#build(staging, request);
+    const built = await failingFileSystemAsUnavailable(() => this.#build(staging, request));
     if (!built.ok) {
       await rm(staging, { recursive: true, force: true });
       return built;
@@ -120,18 +163,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     return ok({ ...built.value, workingDirectory: join(this.#root, name, WORKSPACE_LAYOUT.checkout) });
   }
 
-  // Ready workspaces from their records, in UTF-16 code unit order.
-  async list(): Promise<readonly AttemptId[]> {
-    const names = (await readdir(this.#root)).filter((entry) => !entry.startsWith('.'));
-    const attempts = await Promise.all(names.map(async (name) => {
-      const record = await readWorkspaceRecord(join(this.#root, name, WORKSPACE_LAYOUT.metadata));
-      if (record === undefined) throw new Error(`the workspace ${name} has no record`);
-      return record.attemptId;
-    }));
-    return attempts.sort();
-  }
-
-  async remove(attemptId: AttemptId): Promise<Result<void>> {
+  async #remove(attemptId: AttemptId): Promise<Result<void>> {
     const opened = await this.#opened(attemptId);
     if (!opened.ok) return opened.error.code === 'not-found' ? ok(undefined) : opened;
     const status = await this.#status(opened.value);
@@ -148,21 +180,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     return ok(undefined);
   }
 
-  // Deletes every staging and removing entry; a link is removed as a link.
-  async sweep(): Promise<void> {
-    for (const entry of await readdir(this.#root)) {
-      const path = join(this.#root, entry);
-      if (entry.startsWith(WORKSPACE_LAYOUT.removingPrefix)) await this.#deleteRemoving(path);
-      else if (entry.startsWith(WORKSPACE_LAYOUT.stagingPrefix)) await rm(path, { recursive: true, force: true });
-    }
-  }
-
-  async inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
-    const opened = await this.#opened(attemptId);
-    return opened.ok ? this.#status(opened.value) : opened;
-  }
-
-  async snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>> {
+  async #snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>> {
     const opened = await this.#opened(attemptId);
     if (!opened.ok) return opened;
     const status = await this.#status(opened.value);
@@ -197,7 +215,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (!cloned.ok) return cloned;
     const format = await this.#objectFormat(checkout);
     if (!format.ok) return format;
-    await writeRepositoryConfig(checkout, format.value);
+    await resetRepositoryFiles(checkout, format.value);
     const branch = request.target.kind === 'task-branch' ? taskBranchName(request.taskId, sha256IdentifierDigest) : null;
     const start = await this.#start(checkout, request, branch);
     if (!start.ok) return start;
@@ -239,21 +257,32 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
       : [`refs/remotes/${CLONE_REMOTE}/${branch}`, `refs/remotes/${CLONE_REMOTE}/${binding.baseBranch}`];
     for (const candidate of candidates) {
       const commit = await this.#resolve(checkout, `${candidate}^{commit}`);
-      if (commit === undefined) continue;
-      const tree = await this.#resolve(checkout, `${commit}^{tree}`);
-      if (tree === undefined) return err(failure('internal', `commit ${commit} has no tree`));
-      if (target.kind === 'at-head' && tree !== target.head.tree) {
+      if (!commit.ok) return commit;
+      if (commit.value === undefined) continue;
+      const tree = await this.#treeOf(checkout, commit.value);
+      if (!tree.ok) return tree;
+      if (target.kind === 'at-head' && tree.value !== target.head.tree) {
         return workspaceFailure('invalid', 'head-mismatch', 'the tree is not the commit tree');
       }
-      return ok({ commit, tree });
+      return ok({ commit: commit.value, tree: tree.value });
     }
     return err(failure('not-found', target.kind === 'at-head' ? 'the head commit is unknown' : 'the base branch is missing'));
   }
 
-  async #resolve(checkout: string, revision: string): Promise<string | undefined> {
+  // Undefined for a missing revision, which `--verify --quiet` reports
+  // with exit code 1; any other outcome that is not success fails.
+  async #resolve(checkout: string, revision: string): Promise<Result<string | undefined>> {
     const args = ['rev-parse', '--verify', '--quiet', '--end-of-options', revision];
     const output = await this.#git.run({ args, cwd: checkout });
-    return output.ok && output.value.exitCode === 0 ? text(output.value.stdout) : undefined;
+    if (output.ok && output.value.exitCode === 1) return ok(undefined);
+    const resolved = succeeded(output, 'internal', `the lookup of ${revision}`);
+    return resolved.ok ? ok(text(resolved.value)) : resolved;
+  }
+
+  async #treeOf(checkout: string, commit: string): Promise<Result<string>> {
+    const tree = await this.#resolve(checkout, `${commit}^{tree}`);
+    if (!tree.ok) return tree;
+    return tree.value === undefined ? err(failure('internal', `commit ${commit} has no tree`)) : ok(tree.value);
   }
 
   async #checkOut(checkout: string, commit: string, branch: string | null): Promise<Result<void>> {
@@ -279,11 +308,13 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     this.#crashPoints.reach('WS4.after');
   }
 
-  // Section 9 before any Git call: the workspace, the hand-off, and the
-  // Git directory; then `.git/config` is written anew.
+  // Section 9 once per operation, before its first Git call: the
+  // workspace, the hand-off, the Git directory, then the rewrite.
   async #opened(attemptId: AttemptId): Promise<Result<OpenedWorkspace>> {
     const directory = join(this.#root, workspaceDirectoryName(attemptId, sha256IdentifierDigest));
-    const record = await readWorkspaceRecord(join(directory, WORKSPACE_LAYOUT.metadata));
+    const read = await readWorkspaceRecord(join(directory, WORKSPACE_LAYOUT.metadata));
+    if (!read.ok) return read;
+    const record = read.value;
     if (record === undefined) return err(failure('not-found', `no workspace ${attemptId}`));
     if (await exists(join(directory, WORKSPACE_LAYOUT.handOffRecord))) {
       return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
@@ -291,22 +322,42 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     const checkout = join(directory, WORKSPACE_LAYOUT.checkout);
     const safe = await checkCheckoutSafety(checkout, this.#owner);
     if (!safe.ok) return safe;
-    await writeRepositoryConfig(checkout, record.objectFormat);
+    await resetRepositoryFiles(checkout, record.objectFormat);
     return ok({ record, checkout });
   }
 
   async #status({ record, checkout }: OpenedWorkspace): Promise<Result<WorkspaceStatus>> {
+    const cleared = await this.#clearIndexFlags(checkout);
+    if (!cleared.ok) return cleared;
     const args = ['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all', '--ignore-submodules=all'];
     const output = succeeded(await this.#git.run({ args, cwd: checkout }), 'internal', 'the status');
     if (!output.ok) return output;
     const status = parsePorcelainStatus(output.value);
     if (!status.ok) return status;
     const { commit, branch } = status.value;
-    const tree = commit === null ? undefined : await this.#resolve(checkout, `${commit}^{tree}`);
-    if (commit === null || tree === undefined) return err(failure('internal', 'the workspace has no head commit'));
-    const head = parseCodeHeadIdentity({ repository: record.binding.repository, commit, tree });
+    if (commit === null) return err(failure('internal', 'the workspace has no head commit'));
+    const tree = await this.#treeOf(checkout, commit);
+    if (!tree.ok) return tree;
+    const head = parseCodeHeadIdentity({ repository: record.binding.repository, commit, tree: tree.value });
     if (!head.ok) return head;
     return ok({ head: head.value, branch, dirtyReasons: await this.#dirtyReasons(record, checkout, status.value) });
+  }
+
+  // An assume-unchanged or skip-worktree flag makes status skip a tracked
+  // file, so a change to it would look clean (contract section 6).
+  async #clearIndexFlags(checkout: string): Promise<Result<void>> {
+    const listed = succeeded(await this.#git.run({ args: ['ls-files', '-v', '-z'], cwd: checkout }), 'internal', 'the index listing');
+    if (!listed.ok) return listed;
+    const flags = parseIndexFlags(listed.value);
+    if (!flags.ok) return flags;
+    for (const [option, paths] of [['--no-assume-unchanged', flags.value.assumeUnchanged], ['--no-skip-worktree', flags.value.skipWorktree]] as const) {
+      if (paths.length === 0) continue;
+      const input = Buffer.concat(paths.flatMap((path) => [path, NUL]));
+      const args = ['update-index', '-z', option, '--stdin'];
+      const cleared = succeeded(await this.#git.run({ args, cwd: checkout, input }), 'internal', 'the index update');
+      if (!cleared.ok) return cleared;
+    }
+    return ok(undefined);
   }
 
   async #dirtyReasons(record: WorkspaceRecord, checkout: string, status: PorcelainStatus): Promise<DirtyReason[]> {
@@ -336,6 +387,6 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (names.length === 0) return ok(new Map());
     const input = new TextEncoder().encode(`${names.join('\n')}\n`);
     const output = succeeded(await this.#git.run({ args: ['cat-file', '--batch'], cwd: checkout, input }), 'internal', 'the object read');
-    return output.ok ? parseBatchObjects(output.value) : output;
+    return output.ok ? parseBatchObjects(output.value, names) : output;
   }
 }
