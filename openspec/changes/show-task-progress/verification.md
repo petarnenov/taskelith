@@ -104,12 +104,13 @@ For the coordinator's architect check (governance "Architect check of unreviewed
 2. `cb5a22d7` (docs): the spec delta ("Task progress view" without "one refresh at a time", the stage 5 scenario, "Fix committed before its pass record", and "Progress cache refresh" with its scenarios), `design.md` D1 and D4, `docs/agent-task-protocol.md` "Task progress", `proposal.md`, `tasks.md`, this record, `passes.jsonl`, and `findings.jsonl`.
 3. Outside the repository: the status line script reads the same cache shape and needed no change in this round.
 
+Checked by the coordinator as solution architect, 2026-10-28: correct (Niki; `c1e9789b` and `cb5a22d7`).
+
 ## Limitations
 
 - The status line script, `/Users/petarnenov/geowealth/be/.ai/scripts/statusline-context.py`, is outside this repository and not reviewed with it.
 
 ## Remaining gates
 
-- The coordinator's architect check of the fixes after pass 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request).
