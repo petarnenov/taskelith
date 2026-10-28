@@ -6,12 +6,14 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { CrashPoints, failed, id, value } from '@taskelith/testing';
+import { failed, id, value } from '@taskelith/testing';
 import type { Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
+  GitRunner,
   LinuxReclaimHost,
+  RECLAIM_EXIT,
   RECLAIM_PROGRAM_MAIN,
   credentialForms,
   parseHandOffRecord,
@@ -21,13 +23,14 @@ import {
 } from '@taskelith/git-workspace';
 import {
   GIT_CLIENT_PINS,
+  REDACTED_VALUE,
   WORKSPACE_CONFORMANCE,
   WORKSPACE_LAYOUT,
   reclaimContainmentName,
   taskBranchName,
   type PrepareWorkspace,
 } from '@taskelith/workspace';
-import { CountingHost, createGitFixture, launchedByDeadWorker, runProcess, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
+import { CountingHost, createGitFixture, killedWorker, launchedByDeadWorker, runProcess, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
 
 // Contract section 13, "Linux tests": in the worker image as root with
 // SETUID, SETGID, and KILL, the execution group, and umask 0007.
@@ -48,7 +51,7 @@ await chmod(SCRATCH_PARENT, 0o755);
 const holds = await mkdtemp(join(SCRATCH_PARENT, 'holds-'));
 await chmod(holds, 0o755);
 
-const testProgram = (mode: 'hold' | 'fail', hold = '-'): ReclaimProgram => ({
+const testProgram = (mode: 'hold' | 'fail' | 'eager', hold = '-'): ReclaimProgram => ({
   executable: process.execPath, args: ['--experimental-strip-types', TEST_PROGRAM, mode, hold],
 });
 
@@ -105,14 +108,30 @@ async function agentRefused(cwd: string, command: string): Promise<void> {
 
 const homeCgroup = async () => (await readFile('/proc/self/cgroup', 'utf8')).trim();
 
-async function processesOf(cgroupName: string): Promise<{ pid: number; uid: number; cgroup: string }[]> {
-  const procs = await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.procs'), 'utf8').catch(() => '');
-  return Promise.all(procs.split('\n').filter(Boolean).map(async (pid) => ({
-    pid: Number(pid),
-    uid: Number(/^Uid:\s+(\d+)/m.exec(await readFile(`/proc/${pid}/status`, 'utf8'))![1]),
-    cgroup: (await readFile(`/proc/${pid}/cgroup`, 'utf8')).trim(),
-  })));
+interface ContainedProcess {
+  readonly pid: number;
+  readonly uid: number;
+  readonly cgroup: string;
 }
+
+// The processes of a cgroup; one that exits while it is read is left out.
+async function processesOf(cgroupName: string): Promise<ContainedProcess[]> {
+  const procs = await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.procs'), 'utf8').catch(() => '');
+  const read = await Promise.all(procs.split('\n').filter(Boolean).map((pid) => processOf(Number(pid))));
+  return read.filter((process) => process !== undefined);
+}
+
+async function processOf(pid: number): Promise<ContainedProcess | undefined> {
+  try {
+    const status = await readFile(`/proc/${pid}/status`, 'utf8');
+    return { pid, uid: Number(/^Uid:\s+(\d+)/m.exec(status)![1]), cgroup: (await readFile(`/proc/${pid}/cgroup`, 'utf8')).trim() };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH') return undefined;
+    throw error;
+  }
+}
+
+const inContainment = (name: string) => `0::/${CONTAINMENT_PARENT.split('/').at(-1)}/${name}`;
 
 async function untilPopulated(cgroupName: string): Promise<void> {
   for (let polls = 0; polls < 200; polls += 1) {
@@ -186,12 +205,12 @@ test('a surviving reclaim program in its recorded containment holds the workspac
     value(await git.local.prepare(request(git)));
     value(await git.local.prepare(request(git, SECOND)));
     value(await git.local.handOff(FIRST));
-    await assert.rejects(git.reopen(new CrashPoints({ point: 'WS8', occurrence: 1, action: 'throw' })).reclaim(FIRST), { name: 'SimulatedCrash' });
+    const crashed = { kind: 'linux', containmentParent: CONTAINMENT_PARENT, executionAccount: EXECUTION, program: testProgram('hold', hold) } as const;
+    await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point: 'WS8', host: crashed });
     const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
     assert.deepEqual((await recordOf(git))?.containment, { kind: 'cgroup', name });
-    await untilPopulated(name);
     const running = await processesOf(name);
-    assert.ok(running.every(({ uid, cgroup }) => uid === EXECUTION.uid && cgroup === `0::/${CONTAINMENT_PARENT.split('/').at(-1)}/${name}`), JSON.stringify(running));
+    assert.ok(running.length > 0 && running.every(({ uid, cgroup }) => uid === EXECUTION.uid && cgroup === inContainment(name)), JSON.stringify(running));
     const restarted = git.reopen();
     const started = Date.now();
     assert.equal(failed(await restarted.reclaim(FIRST)).code, 'unavailable');
@@ -201,10 +220,10 @@ test('a surviving reclaim program in its recorded containment holds the workspac
     assert.equal(reasonOf(await restarted.handOff(SECOND)), 'other-workspace-handed-off');
     assert.deepEqual(await restarted.handedOff(), [FIRST]);
     assert.deepEqual((await processesOf(name)).map(({ pid }) => pid), running.map(({ pid }) => pid), 'never killed');
-    assert.equal(host.launched.length, 1);
+    assert.equal(host.launched.length, 0);
     await rm(hold);
     value(await restarted.reclaim(FIRST));
-    assert.equal(host.launched.length, 2);
+    assert.equal(host.launched.length, 1);
     assert.deepEqual(await readdir(CONTAINMENT_PARENT).then((names) => names.filter((entry) => entry === name)), []);
     value(await restarted.handOff(SECOND));
   }, { reclaimHost: host, reclaimProofBoundMs: SHORT_BOUND_MS });
@@ -234,31 +253,75 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
   }, { reclaimHost: linuxHost(testProgram('hold', hold)) });
 });
 
-async function untilEmpty(cgroupName: string): Promise<void> {
-  for (let polls = 0; polls < 200; polls += 1) {
-    if (!(await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.events'), 'utf8')).includes('populated 1')) return;
-    await delay(50);
-  }
-  throw new Error(`${cgroupName} still holds a process`);
+const populatedNow = async (cgroupName: string) => (await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.events'), 'utf8')).includes('populated 1');
+
+// A checkout that the execution account made, without CAP_CHOWN, with a
+// file that normalization changes; `remove` deletes it as that account.
+async function accountCheckout(): Promise<{ checkout: string; file: string; remove: () => Promise<string> }> {
+  const shared = await mkdtemp(join(holds, 'account-'));
+  await chmod(shared, 0o1777);
+  await agentSucceeds(shared, 'mkdir -m 0755 checkout && printf text > checkout/file && chmod 0600 checkout/file');
+  return { checkout: join(shared, 'checkout'), file: join(shared, 'checkout', 'file'), remove: () => agentSucceeds(shared, 'rm -rf checkout') };
 }
 
-test('a reclaim program without go in its window or with a dead worker empties its cgroup unchanged', async () => {
-  const checkout = await mkdtemp(join(holds, 'checkout-'));
-  await writeFile(join(checkout, 'file'), 'text');
-  await chmod(join(checkout, 'file'), 0o600);
-  const windowed = new LinuxReclaimHost({
-    containmentParent: CONTAINMENT_PARENT, executionAccount: EXECUTION,
-    program: { executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '500'] },
-  });
+const modeOf = async (path: string) => (await stat(path)).mode & 0o7777;
+
+async function fifoIn(directory: string, name: string): Promise<string> {
+  const path = join(directory, name);
+  assert.equal((await runProcess('/usr/bin/mkfifo', [path], { env: { PATH: '/usr/bin:/bin' } })).code, 0);
+  return path;
+}
+
+// Runs a program behind a root shell that writes its exit code into the
+// FIFO `status`, so a test reads the code even of an orphaned program.
+function reporting(status: string, args: readonly string[]): ReclaimProgram {
+  return { executable: '/bin/sh', args: ['-c', 'status="$1"; shift; "$@"; echo $? > "$status"', 'reclaim', status, process.execPath, ...args] };
+}
+
+test('a reclaim program without go in its window or with a dead worker exits abandoned and unchanged', async () => {
+  const control = await accountCheckout();
+  const eager = value(await linuxHost(testProgram('eager')).launch(control.checkout, 'reclaim-eager'));
+  assert.equal(await eager.go(), 'succeeded');
+  assert.equal(await modeOf(control.file), 0o660, 'a program that ignores go changes the file');
+  const waiting = await accountCheckout();
+  const { checkout, file } = waiting;
+  const lateStatus = await fifoIn(holds, 'status-late');
+  const windowed = linuxHost(reporting(lateStatus, [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '3000']));
   const late = value(await windowed.launch(checkout, 'reclaim-late-go'));
-  await untilPopulated('reclaim-late-go');
-  assert.deepEqual((await processesOf('reclaim-late-go')).map(({ uid }) => uid), [EXECUTION.uid]);
-  await untilEmpty('reclaim-late-go');
-  const orphaned = await launchedByDeadWorker([checkout, 'reclaim-dead-worker', CONTAINMENT_PARENT, String(EXECUTION.uid)]);
-  await untilEmpty('reclaim-dead-worker');
-  assert.equal((await readFile(join(checkout, 'file'), 'utf8')), 'text');
-  assert.equal((await stat(join(checkout, 'file'))).mode & 0o7777, 0o600);
-  for (const containment of [late.containment, orphaned]) await windowed.release(containment);
+  assert.deepEqual((await processesOf('reclaim-late-go')).map(({ uid, cgroup }) => [uid, cgroup]), [[EXECUTION.uid, inContainment('reclaim-late-go')]]);
+  assert.equal(await readFile(lateStatus, 'utf8'), `${RECLAIM_EXIT.abandoned}\n`);
+  assert.equal(await populatedNow('reclaim-late-go'), false);
+  const deadStatus = await fifoIn(holds, 'status-dead');
+  const program = reporting(deadStatus, [RECLAIM_PROGRAM_MAIN]);
+  const orphaned = await launchedByDeadWorker([checkout, 'reclaim-dead-worker', CONTAINMENT_PARENT, String(EXECUTION.uid), JSON.stringify(program)]);
+  assert.equal(await readFile(deadStatus, 'utf8'), `${RECLAIM_EXIT.abandoned}\n`);
+  assert.equal(await populatedNow('reclaim-dead-worker'), false);
+  assert.equal(await agentSucceeds(checkout, 'cat file'), 'text');
+  assert.equal(await modeOf(file), 0o600);
+  for (const containment of [eager.containment, late.containment, orphaned]) await windowed.release(containment);
+  for (const made of [control, waiting]) await made.remove();
+});
+
+test('a Linux launch resolves only once its program is in its cgroup as the execution account', async () => {
+  const made = await accountCheckout();
+  const { checkout, file } = made;
+  const [arrived, release] = [await fifoIn(holds, 'arrived'), await fifoIn(holds, 'release')];
+  const script = 'printf x > "$1"; cat "$2" > /dev/null; shift 2; exec "$@"';
+  const held = linuxHost({ executable: '/bin/sh', args: ['-c', script, 'held', arrived, release, process.execPath, RECLAIM_PROGRAM_MAIN] });
+  let settled = false;
+  const launching = held.launch(checkout, 'reclaim-held').finally(() => {
+    settled = true;
+  });
+  await readFile(arrived);
+  const [settledWhileHeld, processesWhileHeld] = [settled, await processesOf('reclaim-held')];
+  await writeFile(release, 'x');
+  const launched = value(await launching);
+  assert.deepEqual((await processesOf('reclaim-held')).map(({ uid, cgroup }) => [uid, cgroup]), [[EXECUTION.uid, inContainment('reclaim-held')]]);
+  assert.equal(await launched.go(), 'succeeded');
+  assert.equal(await modeOf(file), 0o660);
+  assert.deepEqual([settledWhileHeld, processesWhileHeld], [false, []], 'held before its cgroup, the program is not ready');
+  await held.release(launched.containment);
+  await made.remove();
 });
 
 test('a reclaim program that runs after the exit keeps the one slot of the worker held', async () => {
@@ -311,21 +374,74 @@ async function allBytes(directory: string): Promise<string> {
   return parts.join('\n');
 }
 
-test('no secret reaches a log, a result, or a file of the data root', () => withLinuxFixture(async (git) => {
+// What the runner hands the adapter: its output after the redaction
+// boundary, recorded by wrapping the runner's public methods.
+async function withRunnerOutputs(run: (outputs: unknown[]) => Promise<void>): Promise<void> {
+  const methods = ['run', 'runChecked', 'runParsed'] as const;
+  const originals = methods.map((method) => GitRunner.prototype[method]);
+  const outputs: unknown[] = [];
+  methods.forEach((method, index) => {
+    const original = originals[index] as (...args: unknown[]) => Promise<unknown>;
+    (GitRunner.prototype as unknown as Record<string, unknown>)[method] = async function (this: GitRunner, ...args: unknown[]) {
+      const result = await original.apply(this, args);
+      outputs.push(result);
+      return result;
+    };
+  });
+  try {
+    await run(outputs);
+  } finally {
+    methods.forEach((method, index) => ((GitRunner.prototype as unknown as Record<string, unknown>)[method] = originals[index]));
+  }
+}
+
+// The worker's own output streams, recorded while `run` runs.
+async function withWorkerOutput(run: () => Promise<void>): Promise<string> {
+  const streams = [process.stdout, process.stderr];
+  const writes = streams.map((stream) => stream.write);
+  let written = '';
+  for (const stream of streams) {
+    const write = stream.write.bind(stream);
+    stream.write = ((chunk: unknown, ...rest: unknown[]) => {
+      written += Buffer.isBuffer(chunk) ? chunk.toString('latin1') : String(chunk);
+      return (write as (...args: unknown[]) => boolean)(chunk, ...rest);
+    }) as typeof stream.write;
+  }
+  try {
+    await run();
+  } finally {
+    streams.forEach((stream, index) => (stream.write = writes[index]!));
+  }
+  return written;
+}
+
+const asText = (value: unknown) => JSON.stringify(value, (_, item: unknown) => (item instanceof Uint8Array ? Buffer.from(item).toString('latin1') : item));
+
+test('no secret reaches a log, an output, a result, or a file of the data root', () => withLinuxFixture(async (git) => {
   const { fixture, local } = git;
   const results: Result<unknown>[] = [];
-  results.push(await local.prepare(request(git)));
-  await fixture.writeFile(FIRST, 'change.txt', 'change\n');
-  await fixture.commitAll(FIRST, 'change');
-  results.push(await local.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.write }));
-  results.push(await local.push({ attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null }));
-  git.remote.behavior = { kind: 'echo-authorization' };
-  results.push(await local.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.write }));
-  results.push(await local.prepare(request(git, SECOND)));
-  assert.equal(results.at(-1)!.ok, false, 'the echoing remote fails the prepare');
+  let runnerOutputs: unknown[] = [];
+  const workerOutput = await withWorkerOutput(() => withRunnerOutputs(async (outputs) => {
+    runnerOutputs = outputs;
+    results.push(await local.prepare(request(git)));
+    await fixture.writeFile(FIRST, 'change.txt', 'change\n');
+    await fixture.commitAll(FIRST, 'change');
+    results.push(await local.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.write }));
+    results.push(await local.push({ attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null }));
+    git.remote.behavior = { kind: 'echo-authorization' };
+    results.push(await local.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.write }));
+    await fixture.writeFile(FIRST, 'later.txt', 'later\n');
+    await fixture.commitAll(FIRST, 'later');
+    results.push(await local.push({ attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null }));
+    results.push(await local.prepare(request(git, SECOND)));
+  }));
+  assert.deepEqual(results.slice(-3).map(({ ok }) => ok), [false, false, false], 'the echoing remote fails each operation');
+  assert.ok(asText(runnerOutputs).includes(REDACTED_VALUE), 'the echoed credential reached the runner and was scrubbed');
   const forms = [fixture.credentials.read, fixture.credentials.write].flatMap(credentialForms);
-  const seen = `${JSON.stringify(results)}\n${await allBytes(fixture.dataRoot)}`;
-  assert.deepEqual(forms.filter((form) => seen.includes(form)), []);
+  const argv = (await git.gitPlacements()).map(({ argv }) => argv.join(' ')).join('\n');
+  const channels = { results: JSON.stringify(results), runner: asText(runnerOutputs), worker: workerOutput, argv, dataRoot: await allBytes(fixture.dataRoot) };
+  const leaks = Object.entries(channels).flatMap(([channel, text]) => forms.filter((form) => text.includes(form)).map(() => channel));
+  assert.deepEqual(leaks, []);
 }));
 
 async function treeHash(directory: string): Promise<string> {
