@@ -1,11 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Needs you items answered once by their source
-Every item that waits on a person SHALL be an inbox item of a registered source, of kind permission-request, input-request, spec-approval, escalation, reconciliation, or delivery-acknowledgement; an answer SHALL go to the owning source, which consumes it once and rejects a duplicate or an answer for a newer attempt generation, and the inbox SHALL never answer an item itself.
+Every item that waits on a person SHALL be an inbox item of a registered source, of kind permission-request, input-request, spec-approval, escalation, reconciliation, or delivery-acknowledgement; an answer SHALL go to the owning source, which consumes it once, returns the first outcome when its idempotency key repeats with the same answer, rejects another answer to a resolved item, the key with another answer, or an answer for a newer attempt generation; the inbox SHALL never answer an item.
 
 #### Scenario: Duplicate answer
-- **WHEN** a second answer arrives for a resolved item
+- **WHEN** a second answer with a new idempotency key, or the key with another answer, arrives for a resolved item
 - **THEN** it fails with `conflict` and changes nothing
+
+#### Scenario: Idempotent repeat
+- **WHEN** the answer that resolved an item repeats with its idempotency key
+- **THEN** it returns the first outcome and changes nothing
 
 ## ADDED Requirements
 

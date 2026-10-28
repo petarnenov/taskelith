@@ -65,7 +65,15 @@ An identifier that the control plane mints for a project, principal, enrollment 
 - **THEN** the answer is 422 with reason `session-stopped`
 
 ### Requirement: Native request responses on the wire
-`respondToNativeRequest` SHALL consume a person's permission or input answer naming the request key, the attempt, and the ownership generation, answering 404 for an unknown, expired, or unresolved request, 409 for an answered one, 422 `attempt-not-current` for an attempt that is not the active bound one, and 400 for an answer of the wrong kind. It and `answerInboxItem` SHALL reach one source, which consumes one answer.
+`respondToNativeRequest` SHALL consume a person's permission or input answer naming the request key, attempt, and ownership generation, answering 404 for an unknown, expired, or unresolved request; for an answered one, 200 when the key and response repeat those that answered it, else 409; 422 `attempt-not-current` for an attempt that is not the active bound one; and 400 for an answer of the wrong kind. It and `answerInboxItem` SHALL reach one source, consuming one answer.
+
+#### Scenario: Response repeated after a lost response
+- **WHEN** a person repeats a response with the idempotency key and response that answered the request
+- **THEN** the answer is 200 with the answered request, and nothing else changes
+
+#### Scenario: Response key reused with another response
+- **WHEN** a response names the key of the response that answered the request but another decision
+- **THEN** the answer is 409 with reason `idempotency-key-reused`, and the first response stays
 
 #### Scenario: Inbox answer and session response race
 - **WHEN** a person answers a permission request through the inbox while another responds to it in the session
@@ -85,6 +93,10 @@ An identifier that the control plane mints for a project, principal, enrollment 
 ### Requirement: Event streams
 `streamProjectEvents` and `streamInstallationEvents` SHALL answer `text/event-stream` with `Cache-Control: no-store`, each event a frame whose `id` is its position, whose `event` is its type, and whose `data` matches `ProjectEvent` or `InstallationEvent`; a project stream SHALL carry only its project's events, and the installation stream only installation-scoped inbox events.
 
+#### Scenario: First worker online for an empty board
+- **WHEN** the number of workers online for a project with no cards goes from zero to one
+- **THEN** the project stream carries a `board-changed` event with `workersOnline` 1
+
 #### Scenario: Another project's event
 - **WHEN** a turn of another project changes while a viewer streams its own project
 - **THEN** the viewer's stream carries no event of that turn
@@ -101,7 +113,15 @@ An event position SHALL exist only after the change it reports has committed: po
 - **THEN** the event of the later commit has the higher position and is sent after the other
 
 ### Requirement: Event stream cursor and resynchronization
-`Last-Event-ID` SHALL be the durable cursor and win over the `after` query parameter, and a stream SHALL resume after it with every retained event of its scope in order. A cursor older than the retention SHALL get a `resync` event with reason `cursor-expired`, and one that is no position of the stream `cursor-unknown`, in a 200 response whose frame has no `id`, after which the stream ends.
+`Last-Event-ID` SHALL be the durable cursor and win over `after`. A cursor SHALL be a boundary of the installation-wide sequence, valid from the stream's retention floor to the sequence's head, and the stream SHALL resume with its scope's retained events above it in order. A cursor below the floor SHALL get a `resync` event with `cursor-expired`, one beyond the head `cursor-unknown`, in a 200 response whose frame has no `id`, after which the stream ends.
+
+#### Scenario: Cursor of no event of the stream
+- **WHEN** a client connects after `0`, or after a view's position that is no event of its stream, within the retention
+- **THEN** the stream sends its scope's events above that position in order and no `resync`
+
+#### Scenario: Cursor beyond the head
+- **WHEN** a client connects after a position beyond the head of the installation-wide sequence
+- **THEN** it receives `resync` with `cursor-unknown`, and the stream ends
 
 #### Scenario: Reconnect
 - **WHEN** a browser reconnects with the `Last-Event-ID` of the last event it received
@@ -119,11 +139,26 @@ Each stream SHALL have a bounded buffer and SHALL be ended rather than waited on
 - **THEN** its stream is ended when its buffer is full, the commands complete, and the client reconnects with `Last-Event-ID`
 
 ### Requirement: Event payloads and agent text
-An event's data SHALL be the record that the corresponding read returns for the same state, and the control plane SHALL redact agent text with `@taskelith/secrets` before it records it, so that a read and an event carry the same redacted text.
+An event's data SHALL be the record, or for `board-changed` the field, that the corresponding read returns for the same state, and the control plane SHALL redact agent text with `@taskelith/secrets` before it records it, a generation's output as one text across its chunks, so that a read and an event carry the same redacted text.
 
 #### Scenario: Secret in agent output
 - **WHEN** a harness writes output that holds a credential of a known shape
 - **THEN** neither the output read nor its `output-appended` event carries the credential
+
+#### Scenario: Secret split across output chunks
+- **WHEN** a harness writes a credential of a known shape in two output chunks
+- **THEN** neither the output read nor any `output-appended` event carries the credential or a part of it that could rebuild it
+
+### Requirement: Idempotency before redaction
+A repeated turn, inbox answer, or native response SHALL be compared by its input before redaction: the control plane SHALL record, with the idempotency key, a keyed digest of the unredacted input in the transaction that records the outcome, and return the first outcome for the same digest and 409 `idempotency-key-reused` for another.
+
+#### Scenario: Inputs that redact alike
+- **WHEN** a turn repeats an idempotency key with text that holds another credential of the same shape
+- **THEN** the answer is 409 with reason `idempotency-key-reused`, though both texts redact to the same text
+
+#### Scenario: Identical retry of a redacted input
+- **WHEN** a turn repeats an idempotency key with the same text, which holds a credential
+- **THEN** the answer is 200 with `duplicate` and the first turn
 
 ### Requirement: Session schemas shared with the worker messages
 The session schemas that the worker messages of sub-change 9d reuse, `AgentSessionId`, `AgentSessionGeneration`, `TurnId`, `TurnText`, `TurnOutcome`, `HarnessFailure`, `NativeRequestId`, `NativeRequestKey`, `NativeRequestKind`, `HarnessText`, `NativeAnswer`, `PermissionDecision`, `DelegationResultOutcome`, and `IdempotencyKey`, SHALL use only keywords that JSON Schema draft-07 reads as 2020-12 does.

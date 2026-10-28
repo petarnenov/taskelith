@@ -12,6 +12,7 @@ export interface Parameter {
   readonly name: string;
   readonly in: string;
   readonly required?: boolean;
+  readonly description?: string;
   readonly schema?: Json;
 }
 
@@ -21,7 +22,10 @@ export interface Operation {
   readonly security: SecurityRequirement[];
   readonly parameters?: Parameter[];
   readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
-  readonly responses: Record<string, { headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
+  readonly responses: Record<
+    string,
+    { description: string; headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }
+  >;
 }
 
 interface Document {

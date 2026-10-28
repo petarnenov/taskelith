@@ -4105,7 +4105,7 @@
         },
         "responses": {
           "200": {
-            "description": "The item is resolved by this answer, also when the same key and answer repeat.",
+            "description": "The item is resolved by this answer, also when the same key and answer, compared before redaction, repeat the answer that resolved it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4471,7 +4471,7 @@
         },
         "responses": {
           "200": {
-            "description": "The key and text repeat a turn of this author; that turn, unchanged.",
+            "description": "The key, and the text before redaction, repeat a turn of this author; that turn, unchanged.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4742,7 +4742,7 @@
         },
         "responses": {
           "200": {
-            "description": "The request is answered by this response, also when the same key and response repeat.",
+            "description": "The request is answered by this response, also when the same key and response, compared before redaction, repeat the response that answered it; checked before `already-answered`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4984,7 +4984,7 @@
             "name": "after",
             "in": "query",
             "required": false,
-            "description": "Start after this position, the `position` of a view the client read; without it, and without `Last-Event-ID`, the stream starts at its head.",
+            "description": "Start after this position, the `position` of a view the client read; a boundary in the installation-wide sequence, valid from the retention floor to its head. Without it, and without `Last-Event-ID`, the stream starts at its head.",
             "schema": {
               "$ref": "#/components/schemas/EventPosition"
             }
@@ -5275,7 +5275,7 @@
         },
         "responses": {
           "200": {
-            "description": "The item is resolved by this answer, also when the same key and answer repeat.",
+            "description": "The item is resolved by this answer, also when the same key and answer, compared before redaction, repeat the answer that resolved it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5392,7 +5392,7 @@
             "name": "after",
             "in": "query",
             "required": false,
-            "description": "Start after this position, the `position` of a view the client read; without it, and without `Last-Event-ID`, the stream starts at its head.",
+            "description": "Start after this position, the `position` of a view the client read; a boundary in the installation-wide sequence, valid from the retention floor to its head. Without it, and without `Last-Event-ID`, the stream starts at its head.",
             "schema": {
               "$ref": "#/components/schemas/EventPosition"
             }
@@ -9675,6 +9675,37 @@
           }
         }
       },
+      "BoardChangedEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The number of workers online for the project changed, also on a board with no cards; `workersOnline` as `readBoard` returns it at this event.",
+        "required": [
+          "type",
+          "position",
+          "occurredAt",
+          "projectId",
+          "workersOnline"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "board-changed"
+          },
+          "position": {
+            "$ref": "#/components/schemas/EventPosition"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workersOnline": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "CardChangedEvent": {
         "type": "object",
         "additionalProperties": false,
@@ -9846,7 +9877,7 @@
       "ResyncEvent": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The stream cannot resume after the cursor: it left the stream's retention (`cursor-expired`), or it is no position of this stream (`cursor-unknown`). The frame has no `id`, and the server ends the stream after it; the client reads its views again and reconnects after their positions.",
+        "description": "The stream cannot resume after the cursor: it is below the stream's retention floor (`cursor-expired`), or beyond the head of the installation-wide sequence (`cursor-unknown`). The frame has no `id`, and the server ends the stream after it; the client reads its views again and reconnects after their positions.",
         "required": [
           "type",
           "reason"
@@ -9868,6 +9899,9 @@
       "ProjectEvent": {
         "description": "The `data` of one event of a project stream, as JSON; the frame's `event` field is its `type` and its `id` field its `position`.",
         "oneOf": [
+          {
+            "$ref": "#/components/schemas/BoardChangedEvent"
+          },
           {
             "$ref": "#/components/schemas/CardChangedEvent"
           },

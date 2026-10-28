@@ -196,7 +196,7 @@ Reconciliation items ([ADR 0015](../decisions/0015-g2-closure.md) decision 5 lea
 ### 4.2 Answers
 
 - A native request appears in the inbox only after its source has persisted it (architecture section 7). The item stays tied to its request, attempt, and attempt generation.
-- An answer goes to the source that owns the item, never to the inbox store. The source consumes it once: a second answer to a resolved item fails with `conflict` and changes nothing, and an answer for an item whose attempt has a newer generation fails with `precondition-failed`.
+- An answer goes to the source that owns the item, never to the inbox store. The source consumes it once: the idempotency key repeated with the same answer returns the first outcome (section 2, rule 7), another answer to a resolved item, or the key with another answer, fails with `conflict` and changes nothing, and an answer for an item whose attempt has a newer generation fails with `precondition-failed`.
 - The inbox never answers an item itself and never generates a default answer. A standing rule (section 5) answers a request before it becomes an item; a request without a matching rule waits for a person.
 - Resolving an item publishes an event that every screen applies, so that the item leaves the inbox and the board's counts everywhere.
 

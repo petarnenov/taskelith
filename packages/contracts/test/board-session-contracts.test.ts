@@ -307,6 +307,35 @@ test('every event names its type and position except the resync, which has no po
   assert.ok(violations(checkHttpSchema('ProjectEvent', { type: 'output-appended', occurredAt: AT, sessionId: 's1', entry: { position: 1, turnId: 't1', generation: 1, text: TEXT } })).length > 0);
 });
 
+test('a change of the workers online reaches the project stream, also for a board with no cards', () => {
+  const board = SCHEMAS.Board as { properties: Record<string, Json> };
+  const event = SCHEMAS.BoardChangedEvent as { properties: Record<string, Json> };
+
+  assert.deepEqual(event.properties.workersOnline, board.properties.workersOnline);
+  assert.ok(!('cards' in event.properties) && !('callerMayAct' in event.properties));
+  assert.ok(checkHttpSchema('ProjectEvent', { type: 'board-changed', position: '5', occurredAt: AT, projectId: 'p1', workersOnline: 1 }).ok);
+  assert.ok(violations(checkHttpSchema('InstallationEvent', { type: 'board-changed', position: '5', occurredAt: AT, projectId: 'p1', workersOnline: 1 })).length > 0);
+});
+
+test('a stream cursor is a boundary of the installation-wide sequence', () => {
+  const resync = (SCHEMAS.ResyncEvent as { description: string }).description;
+
+  assert.match(resync, /below the stream's retention floor \(`cursor-expired`\)/);
+  assert.match(resync, /beyond the head of the installation-wide sequence \(`cursor-unknown`\)/);
+  for (const id of STREAMS) {
+    const after = (operation(id).parameters ?? []).find(({ name }) => name === 'after');
+    assert.match(after?.description ?? '', /a boundary in the installation-wide sequence, valid from the retention floor to its head/, id);
+  }
+});
+
+test('a repeated command is compared before redaction, ahead of the refusal of an answered one', () => {
+  for (const id of ['answerInboxItem', 'answerInstallationInboxItem', 'respondToNativeRequest']) {
+    assert.match(operation(id).responses['200']!.description, /compared before redaction, repeat/, id);
+  }
+  assert.match(operation('respondToNativeRequest').responses['200']!.description, /checked before `already-answered`/);
+  assert.match(operation('submitTurn').responses['200']!.description, /the text before redaction/);
+});
+
 test('commands that can repeat take an idempotency key and answer typed conflicts and refusals', () => {
   const conflicts = (SCHEMAS.CommandConflict as { properties: { details: { properties: { reason: { enum: string[] } } } } }).properties.details.properties.reason.enum;
 
