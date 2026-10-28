@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { X509Certificate } from 'node:crypto';
+import { mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -25,7 +26,7 @@ import {
 } from '@taskelith/nats';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { CommittingFleetRegistry, PostgresDatabase } from '@taskelith/postgres';
-import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { integrationEndpoint, integrationSecret, integrationSecretPath, value } from '@taskelith/testing';
 import { createLaunchRun, launchAuthority, placedTask } from './launch-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
@@ -68,7 +69,12 @@ after(async () => {
   await sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
 });
 
-const ENVIRONMENT = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
+// The test broker's certificate is issued by the test CA, not by the
+// installation's authority, so the broker CA is configured.
+const ENVIRONMENT = {
+  TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href,
+  TASKELITH_NATS_CA: integrationSecretPath('ca.pem'),
+};
 
 async function admin(argv: string[], extra: Record<string, string> = {}): Promise<{ status: number; output: Record<string, unknown> }> {
   const lines: string[] = [];
@@ -98,12 +104,17 @@ const ADMIN = ['--actor', 'root@control-plane-1', '--reason', 'integration test'
 test('initialization, enrollment, rotation, revocation, and the operator reset work end to end', { timeout: 120_000 }, async () => {
   const initialized = await admin(['init', ...ADMIN]);
   assert.equal(initialized.status, 0, JSON.stringify(initialized.output));
-  const { identity, operatorSecret, brokerServerConfig } = initialized.output as {
-    identity: { installationId: string; recoveryEpoch: number }; operatorSecret: string; brokerServerConfig: string;
+  const { identity, operatorSecret, brokerServerConfig, installationCa } = initialized.output as {
+    identity: { installationId: string; recoveryEpoch: number }; operatorSecret: string; brokerServerConfig: string; installationCa: string;
   };
   assert.equal(identity.recoveryEpoch, 1);
   assert.match(operatorSecret, /^tkop_/);
   assert.equal(brokerServerConfig, join(dataRoot, 'control-plane', 'nats-authority.conf'));
+  assert.equal(installationCa, join(dataRoot, 'control-plane', 'installation-ca.pem'));
+  for (const name of ['installation-authority', 'installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem']) {
+    assert.equal(statSync(join(dataRoot, 'control-plane', name)).mode & 0o777, 0o600, name);
+  }
+  assert.equal(new X509Certificate(controlPlaneFile('api-certificate.pem')).checkHost('localhost'), 'localhost');
   assert.equal((await admin(['init', ...ADMIN])).output.error !== undefined, true, 'a second initialization fails');
 
   const refused = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: 'tkop_wrong' });
@@ -152,7 +163,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   // A grant before the revocation, which the administration must invalidate.
   const store = new PostgresDatabase(database);
   after(() => store.close());
-  await sql(database, 'UPDATE workers SET reachable = true');
+  await sql(database, "UPDATE workers SET reachable = true, worker_admission = 'admitted'");
   await createLaunchRun(store);
   const { taskId, request } = await placedTask(store, 'task-1', enrolled.workerId);
   const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 2 }, request));
@@ -207,6 +218,41 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal(!closed.ok && closed.error.code, 'precondition-failed', 'a mismatch with the record keeps the installation closed');
 });
 
+function controlPlaneFile(name: string): string {
+  return readFileSync(join(dataRoot, 'control-plane', name), 'utf8');
+}
+
+test('server certificates are issued again by the kept authority, which fails closed when lost', async () => {
+  const authority = new X509Certificate(controlPlaneFile('installation-ca.pem'));
+  const earlier = new X509Certificate(controlPlaneFile('nats-certificate.pem'));
+  const hosts = { TASKELITH_API_HOSTS: 'control-plane,127.0.0.1', TASKELITH_NATS_HOSTS: 'nats' };
+  const reissued = await admin(['issue-installation-certificates'], hosts);
+  assert.equal(reissued.status, 0, JSON.stringify(reissued.output));
+  assert.deepEqual(Object.keys(reissued.output).sort(), ['apiCertificate', 'installationCa', 'natsCertificate', 'notAfter']);
+  const api = new X509Certificate(controlPlaneFile('api-certificate.pem'));
+  const nats = new X509Certificate(controlPlaneFile('nats-certificate.pem'));
+  assert.equal(new X509Certificate(controlPlaneFile('installation-ca.pem')).fingerprint256, authority.fingerprint256, 'the authority is unchanged');
+  assert.notEqual(nats.serialNumber, earlier.serialNumber);
+  assert.ok(api.checkIssued(authority) && nats.checkIssued(authority));
+  assert.deepEqual([api.checkHost('control-plane'), api.checkIP('127.0.0.1'), api.checkHost('nats')], ['control-plane', '127.0.0.1', undefined]);
+  assert.deepEqual([nats.checkHost('nats'), nats.checkHost('localhost')], ['nats', undefined]);
+
+  const wildcard = await admin(['issue-installation-certificates'], { TASKELITH_NATS_HOSTS: '*.example.com' });
+  assert.deepEqual([wildcard.status, (wildcard.output.error as { details: { variable: string } }).details.variable], [1, 'TASKELITH_NATS_HOSTS']);
+
+  const authorityPath = join(dataRoot, 'control-plane', 'installation-authority');
+  renameSync(authorityPath, `${authorityPath}.kept`);
+  try {
+    for (const argv of [['init', ...ADMIN], ['issue-installation-certificates']]) {
+      const lost = await admin(argv);
+      assert.equal((lost.output.error as { code: string }).code, 'precondition-failed', argv[0]);
+    }
+    assert.equal(new X509Certificate(controlPlaneFile('installation-ca.pem')).fingerprint256, authority.fingerprint256, 'no new authority is made');
+  } finally {
+    renameSync(`${authorityPath}.kept`, authorityPath);
+  }
+});
+
 async function enrollWorker(service: EnrollmentService, journal: string): Promise<WorkerId> {
   const token = value(await service.issueToken({}));
   return value(await service.enroll(token, {
@@ -233,12 +279,27 @@ test('a usage error redacts a secret typed by mistake', async () => {
   assert.match(String(outcome.output.usage), /\[redacted\]/);
 });
 
+test('an unreadable broker CA fails and names its setting', async () => {
+  const outcome = await admin(['expire-grace-windows'], { TASKELITH_NATS_CA: join(base, 'missing-ca.pem') });
+  assert.equal(outcome.status, 1);
+  assert.deepEqual(outcome.output.error, {
+    code: 'invalid', message: 'TASKELITH_NATS_CA must name a readable PEM file', details: { variable: 'TASKELITH_NATS_CA' },
+  });
+});
+
 test('an exception becomes a redacted failure with status 1', async () => {
   const lines: string[] = [];
-  const environment = { ...ENVIRONMENT, TASKELITH_NATS_CA: join(base, 'missing-ca.pem') };
+  const secret = `tkop_${'C'.repeat(43)}`;
+  const environment = new Proxy({ ...ENVIRONMENT }, {
+    get: (target, name) => {
+      if (name === 'TASKELITH_OPERATOR_TOKEN') throw new Error(`no ${secret}`);
+      return target[name as keyof typeof target];
+    },
+  });
   const status = await adminMain(['expire-grace-windows'], { environment, platform: process.platform, ownerUid, write: (line) => lines.push(line) });
   assert.equal(status, 1);
-  assert.equal(JSON.parse(lines[0]!).error.code, 'internal');
+  const { error } = JSON.parse(lines[0]!) as { error: { code: string; message: string } };
+  assert.deepEqual([error.code, error.message.includes(secret)], ['internal', false]);
 });
 
 test('a missing setting fails with its name only', async () => {

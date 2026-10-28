@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
+import { stubAdmissionCheck } from '@taskelith/fleet';
 import { ok, type Result } from '@taskelith/kernel';
 import { connectWorkerTransport, type TransportConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
@@ -169,6 +170,7 @@ export class ScenarioWorker {
       daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: idleUntil },
       pressurePollMilliseconds: LAUNCH_POLL_MILLISECONDS,
       limits: SCENARIO_LIMITS,
+      admissionChecks: [stubAdmissionCheck()],
       sleep: scaledSleep, draw, logger,
       launching: {
         authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),

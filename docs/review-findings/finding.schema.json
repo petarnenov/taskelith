@@ -27,18 +27,18 @@
       "required": ["harness", "model"],
       "properties": {
         "harness": {
-          "description": "Reviewer harness, for example codex, opencode, claude, or antigravity.",
+          "description": "Reviewer harness. npm run findings requires claude, codex, opencode, or agy in an active change; archived records keep their spelling.",
           "$ref": "#/$defs/identifier"
         },
         "model": {
-          "description": "Model id as set in the invocation, for example gpt-6.1-sol.",
+          "description": "Model id as the harness CLI takes it in the invocation, for example gpt-6.1-sol, or opencode-go/kimi-k3.1-pro with the provider prefix, which only an OpenCode model has; npm run findings checks the prefix in an active change.",
           "type": "string",
           "minLength": 1,
           "maxLength": 80,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:-]*$"
         },
         "variant": {
-          "description": "Variant or reasoning effort as set in the invocation, for example medium or high.",
+          "description": "Variant or reasoning effort as set in the invocation, for example medium or high, or default when the invocation sets none; npm run findings requires it in an active change.",
           "$ref": "#/$defs/identifier"
         }
       }

@@ -1,16 +1,18 @@
-import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostConstraints, HostPlatform } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
+import { readBrokerTls } from '../broker-tls.js';
 import { readServiceEndpoints, type Environment } from '../service-endpoints.js';
 import { Administration } from './administration.js';
+import { readServerHosts } from './server-hosts.js';
 
 export const ADMIN_USAGE = [
   'usage: control-plane-admin COMMAND [options]',
   '  init --actor WHO --reason WHY',
   '  reset-operator-credential --actor WHO --reason WHY',
+  '  issue-installation-certificates',
   '  issue-enrollment-token [--platform linux|darwin] [--architecture x64|arm64] [--hostname NAME]',
   '  rotate-worker WORKER_ID | revoke-worker WORKER_ID | expire-grace-windows',
   'The last four read the operator credential from TASKELITH_OPERATOR_TOKEN.',
@@ -39,7 +41,7 @@ export async function adminMain(argv: readonly string[], io: AdminIo): Promise<n
 }
 
 async function runCommand(command: Command, io: AdminIo): Promise<number> {
-  const opened = openAdministration(io);
+  const opened = openAdministration(io, command.name);
   if (!opened.ok) return fail(io, opened.error);
   try {
     const outcome = await run(opened.value, command, io.environment);
@@ -62,9 +64,13 @@ const OPTIONS = {
   platform: { type: 'string' }, architecture: { type: 'string' }, hostname: { type: 'string' },
 } as const;
 const WORKER_COMMANDS = new Set(['rotate-worker', 'revoke-worker']);
+// It restores a lost installation-ca.pem, so it must not need the broker CA.
+const BROKERLESS_COMMANDS = new Set(['issue-installation-certificates']);
 const PLATFORMS = new Set<string>(['linux', 'darwin']);
 const ARCHITECTURES = new Set<string>(['x64', 'arm64']);
-const COMMANDS = new Set(['init', 'reset-operator-credential', 'issue-enrollment-token', 'expire-grace-windows', ...WORKER_COMMANDS]);
+const COMMANDS = new Set([
+  'init', 'reset-operator-credential', 'issue-installation-certificates', 'issue-enrollment-token', 'expire-grace-windows', ...WORKER_COMMANDS,
+]);
 
 function parse(argv: readonly string[]): Result<Command> {
   let parsed: ReturnType<typeof parseArgs<{ options: typeof OPTIONS; allowPositionals: true; args: string[] }>>;
@@ -83,16 +89,19 @@ function parse(argv: readonly string[]): Result<Command> {
   return ok({ name, ...(worker === undefined ? {} : { worker }), values: parsed.values });
 }
 
-function openAdministration(io: AdminIo): Result<Administration> {
+function openAdministration(io: AdminIo, commandName: string): Result<Administration> {
   const endpoints = readServiceEndpoints(io.environment);
   if (!endpoints.ok) return endpoints;
   const dataRoot = resolveDataRoot({ environment: io.environment, platform: io.platform });
   if (!dataRoot.ok) return dataRoot;
-  const caPath = io.environment.TASKELITH_NATS_CA;
-  const natsTls = caPath === undefined || caPath === '' ? undefined : { ca: readFileSync(caPath, 'utf8') };
+  const natsTls = BROKERLESS_COMMANDS.has(commandName) ? ok(undefined) : readBrokerTls(io.environment, dataRoot.value, io.ownerUid);
+  if (!natsTls.ok) return natsTls;
+  const serverHosts = readServerHosts(io.environment);
+  if (!serverHosts.ok) return serverHosts;
   return Administration.open({
     dataRoot: dataRoot.value, ownerUid: io.ownerUid, postgres: endpoints.value.postgres, nats: endpoints.value.nats,
-    ...(natsTls === undefined ? {} : { natsTls }),
+    serverHosts: serverHosts.value,
+    ...(natsTls.value === undefined ? {} : { natsTls: natsTls.value }),
   });
 }
 
@@ -104,6 +113,8 @@ async function run(admin: Administration, command: Command, environment: Environ
       return admin.initialize(invocation);
     case 'reset-operator-credential':
       return mapped(await admin.resetOperatorCredential(invocation), (operatorSecret) => ({ operatorSecret }));
+    case 'issue-installation-certificates':
+      return admin.issueInstallationCertificates();
     case 'issue-enrollment-token':
       return mapped(await admin.issueEnrollmentToken(operator, constraints(command.values)), (enrollmentToken) => ({ enrollmentToken }));
     case 'rotate-worker':

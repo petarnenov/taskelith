@@ -41,13 +41,14 @@ interface WorkerRow {
   readonly memory_mebibytes: number;
   readonly controls: string[];
   readonly protocol_version: number | null;
+  readonly worker_admission: string;
 }
 
 // The columns placement reads; item 13 may add others to the table.
 const WORKER_COLUMNS = `worker_id, enrolled, revoked, draining, reachable, last_contact_at, admission_pressure_since, capacity_refused_since,
-  slots, cpu_millicores, memory_mebibytes, controls, protocol_version`;
+  slots, cpu_millicores, memory_mebibytes, controls, protocol_version, worker_admission`;
 export const ELIGIBLE = `enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL
-  AND capacity_refused_since IS NULL AND protocol_version IS NOT NULL`;
+  AND capacity_refused_since IS NULL AND protocol_version IS NOT NULL AND worker_admission = 'admitted'`;
 
 const HELD = "reservation_state = 'held'";
 
@@ -92,6 +93,7 @@ function workerRecord(row: WorkerRow): WorkerPlacementRecord {
     memoryMebibytes: row.memory_mebibytes,
     controls: Object.freeze(row.controls as HardControl[]),
     ...(row.protocol_version === null ? {} : { protocolVersion: row.protocol_version }),
+    admitted: row.worker_admission === 'admitted',
   });
 }
 

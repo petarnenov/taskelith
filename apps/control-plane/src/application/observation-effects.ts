@@ -3,6 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas
 import {
   decideStartObservation,
   endAttempt,
+  executionsUnderAssignment,
   isQuarantineEvidence,
   parseExitStatus,
   parseRecoveryEpoch,
@@ -24,6 +25,7 @@ import {
   type StartRecord,
   type Task,
 } from '@taskelith/execution';
+import { decideWorkerAdmission } from '@taskelith/fleet';
 import { err, failure, ok, type EventId, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   acceptAssignment,
@@ -152,6 +154,34 @@ function pressureChange(tx: ControlPlaneTransaction, observation: Observation, a
   const { causes } = observation.payload as Payload<'AdmissionPressureChangedPayload'>;
   const { workerId, sequence } = observation.position;
   return causes.length === 0 ? tx.reports.leavePressure(workerId, sequence) : tx.reports.enterPressure(workerId, sequence, at);
+}
+
+// Worker admission contract section 5: the enrolled platform refutes a
+// not-applicable claim that the worker's own facts could not make.
+async function selfCheckReport(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
+  const { results } = observation.payload as Payload<'SelfCheckReportedPayload'>;
+  const { workerId, sequence } = observation.position;
+  const worker = await tx.fleet.worker(workerId);
+  if (!worker.ok) return worker;
+  if (worker.value === undefined) return err(failure('not-found', `worker ${workerId} is not enrolled`, { worker: workerId }));
+  const decision = decideWorkerAdmission(results, worker.value.host.platform);
+  const recorded = await tx.workerAdmissions.record(workerId, decision, sequence, at);
+  if (!recorded.ok) return recorded;
+  const appliedFailure = recorded.value === 'applied' && decision.state === 'self-check-failed';
+  return appliedFailure ? freeUngrantedAssignments(tx, observation) : ok(undefined);
+}
+
+// Worker admission section 7: a worker whose self-check failed launches
+// nothing, so each assignment without a grant is freed; a granted one stays.
+async function freeUngrantedAssignments(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
+  for (const assignment of await tx.assignments.listUnfinishedByWorker(observation.position.workerId)) {
+    const task = await tx.tasks.get(assignment.reservation.scope.taskId);
+    if (!task.ok) return task;
+    if (executionsUnderAssignment(task.value, assignment.id).granted) continue;
+    const freed = await freeIdleAssignment(tx, assignment, commandIdentity(observation, assignment.id));
+    if (!freed.ok) return freed;
+  }
+  return ok(undefined);
 }
 
 // 21c decisions 14 and 15: the evidence beside the execution's state; the
@@ -332,6 +362,7 @@ export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = 
   'execution.not-started': atCurrentEpoch(notStarted),
   'worker.capacity.declared': forWorkingProducer(capacityDeclaration),
   'worker.admission-pressure.changed': forWorkingProducer(pressureChange),
+  'worker.self-check.reported': forWorkingProducer(selfCheckReport),
 });
 
 // The assignment the payload names, of the observed attempt, at the

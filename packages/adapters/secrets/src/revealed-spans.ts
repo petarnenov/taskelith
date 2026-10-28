@@ -1,37 +1,20 @@
-import { redactWith, type TextRule } from '@taskelith/observability';
-
-// A half-open range of text positions.
-export interface Span {
-  readonly start: number;
-  readonly end: number;
-}
+import { redactWith, type TextRule, type TextSpan } from '@taskelith/observability';
 
 const WHITESPACE = /\s/;
 
 // The text to redact for the values revealed to a run, found in the original
 // text, so that no replacement can hide or split another occurrence.
-export function revealedSpans(text: string, revealed: readonly string[], shapeRules: readonly TextRule[]): Span[] {
+export function revealedSpans(text: string, revealed: readonly string[], shapeRules: readonly TextRule[]): TextSpan[] {
   const values = [...new Set(revealed)].filter((value) => value.length > 0);
-  const occurrences = merged(values.flatMap((value) => occurrencesOf(text, value)));
+  const occurrences = mergedSpans(values.flatMap((value) => occurrencesOf(text, value)));
   return wordsTouchingShapes(text, occurrences, shapeRules);
-}
-
-// One marker per span; the text between spans is kept as it was.
-export function replaceSpans(text: string, spans: readonly Span[], marker: string): string {
-  let replaced = '';
-  let kept = 0;
-  for (const span of spans) {
-    replaced += `${text.slice(kept, span.start)}${marker}`;
-    kept = span.end;
-  }
-  return replaced + text.slice(kept);
 }
 
 // Every occurrence, overlapping ones included, in linear time (Knuth, Morris,
 // and Pratt).
-function occurrencesOf(text: string, value: string): Span[] {
+function occurrencesOf(text: string, value: string): TextSpan[] {
   const fallback = borders(value);
-  const found: Span[] = [];
+  const found: TextSpan[] = [];
   let matched = 0;
   for (let index = 0; index < text.length; index += 1) {
     while (matched > 0 && text[index] !== value[matched]) matched = fallback[matched - 1]!;
@@ -57,9 +40,9 @@ function borders(value: string): number[] {
 }
 
 // Overlapping or touching spans become one, so that one marker covers them.
-function merged(spans: readonly Span[]): Span[] {
+export function mergedSpans(spans: readonly TextSpan[]): TextSpan[] {
   const sorted = [...spans].sort((left, right) => left.start - right.start);
-  const result: Span[] = [];
+  const result: TextSpan[] = [];
   for (const span of sorted) {
     const last = result.at(-1);
     if (last !== undefined && span.start <= last.end) {
@@ -73,8 +56,8 @@ function merged(spans: readonly Span[]): Span[] {
 
 // Shape secrets hold no whitespace, except a .creds block, whose parts match
 // on their own; a word holding a value and a shape secret is redacted whole.
-function wordsTouchingShapes(text: string, spans: readonly Span[], shapeRules: readonly TextRule[]): Span[] {
-  const result: Span[] = [];
+function wordsTouchingShapes(text: string, spans: readonly TextSpan[], shapeRules: readonly TextRule[]): TextSpan[] {
+  const result: TextSpan[] = [];
   for (const word of wordsOf(text, spans)) {
     const wordText = text.slice(word.start, word.end);
     const touchesShape = redactWith(wordText, shapeRules) !== wordText;
@@ -83,14 +66,14 @@ function wordsTouchingShapes(text: string, spans: readonly Span[], shapeRules: r
   return result;
 }
 
-interface Word extends Span {
-  readonly spans: readonly Span[];
+interface Word extends TextSpan {
+  readonly spans: readonly TextSpan[];
 }
 
 // The whitespace-free words around the sorted spans; each text position is
 // scanned at most once, so that this stays linear.
-function wordsOf(text: string, spans: readonly Span[]): Word[] {
-  const words: { start: number; end: number; spans: Span[] }[] = [];
+function wordsOf(text: string, spans: readonly TextSpan[]): Word[] {
+  const words: { start: number; end: number; spans: TextSpan[] }[] = [];
   for (const span of spans) {
     const last = words.at(-1);
     if (last !== undefined && span.start < last.end) {

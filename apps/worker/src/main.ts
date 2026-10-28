@@ -8,6 +8,7 @@ import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { ProcessDaemonOverhead } from './daemon-overhead.js';
+import { linuxContainmentCheck } from './linux-containment-check.js';
 import { supervisionHost } from './execution-supervision.js';
 import {
   CONTROL_PLANE_TIMEOUT_MILLISECONDS,
@@ -38,6 +39,7 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     draw: Math.random,
     launching: productionLaunching(settings, logger),
     logger,
+    admissionChecks: [linuxContainmentCheck(settings)],
   };
 }
 

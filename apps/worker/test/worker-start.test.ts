@@ -7,7 +7,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/contracts';
 import type { JournalSnapshot } from '@taskelith/execution';
-import type { Enrollment, EnrollmentClient, EnrollmentRequest } from '@taskelith/fleet';
+import { stubAdmissionCheck, type Enrollment, type EnrollmentClient, type EnrollmentRequest, type SelfCheckRun, type WorkerAdmissionCheck } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -41,6 +41,7 @@ const AN_HOUR_LATER = value(parseInstant('2026-10-25T10:00:00.000Z'));
 const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
 const GIBIBYTE = 2 ** 30;
 const AMPLE_SPACE: VolumeSpace = { availableBytes: 50 * GIBIBYTE, totalBytes: 100 * GIBIBYTE };
+const LAUNCH: LaunchSettings = { command: { executable: '/bin/true', arguments: [] } };
 const TOKEN = `tken_${'T'.repeat(43)}`;
 const ENROLLMENT: Enrollment = {
   installationId: 'a'.repeat(32), workerId: id('WorkerId', `w${'b'.repeat(32)}`), credentialGeneration: 1, recoveryEpoch: 1 as Enrollment['recoveryEpoch'],
@@ -115,6 +116,7 @@ let broker: FakeBroker;
 let timers: ManualTimers;
 let space: VolumeSpace;
 let daemon: FakeDaemon;
+let admissionChecks: WorkerAdmissionCheck[];
 const running: RunningWorker[] = [];
 
 beforeEach(() => {
@@ -130,6 +132,7 @@ beforeEach(() => {
   timers = new ManualTimers();
   space = AMPLE_SPACE;
   daemon = new FakeDaemon();
+  admissionChecks = [stubAdmissionCheck()];
 });
 
 afterEach(async () => {
@@ -141,7 +144,7 @@ function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
     sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), daemon, pressurePollMilliseconds: 10,
-    ...(launching === undefined ? {} : { launching }),
+    admissionChecks, ...(launching === undefined ? {} : { launching }),
   };
 }
 
@@ -223,6 +226,62 @@ test('each start reports its admission pressure once, and a clear one too', asyn
   assert.deepEqual(pressureFacts(first), [[]]);
   await first.stop();
   assert.deepEqual(pressureFacts(await start()), [[], []]);
+});
+
+// A containment check that counts its runs and the connections before them.
+function countingCheck(run: SelfCheckRun = { outcome: 'passed' }): WorkerAdmissionCheck & { connectionsAtRun: number[] } {
+  const connectionsAtRun: number[] = [];
+  return { ...stubAdmissionCheck(run), connectionsAtRun, run: async () => {
+    connectionsAtRun.push(broker.endpoints.length);
+    return run;
+  } };
+}
+
+function selfCheckFacts(worker: RunningWorker): unknown[] {
+  return value(worker.root.journal.dueForPublication(AN_HOUR_LATER))
+    .flatMap(({ fact }) => (fact.kind === 'self-check-reported' ? [fact.results] : []));
+}
+
+test('each start reports its self-check once, after its capacity and pressure', async () => {
+  const first = await start();
+  await until(() => broker.ofType('worker.self-check.reported').length === 1);
+  const [reported] = broker.ofType('worker.self-check.reported');
+  assert.equal(checkMessageSchema('SelfCheckReportedObservation', reported).ok, true);
+  assert.deepEqual(reported?.payload, { results: [{ checkId: 'linux-containment', outcome: 'not-applicable', details: ['no-launch-command'] }] });
+  const kinds = value(first.root.journal.dueForPublication(AN_HOUR_LATER)).map(({ fact }) => fact.kind);
+  assert.deepEqual(kinds, ['capacity-declared', 'admission-pressure-changed', 'self-check-reported']);
+  await first.stop();
+  assert.equal(selfCheckFacts(await start()).length, 2);
+});
+
+test('a Linux worker without a launch command and a macOS worker never run the containment check', async () => {
+  const check = countingCheck();
+  admissionChecks = [check];
+  const linux = await start();
+  assert.deepEqual(selfCheckFacts(linux), [[{ checkId: 'linux-containment', outcome: 'not-applicable', details: ['no-launch-command'] }]]);
+  await linux.stop();
+  const macos = await start({ ...settings, host: { ...settings.host, platform: 'darwin' }, launch: LAUNCH });
+  assert.deepEqual(selfCheckFacts(macos)[1], [{ checkId: 'linux-containment', outcome: 'not-applicable', details: ['platform-not-covered'] }]);
+  assert.deepEqual(check.connectionsAtRun, []);
+});
+
+test('a launching Linux worker runs the check before it connects, and a pass is reported', async () => {
+  const check = countingCheck();
+  admissionChecks = [check];
+  const worker = await start({ ...settings, launch: LAUNCH }, new RecordingLaunching().dependencies);
+  assert.deepEqual(check.connectionsAtRun, [0]);
+  assert.deepEqual(selfCheckFacts(worker), [[{ checkId: 'linux-containment', outcome: 'passed', details: [] }]]);
+});
+
+test('a failed self-check still starts the worker, reports the failure, and never authorizes a launch', async () => {
+  admissionChecks = [countingCheck({ outcome: 'failed', problems: ['cgroup v2 is not mounted'] })];
+  const launching = new RecordingLaunching();
+  const worker = await start({ ...settings, launch: LAUNCH }, launching.dependencies);
+  assert.deepEqual(selfCheckFacts(worker), [[{ checkId: 'linux-containment', outcome: 'failed', details: ['cgroup v2 is not mounted'] }]]);
+  await until(() => broker.ofType('worker.self-check.reported').length === 1);
+  value(worker.root.journal.recordCommand(offer()));
+  await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
+  assert.deepEqual([launching.credentials, launching.authority.requests], [[], []]);
 });
 
 test('below the disk floor the worker reports pressure and truncates only its buffered logs', async () => {
@@ -439,8 +498,6 @@ test('the entry reports a start failure redacted and returns nothing', async () 
   assert.equal(lines.length, 1);
 });
 
-const LAUNCH: LaunchSettings = { command: { executable: '/bin/true', arguments: [] } };
-
 async function until(condition: () => boolean): Promise<void> {
   for (let wait = 0; !condition() && wait < 200; wait += 1) await delay(10);
   assert.ok(condition(), 'the condition never held');
@@ -481,6 +538,13 @@ test('a launching worker begins no authorization before its first broker connect
   broker.answer = ok(undefined);
   timers.elapse(5_000);
   await until(() => launching.authority.requests.length > 0);
+});
+
+test('a composition of more than eight checks fails the start before enrollment', async () => {
+  admissionChecks = Array.from({ length: 9 }, (_, index) => ({ ...stubAdmissionCheck(), checkId: `check-${index}` }));
+  const started = await startWorker(settings, dependencies());
+  assert.equal(failed(started).code, 'invalid');
+  assert.deepEqual([enrollment.calls, broker.endpoints], [[], []]);
 });
 
 test('a launch host that cannot be built fails the start', async () => {

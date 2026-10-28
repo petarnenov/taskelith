@@ -477,6 +477,19 @@ test('each pressure change is journaled under its own identity, numbered by its 
   assert.notEqual(observationIdOf(entries[0]!.fact, id('JournalId', 'journal-2')), entries[0]!.position.observationId);
 });
 
+test('each self-check report is journaled under its own identity, numbered by its sequence', () => {
+  const failedCheck = { checkId: 'linux-containment', outcome: 'failed', details: ['cgroup v2 is not mounted'] } as const;
+  const passedCheck = { checkId: 'linux-containment', outcome: 'passed', details: [] } as const;
+  value(journal.recordSelfCheck([failedCheck]));
+  value(journal.recordSelfCheck([passedCheck]));
+  const entries = value(journal.dueForPublication(T0));
+  assert.deepEqual(entries.map((entry) => entry.fact), [
+    { kind: 'self-check-reported', declaration: 1, results: [failedCheck] },
+    { kind: 'self-check-reported', declaration: 2, results: [passedCheck] },
+  ]);
+  assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 2);
+});
+
 test('the backlog counts the unconfirmed entries and their stored bytes', () => {
   assert.deepEqual(value(journal.backlog()), { entries: 0, bytes: 0 });
   value(journal.recordCapacity(CAPACITY));

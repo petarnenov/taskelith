@@ -233,8 +233,27 @@ test('service data lives on named volumes', () => {
 
 test('host ports are published on localhost only', () => {
   const ports = Object.values(services).flatMap((service) => service.ports ?? []);
-  assert.deepEqual(ports.map((port) => port.target).sort(), [4222, 8080]);
+  assert.deepEqual(ports.map((port) => port.target).sort(), [4222, 8080, 8443]);
   for (const port of ports) assert.equal(port.host_ip, '127.0.0.1');
+});
+
+test('the broker requires TLS and the worker trusts the installation CA read-only', () => {
+  const broker = readFileSync('infra/installation/nats-server.conf', 'utf8');
+  assert.match(broker, /^tls \{[^}]*cert_file: "\/etc\/nats\/authority\/nats-certificate\.pem"[^}]*min_version: "1\.2"/m);
+  assert.doesNotMatch(broker, /^\s*allow_non_tls/m);
+  const trust = services.worker.volumes?.find((mount) => mount.source === 'installation-trust');
+  assert.deepEqual([trust?.target, (trust as { read_only?: boolean } | undefined)?.read_only], ['/etc/taskelith/trust', true]);
+  const ca = '/etc/taskelith/trust/installation-ca.pem';
+  assert.deepEqual([services.worker.environment?.TASKELITH_NATS_CA, services.worker.environment?.NODE_EXTRA_CA_CERTS], [ca, ca]);
+  assert.match(services.worker.environment?.TASKELITH_CONTROL_PLANE_URL ?? '', /^https:\/\//);
+});
+
+test('the composition passes no operator browser certificate, even when the host sets one', () => {
+  const host = { ...COMPOSITION_ENVIRONMENT, TASKELITH_BROWSER_TLS_CERT: '/host/browser.pem', TASKELITH_BROWSER_TLS_KEY: '/host/browser.key' };
+  const controlPlane = resolvedComposition('infra/installation/compose.yaml', host).services['control-plane'];
+  const browserSettings = Object.keys(controlPlane.environment ?? {}).filter((name) => name.startsWith('TASKELITH_BROWSER_TLS_'));
+  assert.deepEqual(browserSettings, []);
+  assert.equal(controlPlane.volumes?.some((mount) => mount.source?.startsWith('/host/')), false);
 });
 
 test('secrets come from the environment of the make targets', () => {

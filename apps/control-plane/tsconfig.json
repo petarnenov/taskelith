@@ -11,6 +11,7 @@
     { "path": "../../packages/modules/access" },
     { "path": "../../packages/modules/execution" },
     { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/adapters/certificates" },
     { "path": "../../packages/adapters/control-plane-store" },
     { "path": "../../packages/adapters/data-root" },
     { "path": "../../packages/adapters/evidence-volume" },

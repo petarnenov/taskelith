@@ -86,6 +86,17 @@ export class ControlPlaneNamespace {
     return written.ok ? ok(path.value) : written;
   }
 
+  // A text file such as a PEM certificate; undefined when it is absent.
+  readText(name: string): Result<string | undefined> {
+    const path = this.#path(name);
+    if (!path.ok) return path;
+    if (!existsSync(path.value)) return ok(undefined);
+    const privateCheck = checkPrivate(path.value, 'file');
+    if (!privateCheck.ok) return privateCheck;
+    const synced = syncBeforeUse(path.value);
+    return synced.ok ? ok(readFileSync(path.value, 'utf8')) : synced;
+  }
+
   #path(name: string): Result<string> {
     if (!/^[a-z][a-z0-9.-]*$/.test(name)) return err(failure('invalid', `${name} is not a control-plane file name`));
     const path = join(this.directory, name);

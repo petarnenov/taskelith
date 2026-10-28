@@ -147,6 +147,7 @@ The worker enforces its limits itself, whatever the scheduler reserved, because 
 | Daemon overhead | At most `512 MiB` RSS; event-loop lag `p99` at most `200ms` | Above it, requests no new launch authorization and reports admission pressure until it subsides |
 
 - **Admission pressure** is an observation that makes the worker ineligible for new placement until a later observation clears it. An assignment the worker has not acknowledged is refused with the retryable reason `worker-admission-pressure`; an acknowledged one waits, keeping its reservation, and its launch is requested only when the pressure clears. The scheduler's bounded supersession of section 6 applies to it.
+- **Self-check.** A worker whose self-check failed at its start refuses every new assignment with `worker-self-check-failed` and is ineligible until a passing report; its running executions keep their assignments and reservations until they end ([worker admission](worker-admission.md)).
 - **Refusal.** A refused assignment is reported as an observation. A refusal ends the assignment, and the release follows section 6. A refusal with `worker-slots-exhausted` or `worker-capacity-exhausted` makes the worker ineligible for new placement until its next capacity declaration or an observation that frees a slot: an exit, a `not-started`, or a launch rejection. Such an observation of the worker's own assignment clears the refusal even at a stale ownership generation, as evidence that changes no task, attempt, or assignment; one older than the refusal, by its journal sequence, or one that [launch authorization](launch-authorization.md) section 7 keeps as evidence, leaves it.
 - **Ended assignments.** The worker ends an acknowledged assignment locally when it receives an assignment-ended command or a launch authorization rejection with `assignment-not-active`, and stops counting it.
 - **Unknown values.** A limit the worker cannot measure, such as free disk space that cannot be read, counts as exceeded.
@@ -184,7 +185,7 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Installation in restore quarantine | `quarantined` | Scheduler | Wait until quarantine is lifted |
 | Attempt already holds a reservation | `attempt-already-reserved` | Scheduler | None; the existing assignment stands |
 | Attempt not admitted, cancelled, or terminal | `attempt-not-reservable` | Scheduler | None |
-| Worker unknown, revoked, draining, unreachable, or under admission pressure | `worker-not-eligible` | Scheduler | Wait or place elsewhere |
+| Worker unknown, revoked, draining, unreachable, under admission pressure, or not admitted by its self-check | `worker-not-eligible` | Scheduler | Wait or place elsewhere |
 | Worker slots, CPU, or memory full | `worker-capacity-exhausted` | Scheduler or worker | Wait or place elsewhere |
 | Request above the per-attempt ceiling | `resource-ceiling-exceeded` | Scheduler or worker | Reject |
 | Project quota full | `project-quota-exhausted` | Scheduler | Wait |
@@ -200,6 +201,7 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Hard spend limit without provider enforcement | `spend-limit-not-enforceable` | Scheduler | Reject |
 | Worker's concurrent attempts full | `worker-slots-exhausted` | Worker | Release; place again |
 | Disk floor, journal backlog, or daemon overhead exceeded | `worker-admission-pressure` | Worker | Release if not acknowledged; place again after the pressure clears |
+| Self-check failed at the worker's start | `worker-self-check-failed` | Worker | Release; place on an admitted worker ([worker admission](worker-admission.md)) |
 | Offer in an execution protocol version the worker does not support | `protocol-not-supported` | Control plane, from the worker's command rejection | Release; place on a worker that supports a common version ([execution wire contracts](execution-wire-contracts.md)) |
 | Reservation released or held elsewhere | `capacity-not-reserved` | Launch authority | As the launch authorization contract states |
 | No eligible account slot for a new session whose project policy rejects (G3, item 12) | `no-eligible-slot` | Scheduler | Reject ([account pool contract](account-pool.md) section 4.5) |

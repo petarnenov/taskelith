@@ -86,7 +86,7 @@ async function transactionWith(task: Task, admission: TaskAdmission): Promise<Ca
   value(await admissions.add(admission));
   const worker = {
     workerId: WORKER, enrolled: true, revoked: false, draining: false, reachable: true,
-    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1,
+    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1, admitted: true,
   };
   return {
     assignments, admissions, tasks, lineage, outbox: new InMemoryOutbox(),

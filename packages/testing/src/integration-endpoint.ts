@@ -13,7 +13,12 @@ export function integrationEndpoint(variable: string, env: NodeJS.ProcessEnv = p
 // A file of the test broker trust and certificates that scripts/services.sh
 // writes, such as `integration.creds` or `ca.pem`.
 export function integrationSecret(name: string, env: NodeJS.ProcessEnv = process.env): string {
+  return readFileSync(integrationSecretPath(name, env), 'utf8');
+}
+
+// The path of such a file, for settings that name a file, such as a CA.
+export function integrationSecretPath(name: string, env: NodeJS.ProcessEnv = process.env): string {
   const directory = env.TASKELITH_SERVICES_SECRETS;
   if (!directory) throw new Error(`TASKELITH_SERVICES_SECRETS is not set; ${SERVICES_REMEDY}`);
-  return readFileSync(join(directory, name), 'utf8');
+  return join(directory, name);
 }

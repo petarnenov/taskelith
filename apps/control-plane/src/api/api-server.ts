@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import { performance } from 'node:perf_hooks';
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import type { WorkerPrincipal } from '@taskelith/fleet';
@@ -19,6 +20,7 @@ import {
   type ApiResponse,
 } from './http-exchange.js';
 import { multipartBoundary, parseMultipart } from './multipart.js';
+import { MINIMUM_TLS_VERSION, type ServerTls } from './server-tls.js';
 import { UploadSlots } from './upload-slots.js';
 import { ROUTES, type RouteDefinition, type SecurityScheme } from './routes.js';
 
@@ -56,21 +58,37 @@ export interface ApiServerOptions {
   // The operations served; the contract's route table unless replaced.
   readonly routes?: readonly RouteDefinition[];
   readonly maxConcurrentUploads?: number;
+  // Plain HTTP without it, which only unit tests of the handling use.
+  readonly tls?: ServerTls;
 }
 
-// The control-plane API over node:http: no framework, contract validation
-// with checkHttpSchema, and no request body or bearer in any log line.
-export function createApiServer(handlers: ApiHandlers, options: ApiServerOptions = {}): Server {
+export type ApiServer = Server | HttpsServer;
+export type ApiRequestListener = (request: IncomingMessage, response: ServerResponse) => void;
+
+// The control-plane API over node:http, or node:https with `tls`.
+export function createApiServer(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiServer {
+  const listener = createApiRequestListener(handlers, options);
+  return options.tls === undefined ? createServer(listener) : createTlsApiServer(listener, options.tls);
+}
+
+// An HTTPS listener of the API that refuses TLS below 1.2.
+export function createTlsApiServer(listener: ApiRequestListener, tls: ServerTls): HttpsServer {
+  return createHttpsServer({ cert: tls.certificate, key: tls.key, minVersion: MINIMUM_TLS_VERSION }, listener);
+}
+
+// Request handling that listeners may share: checkHttpSchema validates, and
+// no log line holds a request body or bearer.
+export function createApiRequestListener(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiRequestListener {
   const logger = options.logger ?? SILENT_LOGGER;
   const routes = options.routes ?? ROUTES;
   const uploads = new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS);
-  return createServer((request, response) => {
+  return (request, response) => {
     // A reused idle socket races the idle timeout: a request written as it
     // fires is reset unread, so every answer closes its connection.
     response.shouldKeepAlive = false;
     // serve answers every failure itself; this only guards a broken socket.
     serve(handlers, uploads, routes, logger, request, response).catch(() => response.destroy());
-  });
+  };
 }
 
 async function serve(
