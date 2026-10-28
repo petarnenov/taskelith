@@ -93,7 +93,19 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The other targets that `design.md` lists still expand their command-line variables under every GNU make.
 - Only hosts with GNU Make 4.4 or later as `make` or `gmake` catch this regression; CI's `ubuntu-latest` has GNU Make 4.3, which does not export to `$(shell)`, so CI passes either way ([design](design.md), D2). A `make doctor` check is a possible follow-up.
 
+## Archive checks
+
+Run on the tree of the archive commit, the archive of `877db6eb` on merge base `f3a53f17` with `origin/dev`, on 2026-10-28, as the uncommitted working tree before the commit:
+
+- `npm run openspec -- archive fix-make-argument-expansion --yes`: archived as `2026-10-28-fix-make-argument-expansion`; `agent-task-protocol` 2 modified.
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-fix-make-argument-expansion` passes; the command reports 220 passed, 14 failed, all 14 older archived changes with open tasks.
+- `git diff f3a53f17 -- openspec/specs`: only `openspec/specs/agent-task-protocol/spec.md`, 10 insertions and 2 deletions, in the two modified requirements "Shared integration command" and "Generated verification record", each with its new scenario "Arguments as typed under GNU Make 3.81 and 4.4".
+- The moved change has `findings.jsonl` (6 lines) and `passes.jsonl` (3 lines); `make findings ARGS="validate"`: 60 findings files and 40 pass summary files valid.
+- `make verify` on that working tree: passed, profile full, no stamp because the tree was uncommitted. Tests: 2650, 2643 pass, 0 fail, 0 cancelled, 7 skipped. Coverage of all files: lines 99.36%, branches 92.51%, functions 99.06%. `verify:archive` found no active change.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a new `make record`: the working tree differs from the verified tree `a7c8054f` in the moved change and the living spec, and the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty. The generated part stays the record of `36929732`.
+
 ## Remaining gates
 
-- Archive of the change.
+- Full `make verify` of the clean archive commit directly before the push, whose stamp the `pre-push` hook reuses, and the handoff to the coordinator.
 - Integration into dev by the coordinator (single pull request)
