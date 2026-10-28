@@ -16,14 +16,26 @@ test('a Cookie header names a session only by one non-empty cookie of the name',
 test('a request log line holds only allowlisted facts, redacted', () => {
   const secret = `tkop_${'C'.repeat(43)}`;
   const fields = requestLogFields({
-    method: 'POST', operationId: 'logIn', parameters: ['r', secret], query: new URLSearchParams({ [secret]: secret }), status: 403, durationMs: 2,
+    method: 'POST', operationId: 'logIn', parameters: ['r', secret], query: new URLSearchParams({ [secret]: secret, from: secret }), declaredQuery: ['from'],
+    status: 403, durationMs: 2,
     failure: failure('forbidden', `the message ${secret} is not logged`, { reason: 'csrf-token-invalid' }),
   });
   assert.deepEqual(Object.keys(fields).sort(), ['durationMs', 'failureCode', 'failureReason', 'method', 'operationId', 'parameters', 'query', 'status']);
   assert.doesNotMatch(JSON.stringify(fields), /tkop_C/);
   assert.equal(fields.failureReason, 'csrf-token-invalid');
-  const bare = requestLogFields({ method: 'GET', operationId: 'readSession', parameters: [], query: new URLSearchParams(), status: 200, durationMs: 1 });
+  const bare = requestLogFields({
+    method: 'GET', operationId: 'readSession', parameters: [], query: new URLSearchParams(), declaredQuery: [], status: 200, durationMs: 1,
+  });
   assert.deepEqual(Object.keys(bare).sort(), ['durationMs', 'method', 'operationId', 'status']);
+});
+
+test('a request log holds only the query parameters its operation declares', () => {
+  const token = 'Zm9vYmFyYmF6cXV4cXV1eGNvcmdlZ3JhdWx0Z2FycGx5';
+  const query = new URLSearchParams({ password: 'correct horse battery staple', csrfToken: token, sessionId: token, from: '7' });
+  const fields = requestLogFields({ method: 'GET', operationId: 'listQuarantine', parameters: [], query, declaredQuery: ['from'], status: 200, durationMs: 1 });
+  assert.equal(fields.query, 'from=7');
+  const undeclared = requestLogFields({ method: 'GET', operationId: 'readSession', parameters: [], query, declaredQuery: [], status: 200, durationMs: 1 });
+  assert.equal(undeclared.query, undefined);
 });
 
 function input(terminal: boolean): PassThrough & { isTTY?: boolean; modes: boolean[]; setRawMode(mode: boolean): void } {

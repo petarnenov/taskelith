@@ -120,6 +120,7 @@ async function serve(
   let operationId = 'unknown';
   let parameters: readonly string[] = [];
   let query = new URLSearchParams();
+  let declaredQuery: readonly string[] = [];
   let answer: ApiResponse;
   try {
     const url = new URL(request.url ?? '/', 'http://control-plane');
@@ -132,6 +133,7 @@ async function serve(
     } else {
       ({ parameters } = matched.value);
       operationId = matched.value.route.operationId;
+      declaredQuery = matched.value.route.query ?? [];
       answer = await answerRoute(handlers, uploads, matched.value, request, url, correlationId);
     }
   } catch (error) {
@@ -139,7 +141,7 @@ async function serve(
   }
   if (!response.headersSent) writeResponse(response, answer, correlationId);
   const fields = requestLogFields({
-    method: redactSecrets(request.method ?? ''), operationId, parameters, query, status: answer.status,
+    method: redactSecrets(request.method ?? ''), operationId, parameters, query, declaredQuery, status: answer.status,
     durationMs: Math.round(performance.now() - startedAt), ...(answer.failure === undefined ? {} : { failure: answer.failure }),
   });
   const log = logger.with({ correlationId });

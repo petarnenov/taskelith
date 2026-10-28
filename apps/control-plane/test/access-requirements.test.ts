@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { OWNER_ONLY, projectRead, projectRequirement } from '@taskelith/access';
 import { ACCESS_REQUIREMENTS, ROUTES, requirementBeforeBody, ruleOf } from '@taskelith/control-plane';
 
-type Operation = { operationId: string; security?: Array<Record<string, string[]>> };
+type Operation = { operationId: string; security?: Array<Record<string, string[]>>; parameters?: Array<{ in?: string; name?: string }> };
 function operationsOf(name: string): Operation[] {
   const document = JSON.parse(readFileSync(new URL(`../../../packages/contracts/documents/${name}`, import.meta.url), 'utf8'));
   return Object.values(document.paths as Record<string, Record<string, Operation>>)
@@ -74,6 +74,16 @@ test('the evidence reads accept the schemes the execution document declares, on 
     const operation = executionOperations.find((candidate) => candidate.operationId === operationId)!;
     assert.deepEqual([...route.security].sort(), schemesOf(operation), operationId);
     assert.equal(route.browserOnly, undefined, operationId);
+  }
+});
+
+test('a route logs exactly the query parameters its document declares', () => {
+  const documents = readdirSync(new URL('../../../packages/contracts/documents/', import.meta.url)).filter((name) => name.endsWith('.openapi.json'));
+  const all = documents.flatMap(operationsOf);
+  for (const route of ROUTES) {
+    const operation = all.find((candidate) => candidate.operationId === route.operationId)!;
+    const declared = (operation.parameters ?? []).filter((parameter) => parameter.in === 'query').map((parameter) => parameter.name);
+    assert.deepEqual(route.query ?? [], declared, route.operationId);
   }
 });
 

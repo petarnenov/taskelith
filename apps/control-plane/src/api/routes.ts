@@ -16,6 +16,8 @@ export interface RouteDefinition {
   // Served on the browser endpoint only, as its document requires.
   readonly browserOnly?: true;
   readonly body?: keyof HttpSchemas & string;
+  // The query parameters of the document, the only ones a request log holds.
+  readonly query?: readonly string[];
   // The body reaches a `writeOnly` schema, so no failure names its values.
   readonly writeOnlyBody?: true;
   // The schema every success body is validated against before it leaves,
@@ -87,8 +89,8 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     security: ['browserSession', 'operatorToken'], response: 'binary', success: 200, statuses: { ...COMMON, 'not-found': 404 },
   },
   {
-    operationId: 'listQuarantine', method: 'GET', pattern: /^\/quarantine$/, security: ['operatorToken'], response: 'QuarantinePage', success: 200,
-    statuses: COMMON,
+    operationId: 'listQuarantine', method: 'GET', pattern: /^\/quarantine$/, security: ['operatorToken'], query: ['from'],
+    response: 'QuarantinePage', success: 200, statuses: COMMON,
   },
   {
     operationId: 'redriveQuarantined', method: 'POST', pattern: /^\/quarantine\/([0-9]+)\/redrive$/, security: ['operatorToken'],

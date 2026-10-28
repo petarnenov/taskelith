@@ -347,6 +347,15 @@ test('submitTask checks the role on its run\'s project before it reads the body'
   assert.deepEqual(stateReads, [], 'no state is read before the role passes');
 });
 
+test('a request log holds no undeclared query parameter, such as a password or token', async () => {
+  const browser = await anonymous();
+  const token = 'Q'.repeat(43);
+  const query = new URLSearchParams({ csrfToken: token, sessionId: token, password: 'correct horse battery staple' });
+  assert.equal((await call('GET', `/session?${query}`, { cookie: browser.cookie })).status, 200);
+  const logged = JSON.stringify(sink.records.filter((record) => record.event === 'api.request'));
+  assert.doesNotMatch(logged, /correct\+horse|Q{43}/);
+});
+
 test('no log line, failure body, or audit event holds a password, session identifier, or CSRF token', async () => {
   const trail = value(await store.transaction((tx) => tx.audit.trail()));
   const written = JSON.stringify([sink.records, trail]);
