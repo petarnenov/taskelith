@@ -35,7 +35,7 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 
 ## Review
 
-Reviewer A: Codex CLI, `codex gpt-6-astra#medium`, run as `make review CHANGE=continue-after-context-warning PASS=1 REVIEWER='codex gpt-6-astra#medium'`, model `gpt-6-astra`, effort medium, sandbox `read-only` reported, session `01a1846b-5306-7c80-9325-a7f8b6da5f6c`. The worktree snapshot was `a7ad178f26cc5305f91919cdb3c282bc5a0b25c3fcb37a47767d0536a7e4da9c` before and after the pass. Counts: Critical 0, High 0, Medium 0, Low 2, each recorded in `findings.jsonl` as `fixed-unreviewed`:
+Reviewer A: Codex CLI, `codex gpt-6-astra#medium`, run as `make review CHANGE=continue-after-context-warning PASS=1 REVIEWER='codex gpt-6-astra#medium'`, model `gpt-6-astra`, effort medium, sandbox `read-only` reported, session `01a1846b-5306-7c80-9325-a7f8b6da5f6c`. The worktree snapshot was `a7ad178f26cc5305f91919cdb3c282bc5a0b25c3fcb37a47767d0536a7e4da9c` before and after the pass. Counts: Critical 0, High 0, Medium 0, Low 2, each recorded in `findings.jsonl` as `fixed-unreviewed` and fixed in `b1095ffe`:
 
 1. Low, process: this record's Review section and remaining gates presented pass 2 as mandatory, although governance "Review sequence" ends the review after a pass with only Low findings or none. Fixed: the section records the actual outcome, the review ended at pass 1, and the remaining gates no longer name further passes.
 2. Low, stale-citation: design.md D1 and the author self-check described `docs/fleet.md:19` as a rule about `/clear` after integration; its text says that the owner does not `/clear` a worker's session after each integration. Fixed in both places, keeping the conclusion that `docs/fleet.md` needs no change.
