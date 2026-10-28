@@ -11,8 +11,11 @@ import {
   parseCommitTree,
   parseIndexEntries,
   parseTreeObject,
+  readHeadTree,
+  readVerified,
   snapshotTree,
   type ListedEntry,
+  type ObjectRead,
 } from '@taskelith/git-workspace';
 import { encodeHeadSnapshot } from '@taskelith/workspace';
 import { nativeGit } from './git-fixture.ts';
@@ -99,6 +102,65 @@ test('the snapshot tree checks a gitlink first, then UTF-8, then the names', () 
   assert.equal(failed(snapshotTree([entry(['..']), gitlink], objects)).details.reason, 'gitlink-in-tree');
   const notUtf8: ListedEntry = { type: 'blob', mode: '100644', object: OID, path: [bytes([0xff])] };
   assert.equal(failed(snapshotTree([entry(['..']), notUtf8], objects)).details.reason, 'non-utf8-path');
+});
+
+// Objects of the test repository, read as the adapter reads them.
+const read: ObjectRead = async (type, names) => {
+  const output = await nativeGit(repository, ['cat-file', '--batch'], { input: bytes(names.map((name) => `${name}\n`).join('')) });
+  return parseBatchObjects(output, names, type);
+};
+const BLOB = 'content\n';
+const blobName = () => literalName('blob', bytes(BLOB));
+const treeOf = (entries: readonly [string, string | Uint8Array, string][]) => literalName('tree', treeBody(entries));
+const emptyTree = () => treeOf([]);
+const commitOf = (tree: string) => literalName('commit', bytes(`tree ${tree}\nauthor A <a> 0 +0000\ncommitter A <a> 0 +0000\n\nm\n`));
+
+// The head snapshot of a commit of `tree`, as the snapshot builds it.
+async function headSnapshotOf(tree: string) {
+  const { entries } = value(await readHeadTree(read, 'sha1', await commitOf(tree)));
+  const names = [...new Set(entries.flatMap((entry) => (entry.type === 'blob' ? [entry.object] : [])))];
+  const listed = snapshotTree(entries, value(await readVerified(read, 'sha1', 'blob', names)));
+  return listed.ok ? encodeHeadSnapshot(listed.value) : listed;
+}
+
+test('a directory of the head tree with a name Git refuses fails the snapshot', async () => {
+  for (const name of ['..', '.', '.git', 'GIT~1', '.git ']) {
+    const failure = failed(await headSnapshotOf(await treeOf([['40000', name, await emptyTree()]])));
+    assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', 'unsafe-tree-path'], name);
+  }
+});
+
+test('two directories of one name in a head tree fail the snapshot', async () => {
+  const blob = await blobName();
+  const first = await treeOf([['100644', 'a', blob]]);
+  const second = await treeOf([['100644', 'b', blob]]);
+  const failure = failed(await headSnapshotOf(await treeOf([['40000', 'dir', first], ['40000', 'dir', second]])));
+  assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', 'unsafe-tree-path']);
+});
+
+test('a file and a directory of one name in a head tree fail the snapshot', async () => {
+  const tree = await treeOf([['100644', 'dir', await blobName()], ['40000', 'dir', await emptyTree()]]);
+  const failure = failed(await headSnapshotOf(tree));
+  assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', 'unsafe-tree-path']);
+});
+
+test('the head tree checks a gitlink, then UTF-8, then the directory names', async () => {
+  const unsafe: [string, string, string] = ['40000', '..', await emptyTree()];
+  const gitlink = await treeOf([unsafe, ['160000', 'module', OID]]);
+  assert.equal(failed(await headSnapshotOf(gitlink)).details.reason, 'gitlink-in-tree');
+  const notUtf8 = await treeOf([unsafe, ['40000', Buffer.from([0xff]), await emptyTree()]]);
+  assert.equal(failed(await headSnapshotOf(notUtf8)).details.reason, 'non-utf8-path');
+});
+
+test('the head tree gives the files of its directories and no empty directory', async () => {
+  const blob = await blobName();
+  const nested = await treeOf([['100644', 'file', blob], ['40000', 'empty', await emptyTree()]]);
+  const tree = await treeOf([['40000', 'dir', nested], ['100755', 'run', blob]]);
+  const expected = new Map([
+    ['dir/file', { type: 'file', mode: '100644', content: new Uint8Array(bytes(BLOB)) }],
+    ['run', { type: 'file', mode: '100755', content: new Uint8Array(bytes(BLOB)) }],
+  ] as const);
+  assert.deepEqual(value(await headSnapshotOf(tree)), value(encodeHeadSnapshot(expected)));
 });
 
 test('the index entries are read with their mode, object, and stage', () => {

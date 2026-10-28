@@ -497,6 +497,18 @@ test('an object whose bytes do not hash to its name fails the snapshot', () => w
   assert.equal(failed(await local.snapshot(FIRST)).code, 'internal');
 }));
 
+test('a clean head with an empty directory named .. fails the snapshot', () => withFixture(async (git) => {
+  const { local } = git;
+  value(await local.prepare(request(git)));
+  const empty = await native(git, ['hash-object', '-t', 'tree', '-w', '--stdin'], '');
+  const listing = await native(git, ['ls-tree', 'HEAD']);
+  const tree = await native(git, ['mktree'], `${listing}\n040000 tree ${empty}\t..\n`);
+  await native(git, ['reset', '--quiet', '--hard', await native(git, ['commit-tree', tree, '-p', 'HEAD', '-m', 'crafted'])]);
+  assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, []);
+  const failure = failed(await local.snapshot(FIRST));
+  assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', 'unsafe-tree-path']);
+}));
+
 test('a forged commit-graph never changes what status reads', () => withFixture(async (git) => {
   const { fixture, local } = git;
   value(await local.prepare(request(git)));
