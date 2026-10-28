@@ -43,6 +43,8 @@ export const GIT_COMMAND_SCOPE_SETTINGS: readonly (readonly [string, string])[] 
   // No commit-graph or multi-pack-index the agent forged changes a read.
   Object.freeze(['core.commitGraph', 'false'] as const),
   Object.freeze(['core.multiPackIndex', 'false'] as const),
+  // The header never follows a redirect to another origin.
+  Object.freeze(['http.followRedirects', 'false'] as const),
 ]);
 
 export const GIT_CREDENTIAL_SETTING = 'http.extraHeader';

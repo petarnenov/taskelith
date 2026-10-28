@@ -2,6 +2,7 @@ import { after } from 'node:test';
 import { Toxiproxy, acquireProcessLock, integrationEndpoint, scenarioRecorderFromEnvironment, type ScenarioRecorder } from '@taskelith/testing';
 import { killProcessesNaming } from './leftover-processes.ts';
 import { ScenarioInstallation, type PostgresRoute } from './scenario-installation.ts';
+import { SCENARIO_LAUNCH_HOST } from './scenario-launch.ts';
 import { runningWorkerNames, stopRunningWorkers } from './scenario-worker.ts';
 import { within } from './waiting.ts';
 
@@ -11,11 +12,11 @@ const CLEANUP_STEP_MILLISECONDS = 30_000;
 const EXIT_GRACE_MILLISECONDS = 30_000;
 const openInstallations = new Set<ScenarioInstallation>();
 
-// The scenarios compose the Linux process-group supervisor, which reads
-// /proc; macOS is covered by the native acceptance (G2 item 25).
-export const SCENARIO_HOST = process.platform === 'linux'
+// Linux composes the process-group or the cgroup supervisor; macOS only
+// the worker's own supervisor, under make verify-macos-g2-scenarios.
+export const SCENARIO_HOST = process.platform === 'linux' || SCENARIO_LAUNCH_HOST === 'macos-supervisor'
   ? {}
-  : { skip: 'Linux only: the G2 harness composes the Linux process-group supervisor' };
+  : { skip: 'Linux, or macOS under make verify-macos-g2-scenarios, only' };
 
 export interface ScenarioIdentity {
   readonly scenario: string;
