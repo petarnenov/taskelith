@@ -1,6 +1,6 @@
 # Verification: define-worker-messages-and-terminal-contracts
 
-Status: developed and verified by the author; review pass 1 by reviewer A done and its seven findings fixed, finding 3 by the architect's answer of 2026-10-28; review pass 2 by reviewer B done, 18 of its 20 findings fixed, H1 by the architect's amendment of 2026-10-28, M2 sent to the architect, and L11 declined; pass 3 pending.
+Status: developed and verified by the author; review pass 1 by reviewer A done and its seven findings fixed, finding 3 by the architect's answer of 2026-10-28; review pass 2 by reviewer B done, 19 of its 20 findings fixed, H1 by the architect's amendment and M2 by the architect's answer of 2026-10-28, and L11 declined, which the architect accepted; pass 3 pending.
 
 ## Scope and source
 
@@ -32,6 +32,9 @@ Status: developed and verified by the author; review pass 1 by reviewer A done a
 - No log `wmt-verify-6.log` exists: the numbering of the session's `make verify` logs skipped 6, and no run is recorded under it.
 - `5a6f1f9e` `chore(contracts): fix the review pass 2 findings of the worker messages and terminal contracts` (Independent review, Pass 2).
 - `16f0aefe` `docs: record review pass 2 of the define worker messages and terminal contracts change` (findings, passes, this section, tasks); the `make verify` run of log `wmt-verify-9.log` checked its tree, `030930741dd5bdc525e37ca8cb7dc1c54cdeec3f`, and passed at the first attempt, with no rerun.
+- `2e6d279a` `docs: record the verification of review pass 2 of the define worker messages and terminal contracts change` records that run.
+- `c5228fa8` `chore(contracts): refuse a turn the harness plugin found invalid and stop the generation on other refusals` (the architect's answers of 2026-10-28 on pass 2 findings M2 and M6: the reason `turn-invalid`, the timeline state `refused` and `recordTurnRefused`, the generation stopped on other refusals, the item 18 and 19 obligation restored, tests, contract pages, design, and spec deltas).
+- The next commit, `docs: record the architect's answers on review pass 2 of the define worker messages and terminal contracts change` (findings M2 and M6, this section, tasks); the `make verify` run of log `wmt-verify-10.log` checked its tree.
 - The commit after it records that run.
 
 ## Environment
@@ -80,8 +83,8 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 - Contract only: no handler enforces the role and origin checks, the refusal order, the close codes, the bounded buffers, or the redaction; items 13, 18, 21, 38, and 39 must, and their tests must check them.
 - `EXECUTION_PROTOCOL_VERSION` stays 1, so no build yet sends or accepts a session message; items 18 and 13 raise the windows (design decision 1).
-- The agent harness port's start and resume requests take no model or effort yet, and no G3 plan row names the port revision that adds them; the coordinator assigns it (contract page section 12).
-- How a turn refused with `port-refused` continues when nothing ends its generation is open: pass 2 finding M2 went to the architect.
+- The agent harness port's start and resume requests take no model or effort yet (`docs/contracts/agent-harness-port.md:89`); the G3 plan's ADR 0014 obligation row binds items 18 and 19 to add them (`docs/g3-plan.md:187` on `dev` `a10ceaaf`; contract page section 12).
+- The timeline state `refused` and `recordTurnRefused` are contract only; item 13 implements them (session timeline section 9).
 - The route record recommends reviewer A at `high` and reviewer B at `xhigh`; the architect kept the brief's `medium` and `high`, because governance "Routed effort" is not authorized yet.
 
 <!-- make record: begin -->
@@ -153,13 +156,14 @@ The fixes change contracts, not only records, and pass 1 found High findings, so
 - Result: Critical 0, High 1, Medium 6, Low 13, each claim checked against its source before the fix; none was wrong. Eighteen are fixed, the content in `5a6f1f9e` and the record findings L1, L12, and L13 in the commit that records this pass; M2 is deferred to the architect and L11 declined, all recorded in `findings.jsonl`, with `missedBy` pass 1, role A, for the 12 whose text pass 1 already reviewed ([design](design.md) "Architect's amendment on pass 2 finding H1" and "Review pass 2 fixes").
   1. H1, High, concurrency-race: a turn whose acceptance is unknown could still run while the next queued turn of its generation was sent. Fixed by the architect's amendment of 2026-10-28 to the answer on pass 1 finding 3: on `timeout` or `crash` the host stops the generation with `closeSession` when it still runs, before it reports, and a crash whose generation ended is reported at once; `nextDeliverableTurn` delivers nothing while that generation runs, so the next turn goes to the next generation; requests and output of the turn that arrive meanwhile are refused, safely, because the close ends the turn; the [agent harness port](/docs/contracts/agent-harness-port.md) section 6 names the running turn in a refused submission (`runningTurnId`), and a refusal naming the submitted turn reports it delivered; `conflict` stays a reason only when it names no running turn or another one (contract page section 3; session timeline sections 4.2 and 4.4; requirements "Running turn named on a repeated submission" and "Generation stopped on unknown acceptance", scenario "One turn at a time" in both deltas; item 13 and 18 obligations). The port detail is a string of the kernel `Result`, not a document field, so the 0.8.0 entry keeps its 110 additions.
   2. M1, Medium, error-handling: an observation the timeline refuses other than as a repeat is applied without effect, confirmed, recorded, and logged as evidence (contract page section 9; requirement "Observations the timeline refuses").
-  3. M2, Medium, error-handling: not fixed; architect question below.
+  3. M2, Medium, error-handling: fixed in `c5228fa8` by the architect's answer below, option (b): `not-found`, `unavailable`, and a `precondition-failed` naming another running turn or none stop the generation and report `port-refused`, the turn staying `queued`; the plugin's `invalid` is reported as `turn-invalid`, and `recordTurnRefused` makes the turn `refused`, final, so the queue moves on (contract page section 3; session timeline section 4.5; requirements "Generation stopped on a port refusal", "Turn refused by the plugin", and "Turn refused by the harness plugin").
   4. M3, Medium, contract-drift: only an `invalid` that the plugin returned is `port-refused`; the parser's `invalid` and a throw are `crash`, whose description names both cases the architect named.
   5. M4, Medium, spec-wording: "twelve" observations in the scenario.
   6. M5, Medium, concurrency-race: `terminal.attach` requires `terminalId` with `after`; requirement "Terminal attach and CSRF token", scenario "Cursor of an ended terminal".
-  7. M6, Medium, contract-drift: ADR 0014 and the architect cited; the item 19 obligation removed; the port revision listed as not yet owned.
+  7. M6, Medium, contract-drift: ADR 0014 and the architect cited. `5a6f1f9e` removed the item 19 obligation as invented and listed the port revision as not yet owned; the architect answered that the G3 plan owns it, so `c5228fa8` restores the item 18 and 19 obligation, citing `docs/g3-plan.md:187` on `dev` `a10ceaaf` (added by #396 after the merge base) and `docs/contracts/agent-harness-port.md:89`, both checked current.
   8. L1 to L13, Low: the counts of 12 observations (L1, L2); the relay's 503 (L3); the NATS test's comment and structural session check (L4, L5); bearer revocation (L6); a cookie upgrade without `Origin` (L7); a subprotocol list (L8); UTF-8 decoding of terminal output (L9); the pass 1 record calls the run-wide test a check of contract text, and item 21 owns the behavioral test (L10); L11 declined, because the architect's binding answer names a restart with the command journaled without its outcome `crash`, and narrowing it by a journaled submission intent would reopen that decision; the skipped log number 6 (L12); the reason of the second re-route (L13).
 - Architect question (M2). A turn refused with `port-refused` stays `queued`, and the contract sends it again in the next generation, but nothing ends the running one: in it `nextDeliverableTurn` keeps returning the turn, its `commandId` makes a resend a duplicate, and a permanent `invalid` would be sent again in every generation and block every later turn. Options: (a) the host stops the generation after `port-refused` as after an unknown acceptance, and the turn is resent in the next generation, which still repeats a permanent `invalid` forever; (b) by code: `precondition-failed` naming another running turn or `unavailable` or `not-found` stops the generation as in (a), and an `invalid` that the plugin returned ends the turn with a new final timeline state or outcome, a session timeline change for item 13; (c) leave the rule and give items 13 and 18 the obligation to define it. Recommendation: (b), because `invalid` of a well-formed request, which the timeline's bounds guarantee, means a plugin defect that a resend never cures, while the other refusals end with their generation.
+- Architect answers (Niki, 2026-10-28, binding): M2 option (b), with a new final timeline state for the plugin's `invalid` and the scenario that a persistent `invalid` does not block later turns as an item 13 obligation; M6 already owned by the G3 plan row "The harness port exposes model and effort per session (ADR 0014)", so the item 18 and 19 obligation is restored; the H1 extension, `runningTurnId` on `conflict` as well as `precondition-failed`, confirmed as an additive kernel `Result` detail; the decline of L11 accepted ([design](design.md) "Architect's answer on pass 2 finding M2").
 - `make verify` on `a3135bb3` (log `wmt-verify-7.log`) failed only in the unrelated Docker timing test `h. an unauthorized start cancels only that execution` of `test/g2-cancellation-races.test.ts`, which this change does not touch; its one rerun (`wmt-verify-8.log`) passed (Pass 1 table above).
 - Fix checks, on the working tree of `5a6f1f9e`:
 
@@ -174,11 +178,21 @@ The fixes change contracts, not only records, and pass 1 found High findings, so
 | `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
 | `make verify` on `16f0aefe`, clean tree (log `wmt-verify-9.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `030930741dd5bdc525e37ca8cb7dc1c54cdeec3f`, stamp written; generated part above |
 
+- Answer checks, on the working tree of `c5228fa8`:
+
+| Command | Result |
+| --- | --- |
+| Fail-before: `node --experimental-strip-types --test packages/contracts/test/worker-session-messages.test.ts` with only the test file changed on `2e6d279a`, after `npm run build` (log `wmt-m2-fail-before.log`) | tests 19, pass 17, fail 2: `a turn the port may have accepted is reported apart from one it proved it never accepted` (the three-value reason list) and `a turn the plugin refused as invalid becomes refused, and other refusals stop its generation` |
+| `npm run build`, then `node --experimental-strip-types --test packages/contracts/test/*.test.ts test/generate-contracts.test.ts packages/modules/execution/test/*.test.ts packages/adapters/nats/test/transport.test.ts` (log `wmt-m2-after.log`) | 411 tests, all passed |
+| `make contract-breaking-changes`, then `make contract-compatibility` | 110 breaking changes for `execution.asyncapi.json` against `10fc3bbe6b7c`, the same 110 additions, because `TurnNotDeliveredPayload` is new in 0.8.0; 0 for the others; `Contract documents have no undeclared breaking change.` The 0.8.0 entry is unchanged |
+| `npm run openspec -- validate --all --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | 72 passed, 0 failed; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
+| Body lengths of the changed and new requirements, in characters | `execution-wire-contracts`: Session command outcomes 435, Generation stopped on a port refusal 369, Turn refused by the plugin 347; `session-turn-model`: Turn refused by the harness plugin 414 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
+
 The pass 2 fixes change contracts, the agent harness port, and tests, not only records, and pass 2 found a High finding, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
 ## Remaining gates
 
-- The architect's answer on pass 2 finding M2, and its fix.
 - Independent review pass 3 by reviewer A.
 - Archive on the branch (worker step 7).
 - Integration into dev by the coordinator (single pull request).
