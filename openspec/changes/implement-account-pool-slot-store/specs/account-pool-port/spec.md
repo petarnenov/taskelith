@@ -5,7 +5,7 @@
 
 #### Scenario: Conformance on PostgreSQL
 - **WHEN** the `AccountSlots` conformance suite runs against `PostgresAccountSlots` inside one transaction
-- **THEN** every case passes, concurrent replaces at one revision included
+- **THEN** every case passes, two replaces at one revision included
 
 #### Scenario: Stored invariants
 - **WHEN** a row of `account_slots` names no allowed project or one project twice
@@ -39,6 +39,10 @@
 #### Scenario: Commit outcome unknown
 - **WHEN** the add-slot transaction commits but its reply is lost, so it returns `unavailable` with the outcome `unknown`
 - **THEN** the stored version is kept for the slot that names it
+
+#### Scenario: Discard fails
+- **WHEN** the add-slot transaction refuses the add and the discard of the stored version fails
+- **THEN** the command returns its own refusal and the version is left for the sweep
 
 #### Scenario: Refused add
 - **WHEN** an add-slot command fails
