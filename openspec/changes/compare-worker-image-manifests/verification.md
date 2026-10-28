@@ -16,17 +16,17 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`, Docker
 
 ## Author self-check
 
-- **Scope.** Only `check_reproducible` and `finish_reproducible` changed in `scripts/installation.sh`, plus five new helpers: `saved_manifest`, `config_digest`, `image_layers`, `report_layers`, and `compare_builds`. `build_image` and every other command are unchanged; the check passes `--no-cache` through its existing extra arguments. (Before the pass 1 fix `2f1e02bf` it also passed `--metadata-file`; see "Review".)
+- **Scope.** Only `check_reproducible` changed in `scripts/installation.sh`, plus five new helpers: `saved_manifest`, `config_digest`, `image_layers`, `report_layers`, and `compare_builds`. `build_image` and every other command are unchanged; the check passes `--no-cache` through its existing extra arguments. (Before the pass 1 fix `2f1e02bf` it also passed `--metadata-file`; see "Review".)
 - **Errors.** A failed `docker image save` or `tar` fails the check with `the manifest.json of the saved image <image> cannot be read`; a saved manifest without exactly one `Config` entry fails it with `names <n> image configs, not one`, and an entry that is not `blobs/sha256/` and 64 hexadecimal digits with `names no image config blob`; a failed `docker image inspect` of the layers fails it with that status; none prints the pass line.
 - **Compatibility.** The script runs under macOS `/bin/bash` 3.2 (the tests start `bash` from `/usr/bin:/bin`), so the layer comparison uses `read -r -a` and indexed loops, not `mapfile`.
 - **Docs.** `docs/local-installation.md` describes the comparison and the containerd image ID; the requirement "Pinned image inputs" and the description of the image ID in the Dockerfile item stay, because they claim equal image IDs only on the classic store, where the image ID is the config digest.
-- **Spec.** The modified requirement "Opt-in reproducibility check" has 499 characters, under the 500 of the pinned OpenSpec.
+- **Spec.** The modified requirement "Opt-in reproducibility check" has 497 characters after review pass 2, under the 500 of the pinned OpenSpec.
 - New comments are at most two lines of at most 80 characters; `npm run verify:comments` passes. Commit types are `chore` and `docs`, without attribution.
 
 ## Evidence check
 
 - **Saved manifest.** On this host the `Config` entry of `docker image save <image> | tar -xOf - manifest.json`, read by the script's `config_digest`, equals the image ID for `busybox:latest` (`sha256:aaef90e06523...`), `alpine:3.20` (`sha256:bf8527eb54c3...`), and a scratch image (`FROM scratch`, one `COPY`) built with `docker build --no-cache`, `sha256:fd28bcfe4c0d841f3238c5cf8129ecf32447874d8f1fe8a5c08c5ad3e4ce4c16`; each manifest had one entry of the form `blobs/sha256/<hex>`. A missing image fails `config_digest` with `cannot be read`, status 1.
-- **Containerd store.** Not measured: this host uses the classic store. The containerd path, an image ID that is the index digest while config and layers are equal, is covered only by the stub tests `the reproducibility check passes on one platform image in two indexes with their own attestations` and `... fails on a differing layer of two indexes with their own attestations`; the stub writes BuildKit's metadata of an index without a config digest.
+- **Containerd store.** Not measured: this host uses the classic store. The containerd path, an image ID that is the index digest while config and layers are equal, is covered only by the stub tests `the reproducibility check passes on one platform image in two indexes with their own attestations` and `... fails on a differing layer of two indexes with their own attestations`; they give the two builds different image IDs over the same saved config and layers. Two containerd facts stay assumptions: that the save writes one `manifest.json` entry, for the platform image, and that `docker image inspect` reports the platform image's `RootFS.Layers` (see "Remaining gates").
 - **Links.** The records link only inside the change directory or root-relative; `npm run verify:links` runs in `make verify`.
 
 ## Fail-before
@@ -61,7 +61,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Limitations
 
-- The containerd image store was not available on this host; its path is covered by the stub tests only, and that `docker image save` there writes one `manifest.json` entry, for the platform image, is not measured; another entry would fail the check, not pass it.
+- The containerd image store was not available on this host; its path is covered by the stub tests only. That `docker image save` there writes one `manifest.json` entry, for the platform image, and that `docker image inspect` reports the platform image's `RootFS.Layers` are not measured; another entry would fail the check, not pass it.
 - `docker image save` streams each whole image through `tar` on every check.
 - An engine before Docker 25 names the config `<hex>.json`, which fails the check with `names no image config blob`.
 
@@ -70,6 +70,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Independent review passes assigned by the coordinator (pass 1 reviewer A, pass 2 reviewer B).
 - Archive of the change after review.
 - Integration into dev by the coordinator (single pull request)
+- A run of `make verify-worker-image-reproducible` on a containerd-store engine, for example the Docker 29.8.2 host `geo-petarpetrov` where the failure was found, recording the pass line, both image IDs, and the `docker info` storage driver; the coordinator may arrange it.
+- Review pass 3 by reviewer A, required because the pass 2 fixes change code and tests.
 
 ## Review pass 1
 
@@ -77,3 +79,14 @@ Reviewer A, Codex CLI `codex gpt-6.1-sol#medium`, session `01a1831a-5209-7d10-80
 
 - **H1 (error-handling).** BuildKit names `containerimage.config.digest` in the metadata file only when it returns the image manifest; for an index with attestations, the containerd case, the key is missing and the check failed. The check now reads the config digest from the `Config` entry of the `manifest.json` of `docker image save`, on both stores and without network access; `--metadata-file` is gone, the layers still come from `RootFS.Layers`, and attestations stay enabled. A failed save or `tar`, no or several `Config` entries, or an entry that is not a `blobs/sha256/` digest fails the check with a message that names the image. Design decision 2 and the docs say so.
 - **M1 (missing-fail-before-test).** The stub writes BuildKit's metadata without a config digest when the image ID is an index digest and serves a saved `manifest.json`; new tests cover two indexes with equal configs and layers, a differing layer under differing index digests, a failed save, and manifests with two, no, or a legacy config entry. The containerd test fails against the pass 1 code (see "Fail-before").
+
+## Review pass 2
+
+Reviewer B, Claude Code `claude claude-opus-5-5#high`, session `93e7c704-8c25-41df-b55e-72892f3311bd`; the model `claude-opus-5-5` is confirmed by `modelUsage` of the last result line, and the worktree snapshot was `5778c886f98036078b989d2a17256c68fb52afcc0f9771b2cd67cd129a043c86` before and after. Findings: 0 Critical, 0 High, 1 Medium, 5 Low, all fixed in `a6f958aa`. Review pass 3 by reviewer A is required, because the L1 and L2 fixes change code and tests.
+
+- **M1 (evidence-mismatch).** Nothing has run on a containerd store, so design decision 3 and "Risks / Trade-offs" now mark both containerd facts as assumptions: one saved `manifest.json` entry, for the platform image, and `docker image inspect` reporting the platform image's `RootFS.Layers`. "Remaining gates" adds a run of `make verify-worker-image-reproducible` on a containerd-store engine.
+- **L1 (docs).** The test stub no longer writes BuildKit metadata for `--metadata-file`, which the script stopped passing in `2f1e02bf`, nor reads a config variable; its comment says what it models. "Evidence check" says the containerd tests give the two builds different image IDs over the same saved config and layers. The fail-before record of `2f1e02bf` stays as history.
+- **L2 (naming).** The build loop iterates over `"$first" "$second"` and builds each tag as is; `compare_builds` takes both tags as arguments instead of reading the caller's locals. `finish_reproducible` is unchanged.
+- **L3 (evidence-mismatch).** "Author self-check" says only `check_reproducible` changed in `scripts/installation.sh`, plus the five new helpers.
+- **L4 (spec-wording).** The scenario "Differing image index only" finishes its comparison, and the requirement says it names each differing layer index and, when they differ, both config digests. It has 497 characters; archiving the change in a scratch copy of the worktree and running `npm run openspec -- validate --all --strict` there passed, 71 of 71 items.
+- **L5 (docs).** `docs/local-installation.md` lists a failed layer read among the failures of the check.
