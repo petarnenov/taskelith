@@ -788,11 +788,13 @@ function composing(fake: FakeWorkspace): void {
 }
 
 test('a workspace precondition that fails stops the start before enrollment and creates nothing', async () => {
-  workspace = async () => workspaceFailure('precondition-failed', 'hardlinks-unprotected', 'fs.protected_hardlinks must be 1');
-  const refused = failed(await startWorker({ ...settings, launch: LAUNCH }, dependencies()));
-  assert.equal(refused.details.reason, 'hardlinks-unprotected');
-  assert.deepEqual([enrollment.reads, enrollment.calls, broker.endpoints], [0, [], []]);
-  assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  for (const reason of ['hardlinks-unprotected', 'git-client-mismatch'] as const) {
+    workspace = async () => workspaceFailure('precondition-failed', reason, 'the workspace cannot be composed');
+    const refused = failed(await startWorker({ ...settings, launch: LAUNCH }, dependencies()));
+    assert.equal(refused.details.reason, reason);
+    assert.deepEqual([enrollment.reads, enrollment.calls, broker.endpoints], [0, [], []]);
+    assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  }
 });
 
 test('the start sweeps the workspaces, holds the recorded slots, and skips their containments in the scan', async () => {
