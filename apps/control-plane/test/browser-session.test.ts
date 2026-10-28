@@ -45,7 +45,8 @@ const alice = value(await administration.createPrincipal(owner, 'alice', INVOCAT
 value(await administration.setPassword(owner, 'alice', ALICE_PASSWORD, INVOCATION));
 value(await administration.assignProjectRole(owner, { projectId: 'alpha', loginName: 'alice', role: 'project-viewer' }, INVOCATION));
 
-// Evidence and runs of two projects; any other identifier is unknown.
+// Evidence and runs of two projects; `e-down` fails, and any other
+// identifier is unknown.
 const EVIDENCE_PROJECTS: Record<string, string> = { 'e-alpha': 'alpha', 'e-beta': 'beta' };
 const RUN_PROJECTS: Record<string, string> = { 'r-alpha': 'alpha', 'r-beta': 'beta' };
 // Every read of run or project state that a handler makes.
@@ -59,6 +60,7 @@ const api = new ControlPlaneApi({
   runs: { createRun: async () => { stateReads.push('createRun'); return err(failure('internal', 'not under test')); } },
   evidence: {
     read: async (evidenceId: string) => {
+      if (evidenceId === 'e-down') return err(failure('unavailable', 'the evidence store is down'));
       const projectId = EVIDENCE_PROJECTS[evidenceId];
       return projectId === undefined ? err(failure('not-found', `no evidence ${evidenceId}`)) : ok({ projectId });
     },
@@ -299,21 +301,29 @@ function request(principalId: PrincipalId, ...parameters: string[]): ApiRequest 
   return { principalId, parameters, body: undefined, query: new URLSearchParams(), correlationId: 'c-test' as never };
 }
 
-test('a foreign resource and an unknown one are denied alike, and only the owner learns it is unknown', async () => {
-  const viewer = { reason: 'role-required', requiredRole: 'project-viewer' };
-  for (const operationId of ['readEvidence', 'downloadEvidence']) {
-    const foreign = await api.handle(operationId, request(alice, 'e-beta'), '');
-    const unknown = await api.handle(operationId, request(alice, 'e-none'), '');
-    assert.ok(!foreign.ok && !unknown.ok);
-    assert.deepEqual([foreign.error.code, foreign.error.details], ['forbidden', viewer], operationId);
-    assert.deepEqual(unknown.error, foreign.error, operationId);
+test('a foreign evidence record and an unknown one answer the same 404, to a session and to the bearer', async () => {
+  const browser = remember(await loggedIn('alice', ALICE_PASSWORD));
+  const answers: Answer[] = [];
+  for (const path of ['/evidence/e-beta', '/evidence/e-none', '/evidence/e-beta/content', '/evidence/e-none/content']) {
+    answers.push(await call('GET', path, { cookie: browser.cookie }));
   }
-  assert.ok((await api.handle('readEvidence', request(alice, 'e-alpha'), '')).ok);
-  const readByOwner = await api.handle('readEvidence', request(owner, 'e-none'), '');
-  assert.equal(readByOwner.ok ? undefined : readByOwner.error.code, 'not-found');
+  answers.push(await call('GET', '/evidence/e-none', { authorization: `Bearer ${OPERATOR}` }));
+  const [foreign] = answers;
+  assert.deepEqual([foreign?.status, foreign?.body.code], [404, 'not-found']);
+  assert.doesNotMatch(foreign?.text ?? '', /e-beta|beta/, 'the body names neither the record nor its project');
+  assert.deepEqual(answers.map((answer) => [answer.status, answer.text]), answers.map(() => [foreign?.status, foreign?.text]),
+    'a missing and a foreign record are answered alike');
+  assert.equal((await call('GET', '/evidence/e-alpha', { cookie: (await anonymous()).cookie })).status, 401);
+  assert.equal((await call('GET', '/evidence/e-down', { cookie: browser.cookie })).status, 503, 'a store failure is no 404');
+  assert.ok((await api.handle('readEvidence', request(alice, 'e-alpha'), '')).ok, 'a project-viewer reads its project');
+  assert.ok((await api.handle('readEvidence', request(owner, 'e-beta'), '')).ok, 'an installation-owner reads every project');
+});
+
+test('a foreign run and an unknown one are denied alike, and the G2 bridge passes the owner', async () => {
   const foreignRun = await api.handle('readTaskResult', request(alice, 'r-beta', 't'), '');
   const unknownRun = await api.handle('readTaskResult', request(alice, 'r-none', 't'), '');
   assert.ok(!foreignRun.ok && !unknownRun.ok);
+  assert.deepEqual([foreignRun.error.code, foreignRun.error.details], ['forbidden', { reason: 'role-required', requiredRole: 'project-viewer' }]);
   assert.deepEqual(unknownRun.error, foreignRun.error);
   assert.deepEqual(value(await api.handle('readTaskResult', request(alice, 'r-alpha', 't'), '')), 'read');
   assert.deepEqual(value(await api.handle('readTaskResult', request(owner, 'r-none', 't'), '')), 'read', 'the G2 bridge passes the owner');

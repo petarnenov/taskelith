@@ -41,12 +41,12 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 ## Merge of dev
 
 - `a1f0d4af` merged `origin/dev` `10fc3bbe` (9b #394, 9c #395) without a textual conflict. `control-plane.openapi.json` 0.2.0 adds the board, inbox, agent session, and event stream operations; their rules follow wire contracts section 3 as 9b amended it, and `test/access-requirements.test.ts` lists them. The `answerableBy` check of `answerInboxItem` belongs to its handler (section 8).
-- Open for the coordinator: `execution.openapi.json` 0.6.0 and execution wire contracts section 8.2 answer an evidence read by a principal without a role on the record's project with the 404 of an unknown record, where this change answers 403 (Q4), and section 9 there assigns item 10 the session on the evidence operations, the retirement entry, the 404 of a download whose record was retired meanwhile, and an orphan content sweep.
+- `execution.openapi.json` 0.6.0 and execution wire contracts section 8.2 answer an evidence read by a principal without a role on the record's project with the 404 of an unknown record, where this change answered 403 (Q4), and section 9 there assigns item 10 the session on the evidence operations, the retirement entry, the 404 of a download whose record was retired meanwhile, and an orphan content sweep. The coordinator decided (D1, D2, [design](design.md) "Coordinator decisions"): `readEvidence` and `downloadEvidence` now accept the session and answer a missing and a foreign record the same 404, which `test/browser-session.test.ts` shows by session and by bearer; `test/access-requirements.test.ts` checks their schemes against the execution document. The rest is a remaining gate below.
 
 ## Limitations
 
-- The evidence retirement entry is deferred until its 9b to 9d operation lands in `dev` ([design](design.md) "Non-goals").
-- The G2 execution and SDLC documents declare no 403 on their operator operations, so a `role-required` denial there answers 401 under the route's statuses; only the owner bearer reaches them until item 11, which the G2 bridge passes. Item 11 adds the 403, and the coordinator names it in item 11's brief. The `createRun` test serves the operation on a probe route with that 403.
+- `retireEvidence`, the 404 of a download whose record was retired meanwhile, and the orphan content sweep are change 10b (D2, [design](design.md) "Non-goals").
+- The G2 execution and SDLC documents declare no 403 on their operator operations, so a `role-required` denial there, other than on the evidence reads, which answer 404 (D1), answers 401 under the route's statuses; only the owner bearer reaches them until item 11, which the G2 bridge passes. Item 11 adds the 403, and the coordinator names it in item 11's brief. The `createRun` test serves the operation on a probe route with that 403.
 - `cookie@2.0.1` and `crypto.argon2` stay `candidate` in the dependency register with their notes (coordinator, 2026-10-28).
 
 <!-- make record: begin -->
@@ -69,7 +69,8 @@ Pending: pass 1 by reviewer A, pass 2 by reviewer B. The brief's efforts run, re
 
 - The temporary G2 bridge, under which an `installation-owner` passes the project requirements of the G2 operator operations, is retired by item 11 ([design](design.md) decision 6, Q5).
 - Follow-up contract change `add-account-self-service-operations`, planned by the coordinator before item 28: account self-service HTTP operations, the browser first run, and the caller's project roles (Q1, Q2, Q12).
-- Change 10b: the evidence retirement entry once its 9b to 9d operation is in `dev` (Q13).
+- Change 10b: `retireEvidence`, the 404 of a download whose record was retired meanwhile, and the sweep of evidence content whose digest no record refers to (Q13, D2; execution wire contracts section 9).
+- The other operations of execution wire contracts section 8.1, by the items that own their handlers (D2): `listUnknownExecutions`, `listUnrecordedProcesses`, and `readmitTask` item 44; `readDelegationResult` item 38; `fetchSlotCredential` item 12; `issueRunScmCredential` and `fetchRunScmCredential` item 21.
 - Item 11: the 403 on the operator operations of the G2 execution and SDLC documents, named in its brief.
 - Review passes.
 - Integration into dev by the coordinator (single pull request)

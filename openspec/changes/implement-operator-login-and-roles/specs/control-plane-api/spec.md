@@ -47,15 +47,19 @@ For every operation with a session or bearer requirement, the control plane SHAL
 - **THEN** the bearer authenticates the request, the cookie is ignored, and no CSRF token is required
 
 ### Requirement: Per-project evidence authorization
-`readEvidence` and `downloadEvidence` SHALL require `project-viewer` or above on the evidence record's project, or `installation-owner`, checked before any content is read. A caller that does not pass the check SHALL get the same 403 `role-required` answer for an unknown evidence identifier as for a known one, with `details.requiredRole` naming the role.
+`readEvidence` and `downloadEvidence` SHALL accept the session cookie or the operator bearer and SHALL require `project-viewer` or above on the evidence record's project, or `installation-owner`, checked before any content is read. A caller that does not pass the check SHALL get the 404 of an unknown record, with the same body for an unknown identifier as for a record of another project (execution wire contracts section 8.2).
 
 #### Scenario: Evidence of a foreign project
 - **WHEN** a principal with a role only on another project downloads evidence
-- **THEN** the answer is 403 with reason `role-required` and no content is read
+- **THEN** the answer is 404 and no content is read
 
 #### Scenario: Unknown evidence for a principal without the role
-- **WHEN** a principal that is not `installation-owner` reads an unknown evidence identifier and a known one of a project where it holds no role
-- **THEN** both answers are the same 403 with reason `role-required`, not 404
+- **WHEN** a principal reads an unknown evidence identifier and a known one of a project where it holds no role
+- **THEN** both answers are the same 404 with the same body, which names neither the record nor its project
+
+#### Scenario: Evidence through a browser session
+- **WHEN** a session of a `project-viewer` on the record's project reads the record
+- **THEN** the session authenticates the read without a CSRF token, and an anonymous session answers 401
 
 ### Requirement: Request logs without secrets
 The request log SHALL hold only the method, the operation, its path and query parameters, the status, and the failure, redacted with `@taskelith/secrets`. No log line, failure, or audit record SHALL contain a password, a session identifier, a CSRF token, or the `Cookie`, `X-CSRF-Token`, or `Authorization` header.

@@ -1,12 +1,13 @@
 import { AUTHENTICATED, OWNER_ONLY, projectRead, projectRequirement, type AccessRequirement, type ProjectRole } from '@taskelith/access';
 
 // How an operation's requirement is found (wire contracts section 3); a
-// `resource-project` one is checked after its resource's project is read.
+// `resource-project` or `evidence-project` one waits for its resource.
 export type RequirementRule =
   | { readonly kind: 'none' }
   | { readonly kind: 'fixed'; readonly requirement: AccessRequirement }
   | { readonly kind: 'path-project'; readonly role: ProjectRole; readonly ownerReads: boolean }
-  | { readonly kind: 'resource-project'; readonly role: ProjectRole };
+  | { readonly kind: 'resource-project'; readonly role: ProjectRole }
+  | { readonly kind: 'evidence-project' };
 
 const NONE: RequirementRule = Object.freeze({ kind: 'none' });
 const ANY_PRINCIPAL: RequirementRule = Object.freeze({ kind: 'fixed', requirement: AUTHENTICATED });
@@ -17,6 +18,8 @@ const PROJECT_MAINTAINER: RequirementRule = Object.freeze({ kind: 'path-project'
 // The G2 operator operations, which the temporary G2 bridge covers (Q5).
 const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator' });
 const RUN_VIEWER: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-viewer' });
+// A section 3 read of the record's project (execution section 8.2).
+const EVIDENCE_READER: RequirementRule = Object.freeze({ kind: 'evidence-project' });
 
 export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Object.freeze({
   readSession: NONE, logIn: NONE, logOut: NONE, receiveScmWebhook: NONE,
@@ -38,7 +41,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   reinstateAccountSlot: OWNER, rotateSlotCredential: OWNER, removeAccountSlot: OWNER,
   createScmIntegration: OWNER, updateScmIntegration: OWNER,
   createRun: RUN_OPERATOR, submitTask: RUN_OPERATOR,
-  readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: RUN_VIEWER, downloadEvidence: RUN_VIEWER,
+  readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
   listQuarantine: OWNER, redriveQuarantined: OWNER,
   readInstallationCa: NONE, enrollWorker: NONE, authorizeLaunch: NONE, publishEvidence: NONE, requestDelegation: NONE,
 });

@@ -11,11 +11,11 @@ G3 item 10 (`implement-operator-login-and-roles`, plan row 10, size M-L) closes 
 - `@taskelith/postgres` gains a migration and repositories for principals, roles, sessions, and the access audit trail, run against the shared conformance suites.
 - The control plane serves `readSession`, `logIn`, and `logOut` on the browser endpoint, accepts the session cookie with the CSRF header or the operator bearer as each operation declares, checks the role after authentication and CSRF and before reading the body, and logs only an allowlist of request parts.
 - The installation's operator credential authenticates one principal, the first `installation-owner`, created once from the G2 bootstrap credential and audited.
-- `readEvidence` and `downloadEvidence` are authorized per project by the evidence record's project.
+- `readEvidence` and `downloadEvidence` accept the session and are authorized per project by the evidence record's project, with the 404 of execution wire contracts section 8.2 for a foreign record.
 - Administrative commands that create principals, set a principal's password, and assign and remove project roles, as the coordinator decided ([design](design.md) "Coordinator decisions").
 - [Control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 2 names `details.requiredRole` of a role denial.
 
-Excluded: OpenID Connect, project setup and the member handlers (item 11), the SPA (item 28), the UI event stream (item 14), and the evidence retirement entry, whose wire operation belongs to sub-changes 9b to 9d and is built only after it lands in `dev`. No contract document changes. The HTTP operations for account self-service, the browser first run, and the caller's project roles belong to the follow-up contract change `add-account-self-service-operations`.
+Excluded: OpenID Connect, project setup and the member handlers (item 11), the SPA (item 28), the UI event stream (item 14), and the evidence retirement entry, the 404 of a record retired during a download, and the orphan content sweep, which are change 10b. No contract document changes. The HTTP operations for account self-service, the browser first run, and the caller's project roles belong to the follow-up contract change `add-account-self-service-operations`.
 
 ## Capabilities
 

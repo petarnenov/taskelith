@@ -3,6 +3,7 @@
 - [x] 1.1 Create the change with empty `findings.jsonl` and `passes.jsonl`, save the brief's checklist as `checklist.json`, and summarize it in `design.md`
 - [x] 1.2 Write the design with the coordinator questions
 - [x] 1.3 Apply the coordinator's answers to the design and the spec deltas
+- [x] 1.4 Merge `dev` and apply the coordinator's decisions D1 and D2 on the evidence reads of 9c
 
 ## 2. Access module
 
@@ -19,7 +20,7 @@
 
 - [x] 4.1 Route alternatives and role requirements derived from the document; the session operations on the browser endpoint
 - [x] 4.2 Authentication, CSRF, role, and body order; cookies and `no-store`; request log allowlist
-- [x] 4.3 Per-project authorization of `readEvidence` and `downloadEvidence`
+- [x] 4.3 Per-project authorization of `readEvidence` and `downloadEvidence`, with the session and the 404 of execution wire contracts section 8.2
 - [x] 4.4 Owner creation at `init` and start, administrative password and role commands, session purge loop
 
 ## 5. Tests

@@ -79,12 +79,12 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     reasons: { 'worker-not-authorized': 401 },
   },
   {
-    operationId: 'readEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}$`), security: ['operatorToken'],
-    response: 'EvidenceRecord', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+    operationId: 'readEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}$`),
+    security: ['browserSession', 'operatorToken'], response: 'EvidenceRecord', success: 200, statuses: { ...COMMON, 'not-found': 404 },
   },
   {
-    operationId: 'downloadEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}/content$`), security: ['operatorToken'],
-    response: 'binary', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+    operationId: 'downloadEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}/content$`),
+    security: ['browserSession', 'operatorToken'], response: 'binary', success: 200, statuses: { ...COMMON, 'not-found': 404 },
   },
   {
     operationId: 'listQuarantine', method: 'GET', pattern: /^\/quarantine$/, security: ['operatorToken'], response: 'QuarantinePage', success: 200,

@@ -1,5 +1,7 @@
 import {
   g2BridgeRequirement,
+  projectRead,
+  unauthenticated,
   type AccessRequirement,
   type LiveSession,
   type LoginAttempt,
@@ -9,7 +11,7 @@ import {
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
 import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
-import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
@@ -130,14 +132,16 @@ export class ControlPlaneApi implements ApiHandlers {
     }
   }
 
-  // A `resource-project` operation: its resource's project first, then the
-  // role, under the temporary G2 bridge (Q5) that item 11 retires.
+  // A `resource-project` or `evidence-project` operation: its resource's
+  // project first, then the role.
   async #authorizeResource(operationId: string, request: ApiRequest): Promise<Result<void>> {
     const rule = ruleOf(operationId);
-    if (rule.kind !== 'resource-project') return ok(undefined);
-    if (request.principalId === undefined) return err(failure('internal', `${operationId} reached its handler without a principal`));
+    if (rule.kind !== 'resource-project' && rule.kind !== 'evidence-project') return ok(undefined);
+    if (request.principalId === undefined) return err(unauthenticated());
+    if (rule.kind === 'evidence-project') return this.#authorizeEvidence(request.principalId, request.parameters[0] ?? '');
     const projectId = await this.#resourceProject(operationId, request);
     if (!projectId.ok) return projectId;
+    // The temporary G2 bridge (Q5), which item 11 retires.
     return this.#services.authorization.authorize(request.principalId, g2BridgeRequirement(projectId.value, rule.role));
   }
 
@@ -146,10 +150,17 @@ export class ControlPlaneApi implements ApiHandlers {
   async #resourceProject(operationId: string, request: ApiRequest): Promise<Result<string | undefined>> {
     const [first = ''] = request.parameters;
     if (operationId === 'createRun') return ok((request.body as HttpSchemas['CreateRunRequest']).projectId);
-    if (operationId !== 'readEvidence' && operationId !== 'downloadEvidence') return this.#services.runProjects.projectOf(first);
-    const record = await this.#services.evidence.read(first);
-    if (record.ok) return ok(record.value.projectId);
-    return record.error.code === 'not-found' || record.error.code === 'invalid' ? ok(undefined) : record;
+    return this.#services.runProjects.projectOf(first);
+  }
+
+  // Execution wire contracts section 8.2: a record outside the caller's
+  // projects answers the same 404 as an unknown one.
+  async #authorizeEvidence(principalId: PrincipalId, evidenceId: string): Promise<Result<void>> {
+    const record = await this.#services.evidence.read(evidenceId);
+    if (!record.ok) return record.error.code === 'not-found' ? err(evidenceNotFound()) : record;
+    const authorized = await this.#services.authorization.authorize(principalId, projectRead(record.value.projectId));
+    if (authorized.ok || authorized.error.code !== 'forbidden') return authorized;
+    return err(evidenceNotFound());
   }
 
   async #readSession(request: ApiRequest): Promise<Result<StatusAnswer>> {
@@ -236,6 +247,11 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!redriven.ok) return redriven;
     return ok(redriven.value === null ? { sequence } : { sequence, messageId: redriven.value });
   }
+}
+
+// One body for an unknown record and a foreign one, naming neither.
+function evidenceNotFound(): Failure {
+  return failure('not-found', 'no evidence record has this identifier');
 }
 
 // The session state, with a Set-Cookie header for a new identifier.
