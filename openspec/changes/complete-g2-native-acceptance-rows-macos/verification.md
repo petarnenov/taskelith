@@ -46,14 +46,14 @@ macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64 (2020 Intel iMac), APFS boot data vo
 
 ## Checks
 
-`make verify` ran on the clean committed tree of `3f4efc07` (tree `cc922677`) with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2655, 2648 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.49%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows it, and it changes only this file.
+`make verify` ran on the clean committed tree of `eda99b81` (tree `c52a8832`), the records commit after the review pass 1 fixes, with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2659, 2652 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.50%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows it, and it changes only this file.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `cc9226776f8ef4f1e13588c6c18a35b6339cd8b0`; tests 2655, pass 2648, fail 0, skipped 7; all files 99.36% lines, 92.49% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `c52a88323b64fd13abf753d3544e7fbcdecc090d`; tests 2659, pass 2652, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
 - `npm run openspec -- validate complete-g2-native-acceptance-rows-macos --strict`: passed, `Change 'complete-g2-native-acceptance-rows-macos' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
 - Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
