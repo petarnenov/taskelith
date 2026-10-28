@@ -68,7 +68,8 @@ Review pass 1, each on its fix commit's tree with only `packages/adapters/git-wo
 
 | Check | Revision | Result |
 | --- | --- | --- |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `d7a1b785`, after the merge `1bdc5bab`, tree `e1c9f859` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.95 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `5bad0cc4`, after the pass 1 fixes and the merge `f33090db`, tree `e88eafd3` | Passed, profile full, stamp written: tests 3271, suites 46, pass 3224, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.93 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `d7a1b785`, after the merge `1bdc5bab`, tree `e1c9f859` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.95 % functions |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `ae323e15`, tree `56041e78` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `254cf2d7`, tree `275cb48f` | Passed, profile full, stamp written: tests 3230, suites 46, pass 3183, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `34a9773d`, tree `ad07be3e` | Passed, profile full: the same counts; 98.95 % functions |
@@ -82,11 +83,15 @@ Review pass 1, each on its fix commit's tree with only `packages/adapters/git-wo
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e1c9f859477f0defc7bff2e53a6f9a07362501bf`; tests 3233, pass 3186, fail 0, skipped 47; all files 99.38% lines, 92.82% branches, 98.95% functions.
+- `make verify`: passed, profile full, tree `e88eafd3192b7f793410e95bb83eda281ae12394`; tests 3271, pass 3224, fail 0, skipped 47; all files 99.38% lines, 92.82% branches, 98.93% functions.
 - `npm run openspec -- validate implement-workspace-handoff-and-reclaim --strict`: passed, `Change 'implement-workspace-handoff-and-reclaim' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
-- Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 74 file(s); every pass summary file is valid: 54 file(s); every route file is valid: 10 file(s).`.
+- Spec diff against the merge base `a10ceaaf860c` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a182da-55e4-7800-adb1-5c516c82d86f` | 0 | 1 | 6 | 1 |
 <!-- make record: end -->
 
 ## Limitations
