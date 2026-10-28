@@ -20,6 +20,9 @@ import {
   type SubscriptionMechanism,
   type TurnOutcome,
 } from './agent-harness.js';
+import type { HarnessRequestKind } from '../domain/harness-values.js';
+
+export type { HarnessRequestKind };
 
 // The module's parsers of plugin data. They accept own data properties only;
 // a proxy's traps still run, so they reject shapes, not hostile code.
@@ -42,10 +45,6 @@ export interface ClassifiedOperation {
   readonly kind: ClassifiedOperationKind;
   readonly ref: string;
 }
-
-import type { HarnessRequestKind } from '../domain/harness-values.js';
-
-export type { HarnessRequestKind };
 
 export type HarnessEvent =
   | { readonly kind: 'output'; readonly turnId: string; readonly text: string }
