@@ -594,10 +594,10 @@ native_log() {
 # Starts the worker of this checkout as a host process, logging to RUN's
 # file; the data root path holds spaces on purpose.
 start_native_worker() {
-  local run="$1" token="$2" node
+  local run="$1" token="$2" fingerprint="$3" node
   node="$(command -v node)"
   TASKELITH_CONTROL_PLANE_URL="$url" TASKELITH_NATS_URL="$nats_url" TASKELITH_DATA_DIR="$native_root" \
-    TASKELITH_ENROLLMENT_TOKEN="$token" TASKELITH_NATS_CA="$ca_file" \
+    TASKELITH_ENROLLMENT_TOKEN="$token" TASKELITH_INSTALLATION_CA_SHA256="$fingerprint" \
     TASKELITH_WORKER_COMMAND="[\"$node\", \"-e\", \"setTimeout(() => {}, 1000)\"]" \
     node "$repository/apps/worker/dist/main.js" > "$(native_log "$run")" 2>&1 &
   native_worker_pid=$!
@@ -665,7 +665,7 @@ finish_native() {
 # Install, start, stop, and restart of a native worker of this host against
 # a fresh installation, with its data root on the host's file system.
 native_worker_lifecycle_scenario() {
-  local architecture token worker identity volume
+  local architecture bundle token fingerprint worker identity volume
   begin_scenario native-worker-lifecycle
   compose_files+=(--file "$smoke_directory/compose.yaml" --file "$scenario_directory/compose.yaml")
   fresh_project
@@ -683,10 +683,12 @@ native_worker_lifecycle_scenario() {
   architecture="$(node -p process.arch)"
   volume="$(volume_of "$native_directory")"
   step "installing a native $(uname -s) $architecture worker"
-  token="$(TASKELITH_WORKER_PLATFORM="$(node -p process.platform)" TASKELITH_WORKER_ARCHITECTURE="$architecture" \
-    enrollment_token | field enrollmentToken)"
-  if [ -z "$token" ]; then fail_scenario "no enrollment token was issued"; fi
-  start_native_worker first "$token"
+  bundle="$(TASKELITH_WORKER_PLATFORM="$(node -p process.platform)" TASKELITH_WORKER_ARCHITECTURE="$architecture" \
+    enrollment_token)"
+  token="$(printf '%s' "$bundle" | field enrollmentToken)"
+  fingerprint="$(printf '%s' "$bundle" | field installationCaSha256)"
+  if [ -z "$token" ] || [ -z "$fingerprint" ]; then fail_scenario "no enrollment token was issued"; fi
+  start_native_worker first "$token" "$fingerprint"
   await_condition "$START_SECONDS" native_online first || fail_scenario "the native worker did not enroll and come online"
   worker="$(unrevoked_workers)"
   identity="$(native_identity)"
@@ -697,7 +699,7 @@ native_worker_lifecycle_scenario() {
   step "stopping the native worker"
   stop_native_worker
   step "starting the native worker again without a token"
-  start_native_worker second ''
+  start_native_worker second '' ''
   await_condition "$RESTART_SECONDS" native_online second || fail_scenario "the restarted native worker did not come online"
   expect_equal "the worker identity after the restart" "$(native_identity)" "$identity"
   expect_equal "the enrolled workers after the restart" "$(unrevoked_workers)" "$worker"
