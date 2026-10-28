@@ -1,13 +1,13 @@
 # Execution wire contracts
 
-Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-plan.md) item 8), under independent review. It states the rules of the execution documents that their schemas cannot express. The documents are the source of the field definitions; this page never repeats a field list.
+Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-plan.md) item 8), under independent review. It states the rules of the execution documents that their schemas cannot express. The documents are the source of the field definitions; this page never repeats a field list. G3 sub-change 9c (`extend-execution-http-contracts`) extends the OpenAPI document with the operations of section 8.
 
 ## 1. Documents
 
 | Document | Version | Content |
 | --- | --- | --- |
 | [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.7.0 | Commands to a worker and observations from it, over NATS JetStream, and its heartbeats over core NATS |
-| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.5.0 | The public installation CA certificate (`readInstallationCa`, which declares no credential; G3 sub-change 26b), enrollment, launch authorization, delegation with its 500 and 503 failures (item 21), task results, evidence with its 400, 500, and 503 failures (item 19), and the quarantine with its redrive (item 16), over HTTPS; G2 served it as plain HTTP on loopback, and since G3 sub-change 26a the installation serves it over HTTPS on a certificate of the installation CA (D11; [installation contract](installation-and-enrollment.md) section 7) |
+| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.6.0 | The public installation CA certificate (`readInstallationCa`, which declares no credential; G3 sub-change 26b), enrollment, launch authorization, delegation with its 500 and 503 failures (item 21), task results, evidence with its 400, 500, and 503 failures (item 19), the quarantine with its redrive (item 16), and, since G3 sub-change 9c, evidence retirement, delegation results, the reconciliation queue and re-admission, and the slot and per-run SCM credential deliveries (section 8), over HTTPS; G2 served it as plain HTTP on loopback, and since G3 sub-change 26a the installation serves it over HTTPS on a certificate of the installation CA (D11; [installation contract](installation-and-enrollment.md) section 7) |
 
 Both live in `@taskelith/contracts` beside the SDLC documents and the [control-plane document](control-plane-wire-contracts.md). The package generates one type and one validator per schema name from all its documents, so a name that several documents define must name the same schema, and a security scheme name the same scheme; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, `ArtifactRevision`, and `Admission` of the SDLC documents. `Admission` gains the optional `ownershipGeneration` that a used admission carries ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)), which the SDLC documents declare with version 0.2.0.
 
@@ -97,11 +97,89 @@ The schemas also fix the dependencies between fields:
 | `requestDelegation` | Worker credential | The worker names the delegating attempt at its ownership generation and the child task; the control plane derives the parent and root, and admits, holds, or rejects the child with the reasons of capacity reservation section 7. A repeat with the same `delegationId` returns the current state. |
 | `readTaskResult` | Operator credential | `pending` until an attempt of the task ends; then the outcome of its last ended attempt, which does not accept the task's work, and the evidence records of the task. |
 | `publishEvidence` | Worker credential | A multipart body of the record and its content. Every record names its input artifacts, code revision, validator or producing program with its version, and outcome (architecture section 8). The record names the `ownershipGeneration` at which the worker produced it, and the worker must have held the attempt at that generation. The control plane compares it with the current generation in the transaction that stores the record: evidence of an older generation is kept for audit with `ownershipCurrent` false and never counts as current evidence (launch authorization section 5). The control plane verifies the SHA-256 digest and size before it stores the record; a repeat of the same record returns 200. |
-| `readEvidence`, `downloadEvidence` | Operator credential | The record, and the content whose SHA-256 digest is the record's `contentDigest`; content that is missing or does not match is not served. |
+| `readEvidence`, `downloadEvidence` | Browser session or operator credential, since 9c (section 8.2) | The record, and the content whose SHA-256 digest is the record's `contentDigest`; content that is missing or does not match is not served. |
 
-The operator credential is the installation bootstrap credential of decision D10 (a). Item 16 declares it on the SDLC operations in `sdlc.openapi.json` 0.3.0.
+The operator credential is the installation bootstrap credential of decision D10 (a). Item 16 declares it on the SDLC operations in `sdlc.openapi.json` 0.3.0. Section 8 adds the operations of G3 sub-change 9c.
 
-## 8. Obligations on other items
+## 8. G3 operations
+
+G3 sub-change 9c (`extend-execution-http-contracts`, [G3 work plan](../g3-plan.md) item 9) adds these operations to `execution.openapi.json` 0.6.0. They stay in this document, not in the [control-plane document](control-plane-wire-contracts.md): retirement shares its path with `readEvidence`, the generator refuses one path in two documents, and the other operations serve the worker or sit beside the operations they extend (architect, 2026-10-28). This sub-change adds no adapter or handler; items 10, 12, 21, 38, and 44 implement the operations.
+
+### 8.1 Credentials and roles
+
+- **Session.** `browserSession` and `csrfToken` are the schemes of the control-plane document, and `AuthenticationFailure`, `AccessDenial`, `CsrfRejection`, `ExternalId`, and `RemoteUrl` its schemas, all unchanged, because the generator refuses one name with two definitions ([control-plane wire contracts](control-plane-wire-contracts.md) sections 1 and 2). An operation that accepts the session takes the cookie, with the CSRF header for a mutation, or the operator bearer alone, which authenticates the first `installation-owner` (control-plane section 2). It authenticates, checks the CSRF token, and checks the role, in that order, and every failure has the control-plane schemas: 401 `AuthenticationFailure`, 403 `AccessDenial` or, for a mutation, `CsrfRejection`.
+- **Worker.** The worker operations take the worker credential only, and their 401 is the kernel `Failure`, as for the G2 worker operations.
+- **Roles.** The roles are those of the [trust model](../trust-model.md#3-project-scoped-authorization-roles) section 3:
+
+| Operation | Credential | Who |
+| --- | --- | --- |
+| `readEvidence`, `downloadEvidence` | Session or operator bearer | `project-viewer` or above on the record's project, or an `installation-owner`; anyone else gets 404 (section 8.2) |
+| `retireEvidence` | Session with CSRF, or operator bearer | `project-maintainer` on the record's project |
+| `listUnknownExecutions` | Session or operator bearer | `project-viewer` or above on the project, or an `installation-owner` |
+| `listUnrecordedProcesses` | Session or operator bearer | `installation-owner` |
+| `readmitTask` | Session with CSRF, or operator bearer | `project-operator` or above on the task's project |
+| `readDelegationResult` | Worker | The worker that holds the active attempt of the delegation's parent task (section 8.3) |
+| `fetchSlotCredential` | Worker | The worker that owns the execution (section 8.6) |
+| `issueRunScmCredential`, `fetchRunScmCredential` | Worker | The worker that holds an attempt of a task of the run (section 8.7) |
+
+### 8.2 Evidence
+
+- **Per-project reads, a breaking change.** G2 served `readEvidence` and `downloadEvidence` to the installation-wide operator credential alone (`implement-evidence-store`, which left per-project authorization to G3 login; [ADR 0015](../decisions/0015-g2-closure.md) decision 5; G3 plan row 10). Since 9c a `project-viewer` or above on the record's project reads them, because the trust model section 3 gives evidence reads to project roles and requires evidence downloads to be authorized by project. The project is known only from the record, so the control plane reads the record before it checks the role, and it answers a principal without a role on that project with the 404 of an unknown record, so that a record of another project is never disclosed. The operator bearer authenticates an `installation-owner`, which reads every project, so the CLI keeps its access. A client sees the change as the session credential, the `AuthenticationFailure` body of a 401, and a 404 for a record outside its projects.
+- **Its version.** `make contract-compatibility` compares schemas, not authorization, and reports no breaking change for this; the document still declares it with the next minor version, 0.6.0, which also covers the added operations, because a caller of the same request can now be refused.
+- **Retirement.** `retireEvidence` is `DELETE` on the record's path. It removes the record once 365 days have passed since its capture (`EVIDENCE_RETENTION_DAYS`, `checkRetentionElapsed`), and then its content once no record refers to the digest, under the digest's advisory lock that a publication of the same digest also takes, as `EvidenceService.retire` does (`implement-evidence-store` decision Q2). Before then it answers 422 `RetentionRefusal`, reason `retention-not-elapsed`, with `details.retainedUntil`, and changes nothing. A record never changes after it is stored, so retirement names no revision; of two concurrent retirements one removes the record and the other answers 404, as does a retirement of an already retired record. Evidence of an older ownership generation retires under the same rule.
+
+### 8.3 Delegation results
+
+- **Result.** `readDelegationResult` answers `pending` while the child task has not ended, and `ended` with the outcome that the agent harness port returns to the parent, `completed`, `rejected`, `failed`, or `cancelled` ([agent harness port](agent-harness-port.md) section 7.4), a summary of at most `MAX_HARNESS_TEXT_LENGTH` characters, and its end time. A delegation that `requestDelegation` rejected ends `rejected`. Item 38 maps the child task's end to the outcome and writes the summary, which is text of the child's run and is redacted as that run's text is ([account pool contract](account-pool.md) section 7.4).
+- **Reader.** The worker that holds the active attempt of the delegation's parent task at the task's current ownership generation reads it: the delegating attempt, or a later attempt of the same task that resumed its session, to which the host delivers the result as a turn (agent harness port section 7.4). Any other worker gets the 404 of an unknown delegation.
+- **And the response command.** The read does not answer the parent's native request: the response command of sub-change 9d returns the result to it ([session timeline](session-timeline.md) section 5.2). The read lets the host learn the result after a restart or a missed command. 9d reuses `DelegationResult`, `DelegationResultOutcome`, and `DelegationSummary` unchanged.
+
+### 8.4 Reconciliation queue
+
+The reads map the G2 `ReconciliationQueue` (`wire-launch-authority-reconciliation` decision 5) onto the reconciliation items of [product ports](product-ports.md) section 4.1.
+
+- **Unknown executions.** `listUnknownExecutions` returns a project's executions that `isUnknownExecution` holds: not terminal, with evidence other than `cancellation-not-applied`, such as `uncertain` or `termination-unproven`. Each names its run, task, attempt with the ownership generation it holds, execution, worker, state, and evidence.
+- **Unrecorded processes.** `listUnrecordedProcesses` returns the processes that workers reported without a journal record. They name no project, so only an `installation-owner` reads them (product ports section 4.1; trust model section 3).
+- **Pages.** Both return at most 100 items in the code-unit order of their execution or observation identifiers and a `next` identifier while more remain, which the caller passes as `after`, as the control-plane lists do (control-plane section 6). The port lists by worker or by task today; item 44 adds the read by project after an identifier.
+- **Answers.** Resolving an unknown execution (`resolve-execution`) and acknowledging a process (`acknowledge-process`) are answers to inbox items, which go to the reconciliation source that owns them (product ports section 4.2), through the inbox operations of sub-change 9b, not through this document.
+
+### 8.5 Re-admission
+
+- **Command.** `readmitTask` re-admits a task through the writer of admissions, binding a new admission at the task's next ownership generation (G2 `rebindAdmission`; product ports section 4.1, "After a revocation"; G3 plan row 44). The task keeps its identity (product ports section 3.3). It answers 201 with the task and its new admission.
+- **Compare-and-set.** The request names the task's ownership generation as the caller read it. A generation that moved, for example by a concurrent re-admission, answers 409 `conflict` and changes nothing, so of two concurrent re-admissions exactly one wins.
+- **Refusals.** 422 `ReadmissionRefusal`, checked in this order: `attempt-active` while an attempt of the task is active, which includes an attempt whose execution is unknown until reconciliation resolves it, because `rebindAdmission` refuses then and the product side never dispatches the task again before the re-admission (product ports section 4.1); `admission-not-dispatched` while the task's current admission is `admitted` and not yet used, because placement still dispatches it at the current generation; and `admission-refused` when SDLC admission refuses the new admission at the current revisions, as `submitTask` answers 422.
+- **Role.** A `project-operator` or above, who may trigger retries (trust model section 3).
+- **Automatic re-admission.** Item 44 also re-admits, in place of the G2 release, an attempt whose launch was rejected under a stale admission (`wire-launch-authority-reconciliation` decision 2). That writer runs inside the control plane with the same checks and has no wire operation.
+
+### 8.6 Slot credential re-delivery
+
+The architect decided on 2026-10-28 that a slot credential is re-delivered by the same pattern as a refreshed SCM credential (section 8.7): a fetch over HTTPS with the worker credential, scoped to the run and the slot, written once, read only by its owner, and logged without its value. A credential travels only in an API response, never in a broker message or stream ([account pool contract](account-pool.md) section 7).
+
+- **Fetch.** `fetchSlotCredential` takes the execution and the slot in its path and, as query parameters, the attempt, the ownership generation, and the recovery epoch that the worker holds. It needs no notice, because the worker asks when it starts or adopts an execution (account pool section 7.3).
+- **Checks.** The checks of account pool section 7.3, in its order, refuse with 422 `SlotCredentialRefusal` and reveal nothing: `quarantined`, `stale-recovery-epoch`, `worker-not-authorized`, `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, `execution-conflict`, `capacity-not-reserved`, then the slot's ineligibility, `revoked` or `removed`, and `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Section 7.3 names that last refusal `invalid`; on this API a 400 means a malformed request, so it is a typed 422 reason. A slot that the execution's reservation does not name is `capacity-not-reserved`; 404 means only an unknown execution.
+- **Written once.** The delivery carries the version that the slot record names. A rotation switches it only while no held reservation names the slot (account pool section 8.1), so every delivery to the same execution and slot carries the same version and value.
+- **Owner only and never kept.** Only the worker that owns the execution passes the checks. The response has `Cache-Control: no-store`; the worker holds the credential only in memory (account pool section 7.3), and no log holds the response body (section 8.8).
+- **First delivery.** Account pool section 7 sends the first delivery with a valid launch authorization; `LaunchGrant` carries no credential, and this sub-change defines only the re-delivery (architect, 2026-10-28). The first delivery's wire form stays with item 12.
+
+### 8.7 Per-run SCM credential
+
+A refreshed per-run SCM credential reaches the worker as a notice of sub-change 9d, which names the run, the credential, and the version, and the worker fetches the secret over HTTPS (architect, 2026-10-28); the secret never travels in a broker message.
+
+- **Issue.** `issueRunScmCredential` returns the run's current credential version to a worker that holds an attempt of a task of the run, and the control plane issues the first one (`issueRunCredential`, [source control contract](source-control.md) section 3) when the run has none, so a repeat returns the same version. A run's credential belongs to the run, so the attempts of its tasks share it.
+- **Fetch.** `fetchRunScmCredential` returns the version that a notice names. A version is the secret that one issue or refresh returned, numbered 1 at issue and one more at each refresh; it never changes once written.
+- **Ownership checks.** The request names the attempt, its ownership generation, and the worker's recovery epoch. The control plane refuses with 422 `ScmCredentialRefusal` and the reasons of [launch authorization](launch-authorization.md) section 9 for the same checks, in this order: `quarantined`, `stale-recovery-epoch`, `worker-not-authorized`, `assignment-not-active` (also for an attempt that is not of a task of the run), `stale-ownership-generation`, and `attempt-not-launchable`.
+- **Remote re-check.** Then, on every issue and every fetch, it re-checks the project's repository binding against the SCM integration's current allowed origin, as control-plane section 4.1, "Credential issue", requires: `repository-unbound` for a project without a binding, then the checks of `bindRepository` in its order, `remote-not-https`, `remote-userinfo`, `remote-query`, `remote-fragment`, and `remote-origin-mismatch` (control-plane section 4). The stored URL passed them when it was bound; the re-check catches an origin narrowed since. `merge-method-undeclared` is a binding refusal only and does not apply.
+- **Version.** Only after these checks does a fetch look up the credential and its version, so a worker without an attempt of the run learns nothing of its credentials: 404 for an unknown credential or version, and 422 `credential-ended` for a version whose secret a refresh or revocation ended (source control section 3).
+- **Records.** On every refusal the control plane issues and reveals nothing and records the reason with the run, attempt, worker, credential, and version, never a secret.
+- **What the worker gets.** The delivery carries the effective repositories and permissions, the expiry, the secret, the complete `Authorization` value that the SCM plugin forms from it (`authorization`, [git workspace contract](git-workspace.md) sections 7 and 14), and the bound remote URL that the re-check passed. The worker sends the credential only to that URL (control-plane section 4.1, "Worker"). The response has `Cache-Control: no-store`, the worker keeps the secret only in memory and passes it per operation (git workspace section 7), and no log holds the response body.
+
+### 8.8 Logs and caching
+
+A request log of these operations holds only the method, the operation, its path and query parameters, the status, and the failure, never a request or response body or the `Cookie`, `X-CSRF-Token`, or `Authorization` header, and what it holds is still redacted with `@taskelith/secrets`, as for the control-plane document (control-plane section 7). Path and query parameters hold identifiers, generations, and epochs only. The three credential deliveries are the only responses of this document that carry a secret, and each has `Cache-Control: no-store`.
+
+## 9. Obligations on other items
+
+The items without a prefix are those of the [G2 work plan](../g2-plan.md); the G3 items are those of the [G3 work plan](../g3-plan.md).
 
 - **Item 12:** the streams, consumers, and quarantine for the subjects of section 2, the `Nats-Msg-Id` header and its new value on a redrive, a per-worker inbox prefix, and a publication the client reports as failed treated as unconfirmed and retried with the same identity.
 - **Item 13:** the credential content, the subject permissions of section 2, and the protocol window check at enrollment.
@@ -109,3 +187,9 @@ The operator credential is the installation bootstrap credential of decision D10
 - **Item 18:** placement only on a worker with a common protocol version, release on `protocol-not-supported`, and the delegation checks of capacity reservation section 7.
 - **Item 20:** the order of section 3 for every delivered command, the observations of section 5, and the heartbeat of section 6 (20d).
 - **Item 21:** the confirmation, the inventory, and the inventory request with its rollback rule of section 6, and the heartbeat's contact and the lost-contact timeout (change `add-worker-heartbeat`).
+- **G3 item 10:** the per-project authorization of `readEvidence` and `downloadEvidence`, the session on the operations of section 8.1, and the retirement entry of section 8.2.
+- **G3 item 12:** `fetchSlotCredential` with the checks of section 8.6, and the wire form of the first slot credential delivery.
+- **G3 item 21:** `issueRunScmCredential` and `fetchRunScmCredential` with their versions, the remote re-check, and the refusal records of section 8.7.
+- **G3 item 38:** the delegation result of section 8.3: the outcome mapped from the child task's end and its summary.
+- **G3 item 44:** the reconciliation reads of section 8.4, with the port's read by project after an identifier, and `readmitTask` and the automatic re-admission of section 8.5.
+- **G3 sub-change 9d:** the refresh notice names the run, the credential, and the version that `fetchRunScmCredential` takes, and the response command reuses `DelegationResult`, `DelegationResultOutcome`, and `DelegationSummary` unchanged.
