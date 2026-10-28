@@ -44,7 +44,7 @@ The changed and new test files were run against the scripts of `aff291bb` (`git 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `9ff3de78ad3e6e9510f91802e75a9ff6765e3c42`; tests 3481, pass 3472, fail 0, skipped 9; all files 99.39% lines, 92.66% branches, 98.92% functions.
+- `make verify`: passed, profile full, tree `4a504f7a4bd7dda505e9ca98fb3ddcc801019241`; tests 3481, pass 3472, fail 0, skipped 9; all files 99.39% lines, 92.66% branches, 98.92% functions.
 - `npm run openspec -- validate record-the-review-sequence --strict`: passed, `Change 'record-the-review-sequence' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 80 file(s); every pass summary file is valid: 60 file(s); every route file is valid: 16 file(s).`.
 - Spec diff against the merge base `aff291bbfb41` with `origin/dev`: no change under `openspec/specs`.
