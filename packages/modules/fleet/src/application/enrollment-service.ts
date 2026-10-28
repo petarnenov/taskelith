@@ -176,8 +176,8 @@ export class EnrollmentService {
     if (principal.generation !== generation) return err(rotationConflict('confirmation-mismatch'));
     const confirmed = await this.#deps.registry.confirm(principal.workerId, generation, this.#deps.clock);
     if (!confirmed.ok) return confirmed.error.code === 'forbidden' ? err(notAuthorized()) : confirmed;
-    // The confirmation is committed; a failed publication is retried later.
-    const revocationsPublished = confirmed.value ? await this.#publishedAfterCommit() : true;
+    // Also on a repeat, which retries a publication that failed before.
+    const revocationsPublished = await this.#publishedAfterCommit();
     return ok(Object.freeze({ credentialGeneration: generation, revocationsPublished }));
   }
 

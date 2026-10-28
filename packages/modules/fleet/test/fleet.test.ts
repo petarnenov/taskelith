@@ -362,6 +362,19 @@ test('a confirmation after the deadline expires the predecessor as unconfirmed, 
   }
 });
 
+test('a repeated confirmation retries a revocation publication that failed', async () => {
+  const { broker, service, enrolled } = await enrolledWorker();
+  broker.down = true;
+  const first = await rotateFully(service, enrolled.workerId, enrolled.credentials.controlPlane, 2);
+  assert.equal(first.revocationsPublished, false);
+  const next = value(await service.authenticateWorkerBearer('worker-next-2'));
+  assert.deepEqual(value(await service.confirm(next, 2)), { credentialGeneration: 2, revocationsPublished: false }, 'the broker is still down');
+  assert.deepEqual(broker.revoked, []);
+  broker.down = false;
+  assert.deepEqual(value(await service.confirm(next, 2)), { credentialGeneration: 2, revocationsPublished: true });
+  assert.deepEqual(broker.revoked, ['U-worker-1-1']);
+});
+
 test('a revoked worker gets no rotation, and a consumer the sweep cannot remove is reported', async () => {
   const { clock, consumers, service, enrolled } = await enrolledWorker();
   value(await service.requestRotation(enrolled.workerId, OPERATOR));
