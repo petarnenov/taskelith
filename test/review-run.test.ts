@@ -26,6 +26,8 @@ const CODEX = 'codex gpt-6.1-sol#medium';
 const CLAUDE = 'claude claude-opus-5-5#high';
 const SENTINEL = 'sentinel-secret-7d2e41';
 const TOOLCHAIN = { node: 'v24.0.0', npm: '11.0.0' };
+// sh sets the first four; Node's test coverage adds the last to children.
+const ADDED_BY_RUNTIME = ['PWD', 'SHLVL', '_', 'OLDPWD', 'NODE_V8_COVERAGE'];
 const CODEX_SESSION = '01a181b7-647f-7d90-abe6-9892355ab6ca';
 
 interface Fixture {
@@ -191,8 +193,8 @@ test('pass 1 with a fresh route runs the reviewer without the caller\'s secrets'
     assert.equal(child.includes(SENTINEL), false);
     assert.equal(child.includes(CREDENTIAL_VARIABLE), false);
     const names = child.split('\n').filter(Boolean).map((line) => line.split('=')[0]!);
-    assert.deepEqual(names.filter((name) => !['PWD', 'SHLVL', '_', 'OLDPWD'].includes(name)).sort(), ['HOME', 'LANG', 'PATH']);
-    assert.ok(names.every((name) => [...BASE_ENVIRONMENT, 'CODEX_HOME', 'PWD', 'SHLVL', '_', 'OLDPWD'].includes(name)));
+    assert.deepEqual(names.filter((name) => !ADDED_BY_RUNTIME.includes(name)).sort(), ['HOME', 'LANG', 'PATH']);
+    assert.ok(names.every((name) => [...BASE_ENVIRONMENT, 'CODEX_HOME', ...ADDED_BY_RUNTIME].includes(name)));
     assert.deepEqual(readFileSync(join(fixture.scratch, 'args.txt'), 'utf8').split('\n').filter(Boolean), [
       'exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="medium"', '-s', 'read-only', '-C', fixture.root, '-',
     ]);
