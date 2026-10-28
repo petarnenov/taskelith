@@ -1,10 +1,10 @@
 {
   "change": "run-reviews-through-make",
-  "generatedAt": "2026-10-28T11:28:32.838Z",
+  "generatedAt": "2026-10-28T12:00:13.854Z",
   "devCommit": "bbce0e81d8e6a7a5ec0098e6c23655f80676c2c9",
-  "headCommit": "1365a9f537d984caf6cb89a0c7eb8b0238f682d1",
+  "headCommit": "21888276fa935d3aa334732b7839f93e06edeb87",
   "features": {
-    "linesChanged": 986,
+    "linesChanged": 992,
     "filesChanged": 8,
     "capabilities": [
       "review-process"
@@ -58,12 +58,12 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "confidence": 0.18,
+    "confidence": 0.14,
     "probabilities": {
-      "standard": 0.41,
-      "elevated": 0.59
+      "standard": 0.43,
+      "elevated": 0.57
     },
-    "expectedPasses": 2.5300000000000002,
+    "expectedPasses": 2.52,
     "passes": [
       {
         "pass": 1,
