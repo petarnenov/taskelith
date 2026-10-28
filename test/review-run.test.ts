@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -10,6 +12,7 @@ import { CREDENTIAL_VARIABLE } from '../scripts/review-route-jev.ts';
 import {
   EXIT_REFUSED, EXIT_REVIEWER_FAILED, EXIT_ROUTED, EXIT_USAGE, runReview, type ReviewDependencies,
 } from '../scripts/review-run.ts';
+import { openFreshLog, ReviewFileError } from '../scripts/review-files.ts';
 import { BASE_ENVIRONMENT } from '../scripts/reviewer-invocations.ts';
 import { gitIn, headRevision, stampDirectory, stampFields, writeStamp } from '../scripts/verify-stamp.ts';
 import { commit, git } from './checklist-git-fixture.ts';
@@ -26,8 +29,10 @@ const CODEX = 'codex gpt-6.1-sol#medium';
 const CLAUDE = 'claude claude-opus-5-5#high';
 const SENTINEL = 'sentinel-secret-7d2e41';
 const TOOLCHAIN = { node: 'v24.0.0', npm: '11.0.0' };
-// sh sets the first four; Node's test coverage adds the last to children.
-const ADDED_BY_RUNTIME = ['PWD', 'SHLVL', '_', 'OLDPWD', 'NODE_V8_COVERAGE'];
+const OPENCODE = 'opencode opencode-go/kimi-k2.7-code#default';
+const AGY = 'agy gemini-4-argon-medium#medium';
+// The stub's sh sets these itself.
+const ADDED_BY_SHELL = ['PWD', 'SHLVL', '_', 'OLDPWD'];
 const CODEX_SESSION = '01a181b7-647f-7d90-abe6-9892355ab6ca';
 
 interface Fixture {
@@ -50,6 +55,26 @@ exit "\${STUB_STATUS:-0}"
 const CLAUDE_STUB = `#!/bin/sh
 env > "$STUB_DIR/env.txt"
 printf '%s\\n' '{"type":"result","session_id":"c3aae8d2","modelUsage":{"claude-opus-5-5":{}}}'
+`;
+
+const OPENCODE_STUB = `#!/bin/sh
+if [ "$1" = session ]; then
+  printf '%s\\n' '{"messages":[{"type":"user"},{"type":"assistant","model":MODEL}]}'
+  exit "\${STUB_EXPORT_STATUS:-0}"
+fi
+printf '%s\\n' '{"type":"step_start","sessionID":"ses_stub1"}'
+`;
+const OPENCODE_MODEL = '{"id":"kimi-k2.7-code","providerID":"opencode-go","variant":"default"}';
+
+const AGY_LINE = 'I1024 13:19:29.967626 715 model_config_manager.go:340] '
+  + 'Propagating selected model override to backend: label="Gemini 4 Argon (Medium)"';
+const AGY_STUB = `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --log-file ]; then log="$2"; fi
+  shift
+done
+printf '%s\\n' '${AGY_LINE}' >> "$log"
+printf '%s\\n' '{"conversation_id":"conv-stub1","response":"ok"}'
 `;
 
 // The stub's directory is baked into its text, because the reviewer
@@ -79,6 +104,8 @@ async function withFixture(body: (fixture: Fixture) => Promise<void>): Promise<v
     }, 'change');
     writeStub(bin, 'codex', CODEX_STUB, scratch);
     writeStub(bin, 'claude', CLAUDE_STUB, scratch);
+    writeStub(bin, 'opencode', OPENCODE_STUB.replace('MODEL', OPENCODE_MODEL), scratch);
+    writeStub(bin, 'agy', AGY_STUB, scratch);
     const prompt = join(scratch, 'prompt.txt');
     writeFileSync(prompt, 'Review the change.\n');
     const environment = {
@@ -103,8 +130,27 @@ function dependencies(fixture: Fixture, routeExit = 0): ReviewDependencies {
 }
 
 function review(fixture: Fixture, pass: string, reviewer = CODEX, routeExit = 0) {
+  return reviewFiles(fixture, pass, reviewer, { prompt: fixture.prompt, log: fixture.log }, routeExit);
+}
+
+function reviewFiles(fixture: Fixture, pass: string, reviewer: string, files: { prompt: string; log: string }, routeExit = 0) {
   const role = pass === '2' ? 'B' : 'A';
-  return runReview([CHANGE, pass, role, reviewer, fixture.prompt, fixture.log], dependencies(fixture, routeExit));
+  return runReview([CHANGE, pass, role, reviewer, files.prompt, files.log], dependencies(fixture, routeExit));
+}
+
+function binOf(fixture: Fixture): string {
+  return join(fixture.root, '..', 'bin');
+}
+
+// While it is set, Node.js adds NODE_V8_COVERAGE to every child's env.
+async function underCoverage<T>(directory: string, body: () => Promise<T>): Promise<T> {
+  const previous = process.env.NODE_V8_COVERAGE;
+  process.env.NODE_V8_COVERAGE = previous ?? directory;
+  try {
+    return await body();
+  } finally {
+    if (previous === undefined) delete process.env.NODE_V8_COVERAGE;
+  }
 }
 
 function stamp(root: string): void {
@@ -183,18 +229,18 @@ test('a failed route refuses the pass', async () => {
   });
 });
 
-test('pass 1 with a fresh route runs the reviewer without the caller\'s secrets', async () => {
+test('pass 1 with a fresh route runs the reviewer with exactly its allowlist', async () => {
   await withFixture(async (fixture) => {
     writeRoute(fixture.root, git(fixture.root, 'rev-parse', 'HEAD'));
-    const result = await review(fixture, '1');
+    const result = await underCoverage(join(fixture.scratch, 'coverage'), () => review(fixture, '1'));
     assert.equal(result.exitCode, 0, result.stderr);
     assert.deepEqual(fixture.routed, []);
     const child = readFileSync(join(fixture.scratch, 'env.txt'), 'utf8');
     assert.equal(child.includes(SENTINEL), false);
     assert.equal(child.includes(CREDENTIAL_VARIABLE), false);
     const names = child.split('\n').filter(Boolean).map((line) => line.split('=')[0]!);
-    assert.deepEqual(names.filter((name) => !ADDED_BY_RUNTIME.includes(name)).sort(), ['HOME', 'LANG', 'PATH']);
-    assert.ok(names.every((name) => [...BASE_ENVIRONMENT, 'CODEX_HOME', ...ADDED_BY_RUNTIME].includes(name)));
+    assert.deepEqual(names.filter((name) => !ADDED_BY_SHELL.includes(name)).sort(), ['HOME', 'LANG', 'PATH']);
+    assert.ok(names.every((name) => [...BASE_ENVIRONMENT, 'CODEX_HOME', ...ADDED_BY_SHELL].includes(name)));
     assert.deepEqual(readFileSync(join(fixture.scratch, 'args.txt'), 'utf8').split('\n').filter(Boolean), [
       'exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="medium"', '-s', 'read-only', '-C', fixture.root, '-',
     ]);
@@ -245,15 +291,15 @@ test('a pass that already has a line is refused before the reviewer runs', async
 
 test('a failed or unconfirmed attempt writes no pass line', async () => {
   await withFixture(async (fixture) => {
-    writeStub(join(fixture.root, '..', 'bin'), 'codex', CODEX_STUB.replace('${STUB_STATUS:-0}', '3'), fixture.scratch);
+    writeStub(binOf(fixture), 'codex', CODEX_STUB.replace('${STUB_STATUS:-0}', '3'), fixture.scratch);
     const failed = await review(fixture, '2');
     assert.equal(failed.exitCode, EXIT_REVIEWER_FAILED);
     assert.match(failed.stderr, /exited with status 3; no pass line written/);
-    writeStub(join(fixture.root, '..', 'bin'), 'codex', CODEX_STUB.replace('${STUB_MODEL:-gpt-6.1-sol}', 'gpt-other'), fixture.scratch);
+    writeStub(binOf(fixture), 'codex', CODEX_STUB.replace('${STUB_MODEL:-gpt-6.1-sol}', 'gpt-other'), fixture.scratch);
     const other = await review(fixture, '2');
     assert.equal(other.exitCode, EXIT_REVIEWER_FAILED);
     assert.match(other.stderr, /reported model gpt-other, not gpt-6\.1-sol/);
-    rmSync(join(fixture.root, '..', 'bin', 'codex'));
+    rmSync(join(binOf(fixture), 'codex'));
     const missing = await review(fixture, '2');
     assert.equal(missing.exitCode, EXIT_REVIEWER_FAILED);
     assert.deepEqual(passLines(fixture.root), []);
@@ -278,6 +324,123 @@ test('wrong arguments and files inside the worktree are refused with the usage',
       assert.equal(result.exitCode, exitCode, args.join(' '));
       assert.match(result.stderr, message);
     }
+  });
+});
+
+test('links, the prompt itself, and unusable logs are refused before any run', async () => {
+  await withFixture(async (fixture) => {
+    const tracked = join(fixture.root, 'src/index.ts');
+    const at = (name: string) => join(fixture.scratch, name);
+    symlinkSync(tracked, at('tracked-link.log'));
+    linkSync(tracked, at('tracked-hard.log'));
+    symlinkSync(join(fixture.root, 'scripts/tool.ts'), at('inside-prompt.txt'));
+    linkSync(fixture.prompt, at('prompt-hard.log'));
+    mkdirSync(at('directory.log'));
+    writeFileSync(at('agy.log.cli.log'), 'Review the change.\n');
+    const cases: [string, { prompt: string; log: string }, RegExp][] = [
+      [CODEX, { prompt: fixture.prompt, log: at('tracked-link.log') }, /LOG .* is a symbolic link/],
+      [CODEX, { prompt: fixture.prompt, log: at('tracked-hard.log') }, /LOG .* has other hard links/],
+      [CODEX, { prompt: at('inside-prompt.txt'), log: fixture.log }, /PROMPT .* lies inside the worktree/],
+      [CODEX, { prompt: fixture.prompt, log: fixture.prompt }, /LOG .* is the prompt file/],
+      [CODEX, { prompt: fixture.prompt, log: at('prompt-hard.log') }, /LOG .* is the prompt file/],
+      [CODEX, { prompt: fixture.prompt, log: at('none/pass.log') }, /the directory of LOG .* does not exist/],
+      [CODEX, { prompt: fixture.prompt, log: at('directory.log') }, /LOG .* is no regular file/],
+      [AGY, { prompt: at('agy.log.cli.log'), log: at('agy.log') }, /LOG .*agy\.log\.cli\.log is the prompt file/],
+    ];
+    for (const [reviewer, files, message] of cases) {
+      const result = await reviewFiles(fixture, '2', reviewer, files);
+      assert.equal(result.exitCode, EXIT_REFUSED, files.log);
+      assert.match(result.stderr, message);
+    }
+    assert.equal(readFileSync(tracked, 'utf8'), 'export {};\n');
+    assert.equal(readFileSync(fixture.prompt, 'utf8'), 'Review the change.\n');
+    assert.equal(readFileSync(at('agy.log.cli.log'), 'utf8'), 'Review the change.\n');
+    assert.equal(existsSync(join(fixture.scratch, 'env.txt')), false);
+  });
+});
+
+test('a log is opened empty, without following a link planted after the check', () => {
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'taskelith-review-log-')));
+  try {
+    const log = join(scratch, 'pass.log');
+    writeFileSync(log, 'an old attempt\n');
+    closeSync(openFreshLog(log));
+    assert.equal(readFileSync(log, 'utf8'), '');
+    const target = join(scratch, 'target.txt');
+    writeFileSync(target, 'keep\n');
+    symlinkSync(target, join(scratch, 'link.log'));
+    assert.throws(() => openFreshLog(join(scratch, 'link.log')), ReviewFileError);
+    assert.throws(() => openFreshLog(scratch), ReviewFileError);
+    linkSync(target, join(scratch, 'hard.log'));
+    assert.throws(() => openFreshLog(join(scratch, 'hard.log')), /no regular file with one link/);
+    assert.equal(readFileSync(target, 'utf8'), 'keep\n');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('a reviewer that cannot start is a failed attempt, not a crash', async () => {
+  await withFixture(async (fixture) => {
+    writeFileSync(fixture.prompt, 'Review\0the change.\n');
+    const result = await review(fixture, '2', CLAUDE);
+    assert.equal(result.exitCode, EXIT_REVIEWER_FAILED);
+    assert.match(result.stderr, /claude could not start: .*; no pass line written/);
+    assert.equal(readFileSync(fixture.log, 'utf8'), '');
+  });
+});
+
+test('a route.json that is no object is stale for pass 1 and ignored later', async () => {
+  await withFixture(async (fixture) => {
+    writeFileSync(join(fixture.root, ROUTE), 'null\n');
+    const first = await review(fixture, '1');
+    assert.equal(first.exitCode, EXIT_REFUSED);
+    assert.match(first.stderr, /route\.json was made for another tree/);
+    const second = await review(fixture, '2');
+    assert.equal(second.exitCode, 0, second.stderr);
+    assert.doesNotMatch(second.stdout, /recommends/);
+    writeFileSync(join(fixture.root, ROUTE), '{"rule":{"passes":[{"reviewer":5},{"reviewer":"x"}]}}\n');
+    const third = await review(fixture, '3');
+    assert.equal(third.exitCode, 0, third.stderr);
+    assert.doesNotMatch(third.stdout, /recommends/);
+  });
+});
+
+test('OpenCode is confirmed by the model of its session export', async () => {
+  await withFixture(async (fixture) => {
+    const confirmed = await review(fixture, '2', OPENCODE);
+    assert.equal(confirmed.exitCode, 0, confirmed.stderr);
+    assert.match(confirmed.stdout, /^session: ses_stub1$/m);
+    assert.match(confirmed.stdout, /^model: opencode-go\/kimi-k2\.7-code \(reported\)$/m);
+    const stubs: [string, RegExp][] = [
+      [OPENCODE_STUB.replace('MODEL', OPENCODE_MODEL.replace('kimi-k2.7-code', 'other')), /reported model opencode-go\/other, not opencode-go\/kimi-k2\.7-code/],
+      [OPENCODE_STUB.replace('MODEL', 'null'), /reported model none, not opencode-go\/kimi-k2\.7-code/],
+      [OPENCODE_STUB.replace('MODEL', OPENCODE_MODEL).replace('${STUB_EXPORT_STATUS:-0}', '1'), /session export exited with status 1/],
+    ];
+    for (const [stub, message] of stubs) {
+      writeStub(binOf(fixture), 'opencode', stub, fixture.scratch);
+      const failed = await review(fixture, '2', OPENCODE);
+      assert.equal(failed.exitCode, EXIT_REVIEWER_FAILED, stub);
+      assert.match(failed.stderr, message);
+    }
+  });
+});
+
+test('Antigravity is confirmed only by a fresh model line of its own log', async () => {
+  await withFixture(async (fixture) => {
+    const cliLog = `${fixture.log}.cli.log`;
+    const confirmed = await review(fixture, '2', AGY);
+    assert.equal(confirmed.exitCode, 0, confirmed.stderr);
+    assert.match(confirmed.stdout, /^model: gemini-4-argon-medium \(reported\)$/m);
+    assert.equal(readFileSync(cliLog, 'utf8'), `${AGY_LINE}\n`);
+    writeStub(binOf(fixture), 'agy', AGY_STUB.replace('(Medium)', '(Low)'), fixture.scratch);
+    const other = await review(fixture, '2', AGY);
+    assert.equal(other.exitCode, EXIT_REVIEWER_FAILED);
+    assert.match(other.stderr, /reported model Gemini 4 Argon \(Low\), not gemini-4-argon-medium/);
+    writeFileSync(cliLog, `${AGY_LINE}\n`);
+    writeStub(binOf(fixture), 'agy', AGY_STUB.replace(/^printf .* >> "\$log"$/m, ''), fixture.scratch);
+    const stale = await review(fixture, '2', AGY);
+    assert.equal(stale.exitCode, EXIT_REVIEWER_FAILED);
+    assert.match(stale.stderr, /reported model none/);
   });
 });
 

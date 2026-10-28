@@ -21,26 +21,24 @@ export interface Invocation {
   readonly stdin: Stdin;
 }
 
-// The captured output: stdout and stderr together, and the CLI's own log.
+// The captured output: stdout and stderr together, the CLI's own log,
+// and the stdout of the model source.
 export interface ReviewerOutput {
   readonly output: string;
   readonly cliLog?: string;
-}
-
-export interface Confirmation {
-  readonly session?: string;
-  // The model the reviewer reported; undefined when its output has none.
-  readonly model?: string;
+  readonly modelSource?: string;
 }
 
 export interface ReviewerInvocation {
   readonly reviewer: Required<Reviewer>;
   readonly environment: readonly string[];
   readonly writesCliLog: boolean;
-  // Where the model is confirmed when the output does not report it.
-  readonly modelNote?: string;
   invocation(context: InvocationContext): Invocation;
-  confirm(output: ReviewerOutput): Confirmation;
+  // A command run after the review whose stdout reports the model.
+  modelSource?(session: string): Invocation;
+  session(output: ReviewerOutput): string | undefined;
+  // The model reported, as the key names it; undefined when none is.
+  model(output: ReviewerOutput): string | undefined;
 }
 
 // Every reviewer gets these and nothing else of the caller's environment.
@@ -49,22 +47,35 @@ export const BASE_ENVIRONMENT: readonly string[] = ['PATH', 'HOME', 'USER', 'LAN
 const CODEX_ENVIRONMENT = ['CODEX_HOME'];
 const CLAUDE_ENVIRONMENT = ['CLAUDE_CONFIG_DIR'];
 const OPENCODE_ENVIRONMENT = ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'OPENCODE_CONFIG'];
-const OPENCODE_MODEL_NOTE = 'the stored assistant messages of the session record the model and variant';
 
 function headerValue(output: string, name: string): string | undefined {
   return new RegExp(`^${name}:[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(output)?.[1];
 }
 
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parsedJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 function jsonLines(output: string): Record<string, unknown>[] {
   return output.split('\n').flatMap((line) => {
     if (!line.trimStart().startsWith('{')) return [];
-    try {
-      const value: unknown = JSON.parse(line);
-      return typeof value === 'object' && value !== null ? [value as Record<string, unknown>] : [];
-    } catch {
-      return [];
-    }
+    const value = parsedJson(line);
+    return isRecord(value) ? [value] : [];
   });
+}
+
+// One model, or every model reported when they differ.
+function reported(models: readonly string[]): string | undefined {
+  const distinct = [...new Set(models)];
+  return distinct.length === 0 ? undefined : distinct.join(', ');
 }
 
 function text(value: unknown): string | undefined {
@@ -81,17 +92,20 @@ function codex(model: string, effort: string): ReviewerInvocation {
       args: ['exec', '-m', model, '-c', `model_reasoning_effort="${effort}"`, '-s', 'read-only', '-C', worktree, '-'],
       stdin: 'prompt',
     }),
-    confirm: ({ output }) => ({ session: headerValue(output, 'session id'), model: headerValue(output, 'model') }),
+    session: ({ output }) => headerValue(output, 'session id'),
+    model: ({ output }) => headerValue(output, 'model'),
   };
 }
 
 // The last result line of the stream; its modelUsage names the models.
-function claudeConfirmation(model: string, output: string): Confirmation {
-  const result = jsonLines(output).filter((line) => line.type === 'result').at(-1);
-  if (result === undefined) return {};
-  const usage = result.modelUsage;
-  const models = typeof usage === 'object' && usage !== null ? Object.keys(usage) : [];
-  return { session: text(result.session_id), model: models.includes(model) ? model : models[0] };
+function claudeResult(output: string): Record<string, unknown> | undefined {
+  return jsonLines(output).filter((line) => line.type === 'result').at(-1);
+}
+
+function claudeModel(model: string, output: string): string | undefined {
+  const usage = claudeResult(output)?.modelUsage;
+  const models = isRecord(usage) ? Object.keys(usage) : [];
+  return models.includes(model) ? model : models[0];
 }
 
 function claude(model: string, effort: string): ReviewerInvocation {
@@ -107,8 +121,23 @@ function claude(model: string, effort: string): ReviewerInvocation {
       ],
       stdin: 'closed',
     }),
-    confirm: ({ output }) => claudeConfirmation(model, output),
+    session: ({ output }) => text(claudeResult(output)?.session_id),
+    model: ({ output }) => claudeModel(model, output),
   };
+}
+
+// Each assistant message of the export names provider, model, and variant.
+function exportedModel(variant: string, exported: string | undefined): string | undefined {
+  const session = exported === undefined ? undefined : parsedJson(exported);
+  const messages = isRecord(session) && Array.isArray(session.messages) ? session.messages : [];
+  const assistant = messages.filter((message) => isRecord(message) && message.type === 'assistant');
+  return reported(assistant.map((message: Record<string, unknown>) => modelName(variant, message.model)));
+}
+
+function modelName(variant: string, model: unknown): string {
+  if (!isRecord(model)) return 'none';
+  const name = `${text(model.providerID) ?? '?'}/${text(model.id) ?? '?'}`;
+  return model.variant === variant ? name : `${name}#${text(model.variant) ?? '?'}`;
 }
 
 // The default variant is the one that runs when -m names none.
@@ -118,17 +147,28 @@ function opencode(model: string, variant: string): ReviewerInvocation {
     reviewer: { harness: 'opencode', model, variant },
     environment: OPENCODE_ENVIRONMENT,
     writesCliLog: false,
-    modelNote: OPENCODE_MODEL_NOTE,
     invocation: ({ change, promptText }) => ({
       command: 'opencode',
       args: ['run', '--standalone', '--agent', 'reviewer', '-m', modelArgument, '--format', 'json', '--title', change, promptText],
       stdin: 'closed',
     }),
-    confirm: ({ output }) => ({ session: jsonLines(output).map((line) => text(line.sessionID)).find(Boolean) }),
+    modelSource: (session) => ({
+      command: 'opencode', args: ['session', 'export', '--standalone', '--sanitize', session], stdin: 'closed',
+    }),
+    session: ({ output }) => jsonLines(output).map((line) => text(line.sessionID)).find(Boolean),
+    model: ({ modelSource }) => exportedModel(variant, modelSource),
   };
 }
 
-function antigravity(model: string, effort: string): ReviewerInvocation {
+// The CLI's own log names the model by its label, never by its ID.
+const AGY_MODEL_LINE = /Propagating selected model override to backend: label="([^"\n]*)"/g;
+
+function agyModel(model: string, label: string, cliLog: string | undefined): string | undefined {
+  const labels = [...(cliLog ?? '').matchAll(AGY_MODEL_LINE)].map((match) => match[1]!);
+  return reported(labels.map((found) => (found === label ? model : found)));
+}
+
+function antigravity(model: string, label: string, effort: string): ReviewerInvocation {
   return {
     reviewer: { harness: 'agy', model, variant: effort },
     environment: [],
@@ -138,10 +178,8 @@ function antigravity(model: string, effort: string): ReviewerInvocation {
       args: ['-p', promptText, '--model', model, '--effort', effort, '--mode', 'plan', '--output-format', 'json', '--log-file', cliLog],
       stdin: 'closed',
     }),
-    confirm: ({ output, cliLog }) => ({
-      session: jsonLines(output).map((line) => text(line.conversation_id)).find(Boolean),
-      model: cliLog?.includes(model) ? model : undefined,
-    }),
+    session: ({ output }) => jsonLines(output).map((line) => text(line.conversation_id)).find(Boolean),
+    model: ({ cliLog }) => agyModel(model, label, cliLog),
   };
 }
 
@@ -150,7 +188,7 @@ function antigravity(model: string, effort: string): ReviewerInvocation {
 const INVOCATIONS: readonly ReviewerInvocation[] = [
   codex('gpt-6.1-sol', 'medium'),
   opencode('opencode-go/kimi-k3.1-pro', 'high'),
-  antigravity('gemini-4-argon-medium', 'medium'),
+  antigravity('gemini-4-argon-medium', 'Gemini 4 Argon (Medium)', 'medium'),
   opencode('opencode-go/deepseek-v4-pro', 'high'),
   claude('claude-fable-5-1', 'medium'),
   opencode('opencode-go/kimi-k2.7-code', 'default'),

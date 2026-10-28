@@ -142,23 +142,77 @@ const OPENCODE_OUTPUT = [
   '',
 ].join('\n');
 
+// A sanitized `opencode session export` of 2026-10-27, trimmed.
+const OPENCODE_EXPORT = JSON.stringify({
+  info: { id: 'ses_e8447b3c8ffe8QYk8bdDlmTmcQ', agent: 'reviewer' },
+  messages: [
+    { id: 'msg_17bb84e4c001QRs1OqF4R7hXn2', type: 'user', text: '[redacted:text]' },
+    {
+      id: 'msg_17bb84fb9001KpBN4pNw20NedM', type: 'assistant', agent: 'reviewer',
+      model: { id: 'kimi-k2.7-code', providerID: 'opencode-go', variant: 'default' },
+    },
+  ],
+});
+
+// The model line of the CLI's own log of 2026-10-24.
+const AGY_LOG = 'I1024 13:19:29.967626     715 model_config_manager.go:340] '
+  + 'Propagating selected model override to backend: label="Gemini 4 Argon (Medium)"\n';
+
 test('the session and model come from each reviewer\'s output', () => {
-  assert.deepEqual(invocationOf('codex gpt-6.1-sol#medium').confirm({ output: CODEX_OUTPUT }),
-    { session: '01a181b7-647f-7d90-abe6-9892355ab6ca', model: 'gpt-6.1-sol' });
-  assert.deepEqual(invocationOf('claude claude-opus-5-5#high').confirm({ output: CLAUDE_OUTPUT }),
-    { session: 'd58a9021-a9a3-40ca-8b5d-d7e096f085bb', model: 'claude-opus-5-5' });
-  assert.deepEqual(invocationOf('opencode opencode-go/kimi-k2.7-code#default').confirm({ output: OPENCODE_OUTPUT }),
-    { session: 'ses_e8458010bffet2OY8uVNIDFp33' });
+  const codex = invocationOf('codex gpt-6.1-sol#medium');
+  assert.equal(codex.session({ output: CODEX_OUTPUT }), '01a181b7-647f-7d90-abe6-9892355ab6ca');
+  assert.equal(codex.model({ output: CODEX_OUTPUT }), 'gpt-6.1-sol');
+  const claude = invocationOf('claude claude-opus-5-5#high');
+  assert.equal(claude.session({ output: CLAUDE_OUTPUT }), 'd58a9021-a9a3-40ca-8b5d-d7e096f085bb');
+  assert.equal(claude.model({ output: CLAUDE_OUTPUT }), 'claude-opus-5-5');
+  const opencode = invocationOf('opencode opencode-go/kimi-k2.7-code#default');
+  assert.equal(opencode.session({ output: OPENCODE_OUTPUT }), 'ses_e8458010bffet2OY8uVNIDFp33');
+  assert.equal(opencode.model({ output: OPENCODE_OUTPUT, modelSource: OPENCODE_EXPORT }), 'opencode-go/kimi-k2.7-code');
   const agy = invocationOf('agy gemini-4-argon-medium#medium');
-  assert.deepEqual(agy.confirm({ output: '{"conversation_id":"conv-1","response":"ok"}\n', cliLog: 'model=gemini-4-argon-medium\n' }),
-    { session: 'conv-1', model: 'gemini-4-argon-medium' });
-  assert.deepEqual(agy.confirm({ output: 'not json\n' }), { session: undefined, model: undefined });
+  assert.equal(agy.session({ output: '{"conversation_id":"conv-1","response":"ok"}\n' }), 'conv-1');
+  assert.equal(agy.model({ output: '', cliLog: AGY_LOG }), 'gemini-4-argon-medium');
+  assert.equal(agy.session({ output: 'not json\n' }), undefined);
 });
 
 test('a Claude Code run without a result line or with another model confirms nothing', () => {
   const claude = invocationOf('claude claude-opus-5-5#high');
-  assert.deepEqual(claude.confirm({ output: CLAUDE_OUTPUT.split('\n')[0]! }), {});
+  assert.equal(claude.session({ output: CLAUDE_OUTPUT.split('\n')[0]! }), undefined);
+  assert.equal(claude.model({ output: CLAUDE_OUTPUT.split('\n')[0]! }), undefined);
   const other = CLAUDE_OUTPUT.replace('"modelUsage":{"claude-opus-5-5"', '"modelUsage":{"claude-sonnet-x"');
-  assert.equal(claude.confirm({ output: other }).model, 'claude-sonnet-x');
-  assert.deepEqual(invocationOf('codex gpt-6.1-sol#medium').confirm({ output: 'error: quota\n' }), { session: undefined, model: undefined });
+  assert.equal(claude.model({ output: other }), 'claude-sonnet-x');
+  const codex = invocationOf('codex gpt-6.1-sol#medium');
+  assert.equal(codex.session({ output: 'error: quota\n' }), undefined);
+  assert.equal(codex.model({ output: 'error: quota\n' }), undefined);
+});
+
+test('OpenCode reads its model from the session export, which names the variant', () => {
+  const opencode = invocationOf('opencode opencode-go/kimi-k3.1-pro#high');
+  assert.deepEqual(opencode.modelSource?.('ses_1'), {
+    command: 'opencode', args: ['session', 'export', '--standalone', '--sanitize', 'ses_1'], stdin: 'closed',
+  });
+  const exported = (model: unknown) => JSON.stringify({ messages: [{ type: 'assistant', model }] });
+  const kimi = { id: 'kimi-k3.1-pro', providerID: 'opencode-go', variant: 'high' };
+  assert.equal(opencode.model({ output: '', modelSource: exported(kimi) }), 'opencode-go/kimi-k3.1-pro');
+  assert.equal(opencode.model({ output: '', modelSource: exported({ ...kimi, variant: 'default' }) }),
+    'opencode-go/kimi-k3.1-pro#default');
+  assert.equal(opencode.model({ output: '', modelSource: exported({ ...kimi, id: 'other' }) }), 'opencode-go/other');
+  assert.equal(opencode.model({ output: '', modelSource: exported(null) }), 'none');
+  assert.equal(opencode.model({ output: '', modelSource: JSON.stringify({ messages: [] }) }), undefined);
+  assert.equal(opencode.model({ output: '', modelSource: 'null' }), undefined);
+  assert.equal(opencode.model({ output: '' }), undefined);
+  const twoModels = JSON.stringify({ messages: [{ type: 'assistant', model: kimi }, { type: 'assistant', model: { ...kimi, id: 'x' } }] });
+  assert.equal(opencode.model({ output: '', modelSource: twoModels }), 'opencode-go/kimi-k3.1-pro, opencode-go/x');
+  for (const [key, invocation] of REVIEWER_INVOCATIONS) {
+    assert.equal(invocation.modelSource === undefined, invocation.reviewer.harness !== 'opencode', key);
+  }
+});
+
+test('Antigravity confirms only the model label of its own log, not any mention', () => {
+  const agy = invocationOf('agy gemini-4-argon-medium#medium');
+  const mention = 'requested=gemini-4-argon-medium actual_model=other-model\n';
+  assert.equal(agy.model({ output: mention, cliLog: mention }), undefined);
+  assert.equal(agy.model({ output: '', cliLog: AGY_LOG.replace('(Medium)', '(Low)') }), 'Gemini 4 Argon (Low)');
+  assert.equal(agy.model({ output: '', cliLog: AGY_LOG + AGY_LOG.replace('(Medium)', '(Low)') }),
+    'gemini-4-argon-medium, Gemini 4 Argon (Low)');
+  assert.equal(agy.model({ output: '' }), undefined);
 });

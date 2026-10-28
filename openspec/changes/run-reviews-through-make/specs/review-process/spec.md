@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Review command
-`make review` SHALL run one review pass of an active change with the authorized reviewer its canonical key names, using that reviewer's fixed command and flags in `scripts/reviewer-invocations.ts` and the effort of governance "Authorized reviewers", with the prompt and log outside the worktree. It SHALL write no `passes.jsonl` line; after a run that exits 0 and reports a valid session ID and the expected model, it SHALL print a line template whose counts fail validation until filled.
+`make review` SHALL run one review pass of an active change with the authorized reviewer its canonical key names, using its fixed command and flags in `scripts/reviewer-invocations.ts` and the effort of governance "Authorized reviewers", with the prompt and logs resolving outside the worktree. It SHALL write no `passes.jsonl` line; after a run that exits 0 and reports a valid session ID and the expected model, it SHALL print a line template whose counts fail validation until filled.
 
 #### Scenario: Fixed flags
 - **WHEN** a pass runs with the key `codex gpt-6.1-sol#medium`
@@ -12,8 +12,12 @@
 - **THEN** `scripts/review-run.ts` lists the keys, exits 2, and runs no reviewer
 
 #### Scenario: Failed attempt
-- **WHEN** the reviewer exits non-zero, reports no session ID, or reports another model
+- **WHEN** the reviewer cannot start, exits non-zero, reports no session ID, or reports no model or another one, also in OpenCode's session export or a fresh Antigravity log
 - **THEN** `scripts/review-run.ts` exits 4 and writes no pass line
+
+#### Scenario: Linked log
+- **WHEN** `LOG` is a symbolic link, has other hard links, or is the prompt file
+- **THEN** `scripts/review-run.ts` exits 1, runs no reviewer, and changes no file
 
 #### Scenario: Pass line template
 - **WHEN** a pass runs to a report
@@ -31,8 +35,12 @@ Before pass 1, when the change's `route.json` is missing or was made for another
 - **THEN** `scripts/review-run.ts` writes `route.json`, exits 3, and runs no reviewer
 
 ### Requirement: Reviewer environment
-`make review` SHALL start the reviewer with no inherited environment except `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`, and the variables that the reviewer's row declares, so that no secret reaches a reviewer.
+`make review` SHALL start the reviewer with no inherited environment except `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`, and the variables that the reviewer's row declares, also none that the Node.js runtime adds to child processes, so that no secret reaches a reviewer.
 
 #### Scenario: Planted secret
 - **WHEN** the caller's environment holds `JEV_MAF_LAB` and another secret
 - **THEN** neither the names nor the values reach the reviewer process
+
+#### Scenario: Runtime variable
+- **WHEN** `NODE_V8_COVERAGE` is set in the caller's environment
+- **THEN** the reviewer process does not get it

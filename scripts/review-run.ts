@@ -1,6 +1,6 @@
-import { execFileSync, spawn } from 'node:child_process';
-import { closeSync, existsSync, openSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { execFileSync, spawn, type ChildProcess, type StdioOptions } from 'node:child_process';
+import { closeSync, existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunResult } from './findings-common.ts';
 import { reviewerKey, type Reviewer, type Role } from './review-findings.ts';
@@ -8,7 +8,9 @@ import { PASSES_FILE, type PassSummary } from './review-passes.ts';
 import { ROUTE_FILE } from './review-route.ts';
 import { routeDependencies, runRoute } from './review-route-command.ts';
 import { changeDirectory } from './review-route-features.ts';
+import { checkReviewFiles, openFreshLog, openPrompt, readPrompt, ReviewFileError } from './review-files.ts';
 import {
+  isRecord,
   REVIEWER_INVOCATIONS,
   reviewerEnvironment,
   type Invocation,
@@ -33,6 +35,8 @@ const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const MAX_PASS = 9;
 const CLI_LOG_SUFFIX = '.cli.log';
+// Started with -i and the allowlist, the reviewer inherits nothing else.
+const ENV_COMMAND = '/usr/bin/env';
 
 export interface ReviewRequest {
   readonly change: string;
@@ -69,9 +73,15 @@ export async function runReview(args: readonly string[], dependencies: ReviewDep
     const run = await runReviewer(request, dependencies);
     return { exitCode: 0, stdout: [...gate, ...advice, ...run].join('\n') + '\n', stderr: '' };
   } catch (error) {
-    if (!(error instanceof ReviewRefusal)) throw error;
-    return { exitCode: error.exitCode, stdout: '', stderr: `make review: ${error.message}\n` };
+    const exitCode = refusalExitCode(error);
+    if (exitCode === undefined) throw error;
+    return { exitCode, stdout: '', stderr: `make review: ${(error as Error).message}\n` };
   }
+}
+
+function refusalExitCode(error: unknown): number | undefined {
+  if (error instanceof ReviewRefusal) return error.exitCode;
+  return error instanceof ReviewFileError ? EXIT_REFUSED : undefined;
 }
 
 function usage(reason: string): ReviewRefusal {
@@ -89,21 +99,18 @@ export function parseRequest(args: readonly string[], root: string): ReviewReque
   if (reviewer === undefined) throw usage(`REVIEWER "${key}" is no authorized reviewer key`);
   if (!existsSync(join(root, changeDirectory(change)))) throw new ReviewRefusal(`${changeDirectory(change)} is no active change`);
   const request = { change, pass: Number(pass), role, reviewer, promptFile: resolve(promptFile), log: resolve(log) } as const;
-  refuseInsideWorktree(root, request.promptFile, 'PROMPT');
-  refuseInsideWorktree(root, request.log, 'LOG');
-  if (!existsSync(request.promptFile) || !statSync(request.promptFile).isFile()) {
-    throw new ReviewRefusal(`PROMPT ${request.promptFile} is no file`);
-  }
+  checkReviewFiles(root, { prompt: request.promptFile, logs: writtenLogs(request) });
   refuseSummarizedPass(root, request);
   return request;
 }
 
-// Files inside the worktree would change the reviewer's snapshot.
-function refuseInsideWorktree(root: string, path: string, name: string): void {
-  const parent = existsSync(dirname(path)) ? realpathSync(dirname(path)) : dirname(path);
-  const fromRoot = relative(realpathSync(root), join(parent, basename(path)));
-  const outside = fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot);
-  if (!outside) throw new ReviewRefusal(`${name} ${path} lies inside the worktree; keep it in a scratch directory`);
+function cliLogOf(request: ReviewRequest): string {
+  return `${request.log}${CLI_LOG_SUFFIX}`;
+}
+
+// The logs that the run writes: its own, and the CLI's where it has one.
+function writtenLogs(request: ReviewRequest): string[] {
+  return request.reviewer.writesCliLog ? [request.log, cliLogOf(request)] : [request.log];
 }
 
 function passesPath(root: string, change: string): string {
@@ -136,18 +143,23 @@ function routePath(root: string, change: string): string {
   return join(root, changeDirectory(change), ROUTE_FILE);
 }
 
+// The parsed route object; undefined when the file holds none.
+function routeRecord(path: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Fresh when made at the current merge base for a commit whose tree
 // equals HEAD's outside the change's own directory.
 export function routeState(root: string, change: string, git: Git): RouteState {
   const path = routePath(root, change);
   if (!existsSync(path)) return 'missing';
-  let routed: RoutedRevision;
-  try {
-    routed = JSON.parse(readFileSync(path, 'utf8')) as RoutedRevision;
-  } catch {
-    return 'stale';
-  }
-  if (typeof routed.headCommit !== 'string' || routed.devCommit !== mergeBase(git)) return 'stale';
+  const routed = routeRecord(path) as RoutedRevision | undefined;
+  if (routed === undefined || typeof routed.headCommit !== 'string' || routed.devCommit !== mergeBase(git)) return 'stale';
   try {
     git(['diff', '--quiet', routed.headCommit, 'HEAD', '--', '.', `:(exclude)${changeDirectory(change)}`]);
     return 'fresh';
@@ -181,22 +193,13 @@ async function routeGate(request: ReviewRequest, dependencies: ReviewDependencie
   );
 }
 
-interface RoutedPlans {
-  readonly rule?: { readonly passes?: readonly { readonly reviewer?: Reviewer }[] };
-}
-
 // route.json only recommends: the authorized effort stays (governance
 // "Routed effort", policy version 7); pass 3 keeps pass 1's reviewer.
 function recommendation(root: string, request: ReviewRequest): string[] {
   const path = routePath(root, request.change);
-  if (!existsSync(path)) return [];
-  let routed: RoutedPlans;
-  try {
-    routed = JSON.parse(readFileSync(path, 'utf8')) as RoutedPlans;
-  } catch {
-    return [];
-  }
-  const recommended = routed.rule?.passes?.[request.pass === 2 ? 1 : 0]?.reviewer;
+  const rule = existsSync(path) ? routeRecord(path)?.rule : undefined;
+  const passes = isRecord(rule) && Array.isArray(rule.passes) ? rule.passes : [];
+  const recommended = plannedReviewer(passes[request.pass === 2 ? 1 : 0]);
   if (recommended === undefined) return [];
   const chosen = reviewerKey(request.reviewer.reviewer);
   const key = reviewerKey(recommended);
@@ -204,41 +207,69 @@ function recommendation(root: string, request: ReviewRequest): string[] {
   return [`route: recommends ${key}; ${chosen} runs at its authorized effort, and another reviewer A goes to the coordinator`];
 }
 
+function plannedReviewer(plan: unknown): Reviewer | undefined {
+  const reviewer = isRecord(plan) ? plan.reviewer : undefined;
+  if (!isRecord(reviewer) || typeof reviewer.harness !== 'string' || typeof reviewer.model !== 'string') return undefined;
+  const variant = typeof reviewer.variant === 'string' ? { variant: reviewer.variant } : {};
+  return { harness: reviewer.harness, model: reviewer.model, ...variant };
+}
+
 async function runReviewer(request: ReviewRequest, dependencies: ReviewDependencies): Promise<string[]> {
   const { reviewer } = request;
-  const cliLog = `${request.log}${CLI_LOG_SUFFIX}`;
+  const cliLog = cliLogOf(request);
   const invocation = reviewer.invocation({
     worktree: dependencies.root,
     change: request.change,
     promptFile: request.promptFile,
-    promptText: readFileSync(request.promptFile, 'utf8'),
+    promptText: readPrompt(request.promptFile),
     cliLog,
   });
   const environment = reviewerEnvironment(reviewer, dependencies.environment);
-  const status = await launch(invocation, environment, request, dependencies.root);
+  const run: CleanRun = { env: environment, cwd: dependencies.root, log: request.log };
+  if (reviewer.writesCliLog) closeSync(openFreshLog(cliLog));
+  const status = await launch(invocation, run, request.promptFile);
   const key = reviewerKey(reviewer.reviewer);
   if (status !== 0) throw failed(`${key} exited with status ${status}`, request.log);
   const output = readFileSync(request.log, 'utf8');
-  const cliText = reviewer.writesCliLog && existsSync(cliLog) ? readFileSync(cliLog, 'utf8') : undefined;
-  const { session, model } = reviewer.confirm({ output, cliLog: cliText });
+  const cliText = reviewer.writesCliLog ? readFileSync(cliLog, 'utf8') : undefined;
+  const session = reviewer.session({ output, cliLog: cliText });
   if (session === undefined || !SESSION.test(session)) throw failed(`${key} reported no valid session ID`, request.log);
-  const modelLine = confirmedModel(reviewer, model, key, request.log);
+  const modelSource = await readModelSource(reviewer, session, run);
+  confirmModel(reviewer, reviewer.model({ output, cliLog: cliText, modelSource }), request.log);
   return [
     `review: ${invocation.command} ${shownArgs(invocation).join(' ')}`,
     `environment: ${Object.keys(environment).join(' ')}`,
     `log: ${request.log}`,
     `session: ${session}`,
-    modelLine,
+    `model: ${reviewer.reviewer.model} (reported)`,
     `${PASSES_FILE} template: ${passLineTemplate(request, session)}`,
     `No line was written: after the report, replace each count placeholder and append the line to ${PASSES_FILE}.`,
   ];
 }
 
-function confirmedModel(reviewer: ReviewerInvocation, model: string | undefined, key: string, log: string): string {
+function confirmModel(reviewer: ReviewerInvocation, model: string | undefined, log: string): void {
   const expected = reviewer.reviewer.model;
-  if (model === expected) return `model: ${model} (reported)`;
-  if (model === undefined && reviewer.modelNote !== undefined) return `model: not in the output; ${reviewer.modelNote}`;
-  throw failed(`${key} reported model ${model ?? 'none'}, not ${expected}`, log);
+  if (model !== expected) throw failed(`${reviewerKey(reviewer.reviewer)} reported model ${model ?? 'none'}, not ${expected}`, log);
+}
+
+// How a reviewer command runs: its environment, directory, and log.
+interface CleanRun {
+  readonly env: Record<string, string>;
+  readonly cwd: string;
+  readonly log: string;
+}
+
+// The stdout of the reviewer's model source, in the same environment.
+async function readModelSource(reviewer: ReviewerInvocation, session: string, run: CleanRun): Promise<string | undefined> {
+  if (reviewer.modelSource === undefined) return undefined;
+  const source = reviewer.modelSource(session);
+  const child = startClean(source, run, ['ignore', 'pipe', 'ignore']);
+  const chunks: Buffer[] = [];
+  child.stdout?.on('data', (chunk: Buffer) => chunks.push(chunk));
+  const status = await exitStatus(child);
+  const name = `${source.command} ${source.args.slice(0, 2).join(' ')}`;
+  if (status !== 0) throw failed(`${name} exited with status ${status}`, run.log);
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function failed(reason: string, log: string): ReviewRefusal {
@@ -250,17 +281,36 @@ function shownArgs({ args }: Invocation): string[] {
   return args.map((arg) => (arg.length > 200 || arg.includes('\n') ? '<prompt>' : arg));
 }
 
-// An explicit env with no inherited variable has the effect of env -i.
-function launch(invocation: Invocation, env: Record<string, string>, request: ReviewRequest, cwd: string): Promise<number> {
-  const out = openSync(request.log, 'w');
-  const stdin = invocation.stdin === 'prompt' ? openSync(request.promptFile, 'r') : 'ignore';
+async function launch(invocation: Invocation, run: CleanRun, promptFile: string): Promise<number> {
+  const out = openFreshLog(run.log);
+  try {
+    const stdin = invocation.stdin === 'prompt' ? openPrompt(promptFile) : 'ignore';
+    try {
+      return await exitStatus(startClean(invocation, run, [stdin, out, out]));
+    } finally {
+      if (typeof stdin === 'number') closeSync(stdin);
+    }
+  } finally {
+    closeSync(out);
+  }
+}
+
+// Node.js adds variables such as NODE_V8_COVERAGE to a child's env;
+// env -i drops them before the reviewer starts.
+function startClean(invocation: Invocation, { env, cwd, log }: CleanRun, stdio: StdioOptions): ChildProcess {
+  const assignments = Object.entries(env).map(([name, value]) => `${name}=${value}`);
+  try {
+    return spawn(ENV_COMMAND, ['-i', ...assignments, invocation.command, ...invocation.args], { cwd, env: {}, stdio });
+  } catch (error) {
+    const reason = (error as NodeJS.ErrnoException).code ?? (error as Error).name;
+    throw failed(`${invocation.command} could not start: ${reason}`, log);
+  }
+}
+
+function exitStatus(child: ChildProcess): Promise<number> {
   return new Promise<number>((resolveStatus) => {
-    const child = spawn(invocation.command, [...invocation.args], { cwd, env, stdio: [stdin, out, out] });
     child.on('error', () => resolveStatus(127));
     child.on('close', (code, signal) => resolveStatus(code ?? (signal === null ? 1 : 128)));
-  }).finally(() => {
-    closeSync(out);
-    if (typeof stdin === 'number') closeSync(stdin);
   });
 }
 
