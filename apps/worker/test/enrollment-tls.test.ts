@@ -175,6 +175,7 @@ test('a worker enrolls over pinned TLS, pins the broker too, and listens on noth
   });
   assert.deepEqual(genuine.tokens, [TOKEN]);
   assert.deepEqual(endpoints[0]?.tls, { ca: installation.certificatePem }, 'the pinned CA is the broker TLS\'s only CA');
+  assert.equal(endpoints[0]?.creds, ENROLLMENT.credentials.broker, 'the broker credential, not a client certificate');
   assert.deepEqual(listeners, [], 'the worker opened no listening socket');
 });
 

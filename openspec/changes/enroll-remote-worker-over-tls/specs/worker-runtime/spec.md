@@ -33,6 +33,10 @@ The worker SHALL read its data root, HTTPS control-plane URL, broker URL, enroll
 ### Requirement: Outbound connections only
 A worker SHALL open no listening socket; every connection it makes SHALL be outbound. Workers SHALL keep the bearer secret and the broker user JWT over TLS that authenticates the server only.
 
+#### Scenario: Server-only TLS
+- **WHEN** an enrolled worker connects to the broker
+- **THEN** its TLS names the pinned CA as its only setting, with no client certificate or key, and it authenticates with its stored `.creds`
+
 #### Scenario: Running worker
 - **WHEN** a worker has started
 - **THEN** the process holds no listening TCP server
