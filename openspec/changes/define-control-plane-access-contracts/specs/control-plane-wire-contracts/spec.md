@@ -38,14 +38,14 @@ The document SHALL define `browserSession`, a cookie under the `__Host-` prefix 
 - **THEN** the answer is 401 with reason `login-failed` and does not say which is wrong
 
 ### Requirement: Access failures
-Authentication, CSRF, and authorization failures SHALL be distinct kernel failures with code `forbidden`: 401 `AuthenticationFailure` (`unauthenticated` or `login-failed`), 403 `CsrfRejection` (`csrf-token-invalid`), and 403 `AccessDenial` (`role-required`). For an operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF token, then the role, before it reads the request body.
+Authentication, CSRF, and authorization failures SHALL be distinct kernel failures with code `forbidden`: 401 `AuthenticationFailure` (`unauthenticated` or `login-failed`), except the webhook receiver's 401 `WebhookRejection` (`signature-invalid`), 403 `CsrfRejection` (`csrf-token-invalid`), and 403 `AccessDenial` (`role-required`). An operation with a session or bearer requirement SHALL authenticate, then check the CSRF token, then the role, before it reads the body.
 
 #### Scenario: CSRF rejection is not an access denial
 - **WHEN** a body with reason `csrf-token-invalid` is checked against `AccessDenial`
 - **THEN** it is invalid, and it is valid as a `CsrfRejection`
 
 ### Requirement: Operation roles
-Each operation SHALL require the role that `docs/contracts/control-plane-wire-contracts.md` section 3 names: `installation-owner` for creating projects, project members, the workers view, enrollment tokens, account slots, and SCM integration changes; `project-maintainer` for project changes, defaults, auto-merge, and the repository binding; and `project-viewer` or above, or `installation-owner`, for a project's reads.
+Each operation SHALL require the role that `docs/contracts/control-plane-wire-contracts.md` section 3 names: `installation-owner` for creating projects, assigning and removing project members, the workers view, enrollment tokens, account slots, and SCM integration changes; `project-maintainer` for project changes, defaults, auto-merge, and the repository binding; and `project-viewer` or above, or `installation-owner`, for a project's reads.
 
 #### Scenario: Maintainer assigns a member
 - **WHEN** a `project-maintainer` without `installation-owner` assigns a role on its project
@@ -77,14 +77,14 @@ The document SHALL define listing pending enrollment tokens without their secret
 - **THEN** either the worker is enrolled and the revocation fails with 422, or the revocation succeeds and the redemption fails with `token-invalid`
 
 ### Requirement: Account slot operations
-The document SHALL define listing, adding, changing, revoking, reinstating, and removing account slots, and rotating a slot's credential, each change by compare-and-set on the slot's revision. A slot credential SHALL be write-only. A project member's view of its pools SHALL say whether a slot also serves other projects without naming them.
+The document SHALL define listing, adding, changing, revoking, reinstating, and removing account slots, and rotating a slot's credential; changing, revoking, reinstating, removing, and rotating SHALL compare-and-set the slot's revision. A slot credential SHALL be write-only. A project member's view of its pools SHALL say whether a slot also serves other projects without naming them.
 
 #### Scenario: Slot in a project's view
 - **WHEN** a slot serves the project and another project
 - **THEN** the project's view shows it as shared and names neither its allowed projects nor its credential
 
 ### Requirement: SCM integration setup
-The document SHALL define listing, reading, creating, and changing SCM integrations, each with an SCM plugin, a label, plugin-defined settings, and plugin-defined write-only secrets. A response SHALL name the stored secrets and never carry their values, and no schema SHALL name an SCM.
+The document SHALL define listing, reading, creating, and changing SCM integrations, each with an SCM plugin, a label, plugin-defined settings, and plugin-defined write-only secrets. A change SHALL compare-and-set the integration's revision. A response SHALL name the stored secrets and never carry their values, and no schema SHALL name an SCM.
 
 #### Scenario: Secrets in a response
 - **WHEN** an integration record carries its secrets' values
@@ -95,14 +95,18 @@ The document SHALL define listing, reading, creating, and changing SCM integrati
 
 #### Scenario: Unsigned delivery
 - **WHEN** a delivery arrives without a valid signature
-- **THEN** the answer is 401 and nothing is recorded
+- **THEN** the answer is 401 `WebhookRejection` and nothing is recorded
 
 ### Requirement: Secrets in responses
-No response schema SHALL reach a write-only value: a password, a slot credential, or an SCM integration's secrets. Apart from a session's CSRF token, which authenticates nothing without the cookie, a new enrollment token's secret SHALL be the only secret in a response body, and each response with it or with a CSRF token SHALL send `Cache-Control: no-store`. The session identifier SHALL travel only in `Set-Cookie`.
+No response schema SHALL reach a `writeOnly` value: a password, a slot credential, or SCM secrets. Besides a CSRF token, a new enrollment token's secret SHALL be the only secret in a response body; a response with either SHALL send `Cache-Control: no-store`. The session identifier SHALL travel only in `Set-Cookie`. A request log SHALL hold only allowlisted parts, never a body with a `writeOnly` value or the `Cookie`, `X-CSRF-Token`, or `Authorization` header.
 
 #### Scenario: Write-only value in a response
 - **WHEN** any operation's response schema reaches a schema marked `writeOnly`
 - **THEN** the contract tests fail
+
+#### Scenario: Logged login request
+- **WHEN** the control plane logs a `logIn` request
+- **THEN** the log holds neither the password nor the `Cookie` or `X-CSRF-Token` header
 
 ### Requirement: Identifiers and pages
 An identifier that the control plane mints for a project, principal, enrollment token, slot, or SCM integration SHALL be one lowercase letter and 32 lowercase hexadecimal digits from 128 random bits; on the wire it SHALL be an `Identifier`. Every list other than `listWorkers`, which returns one unpaged snapshot, SHALL return at most 100 items in identifier order and a `next` identifier while more remain.
