@@ -27,9 +27,8 @@ export interface FleetRegistry {
   // Records a rotation to the next generation with its audit event, unless
   // one is open; answers the open one. `forbidden` if revoked.
   requestRotation(workerId: WorkerId, request: RotationOrder): Promise<Result<RotationRequest>>;
-  // Makes `next` current under the open rotation and audits it once; a
-  // repeat answers the stored request. `conflict` with the domain's reason.
-  // `clock` is read after the row lock: past the deadline it is `forbidden`.
+  // Makes `next` current once, audited; a repeat answers the stored request.
+  // `conflict` per the domain; `forbidden` past the deadline after the lock.
   renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>>;
   // Drops the predecessor of the renewed `generation`, confirmed, or past
   // the deadline read from `clock` after the lock, expired; answers whether.
