@@ -34,7 +34,7 @@ Status: developed and verified by the author; review pass 1 by reviewer A done a
 - `16f0aefe` `docs: record review pass 2 of the define worker messages and terminal contracts change` (findings, passes, this section, tasks); the `make verify` run of log `wmt-verify-9.log` checked its tree, `030930741dd5bdc525e37ca8cb7dc1c54cdeec3f`, and passed at the first attempt, with no rerun.
 - `2e6d279a` `docs: record the verification of review pass 2 of the define worker messages and terminal contracts change` records that run.
 - `c5228fa8` `chore(contracts): refuse a turn the harness plugin found invalid and stop the generation on other refusals` (the architect's answers of 2026-10-28 on pass 2 findings M2 and M6: the reason `turn-invalid`, the timeline state `refused` and `recordTurnRefused`, the generation stopped on other refusals, the item 18 and 19 obligation restored, tests, contract pages, design, and spec deltas).
-- The next commit, `docs: record the architect's answers on review pass 2 of the define worker messages and terminal contracts change` (findings M2 and M6, this section, tasks); the `make verify` run of log `wmt-verify-10.log` checked its tree.
+- `bdd8806e` `docs: record the architect's answers on review pass 2 of the define worker messages and terminal contracts change` (findings M2 and M6, this section, tasks); the `make verify` run of log `wmt-verify-10.log` checked its tree, `3b9f33717d98f6c8b29ea6bc43cc7f877af4ad42`, and passed at the first attempt, with no rerun.
 - The commit after it records that run.
 
 ## Environment
@@ -92,7 +92,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `030930741dd5bdc525e37ca8cb7dc1c54cdeec3f`; tests 3224, pass 3171, fail 0, skipped 53; all files 99.45% lines, 92.79% branches, 99.03% functions.
+- `make verify`: passed, profile full, tree `3b9f33717d98f6c8b29ea6bc43cc7f877af4ad42`; tests 3225, pass 3172, fail 0, skipped 53; all files 99.45% lines, 92.81% branches, 99.03% functions.
 - `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`: passed, `Change 'define-worker-messages-and-terminal-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
 - Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
