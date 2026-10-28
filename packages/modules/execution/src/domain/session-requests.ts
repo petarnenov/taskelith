@@ -1,6 +1,5 @@
 import { ok, type Result } from '@taskelith/kernel';
-import { MAX_HARNESS_TEXT_LENGTH } from '../ports/agent-harness.js';
-import type { HarnessRequestKind } from '../ports/agent-harness-data.js';
+import { MAX_HARNESS_TEXT_LENGTH, type HarnessRequestKind } from './harness-values.js';
 import type { SessionGeneration, TurnId } from './identifiers.js';
 import {
   activeBoundAttempt,

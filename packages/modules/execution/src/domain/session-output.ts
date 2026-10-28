@@ -1,5 +1,5 @@
 import { ok, type Result } from '@taskelith/kernel';
-import { MAX_HARNESS_TEXT_LENGTH } from '../ports/agent-harness.js';
+import { MAX_HARNESS_TEXT_LENGTH } from './harness-values.js';
 import {
   frozenCopy,
   isLiveTurn,

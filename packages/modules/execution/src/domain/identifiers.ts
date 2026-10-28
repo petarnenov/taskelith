@@ -12,6 +12,8 @@ export type NativeRequestId = Identifier<'NativeRequestId'>;
 // A harness plugin, by its manifest `id`; the account pool uses it too.
 export type HarnessPluginId = Identifier<'HarnessPluginId'>;
 export type SessionId = Identifier<'SessionId'>;
+// A project-maintainer's standing approval rule (product ports, section 5).
+export type StandingRuleId = Identifier<'StandingRuleId'>;
 export type TurnId = Identifier<'TurnId'>;
 // The harness's own session handle, opaque to Taskelith.
 export type NativeSessionId = Identifier<'NativeSessionId'>;

@@ -1,8 +1,12 @@
 import { err, failure, type FailureCode, type Instant, type Result } from '@taskelith/kernel';
 import type { EvidenceReference, OwnershipGeneration, TaskId } from '@taskelith/sdlc';
-import type { HarnessRequestKind } from '../ports/agent-harness-data.js';
-import type { DelegationOutcome, HarnessFailure, PermissionDecision, TurnOutcome } from '../ports/agent-harness.js';
-import type { StandingRuleId } from '../ports/standing-approval-rules.js';
+import type {
+  DelegationOutcome,
+  HarnessFailure,
+  HarnessRequestKind,
+  PermissionDecision,
+  TurnOutcome,
+} from './harness-values.js';
 import type {
   AttemptId,
   HarnessPluginId,
@@ -12,6 +16,7 @@ import type {
   PrincipalId,
   SessionGeneration,
   SessionId,
+  StandingRuleId,
   TurnId,
 } from './identifiers.js';
 

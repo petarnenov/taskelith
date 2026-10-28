@@ -43,7 +43,9 @@ export interface ClassifiedOperation {
   readonly ref: string;
 }
 
-export type HarnessRequestKind = 'permission-request' | 'input-request' | 'delegation-request';
+import type { HarnessRequestKind } from '../domain/harness-values.js';
+
+export type { HarnessRequestKind };
 
 export type HarnessEvent =
   | { readonly kind: 'output'; readonly turnId: string; readonly text: string }
