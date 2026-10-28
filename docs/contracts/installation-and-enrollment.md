@@ -48,7 +48,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 - The bootstrap credential and every reset are `tkop_` followed by 256 random bits in base64url. Only the SHA-256 hash is stored, and comparison is in constant time. Its high entropy makes a slow hash unnecessary.
 - `reset-operator-credential` replaces the credential with the next generation. It needs a direct invocation on the host with an actor and a reason, and writes an immutable row of `audit_events`; a trigger refuses updates and deletions. It never lifts a quarantine.
-- `issue-enrollment-token`, `rotate-worker`, `revoke-worker`, and `expire-grace-windows` read the operator credential from `TASKELITH_OPERATOR_TOKEN`, never from the command line.
+- `issue-enrollment-token`, `rotate-worker`, `revoke-worker`, `expire-grace-windows`, and `worker-admission` read the operator credential from `TASKELITH_OPERATOR_TOKEN`, never from the command line. `worker-admission` prints the workers view ([worker admission](worker-admission.md) section 8).
 
 ## 5. Enrollment
 

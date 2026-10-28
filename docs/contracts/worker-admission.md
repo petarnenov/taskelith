@@ -86,7 +86,7 @@ Placement offers work only to an `admitted` worker, in addition to the eligibili
 
 ## 8. The workers view
 
-`WorkerAdmissionView.workers()` returns `asOf` and every enrolled worker that is not revoked, in identifier order: `workerId`, host, enrollment time, worker admission state, the time of the last consumed report, and each stored result. It is installation scoped: Access checks `installation-owner` before the call ([product ports](product-ports.md) section 2, rule 1). It holds no credential or credential hash. When a source cannot be read it fails with `unavailable` and returns no partial data. Item 9 maps it onto the OpenAPI document; item 33 shows it.
+`WorkerAdmissionView.workers()` returns `asOf` and every enrolled worker that is not revoked, in identifier order: `workerId`, host, enrollment time, worker admission state, the time of the last consumed report, and each stored result. It is installation scoped: Access checks `installation-owner` before the call ([product ports](product-ports.md) section 2, rule 1). It holds no credential or credential hash. When a source cannot be read it fails with `unavailable` and returns no partial data. The administrative command `worker-admission` prints it as JSON once the operator credential is verified ([installation contract](installation-and-enrollment.md) section 4), with every detail redacted again by `redactSecrets`; `make verify-installation` reads it. Item 9 maps it onto the OpenAPI document; item 33 shows it.
 
 ## 9. Required tests
 
