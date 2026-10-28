@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Diagnostic } from '@asyncapi/parser';
-import { blockingDiagnostics, mergeOpenapi, mergeSchemas, namedTypesSchema, schemaBundle } from '../scripts/generate-contracts.ts';
+import {
+  blockingDiagnostics,
+  CONTRACT_DOCUMENTS,
+  mergeOpenapi,
+  mergeSchemas,
+  mergeSecuritySchemes,
+  namedTypesSchema,
+  schemaBundle,
+} from '../scripts/generate-contracts.ts';
 
 function diagnostic(severity: number, message: string): Diagnostic {
   return { severity, message, path: ['info'], code: 'example', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } } as Diagnostic;
@@ -54,4 +62,27 @@ test('OpenAPI documents are joined for the type generator, and a path is defined
   assert.deepEqual(Object.keys(merged.paths), ['/runs', '/evidence']);
   assert.deepEqual(merged.components, { schemas: { Run: { type: 'object' } }, securitySchemes: { worker: { type: 'http', scheme: 'bearer' } } });
   assert.throws(() => mergeOpenapi([runs, { ...runs, path: 'other.json' }]), /The path \/runs of other.json is defined by another document/);
+});
+
+test('documents may share a security scheme name only for the same scheme', () => {
+  const operator = { type: 'http', scheme: 'bearer', description: 'The installation bootstrap credential.' };
+  const document = (path: string, securitySchemes: Record<string, unknown>) => ({ path, document: { paths: {}, components: { schemas: {}, securitySchemes } } });
+  const session = { type: 'apiKey', in: 'cookie', name: 'session' };
+
+  assert.deepEqual(mergeSecuritySchemes([document('a.json', { operatorToken: operator }), document('b.json', { operatorToken: { ...operator }, session })]), {
+    operatorToken: operator,
+    session,
+  });
+  assert.throws(
+    () => mergeSecuritySchemes([document('a.json', { operatorToken: operator }), document('b.json', { operatorToken: { ...operator, scheme: 'basic' } })]),
+    /The security scheme operatorToken of b.json differs from the one of a.json/,
+  );
+  assert.throws(
+    () => mergeOpenapi([document('a.json', { operatorToken: operator }), document('c.json', { operatorToken: session })]),
+    /The security scheme operatorToken of c.json differs from the one of a.json/,
+  );
+});
+
+test('the control-plane document is generated with the other contract documents', () => {
+  assert.ok(CONTRACT_DOCUMENTS.some(({ kind, path }) => kind === 'openapi' && path === 'packages/contracts/documents/control-plane.openapi.json'));
 });
