@@ -111,24 +111,36 @@ export function workerContainmentParent(launch: LinuxLaunch, base: string, name:
   return join(launch.TASKELITH_CONTAINMENT_PARENT, `${basename(base)}-${name}`);
 }
 
+// Runs one recovery of the worker's own supervisor, so that a scenario
+// can hold it or watch what it decided.
+export type RecoveryWrap = (recover: () => Promise<Result<SupervisedRecovery>>) => Promise<Result<SupervisedRecovery>>;
+
+export const UNWRAPPED_RECOVERY: RecoveryWrap = (recover) => recover();
+
+// The scenario's holds on the worker's own supervision calls.
+export interface SupervisionHolds {
+  readonly beforeStart: () => Promise<void>;
+  readonly aroundRecover: RecoveryWrap;
+}
+
 // The worker's own launch host, as apps/worker composes it, with each
-// supervisor start held until the scenario lets it go.
-export function workerLaunchHost(settings: WorkerSettings, executions: string, beforeStart: () => Promise<void>): Result<LaunchHost> {
+// supervisor start and recovery held as the scenario says.
+export function workerLaunchHost(settings: WorkerSettings, executions: string, holds: SupervisionHolds): Result<LaunchHost> {
   const host = supervisionHost(settings, executions, SUPERVISOR_VERSION);
   if (!host.ok) return host;
   const { supervision } = host.value;
-  return ok({ ...host.value, supervision: (executionId) => new HeldStart(supervision(executionId), beforeStart) });
+  return ok({ ...host.value, supervision: (executionId) => new HeldSupervision(supervision(executionId), holds) });
 }
 
 const SUPERVISOR_VERSION = '0.0.0';
 
-class HeldStart implements ExecutionSupervision {
+class HeldSupervision implements ExecutionSupervision {
   readonly #supervision: ExecutionSupervision;
-  readonly #beforeStart: () => Promise<void>;
+  readonly #holds: SupervisionHolds;
 
-  constructor(supervision: ExecutionSupervision, beforeStart: () => Promise<void>) {
+  constructor(supervision: ExecutionSupervision, holds: SupervisionHolds) {
     this.#supervision = supervision;
-    this.#beforeStart = beforeStart;
+    this.#holds = holds;
   }
 
   prepare(plan: LaunchPlan): Promise<Result<void>> {
@@ -136,7 +148,7 @@ class HeldStart implements ExecutionSupervision {
   }
 
   async start(): Promise<Result<void>> {
-    await this.#beforeStart();
+    await this.#holds.beforeStart();
     return this.#supervision.start();
   }
 
@@ -153,7 +165,7 @@ class HeldStart implements ExecutionSupervision {
   }
 
   recover(round: RecoveryRound): Promise<Result<SupervisedRecovery>> {
-    return this.#supervision.recover(round);
+    return this.#holds.aroundRecover(() => this.#supervision.recover(round));
   }
 
   remove(): Promise<Result<void>> {

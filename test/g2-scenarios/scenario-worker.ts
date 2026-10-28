@@ -13,7 +13,9 @@ import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSetting
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
-import { SCENARIO_LAUNCH, SCENARIO_LAUNCH_HOST, workerContainmentParent, workerLaunchHost } from './scenario-launch.ts';
+import {
+  SCENARIO_LAUNCH, SCENARIO_LAUNCH_HOST, UNWRAPPED_RECOVERY, workerContainmentParent, workerLaunchHost, type RecoveryWrap,
+} from './scenario-launch.ts';
 import { within } from './waiting.ts';
 
 // The worker's own timers (heartbeats, broker retries, lost contact) and
@@ -52,6 +54,8 @@ export interface ScenarioWorkerOptions {
   readonly freeBytes?: () => number;
   // Awaited before each supervisor starts, after W4.
   readonly beforeSupervisorStart?: () => Promise<void>;
+  // Wraps each recovery of the worker's own supervisor; native launch only.
+  readonly aroundSupervisorRecover?: RecoveryWrap;
   // Offered slots; two unless a scenario says.
   readonly slots?: number;
   // Wraps the broker connection, for a test-side crash point.
@@ -143,7 +147,10 @@ export class ScenarioWorker {
 
   #launchHost(settings: WorkerSettings, executions: string): Result<LaunchHost> {
     const beforeStart = this.#options.beforeSupervisorStart ?? (async () => undefined);
-    if (SCENARIO_LAUNCH_HOST !== 'process-group') return workerLaunchHost(settings, executions, beforeStart);
+    if (SCENARIO_LAUNCH_HOST !== 'process-group') {
+      const aroundRecover = this.#options.aroundSupervisorRecover ?? UNWRAPPED_RECOVERY;
+      return workerLaunchHost(settings, executions, { beforeStart, aroundRecover });
+    }
     return ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), beforeStart));
   }
 

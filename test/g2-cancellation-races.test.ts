@@ -8,7 +8,9 @@ import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
 import { processesNaming } from './g2-scenarios/leftover-processes.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
-import { CANCEL_SIGNAL, SCENARIO_LAUNCH_HOST, assertWorkerSupervised, supervisorProcesses } from './g2-scenarios/scenario-launch.ts';
+import {
+  CANCEL_SIGNAL, SCENARIO_LAUNCH_HOST, assertWorkerSupervised, supervisorProcesses, type RecoveryWrap,
+} from './g2-scenarios/scenario-launch.ts';
 import { SCENARIO_LIMITS, type ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import {
   assertExitedOnce,
@@ -341,16 +343,26 @@ describe('cancellation races', SCENARIO_HOST, () => {
     const random = new SeededRandom(SEED);
     const cancelBeforeAdoption = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'adopting-supervisor-ignores-cancel', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
-      const worker = await startedWorker(installation, 'adopter-cancel', random, { runMilliseconds: HELD_RUN });
+      const recovery = new RecoveryHold();
+      const worker = await startedWorker(installation, 'adopter-cancel', random, {
+        runMilliseconds: HELD_RUN, aroundSupervisorRecover: recovery.wrap,
+      });
       try {
         await installation.submitTask('task-g');
         await waitFor(async () => (await startedExecutions(installation, 'task-g')) === 1, 20_000, 'the start');
         const children = scriptedPids(worker);
         assertWorkerSupervised(worker, children);
-        killFirstSupervisor(worker);
         const cancelled = await firstAssignment(installation, 'task-g');
-        if (cancelBeforeAdoption) await cancelAssignment(installation, cancelled.assignmentId);
-        await waitFor(() => supervisorProcesses(worker.dataRoot, 'adopt').length === 1, 30_000, 'the adopting supervisor');
+        recovery.hold();
+        await waitFor(() => recovery.isHolding, 30_000, 'the held liveness check');
+        killFirstSupervisor(worker);
+        if (cancelBeforeAdoption) {
+          await cancelAssignment(installation, cancelled.assignmentId);
+          assert.deepEqual(supervisorProcesses(worker.dataRoot, 'adopt'), [], 'no adopter before the cancel committed');
+        }
+        recovery.release();
+        await waitFor(() => recovery.adopted, 30_000, 'the recovery that adopted');
+        assert.equal(supervisorProcesses(worker.dataRoot, 'adopt').length, 1, 'one adopting supervisor watches');
         if (!cancelBeforeAdoption) await cancelAssignment(installation, cancelled.assignmentId);
         await waitFor(async () => notAppliedEvidence(await installation.task('task-g')) === 1, 30_000, 'the not-applied evidence');
         assert.deepEqual(scriptedPids(worker), children, 'the adopter signalled nothing: the child still runs');
@@ -367,6 +379,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         return `cancel ${when}: not applied, child ${children.join(', ')} ran on until released; `
           + 'the execution stayed started with evidence cancellation-not-applied then uncertain, the result pending';
       } finally {
+        recovery.release();
         worker.releaseScriptedProcesses();
         await worker.stop();
       }
@@ -396,6 +409,41 @@ describe('cancellation races', SCENARIO_HOST, () => {
 });
 
 const CANCELLATION = 'execution.cancellation.request';
+
+// Holds the worker's next recovery until released, so no adopter starts
+// meanwhile, and tells when a recovery adopted the child.
+class RecoveryHold {
+  readonly #released = new Gate();
+  #holding = false;
+  #held = false;
+  #adopted = false;
+
+  get isHolding(): boolean {
+    return this.#held && !this.#released.isOpen;
+  }
+
+  get adopted(): boolean {
+    return this.#adopted;
+  }
+
+  hold(): void {
+    this.#holding = true;
+  }
+
+  release(): void {
+    this.#released.open();
+  }
+
+  readonly wrap: RecoveryWrap = async (recover) => {
+    if (this.#holding && !this.#released.isOpen) {
+      this.#held = true;
+      await this.#released.wait('the release of the held recovery');
+    }
+    const recovered = await recover();
+    if (recovered.ok && recovered.value.fact === 'adopted') this.#adopted = true;
+    return recovered;
+  };
+}
 
 // SIGKILL of the launching supervisor only; its child keeps running.
 function killFirstSupervisor(worker: ScenarioWorker): void {
