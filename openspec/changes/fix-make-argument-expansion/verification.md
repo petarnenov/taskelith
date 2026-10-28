@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification and `make verify` are recorded below; no review pass has run yet.
+Date: 2026-10-28. The author's verification and `make verify` are recorded below; review pass 1 is recorded below.
 
 ## Scope and source
 
@@ -13,6 +13,7 @@ Worker Pepi's brief of 2026-10-28 for the change `fix-make-argument-expansion` (
 ## Author self-check
 
 - **Root cause found, not assumed.** Minimal Makefiles under GNU Make 4.4.1 show that the expansion comes from the parse-time `$(shell)` calls at lines 2, 3, and 7 of the `Makefile` of `f3a53f17`, which run before its `unexport` line at line 277; the `export X := $(value VAR)` copies pass the value intact once the variable is unexported ([design](design.md), "Root cause").
+- **Brief's diagnosis corrected.** The brief named the `export X := $(value VAR)` pattern as the cause; it is not, as the root cause above and [design](design.md) show.
 - **Interface unchanged.** The three targets keep their invocations; only the position of `unexport` and its comment change in the `Makefile`.
 - **Requirement length.** "Shared integration command" 489 and "Generated verification record" 490 characters, under the 500 of the pinned OpenSpec; `npm run verify:archive`, inside `make verify`, archives the change in a temporary copy into strictly valid specs.
 - **Tests.** The two tests loop over the GNU makes on `PATH` and fail on an empty list; they wait on no timer and share no state with other tests.
@@ -44,6 +45,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
+
+## Review
+
+### Pass 1 (reviewer A)
+
+- **Reviewer:** Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, confirmed in the output header.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, prompt outside the worktree.
+- **Session:** `01a18170-2d21-7473-b894-3e58f95f8cd3`.
+- **Reviewed revision:** `05cac8af`.
+- **Snapshot:** the same before and after the pass (`2e4eb301`).
+- **Findings:** Critical 0, High 0, Medium 0, Low 0. The reviewer checked all six arguments from the command line and the environment under GNU Make 3.81 and 4.4.1, the absence of `include` lines before the `unexport`, sub-make isolation, and a missing `gmake`.
 
 ## Limitations
 

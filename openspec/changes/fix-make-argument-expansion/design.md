@@ -4,7 +4,7 @@
 
 ## Root cause
 
-GNU Make 4.4 passes exported variables to the environment of `$(shell)` calls, which 3.81 does not. The `Makefile` runs three `$(shell)` calls while it is parsed, at lines 2, 3, and 7 of `f3a53f17` (`NODE_PIN`, `NPM_PIN`, `SERVICES_ID`), but the `unexport` line came at line 277. When make 4.4 builds the environment for those calls, the command-line variables are still exported, so make expands them, and every `$(shell ...)` in an argument runs once per such call. The guess that the `export X := $(value VAR)` pattern itself expands was checked and is wrong: with the `unexport` first, both GNU Make 3.81 and 4.4.1 pass the value through intact.
+GNU Make 4.4 passes exported variables to the environment of `$(shell)` calls, which 3.81 does not. The `Makefile` runs three `$(shell)` calls while it is parsed, at lines 2, 3, and 7 of `f3a53f17` (`NODE_PIN`, `NPM_PIN`, `SERVICES_ID`), but the `unexport` line came at line 277. When make 4.4 builds the environment for those calls, the command-line variables are still exported, so make expands them, and every `$(shell ...)` in an argument runs once per such call. The coordinator's brief diagnosed that the `export X := $(value VAR)` pattern itself expands; that diagnosis was checked and is wrong: with the `unexport` first, both GNU Make 3.81 and 4.4.1 pass the value through intact.
 
 Minimal Makefiles under GNU Make 4.4.1 (Homebrew `gmake` on macOS) show it, with `CHANGE='demo $(shell touch /tmp/x)'`:
 
