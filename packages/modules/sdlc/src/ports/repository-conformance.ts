@@ -87,7 +87,8 @@ function headBoundGate(id: string): Gate {
 function passed(pending: Gate): Gate {
   const evidence = must(parseSemanticApproval({
     approver: 'reviewer-1', verdict: 'approved', subject: pending.subject, recordedAt: LATER, reference: 'review-1',
-    ...(pending.codeHead === undefined ? {} : { codeHead: pending.codeHead, gateGeneration: pending.generation }),
+    gateId: pending.id, gateGeneration: pending.generation,
+    ...(pending.codeHead === undefined ? {} : { codeHead: pending.codeHead }),
   }));
   return must(recordGateEvidence(pending, pending.generation, evidence, LATER));
 }

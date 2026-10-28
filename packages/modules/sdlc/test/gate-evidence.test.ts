@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseInstant, type Instant } from '@taskelith/kernel';
+import { parseIdentifier, parseInstant, type Instant } from '@taskelith/kernel';
 import {
   EVIDENCE_KINDS,
   MAX_EVIDENCE_REFERENCE_LENGTH,
@@ -12,6 +12,9 @@ import {
   parseSemanticApproval,
   parseStructuralValidation,
   type ArtifactRevision,
+  type CodeHeadIdentity,
+  type CodeObjectId,
+  type RepositoryId,
   type SemanticApprovalInput,
 } from '@taskelith/sdlc';
 
@@ -31,6 +34,13 @@ const RECORDED_AT = instant('2026-10-24T10:00:00.000Z');
 const SUBJECT = [revision('spec')];
 const FACTS = { subject: SUBJECT, recordedAt: RECORDED_AT, reference: 'review record 7' };
 const APPROVAL: SemanticApprovalInput = { approver: 'reviewer-1', verdict: 'approved', ...FACTS };
+const REPOSITORY = parseIdentifier('RepositoryId', 'acme/project');
+assert.ok(REPOSITORY.ok);
+const CODE_HEAD: CodeHeadIdentity = {
+  repository: REPOSITORY.value as RepositoryId,
+  commit: '1'.repeat(40) as CodeObjectId,
+  tree: 'a'.repeat(40) as CodeObjectId,
+};
 
 test('each evidence kind is a frozen value with its own source and verdict', () => {
   const structural = parseStructuralValidation({ validator: 'schema-check', verdict: 'valid', ...FACTS });
@@ -65,6 +75,26 @@ test('evidence parsers name the invalid field', () => {
   ] as const;
   for (const [result, field] of cases) {
     assert.equal(!result.ok && result.error.code, 'invalid');
+    assert.equal(!result.ok && result.error.details.field, field);
+  }
+});
+
+test('evidence keeps the gate, generation, and code head it was recorded for', () => {
+  const binding = { gateId: 'specs-approval', gateGeneration: 2, codeHead: CODE_HEAD };
+  const result = parseSemanticApproval({ ...APPROVAL, ...binding });
+  assert.deepEqual(result, { ok: true, value: { kind: 'semantic-approval', ...APPROVAL, ...binding } });
+});
+
+test('evidence parsers reject an invalid gate, generation, or code head repository', () => {
+  const otherRepository = { ...CODE_HEAD, repository: 'acme project' } as unknown as CodeHeadIdentity;
+  const cases: [SemanticApprovalInput, string][] = [
+    [{ ...APPROVAL, gateId: '' }, 'gateId'],
+    [{ ...APPROVAL, codeHead: otherRepository }, 'codeHead'],
+    ...[0, -1, 1.5].map((gateGeneration): [SemanticApprovalInput, string] => [{ ...APPROVAL, gateGeneration }, 'gateGeneration']),
+  ];
+  for (const [input, field] of cases) {
+    const result = parseSemanticApproval(input);
+    assert.equal(!result.ok && result.error.code, 'invalid', field);
     assert.equal(!result.ok && result.error.details.field, field);
   }
 });

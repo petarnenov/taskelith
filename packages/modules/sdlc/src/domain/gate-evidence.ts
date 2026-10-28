@@ -3,8 +3,9 @@ import type { ArtifactRevision } from './artifact-revision.js';
 import { codeHeadField, type CodeHeadIdentity } from './code-head.js';
 import { fieldFailure } from './field-failure.js';
 import { isDisplayText } from './display-text.js';
+import type { GateId } from './gate.js';
 import { parseGateSubject, type GateSubject } from './gate-subject.js';
-import type { Generation } from './generation.js';
+import { parseGeneration, type Generation } from './generation.js';
 
 // Evidence from a validator, a reviewer, or a platform record (architecture
 // section 6); a gate accepts only its kind, so no validator replaces review.
@@ -32,12 +33,13 @@ export type EvidenceReference = string & { readonly [evidenceReferenceBrand]: tr
 
 export const MAX_EVIDENCE_REFERENCE_LENGTH = 1024;
 
-// Head-bound evidence names the head it was recorded at and the generation
-// of the pending gate it was recorded for, so it decides only that cycle.
+// Evidence names the pending gate and generation it was recorded for, so it
+// decides only that cycle, and head-bound evidence its code head.
 interface EvidenceFacts<Verdict extends string> {
   readonly verdict: Verdict;
   readonly subject: GateSubject;
   readonly codeHead?: CodeHeadIdentity;
+  readonly gateId?: GateId;
   readonly gateGeneration?: Generation;
   readonly recordedAt: Instant;
   readonly reference: EvidenceReference;
@@ -64,7 +66,8 @@ interface EvidenceFactsInput {
   readonly verdict: string;
   readonly subject: readonly ArtifactRevision[];
   readonly codeHead?: CodeHeadIdentity;
-  readonly gateGeneration?: Generation;
+  readonly gateId?: string;
+  readonly gateGeneration?: number;
   readonly recordedAt: Instant;
   readonly reference: string;
 }
@@ -143,12 +146,31 @@ function parseEvidenceFacts<Verdict extends string>(
   if (!subject.ok) return subject;
   const reference = parseEvidenceReference(input.reference);
   if (!reference.ok) return fieldFailure('reference', reference.error);
+  const binding = parseEvidenceBinding(input);
+  if (!binding.ok) return binding;
   return ok({
     verdict: input.verdict as Verdict,
     subject: subject.value,
-    ...codeHeadField(input.codeHead),
-    ...(input.gateGeneration === undefined ? {} : { gateGeneration: input.gateGeneration }),
+    ...binding.value,
     recordedAt: input.recordedAt,
     reference: reference.value,
+  });
+}
+
+type EvidenceBinding = Pick<EvidenceFacts<string>, 'codeHead' | 'gateId' | 'gateGeneration'>;
+
+function parseEvidenceBinding(input: EvidenceFactsInput): Result<EvidenceBinding> {
+  if (input.codeHead !== undefined) {
+    const repository = parseIdentifier('RepositoryId', input.codeHead.repository);
+    if (!repository.ok) return fieldFailure('codeHead', repository.error);
+  }
+  const gateId = input.gateId === undefined ? undefined : parseIdentifier('GateId', input.gateId);
+  if (gateId !== undefined && !gateId.ok) return fieldFailure('gateId', gateId.error);
+  const generation = input.gateGeneration === undefined ? undefined : parseGeneration(input.gateGeneration);
+  if (generation !== undefined && !generation.ok) return fieldFailure('gateGeneration', generation.error);
+  return ok({
+    ...codeHeadField(input.codeHead),
+    ...(gateId === undefined ? {} : { gateId: gateId.value }),
+    ...(generation === undefined ? {} : { gateGeneration: generation.value }),
   });
 }

@@ -61,20 +61,24 @@ function open(change: Partial<GateInput> = {}): Gate {
   return result.value;
 }
 
-function approval(verdict: string, subject: readonly ArtifactRevision[] = SUBJECT): GateEvidence {
-  const result = parseSemanticApproval({ approver: 'reviewer-1', verdict, subject, recordedAt: LATER, reference: 'review record 7' });
+// Evidence for the gate that `open` opens, at its first generation.
+const FOR_OPENED_GATE = { gateId: 'specs-approval', gateGeneration: 1 };
+
+function approval(verdict: string, subject: readonly ArtifactRevision[] = SUBJECT, gateGeneration = 1): GateEvidence {
+  const facts = { verdict, subject, recordedAt: LATER, reference: 'review record 7' };
+  const result = parseSemanticApproval({ approver: 'reviewer-1', ...facts, ...FOR_OPENED_GATE, gateGeneration });
   assert.ok(result.ok);
   return result.value;
 }
 
 function validation(verdict: string): GateEvidence {
-  const result = parseStructuralValidation({ validator: 'schema-check', verdict, subject: SUBJECT, recordedAt: LATER, reference: 'validate.log' });
+  const result = parseStructuralValidation({ validator: 'schema-check', verdict, subject: SUBJECT, recordedAt: LATER, reference: 'validate.log', ...FOR_OPENED_GATE });
   assert.ok(result.ok);
   return result.value;
 }
 
 function platformRecord(verdict: string): GateEvidence {
-  const result = parsePlatformRecord({ recorder: 'platform', verdict, subject: SUBJECT, recordedAt: LATER, reference: 'checkbox' });
+  const result = parsePlatformRecord({ recorder: 'platform', verdict, subject: SUBJECT, recordedAt: LATER, reference: 'checkbox', ...FOR_OPENED_GATE });
   assert.ok(result.ok);
   return result.value;
 }
@@ -307,7 +311,7 @@ test('a gate made stale by a new specification passes again only after reopening
   assert.equal(recordGateEvidence(stale, stale.generation, approval('approved', newSubject), LATER).ok, false);
   const reopened = value(reopenGate(stale, stale.generation, newSubject, LATER));
   assert.equal(recordGateEvidence(reopened, reopened.generation, approval('approved'), LATER).ok, false);
-  const approved = value(recordGateEvidence(reopened, reopened.generation, approval('approved', newSubject), LATER));
+  const approved = value(recordGateEvidence(reopened, reopened.generation, approval('approved', newSubject, reopened.generation), LATER));
   assert.equal(approved.state, 'passed');
   assert.equal(approved.generation, 5);
 });

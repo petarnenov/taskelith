@@ -83,8 +83,8 @@ export function parseBlockReason(text: string): Result<BlockReason> {
   return ok(text as BlockReason);
 }
 
-// Passes or fails a pending gate with evidence of its kind and subject; a
-// head-bound gate also needs its code head and its current generation.
+// Passes or fails a pending gate with evidence of its kind and subject for
+// it at its current generation, and at its code head if head-bound.
 export function recordGateEvidence(
   gate: Gate,
   expectedGeneration: Generation,
@@ -105,7 +105,8 @@ export function recordGateEvidence(
   if (!isAtGateCodeHead(gate, evidence)) {
     return gateFailure(gate, 'accepts only evidence recorded at its code head');
   }
-  if (!isForGateGeneration(gate, evidence)) {
+  if (evidence.gateId !== gate.id) return gateFailure(gate, 'accepts only evidence recorded for it');
+  if (evidence.gateGeneration !== gate.generation) {
     return gateFailure(gate, 'accepts only evidence recorded for its current generation');
   }
   return ok(changedGate(gate, { state: allowed.value, subject: gate.subject, decision: evidence }, at));
@@ -195,12 +196,6 @@ export function markGateStaleByCodeHead(
 function isAtGateCodeHead(gate: Gate, evidence: GateEvidence): boolean {
   if (gate.codeHead === undefined) return true;
   return evidence.codeHead !== undefined && isSameCodeHead(gate.codeHead, evidence.codeHead);
-}
-
-// A gate turns pending only when opened or reopened, at a new generation,
-// so evidence for another generation belongs to another decision.
-function isForGateGeneration(gate: Gate, evidence: GateEvidence): boolean {
-  return gate.codeHead === undefined || evidence.gateGeneration === gate.generation;
 }
 
 function checkTransition(gate: Gate, expectedGeneration: Generation, to: GateState): Result<GateState> {

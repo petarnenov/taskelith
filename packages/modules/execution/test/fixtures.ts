@@ -110,7 +110,9 @@ export function pendingGate(stage: string, subject: readonly ArtifactRevision[])
 
 export function passedGate(stage: string, subject: readonly ArtifactRevision[]): Gate {
   const pending = pendingGate(stage, subject);
-  const approval = value(parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject, recordedAt: T0, reference: 'review' }));
+  const approval = value(parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject, recordedAt: T0, reference: 'review',
+    gateId: pending.id, gateGeneration: pending.generation,
+  }));
   return value(recordGateEvidence(pending, pending.generation, approval, T0));
 }
 

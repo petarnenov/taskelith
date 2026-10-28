@@ -48,29 +48,40 @@ const EDIT_HEAD = head('2', 'b');
 const REVERT_HEAD = head('3', 'a');
 
 // `null` opens a gate that is not head-bound.
-function reviewGate(codeHead: CodeHeadIdentity | null = REVIEWED_HEAD): Gate {
-  const input = { id: 'code-review', stageId: 'review', requiredEvidence: 'semantic-approval', subject: [SPEC] };
+function reviewGate(codeHead: CodeHeadIdentity | null = REVIEWED_HEAD, id = 'code-review'): Gate {
+  const input = { id, stageId: 'review', requiredEvidence: 'semantic-approval', subject: [SPEC] };
   return value(openGate(codeHead === null ? input : { ...input, codeHead }, OPENED_AT));
 }
 
-function approvalAt(codeHead: CodeHeadIdentity | undefined, gateGeneration?: Generation): GateEvidence {
+// What an approval names beyond its subject: the head, gate, and generation.
+interface EvidenceBinding {
+  readonly codeHead?: CodeHeadIdentity | undefined;
+  readonly gateId?: string;
+  readonly gateGeneration?: Generation;
+}
+
+function approval(binding: EvidenceBinding): GateEvidence {
   const facts = { approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], recordedAt: LATER, reference: 'review 9' };
-  const atHead = codeHead === undefined ? facts : { ...facts, codeHead };
-  return value(parseSemanticApproval(gateGeneration === undefined ? atHead : { ...atHead, gateGeneration }));
+  return value(parseSemanticApproval({ ...facts, ...binding }));
+}
+
+function bindingOf(gate: Gate): EvidenceBinding {
+  return { codeHead: gate.codeHead, gateId: gate.id, gateGeneration: gate.generation };
 }
 
 function approved(gate: Gate): Gate {
-  return value(recordGateEvidence(gate, gate.generation, approvalAt(gate.codeHead, gate.generation), LATER));
+  return value(recordGateEvidence(gate, gate.generation, approval(bindingOf(gate)), LATER));
 }
 
 function reopenedAt(gate: Gate, codeHead: CodeHeadIdentity): Gate {
   return value(reopenGateAtCodeHead(gate, gate.generation, { subject: [SPEC], codeHead }, LATER));
 }
 
+const OTHER_GENERATION = 'gate code-review accepts only evidence recorded for its current generation';
+
 function assertSupersededRefused(gate: Gate, superseded: GateEvidence | undefined): void {
   assert.ok(superseded !== undefined);
-  assertRefused(recordGateEvidence(gate, gate.generation, superseded, LATER), 'precondition-failed',
-    'gate code-review accepts only evidence recorded for its current generation');
+  assertRefused(recordGateEvidence(gate, gate.generation, superseded, LATER), 'precondition-failed', OTHER_GENERATION);
   assert.equal(approved(gate).state, 'passed');
 }
 
@@ -100,18 +111,37 @@ test('an artifact edit, even one that restores the content, does not restore an 
   const passed = approved(reviewGate());
   const superseded = passed.decision;
   assert.ok(superseded !== undefined);
-  const edited = value(markGateStaleByCodeHead(passed, passed.generation, EDIT_HEAD, LATER));
-  assertRefused(markGateStale(edited, edited.generation, SPEC, LATER), 'precondition-failed',
-    'gate code-review cannot change from stale to stale');
+  const edited = value(markGateStale(passed, passed.generation, EDITED_SPEC, LATER));
   assertRefused(reopenGate(edited, edited.generation, [SPEC], LATER), 'precondition-failed',
     'gate code-review is head-bound and reopens only at a code head');
-  const reverted = value(reopenGateAtCodeHead(edited, edited.generation, { subject: [SPEC], codeHead: REVERT_HEAD }, LATER));
+  assertSupersededRefused(reopenedAt(edited, REVIEWED_HEAD), superseded);
+  const moved = value(markGateStaleByCodeHead(passed, passed.generation, EDIT_HEAD, LATER));
+  const reverted = reopenedAt(moved, REVERT_HEAD);
   assert.equal(reverted.state, 'pending');
   assert.equal(reverted.decision, undefined);
   assertRefused(recordGateEvidence(reverted, reverted.generation, superseded, LATER), 'precondition-failed',
     'gate code-review accepts only evidence recorded at its code head');
-  const reviewed = value(recordGateEvidence(reverted, reverted.generation, approvalAt(REVERT_HEAD, reverted.generation), LATER));
-  assert.equal(reviewed.state, 'passed');
+  assert.equal(approved(reverted).state, 'passed');
+});
+
+test('a gate without a code head does not take a superseded approval after an edit and its revert', () => {
+  const passed = approved(reviewGate(null));
+  const edited = value(markGateStale(passed, passed.generation, EDITED_SPEC, LATER));
+  assertSupersededRefused(value(reopenGate(edited, edited.generation, [SPEC], LATER)), passed.decision);
+});
+
+test('an approval for one gate does not pass another gate with the same kind, subject, and head', () => {
+  const first = reviewGate();
+  const forFirst = approval(bindingOf(first));
+  const parallel = reviewGate(REVIEWED_HEAD, 'second-review');
+  assertRefused(recordGateEvidence(parallel, parallel.generation, forFirst, LATER), 'precondition-failed',
+    'gate second-review accepts only evidence recorded for it');
+  const passed = value(recordGateEvidence(first, first.generation, forFirst, LATER));
+  value(markGateStaleByCodeHead(passed, passed.generation, EDIT_HEAD, LATER));
+  const later = reviewGate(REVIEWED_HEAD, 'second-review');
+  assertRefused(recordGateEvidence(later, later.generation, forFirst, LATER), 'precondition-failed',
+    'gate second-review accepts only evidence recorded for it');
+  assert.equal(approved(later).state, 'passed');
 });
 
 test('a superseded approval does not pass a gate reopened at its head after an artifact edit', () => {
@@ -129,18 +159,25 @@ test('a superseded approval does not pass a gate reopened at its head after anot
   assertSupersededRefused(reopenedAt(returned, REVIEWED_HEAD), passed.decision);
 });
 
-test('a head-bound gate needs evidence recorded for its current generation', () => {
-  const pending = reviewGate();
-  const other = (pending.generation + 1) as Generation;
-  for (const unbound of [approvalAt(REVIEWED_HEAD), approvalAt(REVIEWED_HEAD, other)]) {
-    assertRefused(recordGateEvidence(pending, pending.generation, unbound, LATER), 'precondition-failed',
-      'gate code-review accepts only evidence recorded for its current generation');
+test('every gate needs evidence recorded for it at its current generation', () => {
+  for (const pending of [reviewGate(), reviewGate(null)]) {
+    const bound = bindingOf(pending);
+    const other = (pending.generation + 1) as Generation;
+    for (const forAnother of [{ ...bound, gateId: undefined }, { ...bound, gateId: 'second-review' }]) {
+      assertRefused(recordGateEvidence(pending, pending.generation, approval(forAnother), LATER), 'precondition-failed',
+        'gate code-review accepts only evidence recorded for it');
+    }
+    for (const unbound of [{ ...bound, gateGeneration: undefined }, { ...bound, gateGeneration: other }]) {
+      assertRefused(recordGateEvidence(pending, pending.generation, approval(unbound), LATER), 'precondition-failed',
+        OTHER_GENERATION);
+    }
   }
 });
 
 test('evidence from another code head is rejected', () => {
   const pending = reviewGate();
-  for (const foreign of [approvalAt(EDIT_HEAD), approvalAt(head('1', 'a', 'acme/other')), approvalAt(undefined)]) {
+  for (const codeHead of [EDIT_HEAD, head('1', 'a', 'acme/other'), undefined]) {
+    const foreign = approval({ ...bindingOf(pending), codeHead });
     assertRefused(recordGateEvidence(pending, pending.generation, foreign, LATER), 'precondition-failed',
       'gate code-review accepts only evidence recorded at its code head');
   }
@@ -153,7 +190,8 @@ test('a gate without a code head ignores code heads', () => {
   assert.equal(isGateOutdatedByCodeHead(pending, EDIT_HEAD), false);
   assertRefused(markGateStaleByCodeHead(pending, pending.generation, EDIT_HEAD, LATER), 'precondition-failed',
     'gate code-review is not outdated by that code head');
-  for (const anyHead of [approvalAt(EDIT_HEAD), approvalAt(undefined)]) {
+  for (const codeHead of [EDIT_HEAD, undefined]) {
+    const anyHead = approval({ ...bindingOf(pending), codeHead });
     assert.equal(value(recordGateEvidence(pending, pending.generation, anyHead, LATER)).state, 'passed');
   }
   const stale = value(markGateStale(pending, pending.generation, EDITED_SPEC, LATER));
@@ -173,7 +211,7 @@ test('a head-bound gate keeps a copy of its head through other changes', () => {
     'gate code-review is not outdated by that code head');
   assertRefused(reopenGateAtCodeHead(stale, stale.generation, { subject: [], codeHead: EDIT_HEAD }, LATER),
     'invalid', 'subject: a gate subject needs at least one artifact revision');
-  const evidence = approvalAt(codeHead);
+  const evidence = approval({ codeHead });
   assert.notEqual(evidence.codeHead, codeHead);
   assert.ok(Object.isFrozen(evidence.codeHead));
 });
@@ -189,6 +227,18 @@ test('code-head transitions check the generation before any other rule', () => {
     reopenGateAtCodeHead(stale, opened.generation, target, LATER),
   ]) {
     assert.equal(!result.ok && result.error.code, 'conflict');
+  }
+});
+
+test('reopening checks the transition before the head binding', () => {
+  for (const passed of [approved(reviewGate()), approved(reviewGate(null))]) {
+    const target = { subject: [SPEC], codeHead: EDIT_HEAD };
+    for (const result of [
+      reopenGate(passed, passed.generation, [SPEC], LATER),
+      reopenGateAtCodeHead(passed, passed.generation, target, LATER),
+    ]) {
+      assertRefused(result, 'precondition-failed', 'gate code-review cannot change from passed to pending');
+    }
   }
 });
 

@@ -314,6 +314,9 @@
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
           },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
           "gateGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
@@ -361,6 +364,9 @@
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
           },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
           "gateGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
@@ -407,6 +413,9 @@
           },
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
+          },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
           },
           "gateGeneration": {
             "$ref": "#/components/schemas/Generation"
@@ -893,7 +902,7 @@
           "metadata",
           "payload"
         ],
-        "description": "A gate returned to pending for a new subject, and a head-bound gate for a new code head.",
+        "description": "A gate returned to pending for a new subject, and a head-bound gate for a subject at a code head.",
         "properties": {
           "metadata": {
             "allOf": [
@@ -984,7 +993,7 @@
       "gateReopened": {
         "name": "sdlc.gate.reopened",
         "title": "GateReopened",
-        "summary": "A gate returned to pending for a new subject, and a head-bound gate for a new code head.",
+        "summary": "A gate returned to pending for a new subject, and a head-bound gate for a subject at a code head.",
         "payload": {
           "$ref": "#/components/schemas/GateReopenedEvent"
         }
