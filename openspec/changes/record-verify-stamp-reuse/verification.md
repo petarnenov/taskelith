@@ -21,7 +21,7 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 - **Error handling.** A failed append warns on standard error and the run continues (design.md "Risks"); the line stays in the output and the pull request body. A run that fails or is interrupted in its verify step records nothing (design.md D3).
 - **Redaction.** The line holds only a tree hash, the change and branch names, times, and seconds; no credential or environment value.
 - **Scope.** No change to when a stamp is reused, to `.githooks/pre-push`, or to `scripts/verify-stamp.ts`.
-- **Spec.** The added requirement has 395 characters of body, under the strict limit after archive.
+- **Spec.** The added requirement had 395 characters of body; after the pass 1 fix it has 457, under the strict limit after archive.
 - New comments are at most two lines of at most 80 characters; `npm run verify:comments` passes. Commit types are `chore` for the code and `docs` for the records, without attribution.
 
 ## Evidence check

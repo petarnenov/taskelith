@@ -7,7 +7,7 @@
 
 - [x] 2.1 Spec delta of `integration-flow`: add "Integration verify record"
 - [x] 2.2 `scripts/integrate.sh`: print the integration line, add it to the pull request body, and append it to `integrations.jsonl`, warning on a failed append
-- [x] 2.3 Tests that fail before the change: the ran path, the reused path, the pull request body, the JSON line, and the failed append
+- [x] 2.3 Tests that fail before the change: the ran path, the reused path, the pull request body, the resume that appends to an open pull request's body, the JSON line, and the failed append
 - [x] 2.4 `docs/agent-task-protocol.md`: the line and the log in coordinator step 2
 
 ## 3. Verification

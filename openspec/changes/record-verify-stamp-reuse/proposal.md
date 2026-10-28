@@ -5,7 +5,7 @@ The owner decided on 2026-10-28 that every integration records whether `make ver
 ## What Changes
 
 - `make integrate` (`scripts/integrate.sh`) prints one integration line after its verify step: the merged tree hash; `ran`, or `reused stamp of <time>` with the stamp's verification time; the profile; the whole seconds of the verify step, near 0 on reuse; the archived change; the branch; and the run's start time.
-- It adds the same line after the coordinator's `BODY` to the body of the integration pull request that it opens.
+- It adds the same line after the coordinator's `BODY` to the body of the integration pull request that it opens, or appends it to the body of an open pull request that a resume continues, before the merge.
 - It appends the line as one JSON object to `${XDG_STATE_HOME:-~/.local/state}/taskelith/integrations.jsonl`, next to its verify logs; a failed append only warns and never fails the integration.
 - `docs/agent-task-protocol.md` names the line and the log in the coordinator's integration step.
 
