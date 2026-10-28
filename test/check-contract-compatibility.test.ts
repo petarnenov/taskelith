@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
@@ -9,6 +10,7 @@ import {
   compatibilityProblems,
   declarationProblems,
   declaresBreakingChange,
+  documentProblems,
   formatDeclarations,
   listedDeclarations,
   oasdiffBreakingChanges,
@@ -282,11 +284,36 @@ test('the listing prints the file format with the head version and an empty reas
   ]);
 });
 
+test('the check adds the declarations to the existing rule, unless the file is malformed', () => {
+  const minor = { path: API, baseVersion: '0.4.0', headVersion: '0.5.0', breakingChanges: ['remove /channels/a'] };
+  const patch = { path: OTHER, baseVersion: '0.4.0', headVersion: '0.4.1', breakingChanges: ['remove /a'] };
+  const valid = readDeclarations(fileText([declaration('0.5.0', ['remove /channels/a']), declaration('0.4.1', ['remove /a'], OTHER)]), DOCUMENT_PATHS);
+  const malformed = readDeclarations('{', DOCUMENT_PATHS);
+
+  assert.deepEqual(valid.problems, []);
+  assert.deepEqual(documentProblems([minor], valid), []);
+  assert.deepEqual(documentProblems([minor], { declarations: [], problems: [] }), [
+    `${API}: breaking change of 0.5.0 over 0.4.0 not listed in ${FILE}: remove /channels/a`,
+  ]);
+  assert.deepEqual(documentProblems([patch], valid), [
+    `${OTHER}: breaking change without a new major version (or minor while 0.x) over 0.4.0: remove /a`,
+    `${OTHER}: stale entry 0.4.1 in ${FILE}: 0.4.1 over 0.4.0 declares no breaking change of that version`,
+  ]);
+  assert.deepEqual(documentProblems([minor], malformed), []);
+});
+
 test('the check takes --print, optionally with --base, and nothing else', () => {
   assert.deepEqual(parseMode([]), { print: false, base: undefined });
   assert.deepEqual(parseMode(['--print']), { print: true, base: undefined });
   assert.deepEqual(parseMode(['--print', '--base', '9196804b']), { print: true, base: '9196804b' });
   for (const args of [['--base', '9196804b'], ['--write'], ['extra'], ['--print', '--base']]) assert.equal(parseMode(args), undefined, args.join(' '));
+});
+
+test('an unknown --base revision fails with a message, not a stack trace', () => {
+  const args = ['--experimental-strip-types', 'scripts/check-contract-compatibility.ts', '--print', '--base', 'no-such-rev'];
+  const run = spawnSync(process.execPath, args, { encoding: 'utf8' });
+
+  assert.deepEqual({ status: run.status, stdout: run.stdout, stderr: run.stderr }, { status: 1, stdout: '', stderr: 'BASE no-such-rev is not a commit.\n' });
 });
 
 test('AsyncAPI breaking changes are computed in process from two documents', async () => {
