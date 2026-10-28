@@ -13,6 +13,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - `make verify` of the pass 1 fixes passed on `1089addf`, the merge of `origin/dev` `3f23516a` (no conflict; it changed only the Claude Code reviewer rows of `docs/agent-task-protocol.md` and two living specs that no delta of this change touches); `make record` and `make record-check` passed.
 - Merge `1a758b85` of `origin/dev` `1c73e1a7` (#380, #381) into `8d4b3c7a`, with conflicts; the full `make verify` passed on it, and `make record` and `make record-check` passed on the record commit that follows it (see "Merge reconciliation").
 - Review pass 2 fixes, on `1e1cd10f`: `4818a7b7` scripts, tests, and `Makefile` (findings 1, 2, 3, 5, 6, 7, and 10); `149058b8` spec deltas, design, protocol, and coordinator skill (finding 4 and the text of the others); `0be2c4ab` this record (findings 8 and 9); then the pass 2 records.
+- Review pass 3 fixes, on `d9d191dd`, unreviewed under "At most three passes": `945b09f7` `scripts/integrate.sh` and its tests (findings 1 and 2); then this record.
 
 ## Environment
 
@@ -23,7 +24,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
 - Stamp (D2): `scripts/verify-stamp.ts:163` keys the stamp on the tree, its merge base with `origin/dev` (`:98`), profile, Node.js and npm versions, the lockfile hash, and the service images; `:234` writes it only for a tree that was clean at the start and unchanged at the end; `:197` and `:213` let a full stamp satisfy docs-only, never the reverse, and refuse reuse under `CI`; `:248` detects a `make -n`, `-t`, or `-q` run, which writes none. `Makefile:36-44` runs `verify-stamped`; `.githooks/pre-push:9` skips `make verify` only on a satisfying stamp.
 - Docs-only profile (D1): `scripts/verify-stamp.ts:30` is the path set, without the tested `docs/review-findings/**` and `docs/qualification/**`; `:83` forces the full profile for `CI`, `dev`, `main`, a detached HEAD, `TASKELITH_VERIFY_PROFILE=full`, a missing merge base, and an empty change, and refuses any other value of that variable; `Makefile:51` skips only `make test`.
 - Docker slot (D3): `scripts/docker-slot.ts:109` takes a ticket in the bakery's three steps, with a never-reused path; `:161` treats a holder as gone only when its process ID is free or reused and its process group is empty; `:208` and `:226` remove stale markers and then stale tickets and give the slot to the lowest ticket while no run is choosing; `:295` starts the holder as a process group leader and forwards signals to the group, and `:308` holds the slot and removes the ticket; `Makefile:87-93` wraps `make test` and adds `make docker-slot`.
-- Integration (D5): `scripts/integrate.sh:39` waits on the pause file, `:46` is the process-group supervisor of the alarm and of `INT`, `TERM`, and `HUP`, and `:74` forwards those signals to it, `:93` checks the main clone, `:110` finds an earlier pull request, `:127` lands and cleans up, `:169-196` checks the archive, only cleans up a HEAD already in `origin/dev`, and merges on the local branch, `:200` requires a clean tree, `:206-228` reuses a full stamp or runs the full `make verify` and then requires the stamp, `:136-147` checks the deletion, `:148` prints `LANDED`; `Makefile:274-286` passes the arguments unexpanded and resumes only on `RESUME=1`.
+- Integration (D5): `scripts/integrate.sh:39` waits on the pause file, `:46` is the process-group supervisor of the alarm and of `INT`, `TERM`, and `HUP`, which installs its handlers before it forks, and `:84` and `:91` trap those signals before it starts and pass each on as itself, `:113` checks the main clone, `:130` finds an earlier pull request, `:147` lands and cleans up, `:189-216` checks the archive, only cleans up a HEAD already in `origin/dev`, and merges on the local branch, `:220` requires a clean tree, `:226-248` reuses a full stamp or runs the full `make verify` and then requires the stamp, `:156-167` checks the deletion, `:168` prints `LANDED`; `Makefile:274-286` passes the arguments unexpanded and resumes only on `RESUME=1`.
 - Records: `scripts/verification-record.ts:67` and `:106` read the last complete run's stamped result line, counts, and coverage from the log; `:224` stores the generated line next to the stamp; `:206` rewrites only the text between the markers; `:262` and `:279` recompute every other part and check the stamp, the tree, and the stored line.
 - Context hook (D4): `scripts/context-warning.ts:35` takes the newest main-thread usage, its input tokens only, with the size estimate as fallback; `:83` prints only the warning line and swallows every failure; `.claude/settings.json` runs it on `UserPromptSubmit` with a 5 s timeout.
 - Documents: `docs/governance.md:3` (version 6) and `:46` (conditional pass 3); `docs/agent-task-protocol.md` worker steps 4, 6, 8, 9, and 10, coordinator steps 2 to 4, "Subagent execution", "Test authoring", and "Context size"; `AGENTS.md`, `docs/fleet.md`, `docs/releases.md`, and the three skills. The former wording `git merge --no-commit --no-ff origin/dev` remains only in archived changes and in the living requirement that this change's delta removes.
@@ -53,6 +54,11 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
   - After the fixes, `node --experimental-strip-types --test --experimental-test-coverage` with the four new TypeScript scripts included, over the eight test files listed above: tests 129, pass 129, fail 0. Coverage: `verify-stamp.ts` 100% lines, 100% branches, 100% functions; `docker-slot.ts` 98.38%, 94.74%, 98.04%; `verification-record.ts` 98.30%, 92.90%, 100%; `context-warning.ts` 98.06%, 97.30%, 100%. `test/integrate-script.test.ts` has 19 tests.
   - `npx tsc -p tsconfig.check.json --noEmit`: no error. `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 58 findings files and 38 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --strict --all --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`; the longest requirement body of the deltas is 493 characters.
   - Not run: `make verify`, which needs the Docker slot. `make record-check` fails until `make verify` and `make record` run on the fixed tree, because the scripts changed after the recorded tree.
+- Review pass 3 fixes, on `945b09f7` without Docker:
+  - Fail-before: `test/integrate-script.test.ts --test-name-pattern=SIG` with the `scripts/integrate.sh` of `d9d191dd` and the new tests: tests 6, pass 1, fail 2, cancelled 3. The `SIGINT` and `SIGHUP` tests during `make verify` (finding 1) fail with `143 !== 130` and `143 !== 129`; the `SIGTERM` test passes. The three tests that signal the script as the supervisor starts (finding 2) time out after 120 s, because the one passed-on signal is lost and the script waits for the 300 s fake `make verify`. Afterwards `ps` showed no `sleep 300` or fake `make verify` process left.
+  - After the fix: `test/integrate-script.test.ts`: tests 24, pass 24, fail 0; afterwards `ps` showed no process of the fixtures left.
+  - `npx tsc -p tsconfig.check.json --noEmit`: no error. `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 58 findings files and 38 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --strict --all --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
+  - Not run: `make verify`, which needs the Docker slot, and so `make record` and `make record-check`.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -131,6 +137,22 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 - **Checks after the fixes:** under "Checks and results".
 - **Pass 3:** required by "Conditional third pass", because finding 1 is High and the fixes change files under `scripts/` and the `Makefile`.
 
+### Review pass 3
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, run from the worktree, 07:15:08 to 07:17:45 local, 2026-10-28.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt and log outside the worktree; the prompt names the diff `git diff 1e1cd10f d9d191dd`.
+- **Revision:** `d9d191dd`.
+- **Model confirmation:** the output header records `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only`; session `01a180ef-0061-7101-a785-6d196c88fbe0`.
+- **Snapshot:** `6838fe9876d87042e964d8b9fe559b0527671d07ff63fc8696b6466687c78f7a` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 2 Medium, 0 Low; both were checked against the code and are **fixed-unreviewed**; `findings.jsonl` has one line per finding.
+
+| # | Severity | Category | Finding | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | Medium | contract-drift | The trap forwarded `INT` and `HUP` as `TERM`, so the script exited 143, not 130 or 129; only `SIGTERM` was tested (`scripts/integrate.sh:77`) | `945b09f7`: one trap per signal passes it on as itself; tests for all three signals |
+| 2 | Medium | error-handling | The supervisor started before the shell traps and forked before its handlers, so an early signal could leave `make verify` running (`scripts/integrate.sh:75`, `:50-56`) | `945b09f7`: traps first, the signal repeats until the supervisor ends, handlers and a blocked mask before `fork`; tests signal the script as the supervisor starts |
+
+- **Unreviewed fixes:** the change has had its three passes, so under "At most three passes" the owner's away delegate (Claude Fable 5.1, run `/Users/petarnenov/.config/away/runs/20261028T051817Z-claude-81081`, relayed by the coordinator Niki) decided to fix both findings without a fourth pass; `945b09f7` fixes them, and no reviewer has checked it.
+
 ## Merge reconciliation
 
 - **Merge.** `1a758b85` merges `origin/dev` `1c73e1a7` (#380 and #381) into `8d4b3c7a` with a merge commit. Base: `git merge-base 8d4b3c7a 1c73e1a7` = `3f23516a`. `git show 1a758b85 --cc` shows the resolutions.
@@ -164,7 +186,7 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
-- `make verify` of the pass 2 fixes, then `make record` and `make record-check`
-- Independent review: pass 3 by reviewer A, Codex CLI (`gpt-6.1-sol`), required by "Conditional third pass"
-- Archive of the change
+- `make verify` of the pass 2 and pass 3 fixes, in a Docker slot the coordinator grants, then `make record` and `make record-check`
+- Archive of the change, as the last commit
+- Handoff to the coordinator
 - Integration into dev by the coordinator (single pull request)
