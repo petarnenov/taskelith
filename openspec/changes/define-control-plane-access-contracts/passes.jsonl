@@ -1,0 +1,1 @@
+{"change": "define-control-plane-access-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a181dd-9282-7cc3-9cac-62361e988c19", "counts": {"critical": 0, "high": 0, "medium": 6, "low": 3}}

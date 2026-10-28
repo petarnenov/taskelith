@@ -1,6 +1,6 @@
 # Verification: define-control-plane-access-contracts
 
-Status: developed and verified by the author; independent review pending.
+Status: developed and verified by the author; review pass 1 done and its findings fixed; pass 2 pending.
 
 ## Scope and source
 
@@ -16,7 +16,9 @@ Status: developed and verified by the author; independent review pending.
 - `7206ddd4` `chore: add the control-plane access contract document` (document and contract tests).
 - `b1719e0f` `docs: define the control-plane access contracts` (contract page, G3 plan row 9, execution wire contracts, change record, spec deltas).
 - `f369da91` `docs: record the route of the control-plane access contracts` (`route.json`, unedited). The `make verify` run below checked this commit's tree.
-- The commit that adds this record changes only `verification.md`.
+- `b0e76d0c` `docs: record the verification of the control-plane access contracts` (this record), the head that review pass 1 reviewed.
+- Pass 1 fixes: `d63cc174` `chore: add the remote URL to the repository binding and accept Git branch names` (document and contract tests) and `cfde4f9b` `docs: scope the bearer, order, compare-and-set, and paging rules of the control plane` (spec delta, contract page, design).
+- The commit that records pass 1 changes only this record, `findings.jsonl`, and `passes.jsonl`, and the `make verify` run of the pass 1 fixes checked its tree.
 
 ## Environment
 
@@ -44,13 +46,19 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 | `f369da91` | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`, first run (log `cpac-verify-1.log` in the session scratchpad) | Passed, profile full, tree `9560531d`: tests 2928, pass 2881, fail 0, skipped 47; all files 99.35% lines, 92.73% branches, 99.00% functions; but "the tree changed during the run, no stamp written", because this record was being drafted in the change directory. Superseded by the second run |
 | `f369da91`, clean tree | Same, second run (log `cpac-verify-2.log` in the session scratchpad) | Passed, stamp written; generated part below. The wrapper had appended an `exit 0` line to the log, which was removed before `make record`, so that the log ends with the stamped result |
 | This record | `make record CHANGE=define-control-plane-access-contracts LOG=<log>`; `make record-check CHANGE=define-control-plane-access-contracts` | Generated part written; `the generated part matches the tree` |
+| Pass 1 fixes, working tree | `npm run openspec -- validate define-control-plane-access-contracts --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | Valid; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
+| Same, after `npm run build` | `node --experimental-strip-types --test --test-reporter=dot test/generate-contracts.test.ts packages/contracts/test/*.test.ts` | 59 tests, all passed |
+| Same, document of `b0e76d0c` with the new tests | `node --experimental-strip-types --test packages/contracts/test/control-plane-contracts.test.ts` | Fail-before: 3 of 20 failed, the binding test, `a binding branch is any name that git check-ref-format --branch accepts`, and `a binding remote is an HTTPS URL without user information` |
+| Same | The `BranchName` pattern against `git check-ref-format --branch` (Git 2.43.0) over 43 names, among them `release/версия`, `@`, `HEAD`, `a..b`, `x.lock`, and `a@{b` | Same verdict for every name |
+| Same | Spec delta requirement body lengths, in characters | Browser session and CSRF schemes 470, Access failures 427, Project setup operations 464, Webhook receiver 399, Identifiers and pages 407; the others unchanged |
+| Pass 1 records | `make findings ARGS="validate"` | Every findings file is valid |
 
 ## Limitations
 
 - Contract only: no handler enforces the schemes, the roles, the CSRF check, or the serialization of token rotation and redemption; items 10 to 12, 15, and 20 must, and their tests must check the real cookie attributes and headers.
 - `make contract-compatibility` skips a document that is missing at the merge base, so this first version had no breaking-change check; the next change to the document gets one.
 - The document is not validated by a dedicated OpenAPI linter: the repository has none among its dependencies. Its validity rests on the type generator (`openapi-typescript`, which refuses an unresolved reference), the ajv compilation of every schema in strict mode, and the contract tests.
-- The route record recommends reviewer B at `xhigh`; the brief names `claude-opus-5-5` at `high`. An effort above standard needs governance authorization, which is the coordinator's.
+- The route record recommends reviewer A at `high` and reviewer B at `xhigh`. Under governance "Routed effort" these elevated efforts apply only after a later governance change that the owner approves; until then the authorized efforts stay, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, as the authorized reviewer list and the brief give them.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -66,10 +74,22 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run.
+- Pass 1, reviewer A: Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, codex v0.163.0, session `01a181dd-9282-7cc3-9cac-62361e988c19`, invoked on 2026-10-28 on the reviewed head `b0e76d0c` as `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`; the header confirmed `model: gpt-6.1-sol`, `reasoning effort: medium`, and `sandbox: read-only`. The SHA-256 snapshot was `94c29e82b1be067f4d56859861d343c36b1946370f73737ab6b5ae4feff93c8c` before and after the pass, so the reviewer changed nothing. 0 critical, 0 high, 6 medium, 3 low, all fixed ([findings](findings.jsonl), [passes](passes.jsonl)):
+  - M1, contract-drift: the binding had no remote URL, which a workspace prepare takes from it (git workspace contract section 3). `RemoteUrl`, HTTPS without user information, is now required in `RepositoryBindingInput` and `RepositoryBinding`; design decision 11 and contract page section 4.
+  - M2, contract-drift: `BranchName` refused valid non-ASCII branch names. It now follows `git check-ref-format --branch`, and its 1024-character bound is justified as a request bound.
+  - M3, spec-wording: the bearer was offered to `logIn` and `logOut`. The requirement, its scenario, and contract page section 2 exclude them, and a new test pins it.
+  - M4, spec-wording: authentication before the body read cannot hold for the receiver. The order is limited to session and bearer operations, and the receiver's order, bounded raw read, signature verification, then the payload, is stated in the spec and contract page section 5.
+  - M5, spec-wording: "every update" overstated compare-and-set. The spec names the compare-and-set project operations and the exceptions, with a scenario for concurrent member assignments, and contract page section 4 lists every compare-and-set operation and exception.
+  - M6, spec-wording: paging covered `listWorkers`. The requirement, its scenario, and contract page section 6 exclude it, and a new test checks that every other list takes `after`.
+  - L1, docs: the cookie scheme description now limits what the `__Host-` prefix enforces, as design decision 4 does.
+  - L2, docs: design decision 19 states that a login name starts with a letter or digit.
+  - L3, evidence-mismatch: the limitation on the routed effort now cites governance "Routed effort" instead of the coordinator.
+- The findings outside this directory name the capability `control-plane-api`, the closest existing one, because `make findings` accepts only directories under `openspec/specs` and this change creates `control-plane-wire-contracts`; the spec delta findings name it too, because they concern the contract rather than this record.
+- Route: `route.json` is kept. The fixes change 104 lines (81 added, 23 removed) in five files the route already counted, with no new file, capability, or touched area, so its features keep their triggers (`lines`, `contracts`) and its tier `elevated`.
+- Pass 2, reviewer B: Claude Code `claude-opus-5-5`, effort `high`; pending.
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A, Codex `gpt-6.1-sol` (the brief), and pass 2 by reviewer B, Claude Code `claude-opus-5-5` at `high` (the brief); pass 3 by reviewer A only as governance "Conditional third pass" requires.
+- Review pass 2 by reviewer B, Claude Code `claude-opus-5-5` at `high` (the brief); pass 3 by reviewer A, Codex `gpt-6.1-sol` at `medium`, only as governance "Conditional third pass" requires.
 - The archive (task 5.1).
 - Integration into dev by the coordinator (single pull request).
