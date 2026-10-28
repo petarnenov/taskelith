@@ -10,10 +10,14 @@ const DEV_BRANCH = 'origin/dev';
 
 // Hook variables such as GIT_DIR are dropped, and the ceiling keeps git
 // from using a repository above the given root.
+export function gitEnvironment(inherited: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
+  const kept = Object.entries(inherited).filter(([name]) => !name.startsWith('GIT_'));
+  return { ...Object.fromEntries(kept), GIT_CEILING_DIRECTORIES: posix.dirname(root) };
+}
+
 function gitOutput(root: string, args: readonly string[]): string | undefined {
   try {
-    const inherited = Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'));
-    const env = { ...Object.fromEntries(inherited), GIT_CEILING_DIRECTORIES: posix.dirname(root) };
+    const env = gitEnvironment(process.env, root);
     return execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
   } catch {
     return undefined;
