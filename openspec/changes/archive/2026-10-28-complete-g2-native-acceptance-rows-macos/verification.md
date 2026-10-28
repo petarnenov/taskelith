@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification, the evidence runs, `make verify`, the fixes of review passes 1 and 2, and review pass 3, which ended the review, are recorded below.
+Date: 2026-10-28. The author's verification, the evidence runs, `make verify`, the fixes of review passes 1 and 2, review pass 3, which ended the review, and the archive checks are recorded below.
 
 ## Scope and source
 
@@ -124,9 +124,21 @@ Fixes:
 - The Linux entry was not run on this host; its scenario proofs are not applicable on macOS.
 - The Linux paths of the shared scenario helpers (`SCENARIO_LAUNCH_HOST`, `workerLaunchHost`, `assertWorkerSupervised`, `processesNaming`, the stub volume probe) did not run in this change: `make verify` on macOS skips the scenario files, and neither `make verify-linux-g2-scenarios` nor a Linux `make verify` ran. The Linux `make verify` runs in `release.yml` at the promotion to `main` (review pass 2, L-8).
 
+## Archive checks
+
+Run on the tree of the archive commit, the archive of `624bea94` on merge base `f6696995` with `origin/dev`, on 2026-10-28, as the uncommitted working tree before the commit, which also links `docs/g3-plan.md` and `docs/worker-platforms.md` to this `acceptance.md`:
+
+- `npm run openspec -- archive complete-g2-native-acceptance-rows-macos --yes`: archived as `2026-10-28-complete-g2-native-acceptance-rows-macos`; `g2-failure-scenarios` 2 added, 1 modified, 1 removed; `native-worker-acceptance` 1 added.
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-complete-g2-native-acceptance-rows-macos` passes; the command reports 221 passed, 14 failed, all 14 older archived changes with open tasks.
+- `git diff f6696995 -- openspec/specs`: only `openspec/specs/g2-failure-scenarios/spec.md` (35 lines changed) and `openspec/specs/native-worker-acceptance/spec.md` (7 insertions), 34 insertions and 8 deletions: the added requirements "Scenarios through the macOS supervisor", "Adoption cancel scenario", and "macOS cancellation and connectivity scenarios in native acceptance", the modified "Cancel after W4", and the removed "Adoption cancel scenario on Linux".
+- The moved change has `findings.jsonl` (14 lines) and `passes.jsonl` (3 lines); `make findings ARGS="validate"`: 61 findings files and 41 pass summary files valid.
+- `npm run verify:links`: every checked link conforms.
+- `make verify` on that working tree: passed, profile full, no stamp because the tree was uncommitted. Tests: 2662, 2655 pass, 0 fail, 0 cancelled, 7 skipped. Coverage of all files: lines 99.36%, branches 92.50%, functions 99.06%. `verify:archive` found no active change.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a new `make record`: the working tree differs from the verified tree `b4a81102` in the moved change, the two docs, and the living specs, and the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty. The generated part stays the record of `88caa1ed`.
+
 ## Remaining gates
 
-- The archive commit, which links `docs/g3-plan.md` and `docs/worker-platforms.md` to the archived `acceptance.md`, with its checks.
 - Full `make verify` of the clean archive commit directly before the push, whose stamp the `pre-push` hook reuses, and the handoff to the coordinator.
 - Integration into dev by the coordinator (single pull request)
 - Item 43 stays open for `macos-26-arm64` and its process ownership re-run, `linux-ubuntu-24.04-arm64`, and the hosted `ubuntu-24.04` re-dispatch.
