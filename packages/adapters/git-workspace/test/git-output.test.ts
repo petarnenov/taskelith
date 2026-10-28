@@ -39,6 +39,33 @@ test('the status parser refuses output it cannot read', () => {
   }
 });
 
+const HEADERS = `# branch.oid ${OID}\x00# branch.head main\x00`;
+const CHANGED = ['1', '.M', 'N...', '100644', '100644', '100644', OID, OID];
+
+test('the status parser refuses a record with a malformed field or path', () => {
+  const malformed: [number, string][] = [[0, '1x'], [1, 'Z.'], [1, '.MM'], [2, 'X...'], [3, '10064'], [4, '1006448'], [5, '10064x'], [6, OID.toUpperCase()], [7, 'a'.repeat(39)]];
+  const records = [
+    ...malformed.map(([index, field]) => `${CHANGED.map((part, at) => (at === index ? field : part)).join(' ')} file`),
+    `${CHANGED.join(' ')} `,
+    `${CHANGED.join(' ')}  file`,
+    `2 R. N... 100644 100644 100644 ${OID} ${OID} X100 new\x00old`,
+    `2 R. N... 100644 100644 100644 ${OID} ${OID} R100 new\x00`,
+    `u UU N... 100644 100644 100644 100644 ${OID} ${OID} conflict`,
+    '? ',
+    `! ${OID} extra`.slice(0, 1),
+  ];
+  for (const record of records) {
+    assert.equal(failed(parsePorcelainStatus(bytes(HEADERS, `${record}\x00`))).code, 'internal', record);
+  }
+  value(parsePorcelainStatus(bytes(HEADERS, `${CHANGED.join(' ')} file\x00`)));
+});
+
+test('the status parser requires the branch headers with readable values', () => {
+  for (const output of [`# branch.head main\x00`, `# branch.oid ${OID}\x00`, '# branch.oid 1234\x00# branch.head main\x00', `# branch.oid ${OID}\x00# branch.head \x00`]) {
+    assert.equal(failed(parsePorcelainStatus(bytes(output))).code, 'internal', output);
+  }
+});
+
 test('the status parser reads what Git itself prints', async () => {
   const repository = await mkdtemp(join(tmpdir(), 'taskelith-status-'));
   try {
@@ -72,18 +99,32 @@ test('the tree listing keeps paths as bytes and Git modes as Git canonicalizes t
 });
 
 test('the tree listing refuses entries it cannot read', () => {
-  for (const output of [`100644 blob ${OID} plain\x00`, `040000 tree ${OID}\tdirectory\x00`, `100644 blob short\tpath\x00`, `100644 blob ${OID}\tunterminated`]) {
+  for (const output of [
+    `100644 blob ${OID} plain\x00`, `040000 tree ${OID}\tdirectory\x00`, `100644 blob short\tpath\x00`, `100644 blob ${OID}\tunterminated`,
+    `100644garbage blob ${OID}\tpath\x00`, `10644 blob ${OID}\tpath\x00`, `100644 blob ${OID}\t\x00`, `160000 commit ${OID}\t\x00`,
+  ]) {
     assert.equal(failed(parseTreeListing(bytes(output))).code, 'internal', output);
   }
 });
 
-test('the batch reader takes each object by its size, whatever bytes it holds', () => {
-  const objects = value(parseBatchObjects(bytes(`${OID} blob 4\n`, [0, 10, 255, 10], `\n${OTHER} blob 0\n\n`)));
+test('the batch reader takes each requested object by its size, whatever bytes it holds', () => {
+  const objects = value(parseBatchObjects(bytes(`${OID} blob 4\n`, [0, 10, 255, 10], `\n${OTHER} blob 0\n\n`), [OID, OTHER]));
   assert.deepEqual([...objects.keys()], [OID, OTHER]);
   assert.deepEqual([...objects.get(OID)!], [0, 10, 255, 10]);
   assert.equal(objects.get(OTHER)!.length, 0);
-  for (const output of [`${OID} missing\n`, `${OID} blob 9\nshort\n`, `${OID} blob 1\nab`, `${OID} blob\n`]) {
-    assert.equal(failed(parseBatchObjects(bytes(output))).code, 'internal', output);
+  assert.equal(value(parseBatchObjects(new Uint8Array(), [])).size, 0);
+});
+
+test('the batch reader refuses output that is not exactly the requested blobs', () => {
+  const refused: [string, string[]][] = [
+    [`${OID} missing\n`, [OID]], [`${OID} blob 9\nshort\n`, [OID]], [`${OID} blob 1\nab`, [OID]], [`${OID} blob\n`, [OID]],
+    [`${OID} tree 1\nx\n`, [OID]], [`${OID} blob -1\n`, [OID]], [`${OID} blob 01\nx\n`, [OID]], [`${OID} blob 1.0\nx\n`, [OID]],
+    [`${OID} blob +1\nx\n`, [OID]], [`${OID.toUpperCase()} blob 1\nx\n`, [OID]], [`short blob 1\nx\n`, ['short']],
+    [`${OTHER} blob 1\nx\n`, [OID]], [`${OID} blob 1\nx\n`, [OID, OTHER]], [`${OID} blob 1\nx\n${OTHER} blob 1\ny\n`, [OID]],
+    [`${OID} blob 1\nx\n`, []],
+  ];
+  for (const [output, requested] of refused) {
+    assert.equal(failed(parseBatchObjects(bytes(output), requested)).code, 'internal', output);
   }
 });
 

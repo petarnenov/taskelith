@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { failed, value, withholdCoverageFromDescendants } from '@taskelith/testing';
+import { failed, value } from '@taskelith/testing';
 import { GitRunner, scrubCredential, verifyGitClient } from '@taskelith/git-workspace';
 import {
   GIT_NEUTRAL_DIRECTORY,
@@ -16,10 +16,6 @@ import {
   type GitClientPin,
 } from '@taskelith/workspace';
 import { credential, nativeGit, recordingPin, runProcess, systemGitVersion, SYSTEM_GIT } from './git-fixture.ts';
-
-// Node adds NODE_V8_COVERAGE to every child's environment, even a
-// built one, while this test process collects coverage.
-withholdCoverageFromDescendants();
 
 const WRITE = credential('write', ['acme/project'], ['read-code', 'write-code']);
 const SENSITIVE = sensitiveValues([WRITE]);
@@ -47,6 +43,7 @@ const INHERITED = {
   XDG_CONFIG_HOME: '/home/worker/.config', https_proxy: 'http://proxy.example:3128', SSH_ASKPASS: '/usr/bin/ask',
   GIT_CONFIG_PARAMETERS: "'core.pager=planted'", GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: '/planted',
   GIT_TRACE: '1', SUDO_UID: '10003', GIT_CONFIG_GLOBAL: '/attacker/config',
+  NODE_V8_COVERAGE: '/nonexistent/coverage',
 };
 
 async function withEnvironment<T>(extra: Record<string, string>, run: () => Promise<T>): Promise<T> {
@@ -104,15 +101,35 @@ test('every credential form is scrubbed from captured output', () => {
   assert.equal(scrubCredential('no credential', undefined), 'no credential');
 });
 
-test('standard error of a Git process never holds a credential form', async () => {
+// A client that prints the header and its decoded form on both streams.
+async function echoingClient(): Promise<GitClientPin> {
   const echo = join(scratch, 'echo-header');
   const header = `"$GIT_CONFIG_VALUE_${gitConfigEnvironment().GIT_CONFIG_COUNT}"`;
-  await writeFile(echo, `#!/bin/sh\necho ${header} >&2\necho ${header} | cut -d' ' -f3 | base64 -d >&2\necho >&2\necho out\n`);
+  const lines = `echo ${header}\necho ${header} | cut -d' ' -f3 | base64 -d\necho\n`;
+  await writeFile(echo, `#!/bin/sh\n{\n${lines}} >&2\n${lines}printf 'out\\377\\n'\n`);
   await chmod(echo, 0o755);
-  const output = value(await new GitRunner({ path: echo, version: '' }).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: WRITE }));
-  assert.equal(holdsSensitive(output.stderr, SENSITIVE), false);
-  assert.match(output.stderr, new RegExp(REDACTED_VALUE));
-  assert.equal(new TextDecoder().decode(output.stdout), 'out\n');
+  return { path: echo, version: '' };
+}
+
+test('no output stream of a Git process holds a credential form', async () => {
+  const output = value(await new GitRunner(await echoingClient()).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: WRITE }));
+  const stdout = Buffer.from(output.stdout);
+  for (const stream of [output.stderr, stdout.toString('latin1')]) {
+    assert.equal(holdsSensitive(stream, SENSITIVE), false);
+    assert.match(stream, new RegExp(REDACTED_VALUE));
+  }
+  assert.ok(stdout.subarray(-5).equals(Buffer.from('out\xff\n', 'latin1')), 'other bytes survive');
+});
+
+test('a credential whose secret is short is still scrubbed in every form', async () => {
+  const secret = 'abc';
+  const short = { ...WRITE, secret, authorization: `Basic ${btoa(`x-access-token:${secret}`)}` };
+  const scrubbed = scrubCredential(`secret=${secret} base64=${btoa(secret)} header=${short.authorization}`, short);
+  assert.equal(scrubbed, `secret=${REDACTED_VALUE} base64=${REDACTED_VALUE} header=${REDACTED_VALUE}`);
+  const output = value(await new GitRunner(await echoingClient()).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short }));
+  for (const stream of [output.stderr, Buffer.from(output.stdout).toString('latin1')]) {
+    assert.equal(stream.includes(secret) || stream.includes(btoa(`x-access-token:${secret}`)), false, stream);
+  }
 });
 
 test('the runner feeds standard input and reports the exit code', async () => {

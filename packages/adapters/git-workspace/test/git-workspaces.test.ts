@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdir, readdir, symlink, utimes, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
-import { CrashPoints, failed, id, value, withholdCoverageFromDescendants } from '@taskelith/testing';
+import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
-import { sha256IdentifierDigest, type GitWorkspaceCrashPoint } from '@taskelith/git-workspace';
+import { GitWorkspaces, sha256IdentifierDigest, verifyGitClient, type CrashPointHook, type GitWorkspaceCrashPoint } from '@taskelith/git-workspace';
 import {
   HEAD_SNAPSHOT_CONTENT_TYPE,
   WORKSPACE_LAYOUT,
@@ -19,11 +19,7 @@ import {
   type PrepareWorkspace,
   type TreeEntry,
 } from '@taskelith/workspace';
-import { createGitFixture, type GitFixture } from './git-fixture.ts';
-
-// Node adds NODE_V8_COVERAGE to every child's environment, even a
-// built one, while this test process collects coverage.
-withholdCoverageFromDescendants();
+import { createGitFixture, nativeGit, systemGitVersion, SYSTEM_GIT, type GitFixture } from './git-fixture.ts';
 
 const FIRST = id('AttemptId', 'attempt-1') as AttemptId;
 const SECOND = id('AttemptId', 'attempt-2') as AttemptId;
@@ -105,6 +101,10 @@ test('a path or link target that is not UTF-8 is refused by snapshot only', { sk
   for (const [attemptId, plant] of [
     [FIRST, (checkout: Buffer) => writeFile(Buffer.concat([checkout, NON_UTF8]), 'bytes\n')],
     [SECOND, (checkout: Buffer) => symlink(NON_UTF8, Buffer.concat([checkout, Buffer.from('link')]))],
+    [THIRD, async (checkout: Buffer) => {
+      await mkdir(Buffer.concat([checkout, NON_UTF8]));
+      await writeFile(Buffer.concat([checkout, NON_UTF8, Buffer.from('/file')]), 'bytes\n');
+    }],
   ] as const) {
     value(await local.prepare(request(git, { attemptId })));
     await plant(Buffer.from(`${git.checkout(attemptId)}/`));
@@ -283,4 +283,95 @@ test('a prepare that fails after its clone leaves nothing behind', () => withFix
   const unreachable = { ...fixture.binding, remote: `${fixture.binding.remote}-missing` };
   assert.equal(failed(await local.prepare(request(git, { binding: unreachable }))).code, 'unavailable');
   assert.deepEqual([await local.list(), await fixture.leftovers()], [[], []]);
+}));
+
+const native = async (git: GitFixture, args: readonly string[], input?: string) => (await nativeGit(git.checkout(FIRST), args, input === undefined ? {} : { input: encode(input) })).toString('utf8').trim();
+
+// A replacement of the head commit or of one of its blobs.
+const REPLACEMENTS: readonly [string, (git: GitFixture) => Promise<[string, string]>][] = [
+  ['blob', async (git) => [await native(git, ['rev-parse', 'HEAD:real.txt']), await native(git, ['hash-object', '-w', '--stdin'], 'replaced\n')]],
+  ['commit', async (git) => [await native(git, ['rev-parse', 'HEAD']), await native(git, ['commit-tree', 'HEAD~1^{tree}', '-m', 'replaced'])]],
+];
+
+for (const [kind, replacement] of REPLACEMENTS) {
+  test(`a replace ref for a ${kind} never changes what status and snapshot read`, () => withFixture(async (git) => {
+    const { fixture, local } = git;
+    value(await local.prepare(request(git)));
+    await fixture.writeFile(FIRST, 'real.txt', 'real\n');
+    await fixture.commitAll(FIRST, 'real');
+    const head = await fixture.nativeHead(FIRST);
+    const before = value(await local.snapshot(FIRST)).content;
+    await native(git, ['replace', ...(await replacement(git))]);
+    const status = value(await local.inspect(FIRST));
+    assert.deepEqual([status.head.commit, status.head.tree, status.dirtyReasons], [head.commit, head.tree, []]);
+    assert.ok(sameBytes(value(await local.snapshot(FIRST)).content, before));
+  }));
+}
+
+for (const bit of ['--assume-unchanged', '--skip-worktree']) {
+  test(`an index bit set with ${bit} never hides a modified tracked file`, () => withFixture(async (git) => {
+    const { fixture, local } = git;
+    value(await local.prepare(request(git)));
+    await native(git, ['update-index', bit, '--', fixture.trackedPath]);
+    await fixture.writeFile(FIRST, fixture.trackedPath, 'hidden change\n');
+    assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, ['modified']);
+    for (const result of [await local.snapshot(FIRST), await local.remove(FIRST)] as Result<unknown>[]) {
+      assert.equal(failed(result).details.reason, 'workspace-dirty');
+    }
+    assert.deepEqual(await local.list(), [FIRST]);
+  }));
+}
+
+test('ignore and attribute rules in .git/info never hide untracked work', () => withFixture(async (git) => {
+  const { fixture, local } = git;
+  value(await local.prepare(request(git)));
+  const info = join(git.checkout(FIRST), '.git', 'info');
+  await mkdir(info, { recursive: true });
+  await writeFile(join(info, 'exclude'), '*.work\n');
+  await writeFile(join(info, 'attributes'), '*.txt -text\n');
+  await fixture.writeFile(FIRST, 'unpublished.work', 'work\n');
+  assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, ['untracked']);
+  assert.equal(failed(await local.remove(FIRST)).details.reason, 'workspace-dirty');
+  await assert.rejects(lstat(info), { code: 'ENOENT' });
+}));
+
+// A file system fault such as a disk error, without its own crash point.
+const faultAt = (at: GitWorkspaceCrashPoint): CrashPointHook => ({
+  reach: (point) => {
+    if (point === at) throw Object.assign(new Error('injected fault'), { code: 'EIO', syscall: 'write' });
+  },
+});
+
+test('a file system fault fails an operation as unavailable instead of rejecting', () => withFixture(async (git) => {
+  const { fixture } = git;
+  const faulty = git.reopen(faultAt('WS1.after'));
+  assert.equal(failed(await faulty.prepare(request(git))).code, 'unavailable');
+  assert.deepEqual([await faulty.list(), await fixture.leftovers()], [[], []]);
+  value(await git.local.prepare(request(git)));
+  const name = workspaceDirectoryName(FIRST, sha256IdentifierDigest);
+  const blocking = join(fixture.dataRoot, WORKSPACE_LAYOUT.root, `${WORKSPACE_LAYOUT.removingPrefix}${name}`, 'entry');
+  await mkdir(blocking, { recursive: true });
+  assert.equal(failed(await git.local.remove(FIRST)).code, 'unavailable');
+  assert.deepEqual(await git.local.list(), [FIRST]);
+  await rm(join(blocking, '..'), { recursive: true });
+  const record = join(git.checkout(FIRST), '..', WORKSPACE_LAYOUT.metadata);
+  await rm(record);
+  await mkdir(record);
+  for (const result of [await git.local.inspect(FIRST), await git.local.snapshot(FIRST), await git.local.remove(FIRST)] as Result<unknown>[]) {
+    assert.equal(failed(result).code, 'unavailable');
+  }
+  await rm(record, { recursive: true });
+  await writeFile(record, '{"attemptId":');
+  assert.equal(failed(await git.local.inspect(FIRST)).code, 'internal');
+}));
+
+test('a failing revision lookup fails a prepare instead of reading as a missing branch', () => withFixture(async (git) => {
+  const { fixture } = git;
+  const path = join(git.scratch, 'bin', 'git-failing-lookup');
+  await writeFile(path, `#!/bin/sh\n[ "$1" = rev-parse ] && [ "$2" = --verify ] && exit 128\nexec ${SYSTEM_GIT} "$@"\n`);
+  await chmod(path, 0o755);
+  const client = value(await verifyGitClient({ path, version: await systemGitVersion() }));
+  const failing = new GitWorkspaces({ dataRoot: fixture.dataRoot, client, remoteTransport: 'https-or-loopback-http' });
+  assert.equal(failed(await failing.prepare(request(git))).code, 'internal');
+  assert.deepEqual([await failing.list(), await fixture.leftovers()], [[], []]);
 }));

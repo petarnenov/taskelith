@@ -57,6 +57,23 @@ for (const [label, plant] of UNSAFE) {
   });
 }
 
+const NOT_UTF8 = { skip: process.platform === 'darwin' ? 'APFS refuses names that are not UTF-8' : false };
+const named = (...parts: (string | number[])[]) => Buffer.concat(parts.map((part) => Buffer.from(part)));
+
+test('directories whose names are not UTF-8 are walked by their bytes', NOT_UTF8, async () => {
+  const directory = named(checkout, '/', [0x6e, 0xff]);
+  await mkdir(directory);
+  await writeFile(named(directory, '/file'), 'file\n');
+  value(await checkCheckoutSafety(checkout, owner));
+  await writeFile(named(directory, '/.git'), `gitdir: ${scratch}\n`);
+  await expectUnsafe('a gitfile below a name that is not UTF-8');
+  await rm(named(directory, '/.git'));
+  const refs = named(checkout, '/.git/refs/', [0xfe]);
+  await mkdir(refs);
+  await symlink(join(scratch, 'record'), named(refs, '/linked'));
+  await expectUnsafe('a link in .git below a name that is not UTF-8');
+});
+
 test('a checkout of another owner, or one that is a link, is unsafe', async () => {
   await expectUnsafe('another owner', checkout, owner + 1);
   await symlink(checkout, join(scratch, 'linked-checkout'));
