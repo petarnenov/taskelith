@@ -71,10 +71,10 @@ Author checks on `34d99f3a` and its working tree, without Docker:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `5c70c8b2de0360aece26f0243957add7f541998e`; tests 3066, pass 3042, fail 0, skipped 24; all files 99.38% lines, 92.68% branches, 99.07% functions.
-- `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
+- `make verify`: passed, profile full, tree `4ffe5bfaef4ffc80f6aa44ef37380415b3daac69`; tests 3066, pass 3042, fail 0, skipped 24; all files 99.37% lines, 92.68% branches, 99.07% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 70 passed, 0 failed (70 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s).`.
-- Spec diff against the merge base `24d259385778` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `24d259385778` with `origin/dev`: `openspec/specs/sdlc-wire-contracts/spec.md | 52 ++++++++++++++++++++++++++++--`, `1 file changed, 50 insertions(+), 2 deletions(-)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -145,7 +145,17 @@ Unreviewed fixes: pass 2 reported only Low findings, so under the governance rul
 - **`make verify`** on `a33ee524` (tree `5c70c8b2`), full profile, exit 0, stamp written: tests 3066, pass 3042, fail 0, skipped 24; coverage 99.38% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `24d25938`. `make record` wrote "Generated checks" from its log.
 - **Review complete:** two passes, pass 1 by reviewer A and pass 2 by reviewer B; the Low-only pass 2 ends the review.
 
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the declare contract breaking changes change`, the working tree the checks ran on (tree `4ffe5bfa` before this record was written into it):
+
+- `npm run openspec -- archive declare-contract-breaking-changes --yes`: `sdlc-wire-contracts` + 4 added, ~ 1 modified ("Breaking-change check"); archived as `2026-10-28-declare-contract-breaking-changes`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-declare-contract-breaking-changes`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `24d25938`): only this change's intended edits, `sdlc-wire-contracts/spec.md` 52 lines, 50 insertions and 2 deletions, the text of "Breaking-change check" and the WHEN of its scenario "Declared breaking change".
+- Moved change's files: `findings.jsonl` 10 lines, `passes.jsonl` 2 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s). `npm run verify:links`: passed.
+- `make verify` on tree `4ffe5bfa`: passed, profile full; tests 3066, pass 3042, fail 0, skipped 24; coverage 99.37% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `24d25938`. `make record CHANGE=declare-contract-breaking-changes LOG=<log>` wrote "Generated checks" from its log, and `make record-check` matched it. The archive commit differs from that tree only in this record.
+
 ## Remaining gates
 
-- Archive.
 - Integration into dev by the coordinator (single pull request).
