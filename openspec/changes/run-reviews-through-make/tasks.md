@@ -15,9 +15,9 @@
 ## 4. Documents
 
 - [x] 4.1 `docs/agent-task-protocol.md` worker step 5 and "Reviewer invocations"; the skills `taskelith-task-protocol` and `taskelith-worker`.
+- [x] 4.2 Coordinator decision 3: `make review` writes no `passes.jsonl` line and prints a line template; the test, the spec delta, the protocol, and the skill follow.
 
 ## 5. Checks and review
 
-- [x] 4.2 Coordinator decision 3: `make review` writes no `passes.jsonl` line and prints a line template; the test, the spec delta, the protocol, and the skill follow.
 - [x] 5.1 `make verify`, `make record`, and `make record-check`.
 - [ ] 5.2 Review pass 1 by reviewer A, then the further passes that governance requires.
