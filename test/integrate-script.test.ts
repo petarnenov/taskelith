@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -50,7 +50,7 @@ function commit(cwd: string, message: string): void {
 }
 
 // make verify of the stub stamps the tree, as the real one does; gh keeps its
-// pull request in GH_STATE and merges it with a merge commit, as GitHub does.
+// pull request and body in GH_STATE and merges with a merge commit as GitHub.
 function writeStubs(bin: string): void {
   write(join(bin, 'make'), `#!/bin/sh
 echo "make $*" >> "$CALLS"
@@ -73,9 +73,20 @@ echo "npm $*" >> "$CALLS"
 `, 0o755);
   write(join(bin, 'gh'), `#!/bin/sh
 echo "gh $*" >> "$CALLS"
+save_body() {
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --body ]; then printf '%s' "$2" > "$GH_STATE.body"; fi
+    shift
+  done
+}
 case "$1 $2" in
   "pr list") if [ -f "$GH_STATE" ]; then cat "$GH_STATE"; fi ;;
+  "pr view") cat "$GH_STATE.body" ;;
+  "pr edit")
+    if [ "\${FAKE_EDIT:-}" = fail ]; then echo "edit failed" >&2; exit 1; fi
+    save_body "$@" ;;
   "pr create")
+    save_body "$@"
     printf 'OPEN\\t%s\\t%s\\n' "$(git rev-parse HEAD)" "${URL}" > "$GH_STATE"
     echo "${URL}" ;;
   "pr merge")
@@ -182,6 +193,8 @@ test('a clean branch is merged, verified, pushed, landed, and cleaned up', async
       'make verify',
       PR_LIST,
       `gh pr create --base dev --head ${BRANCH} --title Feature title --body Feature body`,
+      '',
+      integrationLine(run),
       `gh pr merge ${URL} --merge`,
       'npm ci --silent',
     ]);
@@ -252,6 +265,21 @@ test('a branch without its archived change is not integrated', async () => {
     const run = integrate(fixture, ['unarchived', 'title', 'body']);
     assert.equal(run.status, 5);
     assert.equal(run.stdout.trim(), 'NOT ARCHIVED unarchived');
+    assert.deepEqual(calls(fixture), []);
+  });
+});
+
+// Review pass 2 finding 1: the check and the change name share one pattern.
+test('a branch whose name only ends another archived change is not integrated', async () => {
+  await withFixture((fixture) => {
+    git(fixture.main, 'switch', '-q', '-c', 'foo', 'origin/dev');
+    write(join(fixture.main, 'openspec/changes/archive/2026-10-27-bar-foo/proposal.md'), 'archived\n');
+    commit(fixture.main, 'docs: archive the bar-foo change');
+    git(fixture.main, 'push', '-q', 'origin', 'foo');
+    git(fixture.main, 'switch', '-q', 'dev');
+    const run = integrate(fixture, ['foo', 'title', 'body']);
+    assert.equal(run.status, 5, run.stderr);
+    assert.equal(run.stdout.trim(), 'NOT ARCHIVED foo');
     assert.deepEqual(calls(fixture), []);
   });
 });
@@ -411,7 +439,9 @@ test('a resume after a failed merge merges the open pull request', async () => {
     const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body']);
     assert.equal(resumed.status, 0, resumed.stderr);
     assert.match(resumed.stdout, /continuing with the open pull request https:\/\/example\.invalid\/pull\/1/);
-    assert.deepEqual(calls(fixture).filter((call) => call.startsWith('gh ')), [PR_LIST, `gh pr merge ${URL} --merge`]);
+    const ghCalls = calls(fixture).filter((call) => call.startsWith('gh '));
+    assert.deepEqual(ghCalls.slice(0, 2), [PR_LIST, `gh pr view ${URL} --json body --jq .body`]);
+    assert.equal(ghCalls.at(-1), `gh pr merge ${URL} --merge`);
     assert.match(resumed.stdout, /LANDED feature /);
   });
 });
@@ -446,6 +476,131 @@ test('a fresh run for a branch already in dev only cleans up', async () => {
     assert.deepEqual(calls(fixture), [PR_LIST, 'npm ci --silent']);
     assert.match(run.stdout, /LANDED feature none /);
     assert.doesNotMatch(remoteHeads(fixture), /refs\/heads\/feature/);
+  });
+});
+
+const ISO_SECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+interface IntegrationRecord {
+  readonly tree: string;
+  readonly verify: string;
+  readonly profile: string;
+  readonly verifySeconds: number;
+  readonly change: string;
+  readonly branch: string;
+  readonly started: string;
+}
+
+function integrationLine(run: Run): string {
+  const line = run.stdout.split('\n').find((text) => text.startsWith('Integration: '));
+  assert.ok(line !== undefined, run.stdout);
+  return line;
+}
+
+function integrationRecords(fixture: Fixture): IntegrationRecord[] {
+  const path = join(fixture.state, 'taskelith', 'integrations.jsonl');
+  return readFileSync(path, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as IntegrationRecord);
+}
+
+function lineOf(record: IntegrationRecord): string {
+  return `Integration: tree ${record.tree}; verify ${record.verify}; profile ${record.profile}`
+    + `; verify seconds ${record.verifySeconds}; change ${record.change}; branch ${record.branch}; started ${record.started}`;
+}
+
+function stampTime(fixture: Fixture): string {
+  const common = git(fixture.main, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+  const directory = join(common, 'taskelith-verify-stamps');
+  const [stamp] = readdirSync(directory);
+  assert.ok(stamp !== undefined);
+  return (JSON.parse(readFileSync(join(directory, stamp), 'utf8')) as { verifiedAt: string }).verifiedAt;
+}
+
+test('an integration that ran make verify records its line in the pull request and the log', async () => {
+  await withFixture((fixture) => {
+    const before = Date.now();
+    const run = integrate(fixture, [BRANCH, 'title', 'Coordinator body']);
+    assert.equal(run.status, 0, run.stderr);
+    const records = integrationRecords(fixture);
+    assert.equal(records.length, 1);
+    const [record] = records;
+    assert.ok(record !== undefined);
+    assert.deepEqual(Object.keys(record), ['tree', 'verify', 'profile', 'verifySeconds', 'change', 'branch', 'started']);
+    assert.equal(record.tree, git(fixture.main, 'rev-parse', 'HEAD^{tree}').trim());
+    assert.equal(record.verify, 'ran');
+    assert.equal(record.profile, 'full');
+    assert.ok(Number.isInteger(record.verifySeconds) && record.verifySeconds >= 0);
+    assert.equal(record.change, '2026-10-27-feature');
+    assert.equal(record.branch, BRANCH);
+    assert.match(record.started, ISO_SECOND);
+    assert.ok(Date.parse(record.started) >= before - 1000 && Date.parse(record.started) <= Date.now());
+    assert.equal(integrationLine(run), lineOf(record));
+    const create = calls(fixture).join('\n');
+    assert.ok(create.includes(`--body Coordinator body\n\n${lineOf(record)}\ngh pr merge`), create);
+  });
+});
+
+// Review pass 1 finding 1: a resume adds its line to the open pull request.
+test('a resume with an open pull request appends its line to the body', async () => {
+  await withFixture((fixture) => {
+    const failed = integrate(fixture, [BRANCH, 'title', 'Coordinator body'], { FAKE_MERGE: 'fail' });
+    assert.equal(failed.status, 1);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'Coordinator body']);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const [first, second, ...more] = integrationRecords(fixture);
+    assert.deepEqual(more, []);
+    assert.ok(first !== undefined && second !== undefined);
+    assert.equal(integrationLine(resumed), lineOf(second));
+    const body = `Coordinator body\n\n${lineOf(first)}\n\n${lineOf(second)}`;
+    const edit = calls(fixture).join('\n');
+    assert.ok(edit.includes(`gh pr edit ${URL} --body ${body}\ngh pr merge`), edit);
+    assert.equal(readFileSync(join(fixture.root, 'gh-state.body'), 'utf8'), body);
+  });
+});
+
+// Review pass 2 finding 3: a resume merges only a body with its line.
+test('a resume whose body edit fails stops before the merge', async () => {
+  await withFixture((fixture) => {
+    const failed = integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_MERGE: 'fail' });
+    assert.equal(failed.status, 1);
+    rmSync(fixture.calls);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body'], { FAKE_EDIT: 'fail' });
+    assert.notEqual(resumed.status, 0);
+    const ghCalls = calls(fixture).filter((call) => call.startsWith('gh '));
+    assert.ok(ghCalls.at(-1)?.startsWith(`gh pr edit ${URL} --body `), ghCalls.join('\n'));
+    assert.equal(ghCalls.some((call) => call.startsWith('gh pr merge')), false);
+    assert.doesNotMatch(resumed.stdout, /LANDED/);
+  });
+});
+
+test('an integration that reused a stamp records the stamp time', async () => {
+  await withFixture((fixture) => {
+    assert.equal(integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_VERIFY_STATUS: '2' }).status, 4);
+    assert.equal(existsSync(join(fixture.state, 'taskelith', 'integrations.jsonl')), false);
+    const tree = git(fixture.worktree, 'rev-parse', 'HEAD^{tree}').trim();
+    execFileSync(process.execPath, ['--experimental-strip-types', stampScript, 'write', 'full', tree], {
+      cwd: fixture.worktree, env: environment(fixture, {}),
+    });
+    const verifiedAt = stampTime(fixture);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body']);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const [record, ...more] = integrationRecords(fixture);
+    assert.deepEqual(more, []);
+    assert.ok(record !== undefined);
+    assert.equal(record.verify, `reused stamp of ${verifiedAt}`);
+    assert.equal(record.tree, tree);
+    assert.ok(record.verifySeconds <= 60, String(record.verifySeconds));
+    assert.equal(integrationLine(resumed), lineOf(record));
+  });
+});
+
+test('a failed append to the integration log only warns', async () => {
+  await withFixture((fixture) => {
+    mkdirSync(join(fixture.state, 'taskelith', 'integrations.jsonl'), { recursive: true });
+    const run = integrate(fixture, [BRANCH, 'title', 'body']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /warning: could not append the integration line to .*integrations\.jsonl/);
+    assert.match(integrationLine(run), /^Integration: tree [0-9a-f]{40}; verify ran; /);
+    assert.match(run.stdout, /LANDED feature /);
   });
 });
 

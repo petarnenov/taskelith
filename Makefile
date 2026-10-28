@@ -30,7 +30,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review progress progress-refresh \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-git-workspace verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -335,6 +335,17 @@ review:
 	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
 		node --experimental-strip-types scripts/review-run.ts "$$TASKELITH_REVIEW_CHANGE" "$$TASKELITH_REVIEW_PASS" \
 		"$$TASKELITH_REVIEW_ROLE" "$$TASKELITH_REVIEW_REVIEWER" "$$TASKELITH_REVIEW_PROMPT" "$$TASKELITH_REVIEW_LOG"
+
+# Prints the stage of every worker task, here and on the SSH hosts of
+# ~/.config/taskelith/progress-hosts.json (docs/agent-task-protocol.md).
+progress:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/task-progress.ts show
+
+# Writes that view to ~/.config/taskelith/progress.json for the status
+# line; ARGS="--if-older-than 60" skips a fresh cache.
+progress-refresh:
+	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/task-progress.ts refresh $(ARGS)
 
 # Checks that this clone can build and verify; changes nothing.
 # Uses the .nvmrc Node.js when nvm has it.
