@@ -48,8 +48,8 @@ function commit(cwd: string, message: string): void {
   git(cwd, 'commit', '-q', '-m', message);
 }
 
-// make verify of the stub stamps the tree, as the real one does on a pass;
-// gh keeps its pull request in GH_STATE, and git can fail a deletion.
+// make verify of the stub stamps the tree, as the real one does; gh keeps its
+// pull request in GH_STATE and merges it with a merge commit, as GitHub does.
 function writeStubs(bin: string): void {
   write(join(bin, 'make'), `#!/bin/sh
 echo "make $*" >> "$CALLS"
@@ -79,7 +79,9 @@ case "$1 $2" in
     echo "${URL}" ;;
   "pr merge")
     if [ "\${FAKE_MERGE:-}" = fail ]; then echo "merge failed" >&2; exit 1; fi
-    git push -q origin HEAD:refs/heads/dev
+    git fetch -q origin dev
+    merge="$(git commit-tree 'HEAD^{tree}' -p origin/dev -p HEAD -m 'Merge pull request #1')"
+    git push -q origin "$merge:refs/heads/dev"
     printf 'MERGED\\t%s\\t%s\\n' "$(git rev-parse HEAD)" "${URL}" > "$GH_STATE"
     if [ "\${FAKE_MERGE:-}" = delete-branch ]; then git push -q origin --delete ${BRANCH}; fi
     if [ "\${FAKE_MERGE:-}" = fail-after ]; then echo "lost the reply" >&2; exit 1; fi ;;
@@ -182,7 +184,8 @@ test('a clean branch is merged, verified, pushed, landed, and cleaned up', async
       `gh pr merge ${URL} --merge`,
       'npm ci --silent',
     ]);
-    assert.match(head, /Merge remote-tracking branch 'origin\/dev' into itg-feature/);
+    assert.match(head, /Merge pull request #1/);
+    assert.match(git(fixture.main, 'log', '--format=%s', '-1', 'HEAD^2'), /Merge remote-tracking branch 'origin\/dev' into itg-feature/);
     assert.equal(existsSync(join(fixture.main, 'feature.txt')), true);
     assert.equal(existsSync(fixture.worktree), false);
     assert.doesNotMatch(git(fixture.main, 'branch'), /itg-feature/);
@@ -270,6 +273,36 @@ test('the alarm stops a make verify that runs too long and leaves no process', a
   });
 });
 
+function linesOf(path: string, count: number): Promise<string[]> {
+  return new Promise((done, fail) => {
+    const deadline = Date.now() + 60_000;
+    const poll = (): void => {
+      const lines = existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n') : [];
+      if (lines.length >= count) done(lines);
+      else if (Date.now() > deadline) fail(new Error(`timed out waiting for ${path}`));
+      else setTimeout(poll, 20);
+    };
+    poll();
+  });
+}
+
+// Review pass 2 finding 2: a signal to the script stops make verify too.
+test('a SIGTERM to the script during make verify leaves no process', async () => {
+  await withFixture(async (fixture) => {
+    const child = spawn('bash', [script, BRANCH, 'title', 'body'], {
+      cwd: fixture.main, env: environment(fixture, { FAKE_VERIFY_SECONDS: '300' }), stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    const exited = new Promise<number | null>((done) => child.on('exit', (code) => done(code)));
+    const pids = (await linesOf(fixture.pids, 2)).map(Number);
+    child.kill('SIGTERM');
+    assert.equal(await exited, 143);
+    assert.match(stdout, /^INTERRUPTED feature$/m);
+    for (const pid of pids) assert.equal(running(pid), false, `process ${pid} survived`);
+  });
+});
+
 // Review finding 5: a dirty tree is never verified or pushed.
 test('an integration worktree with uncommitted changes is not verified or pushed', async () => {
   await withFixture((fixture) => {
@@ -338,16 +371,36 @@ test('a resume after a failed merge merges the open pull request', async () => {
   });
 });
 
+// Review pass 2 finding 3: GitHub merges with a merge commit, so a resume
+// must find HEAD in origin/dev instead of merging origin/dev again.
 test('a resume after a merged pull request only cleans up', async () => {
   await withFixture((fixture) => {
     const failed = integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_MERGE: 'fail-after' });
     assert.equal(failed.status, 1);
     rmSync(fixture.calls);
+    const dev = git(fixture.main, 'ls-remote', 'origin', 'refs/heads/dev');
     const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body']);
     assert.equal(resumed.status, 0, resumed.stderr);
-    assert.match(resumed.stdout, /the pull request https:\/\/example\.invalid\/pull\/1 is already merged/);
-    assert.deepEqual(calls(fixture).filter((call) => call.startsWith('gh ')), [PR_LIST]);
+    assert.match(resumed.stdout, /the pull request https:\/\/example\.invalid\/pull\/1 is already merged; only cleaning up/);
+    assert.deepEqual(calls(fixture), [PR_LIST, 'npm ci --silent']);
+    assert.equal(git(fixture.main, 'ls-remote', 'origin', 'refs/heads/dev'), dev);
     assert.match(resumed.stdout, /LANDED feature https:\/\/example\.invalid\/pull\/1 /);
+  });
+});
+
+test('a fresh run for a branch already in dev only cleans up', async () => {
+  await withFixture((fixture) => {
+    assert.equal(integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_MERGE: 'fail-after' }).status, 1);
+    git(fixture.main, 'worktree', 'remove', fixture.worktree);
+    git(fixture.main, 'branch', '-q', '-D', `itg-${BRANCH}`);
+    rmSync(join(fixture.root, 'gh-state'));
+    rmSync(fixture.calls);
+    const run = integrate(fixture, [BRANCH, 'title', 'body']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /integrate\.sh: feature is already in origin\/dev; only cleaning up/);
+    assert.deepEqual(calls(fixture), [PR_LIST, 'npm ci --silent']);
+    assert.match(run.stdout, /LANDED feature none /);
+    assert.doesNotMatch(remoteHeads(fixture), /refs\/heads\/feature/);
   });
 });
 
@@ -395,7 +448,8 @@ test('the pause file holds the integration until it is removed', async () => {
   });
 });
 
-// Review finding 1: make must pass TITLE and BODY as typed, unexpanded.
+// Review finding 1: make must pass TITLE and BODY as typed, unexpanded;
+// review pass 2 finding 10: only RESUME=1 resumes.
 test('make integrate passes its arguments to the script as typed', () => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-integrate-make-'));
   try {
@@ -413,6 +467,13 @@ test('make integrate passes its arguments to the script as typed', () => {
     assert.equal(existsSync(marker), false, 'make ran a $(shell) of the arguments');
     assert.deepEqual(readFileSync(join(root, 'args'), 'utf8').split('\0').slice(0, -1), ['--resume', 'feature', title, body]);
     assert.doesNotMatch(readFileSync(join(root, 'environment'), 'utf8'), /^MAKEFLAGS=/m);
+    for (const resume of ['0', 'yes', '']) {
+      const fresh = spawnSync('make', ['-f', join(repository, 'Makefile'), '--no-print-directory', 'integrate', 'BRANCH=feature', 'TITLE=t', 'BODY=b', `RESUME=${resume}`], {
+        cwd: root, encoding: 'utf8', env: { ...fixtureEnv, MAKEFLAGS: '' },
+      });
+      assert.equal(fresh.status, 0, fresh.stderr);
+      assert.deepEqual(readFileSync(join(root, 'args'), 'utf8').split('\0').slice(0, -1), ['feature', 't', 'b'], `RESUME=${resume}`);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

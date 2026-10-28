@@ -277,13 +277,13 @@ speckit-lock:
 unexport BRANCH TITLE BODY RESUME CHANGE LOG
 
 # Coordinator: integrates the archived change BRANCH into dev with one pull
-# request (scripts/integrate.sh); RESUME=1 continues a stopped integration.
+# request (scripts/integrate.sh); only RESUME=1 continues a stopped one.
 integrate: export TASKELITH_INTEGRATE_BRANCH := $(value BRANCH)
 integrate: export TASKELITH_INTEGRATE_TITLE := $(value TITLE)
 integrate: export TASKELITH_INTEGRATE_BODY := $(value BODY)
 integrate:
 	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
-		bash scripts/integrate.sh $(if $(value RESUME),--resume) \
+		bash scripts/integrate.sh $(if $(filter 1,$(value RESUME)),--resume) \
 		"$$TASKELITH_INTEGRATE_BRANCH" "$$TASKELITH_INTEGRATE_TITLE" "$$TASKELITH_INTEGRATE_BODY"
 
 # Writes the generated part of CHANGE's verification.md from LOG, a make

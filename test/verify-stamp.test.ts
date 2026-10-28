@@ -306,9 +306,10 @@ test('an unexpected failure propagates', () => {
   assert.throws(() => runCommand(['start'], () => ({ root: '/', git: failing, toolchain: TOOLCHAIN, environment: {} }), NOW), /git broke/);
 });
 
-test('a dry run of make verify writes no stamp', () => {
-  for (const flags of ['n', 'ns', ' --no-print-directory -n', '--dry-run', '--just-print', '--recon']) assert.equal(isDryRun(flags), true, flags);
-  for (const flags of [undefined, '', 's', ' --no-print-directory', 'X=n', '-s']) assert.equal(isDryRun(flags), false, String(flags));
+test('a dry run, touch, or question run of make verify writes no stamp', () => {
+  const noCheck = ['n', 'ns', ' --no-print-directory -n', '--dry-run', '--just-print', '--recon', 't', 'q', 'st', '--touch', '--question', '-t', '-q'];
+  for (const flags of noCheck) assert.equal(isDryRun(flags), true, flags);
+  for (const flags of [undefined, '', 's', 'k', ' --no-print-directory', 'X=n', 'X=t', '-s']) assert.equal(isDryRun(flags), false, String(flags));
   withRepository((_root, context) => {
     const tree = startTree(context.git);
     const dry = runCommand(['write', 'full', tree], () => ({ ...context, environment: { MAKEFLAGS: 'n' } }), NOW);

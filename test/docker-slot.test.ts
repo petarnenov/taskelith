@@ -90,6 +90,32 @@ test('two runs that choose at once never both hold the slot', async () => {
   });
 });
 
+// Review pass 2 finding 1: B publishes and drops its marker while A's poll
+// checks A's own ticket, between the reads of the markers and the tickets.
+test('a run that publishes during the poll of another never shares the slot', async () => {
+  await withLock((lock) => {
+    const early = takeTicket(lock, holder(9));
+    const a = beginChoosing(lock, holder(1), '1-aa');
+    const aNumber = chooseNumber(a);
+    releaseTicket(early);
+    const b = beginChoosing(lock, holder(2), '2-bb');
+    const bNumber = chooseNumber(b);
+    const aTicket = publishTicket(a, aNumber);
+    let bTicket: Ticket | undefined;
+    const interleaved: Processes = {
+      ...fakeProcesses,
+      started(pid) {
+        if (pid === 1 && bTicket === undefined) bTicket = publishTicket(b, bNumber);
+        return 'start-1';
+      },
+    };
+    assert.equal(holdsSlot(liveQueue(lock, interleaved, NOW, () => {}), aTicket), false, 'A must wait while B chooses');
+    assert.ok(bTicket !== undefined, 'B published during the poll of A');
+    const state = liveQueue(lock, fakeProcesses, NOW, () => {});
+    assert.deepEqual([holdsSlot(state, aTicket), holdsSlot(state, bTicket)], [false, true]);
+  });
+});
+
 test('a run that publishes before another starts choosing goes first', async () => {
   await withLock((lock) => {
     const a = beginChoosing(lock, holder(1), '1-aa');
@@ -212,6 +238,16 @@ test('the system probes see this process and no exited one', () => {
   const exited = spawnSync('true');
   assert.equal(systemProcesses.alive(exited.pid ?? 0), false);
   assert.equal(systemProcesses.started(exited.pid ?? 0), '');
+});
+
+// Review pass 2 finding 6: a holder and a waiter in other time zones agree.
+test('the start time of a process does not depend on the time zone or locale', () => {
+  const probe = `import { systemProcesses } from ${JSON.stringify(script)}; process.stdout.write(systemProcesses.started(${process.pid}));`;
+  const elsewhere = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', probe], {
+    encoding: 'utf8', env: { ...process.env, TZ: 'Pacific/Kiritimati', LC_ALL: 'de_DE.UTF-8', LC_TIME: 'de_DE.UTF-8' },
+  });
+  assert.equal(elsewhere.status, 0, elsewhere.stderr);
+  assert.equal(elsewhere.stdout, systemProcesses.started(process.pid));
 });
 
 test('invalid arguments print the usage', async () => {

@@ -63,11 +63,16 @@ function signalReaches(target: number): boolean {
   }
 }
 
+// The holder and its waiters may run with other time zones or locales.
+export const PS_ENVIRONMENT: Environment = { ...process.env, TZ: 'UTC', LC_ALL: 'C' };
+
 export const systemProcesses: Processes = {
   alive: (pid) => signalReaches(pid),
   started(pid) {
     try {
-      return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+        encoding: 'utf8', env: PS_ENVIRONMENT, stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
     } catch {
       return '';
     }
@@ -199,10 +204,11 @@ function liveChoosing(lock: string, processes: Processes, now: number, log: Log)
 }
 
 // Removes stale tickets and markers and returns the live queue, the holder
-// first, with the number of runs still choosing a number.
+// first; it reads the markers before the tickets, as the bakery requires.
 export function liveQueue(lock: string, processes: Processes, now: number, log: Log): QueueState {
   mkdirSync(join(lock, QUEUE), { recursive: true });
   mkdirSync(join(lock, CHOOSING), { recursive: true });
+  const choosing = liveChoosing(lock, processes, now, log);
   const entries: QueueEntry[] = [];
   for (const ticket of ticketsIn(lock)) {
     const holder = readHolder(ticket.path);
@@ -213,7 +219,7 @@ export function liveQueue(lock: string, processes: Processes, now: number, log: 
     }
     entries.push({ ticket, holder });
   }
-  return { entries, choosing: liveChoosing(lock, processes, now, log) };
+  return { entries, choosing };
 }
 
 // A ticket holds the slot when no run is choosing and it is the lowest.

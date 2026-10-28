@@ -240,13 +240,16 @@ export function finishVerify(context: StampContext, profile: VerifyProfile, star
   return `${passed}, tree ${started}; stamp written`;
 }
 
-// make -n still runs recipe lines that call $(MAKE), so the stamp step
-// reads make's flags to tell a dry run from a real one.
+// make -n, -t, and -q still run recipe lines that call $(MAKE), so the
+// stamp step reads make's flags to tell those runs from a real one.
+const NO_CHECK_OPTIONS = ['-n', '--just-print', '--dry-run', '--recon', '-t', '--touch', '-q', '--question'];
+const NO_CHECK_LETTERS = /[ntq]/;
+
 export function isDryRun(makeflags: string | undefined): boolean {
   const words = (makeflags ?? '').trim().split(/\s+/).filter((word) => word !== '');
-  if (words.some((word) => ['-n', '--just-print', '--dry-run', '--recon'].includes(word))) return true;
+  if (words.some((word) => NO_CHECK_OPTIONS.includes(word))) return true;
   const first = words[0];
-  return first !== undefined && !first.startsWith('-') && !first.includes('=') && first.includes('n');
+  return first !== undefined && !first.startsWith('-') && !first.includes('=') && NO_CHECK_LETTERS.test(first);
 }
 
 export const USAGE = 'usage: verify-stamp.ts profile | start | write <full|docs-only> <tree|dirty> | check [full]';

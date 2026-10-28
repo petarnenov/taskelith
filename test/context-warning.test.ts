@@ -33,8 +33,8 @@ function withTranscript(lines: readonly string[], body: (path: string) => void):
 test('the newest main-thread assistant usage is the context', () => {
   const user = JSON.stringify({ type: 'user', message: { content: SECRET } });
   const tail = [assistant(10_000), assistant(150_000, { isSidechain: true }), user, 'not json', assistant(1)].join('\n');
-  assert.equal(lastUsageTokens(tail), 1 + 3500);
-  assert.equal(lastUsageTokens([assistant(100_000), assistant(150_000, { isSidechain: true })].join('\n')), 103_500);
+  assert.equal(lastUsageTokens(tail), 1 + 3000, 'output tokens are not counted');
+  assert.equal(lastUsageTokens([assistant(100_000), assistant(150_000, { isSidechain: true })].join('\n')), 103_000);
   assert.equal(lastUsageTokens(JSON.stringify({ type: 'assistant', message: { usage: {} } })), 0);
   assert.equal(lastUsageTokens(user), undefined);
 });
@@ -51,7 +51,7 @@ test('only the tail of a large transcript is read', () => {
     const { text, size } = readTail(path, TAIL_BYTES);
     assert.equal(text.length, TAIL_BYTES);
     assert.ok(size > TAIL_BYTES);
-    assert.deepEqual(estimateContext(path), { tokens: 143_500, source: 'usage' });
+    assert.deepEqual(estimateContext(path), { tokens: 143_000, source: 'usage' });
   });
 });
 
@@ -75,7 +75,7 @@ test('bad input, a missing transcript, and a small context print nothing', () =>
   assert.equal(hookOutput(JSON.stringify({ transcript_path: join(tmpdir(), 'taskelith-no-such-transcript.jsonl') }), {}), '');
   withTranscript([assistant(1000)], (path) => {
     assert.equal(hookOutput(JSON.stringify({ transcript_path: path }), {}), '');
-    assert.match(hookOutput(JSON.stringify({ transcript_path: path }), { TASKELITH_CONTEXT_WARN_TOKENS: '4000' }), /^Context warning: about 5k tokens/);
+    assert.match(hookOutput(JSON.stringify({ transcript_path: path }), { TASKELITH_CONTEXT_WARN_TOKENS: '4000' }), /^Context warning: about 4k tokens/);
   });
 });
 
@@ -85,7 +85,7 @@ test('the hook command warns, exits 0, and never prints transcript content', () 
       input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', transcript_path: path, prompt: SECRET }), encoding: 'utf8',
     });
     assert.equal(run.status, 0);
-    assert.match(run.stdout, /^Context warning: about 154k tokens/);
+    assert.match(run.stdout, /^Context warning: about 153k tokens/);
     assert.doesNotMatch(run.stdout + run.stderr, new RegExp(SECRET));
   });
   const closed = spawnSync(process.execPath, ['--experimental-strip-types', join(repository, 'scripts/context-warning.ts')], { input: '', encoding: 'utf8' });

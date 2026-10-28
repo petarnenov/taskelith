@@ -17,7 +17,6 @@ interface Usage {
   readonly input_tokens?: number;
   readonly cache_creation_input_tokens?: number;
   readonly cache_read_input_tokens?: number;
-  readonly output_tokens?: number;
 }
 
 interface TranscriptLine {
@@ -26,9 +25,9 @@ interface TranscriptLine {
   readonly message?: { readonly usage?: Usage };
 }
 
+// The input of the last request is the context; its output is not counted.
 function usageTokens(usage: Usage): number {
-  return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0)
-    + (usage.cache_read_input_tokens ?? 0) + (usage.output_tokens ?? 0);
+  return (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
 }
 
 // The newest main-thread assistant usage is the context the model last saw,

@@ -9,6 +9,7 @@ usage() {
 }
 
 resume=false
+interrupted=false
 if [ "${1:-}" = "--resume" ]; then
   resume=true
   shift
@@ -40,16 +41,19 @@ wait_while_paused() {
   while [ -f "$pause_file" ]; do sleep "$poll_seconds"; done
 }
 
-# Runs a command as a new process group; on the alarm (0: none) and at its
-# end it stops what is left of the group and waits until the group is gone.
-GROUP_ALARM='
+# Runs a command as a new process group; on the alarm (0: none), INT, TERM,
+# HUP, and at its end it stops the group and waits until the group is gone.
+GROUP_SUPERVISOR='
 use strict;
 my ($seconds, @command) = @ARGV;
+my %number = (HUP => 1, INT => 2, TERM => 15);
 my $pid = fork() // die "fork: $!\n";
 if ($pid == 0) { setpgrp(0, 0); exec { $command[0] } @command or die "exec: $!\n"; }
 setpgrp($pid, $pid);
-my $alarms = 0;
-$SIG{ALRM} = sub { kill($alarms++ ? "KILL" : "TERM", -$pid); alarm 10; };
+my ($stops, $reason) = (0, "");
+sub stop { kill($stops++ ? "KILL" : "TERM", -$pid); alarm 10; }
+$SIG{ALRM} = sub { $reason ||= "ALRM"; stop(); };
+for my $name (keys %number) { $SIG{$name} = sub { $reason ||= $name; stop() unless $stops; }; }
 alarm $seconds if $seconds > 0;
 waitpid($pid, 0);
 my $status = $?;
@@ -60,12 +64,24 @@ for my $tick (0 .. 600) {
   kill("KILL", -$pid) if $tick == 100;
   select undef, undef, undef, 0.1;
 }
-if ($alarms) { print "integrate.sh: make verify exceeded $seconds s\n"; exit 124; }
+if ($reason eq "ALRM") { print "integrate.sh: make verify exceeded $seconds s\n"; exit 124; }
+exit 128 + $number{$reason} if $reason;
 exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);
 '
 
+# A signal to this script reaches the supervisor, which stops make verify;
+# the wait repeats, because the trap ends the first one early.
 run_verify() {
-  perl -e "$GROUP_ALARM" "$timeout_seconds" make verify
+  perl -e "$GROUP_SUPERVISOR" "$timeout_seconds" make verify </dev/null &
+  local supervisor=$! status
+  trap 'interrupted=true; kill -TERM "$supervisor" 2>/dev/null || true' INT TERM HUP
+  while :; do
+    status=0
+    wait "$supervisor" || status=$?
+    kill -0 "$supervisor" 2>/dev/null || break
+  done
+  trap - INT TERM HUP
+  return "$status"
 }
 
 verify_stamp() {
@@ -106,6 +122,32 @@ existing_pull_request() {
   echo "${merged:-none}"
 }
 
+# Removes the integration worktree, updates the main clone, deletes the
+# remote branch, and reports the landing of the pull request $1.
+land() {
+  local url="$1" delete_failed=false remote_ref
+  cd "$main"
+  git worktree remove "$worktree"
+  git branch -D "itg-$branch" >/dev/null
+  git pull -q --ff-only origin dev
+  npm ci --silent >/dev/null
+  # A failed delete push is fine only when origin no longer has the branch.
+  git push -q origin --delete "$branch" || delete_failed=true
+  if ! remote_ref="$(git ls-remote --heads origin "refs/heads/$branch")"; then
+    echo "DELETE UNCONFIRMED $branch"
+    exit 9
+  fi
+  if [ -n "$remote_ref" ]; then
+    echo "DELETE FAILED $branch"
+    exit 6
+  fi
+  if [ "$delete_failed" = true ]; then
+    echo "integrate.sh: the delete push failed, but origin has no $branch" >&2
+  fi
+  rm -f "$log"
+  echo "LANDED $branch $url $(git log --oneline -1)"
+}
+
 wait_while_paused
 main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
 worktree="$(dirname "$main")/taskelith-worktrees/itg-$branch"
@@ -130,6 +172,21 @@ if [ -d "openspec/changes/$branch" ] || ! compgen -G "openspec/changes/archive/*
   exit 5
 fi
 
+# An earlier attempt whose pull request merged left HEAD in origin/dev; a
+# new merge commit there would open a second pull request.
+if git merge-base --is-ancestor HEAD origin/dev; then
+  pull_request="$(existing_pull_request)"
+  read -r pr_state url <<<"$pull_request"
+  if [ "$pr_state" = merged ]; then
+    echo "integrate.sh: the pull request $url is already merged; only cleaning up"
+  else
+    url=none
+    echo "integrate.sh: $branch is already in origin/dev; only cleaning up"
+  fi
+  land "$url"
+  exit 0
+fi
+
 # The merge stays on the local itg branch until the full verify passed.
 if ! git merge -q --no-ff --no-edit origin/dev >/dev/null 2>&1; then
   git diff --name-only --diff-filter=U >&2
@@ -151,7 +208,13 @@ export TASKELITH_VERIFY_PROFILE=full
 if verify_stamp check full >/dev/null; then
   echo "integrate.sh: reusing the full make verify stamp of the merged tree"
 else
-  if ! run_verify >"$log" 2>&1; then
+  verify_status=0
+  run_verify >"$log" 2>&1 || verify_status=$?
+  if [ "$interrupted" = true ]; then
+    echo "INTERRUPTED $branch"
+    exit "$verify_status"
+  fi
+  if [ "$verify_status" -ne 0 ]; then
     echo "VERIFY FAIL $branch"
     tail -30 "$log"
     exit 4
@@ -181,25 +244,4 @@ case "$pr_state" in
     ;;
 esac
 
-cd "$main"
-git worktree remove "$worktree"
-git branch -D "itg-$branch" >/dev/null
-git pull -q --ff-only origin dev
-npm ci --silent >/dev/null
-
-# A failed delete push is fine only when origin no longer has the branch.
-delete_failed=false
-git push -q origin --delete "$branch" || delete_failed=true
-if ! remote_ref="$(git ls-remote --heads origin "refs/heads/$branch")"; then
-  echo "DELETE UNCONFIRMED $branch"
-  exit 9
-fi
-if [ -n "$remote_ref" ]; then
-  echo "DELETE FAILED $branch"
-  exit 6
-fi
-if [ "$delete_failed" = true ]; then
-  echo "integrate.sh: the delete push failed, but origin has no $branch" >&2
-fi
-rm -f "$log"
-echo "LANDED $branch $url $(git log --oneline -1)"
+land "$url"
