@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Killed reclaim containment
-After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`, the adapter SHALL record the failure durably, then kill the program's containment (`cgroup.kill` on Linux, `SIGKILL` to its process group while its leader is unreaped on one account), prove it empty, and free it. Such a reclaim SHALL fail with `reclaim-failed` even when a fault interrupts that cleanup, which a later `reclaim` SHALL finish. It SHALL never retry the program.
+After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`, the adapter SHALL record the failure durably, never to retry the program, then kill its containment (`cgroup.kill` on Linux, `SIGKILL` to its group while the leader is unreaped on one account), prove it empty, and free it, also when that record fails. A fault in the cleanup SHALL fail with `reclaim-failed`; a later `reclaim` SHALL finish it. A containment populated at the proof's bound SHALL stay.
 
 #### Scenario: Program past its run bound on Linux
 - **WHEN** a Linux reclaim program still runs at its run bound
@@ -13,7 +13,11 @@ After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`
 
 #### Scenario: Interrupted cleanup
 - **WHEN** a fault interrupts the kill, the proof, or the freeing of a failed program's containment
-- **THEN** `reclaim` fails with reason `reclaim-failed`, and a later `reclaim`, also after a restart, kills what the recorded cgroup still holds, proves it empty, and frees it without running the program again
+- **THEN** `reclaim` fails with reason `reclaim-failed`, and a later `reclaim`, also after a restart, on Linux kills what the recorded cgroup still holds, on one account only proves the recorded process group empty and never signals it, and frees the containment without running the program again
+
+#### Scenario: Failure record not written
+- **WHEN** the durable write of an overrunning program's failure meets a fault
+- **THEN** the program's containment is still killed, proven empty, and freed, `reclaim` fails with `unavailable`, and the record names the containment without the failure, so a later `reclaim` runs the program once more
 
 ### Requirement: Handed-off workspace refusal in the adapter
 An adapter composed with a separate execution account SHALL hold at most one handed-off workspace per worker: `handOff` SHALL refuse while another workspace is handed off with `precondition-failed` and reason `other-workspace-handed-off`, checking and recording atomically per worker. The worker's slot rules are the worker runtime's (`worker-runtime`, "Slot held by a handed-off workspace").
@@ -29,7 +33,7 @@ An adapter composed with a separate execution account SHALL hold at most one han
 ## MODIFIED Requirements
 
 ### Requirement: Reclaim program containment
-Unless the identities are the same, the worker SHALL record the reclaim program's containment `reclaim-<name>` under its containment parent in the hand-off record after the program entered it and signalled readiness and before `go`. The scan SHALL skip it, and the worker SHALL prove it empty by polling, without a kill, before it reclaims, runs Git, or hands off again, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
+Unless the identities are the same, the worker SHALL record the reclaim program's containment `reclaim-<name>` in the hand-off record once the program entered it and signalled readiness, before `go`. The scan SHALL skip it. A record without a failure SHALL have it proven empty by polling, without a kill, before a reclaim, Git, or a hand-off, and reported at a bound; one with a failure is cleaned up per "Killed reclaim containment". A failed program SHALL keep the workspace handed off.
 
 #### Scenario: Surviving reclaim program
 - **WHEN** the worker restarts while the reclaim program of its previous run still runs
