@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Breaking-change declarations
-`packages/contracts/breaking-changes.json` SHALL list, per contract document path and per version that declared breaking changes, the version, a non-blank English reason, and the breaking changes the check reports, keeping earlier versions as history. `make contract-compatibility` SHALL fail when the file does not match its schema, names an unknown document, has a version that is not semantic, repeats a path and version, or is not sorted.
+`packages/contracts/breaking-changes.json` SHALL list, per contract document path and per version that declared breaking changes, the version, a non-blank English reason, and the breaking changes the check reports, keeping earlier versions as history. `make contract-compatibility` SHALL fail when the file does not match its schema, names an unknown document, has a version that is not semantic, repeats a path and version, or is not sorted by path, version precedence, then version text.
 
 #### Scenario: Malformed declarations
 - **WHEN** an entry has a blank reason, a version `0.4`, or the same path and version as another entry
 - **THEN** the check fails and names the entry and the problem
+
+#### Scenario: Build metadata
+- **WHEN** two entries of one path have the versions `0.5.0+linux` and `0.5.0+mac`, in that order
+- **THEN** the file is valid
 
 ### Requirement: Declared breaking changes listed
 When the head `info.version` of a document present at the merge base declares a breaking change over its merge-base version, the check SHALL fail unless the found breaking changes equal, as a set, those of the file's entry for that path and version, and SHALL name each found change the entry lacks and each listed change not found. When the check finds none, no entry SHALL be required and each change an entry lists for that version SHALL count as stale.
@@ -19,7 +23,7 @@ When the head `info.version` of a document present at the merge base declares a 
 - **THEN** the check fails and names the listed change
 
 #### Scenario: Matching entry
-- **WHEN** the entry lists exactly the found changes, in any order
+- **WHEN** the file's entry for 0.5.0 is valid, so its changes are sorted, and lists exactly the found changes, whatever order the check finds them in
 - **THEN** the check passes
 
 #### Scenario: Bump without found changes
