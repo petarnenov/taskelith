@@ -46,7 +46,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
   listQuarantine: OWNER, redriveQuarantined: OWNER,
   readInstallationCa: NONE, enrollWorker: NONE, authorizeLaunch: NONE, publishEvidence: NONE, requestDelegation: NONE,
-  renewWorkerCredentials: NONE, confirmWorkerCredentials: NONE,
+  renewWorkerCredentials: NONE, confirmWorkerCredentials: NONE, openWorkerRelay: NONE,
 });
 
 // An operation that no rule names fails closed: it requires the owner.

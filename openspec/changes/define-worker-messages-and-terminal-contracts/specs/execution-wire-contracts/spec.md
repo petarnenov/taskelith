@@ -219,7 +219,11 @@ Each session observation and each adoption or non-adoption SHALL carry `recovery
 - **THEN** no standing rule answers it
 
 ### Requirement: Worker relay connection
-`openWorkerRelay` SHALL upgrade `GET /workers/relay` to the worker's one outbound WebSocket with the worker credential and the subprotocol `taskelith.relay.v1`, answering 422 `protocol-not-supported` below protocol version 2. It SHALL carry only the relay frames of `terminal.asyncapi.json`, multiplexed by `terminalId`, never a command, an observation, or a credential.
+`openWorkerRelay` SHALL upgrade `GET /workers/relay` to the worker's one outbound WebSocket under the worker's own credential, checking no operator role, with the subprotocol `taskelith.relay.v1`, answering 422 `protocol-not-supported` below protocol version 2. It SHALL carry only the relay frames of `terminal.asyncapi.json`, multiplexed by `terminalId`, never a command, an observation, or a credential.
+
+#### Scenario: Relay under the worker credential
+- **WHEN** a worker opens the relay with its worker credential
+- **THEN** the control plane authenticates that credential and checks no operator role
 
 #### Scenario: Version 1 worker opens the relay
 - **WHEN** a worker whose common protocol version is 1 opens the relay
