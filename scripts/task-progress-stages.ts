@@ -205,7 +205,9 @@ function isPassRecord(value: unknown): value is PassRecord {
 export function parsePasses(text: string | undefined): ParsedPasses {
   const records: PassRecord[] = [];
   const problems: string[] = [];
-  nonEmptyLines(text).forEach((line, index) => {
+  (text ?? '').split('\n').forEach((raw, index) => {
+    const line = raw.trim();
+    if (line === '') return;
     let value: unknown;
     try {
       value = JSON.parse(line);

@@ -298,6 +298,15 @@ test('corrupt pass records are reported, not counted, and never crash', () => {
   });
 });
 
+test('a corrupt pass line is named by its physical line number', () => {
+  withFixture((fixture) => {
+    routed(fixture);
+    commit(fixture, { [`${RECORDS}/passes.jsonl`]: `\n${pass(1, { medium: 1 })}\n\nnull\n` }, 'docs: passes');
+    const task = only(fixture);
+    assert.deepEqual([task.review.passes, task.problems], [1, ['passes.jsonl line 4 is no pass summary']]);
+  });
+});
+
 test('worktrees without an open change, dev, and integration branches are skipped', () => {
   withFixture((fixture) => {
     git(fixture.main, T0, 'worktree', 'add', '-q', '-b', 'itg-demo', join(fixture.main, '..', 'itg'), 'origin/dev');
