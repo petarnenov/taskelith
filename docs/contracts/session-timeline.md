@@ -137,7 +137,7 @@ A request of a later generation that reuses a native request ID of an earlier ge
 
 ### 5.5 Reads for the inbox
 
-`requestsAwaitingAnswer(session)` lists the session's `open` requests, in recording order; the inbox source shows its permission and input requests as items, and the host answers delegation requests (item 38). `uncertainDeliveries(session)` lists the `answered` requests whose delivery is `delivery-uncertain`. After a restart, an `unresolved` request closes its inbox item (`closed`, product ports contract section 4.1), and only a `delivery-uncertain` response opens an acknowledgement item, because its answer may have run an action. The product ports contract lists no acknowledgement item kind in G3; the inbox source of item 13 adds it.
+`requestsAwaitingAnswer(session)` lists the session's `open` requests, in recording order; the inbox source shows its permission and input requests as items, and the host answers delegation requests (item 38). `uncertainDeliveries(session)` lists the `answered` requests whose delivery is `delivery-uncertain`. After a restart, an `unresolved` request closes its inbox item (`closed`, product ports contract section 4.1), and only a `delivery-uncertain` response opens an acknowledgement item, because its answer may have run an action. G3 item 9 (sub-change 9b) added that item kind, `delivery-acknowledgement`, to the product ports contract section 4.1, and the native request source of item 13 opens the items.
 
 | Request state | Meaning |
 | --- | --- |
@@ -195,8 +195,8 @@ The items that build on it add:
 
 ## 10. Not in this contract
 
-- Persistence, the session timeline service, and crash points (item 13); the wire schemas and AsyncAPI messages (item 9); the UI event stream and durable snapshots (item 14); the harness host and its calls to the port (item 18).
-- The inbox items themselves, including the acknowledgement item kind (item 13 and the [product ports contract](product-ports.md) section 4).
+- Persistence, the session timeline service, and crash points (item 13); the wire schemas and AsyncAPI messages (item 9; the [control-plane wire contracts](control-plane-wire-contracts.md) sections 9 and 10); the UI event stream and durable snapshots (item 14); the harness host and its calls to the port (item 18).
+- The inbox items themselves (item 13), whose kinds, the acknowledgement item kind included, are in the [product ports contract](product-ports.md) section 4.1.
 - The account pool's selection of the next session's harness and slot, and the slot's cooldown (items 5 and 12).
 - Delegation admission and the child's session (item 38).
 - The prompt that the next session receives from a handoff (item 18).
