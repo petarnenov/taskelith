@@ -38,6 +38,8 @@ export const GIT_COMMAND_SCOPE_SETTINGS: readonly (readonly [string, string])[] 
   Object.freeze(['submodule.recurse', 'false'] as const),
   Object.freeze(['fetch.recurseSubmodules', 'false'] as const),
   Object.freeze(['push.recurseSubmodules', 'no'] as const),
+  // An untracked cache the agent forged in the index never hides a file.
+  Object.freeze(['core.untrackedCache', 'false'] as const),
 ]);
 
 export const GIT_CREDENTIAL_SETTING = 'http.extraHeader';
