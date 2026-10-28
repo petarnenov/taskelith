@@ -23,6 +23,6 @@
 
 - [x] 4.1 `npm run openspec -- validate deliver-rotated-worker-credentials --strict`, `make verify`, and `make verify-installation`
 - [x] 4.2 `verification.md` with the fail-before evidence and the generated part
-- [ ] 4.3 Independent review passes and their fixes
+- [x] 4.3 Independent review passes and their fixes
 - [ ] 4.4 Archive under worker step 7
 - [ ] 4.5 Handoff to the coordinator

@@ -113,9 +113,25 @@ Each finding was checked against the code before its fix and is real; the part o
 | L10 Low, `transport-limits.ts:7` and `fleet-limits.ts`: the catch-up path relied without a record or test on `streamMaxAgeMilliseconds` (7 days) covering the hard cap (7 days) | The design (risks) and the operational targets (stream row) record the dependency, and a test asserts it. The claim that `streamMaxBytes` and `commandBacklogPerWorker` can drop the notice is not correct: the streams use `DiscardPolicy.New` and `discard_new_per_subject` (`topology.ts`), so a full stream or backlog refuses the publication and the outbox retries the notice with backoff; it is delayed, possibly past the deadline, but not dropped. The record says so | `3406ae6f` | `streamMaxAgeMilliseconds` set to 6 days | `control-plane-settings.test.ts` "the command stream keeps a rotation notice at least until the rotation deadline": 1 fail |
 
 - **Contracts and specs.** The execution OpenAPI document stays 0.7.0 and the AsyncAPI document 0.8.0: only descriptions change. `make contract-compatibility` reports 0 breaking changes for `execution.openapi.json` against `7efc48d330b4`, the AsyncAPI document's 3 declared ones unchanged, and "Contract documents have no undeclared breaking change." `npm run openspec -- validate deliver-rotated-worker-credentials --strict` and `npm run verify:archive` pass; the modified "Credential rotation on the worker" is 496 characters.
-- **Observed, not fixed.** The worker's rotation log lines (`worker.credentials.adopted`, `.confirmed`, `-refused`, `-unavailable`) carry the field `credentialGeneration`, which the logger redacts, so they name no generation; the author self-check's "log lines name generations" holds for the control plane only. This is outside the pass 2 findings and is left for pass 3 or a follow-up.
+- **Observed after the fixes.** The worker's rotation log lines carried the field `credentialGeneration`, which the logger redacts, so they named no generation. This was outside the pass 2 findings; pass 3 reported it as L1, fixed below.
 - **Checks after the fixes.** M1 changed the worker driver and L4 the worker's start path (`CredentialRotation.open`), so `make verify-installation` ran on `09d4ebf8`: exit 0, "installation.sh: built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed", and its log holds no `PRIVATE KEY` line and no `tken_` token. Its log also holds `scripts/installation.sh: line 332: files: unbound variable`, which the run after pass 1 printed as well; this change does not touch that script. `make findings ARGS="validate"` passes; `make verify` on the clean tree is in the generated part below.
 - **Pass 3.** Required: the M1 fix changes code.
+
+### Pass 3
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, effort `medium`, session `01a18374-c2a8-7410-bc4f-b538fbacc7cd`, run by this worker session with `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt file>`; the log's header confirms `model: gpt-6.1-sol`, `sandbox: read-only`, and `reasoning effort: medium`.
+- **Reviewed range:** `7efc48d3...db40b1b9`, the pass 2 fixes being `2070e8b8..db40b1b9`.
+- **Snapshot:** identical before and after the pass, `8ee8b27d47dce8af4586a6798c3e8725f638c8fbbd9aea94cd16cd8bb377be04`.
+- **Counts:** Critical 0, High 0, Medium 0, Low 2, as in `passes.jsonl`; each finding is a line of `findings.jsonl`, both `fixed-unreviewed`.
+- **Pass 2 fixes:** the reviewer confirmed M1 and L1 to L10 with no regression: M1 for the renewal and the confirmation alike, the fail-before tests of M1, L3, L4, and L10 valid, and no seed, bearer, or JWT in the new `renewal-refused` log.
+- **End of the review.** Pass 3 reported Low findings only, so the review ends here under governance "Low findings are fixed"; the fixes are not reviewed again.
+
+The L1 fail-before run restored `credential-rotation.ts` of `db40b1b9`, rebuilt with `npm run build`, and ran `credential-rotation.test.ts`; with the fixed file restored and rebuilt, all 11 tests passed.
+
+| Finding | Resolution | Commit | Mutation | Result under mutation |
+| --- | --- | --- | --- | --- |
+| L1 Low, `apps/worker/src/credential-rotation.ts:189` (also 109, 160, 182): the worker logged the generation as `credentialGeneration`, which `isSecretFieldName` of `@taskelith/observability` matches through the segment `credential`, so `redactFields` wrote `[redacted]` into `notice-ignored`, `adopted`, `confirmed`, and every `-refused` and `-unavailable` line | The field is `generation`, as in the control plane's `fleet.credentials.renewal-refused`. The tests read each event's `generation` from the records of the real `Logger`, after its redaction | `27304160` | the field restored as `credentialGeneration` | 5 fail in `credential-rotation.test.ts`, each logging `undefined` for the generation: "a notice for the next generation renews it, adopts it, re-dials, and confirms after the new link", "a refused renewal ends the round with a log line; no answer is retried after the delay", "a renewal or confirmation that the control plane failed with 500 is retried after the delay", "a notice for another generation stores nothing", and "a refused confirmation keeps both generations for the next start" |
+| L2 Low, `verification.md:93`: the pass 2 reviewer line lacked the invocation that governance "Authorized reviewers" requires; the pass 1 line lacked it too, and both said the coordinator relayed the result, though this worker session ran both reviewers | Both lines give the invocation and the confirmation the tool printed, and say that this worker session ran the reviewer; this section does the same | `4c464e63` | record only | none |
 
 <!-- make record: begin -->
 ## Generated checks
@@ -143,6 +159,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review pass 3, required by the M1 fix of pass 2, and its fixes.
 - Archive under worker step 7.
 - Integration into dev by the coordinator (single pull request).
