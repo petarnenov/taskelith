@@ -14,7 +14,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16e, developed by a briefed s
 - `3a6784fe` the first route (`route.json`, unedited). The `make verify` on its tree failed at `npm run verify:comments` (`apps/worker/src/workspace-slots.ts:16: comment spans 3 lines (max 2)`); `624112b7` fixed the comment, which changed the diff after routing, so `b513fe37` deleted `route.json` and `e7d61265` routed again, unedited, as worker step 4 of the agent task protocol requires. Both routes gave the same result.
 - `efbb79ca` `docs: record the verification of the wire git workspace into worker change`, the revision that review pass 1 reviewed.
 - Review pass 1 fixes: `f40abcec` (finding 1), `824ccab2` (finding 3), `3acc3dc1` (finding 2), `291f9822` (finding 4), `00a1e2b0` (finding 5, the worker-runtime delta of finding 1, and the contract text of findings 1 and 2), `004144e1` (the git-workspace-port delta of finding 2 with its "Interrupted cleanup" scenario, and design, proposal, and tasks, with the architect's answers N1 and N2), and `38d39dda` (the pass 1 line of `passes.jsonl` and the five lines of `findings.jsonl`). `route.json` is not routed again: worker step 4 routes before pass 1 only.
-- Review pass 2 fixes: `c764fd2a` (finding 4), `45b308d8` (finding 3 and the tests of answer A2), `d26690b6` (findings 1, 2, and 5 and the contract and spec text of finding 4), `44b5b314` (design and tasks, with the coordinator's answers A1 and A2), `aeaf36b8` (findings 6 and 7), and the records commits after `aeaf36b8` (the pass 2 line of `passes.jsonl`, the seven lines of `findings.jsonl`, and this record).
+- Review pass 2 fixes: `c764fd2a` (finding 4), `45b308d8` (finding 3 and the tests of answer A2), `d26690b6` (findings 1, 2, and 5 and the contract and spec text of finding 4), `44b5b314` (design and tasks, with the coordinator's answers A1 and A2), `aeaf36b8` (findings 6 and 7), `64917d03` (the pass 2 line of `passes.jsonl`, the seven lines of `findings.jsonl`, and this record), `ff78b57d` (the two tests of `reclaim-program.test.ts` typed through the `ReclaimHost` port, after the first `make verify` below failed its type check), and the commit after it (`make record` and the checks below).
 
 ## Environment
 
@@ -64,8 +64,11 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `make verify` | `64917d03` | Failed at `npm run check:boundaries`: `reclaim-program.test.ts(265,29): error TS2554` (the one-account host's `killRecorded` takes no argument), fixed in `ff78b57d` |
+| `make verify` | `ff78b57d`, after the pass 2 fixes, tree `d1b22d39` (log `16e-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3571, suites 46, pass 3524, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify-linux-git-workspace` | `ff78b57d` | Passed: tests 43, pass 43, fail 0, skipped 0 (log `16e-linux-3.log`) |
 | `make verify` | `3a6784fe` | Failed at `npm run verify:comments` (one comment of 3 lines), fixed in `624112b7` |
-| `make verify` | `38d39dda`, after the pass 1 fixes, tree `1fb8f298` (log `16e-verify-2.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3567, suites 46, pass 3520, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.77 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify` | `38d39dda`, after the pass 1 fixes, tree `1fb8f298` (log `16e-verify-2.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3567, suites 46, pass 3520, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.77 % branches, 98.76 % functions; its `make record` was replaced by the run after the pass 2 fixes |
 | `make verify-linux-git-workspace` | `38d39dda` | Passed: tests 43, pass 43, fail 0, skipped 0 (log `16e-linux-2.log`) |
 | `make verify` | `e7d61265`, tree `d17b367a` | Passed, profile full, stamp written: tests 3558, pass 3511, fail 0, skipped 47; all files 99.36 % lines, 92.77 % branches, 98.76 % functions; its `make record` was replaced by the run after the pass 1 fixes |
 | `make findings ARGS="route --change wire-git-workspace-into-worker"` | `7971e4b2`, again on `b513fe37` | "route: elevated (lines, files, contracts, docker), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` agrees; recommendation only, committed unedited as `3a6784fe` and `e7d61265`. The brief names pass 1 `codex gpt-6-astra#medium`, pass 2 `claude claude-opus-5-5#medium` (accepted by `make review` since governance policy v8, #405), and pass 3 `codex gpt-6.1-sol#medium` |
@@ -93,7 +96,7 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `1fb8f298a2af5c8b1b27b89e4e1f241a68eba040`; tests 3567, pass 3520, fail 0, skipped 47; all files 99.37% lines, 92.77% branches, 98.76% functions.
+- `make verify`: passed, profile full, tree `d1b22d39fe81ade01ab82fb856d57fa4d18bf560`; tests 3571, pass 3524, fail 0, skipped 47; all files 99.37% lines, 92.78% branches, 98.76% functions.
 - `npm run openspec -- validate wire-git-workspace-into-worker --strict`: passed, `Change 'wire-git-workspace-into-worker' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).`.
 - Spec diff against the merge base `166673998210` with `origin/dev`: no change under `openspec/specs`.
@@ -102,6 +105,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18418-c2ef-7430-8b47-0d49b8341c30` | 0 | 1 | 3 | 1 |
+| 2 | B | `claude claude-opus-5-5#medium` | `b1712a46-c45e-4d1a-bc1a-c52f61a40928` | 0 | 0 | 4 | 3 |
 <!-- make record: end -->
 
 ## Independent review
@@ -145,7 +149,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   6. Low, evidence-mismatch (this record, "Author self-check"): the longest requirement before the fixes was given as current. Fixed in `aeaf36b8`.
   7. Low, stale-citation (this record, "Revision"): `004144e1`, not `00a1e2b0`, holds the git-workspace-port delta of pass 1 finding 2. Fixed in `aeaf36b8`.
 - Answers A1 and A2 (Niki, 2026-10-28) are recorded in `design.md`. A2 asks for the macOS no-signal rule in the contract and in a test: contract section 3, step 7, states it, and the two tests "a one-account host never signals a recorded process group, also one still running" and "on one account a later reclaim of a failed program signals no recorded process group" check it.
-- Fail-before, with the new tests on the fixed tree and one source change at a time, rebuilt with `npx tsc -b packages/adapters/git-workspace`, then restored (log `16e-pass2-failbefore.out` in the session scratchpad):
+- Fail-before, with the new tests on the fixed tree and one source change at a time, rebuilt with `npx tsc -b packages/adapters/git-workspace`, then restored (log `16e-pass2-failbefore.out` in the session scratchpad; the two `reclaim-program.test.ts` mutants ran again after `ff78b57d` with the same failures):
 
 | Test | How it failed before the fix |
 | --- | --- |
