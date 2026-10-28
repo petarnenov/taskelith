@@ -17,6 +17,7 @@ import {
   type ChecklistQuery,
   type Finding,
 } from './review-findings.ts';
+import { formatRoutingEffect, type RoutingEffect } from './review-route-report.ts';
 
 // The checklist and effect commands of npm run findings, over records that
 // scripts/findings.ts has loaded and validated.
@@ -113,10 +114,11 @@ export interface EffectContext {
   readonly environment: ChecklistEnvironment;
   readonly archivedChanges: readonly ArchivedChange[];
   readonly checklists: readonly LocatedChecklist[];
+  readonly routing: RoutingEffect;
 }
 
 // `<date>-<change>`: the archive directory starts with the archive date.
-export function runEffect(json: boolean, { root, environment, archivedChanges, checklists }: EffectContext): CommandResult {
+export function runEffect(json: boolean, { root, environment, archivedChanges, checklists, routing }: EffectContext): CommandResult {
   const recorded = new Map(checklists.map(({ location, record }) => [location.directory, record]));
   const measured: ArchivedChecklist[] = [];
   for (const { directory, change, findings } of archivedChanges) {
@@ -130,7 +132,8 @@ export function runEffect(json: boolean, { root, environment, archivedChanges, c
   }
   const noChecklist = archivedChanges.filter(({ directory }) => !recorded.has(directory)).map(({ change }) => change);
   const effect = checklistEffect(measured, noChecklist);
-  return success(json ? JSON.stringify(effect, null, 2) : formatChecklistEffect(effect));
+  if (json) return success(JSON.stringify({ ...effect, routing }, null, 2));
+  return success(`${formatChecklistEffect(effect)}\n\n${formatRoutingEffect(routing)}`);
 }
 
 function success(stdout: string): CommandResult {
