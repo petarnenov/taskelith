@@ -60,7 +60,7 @@ A Linux worker with a separate execution account SHALL read `fs.protected_hardli
 A worker that composes the Git workspace SHALL count, once per attempt beside the attempts its journal counts, every attempt whose hand-off record exists as holding one slot, but not its CPU or memory, until its reclaim removes the record, read through `handedOff` at the start; it SHALL refuse an offer beyond its slots with `worker-slots-exhausted`, and a hand-off read that fails SHALL fail the start.
 
 #### Scenario: Reclaim after the exit
-- **WHEN** the assignment of a handed-off attempt has ended, its reclaim has not removed the record, and an offer arrives
+- **WHEN** every slot of the worker is held, one of them by a handed-off attempt whose assignment has ended and whose reclaim has not removed the record, and an offer arrives
 - **THEN** the worker refuses it with `worker-slots-exhausted`
 
 #### Scenario: Held slot after a restart
@@ -94,6 +94,13 @@ A worker whose reclaim fails with `reclaim-failed` SHALL keep the workspace's sl
 - **WHEN** a failed reclaim's message holds a checkout path and a credential
 - **THEN** the logged line holds neither
 
+### Requirement: Workspace start failures without paths
+A worker whose start fails because it cannot read `fs.protected_hardlinks`, sweep its workspaces, or read its hand-off records SHALL report a fixed message with only the system error code, such as `EACCES`, and never the error's own message, which may name a checkout path.
+
+#### Scenario: Unreadable hand-off records
+- **WHEN** the hand-off records cannot be read at the start with an error whose message names a checkout path
+- **THEN** the start failure that the worker writes names the error code and not the path
+
 ### Requirement: Recorded reclaim containment skipped by the scan
 A Linux worker's start scan for unrecorded processes SHALL skip a cgroup that a hand-off record names at the start, and SHALL still report a populated cgroup that no record names.
 
@@ -126,12 +133,16 @@ The worker SHALL read its data root, HTTPS control-plane URL, broker URL, enroll
 - **THEN** the settings fail with `invalid`, naming the variable
 
 ### Requirement: Capacity declaration
-A worker SHALL journal `worker.capacity.declared` at its first start and whenever its slots, CPU, memory, enforceable controls, or protocol window differ from its last declaration, and after every reclaim that removes a hand-off record, also when its capacity is unchanged, so that the scheduler finds it eligible again.
+A worker SHALL journal `worker.capacity.declared` at its first start and whenever its slots, CPU, memory, enforceable controls, or protocol window differ from its last declaration, and after every reclaim that removes a hand-off record, also when its capacity is unchanged, so that the scheduler finds it eligible again. It SHALL owe that declaration durably before the reclaim, so that a later reclaim or the next start journals it after a journal failure or a crash.
 
 #### Scenario: Unchanged capacity
-- **WHEN** a worker starts again with the capacity it declared before
+- **WHEN** a worker starts again with the capacity it declared before, and no reclaim owes a declaration
 - **THEN** it journals no new declaration
 
 #### Scenario: Declaration after a reclaim
 - **WHEN** a worker's reclaim removes a hand-off record and its capacity is unchanged
 - **THEN** it journals `worker.capacity.declared` again
+
+#### Scenario: Declaration owed after a fault
+- **WHEN** the journal fails, or the worker crashes, after a reclaim removed a hand-off record and before its declaration was journaled
+- **THEN** the next successful reclaim, or the next start, journals `worker.capacity.declared`
