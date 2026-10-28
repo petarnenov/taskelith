@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fixtureEnv } from './git-fixture-env.ts';
+import { gnuMakes } from './gnu-makes.ts';
 
 // scripts/integrate.sh against a local bare origin, with make, npm, and gh
 // stubs that log their calls; no network.
@@ -495,6 +496,11 @@ test('the pause file holds the integration until it is removed', async () => {
 // Review finding 1: make must pass TITLE and BODY as typed, unexpanded;
 // review pass 2 finding 10: only RESUME=1 resumes.
 test('make integrate passes its arguments to the script as typed', () => {
+  assert.notEqual(gnuMakes.length, 0, 'no GNU make on PATH');
+  for (const make of gnuMakes) assertIntegrateArgumentsAsTyped(make);
+});
+
+function assertIntegrateArgumentsAsTyped(make: string): void {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-integrate-make-'));
   try {
     write(join(root, '.nvmrc'), readFileSync(join(repository, '.nvmrc'), 'utf8'));
@@ -504,15 +510,15 @@ test('make integrate passes its arguments to the script as typed', () => {
     const marker = join(root, 'expanded');
     const title = `Title with $HOME, $$, $(shell touch ${marker}), and "quotes" 'too'`;
     const body = `Line one with \`backticks\`\nline two with $(shell touch ${marker}) and $(MAKE)`;
-    const run = spawnSync('make', ['-f', join(repository, 'Makefile'), '--no-print-directory', 'integrate', 'BRANCH=feature', `TITLE=${title}`, `BODY=${body}`, 'RESUME=1'], {
+    const run = spawnSync(make, ['-f', join(repository, 'Makefile'), '--no-print-directory', 'integrate', 'BRANCH=feature', `TITLE=${title}`, `BODY=${body}`, 'RESUME=1'], {
       cwd: root, encoding: 'utf8', env: { ...fixtureEnv, MAKEFLAGS: '' },
     });
     assert.equal(run.status, 0, run.stderr);
-    assert.equal(existsSync(marker), false, 'make ran a $(shell) of the arguments');
+    assert.equal(existsSync(marker), false, `${make} ran a $(shell) of the arguments`);
     assert.deepEqual(readFileSync(join(root, 'args'), 'utf8').split('\0').slice(0, -1), ['--resume', 'feature', title, body]);
     assert.doesNotMatch(readFileSync(join(root, 'environment'), 'utf8'), /^MAKEFLAGS=/m);
     for (const resume of ['0', 'yes', '']) {
-      const fresh = spawnSync('make', ['-f', join(repository, 'Makefile'), '--no-print-directory', 'integrate', 'BRANCH=feature', 'TITLE=t', 'BODY=b', `RESUME=${resume}`], {
+      const fresh = spawnSync(make, ['-f', join(repository, 'Makefile'), '--no-print-directory', 'integrate', 'BRANCH=feature', 'TITLE=t', 'BODY=b', `RESUME=${resume}`], {
         cwd: root, encoding: 'utf8', env: { ...fixtureEnv, MAKEFLAGS: '' },
       });
       assert.equal(fresh.status, 0, fresh.stderr);
@@ -521,4 +527,4 @@ test('make integrate passes its arguments to the script as typed', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}
