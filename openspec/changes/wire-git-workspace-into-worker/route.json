@@ -1,0 +1,107 @@
+{
+  "change": "wire-git-workspace-into-worker",
+  "generatedAt": "2026-10-28T19:52:20.617Z",
+  "devCommit": "1666739982106ec3e9663978b4f86cdd2fb72f1f",
+  "headCommit": "7971e4b2212faf879a272e96b4594028d8404935",
+  "features": {
+    "linesChanged": 939,
+    "filesChanged": 34,
+    "capabilities": [
+      "git-workspace-port",
+      "worker-runtime"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": true,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 16,
+      "thirdPassShare": 0.6875,
+      "mediumOrWorsePerChange": 8.0625
+    }
+  },
+  "rule": {
+    "version": 2,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "contracts",
+      "docker"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.77,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 387
+  }
+}
