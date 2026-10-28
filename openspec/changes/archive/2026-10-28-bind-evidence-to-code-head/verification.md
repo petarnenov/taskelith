@@ -1,6 +1,6 @@
 # Verification
 
-Record of the change through review pass 3, the last pass; the review found no open findings (Remaining gates).
+Record of the change through review pass 3, the last pass, and its archive; the review found no open findings (Remaining gates).
 
 ## Scope and source
 
@@ -44,6 +44,17 @@ Author checks, run on `56a63b3b` and its working tree:
 - `make verify` on `e1fca2ec` (tree `ea31edaa`), ended 11:38 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2903, pass 2896, fail 0, cancelled 0, skipped 7; coverage 99.37% lines, 92.66% branches, 99.08% functions; 219 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0; the head-bound gate of the gate repository suite passed against PostgreSQL (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log.
 - `make verify` after the pass 2 fixes, on `e578bfd5` (tree `d8e84155`), ended 12:07 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2908, pass 2901, fail 0, cancelled 0, skipped 7; coverage 99.37% lines, 92.68% branches, 99.08% functions; 306 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0, as the breakdown in "Breaking changes of the SDLC AsyncAPI document" counts them; the gate repository suite passed against PostgreSQL (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log. No fresh route record: the protocol routes once, before pass 1 (worker step 4).
 
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the bind evidence to code head change`, the working tree the checks ran on (tree `6b1d64c4` before this record was written into it):
+
+- `npm run openspec -- archive bind-evidence-to-code-head --yes`: `sdlc-gates` + 5 added, ~ 1 modified ("Gate transitions"); `sdlc-wire-contracts` + 1 added; `sdlc-workflow-model` + 1 added; archived as `2026-10-28-bind-evidence-to-code-head`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-bind-evidence-to-code-head`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `9196804b`): only this change's intended edits, `sdlc-gates/spec.md` 57 lines, `sdlc-wire-contracts/spec.md` 7, `sdlc-workflow-model/spec.md` 7; 70 insertions, 1 deletion, the WHEN of "Reopening a gate".
+- Moved change's files: `findings.jsonl` 11 lines, `passes.jsonl` 3 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).
+- `make verify` on tree `6b1d64c4`: passed, profile full; 306 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0; `make record CHANGE=bind-evidence-to-code-head LOG=<log>` wrote "Generated checks" from its log, and `make record-check` matched it. The archive commit differs from that tree only in this record.
+
 ## Fails before the change
 
 - With `packages/modules/sdlc/src` and `packages/modules/workspace/src` of `a899d5d2` restored and built, `code-head-binding.test.ts` fails to load: `The requested module '@taskelith/sdlc' does not provide an export named 'isGateOutdatedByCodeHead'` (0 pass, 1 fail). The sources were restored afterwards.
@@ -54,10 +65,10 @@ Author checks, run on `56a63b3b` and its working tree:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `d8e84155d11ebdc4fb225eb090c97661a4c3d6c1`; tests 2908, pass 2901, fail 0, skipped 7; all files 99.37% lines, 92.68% branches, 99.08% functions.
-- `npm run openspec -- validate bind-evidence-to-code-head --strict`: passed, `Change 'bind-evidence-to-code-head' is valid`.
+- `make verify`: passed, profile full, tree `6b1d64c4e0785cdbee77f3b1c2ab4ae6fb335ff0`; tests 2908, pass 2901, fail 0, skipped 7; all files 99.37% lines, 92.67% branches, 99.08% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 70 passed, 0 failed (70 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
-- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `9196804b89c6` with `origin/dev`: `openspec/specs/sdlc-gates/spec.md | 57 +++++++++++++++++++++++++++++-`, `openspec/specs/sdlc-wire-contracts/spec.md | 7 ++++`, `openspec/specs/sdlc-workflow-model/spec.md | 7 ++++`, `3 files changed, 70 insertions(+), 1 deletion(-)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -169,5 +180,4 @@ No group is unintended. The 16 `edit` changes are text only; the 290 `add` chang
 
 ## Remaining gates
 
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
