@@ -31,7 +31,7 @@ A session SHALL belong to one task of one run and SHALL bind only attempts of th
 - **THEN** the binding fails with `conflict`
 
 ### Requirement: One active attempt per session
-A session SHALL bind one attempt at a time: binding while the bound attempt has not ended SHALL fail with `precondition-failed`; binding an attempt that the session already bound, or that another session of the task holds, SHALL fail with `conflict`; each failure SHALL change nothing.
+A session SHALL bind one attempt at a time: binding while the bound attempt has not ended SHALL fail with `precondition-failed`; binding an attempt that the session already bound, or that another session of the task holds, SHALL fail with `conflict`; binding to a stopped session SHALL fail with `precondition-failed`; each failure SHALL change nothing.
 
 #### Scenario: Second active attempt
 - **WHEN** an attempt is bound to a session whose bound attempt has not ended
@@ -44,6 +44,10 @@ A session SHALL bind one attempt at a time: binding while the bound attempt has 
 #### Scenario: After the attempt ended
 - **WHEN** an attempt is bound after the session's bound attempt ended
 - **THEN** the session binds the new attempt
+
+#### Scenario: Stopped session
+- **WHEN** an attempt is bound to a stopped session whose bound attempt ended
+- **THEN** the binding fails with `precondition-failed`, and the next session of the task can bind the attempt
 
 ### Requirement: Session generations
 A generation SHALL start only under an active bound attempt; the first SHALL be 1 and record the native session ID, and each next one SHALL be exactly one more, start after the last ended, and name the same native session ID, another failing with `conflict`; a stopped session SHALL start none; ending the bound attempt SHALL end a running generation.
@@ -184,7 +188,7 @@ Output SHALL take session-wide positions from 1 without gaps, each tied to its t
 - **THEN** the result is `cursor-expired` with the earliest retained position
 
 ### Requirement: Limit handoff
-A turn ending as `account-limit-reached`, or a `limit` signal, SHALL stop the session, which then SHALL accept no turn, delivery, or generation; after its generation ends the host SHALL write one handoff with the session, task, harness, known reset time, last turn with an outcome, unresolved requests, and an evidence reference, which one next session of the task SHALL take.
+A turn ending as `account-limit-reached`, or a `limit` signal, SHALL stop the session, which then SHALL accept no attempt, turn, delivery, or generation; after its generation ends the host SHALL write one handoff with the session, task, harness, known reset time, last turn with an outcome, unresolved requests, and an evidence reference, which one next session of the task SHALL take.
 
 #### Scenario: Limit reached
 - **WHEN** a turn ends as `account-limit-reached`

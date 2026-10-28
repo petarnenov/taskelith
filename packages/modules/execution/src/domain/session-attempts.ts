@@ -17,7 +17,7 @@ import {
 import { reconcileRequests } from './session-requests.js';
 import { reconcileTurns } from './session-turns.js';
 
-// Binds an attempt of the session's task while no bound attempt is active;
+// Binds a task attempt to a session neither stopped nor holding an active one;
 // taskSessions are the task's other sessions (contract, section 3.2).
 export function bindAttempt(session: Session, binding: AttemptBinding, taskSessions: readonly Session[]): Result<Session> {
   if (binding.taskId !== session.taskId) return sessionFailure('conflict', session, `belongs to task ${session.taskId}`);
@@ -26,6 +26,7 @@ export function bindAttempt(session: Session, binding: AttemptBinding, taskSessi
   if (holder !== undefined) return sessionFailure('conflict', session, `cannot bind ${binding.attemptId} of ${holder.id}`);
   const active = activeBoundAttempt(session);
   if (active !== undefined) return sessionFailure('precondition-failed', session, `has the active attempt ${active.id}`);
+  if (isStopped(session)) return sessionFailure('precondition-failed', session, 'is stopped');
   const attempt: BoundAttempt = { id: binding.attemptId, ownershipGeneration: binding.ownershipGeneration, ended: false };
   return ok(withChanges(session, { attempts: appended(session.attempts, attempt) }));
 }

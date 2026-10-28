@@ -46,6 +46,7 @@ The domain is pure: it reads no clock, random source, file, or network, and it s
 2. An attempt the session already bound, ended or not, fails with `conflict`.
 3. An attempt that one of `taskSessions` holds fails with `conflict`.
 4. While the session's bound attempt has not ended, binding fails with `precondition-failed`.
+5. A stopped session (section 8) fails with `precondition-failed`, so the attempt stays free for the session that takes the handoff.
 
 So a session has at most one active attempt, and an attempt binds to one session only, which makes the capacity reservation contract's count of attempts a count of active sessions. `endBoundAttempt(session, attemptId)` records that the bound attempt ended, from the attempt's outcome fact; it also ends a running generation with the reconciliation of section 6. An attempt the session never bound fails with `not-found`, and ending an ended attempt changes nothing. `activeBoundAttempt(session)` returns the bound attempt that has not ended, if any.
 
@@ -164,7 +165,7 @@ The session retains a window of its latest entries of at most `OUTPUT_RETENTION_
 
 ## 8. Limit and handoff
 
-A session is stopped by a turn that ends as `account-limit-reached` (section 4.3) or by `recordLimitSignal(session, signal)`, the port's `limit` account signal of the session's slot with its `resetsAt` when known. A later signal records a reset time that the stop does not have yet; otherwise it changes nothing. `isStopped(session)` tells whether the session is stopped. A stopped session accepts no new turn, delivery, or generation; outcomes, requests, responses, delivery reports, and output of its running turn are still recorded.
+A session is stopped by a turn that ends as `account-limit-reached` (section 4.3) or by `recordLimitSignal(session, signal)`, the port's `limit` account signal of the session's slot with its `resetsAt` when known. A later signal records a reset time that the stop does not have yet; otherwise it changes nothing. `isStopped(session)` tells whether the session is stopped. A stopped session accepts no new attempt, turn, delivery, or generation; outcomes, requests, responses, delivery reports, and output of its running turn are still recorded.
 
 `writeHandoff(session, evidence)` records the handoff once the stopped session's generation has ended, so that its unresolved requests are final. The host writes it; no agent-written text is in it. It holds:
 

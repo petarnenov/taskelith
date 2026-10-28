@@ -8,6 +8,7 @@ import {
   endGeneration,
   openSession,
   parseSessionGeneration,
+  recordLimitSignal,
   runningGeneration,
   startGeneration,
   submitTurn,
@@ -68,6 +69,13 @@ test('a session binds one attempt of its task, and a second active attempt fails
   const second = failed(bindAttempt(bound, binding(SECOND_ATTEMPT), []));
   assert.equal(second.code, 'precondition-failed');
   assert.equal(activeBoundAttempt(bound)?.id, FIRST_ATTEMPT);
+});
+
+test('a stopped session binds no attempt, which stays free for the next session', () => {
+  const stopped = recordLimitSignal(endedFirstAttempt(), {});
+  const next = binding(SECOND_ATTEMPT, ownership(2));
+  assert.equal(failed(bindAttempt(stopped, next, [])).code, 'precondition-failed');
+  assert.equal(activeBoundAttempt(value(bindAttempt(newSession(OTHER_SESSION), next, [stopped])))?.id, SECOND_ATTEMPT);
 });
 
 test('after the bound attempt ended, the session binds the task attempt of its next admission', () => {
