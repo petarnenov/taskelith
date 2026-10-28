@@ -172,12 +172,20 @@ test('a self-check report with a malformed reason is refused at the wire; a repe
   assert.deepEqual(repeated.ok && [repeated.value.type, repeated.value.identity], ['worker.self-check.reported', 'observation-9']);
 });
 
-test('the schema tables cover every message of the execution channels', () => {
+// Item 13 adds the session messages of protocol version 2.
+test('the schema tables cover every protocol version 1 message of the execution channels', () => {
   const document = JSON.parse(readFileSync(new URL('../../../contracts/documents/execution.asyncapi.json', import.meta.url), 'utf8'));
+  const schemas = document.components.schemas;
+  const versionRefs = (name: string): unknown[] => [
+    schemas[`${name.replace(/Command$/, '')}Payload`]?.properties?.protocolVersion?.$ref,
+    ...(schemas[name]?.properties?.metadata?.allOf ?? []).map((part: { properties?: { protocolVersion?: { $ref?: string } } }) => part.properties?.protocolVersion?.$ref),
+  ];
+  const sessionWork = (name: string) => versionRefs(name).includes('#/components/schemas/SessionProtocolVersion');
   const schemaOf = (channel: string) =>
     Object.values<{ payload: { $ref: string } }>(document.components.messages)
       .filter((message) => Object.values<{ $ref: string }>(document.channels[channel].messages).some((ref) => document.components.messages[ref.$ref.split('/').pop()!] === message))
-      .map((message) => message.payload.$ref.split('/').pop())
+      .map((message) => message.payload.$ref.split('/').pop()!)
+      .filter((name) => !sessionWork(name))
       .sort();
   assert.deepEqual(schemaOf('workerCommands'), [...Object.values(COMMAND_SCHEMAS), ...Object.values(COMMAND_SUBJECT_NOTICES)].sort());
   assert.deepEqual(schemaOf('workerObservations'), [...Object.values(OBSERVATION_SCHEMAS), 'InventoryReported'].sort());

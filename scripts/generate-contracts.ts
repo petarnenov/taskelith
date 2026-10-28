@@ -20,6 +20,7 @@ export const CONTRACT_DOCUMENTS: readonly ContractDocument[] = Object.freeze([
   { kind: 'openapi', path: 'packages/contracts/documents/execution.openapi.json' },
   { kind: 'asyncapi', path: 'packages/contracts/documents/execution.asyncapi.json' },
   { kind: 'openapi', path: 'packages/contracts/documents/control-plane.openapi.json' },
+  { kind: 'asyncapi', path: 'packages/contracts/documents/terminal.asyncapi.json' },
 ]);
 
 const OUTPUT_DIR = 'packages/contracts/src/generated';

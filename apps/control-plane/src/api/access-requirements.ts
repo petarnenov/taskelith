@@ -34,6 +34,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   listAgentSessionRequests: PROJECT_READ, readAgentSessionOutput: PROJECT_READ, streamProjectEvents: PROJECT_READ,
   // The item's `answerableBy` role is checked by its handler (section 8).
   submitTurn: PROJECT_OPERATOR, respondToNativeRequest: PROJECT_OPERATOR, answerInboxItem: PROJECT_OPERATOR,
+  openTerminal: PROJECT_OPERATOR,
   readInstallationInbox: OWNER, readInstallationInboxCounts: OWNER, answerInstallationInboxItem: OWNER,
   streamInstallationEvents: OWNER,
   createProject: OWNER, assignProjectMember: OWNER, removeProjectMember: OWNER, listWorkers: OWNER,
@@ -45,7 +46,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
   listQuarantine: OWNER, redriveQuarantined: OWNER,
   readInstallationCa: NONE, enrollWorker: NONE, authorizeLaunch: NONE, publishEvidence: NONE, requestDelegation: NONE,
-  renewWorkerCredentials: NONE, confirmWorkerCredentials: NONE,
+  renewWorkerCredentials: NONE, confirmWorkerCredentials: NONE, openWorkerRelay: NONE,
 });
 
 // An operation that no rule names fails closed: it requires the owner.

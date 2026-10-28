@@ -24,9 +24,9 @@ import {
 
 const CSRF = 'A'.repeat(43);
 
-test('the control-plane document is OpenAPI 3.1.0 at version 0.2.0 and every reference resolves', () => {
+test('the control-plane document is OpenAPI 3.1.0 at version 0.3.0 and every reference resolves', () => {
   assert.equal(CONTROL_PLANE.openapi, '3.1.0');
-  assert.equal(CONTROL_PLANE.info.version, '0.2.0');
+  assert.equal(CONTROL_PLANE.info.version, '0.3.0');
   for (const reference of referencesIn(CONTROL_PLANE)) {
     assert.match(reference, /^#\/components\/schemas\//);
     assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
@@ -35,7 +35,7 @@ test('the control-plane document is OpenAPI 3.1.0 at version 0.2.0 and every ref
     Object.values(document(name).paths).flatMap((item) => Object.values(item).map(({ operationId }) => operationId)));
   const ids = [...others, ...OPERATIONS.map(({ operationId }) => operationId)];
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(OPERATIONS.length, 51);
+  assert.equal(OPERATIONS.length, 52);
 });
 
 test('every security requirement names a scheme of the document', () => {
