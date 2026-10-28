@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHook } from 'node:async_hooks';
 import { createHash, X509Certificate } from 'node:crypto';
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:https';
@@ -23,7 +24,7 @@ const ENROLLMENT = {
   installationId: 'a'.repeat(32), workerId: `w${'b'.repeat(32)}`, credentialGeneration: 1, recoveryEpoch: 1,
   protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: `tkwk_${'C'.repeat(43)}`, broker: 'creds text' },
 };
-const LISTENING = new Set(['TCPServerWrap', 'PipeServerWrap', 'UDPWrap']);
+const LISTENING = new Set(['TCPSERVERWRAP', 'PIPESERVERWRAP', 'UDPWRAP']);
 
 async function authority(commonName: string): Promise<IssuedCertificate> {
   return value(await issuer.createAuthority({ commonName, validity: value(authorityValidity(NOW)) }));
@@ -98,6 +99,8 @@ afterEach(async () => {
   for (const worker of running.splice(0)) await worker.stop();
   if (base !== undefined) rmSync(base, { recursive: true, force: true });
   endpoints.length = 0;
+  genuine.tokens.length = 0;
+  impostor.tokens.length = 0;
 });
 
 function environment(controlPlane: URL, fingerprint: string): Record<string, string> {
@@ -131,8 +134,18 @@ async function start(env: Record<string, string>): Promise<{ worker: RunningWork
   return { worker, lines };
 }
 
-function listeningHandles(): number {
-  return process.getActiveResourcesInfo().filter((name) => LISTENING.has(name)).length;
+// Every listening handle created while `run` lasts, unreferenced ones too,
+// which `process.getActiveResourcesInfo` does not list.
+async function listenersCreatedDuring(run: () => Promise<void>): Promise<string[]> {
+  const created: string[] = [];
+  const hook = createHook({ init: (_id, type) => { if (LISTENING.has(type)) created.push(type); } });
+  hook.enable();
+  try {
+    await run();
+  } finally {
+    hook.disable();
+  }
+  return created;
 }
 
 test('a CA with another fingerprint aborts the start before the token is sent', async () => {
@@ -152,11 +165,12 @@ test('a system-trusted certificate that the installation CA did not issue gets n
 });
 
 test('a worker enrolls over pinned TLS, pins the broker too, and listens on nothing', async () => {
-  const before = listeningHandles();
-  const { worker, lines } = await start(environment(genuineUrl, sha256(installation.certificatePem).toUpperCase()));
-  assert.ok(worker, lines.join('\n'));
+  const listeners = await listenersCreatedDuring(async () => {
+    const { worker, lines } = await start(environment(genuineUrl, sha256(installation.certificatePem).toUpperCase()));
+    assert.ok(worker, lines.join('\n'));
+    for (let wait = 0; endpoints.length === 0 && wait < 100; wait += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  });
   assert.deepEqual(genuine.tokens, [TOKEN]);
-  for (let wait = 0; endpoints.length === 0 && wait < 100; wait += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(endpoints[0]?.tls, { ca: installation.certificatePem }, 'the pinned CA is the broker TLS\'s only CA');
-  assert.equal(listeningHandles(), before, 'the worker opened no listening socket');
+  assert.deepEqual(listeners, [], 'the worker opened no listening socket');
 });
