@@ -1,0 +1,102 @@
+{
+  "change": "implement-git-remote-operations",
+  "generatedAt": "2026-10-28T10:46:16.193Z",
+  "devCommit": "803c7057549993b6d351377c1b4c68b94e6981c6",
+  "query": {
+    "capabilities": [
+      "git-workspace-port",
+      "scm-port"
+    ],
+    "files": [
+      "packages/adapters/git-workspace/**",
+      "packages/workspace/**",
+      "docs/contracts/git-workspace.md"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 31
+      },
+      {
+        "category": "error-handling",
+        "count": 20
+      },
+      {
+        "category": "spec-wording",
+        "count": 16
+      },
+      {
+        "category": "redaction",
+        "count": 12
+      },
+      {
+        "category": "docs",
+        "count": 9
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      },
+      {
+        "category": "concurrency-race",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 462,
+        "inChecklist": 386
+      },
+      "mediumOrWorse": {
+        "findings": 203,
+        "inChecklist": 184
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 87
+      },
+      {
+        "category": "docs",
+        "count": 54
+      },
+      {
+        "category": "spec-wording",
+        "count": 46
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 260,
+        "inChecklist": 257
+      },
+      "mediumOrWorse": {
+        "findings": 42,
+        "inChecklist": 41
+      }
+    }
+  }
+}
