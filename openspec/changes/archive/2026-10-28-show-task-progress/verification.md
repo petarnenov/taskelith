@@ -110,7 +110,16 @@ Checked by the coordinator as solution architect, 2026-10-28: correct (Niki; `c1
 
 - The status line script, `/Users/petarnenov/geowealth/be/.ai/scripts/statusline-context.py`, is outside this repository and not reviewed with it.
 
+## Archive checks
+
+Checked state: the tree of the archive commit, the working tree after `npm run openspec -- archive show-task-progress --yes` (3 added in `agent-task-protocol`):
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `make verify`: passed, profile full, on that uncommitted working tree, no stamp written; tests 3551, pass 3542, fail 0, skipped 9 (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress6.log`).
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-show-task-progress` valid; 242 passed and 14 failed, all older archived changes this change does not touch.
+- `git diff 16667399 -- openspec/specs` (merge base with `origin/dev`): only `openspec/specs/agent-task-protocol/spec.md`, 53 added lines, this change's three added requirements.
+- The moved change has `findings.jsonl` (21 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"`: 82 findings files, 62 pass summary files, and 18 route files valid.
+
 ## Remaining gates
 
-- Archive of the change.
 - Integration into dev by the coordinator (single pull request).
