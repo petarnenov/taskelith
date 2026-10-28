@@ -1,7 +1,6 @@
 import { ok, type Result } from '@taskelith/kernel';
 import { MAX_HARNESS_TEXT_LENGTH } from './harness-values.js';
 import {
-  frozenCopy,
   isLiveTurn,
   isTextWithin,
   sessionFailure,
@@ -27,7 +26,7 @@ export function appendOutput(session: Session, output: OutputAppend): Result<Ses
   }
   if (output.text === '') return ok(session);
   const position = session.output.lastPosition + 1;
-  const entry: OutputEntry = { turnId: output.turnId, generation: output.generation, text: output.text, position };
+  const entry: OutputEntry = Object.freeze({ turnId: output.turnId, generation: output.generation, text: output.text, position });
   return ok(withChanges(session, { output: withinBound([...session.output.entries, entry], session.output.retainedBytes, entry) }));
 }
 
@@ -49,7 +48,7 @@ function withinBound(entries: readonly OutputEntry[], retainedBefore: number, ad
     retainedBytes -= utf8Length(entry.text);
     dropped += 1;
   }
-  return frozenCopy({ entries: entries.slice(dropped), retainedBytes, lastPosition: added.position });
+  return Object.freeze({ entries: Object.freeze(entries.slice(dropped)), retainedBytes, lastPosition: added.position });
 }
 
 // A lone surrogate counts 3 bytes, as its UTF-8 replacement character does.
