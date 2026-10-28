@@ -95,10 +95,10 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `30976eeeabe47dd6c6e88e8e958e53e8f9ab7ce0`; tests 3027, pass 2965, fail 0, skipped 62; all files 99.34% lines, 92.73% branches, 98.99% functions.
-- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 70 passed, 0 failed (70 items)`.
+- `make verify`: passed, profile full, tree `f188e722308c8c8129f993f2a06e22017728fac9`; tests 3027, pass 2965, fail 0, skipped 62; all files 99.34% lines, 92.72% branches, 98.99% functions.
+- `npm run openspec -- validate implement-git-runner-and-snapshot --strict`: passed, `Change 'implement-git-runner-and-snapshot' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 1 file(s).`.
-- Spec diff against the merge base `9196804b89c6` with `origin/dev`: `openspec/specs/git-workspace-port/spec.md | 147 +++++++++++++++++++++++++++++-`, `1 file changed, 145 insertions(+), 2 deletions(-)`.
+- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -161,18 +161,6 @@ Pass 4, limited to the M2 fix, confirmed it with no finding, so `findings.jsonl`
 - The test remote speaks Git's dumb HTTP protocol from a static file server; the smart-HTTP server, the service's own credential check, and the remote operations are 16c's.
 - 15 conformance cases are skipped with their reason (16c: 9, 16d: 6); the adapter's own tests cover their checks of the local operations, not their checks of the push, the remote head, or the hand-off.
 - The clone runs with the worker's umask and primary group, not umask `0007` and the execution group (16d and 16e); Git's objects are not forced to disk (design, "Risks"); no Git process has a time limit.
-
-## Archive checks
-
-Run on 2026-10-28 on the tree of the archive commit, the archive of `21a6d16c` on merge base `9196804b` with `origin/dev`:
-
-- `npm run openspec -- archive implement-git-runner-and-snapshot --yes`: archived as `2026-10-28-implement-git-runner-and-snapshot`; `git-workspace-port` 9 added, 2 modified; task status complete.
-- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
-- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-10-28-implement-git-runner-and-snapshot`; the command as a whole gave 223 passed, 14 failed, all 14 older archived changes.
-- `git diff 9196804b -- openspec/specs`: only `openspec/specs/git-workspace-port/spec.md`, 145 insertions and 2 deletions: the 9 added requirements of the delta ("Git adapter local operations", "Git adapter operation failures", "Git runner environment", "Scrubbed Git output", "Repository configuration rewrite", "Status parsing for dirty reasons", "Snapshot from Git objects", "Verified Git objects", "Conformance run of the local operations") and the 2 modified ones ("Git directory safety", "Git configuration scope").
-- The moved change has `findings.jsonl` (24 lines), `passes.jsonl` (4 lines), and `checklist.json`; `make findings ARGS="validate"`: `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 1 file(s).`
-- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the clean archive commit before this section's `make verify` result and the generated part were written, tree `30976eee`: passed, profile full, stamp written; tests 3027, suites 45, pass 2965, fail 0, cancelled 0, skipped 62; all files 99.34 % lines, 92.73 % branches, 98.99 % functions; "Every checked link conforms"; "No active OpenSpec change; nothing to archive". "Generated checks" above is `make record` of its log. The archive commit's tree differs from `30976eee` only in this file, which `make record-check` accepts.
-- `make record-check CHANGE=implement-git-runner-and-snapshot`: the generated part matches the tree.
 
 ## Remaining gates
 
