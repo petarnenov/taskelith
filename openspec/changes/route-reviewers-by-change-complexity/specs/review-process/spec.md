@@ -72,10 +72,14 @@ The shadow router's credential SHALL be read only from the environment variable 
 - **THEN** no request is sent and `route.json` records `missing-credential`
 
 ### Requirement: Route record
-`route.json` SHALL conform to `docs/review-findings/route.schema.json`, which rejects unknown properties and free text. `make findings ARGS="validate"` SHALL check every `route.json`, active and archived, against the schema, its change name, and the secret-like value check, and SHALL check that the rule's tier is `elevated` exactly when triggers fired and that its pass plans equal the reviewer table of its rule version for its tier. `route.json` SHALL be optional.
+`route.json` SHALL conform to `docs/review-findings/route.schema.json`, which rejects unknown properties and free text. `make findings ARGS="validate"` SHALL check every `route.json`, active and archived, against the schema, its change name, and the secret-like value check, and SHALL check that the rule's tier is `elevated` exactly when triggers fired, and that its triggers and pass plans are those that its rule version gives for its features and tier. `route.json` SHALL be optional.
 
 #### Scenario: Inconsistent tier
 - **WHEN** a `route.json` has tier `standard` and trigger `lines`
+- **THEN** validation reports the file and fails
+
+#### Scenario: Triggers not fired by the features
+- **WHEN** a `route.json` has 4099 changed lines, no trigger, and tier `standard`
 - **THEN** validation reports the file and fails
 
 #### Scenario: No route
@@ -98,7 +102,7 @@ The shadow router's credential SHALL be read only from the environment variable 
 - **THEN** the effect counts two passes needed and no third pass for it
 
 ### Requirement: Archive routing evaluation
-`make findings ARGS="route-evaluation --save <change>"` SHALL route each archived single-artifact change with review records by both routers using only information from before its review: the diff of its first reviewed revision, or its merged diff marked approximate, and the capability history of changes merged before its base. It SHALL write one line per change with the outcome, SHALL report changes without `passes.jsonl` apart as lower bounds, and `--rule-only` SHALL skip the shadow router.
+`make findings ARGS="route-evaluation --save <change>"` SHALL route each reviewed archived single-artifact change by both routers on the diff of the parent of its first branch commit naming pass 1, fixes before it included, or its merged diff marked approximate, and the capability history of changes merged before its base. It SHALL write one line per change with the outcome, report changes without `passes.jsonl` as lower bounds, and stop on HTTP 401 to 403; `--rule-only` SHALL skip the shadow.
 
 #### Scenario: No future history
 - **WHEN** the evaluation routes a change merged before a later change of the same capability
@@ -107,3 +111,7 @@ The shadow router's credential SHALL be read only from the environment variable 
 #### Scenario: Missing credential
 - **WHEN** `JEV_MAF_LAB` is unset and `--rule-only` is not given
 - **THEN** the command exits 1 and writes nothing
+
+#### Scenario: Refused shadow
+- **WHEN** the shadow router fails with HTTP 401, 402, or 403
+- **THEN** the command sends no further request, exits 1, and writes nothing
