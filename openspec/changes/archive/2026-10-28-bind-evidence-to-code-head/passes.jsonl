@@ -1,0 +1,3 @@
+{"change": "bind-evidence-to-code-head", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18144-6e30-7fd3-b8e6-1788fa5b1766", "counts": {"critical": 0, "high": 1, "medium": 0, "low": 0}}
+{"change": "bind-evidence-to-code-head", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "c3aae8d2-0f3a-49f9-a676-1d81016d7b40", "counts": {"critical": 0, "high": 0, "medium": 3, "low": 7}}
+{"change": "bind-evidence-to-code-head", "pass": 3, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a181fd-23d2-7ab0-bb97-773ed00e5953", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0}}
