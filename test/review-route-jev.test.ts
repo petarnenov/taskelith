@@ -80,6 +80,7 @@ test('the response maps to an answered shadow decision', async () => {
   assert.ok(sent[0]!.init.signal instanceof AbortSignal);
 });
 
+// Fails before the change: the criteria restated the conditional rule.
 test('the request sends the pinned model and the one third pass question', () => {
   const body = JSON.parse(jevRequestBody(QUIET_INPUT, JEV_MODEL)) as Record<string, any>;
   assert.equal(body.model, 'jev-1.14.0');
@@ -89,8 +90,8 @@ test('the request sends the pinned model and the one third pass question', () =>
     type: 'noul',
     instructions: 'This software change will need a third review pass.',
     criteria: {
-      true: 'Reviewer B in pass 2 will find a Critical or High issue, or pass 2 will include a Medium issue and its fixes, including fixes for accompanying Low issues, will change files other than records and documentation.',
-      false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
+      true: 'The reviewer of pass 2 will find a Medium, High, or Critical issue.',
+      false: 'The review ends at a Low-only or clean pass 1 or pass 2.',
     },
   });
 });
@@ -116,7 +117,7 @@ test('the request state carries no touches flags', () => {
 test('the context explains the features, the review, and the reference rates', () => {
   const { state } = JSON.parse(jevRequestBody(QUIET_INPUT, JEV_MODEL)) as { state: { context: Record<string, any> } };
   const { context } = state;
-  assert.match(context.review, /pass 1 by reviewer A, pass 2 by reviewer B\. A third pass is required only when/);
+  assert.match(context.review, /The review ends at the first pass with only Low findings or none; a third pass runs when pass 2 found a Medium/);
   assert.equal(context.baseRate, 'In this repository 32% of reviewed changes needed a third pass.');
   assert.equal(context.byLinesChanged, 'Third-pass rate by lines changed: under 100 lines 10%, 100 to 399 lines 40%, 400 lines and more 60%.');
   assert.deepEqual(Object.keys(context.fields).sort(), [

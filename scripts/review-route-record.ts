@@ -4,6 +4,7 @@ import {
   isThirdPassAnswer,
   tierAt,
   versionedPassPlans,
+  type PassPlan,
   type PassPlans,
   type RouteFeatures,
   type RuleDecision,
@@ -52,7 +53,7 @@ function secretProblems(record: RouteRecord): string[] {
   return secrets === 0 ? [] : [`${secrets} value(s) look like a secret`];
 }
 
-// The triggers and both pass plans are checked against the record's own
+// The triggers and the pass plans are checked against the record's own
 // rule version, so a later version leaves it valid.
 function ruleProblems({ rule, features }: RouteRecord): string[] {
   const tierProblems = (rule.tier === 'elevated') === (rule.triggers.length > 0)
@@ -124,8 +125,7 @@ export function formatRouteSummary({ rule, shadow }: RouteRecord): string {
   const triggers = rule.triggers.length === 0 ? 'no trigger' : rule.triggers.join(', ');
   return [
     `route: ${rule.tier} (${triggers}), rule version ${rule.version}`,
-    `pass 1, reviewer A: ${reviewerKey(rule.passes[0].reviewer)}`,
-    `pass 2, reviewer B: ${reviewerKey(rule.passes[1].reviewer)}`,
+    ...rule.passes.map(planLine),
     `shadow: ${shadowSummary(shadow, rule)}`,
     'Recommendation only: the brief names the reviewers, and an effort above standard needs governance authorization.',
   ].join('\n');
@@ -139,6 +139,12 @@ function shadowSummary(shadow: ShadowDecision, rule: RuleDecision): string {
     ? `P(third) ${shadow.thirdPassProbability.toFixed(2)}, threshold ${shadow.threshold}`
     : shadow.probabilities[shadow.tier].toFixed(2);
   return `${shadow.model} ${shadow.tier} (${probability}), would assign ${planKeys(shadow.passes)}; ${agreement}`;
+}
+
+// Pass 3 of rule version 2 runs only after a Medium or worse pass 2.
+function planLine({ pass, role, reviewer }: PassPlan): string {
+  const condition = pass === 3 ? ', only after a pass 2 with a Medium or worse finding' : '';
+  return `pass ${pass}, reviewer ${role}: ${reviewerKey(reviewer)}${condition}`;
 }
 
 function planKeys(passes: PassPlans): string {

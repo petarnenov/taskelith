@@ -40,8 +40,8 @@ export interface ReviewRecords {
   readonly passes: readonly RecordLine[] | undefined;
 }
 
-// At least one pass ran, also when it recorded nothing. A review that the
-// conditional third pass ended after pass 2 has two passes.
+// At least one pass ran, also when it recorded nothing. A review that
+// ended after pass 2 has two passes.
 export function reviewOutcome(records: ReviewRecords): ReviewOutcome {
   const passNumbers = [...records.findings, ...(records.passes ?? [])].map(({ pass }) => pass ?? 0);
   const passesNeeded = Math.max(1, ...passNumbers);

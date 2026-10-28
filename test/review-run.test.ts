@@ -347,7 +347,7 @@ test('the route recommendation tells an effort apart from another reviewer', asy
     writeRecommendation(fixture.root, CODEX_HIGH, CLAUDE_XHIGH);
     const second = await review(fixture, '2', CLAUDE);
     assert.match(second.stdout, /^route: recommends effort xhigh; the authorized high applies \(policy version 7\)$/m);
-    assert.doesNotMatch(second.stdout, /reviewer A|coordinator/);
+    assert.doesNotMatch(second.stdout, /other reviewer|coordinator/);
     const third = await review(fixture, '3');
     assert.match(third.stdout, /^route: recommends effort high; the authorized medium applies \(policy version 7\)$/m);
     writeRecommendation(fixture.root, { ...CODEX_HIGH, variant: 'medium' }, CLAUDE_XHIGH);
@@ -355,9 +355,20 @@ test('the route recommendation tells an effort apart from another reviewer', asy
     writeRecommendation(fixture.root, { ...CODEX_HIGH, model: 'gpt-6-astra' }, { ...CLAUDE_XHIGH, model: 'claude-fable-5-1' });
     const otherA = await review(fixture, '3');
     assert.match(otherA.stdout, new RegExp('^route: recommends codex gpt-6-astra#high; the brief\'s codex gpt-6\\.1-sol#medium '
-      + 'stays, so report the other reviewer A to the coordinator$', 'm'));
+      + 'stays, so report the other reviewer of pass 3 to the coordinator$', 'm'));
     const otherB = await review(fixture, '2', CLAUDE);
     assert.match(otherB.stdout, /^route: recommends claude claude-fable-5-1#xhigh; the brief's claude claude-opus-5-5#high stays$/m);
+  });
+});
+
+// Rule version 2 plans pass 3 with its own reviewer.
+test('the route recommends the reviewer that its plans name for pass 3', async () => {
+  await withFixture(async (fixture) => {
+    const astra = { ...CODEX_HIGH, model: 'gpt-6-astra', variant: 'medium' };
+    const sol = { ...CODEX_HIGH, variant: 'medium' };
+    const rule = { passes: [{ reviewer: astra }, { reviewer: CLAUDE_XHIGH }, { reviewer: sol }] };
+    writeFileSync(join(fixture.root, ROUTE), `${JSON.stringify({ rule })}\n`);
+    assert.match((await review(fixture, '3')).stdout, /^route: recommends codex gpt-6\.1-sol#medium$/m);
   });
 });
 
@@ -385,6 +396,20 @@ test('a pass writes no line and prints a template that is invalid until filled',
     assert.deepEqual(passSchemaErrors({ ...template, counts: { critical: 0, high: 1, medium: 0, low: 2 } }), []);
     assert.deepEqual(fixture.routed, []);
     assert.equal(readFileSync(join(fixture.scratch, 'env.txt'), 'utf8').includes(SENTINEL), false);
+  });
+});
+
+// Fails before the change: an empty ROLE was a missing argument.
+test('an empty ROLE defaults to the role of the pass', async () => {
+  await withFixture(async (fixture) => {
+    const deps = dependencies(fixture);
+    const result = await runReview([CHANGE, '2', '', CLAUDE, fixture.prompt, fixture.log], deps);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const template = /^passes\.jsonl template: (.*)$/m.exec(fixture.printed.join('\n'));
+    assert.equal((JSON.parse(template![1]!) as { role: string }).role, 'B');
+    const unknown = await runReview([CHANGE, '4', '', CODEX, fixture.prompt, fixture.log], deps);
+    assert.equal(unknown.exitCode, EXIT_USAGE);
+    assert.match(unknown.stderr, /ROLE is required for pass 4/);
   });
 });
 
@@ -570,4 +595,13 @@ test('make review passes its arguments to the script unexpanded', () => {
     'REVIEWER=codex gpt-6.1-sol#high', 'PROMPT=/nonexistent/prompt', 'LOG=/nonexistent/log',
   ], { cwd: process.cwd(), encoding: 'utf8', env: fixtureEnv });
   assert.match(reviewer.stderr, /make review: REVIEWER "codex gpt-6\.1-sol#high" is no authorized reviewer key/);
+});
+
+test('make review takes no ROLE and defaults it from PASS', () => {
+  const result = spawnSync('make', [
+    '--no-print-directory', 'review', `CHANGE=${CHANGE}`, 'PASS=3',
+    'REVIEWER=codex gpt-6.1-sol#high', 'PROMPT=/nonexistent/prompt', 'LOG=/nonexistent/log',
+  ], { cwd: process.cwd(), encoding: 'utf8', env: fixtureEnv });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /make review: REVIEWER "codex gpt-6\.1-sol#high" is no authorized reviewer key/);
 });
