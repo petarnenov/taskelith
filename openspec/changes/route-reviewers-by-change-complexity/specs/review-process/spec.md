@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Review route command
-`make findings ARGS="route --change <change> [--json] [--no-shadow]"` SHALL derive the structured features of an active change from its committed state against the merge base of `HEAD` and `origin/dev`, decide with the rule router, consult the shadow router unless `--no-shadow` is given, and write the change's `route.json`. It SHALL exit 1 without writing for an unknown or archived change, an existing `route.json`, uncommitted changes outside the change directory, or no merge base.
+`make findings ARGS="route --change <change> [--json] [--no-shadow]"` SHALL derive an active change's features from its committed state against its merge base with `origin/dev`, decide by the rule router, consult the shadow router unless `--no-shadow` is given, and write `route.json`. Without writing, it SHALL exit 1 for an unknown change, an existing `route.json`, uncommitted work outside the change directory, or no merge base, and exit 2 for `archive` or a name not shaped as a change name.
 
 #### Scenario: Route written
 - **WHEN** a worker runs the command for an active change with a clean working tree
@@ -14,6 +14,10 @@
 #### Scenario: Uncommitted work
 - **WHEN** a file outside the change directory has uncommitted changes
 - **THEN** the command exits 1 and writes nothing
+
+#### Scenario: Archive as the change
+- **WHEN** a worker runs the command with `--change archive`
+- **THEN** the command exits 2 with its usage and writes nothing
 
 ### Requirement: Rule routing floor
 The rule router SHALL be deterministic and SHALL recommend the reviewers and effort of passes 1 and 2. Its tier SHALL be `elevated` when a trigger fires (400 or more changed lines, 18 or more changed files, 3 or more capabilities, security, contract, or Docker paths, or size M-L or L) and `standard` otherwise. Its reviewers SHALL stay within the owner's reviewer assignment, `standard` SHALL equal today's configured reviewers and effort, and no tier SHALL go below it.
@@ -68,7 +72,7 @@ The shadow router's credential SHALL be read only from the environment variable 
 - **THEN** no request is sent and `route.json` records `missing-credential`
 
 ### Requirement: Route record
-`route.json` SHALL conform to `docs/review-findings/route.schema.json`, which rejects unknown properties and free text. `make findings ARGS="validate"` SHALL check every `route.json`, active and archived, against the schema, its change name, and the secret-like value check, and SHALL check that the rule's tier is `elevated` exactly when triggers fired and that its pass plans equal the reviewer table for its tier. `route.json` SHALL be optional.
+`route.json` SHALL conform to `docs/review-findings/route.schema.json`, which rejects unknown properties and free text. `make findings ARGS="validate"` SHALL check every `route.json`, active and archived, against the schema, its change name, and the secret-like value check, and SHALL check that the rule's tier is `elevated` exactly when triggers fired and that its pass plans equal the reviewer table of its rule version for its tier. `route.json` SHALL be optional.
 
 #### Scenario: Inconsistent tier
 - **WHEN** a `route.json` has tier `standard` and trigger `lines`
