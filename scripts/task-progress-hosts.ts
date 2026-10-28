@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { deriveTasks, type Reader, type TaskProgress } from './task-progress-stages.ts';
+import { deriveTasks, isTaskProgress, TransportError, type Reader, type TaskProgress } from './task-progress-stages.ts';
 
 // Readers of local and SSH hosts; an SSH host runs this script when its
 // clone has it, and plain git and shell commands otherwise.
@@ -89,6 +89,7 @@ export function remotePath(path: string): string {
 export function sshReader(run: SshRunner, target: string): Reader {
   const remote = (command: string): string | undefined => {
     const result = run(target, command);
+    if (result.status === SSH_UNREACHABLE) throw new TransportError(`${target} stopped answering`);
     return result.status === 0 ? result.stdout : undefined;
   };
   return {
@@ -119,7 +120,7 @@ export function remoteScriptCommand(repo: string): string {
 function parseTasks(stdout: string): TaskProgress[] | undefined {
   try {
     const tasks = JSON.parse(stdout) as unknown;
-    return Array.isArray(tasks) ? tasks as TaskProgress[] : undefined;
+    return Array.isArray(tasks) && tasks.every(isTaskProgress) ? tasks : undefined;
   } catch {
     return undefined;
   }
@@ -143,7 +144,12 @@ export function readSshHost(run: SshRunner, host: HostConfig, now: number): Host
   if (scripted.status !== SCRIPT_MISSING) return report('error', [], `remote script exited with ${scripted.status}`);
   const root = remoteRepoRoot(run, host);
   if (root === undefined) return report('unreachable', []);
-  return report('ok', deriveTasks(sshReader(run, host.ssh), root, now));
+  try {
+    return report('ok', deriveTasks(sshReader(run, host.ssh), root, now));
+  } catch (error) {
+    if (error instanceof TransportError) return report('unreachable', []);
+    throw error;
+  }
 }
 
 // Connections are shared for 30 s, so the per-command fallback stays fast.

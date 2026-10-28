@@ -7,10 +7,13 @@ import test from 'node:test';
 import { localReader, readSshHost, remotePath, type SshRunner } from '../scripts/task-progress-hosts.ts';
 import { applyQueue, deriveTasks, LANDED_WINDOW_SECONDS, parseQueue, type TaskProgress } from '../scripts/task-progress-stages.ts';
 import {
-  acquireLock, cacheAgeSeconds, collectProgress, formatDuration, LOCK_TIMEOUT_SECONDS, progressBar, progressPaths, renderReport,
+  cacheAgeSeconds, collectProgress, formatDuration, progressBar, progressPaths, renderReport,
   runCommand, writeCache, type CollectOptions,
 } from '../scripts/task-progress.ts';
 import { fixtureEnv } from './git-fixture-env.ts';
+
+// The view prints local clock times; a fixed zone keeps them exact.
+process.env.TZ = 'UTC';
 
 const CHANGE = 'demo-task';
 const RECORDS = `openspec/changes/${CHANGE}`;
@@ -236,6 +239,38 @@ test('stage 11 landed: merged into origin/dev, shown for a day', () => {
   });
 });
 
+test('the archived change of the branch wins over another active change', () => {
+  withFixture((fixture) => {
+    routed(fixture);
+    archive(fixture);
+    write(fixture.task, { 'openspec/changes/other-change/checklist.json': '{}\n' });
+    const task = only(fixture);
+    assert.deepEqual([task.change, task.stage, task.stageName], [CHANGE, 9, 'archived']);
+  });
+});
+
+test('a worktree with several changes, none of them the branch, is skipped', () => {
+  withFixture((fixture) => {
+    write(fixture.task, { 'openspec/changes/one/checklist.json': '{}\n', 'openspec/changes/two/checklist.json': '{}\n' });
+    assert.deepEqual(deriveTasks(localReader, fixture.main, NOW), []);
+    rmSync(join(fixture.task, 'openspec/changes/two'), { recursive: true });
+    assert.equal(only(fixture).change, 'one', 'the one change of the worktree');
+  });
+});
+
+test('corrupt pass records are reported, not counted, and never crash', () => {
+  withFixture((fixture) => {
+    routed(fixture);
+    const lines = [pass(1, { medium: 1 }), 'null', '{}', '{"counts":{"critical":0,"high":0,"medium":-1,"low":0}}', 'not json'];
+    commit(fixture, { [`${RECORDS}/passes.jsonl`]: `${lines.join('\n')}\n` }, 'docs: passes');
+    const task = only(fixture);
+    assert.deepEqual([task.stage, task.review], [5, { passes: 1, stopped: false }]);
+    assert.deepEqual(task.problems, [2, 3, 4, 5].map((line) => `passes.jsonl line ${line} is no pass summary`));
+    const report = renderReport({ generatedAt: '', generatedAtEpoch: NOW, problems: [], hosts: [{ name: 'local', status: 'ok', tasks: [task] }] });
+    assert.match(report, /; passes\.jsonl line 2 is no pass summary; /);
+  });
+});
+
 test('worktrees without an open change, dev, and integration branches are skipped', () => {
   withFixture((fixture) => {
     git(fixture.main, T0, 'worktree', 'add', '-q', '-b', 'itg-demo', join(fixture.main, '..', 'itg'), 'origin/dev');
@@ -270,8 +305,13 @@ test('an SSH host with the script returns its tasks; failures are reported', () 
     commands.push(command);
     return { status, stdout };
   };
-  assert.deepEqual(readSshHost(answer(0, '[{"branch":"x"}]'), host, NOW).tasks, [{ branch: 'x' }]);
+  const task = stagedTask('remote', 4, NOW - HOUR);
+  assert.deepEqual(readSshHost(answer(0, JSON.stringify([{ ...task, stageName: 'route' }])), host, NOW).tasks, [task]);
   assert.match(commands[0]!, /^cd "\$HOME"\/'taskelith' /);
+  for (const invalid of [[{ branch: 'x' }], [{ ...task, stage: 12 }], [{ ...task, stageName: 'code' }], [{ ...task, reached: [{}] }]]) {
+    const report = readSshHost(answer(0, JSON.stringify(invalid)), host, NOW);
+    assert.deepEqual(report, { name: 'Zaki', status: 'error', tasks: [], detail: 'unreadable output of the remote script' }, JSON.stringify(invalid));
+  }
   assert.deepEqual(readSshHost(answer(65, ''), host, NOW), { name: 'Zaki', status: 'error', tasks: [], detail: 'no clone at ~/taskelith' });
   assert.equal(readSshHost(answer(0, 'nvm noise'), host, NOW).status, 'error');
   assert.equal(readSshHost(answer(1, ''), host, NOW).detail, 'remote script exited with 1');
@@ -282,13 +322,25 @@ function options(fixture: Fixture, ssh: SshRunner, now = new Date(NOW * 1000)): 
   return { repo: fixture.main, paths: progressPaths(fixture.config), ssh, now };
 }
 
+test('an SSH host that stops answering during the fallback is unreachable', () => {
+  withFixture((fixture) => {
+    briefed(fixture);
+    const shell = localShell();
+    for (const failing of ['worktree', 'log']) {
+      const dropping: SshRunner = (target, command) => (command.includes(`'${failing}'`) ? { status: 255, stdout: '' } : shell(target, command));
+      assert.deepEqual(readSshHost(dropping, { name: 'Zaki', ssh: 'zaki', repo: fixture.main }, NOW),
+        { name: 'Zaki', status: 'unreachable', tasks: [] }, failing);
+    }
+  });
+});
+
 test('an unreachable host is reported and never fails the run', () => {
   withFixture((fixture) => {
     briefed(fixture);
     write(fixture.config, { 'progress-hosts.json': JSON.stringify([{ name: 'Zaki', ssh: 'petar@hpz600', repo: '~/taskelith' }]) });
     const result = runCommand(['show'], options(fixture, () => ({ status: 255, stdout: '' })));
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /^local {2}demo-task {2}█░{10} {2}1\/11 brief {2}19h00m {2}brief \d\d-\d\d \d\d:00$/m);
+    assert.match(result.stdout, /^local {2}demo-task {2}█░{10} {2}1\/11 brief {2}19h00m {2}brief 10-28 09:00$/m);
     assert.match(result.stdout, /^Zaki {3}unreachable$/m);
   });
 });
@@ -296,7 +348,7 @@ test('an unreachable host is reported and never fails the run', () => {
 function stagedTask(change: string, stage: number, startedAt: number): TaskProgress {
   return {
     branch: change, change, worktree: `/w/${change}`, stage, stageName: 'route', review: { passes: 0, stopped: false },
-    reached: [{ stage: 1, name: 'brief', at: startedAt }], startedAt,
+    reached: [{ stage: 1, name: 'brief', at: startedAt }], startedAt, problems: [],
   };
 }
 
@@ -344,16 +396,33 @@ test('the cache is written atomically with its timestamp and refreshed only when
   });
 });
 
-test('one refresh at a time: a live lock blocks, a dead one is taken over', () => {
+test('an invalid or future cache is due for a refresh', () => {
+  withFixture((fixture) => {
+    briefed(fixture);
+    const paths = progressPaths(fixture.config);
+    const unreachable: SshRunner = () => ({ status: 255, stdout: '' });
+    const at = new Date(NOW * 1000);
+    write(fixture.config, { 'progress.json': JSON.stringify({ generatedAtEpoch: NOW }) });
+    assert.equal(cacheAgeSeconds(paths.cache, at), undefined, 'no hosts');
+    write(fixture.config, { 'progress.json': JSON.stringify({ generatedAt: '', generatedAtEpoch: NOW, problems: [], hosts: [{ name: 'x', status: 'ok', tasks: [{}] }] }) });
+    assert.equal(cacheAgeSeconds(paths.cache, at), undefined, 'an invalid task');
+    writeCache(paths.cache, { generatedAt: '', generatedAtEpoch: NOW + 3600, problems: [], hosts: [] });
+    assert.equal(cacheAgeSeconds(paths.cache, at), undefined, 'a cache from the future');
+    writeCache(paths.cache, { generatedAt: '', generatedAtEpoch: NOW + 30, problems: [], hosts: [] });
+    assert.equal(cacheAgeSeconds(paths.cache, at), -30, 'clock skew within the tolerance');
+    write(fixture.config, { 'progress.json': JSON.stringify({ generatedAtEpoch: NOW }) });
+    assert.match(runCommand(['refresh', '--if-older-than', '60'], options(fixture, unreachable, at)).stdout, /^wrote /);
+    assert.equal(cacheAgeSeconds(paths.cache, at), 0);
+  });
+});
+
+test('a refresh leaves the cache alone while a live refresh holds the lock', () => {
   withFixture((fixture) => {
     const paths = progressPaths(fixture.config);
-    const now = new Date();
-    assert.equal(acquireLock(paths.lock, now), true);
-    assert.equal(acquireLock(paths.lock, now), false);
-    const blocked = runCommand(['refresh'], options(fixture, () => assert.fail('no refresh while locked'), now));
+    write(fixture.config, { 'progress.lock': JSON.stringify({ pid: process.pid, token: 'other' }) });
+    const blocked = runCommand(['refresh'], options(fixture, () => assert.fail('no refresh while locked')));
     assert.deepEqual([blocked.stdout, existsSync(paths.cache)], ['another progress refresh is running\n', false]);
-    const later = new Date(now.getTime() + (LOCK_TIMEOUT_SECONDS + 1) * 1000);
-    assert.equal(acquireLock(paths.lock, later), true, 'a lock older than the timeout');
+    assert.equal(JSON.parse(readFileSync(paths.lock, 'utf8')).token, 'other', 'the owner keeps its lock');
   });
 });
 

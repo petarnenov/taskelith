@@ -1,11 +1,12 @@
-import { closeSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeFileSync, realpathSync } from 'node:fs';
+import { mkdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   localReader, parseHostsConfig, readSshHost, sshRunner, type HostConfig, type HostReport, type SshRunner,
 } from './task-progress-hosts.ts';
-import { applyQueue, deriveTasks, LANDED, parseQueue, STAGES, type TaskProgress } from './task-progress-stages.ts';
+import { acquireLock, releaseLock, type IsAlive } from './task-progress-lock.ts';
+import { applyQueue, deriveTasks, isTaskProgress, LANDED, parseQueue, STAGES, type TaskProgress } from './task-progress-stages.ts';
 
 // make progress and make progress-refresh: the stage of every worker task,
 // from brief to landed, on this host and the SSH hosts of the hosts file.
@@ -27,8 +28,8 @@ export function progressPaths(configDirectory: string): ProgressPaths {
 }
 
 export const LOCAL_HOST = 'local';
-// A refresh that holds the lock longer has died.
-export const LOCK_TIMEOUT_SECONDS = 300;
+// A cache stamped further ahead than this is treated as unreadable.
+export const FUTURE_TOLERANCE_SECONDS = 60;
 
 export interface ProgressReport {
   readonly generatedAt: string;
@@ -42,6 +43,7 @@ export interface CollectOptions {
   readonly paths: ProgressPaths;
   readonly ssh: SshRunner;
   readonly now: Date;
+  readonly isAlive?: IsAlive;
 }
 
 export function collectProgress({ repo, paths, ssh, now }: CollectOptions): ProgressReport {
@@ -90,7 +92,8 @@ type Row = readonly string[];
 function taskRow(host: string, task: TaskProgress, now: number): Row {
   const elapsed = elapsedSeconds(task, now);
   const times = task.reached.map((stage) => `${stage.name} ${stage.at === undefined ? '-' : clock(stage.at)}`);
-  return [host, task.change, progressBar(task.stage), stageLabel(task), elapsed === undefined ? '' : formatDuration(elapsed), times.join(', ')];
+  const problems = task.problems.length === 0 ? '' : `; ${task.problems.join('; ')}`;
+  return [host, task.change, progressBar(task.stage), stageLabel(task), elapsed === undefined ? '' : formatDuration(elapsed), times.join(', ') + problems];
 }
 
 function hostRows(host: HostReport, now: number): Row[] {
@@ -126,34 +129,38 @@ export function writeCache(path: string, report: ProgressReport): void {
   renameSync(temporary, path);
 }
 
-export function cacheAgeSeconds(path: string, now: Date): number | undefined {
-  const report = localReader.read(path);
-  if (report === undefined) return undefined;
+const HOST_STATUSES: ReadonlySet<unknown> = new Set(['ok', 'unreachable', 'error']);
+
+function isHostReport(value: unknown): value is HostReport {
+  const host = value as Partial<Record<keyof HostReport, unknown>> | null;
+  return typeof host === 'object' && host !== null && typeof host.name === 'string' && HOST_STATUSES.has(host.status)
+    && (host.detail === undefined || typeof host.detail === 'string')
+    && Array.isArray(host.tasks) && host.tasks.every(isTaskProgress);
+}
+
+function isProgressReport(value: unknown): value is ProgressReport {
+  const report = value as Partial<Record<keyof ProgressReport, unknown>> | null;
+  return typeof report === 'object' && report !== null && typeof report.generatedAt === 'string'
+    && Number.isInteger(report.generatedAtEpoch)
+    && Array.isArray(report.problems) && report.problems.every((problem) => typeof problem === 'string')
+    && Array.isArray(report.hosts) && report.hosts.every(isHostReport);
+}
+
+export function readCache(path: string): ProgressReport | undefined {
   try {
-    const generated = (JSON.parse(report) as Partial<ProgressReport>).generatedAtEpoch;
-    return typeof generated === 'number' ? Math.floor(now.getTime() / 1000) - generated : undefined;
+    const report = JSON.parse(localReader.read(path) ?? '') as unknown;
+    return isProgressReport(report) ? report : undefined;
   } catch {
     return undefined;
   }
 }
 
-// Returns false while another live refresh holds the lock.
-export function acquireLock(path: string, now: Date): boolean {
-  mkdirSync(dirname(path), { recursive: true });
-  if (createExclusively(path)) return true;
-  const held = statSync(path, { throwIfNoEntry: false });
-  if (held !== undefined && now.getTime() - held.mtimeMs <= LOCK_TIMEOUT_SECONDS * 1000) return false;
-  rmSync(path, { force: true });
-  return createExclusively(path);
-}
-
-function createExclusively(path: string): boolean {
-  try {
-    closeSync(openSync(path, 'wx'));
-    return true;
-  } catch {
-    return false;
-  }
+// Undefined, so due for a refresh, for a missing, invalid, or future cache.
+export function cacheAgeSeconds(path: string, now: Date): number | undefined {
+  const report = readCache(path);
+  if (report === undefined) return undefined;
+  const age = Math.floor(now.getTime() / 1000) - report.generatedAtEpoch;
+  return age < -FUTURE_TOLERANCE_SECONDS ? undefined : age;
 }
 
 export const USAGE = 'usage: task-progress.ts [show | refresh [--if-older-than <seconds>] | local-json]';
@@ -172,13 +179,14 @@ function parseMaxAge(args: readonly string[]): number | undefined | null {
 function refresh(options: CollectOptions, maxAge: number | undefined): CommandResult {
   const age = cacheAgeSeconds(options.paths.cache, options.now);
   if (maxAge !== undefined && age !== undefined && age <= maxAge) return { status: 0, stdout: `progress cache is ${age} s old\n` };
-  if (!acquireLock(options.paths.lock, options.now)) return { status: 0, stdout: 'another progress refresh is running\n' };
+  const lock = acquireLock(options.paths.lock, options.now, options.isAlive);
+  if (lock === undefined) return { status: 0, stdout: 'another progress refresh is running\n' };
   try {
     const report = collectProgress(options);
     writeCache(options.paths.cache, report);
     return { status: 0, stdout: `wrote ${options.paths.cache}: ${activeTasks(report)} active task(s)\n` };
   } finally {
-    rmSync(options.paths.lock, { force: true });
+    releaseLock(lock);
   }
 }
 

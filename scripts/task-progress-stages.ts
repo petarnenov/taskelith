@@ -6,6 +6,10 @@ import {
 // Derives the protocol stage of every task worktree from the records the
 // protocol already creates; all access goes through a Reader.
 
+// A reader throws this when its host stops answering; the host is then
+// unreachable, never a host without tasks.
+export class TransportError extends Error {}
+
 export interface Reader {
   // Output of git in cwd, or undefined when git fails.
   git(cwd: string, args: readonly string[]): string | undefined;
@@ -49,6 +53,8 @@ export interface TaskProgress {
   readonly review: ReviewState;
   readonly startedAt?: number;
   readonly landedAt?: number;
+  // Records that could not be read, such as corrupt passes.jsonl lines.
+  readonly problems: readonly string[];
 }
 
 export interface Worktree {
@@ -133,16 +139,19 @@ interface Located {
   readonly archived: boolean;
 }
 
+// An exact match with the branch wins; another change only when it is the
+// one change of the worktree.
 function locateChange(task: TaskReader, branch: string): Located | undefined {
   const active = task.reader.list(task.file(CHANGES)).filter((name) => name !== 'archive' && !name.startsWith('.'));
   const archived = task.reader.list(task.file(ARCHIVE)).find((name) => name.endsWith(`-${branch}`) && /^\d{4}-\d{2}-\d{2}-/.test(name));
   const archivedPath = archived === undefined ? [] : [`${ARCHIVE}/${archived}`];
-  const change = active.includes(branch) ? branch : active[0];
-  if (change !== undefined) {
-    return { change, records: `${CHANGES}/${change}`, paths: [`${CHANGES}/${change}`, ...archivedPath], archived: false };
+  const activeOf = (change: string): Located =>
+    ({ change, records: `${CHANGES}/${change}`, paths: [`${CHANGES}/${change}`, ...archivedPath], archived: false });
+  if (active.includes(branch)) return activeOf(branch);
+  if (archived !== undefined) {
+    return { change: branch, records: archivedPath[0]!, paths: [`${CHANGES}/${branch}`, ...archivedPath], archived: true };
   }
-  if (archived === undefined) return undefined;
-  return { change: branch, records: archivedPath[0]!, paths: [`${CHANGES}/${branch}`, ...archivedPath], archived: true };
+  return active.length === 1 ? activeOf(active[0]!) : undefined;
 }
 
 interface Landing {
@@ -171,23 +180,43 @@ function rangeFrom(base: string): string {
   return base === NO_MERGE_BASE ? 'HEAD' : `${base}..HEAD`;
 }
 
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+type PassCounts = Readonly<Record<(typeof SEVERITIES)[number], number>>;
+
 interface PassRecord {
-  readonly counts?: Readonly<Record<string, number>>;
+  readonly counts: PassCounts;
 }
 
-function parsePasses(text: string | undefined): PassRecord[] {
-  return nonEmptyLines(text).flatMap((line) => {
+interface ParsedPasses {
+  readonly records: readonly PassRecord[];
+  readonly problems: readonly string[];
+}
+
+function isPassRecord(value: unknown): value is PassRecord {
+  const counts = (value as { counts?: unknown } | null)?.counts as Record<string, unknown> | null | undefined;
+  return typeof counts === 'object' && counts !== null
+    && SEVERITIES.every((severity) => Number.isInteger(counts[severity]) && (counts[severity] as number) >= 0);
+}
+
+// A line that is no pass summary with four counts is reported, not counted.
+export function parsePasses(text: string | undefined): ParsedPasses {
+  const records: PassRecord[] = [];
+  const problems: string[] = [];
+  nonEmptyLines(text).forEach((line, index) => {
+    let value: unknown;
     try {
-      return [JSON.parse(line) as PassRecord];
+      value = JSON.parse(line);
     } catch {
-      return [];
+      value = undefined;
     }
+    if (isPassRecord(value)) records.push(value);
+    else problems.push(`passes.jsonl line ${index + 1} is no pass summary`);
   });
+  return { records, problems };
 }
 
 export function isLowOnly(pass: PassRecord): boolean {
-  const counts = pass.counts ?? {};
-  return ['critical', 'high', 'medium'].every((severity) => (counts[severity] ?? 0) === 0);
+  return pass.counts.critical === 0 && pass.counts.high === 0 && pass.counts.medium === 0;
 }
 
 interface PassTimes {
@@ -204,7 +233,7 @@ function passTimes(task: TaskReader, range: string, located: Located): PassTimes
   for (const entry of log) {
     const [sha, at] = entry.split(' ');
     const text = files.map((file) => task.run(['show', `${sha}:${file}`])).find((shown) => shown !== undefined);
-    const count = parsePasses(text).length;
+    const count = parsePasses(text).records.length;
     if (count > times.length) lastSha = sha;
     while (times.length < count) times.push(Number(at));
   }
@@ -225,7 +254,8 @@ function verifiedAt(task: TaskReader, base: string): number | undefined {
     const times = stamps.filter((stamp) => stamp.tree === tree && stamp.base === base)
       .map((stamp) => Date.parse(stamp.verifiedAt) / 1000).filter(Number.isFinite);
     return times.length === 0 ? undefined : Math.min(...times);
-  } catch {
+  } catch (error) {
+    if (error instanceof TransportError) throw error;
     return undefined;
   }
 }
@@ -266,17 +296,22 @@ function recordReach(task: TaskReader, range: string, located: Located, name: st
   return task.firstCommitTime(range, located.paths.map((records) => `${records}/${name}`)) ?? task.reader.mtime(task.file(path));
 }
 
-function reachReview(task: TaskReader, range: string, located: Located, progress: Progress, archives: boolean): ReviewState {
-  const passes = parsePasses(task.reader.read(task.file(`${located.records}/passes.jsonl`)));
+interface ReviewReach {
+  readonly review: ReviewState;
+  readonly problems: readonly string[];
+}
+
+function reachReview(task: TaskReader, range: string, located: Located, progress: Progress, archives: boolean): ReviewReach {
+  const { records, problems } = parsePasses(task.reader.read(task.file(`${located.records}/passes.jsonl`)));
   const { times, lastSha } = passTimes(task, range, located);
-  passes.slice(0, MAX_PASSES).forEach((_, index) => progress.reach(FIRST_PASS + index, times[index]));
-  if (lastSha !== undefined && times.length === passes.length && passes.length > 0) {
+  records.slice(0, MAX_PASSES).forEach((_, index) => progress.reach(FIRST_PASS + index, times[index]));
+  if (lastSha !== undefined && times.length === records.length && records.length > 0) {
     const fixes = task.commitTimes(`${lastSha}..HEAD`, ['--no-merges'], []);
     const counted = archives ? fixes.slice(0, -1) : fixes;
     if (counted.length > 0) progress.reach(STAGES.indexOf('fixes') + 1, counted[0]);
   }
-  const last = passes.at(-1);
-  return { passes: passes.length, stopped: last !== undefined && isLowOnly(last) };
+  const last = records.at(-1);
+  return { review: { passes: records.length, stopped: last !== undefined && isLowOnly(last) }, problems };
 }
 
 function deriveTask(reader: Reader, worktree: Worktree, now: number): TaskProgress | undefined {
@@ -299,13 +334,13 @@ function deriveTask(reader: Reader, worktree: Worktree, now: number): TaskProgre
   const route = recordReach(task, range, located, 'route.json');
   if (route !== null) progress.reach(4, route);
   const archives = lastCommitArchives(task, located);
-  const review = reachReview(task, range, located, progress, archives);
+  const { review, problems } = reachReview(task, range, located, progress, archives);
   if (archives) progress.reach(STAGES.indexOf('archived') + 1, epoch(task.run(['log', '-1', '--format=%ct'])?.trim()));
   if (landing !== undefined) progress.reach(LANDED, landing.at);
   const stage = progress.stage;
   return {
     branch, change: located.change, worktree: worktree.path, stage, stageName: STAGES[stage - 1]!,
-    reached: progress.reached(), review,
+    reached: progress.reached(), review, problems,
     ...(startedAt === undefined ? {} : { startedAt }), ...(landing?.at === undefined ? {} : { landedAt: landing.at }),
   };
 }
@@ -334,4 +369,29 @@ export function parseQueue(text: string | undefined): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+function isReached(value: unknown): value is ReachedStage {
+  const reached = value as Partial<Record<keyof ReachedStage, unknown>> | null;
+  return typeof reached === 'object' && reached !== null && isStage(reached.stage)
+    && reached.name === STAGES[reached.stage - 1] && (reached.at === undefined || typeof reached.at === 'number');
+}
+
+function isStage(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= STAGES.length;
+}
+
+const optionalNumber = (value: unknown): boolean => value === undefined || typeof value === 'number';
+
+// The full shape of a task, for output that another host or a cache wrote.
+export function isTaskProgress(value: unknown): value is TaskProgress {
+  const task = value as Partial<Record<keyof TaskProgress, unknown>> | null;
+  if (typeof task !== 'object' || task === null) return false;
+  const review = task.review as Partial<Record<keyof ReviewState, unknown>> | null | undefined;
+  return typeof task.branch === 'string' && typeof task.change === 'string' && typeof task.worktree === 'string'
+    && isStage(task.stage) && task.stageName === STAGES[task.stage - 1]
+    && Array.isArray(task.reached) && task.reached.every(isReached)
+    && typeof review === 'object' && review !== null && Number.isInteger(review.passes) && typeof review.stopped === 'boolean'
+    && optionalNumber(task.startedAt) && optionalNumber(task.landedAt)
+    && Array.isArray(task.problems) && task.problems.every((problem) => typeof problem === 'string');
 }
