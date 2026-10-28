@@ -1,5 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { SECRET_PREFIXES, type IssuedSecret, type SecretHash, type SecretKind, type Secrets } from '@taskelith/access';
+import {
+  SECRET_PREFIXES,
+  type IssuedSecret,
+  type RandomValues,
+  type SecretHash,
+  type SecretKind,
+  type Secrets,
+} from '@taskelith/access';
 import type { IdentifierSource } from '@taskelith/fleet';
 
 // 256 random bits make a bearer secret that cannot be guessed, so a plain
@@ -7,7 +14,7 @@ import type { IdentifierSource } from '@taskelith/fleet';
 const SECRET_BYTES = 32;
 const IDENTIFIER_BYTES = 16;
 
-export class NodeSecrets implements Secrets {
+export class NodeSecrets implements Secrets, RandomValues {
   issue(kind: SecretKind): IssuedSecret {
     const secret = `${SECRET_PREFIXES[kind]}_${randomBytes(SECRET_BYTES).toString('base64url')}`;
     return { secret, hash: this.hashOf(secret) };
@@ -21,6 +28,14 @@ export class NodeSecrets implements Secrets {
     const presented = Buffer.from(this.hashOf(secret), 'hex');
     const stored = Buffer.from(hash, 'hex');
     return presented.length === stored.length && timingSafeEqual(presented, stored);
+  }
+
+  sessionToken(): string {
+    return randomBytes(SECRET_BYTES).toString('base64url');
+  }
+
+  principalId(): string {
+    return `u${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
   }
 }
 
