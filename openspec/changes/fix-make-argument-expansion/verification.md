@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification and `make verify` are recorded below; review pass 1 is recorded below.
+Date: 2026-10-28. The author's verification, `make verify`, and review passes 1 to 3 are recorded below.
 
 ## Scope and source
 
@@ -32,7 +32,7 @@ Hosts: macOS on Intel, `/usr/bin/make` GNU Make 3.81, `/usr/local/bin/gmake` GNU
 
 ## Checks
 
-`make verify` ran on the clean committed tree of `cac17956` (tree `7440b84e`) with Node.js 24.22.1: exit 0, profile full. Tests: 2650, 2643 pass, 0 fail, 0 cancelled, 7 skipped. Coverage of all files: lines 99.36%, branches 92.50%, functions 99.06%. It ran the two "as typed" tests under `make` 3.81 and `gmake` 4.4.1. `make record` wrote the generated part below from that log, and `make record-check` passed. The records commit after it changes only this file and `tasks.md`, so a fresh `make verify` of the final clean tree writes the stamp that the `pre-push` hook reuses.
+`make verify` ran on the clean committed tree of `PENDING` (tree `PENDING`) with Node.js 24.22.1, after every review fix.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -75,6 +75,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   - L2, pass 1 still open in the records: task 4.1 ticked and the gate removed (`cd7ee291`).
   - L3, the spec delta dropped the change from the record requirement: it names CHANGE's `verification.md` again, 499 characters (`b3f51341`).
 
+### Pass 3 (reviewer A)
+
+- **Reviewer:** Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, confirmed in the output header.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, prompt outside the worktree.
+- **Session:** `01a18182-d5e2-7602-a406-aa3832362160`.
+- **Reviewed revision:** `82f47666`.
+- **Snapshot:** the same before and after the pass (`b3773fb2`).
+- **Findings:** Critical 0, High 0, Medium 1, Low 0. The reviewer confirmed the fixes of M2, L1, L2, and L3 of pass 2.
+  - M1, M1 of pass 2 partly unresolved: the checks paragraph still named the first verified tree `7440b84e` of `cac17956` and said the commits after it changed only this file and `tasks.md`, though `1b2783d5` changed a test and `b3f51341` the spec delta. **Unreviewed fix:** the paragraph names the revision and tree of the final `make verify` run and the commits after it; fixed after the last pass and not reviewed.
+
 ## Limitations
 
 - The fix was checked under GNU Make 3.81 and 4.4.1 only; the Linux check ran the shell repro, not the Node.js tests.
@@ -83,6 +93,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 3 (reviewer A), required because the pass 2 fixes change a test.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)

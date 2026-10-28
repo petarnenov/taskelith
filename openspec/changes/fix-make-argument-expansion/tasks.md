@@ -11,10 +11,11 @@
 ## 3. Evidence
 
 - [x] 3.1 Fail-before and pass-after under GNU Make 3.81 and 4.4.1, and the Linux repro in `debian:trixie-slim`
-- [x] 3.2 `make verify` on the clean committed tree, `make record`, and `make record-check`: passed on `cac17956`
+- [x] 3.2 `make verify` on the clean committed tree, `make record`, and `make record-check`: passed on the final clean tree after the review fixes
 
 ## 4. Review and archive
 
 - [x] 4.1 Review pass 1 (reviewer A) and its fixes: no findings
-- [ ] 4.2 Review pass 2 (reviewer B) and its fixes
-- [ ] 4.3 Archive the change
+- [x] 4.2 Review pass 2 (reviewer B) and its fixes: 2 Medium and 3 Low, all fixed
+- [x] 4.3 Review pass 3 (reviewer A) and its fix: 1 Medium, fixed without review
+- [x] 4.4 Archive the change
