@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { failed, value } from '@taskelith/testing';
+import { failed, value, withholdCoverageFromDescendants } from '@taskelith/testing';
 import { GitRunner, scrubCredential, verifyGitClient } from '@taskelith/git-workspace';
 import {
   GIT_NEUTRAL_DIRECTORY,
@@ -16,6 +16,10 @@ import {
   type GitClientPin,
 } from '@taskelith/workspace';
 import { credential, nativeGit, recordingPin, runProcess, systemGitVersion, SYSTEM_GIT } from './git-fixture.ts';
+
+// Node adds NODE_V8_COVERAGE to every child's environment, even a
+// built one, while this test process collects coverage.
+withholdCoverageFromDescendants();
 
 const WRITE = credential('write', ['acme/project'], ['read-code', 'write-code']);
 const SENSITIVE = sensitiveValues([WRITE]);

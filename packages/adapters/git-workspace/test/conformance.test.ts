@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { withholdCoverageFromDescendants } from '@taskelith/testing';
 import { WORKSPACE_CONFORMANCE } from '@taskelith/workspace';
 import { createGitFixture } from './git-fixture.ts';
+
+// Node adds NODE_V8_COVERAGE to every child's environment, even a
+// built one, while this test process collects coverage.
+withholdCoverageFromDescendants();
 
 // Cases that need an operation of a later sub-change, each with its
 // reason; 16b runs every other case against the Git adapter.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chmod, lstat, mkdir, readdir, symlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
-import { CrashPoints, failed, id, value } from '@taskelith/testing';
+import { CrashPoints, failed, id, value, withholdCoverageFromDescendants } from '@taskelith/testing';
 import type { Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
@@ -20,6 +20,10 @@ import {
   type TreeEntry,
 } from '@taskelith/workspace';
 import { createGitFixture, type GitFixture } from './git-fixture.ts';
+
+// Node adds NODE_V8_COVERAGE to every child's environment, even a
+// built one, while this test process collects coverage.
+withholdCoverageFromDescendants();
 
 const FIRST = id('AttemptId', 'attempt-1') as AttemptId;
 const SECOND = id('AttemptId', 'attempt-2') as AttemptId;
