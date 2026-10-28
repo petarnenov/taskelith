@@ -51,6 +51,7 @@ The stubs and mutants were restored from the real files before the commit. After
 | Check | Revision | Result |
 | --- | --- | --- |
 | `make verify` | `6814dcab`, tree `9cacd94c` (log `13-verify-1.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3703, suites 47, pass 3656, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.76 % branches, 98.77 % functions |
+| `make verify` | `335102b3`, tree `fc4bd347` (log `13-verify-2.log` in the session scratchpad) | First run failed, 1 of 3711: the G2 scenario "h. an unauthorized start cancels only that execution" of `test/g2-cancellation-races.test.ts`, which this change does not touch, timed out waiting 20000 ms for the authorized start (log kept as `13-verify-2-attempt1.log`). The rerun on the same clean tree passed, profile full, stamp written: tests 3711, suites 47, pass 3664, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.74 % branches, 98.77 % functions |
 | `make findings ARGS="route --change implement-session-timeline"` | `64ea6d1d` | "route: elevated (lines, files, security, contracts, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` agrees; recommendation only, committed unedited as `6814dcab`. The brief names pass 1 `codex gpt-6-astra#medium`, pass 2 `claude claude-opus-5-5#medium`, and pass 3 `codex gpt-6.1-sol#medium` |
 
 <!-- make record: begin -->
@@ -58,16 +59,31 @@ The stubs and mutants were restored from the real files before the commit. After
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `9cacd94c07451e86569b6d8661618d71e7d72998`; tests 3703, pass 3656, fail 0, skipped 47; all files 99.36% lines, 92.76% branches, 98.77% functions.
+- `make verify`: passed, profile full, tree `fc4bd347097c4d04447cda0234980772407717ab`; tests 3711, pass 3664, fail 0, skipped 47; all files 99.36% lines, 92.74% branches, 98.77% functions.
 - `npm run openspec -- validate implement-session-timeline --strict`: passed, `Change 'implement-session-timeline' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).`.
 - Spec diff against the merge base `62217e7a1f56` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a184cb-122d-7ea3-b3c0-eb5d81062ea4` | 0 | 0 | 4 | 2 |
 <!-- make record: end -->
 
 ## Independent review
 
-Not started.
+### Pass 1
+
+- Reviewer A: Codex CLI, model `gpt-6-astra`, reasoning effort `medium`, sandbox read-only, session `01a184cb-122d-7ea3-b3c0-eb5d81062ea4`, on `12c1035c` (diff `62217e7a...12c1035c`). The worktree snapshot before and after the review was `341da4d904cc51b1dac317756206c76322f6b6630b26126bd6610be1ecc5cca2`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C /home/petar/taskelith-worktrees/implement-session-timeline -`, environment `PATH HOME USER LANG TERM`, started 2026-10-28T23:14:23.187Z. Model confirmation: `model: gpt-6-astra`, `effort: medium`, `sandbox: read-only`, as reported by the Codex log header and printed by `make review`. The brief names pass 1 reviewer A `codex gpt-6-astra#medium`; `make review` printed "route: recommends effort high; the authorized medium applies (policy version 8)", since `route.json` recommends `codex gpt-6-astra#high`.
+- Result: Critical 0, High 0, Medium 4, Low 2, matching the pass 1 line of `passes.jsonl`; all six fixed and recorded in `findings.jsonl`. The reviewer ran neither PostgreSQL nor `make verify`.
+  1. Medium, contract-drift (`session-timeline-service.ts`, `consumeResponse`): the response digest left out the attempt and its ownership generation, so a repeated key with either changed returned the answered request. Fixed in `c87d0653`: the digest covers both (design decision 5, the delta's "Response consumed once under concurrency").
+  2. Medium, contract-drift (`recordRequest`): a held native request key was compared on its redacted text, so two texts that differ only in a secret were one request. Fixed in `c87d0653`: the native request ID, scoped to its generation, holds the keyed digest of the unredacted kind, turn, and text in `session_idempotency_keys`, compared before the domain; another digest is `conflict` (decision 5, the delta's "Durable session timeline service" with the scenario "Request texts that redact alike").
+  3. Medium, contract-drift (`recordRequest`): request text was bounded only after redaction. Fixed in `c87d0653`: the unredacted text is checked first and fails with `invalid` before any state access (decision 6).
+  4. Medium, contract-drift (`appendOutput`): the same for output chunks. Fixed in `c87d0653` likewise; the window and its last position stay unchanged.
+  5. Low, evidence-mismatch (this record, "Author self-check"): PostgreSQL evidence of two turn texts that redact alike was claimed but missing. Fixed in `c87d0653` with that test after a new pool and the real `SecretTextRedactor`, and in `335102b3`, which states what each suite tested.
+  6. Low, missing-fail-before-test (this record, "Fail-before"): the down migration's evidence was an `ENOENT`. Fixed in `335102b3` with a mutation run that removes the four `DROP TABLE` statements and fails by assertion, named a later mutation run.
+- Fail-before of the new tests: see the rows "the 4 tests of review pass 1" and the down migration row in "Fail-before"; logs `13-fb-memory.log`, `13-fb-postgres.log`, and `13-fb-down.log` in the session scratchpad. The service of `64ea6d1d` was restored into the tree, `npm run build`, the tests run, then the fixed file restored and rebuilt.
 
 ## Limitations
 

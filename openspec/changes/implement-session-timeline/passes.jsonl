@@ -1,0 +1,1 @@
+{"change": "implement-session-timeline", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a184cb-122d-7ea3-b3c0-eb5d81062ea4", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 2}}
