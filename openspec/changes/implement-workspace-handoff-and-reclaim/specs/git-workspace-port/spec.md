@@ -27,7 +27,11 @@ The reclaim program SHALL be a fixed module of the adapter that changes nothing 
 
 #### Scenario: Worker gone before the record
 - **WHEN** the worker crashes after it started the program and before it wrote `go`
-- **THEN** the program exits without changing the checkout
+- **THEN** the program exits without changing the checkout and leaves its containment empty
+
+#### Scenario: No go within the window
+- **WHEN** a started program gets no `go` within its window, 60 seconds by default (`RECLAIM_GO_BOUND_MS`)
+- **THEN** it exits without changing the checkout and leaves its containment empty, and its `reclaim` fails with `unavailable`, keeps the hand-off record without a failure, and a retry reclaims
 
 #### Scenario: Program in its containment
 - **WHEN** a Linux worker's reclaim program runs

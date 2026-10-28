@@ -1,7 +1,7 @@
 ## 1. Change
 
 - [x] 1.1 Create the change, save the brief's `checklist.json`, and add the empty `findings.jsonl` and `passes.jsonl`
-- [ ] 1.2 Record the coordinator's answers to the open questions of the design
+- [x] 1.2 Record the coordinator's answers to the open questions of the design
 
 ## 2. Implementation and tests
 
@@ -11,6 +11,7 @@
 - [x] 2.4 Adapter tests of the hand-off, the reclaim, every crash point, and the failed, surviving, and abandoned program, and their failing run against the 16c adapter
 - [x] 2.5 The pinned Git in the worker image, `make verify-linux-git-workspace`, and the Linux tests, run in the worker image
 - [x] 2.6 Rewrite `.git/config` with mode `0660`
+- [x] 2.7 The reclaim program's window for `go` and the `abandoned` outcome, with their fail-before tests (coordinator decision Q3)
 
 ## 3. Records and checks
 

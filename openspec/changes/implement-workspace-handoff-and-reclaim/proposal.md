@@ -6,7 +6,7 @@ G3 item 16 (`implement-git-workspace-adapter`, `docs/g3-plan.md`, row 16) implem
 
 - `@taskelith/git-workspace`:
   - `GitWorkspaces.handOff`, `reclaim`, and `handedOff` (contract section 3, steps 6 and 7): a durable hand-off record (`hand-off-record.ts`), one hand-off chain per workspace root so that the check for another hand-off and the write of the record are one step, the containment recorded before the program may run, the proof that a recorded containment is empty by polling up to `RECLAIM_PROOF_BOUND_MS` (30 s), the `reclaim-failed` outcome kept in the record, and the crash points `WS5` to `WS10` with the bare `WS8`.
-  - The reclaim program (`reclaim-program.ts`, `reclaim-program-main.ts`): waits for `go`, on Linux enters `reclaim-<name>` as root and switches to the execution account, copies hard-linked regular files, and sets exact shared modes on what it owns.
+  - The reclaim program (`reclaim-program.ts`, `reclaim-program-main.ts`): waits for `go` within a window of 60 s (`RECLAIM_GO_BOUND_MS`) and otherwise exits without a change, on Linux enters `reclaim-<name>` as root and switches to the execution account, copies hard-linked regular files, and sets exact shared modes on what it owns.
   - `ReclaimHost` with `LinuxReclaimHost` (cgroup containment) and `ProcessGroupReclaimHost` (one account); the host's execution account gives the attempt directory and the checkout the execution group at prepare.
   - `.git/config` is rewritten with mode `0660`, so the harness's Git can read it (found by the Linux tests).
   - `GitWorkspaces` implements the whole `WorkspaceProvider`; the type `GitWorkspaceOperations` is gone.
