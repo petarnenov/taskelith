@@ -9,6 +9,7 @@ import {
   PostgresTaskLineage,
   databaseNow,
 } from './capacity-repositories.js';
+import { PostgresAccountSlots, PostgresSlotCredentialRecords } from './account-pool-repositories.js';
 import { PostgresSignalReadings } from './control-plane-signals.js';
 import { PostgresEvidenceProducers, PostgresEvidenceRecords } from './evidence-records.js';
 import {
@@ -68,6 +69,9 @@ export class PostgresTransaction {
   readonly unrecordedProcesses: PostgresUnrecordedProcesses;
   readonly reconciliation: PostgresReconciliationQueue;
   readonly workerAdmissions: PostgresWorkerAdmissions;
+  readonly accountSlots: PostgresAccountSlots;
+  // Encrypted rows only; PostgresSlotCredentials commits each change alone.
+  readonly slotCredentialRecords: PostgresSlotCredentialRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -107,6 +111,8 @@ export class PostgresTransaction {
     this.unrecordedProcesses = new PostgresUnrecordedProcesses(session);
     this.reconciliation = new PostgresReconciliationQueue(session);
     this.workerAdmissions = new PostgresWorkerAdmissions(session);
+    this.accountSlots = new PostgresAccountSlots(session);
+    this.slotCredentialRecords = new PostgresSlotCredentialRecords(session);
     this.outboxLookup = this.outbox;
   }
 

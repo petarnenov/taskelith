@@ -331,7 +331,6 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
     attemptId,
     ownershipGeneration: task.ownershipGeneration,
     requested: DEFAULT_ATTEMPT_REQUEST,
-    providerCredentials: [],
     ...(retryOf === undefined ? {} : { automaticRetryOf: retryOf }),
   };
 }

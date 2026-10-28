@@ -97,6 +97,8 @@ export const PLACEMENT_REJECTING_REASONS = Object.freeze([
   'delegation-chain-exceeds-quota',
   'delegation-budget-exhausted',
   'retry-budget-exhausted',
+  'no-eligible-slot',
+  'session-slot-withdrawn',
 ] as const);
 
 export type PlacementRejectingReason = (typeof PLACEMENT_REJECTING_REASONS)[number];

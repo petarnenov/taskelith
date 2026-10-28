@@ -1,3 +1,5 @@
+import { SLOT_REJECTING_REASONS } from './slot-selection.js';
+
 // Contract section 11: waiting leaves the task queued, rejecting ends its
 // admission to capacity, and standing changes nothing.
 export const WAITING_REASONS = Object.freeze([
@@ -20,6 +22,8 @@ export const REJECTING_REASONS = Object.freeze([
   'delegation-chain-exceeds-quota',
   'delegation-budget-exhausted',
   'retry-budget-exhausted',
+  // Derived, never copied (account pool contract section 4.5).
+  ...SLOT_REJECTING_REASONS,
 ] as const);
 
 // Reasons about one worker: placement tries the next candidate on them.

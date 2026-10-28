@@ -9,6 +9,8 @@ import {
   COOLDOWN_SOURCES,
   DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   FIRST_SLOT_REVISION,
+  InMemoryAccountSlots,
+  InMemorySlotCredentials,
   NO_SLOT_POLICIES,
   SLOT_COOLDOWN_DEFAULT_MINUTES,
   SLOT_CREDENTIALS_CONFORMANCE,
@@ -183,87 +185,6 @@ test('an empty slot secret is invalid', () => {
   assert.equal(!made.ok && made.error.code, 'invalid');
 });
 
-// A test double that applies the port rules the suites check.
-class InMemoryAccountSlots implements AccountSlots {
-  readonly #slots = new Map<ProviderCredentialId, AccountSlot>();
-
-  async add(slot: AccountSlot): Promise<Result<void>> {
-    if (this.#slots.has(slot.id)) return err(failure('conflict', 'the slot exists'));
-    if (slot.revision !== FIRST_SLOT_REVISION) return err(failure('invalid', 'a new slot starts at the first revision'));
-    return this.write(slot);
-  }
-
-  async get(id: ProviderCredentialId): Promise<Result<AccountSlot>> {
-    const slot = this.#slots.get(id);
-    return slot === undefined ? err(failure('not-found', 'no such slot')) : ok(slot);
-  }
-
-  async pool(projectId: ProjectId, harnessId: HarnessPluginId): Promise<readonly AccountSlot[]> {
-    return [...this.#slots.values()]
-      .filter((slot) => slot.state === 'active' && slot.harnessId === harnessId && slot.allowedProjects.includes(projectId))
-      .sort((left, right) => (left.id < right.id ? -1 : 1));
-  }
-
-  async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
-    const stored = this.#slots.get(slot.id);
-    if (stored === undefined) return err(failure('not-found', 'no such slot'));
-    if (slot.harnessId !== stored.harnessId || (stored.state === 'removed' && slot.state !== 'removed')) {
-      return err(failure('invalid', 'a slot keeps its harness and its tombstone'));
-    }
-    if (slot.revision !== expectedRevision + 1) return err(failure('invalid', 'a change moves the revision by one'));
-    if (stored.revision !== expectedRevision) return err(failure('conflict', 'the slot revision moved'));
-    return this.write(slot);
-  }
-
-  protected write(slot: AccountSlot): Result<void> {
-    this.#slots.set(slot.id, slot);
-    return ok(undefined);
-  }
-}
-
-class InMemorySlotCredentials implements SlotCredentials {
-  protected readonly versions = new Map<ProviderCredentialId, Map<SlotCredentialVersion, SlotSecret>>();
-  protected readonly destroyed = new Set<ProviderCredentialId>();
-  readonly #lastVersions = new Map<ProviderCredentialId, number>();
-
-  async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<SlotCredentialVersion> {
-    const version = this.nextVersion(slotId);
-    if (!this.destroyed.has(slotId)) this.versionsOf(slotId).set(version, secret);
-    return version;
-  }
-
-  async reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>> {
-    const secret = this.versions.get(slotId)?.get(version);
-    return secret === undefined ? err(failure('not-found', 'no such credential version')) : ok(secret);
-  }
-
-  async discard(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
-    this.versions.get(slotId)?.delete(version);
-  }
-
-  async discardOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
-    const stored = this.versionsOf(slotId);
-    for (const older of stored.keys()) if (older < version) stored.delete(older);
-  }
-
-  async destroy(slotId: ProviderCredentialId): Promise<void> {
-    this.destroyed.add(slotId);
-    this.versions.delete(slotId);
-  }
-
-  protected nextVersion(slotId: ProviderCredentialId): SlotCredentialVersion {
-    const next = (this.#lastVersions.get(slotId) ?? 0) + 1;
-    this.#lastVersions.set(slotId, next);
-    return credentialVersion(next);
-  }
-
-  protected versionsOf(slotId: ProviderCredentialId): Map<SlotCredentialVersion, SlotSecret> {
-    const stored = this.versions.get(slotId) ?? new Map<SlotCredentialVersion, SlotSecret>();
-    this.versions.set(slotId, stored);
-    return stored;
-  }
-}
-
 for (const conformance of ACCOUNT_SLOTS_CONFORMANCE) {
   test(`in-memory account slots: ${conformance.name}`, async () => {
     assert.deepEqual(await conformance.check(new InMemoryAccountSlots()), []);
@@ -377,5 +298,26 @@ test('the slot credentials suite rejects an adapter that retains lower versions'
 test('the slot credentials suite rejects an adapter that discards higher versions', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new OverDiscardingSlotCredentials()), [
     'discards only the lower versions of a slot, idempotently, and keeps the rest',
+  ]);
+});
+
+// Counts tombstones too, so a removed slot would block a new one.
+class TombstoneCountingAccountSlots extends InMemoryAccountSlots {
+  readonly #all: AccountSlot[] = [];
+
+  override async add(slot: AccountSlot): Promise<Result<void>> {
+    const added = await super.add(slot);
+    if (added.ok) this.#all.push(slot);
+    return added;
+  }
+
+  override async countNotRemoved(harnessId: HarnessPluginId): Promise<number> {
+    return this.#all.filter((slot) => slot.harnessId === harnessId).length;
+  }
+}
+
+test('the account slots suite rejects an adapter that counts removed slots', async () => {
+  assert.deepEqual(await failingCases(ACCOUNT_SLOTS_CONFORMANCE, () => new TombstoneCountingAccountSlots()), [
+    'counts the slots of a harness that are not removed, in every project',
   ]);
 });

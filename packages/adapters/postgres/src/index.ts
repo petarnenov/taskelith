@@ -1,3 +1,12 @@
+export {
+  PostgresAccountSlots,
+  PostgresSlotCredentialRecords,
+  PostgresSlotCredentials,
+  type NextCredentialVersion,
+  type SealedCredential,
+  type SlotCredentialCipher,
+  type SlotCredentialTransactions,
+} from './account-pool-repositories.js';
 export { PostgresAccessStore, PostgresAccessTransaction } from './access-repositories.js';
 export {
   CommittingAdmissionRepository,

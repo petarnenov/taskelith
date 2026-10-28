@@ -11,6 +11,7 @@ import { InMemoryWorkerAdmissions, fleetWorker, type FleetRegistry } from '@task
 import { ok } from '@taskelith/kernel';
 import { InMemoryOutbox } from '@taskelith/sdlc';
 import {
+  InMemoryAccountSlots,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
   InMemoryDelegationRequests,
@@ -49,6 +50,7 @@ export function inMemoryCapacity(
     installation: new InMemoryInstallationGuard(false),
     quotas: new InMemoryQuotaSettings(),
     ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage),
+    accountSlots: new InMemoryAccountSlots(),
     placements: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()),
     rotation: new InMemoryPlacementRotation(),
     placementOutcomes: new InMemoryPlacementOutcomeRecords(),
