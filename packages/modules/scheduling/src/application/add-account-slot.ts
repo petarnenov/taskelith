@@ -39,12 +39,22 @@ export async function addAccountSlot(ports: AccountSlotCommandPorts, input: AddA
   if (!draft.ok) return draft;
   const version = await ports.credentials.store(input.id, input.secret);
   const added = await ports.store.transaction((tx) => addWithinLimit(tx, slotRecord(input, version), delivery));
-  if (!added.ok && !mayHaveCommitted(added.error)) await ports.credentials.discard(input.id, version);
+  if (!added.ok && !mayHaveCommitted(added.error)) await discardUnlessUnreachable(ports.credentials, input.id, version);
   return added;
 }
 
 function mayHaveCommitted(failed: Failure): boolean {
   return failed.code === 'unavailable' && failed.details.outcome === 'unknown';
+}
+
+// A version that cannot be discarded now is left for the sweep of section
+// 8.1, so the add still returns its own refusal.
+async function discardUnlessUnreachable(credentials: SlotCredentials, slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
+  try {
+    await credentials.discard(slotId, version);
+  } catch {
+    return;
+  }
 }
 
 const FIRST_CREDENTIAL_VERSION = mustVersion(1);

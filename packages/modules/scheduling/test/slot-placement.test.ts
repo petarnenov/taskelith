@@ -310,6 +310,31 @@ test('an add whose commit outcome is unknown keeps its stored version', async ()
   assert.deepEqual(credentials.storedVersions(stored.id), [stored.credentialVersion]);
 });
 
+class UnreachableDiscard extends InMemorySlotCredentials {
+  override async discard(): Promise<void> {
+    throw new Error('the credential store is unreachable');
+  }
+}
+
+async function unreachableDiscardFixture(slotLimit?: number) {
+  const { tx } = await fixture([2]);
+  const credentials = new UnreachableDiscard();
+  const deliveries = new StaticAdmittedDeliveries([{ ...PAIR, ...(slotLimit === undefined ? {} : { slotLimit }) }]);
+  return { credentials, ports: { store: serialStore(tx), credentials, deliveries } };
+}
+
+test('a refused add keeps its own refusal when the discard of its version fails', async () => {
+  const limited = await unreachableDiscardFixture(1);
+  value(await addAccountSlot(limited.ports, input('slot-1')));
+  expectInvalidWithoutSecret(await addAccountSlot(limited.ports, input('slot-2')));
+  assert.deepEqual(limited.credentials.storedVersions(id('ProviderCredentialId', 'slot-2')), [1]);
+  const unlimited = await unreachableDiscardFixture();
+  const first = value(await addAccountSlot(unlimited.ports, input('slot-1')));
+  const again = await addAccountSlot(unlimited.ports, input('slot-1'));
+  assert.equal(!again.ok && again.error.code, 'conflict');
+  assert.equal(unlimited.credentials.storedVersions(first.id).length, 2);
+});
+
 test('a duplicate slot is a conflict and keeps the existing credential only', async () => {
   const { credentials, ports } = await commandFixture();
   const first = value(await addAccountSlot(ports, input('slot-1')));
