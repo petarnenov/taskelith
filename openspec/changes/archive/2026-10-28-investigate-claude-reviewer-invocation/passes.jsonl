@@ -1,0 +1,1 @@
+{"change": "investigate-claude-reviewer-invocation", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f5c-de84-74e2-8ab9-dc4641a34ad4", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 2}}
