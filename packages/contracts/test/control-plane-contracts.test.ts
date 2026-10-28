@@ -14,7 +14,7 @@ type SecurityRequirement = Record<string, string[]>;
 interface Operation {
   readonly operationId: string;
   readonly security: SecurityRequirement[];
-  readonly parameters?: { readonly name: string }[];
+  readonly parameters?: { readonly name: string; readonly in: string }[];
   readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
   readonly responses: Record<string, { headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
 }
@@ -160,17 +160,22 @@ test('authentication, authorization, and CSRF failures are distinct responses', 
   const csrf = { code: 'forbidden', message: 'the CSRF token is missing', details: { reason: 'csrf-token-invalid' } };
   const denial = { code: 'forbidden', message: 'project-maintainer is required', details: { reason: 'role-required' } };
   const unauthenticated = { code: 'forbidden', message: 'log in first', details: { reason: 'unauthenticated' } };
+  const rejected = { code: 'forbidden', message: 'the delivery is refused', details: { reason: 'signature-invalid' } };
 
   assert.ok(checkHttpSchema('CsrfRejection', csrf).ok);
   assert.ok(violations(checkHttpSchema('AccessDenial', csrf)).some((text) => text.includes('/details/reason')));
   assert.ok(checkHttpSchema('AccessDenial', denial).ok);
   assert.ok(checkHttpSchema('AuthenticationFailure', unauthenticated).ok);
   assert.ok(violations(checkHttpSchema('AuthenticationFailure', csrf)).some((text) => text.includes('/details/reason')));
-  for (const { method, operationId, responses } of OPERATIONS.filter((candidate) => candidate.operationId !== WEBHOOK)) {
+  assert.ok(checkHttpSchema('WebhookRejection', rejected).ok);
+  assert.ok(violations(checkHttpSchema('WebhookRejection', unauthenticated)).some((text) => text.includes('/details/reason')));
+  assert.ok(violations(checkHttpSchema('AuthenticationFailure', rejected)).some((text) => text.includes('/details/reason')));
+  for (const { method, operationId, responses } of OPERATIONS) {
     const unauthorized = responses['401']?.content?.['application/json']!.schema;
-    if (unauthorized !== undefined) assert.deepEqual(unauthorized, { $ref: '#/components/schemas/AuthenticationFailure' }, operationId);
+    const expected = operationId === WEBHOOK ? 'WebhookRejection' : 'AuthenticationFailure';
+    if (unauthorized !== undefined) assert.deepEqual(unauthorized, { $ref: `#/components/schemas/${expected}` }, operationId);
     const forbidden = responses['403']?.content?.['application/json']!.schema;
-    if (method !== 'get') assert.ok(forbidden !== undefined && holdsKey(forbidden, '$ref', '#/components/schemas/CsrfRejection'), operationId);
+    if (method !== 'get' && operationId !== WEBHOOK) assert.ok(forbidden !== undefined && holdsKey(forbidden, '$ref', '#/components/schemas/CsrfRejection'), operationId);
   }
   assert.deepEqual(operation('updateProject').responses['403']!.content!['application/json']!.schema, {
     oneOf: [{ $ref: '#/components/schemas/AccessDenial' }, { $ref: '#/components/schemas/CsrfRejection' }],
@@ -187,6 +192,17 @@ test('no response schema can carry a write-only value', () => {
   }
   assert.ok(reachable(operation('addAccountSlot').requestBody!.content['application/json']!.schema).some((schema) => holdsKey(schema, 'writeOnly', true)));
   assert.ok(reachable(operation('rotateSlotCredential').requestBody!.content['application/json']!.schema).some((schema) => holdsKey(schema, 'writeOnly', true)));
+});
+
+test('every operation with a path parameter but the receiver answers 400 to an invalid one', () => {
+  const withPath = OPERATIONS.filter(({ operationId, parameters }) => operationId !== WEBHOOK && (parameters ?? []).some(({ in: place }) => place === 'path'));
+
+  assert.ok(withPath.length > 0);
+  for (const { operationId, responses } of withPath) assert.ok('400' in responses, operationId);
+});
+
+test('every response with a CSRF token is uncached', () => {
+  for (const id of ['readSession', 'logIn']) assert.deepEqual(operation(id).responses['200']!.headers!['Cache-Control']!.schema, { type: 'string', const: 'no-store' }, id);
 });
 
 test('only issuing and rotating an enrollment token reveal its secret, uncached', () => {
@@ -206,7 +222,7 @@ test('the webhook receiver needs no session, CSRF token, or operator credential 
   assert.equal(receiver.method, 'post');
   assert.deepEqual(receiver.security, []);
   assert.deepEqual(receiver.requestBody!.content, { '*/*': {} });
-  assert.deepEqual(Object.keys(receiver.responses).sort(), ['202', '401', '413', '500', '503']);
+  assert.deepEqual(Object.keys(receiver.responses).sort(), ['202', '400', '401', '413', '500', '503']);
 });
 
 test('the wire enumerations are the domain vocabularies', () => {
@@ -286,11 +302,29 @@ test('a binding remote is an HTTPS URL without user information', () => {
   for (const remote of refused) assert.ok(violations(checkHttpSchema('RemoteUrl', remote)).length > 0, remote);
 });
 
+interface PageSchema {
+  readonly required: string[];
+  readonly properties: Record<string, { maxItems?: number; $ref?: string }>;
+}
+
+function pageName(schema: Json): string {
+  return (schema.$ref as string).replace('#/components/schemas/', '');
+}
+
 test('every list but the workers snapshot pages by identifier', () => {
   const lists = OPERATIONS.filter(({ method, operationId }) => method === 'get' && operationId.startsWith('list'));
   const paged = lists.filter(({ parameters }) => (parameters ?? []).some(({ name }) => name === 'after'));
 
   assert.deepEqual(lists.filter((candidate) => !paged.includes(candidate)).map(({ operationId }) => operationId), ['listWorkers']);
+  for (const { operationId, responses } of paged) {
+    const page = SCHEMAS[pageName(responses['200']!.content!['application/json']!.schema)] as unknown as PageSchema;
+    const items = Object.entries(page.properties).filter(([name]) => name !== 'next');
+
+    assert.equal(items.length, 1, operationId);
+    assert.equal(items[0]![1].maxItems, 100, operationId);
+    assert.deepEqual(page.properties.next!.$ref, '#/components/schemas/Identifier', operationId);
+    assert.ok(!page.required.includes('next'), operationId);
+  }
 });
 
 test('the workers view holds the admission state and self-check results, never a credential', () => {

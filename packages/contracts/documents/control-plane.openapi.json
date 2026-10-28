@@ -190,7 +190,7 @@
             }
           },
           "401": {
-            "description": "No valid session cookie or operator credential was presented.",
+            "description": "No valid session cookie was presented.",
             "content": {
               "application/json": {
                 "schema": {
@@ -438,6 +438,16 @@
               }
             }
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "No valid session cookie or operator credential was presented.",
             "content": {
@@ -583,7 +593,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the resource already exists.",
+            "description": "The expected revision is not the current one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -726,7 +736,7 @@
       "put": {
         "operationId": "assignProjectMember",
         "summary": "Give a principal its one role on a project, replacing any earlier role",
-        "description": "Requires `installation-owner`, who manages operator principals (trust model section 3). Idempotent by the project and principal.",
+        "description": "Requires `installation-owner`, who manages operator principals (trust model section 3). Names no revision: a reassignment replaces the earlier role, and of two concurrent assignments the one serialized last stays.",
         "security": [
           {
             "browserSession": [],
@@ -883,6 +893,16 @@
           "204": {
             "description": "The principal has no role on the project."
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "No valid session cookie or operator credential was presented.",
             "content": {
@@ -974,6 +994,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectDefaults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -1123,7 +1153,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the resource already exists.",
+            "description": "The expected revision is not the current one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1186,6 +1216,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AutoMergeSetting"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -1335,7 +1375,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the resource already exists.",
+            "description": "The expected revision is not the current one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1398,6 +1438,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepositoryBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -1557,7 +1607,7 @@
             }
           },
           "422": {
-            "description": "The integration's plugin cannot reach the repository with its own identity.",
+            "description": "The integration's plugin does not declare the merge method in its `SourceControlCapabilities`, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1958,7 +2008,7 @@
       "delete": {
         "operationId": "revokeEnrollmentToken",
         "summary": "Revoke a pending enrollment token",
-        "description": "Requires `installation-owner`. Serialized with a redemption on the token's row lock: exactly one of them wins. Revoking a revoked token succeeds.",
+        "description": "Requires `installation-owner`. Serialized with a redemption on the token's row lock: exactly one of them wins, and a redemption treats a revoked token as `token-invalid`. Revoking a revoked or expired token succeeds, since neither can be redeemed.",
         "security": [
           {
             "browserSession": [],
@@ -1982,6 +2032,16 @@
         "responses": {
           "204": {
             "description": "The token can no longer be redeemed."
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
           },
           "401": {
             "description": "No valid session cookie or operator credential was presented.",
@@ -2021,7 +2081,7 @@
             }
           },
           "422": {
-            "description": "The token was already used (reason `token-used`); revoke the enrolled worker instead.",
+            "description": "The token was already used (reason `token-used`), so revoke the enrolled worker instead, or a rotation replaced it (reason `token-rotated`), and `details.replacementTokenId` names the new token, which stays redeemable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2095,6 +2155,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IssuedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -2444,7 +2514,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the resource already exists.",
+            "description": "The expected revision is not the current one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2765,7 +2835,7 @@
         },
         "responses": {
           "200": {
-            "description": "The slot, healthy, with its new credential version.",
+            "description": "The slot, healthy, on its new credential, as read after the rotation's final revision advance (account pool contract section 8.1).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3196,6 +3266,16 @@
               }
             }
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "No valid session cookie or operator credential was presented.",
             "content": {
@@ -3331,7 +3411,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the resource already exists.",
+            "description": "The expected revision is not the current one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3391,12 +3471,22 @@
           "202": {
             "description": "The delivery was verified and recorded, or it repeats a recorded delivery."
           },
-          "401": {
-            "description": "The integration is unknown, or the signature is missing or does not verify; the answer does not say which.",
+          "400": {
+            "description": "The delivery verified, but its plugin cannot parse the payload (`invalid`); nothing is recorded.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The integration is unknown, its identifier included, or the signature is missing or does not verify; the answer does not say which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookRejection"
                 }
               }
             }
@@ -3700,6 +3790,40 @@
               "reason": {
                 "type": "string",
                 "const": "csrf-token-invalid"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WebhookRejection": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 401 of the webhook receiver: an unknown integration or a missing or failed signature, with one body that does not say which.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "signature-invalid"
               }
             },
             "additionalProperties": {
