@@ -20,6 +20,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16d, developed by a briefed s
 - `32051372` `docs: record the second route of implement-workspace-handoff-and-reclaim`.
 - `2c038591` `chore: type the late-go host of the hand-off tests as a reclaim host` (the first `make verify` after `db767f8f` failed at `tsc -p tsconfig.check.json`: `hand-off.test.ts(233,52): error TS2554: Expected 1 arguments, but got 2.`).
 - `613818cd` `docs: route the implement-workspace-handoff-and-reclaim change after the type fix` (routed again, unedited, since `2c038591` changed the diff).
+- `1bdc5bab` the merge of `origin/dev` `7efc48d3` (#396, ADR 0016 and the archived `schedule-intent-and-council-gates`, documentation only), without a conflict; it changes no file of this change, so `route.json` stays.
 
 ## Environment
 
