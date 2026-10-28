@@ -44,12 +44,29 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
+## Review
+
+### Pass 1
+
+Reviewer A: Codex CLI, `codex gpt-6-astra#medium`, the brief's reviewer of pass 1, on `8e1cad1f`, run by the coordinator with `make review`, session `01a1842b-9887-7de0-ad44-779dc8e6a1d5`; the worktree snapshot was unchanged by the pass. Counts: Critical 0, High 0, Medium 7, Low 1, recorded in `passes.jsonl` and `findings.jsonl`. The pass has Medium findings, so pass 2 follows under governance "Review sequence" and reviews these fixes; until then they are `fixed-unreviewed`.
+
+1. **Medium, error-handling.** `scripts/task-progress-hosts.ts:119` accepted any JSON array from an SSH host. Fixed in `df6a2f60`: `isTaskProgress` checks every field and the stage range; an invalid answer is an error of that host only.
+2. **Medium, error-handling.** `scripts/task-progress-hosts.ts:146`: transport failures after the root lookup became missing data. Fixed in `df6a2f60`: the SSH reader throws `TransportError` on exit 255, and the host is reported unreachable.
+3. **Medium, error-handling** (the reviewer's "correctness", which `categories.txt` lacks). `scripts/task-progress-stages.ts:140`: another active change won over the branch's archived change. Fixed in `df6a2f60`: exact matches first, another change only when it is the worktree's only one.
+4. **Medium, concurrency-race.** `scripts/task-progress.ts:145`: the lock was stolen by age and removed unconditionally. Fixed in `df6a2f60`: `scripts/task-progress-lock.ts`, an owner-checked lock (pid and token, hard-linked whole, moved aside and checked before removal), taken over only from a dead process or, unreadable, after 300 s; a test runs eight concurrent processes.
+5. **Medium, error-handling.** `scripts/task-progress.ts:133`: an incomplete cache counted as fresh and a future one blocked refreshes. Fixed in `df6a2f60`: `readCache` validates the shape, and an invalid cache or one more than 60 s ahead is due; the status line follows.
+6. **Medium, error-handling.** `scripts/task-progress-stages.ts:181`: a `null` pass line crashed, `{}` counted as Low-only. Fixed in `df6a2f60`: only records with four counts count; other lines are named on the task's row.
+7. **Medium, contract-drift.** The spec delta lacked one row per task and the background refresh. Fixed in `df6a2f60`: requirements "Stacked task progress rows" and "Progress cache refresh" with scenarios.
+8. **Low, test-flakiness.** `test/task-progress.test.ts:291` depended on the host's time zone. Fixed in `df6a2f60`: `TZ=UTC` and the exact time.
+
+Fail-before: the new and changed tests run against the scripts of `8e1cad1f` (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/progress-fail-before.log`): 27 tests, 8 failed, among them findings 1 to 6's tests, and `test/task-progress-lock.test.ts` failed to load on the missing module. Finding 4's refresh test shows the old age-based steal: a refresh at a later clock wrote the cache over a live lock. With `df6a2f60` the two files pass 31 of 31.
+
 ## Limitations
 
 - The status line script, `/Users/petarnenov/geowealth/be/.ai/scripts/statusline-context.py`, is outside this repository and not reviewed with it.
 
 ## Remaining gates
 
-- Independent review passes, assigned by the coordinator.
+- Review pass 2 of the fixes of pass 1, and pass 3 if pass 2 has a Medium or worse finding.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request).
