@@ -27,11 +27,11 @@
 - **THEN** the task's row names the line, and the line counts as no review pass
 
 ### Requirement: Progress cache refresh
-A reader of the progress cache SHALL treat a cache that is missing, invalid in shape, stamped more than 60 seconds ahead, or older than 60 seconds as due, and SHALL start `make progress-refresh` in the background without waiting for it; it SHALL mark a cache older than 180 seconds as stale. A refresh SHALL hold a lock naming its process, SHALL NOT take over a lock of a live process, and SHALL release only its own lock.
+`make progress-refresh ARGS="--if-older-than 60"` SHALL rewrite a cache that is missing, invalid in shape, stamped more than 60 seconds ahead, or older than 60 seconds, and SHALL leave a younger valid cache alone. A refresh SHALL hold a lock naming its process and token, SHALL NOT take over the lock of a live process younger than 30 minutes, SHALL serialize takeovers, and SHALL release only its own lock.
 
-#### Scenario: Stale cache
-- **WHEN** the status line finds a cache older than 60 seconds and no live refresh
-- **THEN** it starts a detached refresh, prints the cached rows at once, and marks them stale when the cache is older than 180 seconds
+#### Scenario: Fresh cache
+- **WHEN** a valid cache is 45 seconds old
+- **THEN** the refresh leaves it alone and exits with status 0
 
 #### Scenario: Corrupt or missing cache
 - **WHEN** the cache is missing or not a valid progress report
@@ -40,3 +40,7 @@ A reader of the progress cache SHALL treat a cache that is missing, invalid in s
 #### Scenario: Refresh slower than the lock timeout
 - **WHEN** a refresh still runs after 300 seconds and another refresh starts
 - **THEN** the second leaves the lock and the cache to the first, which later removes only its own lock
+
+#### Scenario: Dead owner
+- **WHEN** several refreshes start at once while the lock names a process that has exited
+- **THEN** exactly one of them takes the lock over

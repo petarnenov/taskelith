@@ -64,8 +64,16 @@ local file and applies to every host's tasks.
 
 `make progress-refresh` writes `progress.json` through a temporary file
 and a rename, with `generatedAt` and `generatedAtEpoch`. A lock file
-created exclusively admits one refresh; a lock older than 300 seconds
-belongs to a dead refresh and is taken over. `ARGS="--if-older-than 60"`
+hard-linked whole from a draft, naming the owner's pid and a random
+token, admits one refresh (`scripts/task-progress-lock.ts`). It is taken
+over only when its owner's process has exited, when it is older than 30
+minutes (a reused pid), or, without a readable owner, after 300 seconds. A
+takeover holds the exclusive file `progress.lock.takeover`, rereads the
+owner under it, and only then replaces the lock, so two contenders never
+both replace one abandoned lock; a takeover file older than 60 seconds was
+left by a dead takeover and is removed. The owner releases the lock only
+while it still holds its token. Only an owner older than 30 minutes can
+lose its lock while it runs. `ARGS="--if-older-than 60"`
 skips a cache younger than 60 seconds, so a refresh that the status line
 started just after another one finished does no work.
 
@@ -77,7 +85,9 @@ elapsed time, and the time of every reached stage.
 
 ### D6 Status line
 
-The status line script lives outside the repository and is not committed.
+The status line script lives outside the repository and is not committed,
+so the spec delta covers only `make progress-refresh`; this decision and
+the protocol text describe the status line.
 Inside a `taskelith` working directory it reads the cache and, below its
 first line, stacks one row per task below stage 11, one under another
 (owner requirement, 2026-10-28): host, change (24 characters), a bar of

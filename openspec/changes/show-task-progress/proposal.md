@@ -36,6 +36,8 @@ None.
 
 ## Impact
 
-- `scripts/task-progress*.ts`, `test/task-progress.test.ts`, `Makefile`,
+- `scripts/task-progress.ts`, `scripts/task-progress-stages.ts`,
+  `scripts/task-progress-hosts.ts`, `scripts/task-progress-lock.ts`,
+  `test/task-progress.test.ts`, `test/task-progress-lock.test.ts`, `Makefile`,
   and `docs/agent-task-protocol.md`.
 - Out of scope: worker steps, review rules, and `scripts/integrate.sh`.
