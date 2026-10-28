@@ -10,7 +10,7 @@ Status: implemented and verified by the author; review pass 1 found 1 High and 7
 ## Revision
 
 - Base: `dev` `a3a0ac4c`.
-- Verified head: `e9b1c6c6` (tree `62f44a75`), commits `823b92de` to `e9b1c6c6` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3`, the fixes of review pass 1, the coordinator's decision (c) on its finding 4 included, and the fixes of review pass 2.
+- Verified head: `e9b1c6c6` (tree `62f44a75`), commits `823b92de` to `e9b1c6c6` on the branch, then the records of the reviews, the merge of `dev` `a10ceaaf` in `02805b7b`, and the archive commit (Archive checks below); with the merges of `dev` `10fc3bbe` and `7efc48d3`, the fixes of review pass 1, the coordinator's decision (c) on its finding 4 included, and the fixes of review pass 2.
 
 ## Environment
 
@@ -48,6 +48,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 - `a1f0d4af` merged `origin/dev` `10fc3bbe` (9b #394, 9c #395) without a textual conflict. `control-plane.openapi.json` 0.2.0 adds the board, inbox, agent session, and event stream operations; their rules follow wire contracts section 3 as 9b amended it, and `test/access-requirements.test.ts` lists them. The `answerableBy` check of `answerInboxItem` belongs to its handler (section 8).
 - `execution.openapi.json` 0.6.0 and execution wire contracts section 8.2 answer an evidence read by a principal without a role on the record's project with the 404 of an unknown record, where this change answered 403 (Q4), and section 9 there assigns item 10 the session on the evidence operations, the retirement entry, the 404 of a download whose record was retired meanwhile, and an orphan content sweep. The coordinator decided (D1, D2, [design](design.md) "Coordinator decisions"): `readEvidence` and `downloadEvidence` now accept the session and answer a missing and a foreign record the same 404, which `test/browser-session.test.ts` shows by session and by bearer; `test/access-requirements.test.ts` checks their schemes against the execution document. The rest is a remaining gate below.
 - `14f968d8` merged `origin/dev` `7efc48d3` (#396, `schedule-intent-and-council-gates`, documents and records only) without a conflict; the dependency inventory stayed current.
+- `02805b7b`, after review pass 3, merged `origin/dev` `a10ceaaf` (#397, `run-reviews-through-make`: the review tooling under `scripts/`, its tests, the `review-process` living spec, `Makefile`, and protocol documents) without a conflict. It touches none of this change's requirements, contracts, implementation, or verification inputs (`scripts/findings-common.ts` only gains an `isRecord` helper), so the review evidence stays fresh; the dependency inventory stayed current.
 
 ## Limitations
 
@@ -136,3 +137,15 @@ New findings: 0 Critical, 0 High, 0 Medium, 0 Low, matching its `passes.jsonl` l
 - The other operations of execution wire contracts section 8.1, by the items that own their handlers (D2): `listUnknownExecutions`, `listUnrecordedProcesses`, and `readmitTask` item 44; `readDelegationResult` item 38; `fetchSlotCredential` item 12; `issueRunScmCredential` and `fetchRunScmCredential` item 21.
 - Item 11: the 403 on the operator operations of the G2 execution and SDLC documents, named in its brief.
 - Integration into dev by the coordinator (single pull request)
+
+## Archive checks
+
+Run on the tree of the archive commit, the archive of `02805b7b` on merge base `a10ceaaf` with `origin/dev`, on 2026-10-28:
+
+- `npm run openspec -- archive implement-operator-login-and-roles --yes`: archived as `2026-10-28-implement-operator-login-and-roles`; `control-plane-api` 7 added and `trust-and-operational-foundation` 6 added (`+ 13, ~ 0, - 0, → 0`).
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: 234 passed, 14 failed; this change passes, and the 14 are older archived changes, none of them added by this change.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/control-plane-api/spec.md` (93 insertions) and `openspec/specs/trust-and-operational-foundation/spec.md` (70 insertions), the 13 added requirements of the deltas and nothing removed.
+- The moved change has `findings.jsonl` (17 lines) and `passes.jsonl` (3 lines); `make findings ARGS="validate"`: 74 findings files, 54 pass summary files, and 10 route files valid.
+- `make verify`, profile full, on the archive working tree before the commit, which differs from the archive commit's tree only in this section: the first run failed only in `test/installation-script.test.ts:452` ("a bound with a leading zero is read in base 10": "ended after 9.101s, before 10"), the timing test that this change does not touch and that failed the same way after the pass 2 fixes; the rerun passed: tests 3302, pass 3287, fail 0, skipped 15; all files 99.47% lines, 92.66% branches, 99.06% functions. It wrote no stamp, because the tree was uncommitted; the `pre-push` hook verifies the committed archive tree.
+- The generated part above stays the `make record` of `e9b1c6c6`; `passes.jsonl` and the review sections record pass 3.
