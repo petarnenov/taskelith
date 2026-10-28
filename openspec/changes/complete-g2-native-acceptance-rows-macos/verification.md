@@ -36,15 +36,24 @@ macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64 (2020 Intel iMac), APFS boot data vo
 
 ## Fail-before
 
-- **Race g against a signalling adopter.** With `packages/adapters/worker-supervisor/src/adoption.ts` changed locally to send the group `SIGTERM` after recording `not-applied`, rebuilt, `TASKELITH_TEST_SEED=1` and `2 make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^g\.'`: race g failed in both seeds with `the adopter signalled nothing: the child still runs` (actual `[]`, expected the child's process ID). The change was reverted and the checkout rebuilt; it was never committed.
+- **Race g against a signalling adopter.** With `packages/adapters/worker-supervisor/src/adoption.ts` changed locally to send the group `SIGTERM` after recording `not-applied`, rebuilt, `make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^g\.'` with `TASKELITH_TEST_SEED` `1` and `2`: race g failed in both seeds with `the adopter signalled nothing: the child still runs` (actual `[]`, expected the child's process ID). The change was reverted and the checkout rebuilt; it was never committed.
 - **The macOS guard against a process that is not a launch supervisor's child.** With the guard changed locally to accept only adopting supervisors as parents, `TASKELITH_TEST_SEED=20261026 make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^h\.'`: race h failed with `process 81955 is a child of 81930, not of a supervisor of /var/folders/.../unauthorized-start`. Reverted; never committed.
 - **Unit tests.** `test/g2-scenario-launch.test.ts` covers the switch, its refusal off macOS, the launch host kinds and cancel signals, and the `ps` parsing; `test/native-acceptance-runner.test.ts` covers the two new macOS proofs.
 
 ## Checks
 
-PENDING
+`make verify` ran on the clean committed tree of `3f4efc07` (tree `cc922677`) with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2655, 2648 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.49%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows it, and it changes only this file.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `cc9226776f8ef4f1e13588c6c18a35b6339cd8b0`; tests 2655, pass 2648, fail 0, skipped 7; all files 99.36% lines, 92.49% branches, 99.06% functions.
+- `npm run openspec -- validate complete-g2-native-acceptance-rows-macos --strict`: passed, `Change 'complete-g2-native-acceptance-rows-macos' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
+- Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Review
