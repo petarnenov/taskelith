@@ -1,6 +1,16 @@
 {
   "declarations": [
     {
+      "path": "packages/contracts/documents/execution.asyncapi.json",
+      "version": "0.8.0",
+      "reason": "G3 sub-change 26c (deliver-rotated-worker-credentials): the command channel gains the notice worker.credentials.rotation-requested; listed against a3a0ac4c.",
+      "breakingChanges": [
+        "add /components/messages/credentialRotationRequested",
+        "add /components/schemas/CredentialRotationRequested",
+        "add /operations/sendWorkerCommand/channel/messages/credentialRotationRequested"
+      ]
+    },
+    {
       "path": "packages/contracts/documents/sdlc.asyncapi.json",
       "version": "0.4.0",
       "reason": "G3 item 17 (bind-evidence-to-code-head): gates and gate evidence bound to the code head, the gate, and its generation; listed against 9196804b.",
