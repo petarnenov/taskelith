@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3 and their fixes, the merge of `dev` with its reconciliation review, and the checks after the merge. The review is complete after three passes; the fix of pass 3 is unreviewed.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3 and their fixes, the merge of `dev` with its reconciliation review, the checks after the merge, and the archive checks. The review is complete after three passes; the fix of pass 3 is unreviewed.
 
 ## Scope and source
 
@@ -186,9 +186,21 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The CA read uses TLS that does not verify the server; a man in the middle can answer another CA, which the fingerprint check refuses, so it learns that a worker enrolls but gets no token (design, risks).
 - Roots enrolled before this change have no `worker/installation-ca.pem` and fail closed with reason `corrupt` and the message "the pinned installation CA is missing; remove worker/ and enroll again with a new token and its fingerprint". No migration, pre-release.
 
+## Archive checks
+
+Checked state: the tree of the archive commit (`docs: archive the enroll-remote-worker-over-tls change`), the working tree on which the checks below ran, on top of `c1ab74cd`, with `origin/dev` at `f3a53f17`, the merge base. The generated part above stays the record of the tree of `73838584`.
+
+- `npm run openspec -- archive enroll-remote-worker-over-tls --yes`: archived as `2026-10-28-enroll-remote-worker-over-tls`; `control-plane-api` 1 added; `execution-wire-contracts` 1 modified; `installation-enrollment` 1 added; `local-installation` 1 modified; `worker-runtime` 2 added, 3 modified; totals 4 added, 5 modified, 0 removed.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- This change's line in `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-28-enroll-remote-worker-over-tls`. The command as a whole gives 220 passed, 14 failed: 13 archived changes of 2026-10-24 to 2026-10-26 with open tasks, and `2026-10-28-adopt-process-performance-recommendations`, whose task 4.8 its record leaves open.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `f3a53f17`: 5 files, 90 insertions, 5 deletions, only this change's edits: `control-plane-api` "Public installation CA" added; `installation-enrollment` "Installation CA fingerprint in the enrollment bundle" added; `execution-wire-contracts` "Execution HTTP operations" modified; `local-installation` "TLS of the local installation" modified, one line, with `dev`'s "Opt-in bring-up check" and added requirements kept; `worker-runtime` "Installation CA checked before the token" and "Pinned installation CA" added, "Enrollment on first start", "Worker settings", and "Outbound connections only" modified.
+- The moved change has `findings.jsonl` (15 lines), `passes.jsonl` (4 lines), and `checklist.json`; `make findings ARGS="validate"`: "Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s)."
+- `make verify` on that working tree: passed, profile full, "uncommitted working tree; no stamp written"; 45 suites, tests 2673, pass 2666, fail 0, cancelled 0, skipped 7, todo 0; all files 99.35% lines, 92.53% branches, 99.06% functions; 0 breaking changes in the four contract documents against `f3a53f172dc2`; verified 766 package paths; `validate --all --strict` 69 passed, 0 failed; every checked link conforms; no active OpenSpec change, nothing to archive; the packed file allowlist and installed CLI checks passed.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a `make verify` of the committed archive tree: the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty, and the working tree differs from the verified tree `1b80fc14ae9b` in the moved change and the five living specs. The `make verify` of the committed archive head runs before the push and writes the stamp that the `pre-push` hook reuses; its result goes into the handoff, not this tree.
+
 ## Remaining gates
 
-- Archive of the change on this branch (worker step 7).
+- `make verify` of the committed archive head before the push, the push, and the handoff to the coordinator with its result.
 - Liki's Linux reruns on the archive head, as the coordinator schedules them: `make verify-linux-g2-scenarios`, `make verify-linux-crash-windows`, `make scenario-native-worker-lifecycle`, and `make installation-smoke`.
 - The deferred pre-existing Medium of the merge reconciliation review (`admin-main.ts:97`), as a coordinator follow-up task.
 - Integration into dev by the coordinator (single pull request).
