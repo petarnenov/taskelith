@@ -27,10 +27,11 @@ const SEMANTIC_VERSION = new RegExp(
   + '(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$',
 );
 
+// Components are BigInt, so that no version above 2^53 loses precision.
 interface Version {
-  readonly major: number;
-  readonly minor: number;
-  readonly patch: number;
+  readonly major: bigint;
+  readonly minor: bigint;
+  readonly patch: bigint;
   readonly prerelease: readonly string[];
 }
 
@@ -38,7 +39,7 @@ function parseVersion(text: string): Version | undefined {
   const match = SEMANTIC_VERSION.exec(text);
   if (match === null) return undefined;
   const prerelease = match[4]?.split('.') ?? [];
-  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease };
+  return { major: BigInt(match[1]), minor: BigInt(match[2]), patch: BigInt(match[3]), prerelease };
 }
 
 // Code-unit order, never localeCompare, so no locale changes a result.
@@ -47,10 +48,15 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : 1;
 }
 
+function compareNumbers(left: bigint, right: bigint): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 function compareIdentifiers(left: string, right: string): number {
   const leftNumeric = /^\d+$/.test(left);
   const rightNumeric = /^\d+$/.test(right);
-  if (leftNumeric && rightNumeric) return Math.sign(Number(left) - Number(right));
+  if (leftNumeric && rightNumeric) return compareNumbers(BigInt(left), BigInt(right));
   if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
   return compareText(left, right);
 }
@@ -66,8 +72,8 @@ function comparePrereleases(left: readonly string[], right: readonly string[]): 
 
 // Semantic versioning precedence (item 11); build metadata does not count.
 function compareVersions(left: Version, right: Version): number {
-  return Math.sign(left.major - right.major) || Math.sign(left.minor - right.minor)
-    || Math.sign(left.patch - right.patch) || comparePrereleases(left.prerelease, right.prerelease);
+  return compareNumbers(left.major, right.major) || compareNumbers(left.minor, right.minor)
+    || compareNumbers(left.patch, right.patch) || comparePrereleases(left.prerelease, right.prerelease);
 }
 
 // A breaking change is declared by a higher major version, or, while the major
@@ -77,7 +83,7 @@ export function declaresBreakingChange(baseVersion: string, headVersion: string)
   const head = parseVersion(headVersion);
   if (base === undefined || head === undefined) return false;
   if (head.major !== base.major) return head.major > base.major;
-  return head.major === 0 && head.minor > base.minor;
+  return head.major === 0n && head.minor > base.minor;
 }
 
 export function versionProblems(path: string, version: unknown): string[] {
@@ -185,8 +191,10 @@ function orderProblems(previous: BreakingChangeDeclaration | undefined, entry: B
   return order > 0 ? ['is not sorted by path and version'] : [];
 }
 
+// Versions of equal precedence, differing in build metadata, order by text.
 function compareDeclarations(left: BreakingChangeDeclaration, right: BreakingChangeDeclaration): number {
-  return compareText(left.path, right.path) || compareVersions(parseVersion(left.version)!, parseVersion(right.version)!);
+  return compareText(left.path, right.path) || compareVersions(parseVersion(left.version)!, parseVersion(right.version)!)
+    || compareText(left.version, right.version);
 }
 
 // The entries an author copies into the file, with a reason to fill.
