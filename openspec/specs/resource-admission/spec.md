@@ -54,11 +54,15 @@ Cancelling an assignment SHALL end it and release its reservation with an assign
 - **THEN** it returns `kept` with the assignment, and the reservation stays held
 
 ### Requirement: Bounded supersession and retries
-`supersede` SHALL end and release an assignment without a grant whose worker is unknown, revoked, draining, or unreachable, or that exceeded the 2 minute acknowledgement or 10 minute admission pressure bound, and SHALL otherwise fail with `precondition-failed`; `reserveWithRetry` SHALL retry an `unavailable` placement at most 5 times in all with delays within 5 to 60 seconds.
+`supersede` SHALL end and release an assignment without a grant whose worker is unknown, revoked, draining, unreachable, or not admitted, or that exceeded the 2 minute acknowledgement or 10 minute admission pressure bound, and SHALL otherwise fail with `precondition-failed`; `reserveWithRetry` SHALL retry an `unavailable` placement at most 5 times in all with delays within 5 to 60 seconds.
 
 #### Scenario: Unreachable worker
 - **WHEN** the worker of an ungranted assignment becomes unreachable and the assignment is superseded
 - **THEN** it ends as superseded, its reservation is released, and the worker gets an assignment-ended command
+
+#### Scenario: Worker whose self-check failed
+- **WHEN** the worker of an accepted assignment without a grant becomes `self-check-failed`
+- **THEN** the assignment is due at once, the report's transaction frees it as superseded, its reservation is released, and the worker gets an assignment-ended command
 
 ### Requirement: Delegation admission
 `admitDelegation` SHALL run in the transaction that creates the child, fail with `conflict` for a stale ownership generation and with `precondition-failed` unless the delegating attempt is the parent task's active, uncancelled attempt that holds a reservation, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, and otherwise write the child's lineage link and an open delegation.

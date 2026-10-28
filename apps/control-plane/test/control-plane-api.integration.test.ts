@@ -442,9 +442,10 @@ describe('enrollment and quarantine', () => {
       }
       // The observations follow W1 of both offers; confirmations of them share
       // the command subject, so only an empty consumer proves every ack.
-      const types = await observationTypes(broker, value(address.observationSubject(workerId)), 4);
+      const types = await observationTypes(broker, value(address.observationSubject(workerId)), 5);
       assert.deepEqual(types, [
-        'worker.capacity.declared', 'worker.admission-pressure.changed', 'execution.assignment.accepted', 'execution.command.rejected',
+        'worker.capacity.declared', 'worker.admission-pressure.changed', 'worker.self-check.reported',
+        'execution.assignment.accepted', 'execution.command.rejected',
       ]);
       assert.deepEqual(value(worker.root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-offer-1']);
       await waitFor(async () => {
@@ -505,6 +506,7 @@ describe('enrollment and quarantine', () => {
       },
     });
     const workerBearer = (enrolled.body.credentials as { controlPlane: string }).controlPlane;
+    await sql(database, "UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = $1", [enrolled.body.workerId]);
     const body = {
       operationId: 'operation-api-1', recoveryEpoch: 1, assignmentId: 'assignment-unknown', attemptId: 'attempt-1', ownershipGeneration: 1,
       executionId: 'execution-1', admissionId: 'admission-1', admissionGeneration: 1, reportsNotStarted: false,

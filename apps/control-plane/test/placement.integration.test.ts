@@ -61,7 +61,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
-  'placement_rotation', 'placement_outcomes',
+  'placement_rotation', 'placement_outcomes', 'worker_self_check_results',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
@@ -88,7 +88,7 @@ async function enroll(workerId: string, capacity: Partial<EnrolledWorker['capaci
     const added = await tx.fleet.addToken(fleetToken(`token-${workerId}`));
     return added.ok ? tx.fleet.enroll(`token-${workerId}` as never, worker) : added;
   }));
-  await sql('UPDATE workers SET reachable = true WHERE worker_id = $1', [workerId]);
+  await sql("UPDATE workers SET reachable = true, worker_admission = 'admitted' WHERE worker_id = $1", [workerId]);
 }
 
 async function submit(taskId: string, runId = 'run-1'): Promise<void> {

@@ -112,7 +112,7 @@ Each check of sections 2 to 4 maps to one reason. The scheduler acts on the reas
 | --- | --- | --- | --- |
 | Installation in restore quarantine | `quarantined` | yes | None until quarantine is lifted |
 | Recovery epoch not current | `stale-recovery-epoch` | no | Reconcile the worker before any assignment |
-| Worker revoked, unknown, or at an old credential generation | `worker-not-authorized` | no | Reassign after reconciliation |
+| Worker revoked, unknown, or at an old credential generation; for a new operation, also a worker not admitted by its self-check ([worker admission](worker-admission.md) section 7) | `worker-not-authorized` | no | Reassign after reconciliation |
 | Assignment missing, ended, or held by another worker | `assignment-not-active` | no | None; the current owner decides |
 | Ownership generation not current | `stale-ownership-generation` | no | None; the current owner decides |
 | Attempt cancelled or terminal | `attempt-not-launchable` | no | None |

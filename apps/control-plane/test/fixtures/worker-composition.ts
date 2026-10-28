@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
+import { stubAdmissionCheck } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type TransportConnection } from '@taskelith/nats';
 import { SeededRandom, seedFromEnvironment } from '@taskelith/testing';
@@ -34,7 +35,7 @@ function composedDependencies(settings: WorkerSettings): WorkerDependencies {
   const launching = production.launching!;
   const hold = process.env[HOLD_NOT_STARTED_VARIABLE] === '1' ? new NotStartedHold() : undefined;
   return {
-    ...production, draw, limits: LIMITS,
+    ...production, draw, limits: LIMITS, admissionChecks: [stubAdmissionCheck()],
     space: () => ok({ availableBytes: 2 ** 40, totalBytes: 2 ** 41 }),
     daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: async () => undefined },
     ...(hold === undefined ? {} : { connect: async (endpoint) => hold.connection(await production.connect(endpoint)) }),

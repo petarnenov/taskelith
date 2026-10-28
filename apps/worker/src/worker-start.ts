@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
-import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
+import { parseInstallationId, type Enrollment, type EnrollmentClient, type StartFacts, type WorkerAdmissionCheck } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
@@ -37,6 +37,7 @@ import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
+import { checkComposition, hasFailedCheck, runSelfCheck } from './self-check.js';
 import type { WorkerSettings } from './settings.js';
 import { runTogether, TaskGroup } from './task-group.js';
 import { WorkerContact } from './worker-contact.js';
@@ -60,6 +61,8 @@ export interface WorkerDependencies {
   // Reconciliation needs only the host; launches need a command too.
   readonly launching?: LaunchingDependencies;
   readonly logger?: Logger;
+  // The worker admission checks of every start (worker admission contract).
+  readonly admissionChecks: readonly WorkerAdmissionCheck[];
 }
 
 // What launches need beyond the journal: the launch authority with the
@@ -96,11 +99,13 @@ export interface RunningWorker {
 // Opens the enrolled root, or enrolls with the configured token first, then
 // starts offline and connects to the broker with the stored credential.
 export async function startWorker(settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<RunningWorker>> {
+  const composed = checkComposition(dependencies.admissionChecks);
+  if (!composed.ok) return composed;
   const options = rootOptions(settings, dependencies);
   const opened = openWorkerRoot(options);
   const root = !opened.ok && failureReason(opened.error) === 'not-enrolled' ? await enroll(settings, dependencies, options) : opened;
   if (!root.ok) return root;
-  const started = startRuntime(settings, dependencies, root.value);
+  const started = await startRuntime(settings, dependencies, root.value);
   if (!started.ok) root.value.close();
   return started;
 }
@@ -155,7 +160,7 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<Wo
 
 // The launches, reconciliation, and pressure watch run at once; the
 // broker's work runs while a connection is up.
-function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Result<RunningWorker> {
+async function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {
   const { identity } = root;
   const credentials = readWorkerCredentials(root.paths, identity);
   if (!credentials.ok) return credentials;
@@ -169,21 +174,32 @@ function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies
   const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: tasks.signal, logger });
   const pressure = admissionPressure(settings, dependencies, root);
   const credential = credentials.value.controlPlane;
-  const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure });
+  const selfCheck = await runSelfCheck(dependencies.admissionChecks, startFacts(settings));
+  if (!selfCheck.ok) return selfCheck;
+  const selfCheckFailed = hasFailedCheck(selfCheck.value);
+  const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure, selfCheckFailed });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const pressured = pressure.refresh();
   if (!pressured.ok) return pressured;
+  const reported = root.journal.recordSelfCheck(selfCheck.value);
+  if (!reported.ok) return reported;
   const session = brokerSession({
     settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
-    ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
+    selfCheckFailed, ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
   tasks.add(session.run(tasks.signal));
   tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
   tasks.add(dependencies.daemon.watch(tasks.signal));
   if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
   return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
+}
+
+// Only the platform and the launch command decide that a check does not
+// apply at this start.
+function startFacts(settings: WorkerSettings): StartFacts {
+  return { platform: settings.host.platform, launchCommand: settings.launch !== undefined };
 }
 
 interface WorkerSubjects {
@@ -214,12 +230,13 @@ interface OrchestratorContext {
   readonly credential: string;
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
+  readonly selfCheckFailed: boolean;
 }
 
 // The host reconciles and removes records with or without a launch
-// command; only a command adds the launch authority.
+// command; only a command and a passed self-check add the launch authority.
 function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
-  const { settings, dependencies, root, credential, contact, pressure } = context;
+  const { settings, dependencies, root, credential, contact, pressure, selfCheckFailed } = context;
   const { launching } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
@@ -229,7 +246,7 @@ function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestr
   const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
     journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
-    ...(settings.launch === undefined ? {} : { authority: launching.authority(credential) }),
+    ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(credential) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(containments === undefined ? {} : { containments }),
     ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
@@ -261,6 +278,7 @@ interface SessionContext {
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
   readonly broker: string;
+  readonly selfCheckFailed: boolean;
   readonly launcher?: LaunchOrchestrator;
 }
 
@@ -312,7 +330,7 @@ async function serveConnection(context: SessionContext, transport: TransportConn
   const { settings, dependencies, root, address, launcher } = context;
   const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
-    ...publishing, capacity: settings.capacity, pressure: context.pressure, newReportId: randomUUID,
+    ...publishing, capacity: settings.capacity, pressure: context.pressure, selfCheckFailed: context.selfCheckFailed, newReportId: randomUUID,
     ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };

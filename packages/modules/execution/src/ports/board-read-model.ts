@@ -116,6 +116,7 @@ export const WORKER_REFUSAL_REASONS = Object.freeze([
   'resource-ceiling-exceeded',
   'control-not-enforceable',
   'worker-admission-pressure',
+  'worker-self-check-failed',
   'protocol-not-supported',
 ] as const);
 

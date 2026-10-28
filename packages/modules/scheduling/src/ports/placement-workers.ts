@@ -3,7 +3,7 @@ import type { WorkerId } from '@taskelith/execution';
 import type { HardControl } from '../domain/capacity-reservation.js';
 
 // What placement reads about a worker. Enrollment, declarations, pressure,
-// and reachability write it (items 13, 20, 21), always at SERIALIZABLE.
+// reachability, and self-checks write it, always at SERIALIZABLE.
 export interface WorkerPlacementRecord {
   readonly workerId: WorkerId;
   readonly enrolled: boolean;
@@ -22,6 +22,8 @@ export interface WorkerPlacementRecord {
   // The highest protocol version the worker and the control plane share, set
   // at enrollment; a worker without one is never placed on.
   readonly protocolVersion?: number;
+  // The worker's self-check admitted it (worker admission contract).
+  readonly admitted: boolean;
 }
 
 export interface PlacementWorkers {
@@ -34,5 +36,5 @@ export interface PlacementWorkers {
 
 export function isEligibleForPlacement(worker: WorkerPlacementRecord): boolean {
   return worker.enrolled && !worker.revoked && !worker.draining && worker.reachable && worker.admissionPressureSince === undefined
-    && worker.capacityRefusedSince === undefined && worker.protocolVersion !== undefined;
+    && worker.capacityRefusedSince === undefined && worker.protocolVersion !== undefined && worker.admitted;
 }

@@ -267,6 +267,6 @@ The items that implement these ports add, through `make`:
 
 - Wire schemas: item 9 maps these views and commands onto the OpenAPI document and the event stream.
 - The SCM operations, the agent harness port, and the classification of native requests: items 7 and 3.
-- The worker admission port: G2, or item 27 if the G2 closure defers it.
+- The worker admission port: the [worker admission](worker-admission.md) contract of item 27.
 - Framework selection in the UI (G4), lesson feedback from sources (G5), notifications, and the decision council ([ADR 0014](../decisions/0014-decision-council-and-delegated-approval.md)).
 - Freezing `IntakeSource` and `WriteBack` as plugin API ports in the plugin SDK: item 25 freezes them with their first plugin.
