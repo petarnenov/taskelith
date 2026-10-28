@@ -157,7 +157,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     installationCa: installationCa.value,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
-  }), { logger });
+  }, logger), { logger });
   const servers = [createTlsApiServer(requests, tls.value.worker), createTlsApiServer(requests, tls.value.browser)];
   const closeApi = once(async () => {
     await Promise.all(servers.map((server) => close(server)));

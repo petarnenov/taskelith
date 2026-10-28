@@ -95,3 +95,7 @@ Every audit event SHALL name its subject: `operator` for the operator credential
 #### Scenario: Audit trail of a rotation
 - **WHEN** a rotation is requested, renewed, and confirmed
 - **THEN** the worker's audit trail lists the request, the renewal, and the confirmation in that order, each with the worker as subject and the new generation
+
+#### Scenario: Refused renewal
+- **WHEN** a renewal is refused with `invalid`, `forbidden`, or `conflict`
+- **THEN** the control plane logs `fleet.credentials.renewal-refused` with the worker, the generation, the code, and the reason, no key or hash, and writes no audit event

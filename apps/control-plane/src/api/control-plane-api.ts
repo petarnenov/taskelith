@@ -2,7 +2,8 @@ import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
 import type { ConfirmedCredentials, CredentialRenewalRequest, Enrollment, EnrollmentRequest, RenewedCredentials, WorkerPrincipal } from '@taskelith/fleet';
 import type { SecretHash } from '@taskelith/access';
-import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { QuarantineRecord } from '@taskelith/nats';
 import type { DelegationService } from '../application/delegation-service.js';
 import type { EvidenceService } from '../application/evidence-service.js';
@@ -13,6 +14,9 @@ import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wir
 
 export const QUARANTINE_PAGE = 100;
 export const QUARANTINE_REASON_LENGTH = 512;
+
+// The renewal failures answered 400, 401, or 409.
+const RENEWAL_REFUSALS: ReadonlySet<FailureCode> = new Set(['invalid', 'forbidden', 'conflict']);
 
 // The operations the API reaches beyond the run and task use cases.
 export interface ApiServices {
@@ -42,9 +46,11 @@ export interface ApiServices {
 // shapes to and from the modules' own.
 export class ControlPlaneApi implements ApiHandlers {
   readonly #services: ApiServices;
+  readonly #logger: Logger;
 
-  constructor(services: ApiServices) {
+  constructor(services: ApiServices, logger: Logger = SILENT_LOGGER) {
     this.#services = services;
+    this.#logger = logger;
   }
 
   authenticateOperator(secret: string): Promise<Result<void>> {
@@ -115,9 +121,20 @@ export class ControlPlaneApi implements ApiHandlers {
     const renewed = await this.#services.enrollment.renew(worker, {
       credentialGeneration, brokerUserPublicKey, controlPlaneSecretSha256: controlPlaneSecretSha256 as SecretHash,
     });
-    if (!renewed.ok) return renewed;
+    if (!renewed.ok) {
+      this.#logRefusal(worker, credentialGeneration, renewed.error);
+      return renewed;
+    }
     const { brokerUserJwt, deadline } = renewed.value;
     return ok({ credentialGeneration: renewed.value.credentialGeneration, brokerUserJwt, deadline });
+  }
+
+  // Logged, not audited, so that a mismatch names its worker; the key is
+  // `generation`, as the logger redacts a key that names a credential.
+  #logRefusal(worker: WorkerPrincipal, credentialGeneration: number, failed: Failure): void {
+    if (!RENEWAL_REFUSALS.has(failed.code)) return;
+    const fields = { generation: credentialGeneration, code: failed.code, reason: failed.details.reason ?? failed.message };
+    this.#logger.with({ workerId: worker.workerId }).warn('fleet.credentials.renewal-refused', fields);
   }
 
   async #confirm({ worker, body }: ApiRequest): Promise<Result<HttpSchemas['CredentialConfirmation']>> {
