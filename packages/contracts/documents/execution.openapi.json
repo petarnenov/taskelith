@@ -3394,7 +3394,7 @@
           "failed",
           "cancelled"
         ],
-        "description": "How a delegation ended, as the agent harness port returns it to the parent (agent harness port contract section 7.4)."
+        "description": "A delegated child's outcome in a delegation result (`DELEGATION_OUTCOMES`)."
       },
       "DelegationSummary": {
         "type": "string",
@@ -3488,7 +3488,7 @@
           "local-history-lost",
           "cancellation-not-applied"
         ],
-        "description": "Evidence that an execution's running is not known."
+        "description": "`EXECUTION_EVIDENCE_KINDS`."
       },
       "UnknownExecution": {
         "type": "object",
