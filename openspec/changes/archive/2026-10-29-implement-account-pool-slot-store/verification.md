@@ -107,3 +107,15 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the implement account pool slot store change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive implement-account-pool-slot-store --yes` on `ad50c909`, with every task of `tasks.md` ticked, and only this section was added afterward.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-29-implement-account-pool-slot-store` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `62217e7a`) | Only this change's delta: `account-pool-port`, 63 insertions, 5 requirements added; the longest requirement body of the capability 300 characters |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present (8 findings, 2 passes); `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).` |
+| `make verify` on the archive working tree (log `verify-12a-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3650 tests, 3641 passed, 0 failed, 9 skipped; all files 99.42% lines, 92.76% branches, 98.83% functions |
