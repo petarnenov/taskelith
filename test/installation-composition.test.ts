@@ -213,7 +213,19 @@ test('the smoke adds only its workflow and the scripted process', () => {
   assert.equal(variable, 'TASKELITH_WORKER_COMMAND');
   assert.equal((JSON.parse(command ?? '[]') as string[])[0], '/usr/local/bin/node');
   assert.deepEqual(Object.keys(smoke.services).sort(), Object.keys(services).sort());
-  assert.equal(services.worker.environment?.TASKELITH_WORKER_COMMAND, undefined, 'only the smoke launches');
+  assert.equal(services.worker.environment?.TASKELITH_WORKER_COMMAND, undefined, 'only the overrides launch');
+});
+
+test('the bring-up check adds only a launch command, so the containment check runs', () => {
+  const verify = resolvedComposition(['infra/installation/compose.yaml', 'infra/installation/verify/compose.yaml'], COMPOSITION_ENVIRONMENT);
+  const changed = (name: string) => Object.entries(verify.services[name].environment ?? {})
+    .filter(([variable, setting]) => services[name].environment?.[variable] !== setting);
+  const [[variable, command] = [], ...others] = changed('worker');
+  assert.equal(variable, 'TASKELITH_WORKER_COMMAND');
+  assert.equal((JSON.parse(command ?? '[]') as string[])[0], '/usr/local/bin/node');
+  assert.deepEqual(others, []);
+  for (const name of Object.keys(services).filter((service) => service !== 'worker')) assert.deepEqual(changed(name), [], name);
+  assert.deepEqual(Object.keys(verify.services).sort(), Object.keys(services).sort());
 });
 
 test('service data lives on named volumes', () => {
