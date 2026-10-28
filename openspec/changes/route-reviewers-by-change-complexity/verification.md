@@ -138,17 +138,24 @@ Node.js 24.22.1, the `.nvmrc` pin, called by its full nvm path, because `~/.loca
 - `env -u JEV_MAF_LAB make findings ARGS="route-evaluation --rule-only --at 3f23516a2e4ef8724f38e5c9c67267225f40ff16"` (without `--save`; `evaluation.jsonl` is unchanged): exit 0; it prints `Features of the revision named by the branch's first "pass 1" commit; 0 approximate from the merged diff.`, and every other line equals the recorded output above.
 - Re-route: the fixes change the diff features (4042 to 4117 changed lines; 36 files, the flags, the triggers, and the tier unchanged), so as worker step 4 asks, `8ae465c9` deletes `route.json` and `f430cc97` records the new one from `env -u JEV_MAF_LAB make findings ARGS="route --change route-reviewers-by-change-complexity"`: exit 0, `route: elevated (lines, files), rule version 1`, `pass 1, reviewer A: claude claude-fable-5-1#high`, `pass 2, reviewer B: claude claude-opus-5-5#xhigh`, `shadow: failed (missing-credential); the rule decided alone`, at head `8ae465c9` against `f3a53f17`.
 - `npm run verify:comments`: `Every comment is within the comment length rule.` `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
+- `make verify` with `TMPDIR` under the session scratchpad, on `a27ed1e2`, full profile. The first run failed in `make test` with one failure of `test/g2-partition.test.ts`, `a partition while the process runs keeps its observations, published once after the heal` (`the exit waits in the local outbox`, `'ended' !== 'pending'`), a Docker partition scenario that this change does not touch: `tests 2820`, `pass 2772`, `fail 1`, `skipped 47`. The second run, on the same tree, log at `/tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/rr-verify-2.log`, exited 0: `make verify: passed, profile full, tree 2d70a2309199e0f2d5a186e046ff1b84036ace5f; stamp written`; `tests 2820`, `pass 2773`, `fail 0`, `cancelled 0`, `skipped 47`; product coverage all files 99.32 lines, 92.61 branches, 98.98 functions; `Verified 766 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)`; `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`
+- `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`: `make record: wrote the generated part of openspec/changes/route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`.
+- `npm run openspec -- validate --all --strict`: `Totals: 70 passed, 0 failed (70 items)`. `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `468985447f8578520ad993243fa804a7f8bf13d0`; tests 2816, pass 2769, fail 0, skipped 47; all files 99.32% lines, 92.62% branches, 98.98% functions.
+- `make verify`: passed, profile full, tree `2d70a2309199e0f2d5a186e046ff1b84036ace5f`; tests 2820, pass 2773, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions.
 - `npm run openspec -- validate route-reviewers-by-change-complexity --strict`: passed, `Change 'route-reviewers-by-change-complexity' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`.
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `claude claude-fable-5-1#medium` | `2312677b-a5e1-4977-8400-cfe1bd02b090` | 0 | 0 | 1 | 9 |
 <!-- make record: end -->
 
 ## Remaining gates
