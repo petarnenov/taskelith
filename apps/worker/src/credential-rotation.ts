@@ -106,7 +106,8 @@ export class CredentialRotation {
   readonly requested = (notice: RotationNotice): Result<void> => {
     const next = this.generation + 1;
     if (notice.credentialGeneration !== next) {
-      this.#logger.info('worker.credentials.notice-ignored', { credentialGeneration: notice.credentialGeneration, current: this.generation });
+      // Logged as `generation`: the logger redacts a name with `credential`.
+      this.#logger.info('worker.credentials.notice-ignored', { generation: notice.credentialGeneration, current: this.generation });
       return ok(undefined);
     }
     const stored = storePendingGeneration(this.#options.paths, newGeneration(next));
@@ -157,7 +158,7 @@ export class CredentialRotation {
     if (!adopted.ok) throw adopted.error;
     [this.#previous, this.#current, this.#identity] = [this.#current, next, adopted.value];
     this.#redialed = false;
-    this.#logger.info('worker.credentials.adopted', { credentialGeneration: this.generation, deadline: renewed.value.deadline });
+    this.#logger.info('worker.credentials.adopted', { generation: this.generation, deadline: renewed.value.deadline });
     return 'continue';
   }
 
@@ -179,14 +180,14 @@ export class CredentialRotation {
     if (!finished.ok) throw finished.error;
     this.#identity = finished.value;
     this.#previous = undefined;
-    this.#logger.info('worker.credentials.confirmed', { credentialGeneration: this.generation });
+    this.#logger.info('worker.credentials.confirmed', { generation: this.generation });
     return 'continue';
   }
 
   // A refusal ends the round until the next notice or start; any other
   // failure, a 500 included, decided nothing and is retried.
   #unfinished(operation: string, generation: number, failed: Failure): Step {
-    const fields = { credentialGeneration: generation, code: failed.code, reason: failed.details.reason ?? failed.message };
+    const fields = { generation, code: failed.code, reason: failed.details.reason ?? failed.message };
     if (!REFUSALS.has(failed.code)) {
       this.#logger.warn(`worker.credentials.${operation}-unavailable`, fields);
       return 'retry';

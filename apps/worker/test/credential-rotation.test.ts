@@ -130,6 +130,11 @@ function started(rotationOptions = options()): { rotation: CredentialRotation; r
   return { rotation, running: rotation.run(stop.signal), stop };
 }
 
+// The generation each `event` record logged, read after the redaction.
+function loggedGenerations(event: string): unknown[] {
+  return sink.records.filter((record) => record.event === event).map(({ fields }) => fields.generation);
+}
+
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
@@ -162,6 +167,8 @@ test('a notice for the next generation renews it, adopts it, re-dials, and confi
   assert.deepEqual(renewal.confirmations, [{ bearer: pending.controlPlane, generation: 2 }]);
   await waitUntil(() => value(readIdentity(root.paths.identity)).previous === undefined);
   assert.deepEqual(rotation.brokerCandidates().map(({ generation }) => generation), [2]);
+  assert.deepEqual(loggedGenerations('worker.credentials.adopted'), [2]);
+  assert.deepEqual(loggedGenerations('worker.credentials.confirmed'), [2]);
   for (const name of ['control-plane.1', 'broker.1.creds', 'pending.2']) assert.equal(existsSync(join(root.paths.credentials, name)), false, name);
   const logged = JSON.stringify(sink.records);
   for (const secret of [BEARER_1, pending.controlPlane, pending.brokerSeed]) assert.equal(logged.includes(secret), false, 'no secret is logged');
@@ -227,6 +234,7 @@ test('a refused renewal ends the round with a log line; no answer is retried aft
   await renewal.renewed(1);
   await waitUntil(() => sink.records.some(({ event }) => event === 'worker.credentials.renewal-refused'));
   assert.deepEqual(sleeps, [], 'a refusal waits for the next notice or start');
+  assert.deepEqual(loggedGenerations('worker.credentials.renewal-refused'), [2]);
   assert.equal(value(readIdentity(root.paths.identity)).credentialGeneration, 1);
 
   renewal.renewAnswers = [err(failure('unavailable', 'the control plane did not answer'))];
@@ -234,6 +242,7 @@ test('a refused renewal ends the round with a log line; no answer is retried aft
   await renewal.renewed(2);
   await waitUntil(() => sleeps.length === 1);
   assert.equal(sleeps[0], 5000, 'the first launch retry delay at no jitter');
+  assert.deepEqual(loggedGenerations('worker.credentials.renewal-unavailable'), [2]);
 });
 
 test('a renewal or confirmation that the control plane failed with 500 is retried after the delay', async () => {
@@ -253,6 +262,7 @@ test('a renewal or confirmation that the control plane failed with 500 is retrie
   rotation.linked(2);
   await waitUntil(() => ended('confirmation', 2));
   assert.deepEqual(sleeps, [5000, 5000], 'a 500 decided nothing, so the confirmation is retried');
+  assert.deepEqual(loggedGenerations('worker.credentials.confirmation-unavailable'), [2]);
   await renewal.confirmed(2);
   await waitUntil(() => value(readIdentity(root.paths.identity)).previous === undefined);
 });
@@ -263,7 +273,7 @@ test('a notice for another generation stores nothing', async () => {
   assert.deepEqual(rotation.requested({ credentialGeneration: 1 }), ok(undefined));
   assert.equal(value(readPendingGeneration(root.paths, 3)), undefined);
   assert.equal(value(readPendingGeneration(root.paths, 2)), undefined);
-  assert.equal(sink.records.filter(({ event }) => event === 'worker.credentials.notice-ignored').length, 2);
+  assert.deepEqual(loggedGenerations('worker.credentials.notice-ignored'), [3, 1]);
 });
 
 test('a next notice while a confirmation answer was lost is stored, then renewed after that confirmation', async () => {
@@ -305,6 +315,7 @@ test('a refused confirmation keeps both generations for the next start', async (
   await renewal.confirmed(1);
   await waitUntil(() => sink.records.some(({ event }) => event === 'worker.credentials.confirmation-refused'));
   assert.equal(value(readIdentity(root.paths.identity)).previous?.credentialGeneration, 1);
+  assert.deepEqual(loggedGenerations('worker.credentials.confirmation-refused'), [2]);
   assert.equal(readFileSync(join(root.paths.credentials, 'control-plane.1'), 'utf8'), BEARER_1);
 });
 
