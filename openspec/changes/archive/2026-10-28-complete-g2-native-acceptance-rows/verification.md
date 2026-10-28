@@ -133,3 +133,17 @@ Checks after the fixes:
 - Pass 2 (reviewer B), at `759dbc21`: Claude Code `claude-opus-5-5` (high, session `a80c238d-4183-4690-b5a5-6989686b7d89`): Critical 0, High 0, Medium 1, Low 14, all fixed; see "Review pass 2 fixes" and `findings.jsonl`.
 - Pass 3 (reviewer A), at `bae620b2`: Codex `gpt-6.1-sol` (session `01a18016-8b21-77f1-aa43-88a32beda6c7`) confirmed the pass 2 fixes and found Low 3 only (a stale design summary of the partial launch environment, the re-run difference in `acceptance.md`, and this section). They were fixed without another review, as the process sets for a Low-only pass; the review is complete.
 - Merge of `dev` (reviewer A): after the passes, merge `6b84ea47` brought in `dev` `2b90d0ab` (#378, #379), with `063e9818` and `ae07eb5f` (see "Revision"). Codex `gpt-6.1-sol` (session `01a1802c-dd23-7372-87f0-561909c6791c`) reviewed the resolved diff and the reconciliation, `git diff bf793f2e ae07eb5f` against `dev`'s own diff, and found no problems (High 0, Medium 0, Low 0): every conflict keeps both sides, the cgroup-launched worker uses the real `linuxContainmentCheck`, the runner gives the scenarios the CA and HTTPS settings, the evidence and its citations match `results.jsonl`, and the deltas agree with `dev`'s requirement text.
+
+## Archive checks
+
+Run on the archived tree, on top of the merge of `dev` `2b90d0ab`, on 2026-10-28:
+
+- `npm run openspec -- archive complete-g2-native-acceptance-rows --yes`: archived as `2026-10-28-complete-g2-native-acceptance-rows`; specs updated: `g2-failure-scenarios` (1 added, 1 modified) and `native-worker-acceptance` (1 added).
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: 217 passed, 13 failed; the 13 are archived changes of 2026-10-24 to 2026-10-26 that this change does not touch, and this change passes.
+- `git diff 2b90d0ab -- openspec/specs`: only the three requirements of the deltas, in `g2-failure-scenarios` and `native-worker-acceptance`.
+- `make findings ARGS="validate"`: 56 findings files and 36 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; 2492 tests, 2445 passed, 0 failed, 47 skipped; coverage 99.32% lines, 92.45% branches, 98.96% functions.
+- `docs/g3-plan.md`, `docs/worker-platforms.md`, and ADR 0015 link the archived `acceptance.md`.
+
+Remaining gate: integration into `dev` by the coordinator. Item 43 stays open for the macOS rows, the `macos-26-arm64` re-run, `linux-ubuntu-24.04-arm64`, and the hosted `ubuntu-24.04` re-dispatch.

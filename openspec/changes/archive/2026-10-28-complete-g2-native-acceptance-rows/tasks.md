@@ -27,4 +27,4 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Archive the change in the last commit of the branch, link `docs/g3-plan.md`, `docs/worker-platforms.md`, and ADR 0015 to the archived `acceptance.md`, and record the archive checks
+- [x] 5.1 Archive the change in the last commit of the branch, link `docs/g3-plan.md`, `docs/worker-platforms.md`, and ADR 0015 to the archived `acceptance.md`, and record the archive checks
