@@ -1,6 +1,6 @@
 # Verification
 
-Record after review passes 1 and 2 and their fixes. Pass 2 found only Low findings, so by the [review process](/docs/governance.md#independent-review-process) the review ended there; its fixes are unreviewed. The final `make verify` and `make verify-installation` on them are pending.
+Record after review passes 1 and 2 and their fixes. Pass 2 found only Low findings, so by the [review process](/docs/governance.md#independent-review-process) the review ended there; its fixes are unreviewed. The final `make verify` and `make verify-installation` on them passed (section Coordinator checks on `ecfe6222`).
 
 ## Scope and source
 
@@ -60,6 +60,13 @@ Run by the coordinator's session in its Docker slot, after the pass 1 fixes:
 - **`make verify-installation`:** passed, ending with `installation.sh: built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed`.
 - **`make verify`:** failed; 2548 tests, 2540 pass, 1 fail, 7 skipped; coverage of all files 99.36% lines, 92.51% branches, 99.06% functions. The one failure was the timing test `packages/adapters/secrets/test/secrets.test.ts:160`, "value redaction takes linear time on long runs", whose repeated `a b` input took 217 ms; it ran while the pass 2 reviewer ran on the same host. This change does not touch that test or its code, and leaves it unchanged. The final `make verify` runs again on the pass 2 fixes (Remaining gates).
 
+## Coordinator checks on `ecfe6222`
+
+Run by the coordinator's session on the worker host, the same 2020 Intel iMac, in its Docker slot, after the unreviewed fixes of review pass 2:
+
+- **`make verify`:** passed; 2549 tests, 2542 pass, 0 fail, 7 skipped; coverage of all files 99.36% lines, 92.50% branches, 99.06% functions.
+- **`make verify-installation`:** passed, ending with `installation.sh: built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed`.
+
 ## Review passes
 
 ### Review pass 1
@@ -111,7 +118,7 @@ These fixes were not reviewed; `findings.jsonl` marks them `fixed-unreviewed`.
 
 ## Limitations
 
-- The end-to-end admission of the real Linux worker image is shown by the Docker gate on `431d1ddf` and on `42e189c3`; it has not run on the pass 2 fixes yet.
+- The end-to-end admission of the real Linux worker image is shown by the Docker gate on `431d1ddf`, `42e189c3`, and `ecfe6222`.
 - The fixes of review pass 2 are unreviewed.
 - `make verify` on `42e189c3` failed in an unrelated timing test (section Coordinator checks on `42e189c3`).
 - The negative case, a worker whose containment check fails and gets no offers, has no Docker case (design D5); its behaviour is covered by unit and integration tests of item 27.
@@ -119,6 +126,5 @@ These fixes were not reviewed; `findings.jsonl` marks them `fixed-unreviewed`.
 
 ## Remaining gates
 
-- Final `make verify` and `make verify-installation` on the pass 2 fixes (coordinator's Docker slot, task 4.5).
 - Archive (worker step 7).
 - Integration into dev by the coordinator (single pull request)

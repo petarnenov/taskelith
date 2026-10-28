@@ -21,4 +21,4 @@
 - [x] 4.2 `make verify` (coordinator's Docker slot), done on `431d1ddf`
 - [x] 4.3 `make verify-installation` (coordinator's Docker slot), done on `431d1ddf`
 - [x] 4.4 Review passes and their records
-- [ ] 4.5 Final `make verify` and `make verify-installation` on the fixes of review pass 2 (coordinator's Docker slot)
+- [x] 4.5 Final `make verify` and `make verify-installation` on the fixes of review pass 2 (coordinator's Docker slot), done on `ecfe6222`
