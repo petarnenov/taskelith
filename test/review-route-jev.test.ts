@@ -89,7 +89,7 @@ test('the request sends the pinned model and the one third pass question', () =>
     type: 'noul',
     instructions: 'This software change will need a third review pass.',
     criteria: {
-      true: 'Reviewer B in pass 2 will find a Critical or High issue, or a Medium issue whose fixes will change code, tests, or contracts rather than only records and documentation.',
+      true: 'Reviewer B in pass 2 will find a Critical or High issue, or pass 2 will include a Medium issue and its fixes, including fixes for accompanying Low issues, will change files other than records and documentation.',
       false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
     },
   });
