@@ -50,6 +50,15 @@ Before the change both test files fail to load, because the scripts do not exist
 - `node --experimental-strip-types --test test/review-run.test.ts test/reviewer-invocations.test.ts`: 20 tests, 20 pass.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `15d001bc5dcc4b9d09b94ee35c6ec0268009b6a5`; tests 3079, pass 3055, fail 0, skipped 24; all files 99.37% lines, 92.68% branches, 99.07% functions.
+- `npm run openspec -- validate run-reviews-through-make --strict`: passed, `Change 'run-reviews-through-make' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 67 file(s); every pass summary file is valid: 47 file(s); every route file is valid: 3 file(s).`.
+- Spec diff against the merge base `bbce0e81d8e6` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Review
