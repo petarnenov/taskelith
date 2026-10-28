@@ -91,6 +91,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | B | `claude claude-opus-5-5#medium` | `a7c8c597-e510-406c-a739-08652cf32c55` | 0 | 0 | 0 | 5 |
 <!-- make record: end -->
 
+## Archive
+
+Every task of `tasks.md` is ticked (`b0aba3ef`). `npm run openspec -- archive record-verify-stamp-reuse --yes` moved the change to `openspec/changes/archive/2026-10-28-record-verify-stamp-reuse/` and added the requirement "Integration verify record" to `openspec/specs/integration-flow/spec.md`. The checked state is the tree of the archive commit, `docs: archive the record verify stamp reuse change`, the last commit of the branch; the checks below ran on that working tree before the commit, and only this section was added afterward:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-record-verify-stamp-reuse` is valid.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/integration-flow/spec.md`, 19 added lines, the requirement "Integration verify record" with its four scenarios.
+- The moved directory holds `findings.jsonl` (6 findings) and `passes.jsonl` (passes 1 and 2); `make findings ARGS="validate"` passes: `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).`
+- `make verify`: passed, profile full, uncommitted working tree, so no stamp was written; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.67% branches, 98.92% functions (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/06b2129b-88b1-474a-982f-61d6a1728b94/scratchpad/verify-4.log`).
+
 ## Limitations
 
 - A failed append to the log loses that run's line from `integrations.jsonl`; it remains only in the script's output and the pull request body (design.md "Risks").
@@ -99,6 +109,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Archive the change
 - Architect check of the unreviewed fixes by the coordinator (Niki)
 - Integration into dev by the coordinator (single pull request)
