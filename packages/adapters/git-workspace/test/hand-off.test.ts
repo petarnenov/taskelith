@@ -222,7 +222,7 @@ test('a reclaim program that survives a crash holds the workspace until it is pr
 // Its first program misses a short window before the adapter can send
 // `go`; later ones get the default window.
 function lateGoHost(): ReclaimHost {
-  const late = new ProcessGroupReclaimHost({ executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '50'] });
+  const late: ReclaimHost = new ProcessGroupReclaimHost({ executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '50'] });
   const host = simulatedSeparateAccount();
   let launches = 0;
   return {
