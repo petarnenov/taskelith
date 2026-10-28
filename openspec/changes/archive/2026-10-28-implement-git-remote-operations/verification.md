@@ -72,10 +72,10 @@ On `6b2ce77b`, after `npm run build`: `node --experimental-strip-types --test --
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `4f377b1b4f48740f14375f8bc55e6ab73fb8a00e`; tests 3080, pass 3027, fail 0, skipped 53; all files 99.33% lines, 92.75% branches, 99.00% functions.
-- `npm run openspec -- validate implement-git-remote-operations --strict`: passed, `Change 'implement-git-remote-operations' is valid`.
+- `make verify`: passed, profile full, tree `cfb0811f836f456ceefd098f4b54ca50072cdfe9`; tests 3080, pass 3027, fail 0, skipped 53; all files 99.33% lines, 92.74% branches, 99.00% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 70 passed, 0 failed (70 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 65 file(s); every pass summary file is valid: 45 file(s); every route file is valid: 2 file(s).`.
-- Spec diff against the merge base `803c70575499` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `803c70575499` with `origin/dev`: `openspec/specs/git-workspace-port/spec.md | 66 +++++++++++++++++++++++++++++--`, `1 file changed, 63 insertions(+), 3 deletions(-)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -154,6 +154,18 @@ The review is complete: pass 3 found nothing, and governance allows at most thre
 
 - `http.lowSpeedLimit` and `http.lowSpeedTime`, so that a remote that trickles bytes fails before the 10-minute limit (decision Q2 (a) left them out).
 - Item 20: the control plane sends the canonical remote URL, because a redirecting remote now fails as `unavailable` (decision Q1 (a), item 9a's follow-up).
+
+## Archive checks
+
+Run on 2026-10-28 on the tree of this archive commit, the archive of `c34811a1` on merge base `803c7057` with `origin/dev`:
+
+- `npm run openspec -- archive implement-git-remote-operations --yes`: archived as `2026-10-28-implement-git-remote-operations`; `git-workspace-port` 4 added, 3 modified; task status complete.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-10-28-implement-git-remote-operations`; the command as a whole gave 225 passed, 14 failed, all 14 older archived changes already on `dev`.
+- `git diff 803c7057 -- openspec/specs`: only `openspec/specs/git-workspace-port/spec.md`, 63 insertions and 3 deletions: the 4 added requirements of the delta ("Git adapter remote operations", "Leased push outcome", "Run credential to the bound remote only", "Git process time limit") and the 3 modified ones ("Git configuration scope", "Conformance run of the local operations", "Scrubbed Git output").
+- The moved change has `findings.jsonl` (11 lines), `passes.jsonl` (3 lines), `checklist.json`, and `route.json`; `make findings ARGS="validate"`: `Every findings file is valid: 65 file(s); every pass summary file is valid: 45 file(s); every route file is valid: 2 file(s).`
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the clean archive commit before this section and the generated part were written, tree `cfb0811f`: passed, profile full, stamp written; tests 3080, suites 45, pass 3027, fail 0, cancelled 0, skipped 53; all files 99.33 % lines, 92.74 % branches, 99.00 % functions; "Every product module is in the coverage report"; `openspec validate --all --strict` 70 passed, 0 failed; "Every checked link conforms"; "No active OpenSpec change; nothing to archive". "Generated checks" above is `make record` of its log. The archive commit's tree differs from `cfb0811f` only in this file, which `make record-check` accepts.
+- `make record-check CHANGE=implement-git-remote-operations`: the generated part matches the tree.
 
 ## Remaining gates
 
