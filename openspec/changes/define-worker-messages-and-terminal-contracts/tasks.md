@@ -10,6 +10,7 @@
 - [x] 2.4 Export `SESSION_PROTOCOL_VERSION` and declare the computed breaking changes in `packages/contracts/breaking-changes.json`
 - [x] 2.5 Write `docs/contracts/worker-messages-and-terminal.md`, link it from the wire contract pages, and fix the refreshed credential wording in the G3 plan row 9 and the source control contract
 - [x] 2.6 Write the `execution-wire-contracts`, `control-plane-wire-contracts`, and `scm-port` spec deltas
+- [x] 2.7 Add the agent session binding to the protocol version 2 assignment offer, as the architect decided on 2026-10-28, with its tests, contract page, spec delta, and breaking-change declaration
 
 ## 3. Tests
 

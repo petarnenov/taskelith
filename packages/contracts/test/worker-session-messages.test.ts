@@ -85,6 +85,13 @@ const ENDED = {
   outcome: 'completed', summary: 'The child added the parser.', endedAt: AT,
 };
 const NOTICE = { runId: 'run-1', credentialId: 'credential-1', version: 3 };
+const BINDING = { sessionId: 'session-1', harness: 'claude-code', model: 'claude-opus-5-5', effort: 'high' };
+const RESUME = { nativeSessionId: 'native-session-1', generation: 3 };
+const OFFER = {
+  assignmentId: 'assignment-1',
+  recoveryEpoch: 1,
+  reservation: { reservationId: 'reservation-1', requested: { cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: ['cpu-limit'] } },
+};
 
 const COMMAND_EXAMPLES: Record<string, object> = {
   'session.turn.deliver': TURN,
@@ -166,6 +173,35 @@ test('a worker of version 1 reads a session command as versioned and fails close
   assert.ok(checkMessageSchema('VersionedCommand', turn).ok);
   assert.equal(supportsProtocolVersion(SUPPORTED_PROTOCOL_VERSIONS, turn.payload.protocolVersion), false);
   assert.equal(supportsProtocolVersion({ minimum: 1, maximum: 2 }, turn.payload.protocolVersion), true);
+});
+
+test('an offer of protocol version 2 binds its attempt to a new or resumed agent session', () => {
+  const offer = (payload: object, protocolVersion = SESSION_PROTOCOL_VERSION) =>
+    checkMessageSchema('AssignmentOfferCommand', command('execution.assignment.offer', { ...OFFER, ...payload }, protocolVersion));
+  const binding = SCHEMAS.AssignmentSessionBinding as { required: string[]; properties: Record<string, Json> };
+  const { model: _model, ...withoutModel } = BINDING;
+  const { effort: _effort, ...withoutEffort } = BINDING;
+
+  assert.deepEqual([...binding.required].sort(), ['effort', 'harness', 'model', 'sessionId']);
+  assert.deepEqual(binding.properties.sessionId, { $ref: '#/components/schemas/AgentSessionId' });
+  assert.ok(offer({ session: BINDING }).ok);
+  assert.ok(offer({ session: { ...BINDING, resume: RESUME } }).ok);
+  assert.ok(violations(offer({})).some((text) => text.includes('session')));
+  assert.ok(violations(offer({ session: withoutModel })).some((text) => text.includes('model')));
+  assert.ok(violations(offer({ session: withoutEffort })).some((text) => text.includes('effort')));
+  assert.ok(!offer({ session: { ...BINDING, resume: { ...RESUME, generation: 1 } } }).ok);
+  assert.ok(offer({}, 1).ok);
+  assert.ok(!offer({ session: BINDING }, 1).ok);
+});
+
+test('the session binding of an offer carries no credential, which keeps its own channel', () => {
+  const offer = (session: object) => checkMessageSchema('AssignmentOfferCommand', command('execution.assignment.offer', { ...OFFER, session }));
+  const binding = SCHEMAS.AssignmentSessionBinding as { properties: Record<string, Json> };
+
+  assert.deepEqual(Object.keys(binding.properties).sort(), ['effort', 'harness', 'model', 'resume', 'sessionId']);
+  for (const name of SECRET_SCHEMAS) assert.ok(!reachableNames(binding).has(name), name);
+  assert.ok(violations(offer({ ...BINDING, secret: 'slot secret' })).some((text) => text.includes('"secret"')));
+  assert.ok(violations(offer({ ...BINDING, resume: { ...RESUME, slotCredential: 'token' } })).some((text) => text.includes('"slotCredential"')));
 });
 
 test('a turn travels with its immutable identity, position, author, and recorded text', () => {

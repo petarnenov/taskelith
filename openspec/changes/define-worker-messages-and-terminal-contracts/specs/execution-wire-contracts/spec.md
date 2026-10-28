@@ -50,6 +50,21 @@ Every session command, notice, and session observation SHALL require a protocol 
 - **WHEN** a worker whose window is 1 to 1 reads a turn delivery of version 2
 - **THEN** `VersionedCommand` accepts it, the version is unsupported, and the worker rejects it with `execution.command.rejected`
 
+### Requirement: Session binding of an offer
+From protocol version 2 (`SessionProtocolVersion`), an assignment offer SHALL carry `session`, an `AssignmentSessionBinding` with the `sessionId`, the harness, the model and effort of the session, and an optional `resume` naming the native session ID and the next generation, absent for a new session; an offer of version 1 SHALL carry none. The binding SHALL carry no credential, which keeps its own HTTPS channel.
+
+#### Scenario: Offer of version 2 without a session
+- **WHEN** an assignment offer of protocol version 2 omits `session`
+- **THEN** validation fails and names `session`
+
+#### Scenario: Offer of version 1 with a session
+- **WHEN** an assignment offer of protocol version 1 carries `session`
+- **THEN** validation fails
+
+#### Scenario: Binding with a secret
+- **WHEN** a session binding carries a `secret` field
+- **THEN** validation fails and names the field
+
 ### Requirement: Session commands
 The command channel SHALL carry `session.turn.deliver`, `session.response.deliver`, `session.delegation-result.deliver`, and `execution.scm-credential.refreshed`, each in the command envelope with its attempt, worker, and ownership generation. A turn delivery SHALL carry the turn's identity, position, author, and recorded text and name the generation it is sent for; the control plane SHALL send one only for the turn that `nextDeliverableTurn` returns.
 

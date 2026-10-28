@@ -6,7 +6,7 @@ Date: 2026-10-28. Status: proposed wire contract for G3 ([G3 work plan](../g3-pl
 
 | Document | Version | What 9d adds |
 | --- | --- | --- |
-| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.8.0 | The session commands and the refreshed SCM credential notice on the worker's command subject; the session observations and the adoption confirmation on its observation subject (sections 3 to 6) |
+| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.8.0 | The session commands, the refreshed SCM credential notice, and the offer's session binding on the worker's command subject; the session observations and the adoption confirmation on its observation subject (sections 3 to 6) |
 | [`terminal.asyncapi.json`](../../packages/contracts/documents/terminal.asyncapi.json) | 0.1.0 | New: the frames of the browser terminal WebSocket and of the worker relay connection (sections 7 and 8) |
 | [`control-plane.openapi.json`](../../packages/contracts/documents/control-plane.openapi.json) | 0.3.0 | `openTerminal`, the terminal WebSocket upgrade, with `TerminalRefusal` (section 7) |
 | [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.7.0 | `openWorkerRelay`, the worker's relay upgrade, with `RelayRefusal` (section 8) |
@@ -19,6 +19,7 @@ The build generates `terminal.asyncapi.json` with the other documents. The messa
 
 - **Version 1 stays accepted.** The control plane supports versions 1 and 2, its current and its previous version (section 3 there, "Compatibility window"), and keeps sending the G2 commands to a worker whose common version is 1 (architect, 2026-10-28).
 - **Session work only to version 2.** The control plane writes a session command or a notice only for a worker whose common version (`commonProtocolVersion`) is 2 or later, and places an assignment whose attempt runs an agent session only on such a worker. Each session command, notice, and session observation requires a protocol version of at least 2 (`SessionProtocolVersion`), so a version 1 worker that receives one by mistake reads it as `VersionedCommand`, fails closed, and rejects it with `execution.command.rejected`.
+- **Session binding of the offer.** From protocol version 2 an assignment offer binds its attempt to its agent session (`AssignmentSessionBinding`), and at version 1 it carries none (architect, 2026-10-28). The binding names the session by `sessionId`, the stable identity that [ADR 0013](../decisions/0013-intents-campaigns-and-proposal-graphs.md) "Forward-compatibility obligations" keeps the read models on; the harness plugin, which never changes for the session; and the model and effort the session runs with, which [ADR 0014](../decisions/0014-decision-council-and-delegated-approval.md) "Forward-compatibility obligations" requires per session and [G3 plan](../g3-plan.md) items 18 and 19 implement; the port's start and resume requests do not take them yet. A `resume` names the native session ID and the next generation of an ended session, as `resumeSession` takes them ([agent harness port](agent-harness-port.md) section 5); without it the attempt starts a new session at generation 1. The binding carries no credential (section 10). Item 18 implements it on the worker.
 - **The build.** `EXECUTION_PROTOCOL_VERSION` and `SUPPORTED_PROTOCOL_VERSIONS` stay at 1 until the worker executes version 2: item 18 raises the worker's window to 1 to 2, and item 13 the control plane's, so that no build declares a version it cannot execute.
 
 ## 3. Session commands
@@ -119,7 +120,7 @@ Each observation is an `ObservationMetadata` envelope with its attempt and owner
 
 This contract's redaction rule, named **no secret on the worker wire**:
 
-1. **No credential in a message or frame.** No command, observation, or frame carries a credential, a secret, or an `Authorization` value; a credential travels only in an HTTPS response of 9c ([account pool](account-pool.md) section 7; execution wire contracts section 8.8). The notice names identifiers and a version only.
+1. **No credential in a message or frame.** No command, observation, or frame carries a credential, a secret, or an `Authorization` value; a credential travels only in an HTTPS response of 9c ([account pool](account-pool.md) section 7; execution wire contracts section 8.8). The notice names identifiers and a version only, and the offer's session binding names the session, harness, model, effort, and resume point only: the slot credential keeps its own channel, the HTTPS fetch of 9c, which a test checks.
 2. **Run text redacted on the worker.** Every session text and terminal output that leaves the harness host is first redacted by value with the run's revealed credentials and by the shape rules over a sliding window, as account pool section 7.4 requires of every text of the run, its terminal stream included.
 3. **Session text redacted again before it is recorded.** The control plane redacts session text with `@taskelith/secrets` before it records it, and a command carries only the recorded text (control-plane section 7).
 4. **Terminal traffic never kept.** Terminal input, terminal output, and the CSRF token of an attach are never logged, recorded, journaled, published to the broker, or sent on an event stream; terminal output is held only in the bounded relay buffer of section 8.
@@ -137,7 +138,8 @@ This contract's redaction rule, named **no secret on the worker wire**:
 ## 12. Obligations on other items
 
 - **Item 13:** the session messages in the NATS adapter's schema tables (`COMMAND_SCHEMAS` and `OBSERVATION_SCHEMAS`), whose test covers only the protocol version 1 messages until then, the session commands of section 3 written in the transactions that make them due, their `commandId` stored and reused, the observations of section 9 applied through the timeline, and the control plane's protocol window raised to 1 to 2.
-- **Item 18:** the host side of sections 3 to 6 and 9 on the worker, the redaction of section 10 before a text leaves the host, and the worker's protocol window raised to 1 to 2.
+- **Item 18:** the offer's session binding of section 2, starting or resuming the bound session with its harness, model, and effort, the host side of sections 3 to 6 and 9 on the worker, the redaction of section 10 before a text leaves the host, and the worker's protocol window raised to 1 to 2.
+- **Item 19:** the Claude Code plugin runs a session with the model and effort of its binding.
 - **Item 21:** the notice of section 6 on each refresh, and the end of the previous secret only after the adoption confirmation.
 - **Item 38:** the delegation result command of section 5 when a child ends.
 - **Item 39:** `openTerminal`, `openWorkerRelay`, and the frames of sections 7 and 8, with the rate limit, the attach timeout, the idle timeout, and the bounded buffers.
@@ -145,4 +147,4 @@ This contract's redaction rule, named **no secret on the worker wire**:
 
 ## 13. Versioning
 
-`execution.asyncapi.json` goes from 0.7.0 to 0.8.0. The asyncapi diff of `make contract-compatibility` lists its added messages, schemas, and operation entries as unclassified changes, which `packages/contracts/breaking-changes.json` declares; no existing message changed. `control-plane.openapi.json` goes to 0.3.0 and `execution.openapi.json` to 0.7.0 with an added operation each, which the check reports as no breaking change; `terminal.asyncapi.json` starts at 0.1.0.
+`execution.asyncapi.json` goes from 0.7.0 to 0.8.0. The asyncapi diff of `make contract-compatibility` lists its added messages, schemas, and operation entries, and the offer's added `session`, `if`, `then`, and `else`, as unclassified changes, which `packages/contracts/breaking-changes.json` declares; no other existing message changed, and an offer of version 1 is valid exactly as before. `control-plane.openapi.json` goes to 0.3.0 and `execution.openapi.json` to 0.7.0 with an added operation each, which the check reports as no breaking change; `terminal.asyncapi.json` starts at 0.1.0.

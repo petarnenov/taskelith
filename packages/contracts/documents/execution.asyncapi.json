@@ -1021,6 +1021,45 @@
           "retryOf": {
             "$ref": "#/components/schemas/Identifier",
             "description": "The attempt this attempt retries."
+          },
+          "session": {
+            "$ref": "#/components/schemas/AssignmentSessionBinding",
+            "description": "The attempt's agent session: required from protocol version 2 (`SessionProtocolVersion`), absent at version 1."
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "protocolVersion"
+          ],
+          "properties": {
+            "protocolVersion": {
+              "$ref": "#/components/schemas/SessionProtocolVersion"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "required": [
+            "session"
+          ],
+          "properties": {
+            "session": {
+              "$ref": "#/components/schemas/AssignmentSessionBinding"
+            }
+          }
+        },
+        "else": {
+          "not": {
+            "type": "object",
+            "required": [
+              "session"
+            ],
+            "properties": {
+              "session": {
+                "$ref": "#/components/schemas/AssignmentSessionBinding"
+              }
+            }
           }
         }
       },
@@ -2667,6 +2706,61 @@
         "type": "integer",
         "minimum": 2,
         "description": "The execution protocol version of a session command or observation: 2 or later, so that a worker of version 1 rejects it with `execution.command.rejected` and the control plane sends session work only to a worker whose common version is 2 or later."
+      },
+      "AssignmentSessionBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The agent session an offer of protocol version 2 binds its attempt to: the session, its harness, and the model and effort it runs with, and to resume it, its native session and next generation. No credential; the slot credential keeps its own HTTPS channel.",
+        "required": [
+          "sessionId",
+          "harness",
+          "model",
+          "effort"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness plugin (`HarnessPluginId`) that runs the session; a session never changes its harness."
+          },
+          "model": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness model the session runs with, set per session."
+          },
+          "effort": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness effort the session runs with, set per session."
+          },
+          "resume": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Present to resume the ended session at its next generation; absent, the attempt starts a new session at generation 1.",
+            "required": [
+              "nativeSessionId",
+              "generation"
+            ],
+            "properties": {
+              "nativeSessionId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The opaque native session ID that the resume keeps."
+              },
+              "generation": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentSessionGeneration"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 2
+                  }
+                ],
+                "description": "The generation after the session's last one."
+              }
+            }
+          }
+        }
       },
       "TurnDeliveryPayload": {
         "type": "object",

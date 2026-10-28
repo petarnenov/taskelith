@@ -44,7 +44,7 @@ Each command is a `CommandMetadata` envelope that also requires `attemptId`, `wo
 
 - An offer names the `recoveryEpoch` the worker uses in its launch requests and in the observations about its executions. The admission and its generation are `metadata.sdlc.admissionId` and `metadata.sdlc.admissionGeneration`, which the worker journals with the launch intent ([worker journal](worker-journal.md) section 5).
 - A cancellation without `executionId` targets the attempt; with it, only that execution. A cancellation is never proof of termination.
-- What an offer executes is not part of G2: item 15 runs a test-only scripted process chosen by the worker's test configuration, and the harness invocation joins the offer with the agent harness port in G3.
+- What an offer executes is not part of G2: item 15 runs a test-only scripted process chosen by the worker's test configuration, and the harness invocation joins the offer with the agent harness port in G3: from protocol version 2 the offer binds its attempt to its agent session ([worker messages and terminal](worker-messages-and-terminal.md) section 2).
 
 The control plane also sends `execution.observations.confirmed` and `worker.inventory.requested` (section 6) on the command subject. Neither is a command: they have no `commandId`, the worker does not journal them in its inbox, and receiving either twice changes nothing.
 
