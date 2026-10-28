@@ -41,6 +41,7 @@ export {
   type ReclaimHost,
   type ReclaimOutcome,
   type ReclaimProgram,
+  type SendSignal,
 } from './reclaim-host.js';
 export {
   RECLAIM_EXIT,

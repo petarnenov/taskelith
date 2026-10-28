@@ -13,6 +13,7 @@ import {
   OperationChains,
   ProcessGroupReclaimHost,
   RECLAIM_PROGRAM_MAIN,
+  RECLAIM_READY_BOUND_MS,
   parseHandOffRecord,
   type GitWorkspaceCrashPoint,
   type LaunchedReclaim,
@@ -419,6 +420,21 @@ test('a failure record that cannot be written still kills the overrunning progra
     assert.equal(host.launched.length, 2, 'the later reclaim runs the program once more');
     assert.deepEqual(await git.local.handedOff(), []);
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('on one account a later reclaim of a failed program signals no recorded process group', () => {
+  const signals: [number, NodeJS.Signals][] = [];
+  const recording = new ProcessGroupReclaimHost(FAILING_PROGRAM, RECLAIM_READY_BOUND_MS, (pid, signal) => void signals.push([pid, signal]));
+  const host = new CountingHost(recording);
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    for (const provider of [git.local, git.reopen()]) {
+      assert.equal(failed(await provider.reclaim(FIRST)).details.reason, 'reclaim-failed');
+    }
+    assert.deepEqual(host.killedRecorded, [host.launched[0]], 'the later reclaim finishes the cleanup');
+    assert.deepEqual(signals, [], 'no process group is signalled');
+  }, { reclaimHost: host });
 });
 
 interface Signal {

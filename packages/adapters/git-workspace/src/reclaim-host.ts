@@ -47,6 +47,11 @@ export interface ReclaimProgram {
 
 export const FIXED_RECLAIM_PROGRAM: ReclaimProgram = Object.freeze({ executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN] });
 
+// Sends a signal as `process.kill` does; a test may inject a recorder.
+export type SendSignal = (pid: number, signal: NodeJS.Signals) => void;
+
+const sendSignal: SendSignal = (pid, signal) => void process.kill(pid, signal);
+
 // Nothing of the worker's environment; Node adds no coverage variable.
 const PROGRAM_ENVIRONMENT = { PATH: '/usr/bin:/bin', LC_ALL: 'C', NODE_V8_COVERAGE: undefined };
 
@@ -54,7 +59,7 @@ interface StartedProgram {
   readonly pid: number;
   go(): Promise<ReclaimOutcome>;
   abandon(): void;
-  killGroup(): void;
+  killGroup(send: SendSignal): void;
 }
 
 interface ProgramStart {
@@ -88,7 +93,7 @@ function startProgram(program: ReclaimProgram, args: readonly string[], readyBou
           return exited;
         },
         abandon,
-        killGroup: () => killUnreapedGroup(child),
+        killGroup: (send) => killUnreapedGroup(child, send),
       }));
     });
   });
@@ -96,10 +101,10 @@ function startProgram(program: ReclaimProgram, args: readonly string[], readyBou
 
 // Only while Node has not reaped the leader, so its group identifier
 // cannot belong to another group yet; a reaped leader's group is not killed.
-function killUnreapedGroup(child: ChildProcess): void {
+function killUnreapedGroup(child: ChildProcess, send: SendSignal): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
   try {
-    process.kill(-child.pid!, 'SIGKILL');
+    send(-child.pid!, 'SIGKILL');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
@@ -230,17 +235,19 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
   readonly executionAccount = null;
   readonly #program: ReclaimProgram;
   readonly #readyBoundMs: number;
+  readonly #send: SendSignal;
 
-  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM, readyBoundMs = RECLAIM_READY_BOUND_MS) {
+  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM, readyBoundMs = RECLAIM_READY_BOUND_MS, send = sendSignal) {
     this.#program = program;
     this.#readyBoundMs = readyBoundMs;
+    this.#send = send;
   }
 
   async launch(checkout: string): Promise<Result<LaunchedReclaim>> {
     const { started } = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
     if (!started.ok) return started;
     const { pid, go, abandon, killGroup } = started.value;
-    return ok({ containment: { kind: 'process-group', id: pid }, go, abandon, kill: async () => killGroup() });
+    return ok({ containment: { kind: 'process-group', id: pid }, go, abandon, kill: async () => killGroup(this.#send) });
   }
 
   async populated(containment: ReclaimContainment): Promise<boolean> {
