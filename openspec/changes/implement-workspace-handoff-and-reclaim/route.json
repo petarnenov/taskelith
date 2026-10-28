@@ -1,0 +1,93 @@
+{
+  "change": "implement-workspace-handoff-and-reclaim",
+  "generatedAt": "2026-10-28T13:40:07.335Z",
+  "devCommit": "10fc3bbe6b7c46089e74ea32dc6d70bf79cdbe8d",
+  "headCommit": "34a9773da3abf5b4ab43705f1f73a54e6387f300",
+  "features": {
+    "linesChanged": 1640,
+    "filesChanged": 22,
+    "capabilities": [
+      "git-workspace-port"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": true,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M-L",
+    "capabilityHistory": {
+      "changes": 9,
+      "thirdPassShare": 0.7777777777777778,
+      "mediumOrWorsePerChange": 10.666666666666666
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "contracts",
+      "docker",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "confidence": 1,
+    "probabilities": {
+      "standard": 0,
+      "elevated": 1
+    },
+    "expectedPasses": 2.73,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ],
+    "latencyMs": 209
+  }
+}
