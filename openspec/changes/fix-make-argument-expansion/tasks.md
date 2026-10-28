@@ -1,0 +1,20 @@
+## 1. Change
+
+- [x] 1.1 Create the change with proposal, design, the `agent-task-protocol` spec delta, the brief's checklist, and empty `findings.jsonl` and `passes.jsonl`
+
+## 2. Implementation
+
+- [x] 2.1 Find the mechanism: GNU Make 4.4 exports, and so expands, the arguments for the parse-time `$(shell)` calls that run before the `unexport` line
+- [x] 2.2 Move the `unexport` line before the first `$(shell)` call of the `Makefile`
+- [x] 2.3 Run the two "as typed" tests under every GNU make on `PATH` (`test/gnu-makes.ts`), failing before the fix under GNU Make 4.4
+
+## 3. Evidence
+
+- [x] 3.1 Fail-before and pass-after under GNU Make 3.81 and 4.4.1, and the Linux repro in `debian:trixie-slim`
+- [ ] 3.2 `make verify` on the clean committed tree, `make record`, and `make record-check`
+
+## 4. Review and archive
+
+- [ ] 4.1 Review pass 1 (reviewer A) and its fixes
+- [ ] 4.2 Review pass 2 (reviewer B) and its fixes
+- [ ] 4.3 Archive the change
