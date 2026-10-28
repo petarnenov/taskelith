@@ -13,7 +13,7 @@ The AsyncAPI document SHALL define a command channel, an observation channel, an
 
 ## ADDED Requirements
 
-### Requirement: Credential rotation notice
+### Requirement: Credential rotation contracts
 The AsyncAPI document SHALL define `worker.credentials.rotation-requested` on the command channel with the worker, the requested `credentialGeneration`, and the `deadline`, and no secret. The OpenAPI document SHALL define `renewWorkerCredentials` and `confirmWorkerCredentials` under the worker credential. A renewal request SHALL carry only the NKey public key and the SHA-256 of the bearer secret, and its answer the user JWT and the deadline.
 
 #### Scenario: Notice with a secret

@@ -200,8 +200,8 @@ export class EnrollmentService {
     return this.#deps.registry.publishRevocations((revocations) => this.#deps.broker.publishRevocations(revocations));
   }
 
-  // The worker and generation a presented control-plane bearer belongs to;
-  // unknown, revoked, dropped, or past the deadline are alike `forbidden`.
+  // The worker and generation of a control-plane bearer; unknown, revoked,
+  // and a dropped or expired predecessor are alike `forbidden`.
   async authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>> {
     const worker = await this.#deps.registry.workerByCredentialHash(this.#deps.secrets.hashOf(secret));
     if (!worker.ok) return worker;

@@ -181,7 +181,7 @@
             }
           },
           "401": {
-            "description": "The worker credential is unknown, revoked, or past its deadline, or this first renewal of the rotation came at or after its deadline.",
+            "description": "The worker credential is unknown, revoked, or a predecessor dropped by a confirmation or past its rotation's deadline, or this first renewal of the rotation came at or after its deadline.",
             "content": {
               "application/json": {
                 "schema": {
@@ -265,7 +265,7 @@
             }
           },
           "401": {
-            "description": "The worker credential is unknown, revoked, or past its deadline.",
+            "description": "The worker credential is unknown, revoked, or a predecessor dropped by a confirmation or past its rotation's deadline.",
             "content": {
               "application/json": {
                 "schema": {

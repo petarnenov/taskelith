@@ -34,6 +34,10 @@ A worker's control-plane secret SHALL authenticate without its worker identifier
 - **WHEN** a worker renewed a requested generation and presents the previous control-plane secret before it confirms the new one and before the deadline
 - **THEN** it authenticates as that worker with the previous generation
 
+#### Scenario: Current generation of an unrenewed rotation
+- **WHEN** the deadline of a rotation passes and the worker never renewed it
+- **THEN** its current control-plane secret still authenticates as that worker until the sweep revokes the worker
+
 #### Scenario: Revoked worker
 - **WHEN** a revoked worker presents its current control-plane secret
 - **THEN** authentication fails with `forbidden` and reason `worker-not-authorized`
