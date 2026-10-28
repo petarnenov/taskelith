@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import type { DeclaredCapacity, JournalId, LaunchAuthorityClient } from '@taskelith/execution';
+import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import {
   parseInstallationId,
   type Enrollment,
@@ -279,8 +279,8 @@ async function openWorkspaceSlots(
   } catch (error) {
     return err(failure('unavailable', `the workspaces cannot be swept: ${(error as Error).message}`));
   }
-  const redeclareCapacity = () => root.journal.redeclareCapacity(declaredCapacity(settings));
-  return WorkspaceSlots.open({ workspace, redeclareCapacity, logger });
+  const oweCapacityDeclaration = () => root.journal.oweCapacityDeclaration();
+  return WorkspaceSlots.open({ workspace, oweCapacityDeclaration, declareCapacity: () => declareCapacity(settings, root), logger });
 }
 
 // Only the platform and the launch command decide that a check does not
@@ -362,15 +362,11 @@ function skippingRecorded(scan: ContainmentScan | undefined, recorded: ReadonlyS
   };
 }
 
-function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<void> {
-  return root.journal.recordCapacity(declaredCapacity(settings));
-}
-
 // Sorted, so a reordered configuration declares nothing new.
-function declaredCapacity(settings: WorkerSettings): DeclaredCapacity {
+function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<void> {
   const { controls, ...capacity } = settings.capacity;
   const enforceableControls = [...controls].sort();
-  return { ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS };
+  return root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
 }
 
 interface SessionContext {

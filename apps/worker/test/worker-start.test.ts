@@ -759,6 +759,8 @@ class FakeWorkspace implements WorkerWorkspace {
   sweeps = 0;
   sweepFault: Error | undefined;
   readFault: Error | undefined;
+  // A reclaim removes its record and then the worker dies.
+  crashesAfterReclaim = false;
 
   async sweep(): Promise<void> {
     this.sweeps += 1;
@@ -776,6 +778,7 @@ class FakeWorkspace implements WorkerWorkspace {
 
   async reclaim(attemptId: AttemptId): Promise<Result<void>> {
     this.records.splice(this.records.findIndex((record) => record.attemptId === attemptId), 1);
+    if (this.crashesAfterReclaim) throw new Error('simulated crash after the record removal');
     return ok(undefined);
   }
 }
@@ -827,6 +830,20 @@ test('a reclaim through the worker\'s slots declares the unchanged capacity agai
   assert.equal(declarations(), 1);
   value(await worker.workspaceSlots!.reclaim(HANDED_OFF_ATTEMPT));
   assert.deepEqual([declarations(), [...worker.workspaceSlots!.held]], [2, []]);
+});
+
+test('a capacity declaration that a reclaim owes is journaled by the next start after a crash', async () => {
+  const fake = new FakeWorkspace();
+  fake.records.push({ attemptId: HANDED_OFF_ATTEMPT, record: { containment: null, reclaimFailed: false } });
+  fake.crashesAfterReclaim = true;
+  composing(fake);
+  const crashed = value(await startWorker({ ...settings, launch: LAUNCH }, dependencies()));
+  await assert.rejects(crashed.workspaceSlots!.reclaim(HANDED_OFF_ATTEMPT), /simulated crash/);
+  await crashed.stop();
+  composing(new FakeWorkspace());
+  const restarted = await start({ ...settings, launch: LAUNCH });
+  const declarations = value(restarted.root.journal.dueForPublication(T0)).flatMap(({ fact }) => (fact.kind === 'capacity-declared' ? [fact.declaration] : []));
+  assert.equal(declarations.at(-1), 2);
 });
 
 test('hand-off records or a sweep that fail fail the start and release the root', async () => {

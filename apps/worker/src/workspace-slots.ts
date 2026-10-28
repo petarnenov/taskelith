@@ -8,8 +8,10 @@ export const RECLAIM_FAILED_EVENT = 'worker.workspace.reclaim-failed';
 
 export interface WorkspaceSlotsOptions {
   readonly workspace: Pick<WorkerWorkspace, 'handOffRecords' | 'handOff' | 'reclaim'>;
-  // Journals the capacity again, also when unchanged, after a reclaim.
-  readonly redeclareCapacity: () => Result<void>;
+  // Owes a capacity declaration durably, before a reclaim frees a slot.
+  readonly oweCapacityDeclaration: () => Result<void>;
+  // Journals the capacity when it changed or a declaration is owed.
+  readonly declareCapacity: () => Result<void>;
   readonly logger: Logger;
 }
 
@@ -55,15 +57,20 @@ export class WorkspaceSlots {
     return handedOff;
   }
 
-  // Only a reclaim that removed the record frees the slot; a failed
-  // reclaim program keeps it, and the worker never runs it again.
+  // Only a reclaim that removed the record frees the slot, and it never
+  // reruns a failed program; the owed declaration outlives a fault.
   async reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    if (this.#held.has(attemptId)) {
+      const owed = this.#options.oweCapacityDeclaration();
+      if (!owed.ok) return owed;
+    }
     const reclaimed = await this.#options.workspace.reclaim(attemptId);
     if (!reclaimed.ok) {
       if (isReclaimFailed(reclaimed.error)) logReclaimFailed(this.#options.logger, attemptId, {});
       return reclaimed;
     }
-    return this.#held.delete(attemptId) ? this.#options.redeclareCapacity() : reclaimed;
+    this.#held.delete(attemptId);
+    return this.#options.declareCapacity();
   }
 
   async #recordMayExist(attemptId: AttemptId): Promise<boolean> {
