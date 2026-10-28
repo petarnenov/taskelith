@@ -4,9 +4,9 @@
 
 ## 2. Contract
 
-- [x] 2.1 Extend `execution.asyncapi.json` to 0.8.0 with the protocol version 2 session commands, notice, and observations
+- [x] 2.1 Extend `execution.asyncapi.json` to 0.9.0 with the protocol version 2 session commands, notice, and observations
 - [x] 2.2 Add `terminal.asyncapi.json` 0.1.0 with the browser terminal and worker relay frames, and register it with the generator
-- [x] 2.3 Add `openTerminal` to `control-plane.openapi.json` 0.3.0 and `openWorkerRelay` to `execution.openapi.json` 0.7.0
+- [x] 2.3 Add `openTerminal` to `control-plane.openapi.json` 0.3.0 and `openWorkerRelay` to `execution.openapi.json` 0.8.0
 - [x] 2.4 Export `SESSION_PROTOCOL_VERSION` and declare the computed breaking changes in `packages/contracts/breaking-changes.json`
 - [x] 2.5 Write `docs/contracts/worker-messages-and-terminal.md`, link it from the wire contract pages, and fix the refreshed credential wording in the G3 plan row 9 and the source control contract
 - [x] 2.6 Write the `execution-wire-contracts`, `control-plane-wire-contracts`, and `scm-port` spec deltas

@@ -6,10 +6,10 @@ Date: 2026-10-28. Status: proposed wire contract for G3 ([G3 work plan](../g3-pl
 
 | Document | Version | What 9d adds |
 | --- | --- | --- |
-| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.8.0 | The session commands, the refreshed SCM credential notice, and the offer's session binding on the worker's command subject; the session observations and the adoption confirmation on its observation subject (sections 3 to 6) |
+| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.9.0 | The session commands, the refreshed SCM credential notice, and the offer's session binding on the worker's command subject; the session observations and the adoption confirmation on its observation subject (sections 3 to 6) |
 | [`terminal.asyncapi.json`](../../packages/contracts/documents/terminal.asyncapi.json) | 0.1.0 | New: the frames of the browser terminal WebSocket and of the worker relay connection (sections 7 and 8) |
 | [`control-plane.openapi.json`](../../packages/contracts/documents/control-plane.openapi.json) | 0.3.0 | `openTerminal`, the terminal WebSocket upgrade, with `TerminalRefusal` (section 7) |
-| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.7.0 | `openWorkerRelay`, the worker's relay upgrade, with `RelayRefusal` (section 8) |
+| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.8.0 | `openWorkerRelay`, the worker's relay upgrade, with `RelayRefusal` (section 8) |
 
 The build generates `terminal.asyncapi.json` with the other documents. The messages reuse, unchanged, the session schemas that [control-plane wire contracts](control-plane-wire-contracts.md) section 9 names, `Responder`, `TurnAuthor`, `TimelinePosition`, and `ExternalId` of the control-plane document, and `DelegationResult` and `DelegationSummary` of the execution document ([execution wire contracts](execution-wire-contracts.md) section 8.3); the terminal frames reuse `Identifier`, `Generation`, `AgentSessionId`, `AgentSessionGeneration`, and `CsrfToken`. A name that several documents define names the same schema, which the generator and the package tests check. The terminal channels have no address: each names the HTTP operation that upgrades it, so no path is defined in two documents. No document carries an example, so no example can hold a secret.
 
@@ -159,4 +159,4 @@ This contract's redaction rule, named **no secret on the worker wire**:
 
 ## 13. Versioning
 
-`execution.asyncapi.json` goes from 0.7.0 to 0.8.0. The asyncapi diff of `make contract-compatibility` lists its added messages, schemas, and operation entries, and the offer's added `session`, `if`, `then`, and `else`, as unclassified changes, which `packages/contracts/breaking-changes.json` declares; no other existing message changed, and an offer of version 1 is valid exactly as before. `control-plane.openapi.json` goes to 0.3.0 and `execution.openapi.json` to 0.7.0 with an added operation each, which the check reports as no breaking change; `terminal.asyncapi.json` starts at 0.1.0.
+`execution.asyncapi.json` goes from 0.8.0 to 0.9.0. The asyncapi diff of `make contract-compatibility` lists its added messages, schemas, and operation entries, and the offer's added `session`, `if`, `then`, and `else`, as unclassified changes, which `packages/contracts/breaking-changes.json` declares; no other existing message changed, and an offer of version 1 is valid exactly as before. `control-plane.openapi.json` goes to 0.3.0 and `execution.openapi.json` to 0.8.0 with an added operation each, which the check reports as no breaking change; `terminal.asyncapi.json` starts at 0.1.0.

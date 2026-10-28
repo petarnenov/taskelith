@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.7.0",
-    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), launch authorization (G2 decision D12 (a)), delegation and its result, task results, evidence with its retirement, the reconciliation queue and re-admission, and the delivery of slot and per-run SCM credentials to a worker (G3 sub-change 9c). Worker operations use the per-worker credential. Operator operations use the installation bootstrap credential (G2 decision D10 (a)); since 9c the evidence, reconciliation, and re-admission operations also accept the browser session of the control-plane document. Since G3 sub-change 9d, the worker's terminal relay connection, whose frames `terminal.asyncapi.json` defines."
+    "version": "0.8.0",
+    "description": "X Since G3 sub-change 9d, the worker's terminal relay connection, whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
     "/installation/ca": {
@@ -108,6 +108,174 @@
           },
           "422": {
             "description": "The host does not match the token constraints, or no protocol version is supported by both sides.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/credentials/renewals": {
+      "post": {
+        "operationId": "renewWorkerCredentials",
+        "summary": "Renew a worker's credentials into the generation that rotate-worker requested",
+        "description": "Called with the bearer of the generation before the requested one. The worker generated the NKey and the bearer secret of the new generation; it sends only the NKey public key and the SHA-256 of the secret, and gets the broker user JWT signed for that key. A repeat with the same key and hash answers the same JWT.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRenewalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new generation is stored as current, and the previous one stays valid until the confirmation or the deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialRenewal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid, or the public key is not an NKey user key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is unknown, revoked, or a predecessor dropped by a confirmation or past its rotation's deadline, or this first renewal of the rotation came at or after its deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No rotation to this generation was requested for the caller's generation (reason rotation-not-requested), or the generation was renewed with another key or hash (reason renewal-mismatch).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/credentials/confirmations": {
+      "post": {
+        "operationId": "confirmWorkerCredentials",
+        "summary": "Confirm a renewed credential generation, which drops its predecessor at once",
+        "description": "Called with the bearer of the renewed generation, after the worker connected to the broker with that generation's user; that worker-side rule is why the control plane checks no broker connection. A repeat of a confirmed generation answers the same and drops nothing.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialConfirmationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The generation is confirmed and its predecessor dropped; at or after the deadline the predecessor is dropped as expired instead, and a repeat answers the same.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialConfirmation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is unknown, revoked, or a predecessor dropped by a confirmation or past its rotation's deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The bearer is not of the named generation, or that generation is not the worker's renewed or current one (reason confirmation-mismatch).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1970,7 +2138,7 @@
       "workerCredential": {
         "type": "http",
         "scheme": "bearer",
-        "description": "The control-plane credential issued at enrollment."
+        "description": "The control-plane credential of the worker's current generation, or of its predecessor until the rotation is confirmed or its deadline passes."
       },
       "operatorToken": {
         "type": "http",
@@ -4162,6 +4330,85 @@
             "additionalProperties": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CredentialRenewalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker's public part of the requested generation; the secrets stay on the worker.",
+        "required": [
+          "credentialGeneration",
+          "brokerUserPublicKey",
+          "controlPlaneSecretSha256"
+        ],
+        "properties": {
+          "credentialGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "brokerUserPublicKey": {
+            "type": "string",
+            "pattern": "^U[A-Z2-7]{55}$",
+            "description": "The public key of the NKey user that the worker generated."
+          },
+          "controlPlaneSecretSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "The SHA-256 of the worker-generated tkwk_ bearer secret, in lowercase hexadecimal."
+          }
+        }
+      },
+      "CredentialRenewal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The renewed generation: the broker user JWT for the worker's key, and the deadline by which the worker must confirm.",
+        "required": [
+          "credentialGeneration",
+          "brokerUserJwt",
+          "deadline"
+        ],
+        "properties": {
+          "credentialGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "brokerUserJwt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384,
+            "description": "The NATS user JWT, signed by the installation account; not a secret without the seed."
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "The hard cap of the rotation, measured from rotate-worker."
+          }
+        }
+      },
+      "CredentialConfirmationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "credentialGeneration"
+        ],
+        "properties": {
+          "credentialGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "CredentialConfirmation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The confirmed generation. revocationsPublished false: a recorded broker user revocation is still unpublished after this call, and a repeated confirmation or the periodic sweep publishes it.",
+        "required": [
+          "credentialGeneration",
+          "revocationsPublished"
+        ],
+        "properties": {
+          "credentialGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "revocationsPublished": {
+            "type": "boolean"
           }
         }
       }

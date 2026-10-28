@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Worker channels
-The AsyncAPI document SHALL define a command channel, an observation channel, and a heartbeat channel per installation and worker. The command channel SHALL carry the assignment offer, cancellation request, and assignment end commands, the observation confirmation, and the session commands. The observation channel SHALL carry every observation and the inventory report. The heartbeat channel SHALL carry only the worker heartbeat, over core NATS without a stream.
+The AsyncAPI document SHALL define a command channel, an observation channel, and a heartbeat channel per installation and worker. The command channel SHALL carry the offer, cancellation, assignment end, and session commands, the observation confirmation, the inventory request, and the credential rotation notice. The observation channel SHALL carry every observation and the inventory report. The heartbeat channel SHALL carry only the worker heartbeat, over core NATS without a stream.
 
 #### Scenario: Channel per worker
 - **WHEN** a channel address is resolved
@@ -12,7 +12,7 @@ The AsyncAPI document SHALL define a command channel, an observation channel, an
 - **THEN** it is `taskelith.<installationId>.workers.<workerId>.heartbeats`, and its only message is `worker.heartbeat`
 
 #### Scenario: Session messages on the worker channels
-- **WHEN** the channels of `execution.asyncapi.json` 0.8.0 are read
+- **WHEN** the channels of `execution.asyncapi.json` 0.9.0 are read
 - **THEN** the command channel lists the three session commands and the notice, and the observation channel the twelve session and adoption observations
 
 ### Requirement: Protocol version
@@ -27,7 +27,7 @@ Every execution command, observation, and report SHALL carry a positive integer 
 - **THEN** `commonProtocolVersion` returns no version
 
 ### Requirement: G3 execution operations
-The OpenAPI document SHALL define, since version 0.6.0, `retireEvidence`, `readDelegationResult`, `listUnknownExecutions`, `listUnrecordedProcesses`, `readmitTask`, `fetchSlotCredential`, `issueRunScmCredential`, and `fetchRunScmCredential`, and, since 0.7.0, `openWorkerRelay`. It SHALL reuse the control-plane document's `browserSession` and `csrfToken` schemes and access failure schemas unchanged, and every operation with a path parameter SHALL answer 400 to an invalid one.
+The OpenAPI document SHALL define, since version 0.6.0, `retireEvidence`, `readDelegationResult`, `listUnknownExecutions`, `listUnrecordedProcesses`, `readmitTask`, `fetchSlotCredential`, `issueRunScmCredential`, and `fetchRunScmCredential`, and, since 0.8.0, `openWorkerRelay`. It SHALL reuse the control-plane document's `browserSession` and `csrfToken` schemes and access failure schemas unchanged, and every operation with a path parameter SHALL answer 400 to an invalid one.
 
 #### Scenario: Session scheme redefined
 - **WHEN** the execution document defines `browserSession` differently from the control-plane document

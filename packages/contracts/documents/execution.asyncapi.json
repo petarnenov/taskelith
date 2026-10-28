@@ -2,8 +2,8 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.8.0",
-    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support. Since protocol version 2 (G3 sub-change 9d) the command channel also carries the session commands and the notice of a refreshed per-run SCM credential, and the observation channel the session observations and the adoption confirmation; a message never carries a secret."
+    "version": "0.9.0",
+    "description": "X Since protocol version 2 (G3 sub-change 9d) the command channel also carries the session commands and the notice of a refreshed per-run SCM credential, and the observation channel the session observations and the adoption confirmation; a message never carries a secret."
   },
   "defaultContentType": "application/json",
   "channels": {
@@ -33,6 +33,9 @@
         },
         "inventoryRequested": {
           "$ref": "#/components/messages/inventoryRequested"
+        },
+        "credentialRotationRequested": {
+          "$ref": "#/components/messages/credentialRotationRequested"
         },
         "turnDelivery": {
           "$ref": "#/components/messages/turnDelivery"
@@ -182,6 +185,9 @@
         },
         {
           "$ref": "#/channels/workerCommands/messages/inventoryRequested"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/credentialRotationRequested"
         },
         {
           "$ref": "#/channels/workerCommands/messages/turnDelivery"
@@ -834,6 +840,46 @@
           "requestId": {
             "$ref": "#/components/schemas/Identifier",
             "description": "A fresh random value for every request, which the snapshot answering it returns."
+          }
+        }
+      },
+      "CredentialRotationRequested": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "rotate-worker requested the next credential generation of the worker, which renews it with renewWorkerCredentials. It carries no secret, is not a command, and is not journaled; the worker's durable consumer keeps it until the worker acknowledges it.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "issuedAt",
+          "workerId",
+          "credentialGeneration",
+          "deadline"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "worker.credentials.rotation-requested"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "credentialGeneration": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "The requested generation, one above the worker's current one."
+          },
+          "deadline": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "The hard cap of the rotation, measured from rotate-worker."
           }
         }
       },
@@ -4260,6 +4306,13 @@
         "title": "worker.heartbeat",
         "payload": {
           "$ref": "#/components/schemas/WorkerHeartbeat"
+        }
+      },
+      "credentialRotationRequested": {
+        "name": "credentialRotationRequested",
+        "title": "worker.credentials.rotation-requested",
+        "payload": {
+          "$ref": "#/components/schemas/CredentialRotationRequested"
         }
       },
       "turnDelivery": {

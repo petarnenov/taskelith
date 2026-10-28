@@ -15,6 +15,7 @@ import {
   type RouteDefinition,
   type Upload,
 } from '@taskelith/control-plane';
+import type { PrincipalId } from '@taskelith/access';
 import { checkHttpSchema } from '@taskelith/contracts';
 import { parseLaunchParameters, REPORTED_SEALS_LIMIT, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -30,9 +31,12 @@ let storeDown = false;
 const handlers: ApiHandlers = {
   authenticateOperator: async (secret) => {
     if (storeDown) return err(failure('unavailable', 'the credential store is down'));
-    return secret === OPERATOR ? ok(undefined) : err(failure('forbidden', 'not the operator'));
+    return secret === OPERATOR ? ok(`u${'0'.repeat(32)}` as PrincipalId) : err(failure('forbidden', 'not the operator'));
   },
   authenticateWorker: async () => err(failure('forbidden', 'no worker in these tests')),
+  authenticateSession: async () => err(failure('forbidden', 'no session in these tests', { reason: 'unauthenticated' })),
+  authorize: async () => ok(undefined),
+  authorizeResource: async () => ok(undefined),
   handle: async (operationId) => (answers[operationId] ?? (() => err(failure('internal', 'unset'))))(),
 };
 const server = createApiServer(handlers, { logger: new Logger(sink, { now: () => '2026-10-25T09:00:00.000Z' as never }) });
@@ -156,7 +160,8 @@ test('every response closes its connection, so no idle socket is reused', async 
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: { authenticate: async () => ok(undefined) },
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never,
     enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
@@ -185,7 +190,8 @@ test('evidence content is sent as exact bytes, and a handler that returns no byt
 test('a worker route reaches its operation with the principal of a valid worker bearer only, whatever it declares', async () => {
   const WORKER = `tkwk_${'B'.repeat(43)}`;
   const probe: RouteDefinition = {
-    operationId: 'probeWorker', method: 'GET', pattern: /^\/probe$/, security: 'workerCredential', response: 'TaskResult', success: 200,
+    // A worker operation, which needs no role; an unknown one would.
+    operationId: 'authorizeLaunch', method: 'GET', pattern: /^\/probe$/, security: ['workerCredential'], response: 'TaskResult', success: 200,
     statuses: { forbidden: 418, unavailable: 500 },
   };
   const seen: ApiRequest[] = [];
@@ -237,9 +243,10 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
-    enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
+    enrollment: { enroll: undefined as never, renew: undefined as never, confirm: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
   assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
   assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);
@@ -368,6 +375,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   ];
   let next = 0;
   const api = new ControlPlaneApi({
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
@@ -387,9 +395,35 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
 });
 
+test('a refused renewal is logged with its worker, generation, code, and reason, and never its key or hash', async () => {
+  const renewalSink = new InMemoryLogSink();
+  const failures = [
+    failure('conflict', 'another key or hash', { reason: 'renewal-mismatch' }),
+    failure('forbidden', 'the worker is not authorized', { reason: 'worker-not-authorized' }),
+    failure('unavailable', 'the database is down'),
+  ];
+  const api = new ControlPlaneApi({
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never, launches: undefined as never,
+    enrollment: { renew: async () => err(failures.shift()!) } as never,
+    logger: new Logger(renewalSink, { now: () => '2026-10-25T09:00:00.000Z' as never }),
+  } as never);
+  const body = { credentialGeneration: 2, brokerUserPublicKey: `U${'K'.repeat(55)}`, controlPlaneSecretSha256: 'a'.repeat(64) };
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  const codes = [];
+  for (let call = 0; call < 3; call += 1) codes.push(failed(await api.handle('renewWorkerCredentials', request, '')).code);
+  assert.deepEqual(codes, ['conflict', 'forbidden', 'unavailable'], 'the failures pass unchanged');
+  assert.deepEqual(renewalSink.records.map(({ level, event, correlation, fields }) => ({ level, event, correlation, fields })), [
+    { level: 'warn', event: 'fleet.credentials.renewal-refused', correlation: { workerId: 'worker-1' }, fields: { generation: 2, code: 'conflict', reason: 'renewal-mismatch' } },
+    { level: 'warn', event: 'fleet.credentials.renewal-refused', correlation: { workerId: 'worker-1' }, fields: { generation: 2, code: 'forbidden', reason: 'worker-not-authorized' } },
+  ], 'an unavailable store refuses nothing');
+  assert.doesNotMatch(JSON.stringify(renewalSink.records), /KKKK|aaaa/);
+});
+
 test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {
   const received: unknown[] = [];
   const api = new ControlPlaneApi({
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async (_principal, values) => {
@@ -439,6 +473,7 @@ test('an undecided launch operation is 503, never 500', async () => {
 test('a delegation while the database is down is 503 with a Failure', async () => {
   const down = { transaction: async () => err(failure('unavailable', 'the database is down')) } as unknown as ControlPlaneStore;
   const api = new ControlPlaneApi({
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, launches: undefined as never, delegations: new DelegationService(down),
   });

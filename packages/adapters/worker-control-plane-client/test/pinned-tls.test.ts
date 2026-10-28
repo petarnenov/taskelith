@@ -160,9 +160,9 @@ test('a server the pinned CA issued gets the token; a system-trusted foreign one
 });
 
 test('the launch authority and the evidence publisher refuse a system-trusted foreign server', async () => {
-  const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), credential: CREDENTIAL });
+  const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), bearer: () => CREDENTIAL });
   assert.equal(failed(await launch.authorize({} as never)).code, 'unavailable');
-  const evidence = new HttpEvidencePublisher({ ...endpoint(impostorUrl), credential: CREDENTIAL });
+  const evidence = new HttpEvidencePublisher({ ...endpoint(impostorUrl), bearer: () => CREDENTIAL });
   assert.equal(failed(await evidence.publish({} as never, new Uint8Array([1]))).code, 'unavailable');
   assert.deepEqual(impostor.seen, []);
 });
@@ -179,7 +179,7 @@ test('NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign server get the token
   const refused = failed(await new HttpEnrollmentClient(endpoint(impostorUrl)).enroll(TOKEN, ENROLLMENT_REQUEST));
   impostor.status = 200;
   assert.deepEqual([refused.code, refused.details.reason], ['precondition-failed', 'installation-ca-untrusted']);
-  const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), credential: CREDENTIAL });
+  const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), bearer: () => CREDENTIAL });
   assert.equal(failed(await launch.authorize({} as never)).code, 'unavailable');
   assert.deepEqual(impostor.seen, [], 'no token and no bearer reached the foreign server');
 });

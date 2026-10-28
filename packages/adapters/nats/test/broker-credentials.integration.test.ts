@@ -6,7 +6,10 @@ import { connect, credsAuthenticator } from '@nats-io/transport-node';
 import { installationIdentity, parseWorkerId } from '@taskelith/fleet';
 import {
   BrokerAuthority,
+  brokerUserPublicKey,
   connectWorkerTransport,
+  credsFile,
+  newBrokerUserKey,
   encodeJson,
   JetStreamPublisher,
   NatsBrokerCredentials,
@@ -100,6 +103,19 @@ test('a revoked worker is disconnected at once and cannot connect again, without
   const again = failed(await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds: issued.creds }));
   assert.equal(again.code, 'unavailable');
   assert.match(again.details.cause ?? '', /Authorization Violation/);
+  assert.equal(again.details.reason, 'credentials-rejected', 'the worker counts it toward its stop');
+});
+
+test('a key the worker generated connects with the JWT signed for it', async () => {
+  const { address } = await workerSetup('worker-1');
+  const identity = value(installationIdentity(address.installationId, 1));
+  const own = newBrokerUserKey();
+  assert.equal(brokerUserPublicKey(own.seed), own.publicKey);
+  const signed = expectOk(await broker.sign(identity, value(parseWorkerId('worker-1')), 2, own.publicKey));
+  const creds = credsFile(signed.jwt, new TextEncoder().encode(own.seed));
+  const worker = expectOk(await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds }));
+  await worker.close();
+  assert.equal(failed(await broker.sign(identity, value(parseWorkerId('worker-1')), 2, 'not-a-key')).code, 'invalid');
 });
 
 test('a published list replaces the previous one: listed users are refused, others accepted', async () => {
@@ -129,4 +145,5 @@ test('a connection with the configured CA uses TLS, and one with another CA fail
     server: NATS_URL, address, workerId: 'worker-1', creds: issued.creds, tls: { ca: integrationSecret('server-cert.pem') },
   });
   assert.equal(wrong.ok, false);
+  assert.equal(failed(wrong).details.reason, undefined, 'a TLS failure is not a rejected credential');
 });

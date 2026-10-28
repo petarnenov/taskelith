@@ -1,5 +1,5 @@
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
-import type { Secrets } from '@taskelith/access';
+import { checkInvocation, type Secrets } from '@taskelith/access';
 import type { RecoveryEpoch, WorkerId } from '@taskelith/execution';
 import type { Clock } from '@taskelith/sdlc';
 import {
@@ -12,8 +12,10 @@ import {
   type EnrollmentRequest,
   type HostConstraints,
   type ProtocolWindow,
+  type RotationRequest,
   type WorkerPrincipal,
 } from '../domain/enrollment.js';
+import { rotationConflict, type CredentialRenewalRequest, type RenewedCredentials } from '../domain/credential-rotation.js';
 import { FLEET_LIMITS, type FleetLimits } from '../domain/fleet-limits.js';
 import { parseWorkerId, type InstallationIdentity } from '../domain/installation.js';
 import type { BrokerCredentials } from '../ports/broker-credentials.js';
@@ -31,11 +33,24 @@ export interface Enrollment {
   readonly credentials: { readonly controlPlane: string; readonly broker: string };
 }
 
+// The operator's actor and reason for a rotation's audit event.
+export interface RotationInvocation {
+  readonly actor: string;
+  readonly reason: string;
+}
+
+// What `rotate-worker` prints: no secret.
+export interface RequestedRotation {
+  readonly workerId: WorkerId;
+  readonly credentialGeneration: number;
+  readonly deadline: Instant;
+}
+
+
 // `revocationsPublished` false means the dropped predecessor is recorded but
 // the broker does not know yet; the next publication retries it.
-export interface RotatedCredentials {
+export interface ConfirmedCredentials {
   readonly credentialGeneration: number;
-  readonly credentials: { readonly controlPlane: string; readonly broker: string };
   readonly revocationsPublished: boolean;
 }
 
@@ -110,21 +125,48 @@ export class EnrollmentService {
     });
   }
 
-  // A new generation of both credentials; the old one stays valid only
-  // within the grace window (trust model section 4).
-  async rotate(workerId: WorkerId): Promise<Result<RotatedCredentials>> {
-    const worker = await this.#activeWorker(workerId);
+  // Only requests the next generation (installation contract section 6);
+  // an open rotation is answered unchanged.
+  async requestRotation(workerId: WorkerId, invocation: RotationInvocation): Promise<Result<RequestedRotation>> {
+    const checked = checkInvocation(invocation);
+    if (!checked.ok) return checked;
+    const requestedAt = this.#deps.clock.now();
+    const { rotationGraceMilliseconds, rotationHardCapMilliseconds } = this.#limits;
+    const deadline = this.#after(requestedAt, Math.max(rotationGraceMilliseconds, rotationHardCapMilliseconds));
+    const requested = await this.#deps.registry.requestRotation(workerId, { requestedAt, deadline, ...invocation });
+    if (!requested.ok) return requested.error.code === 'forbidden' ? err(notAuthorized()) : requested;
+    return ok(Object.freeze({ workerId, credentialGeneration: requested.value.generation, deadline: requested.value.deadline }));
+  }
+
+  // The caller authenticated with the generation before the requested one;
+  // the control plane signs a user JWT for the worker's own key.
+  async renew(principal: WorkerPrincipal, request: CredentialRenewalRequest): Promise<Result<RenewedCredentials>> {
+    const worker = await this.#activeWorker(principal.workerId);
     if (!worker.ok) return worker;
-    const { current } = worker.value.credentials;
-    const issued = await this.#issueGeneration(workerId, current.generation + 1);
-    if (!issued.ok) return issued;
-    const now = this.#deps.clock.now();
-    const validUntil = this.#after(now, this.#limits.rotationGraceMilliseconds);
-    const rotated = await this.#deps.registry.rotate(workerId, current.generation, issued.value.generation, validUntil, now);
-    if (!rotated.ok) return rotated.error.code === 'forbidden' ? err(notAuthorized()) : rotated;
-    // The rotation is committed, so its new secrets are returned in any case.
+    const { rotation, current } = worker.value.credentials;
+    const generation = request.credentialGeneration;
+    if (rotation?.generation !== generation || principal.generation !== generation - 1) return err(rotationConflict('rotation-not-requested'));
+    const stored = renewedAnswer(rotation, current, request);
+    if (stored !== undefined) return stored;
+    const signed = await this.#deps.broker.sign(this.#deps.installation, principal.workerId, generation, request.brokerUserPublicKey);
+    if (!signed.ok) return signed;
+    const next = Object.freeze({
+      generation, controlPlaneHash: request.controlPlaneSecretSha256, brokerUserKey: request.brokerUserPublicKey, brokerIssuedAt: signed.value.issuedAt,
+    });
+    const renewed = await this.#deps.registry.renew(principal.workerId, next, signed.value.jwt, this.#deps.clock);
+    if (!renewed.ok) return renewed.error.code === 'forbidden' ? err(notAuthorized()) : renewed;
+    return ok(renewal(renewed.value));
+  }
+
+  // Drops the predecessor at once; the caller authenticated with the
+  // generation it confirms, after its broker connection used it.
+  async confirm(principal: WorkerPrincipal, generation: number): Promise<Result<ConfirmedCredentials>> {
+    if (principal.generation !== generation) return err(rotationConflict('confirmation-mismatch'));
+    const confirmed = await this.#deps.registry.confirm(principal.workerId, generation, this.#deps.clock);
+    if (!confirmed.ok) return confirmed.error.code === 'forbidden' ? err(notAuthorized()) : confirmed;
+    // Also on a repeat, which retries a publication that failed before.
     const revocationsPublished = await this.#publishedAfterCommit();
-    return ok({ credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets, revocationsPublished });
+    return ok(Object.freeze({ credentialGeneration: generation, revocationsPublished }));
   }
 
   // Denies every credential of the worker at once; with item 17's registry
@@ -138,13 +180,19 @@ export class EnrollmentService {
     return published.ok ? ok(Object.freeze({ commandConsumerRemoved: removed.ok })) : published;
   }
 
-  // Ends the grace windows that have passed; the control plane runs it
-  // periodically, which also retries an unpublished revocation.
+  // Enforces rotation deadlines; the control plane runs it periodically,
+  // which also retries an unpublished revocation. Answers how many it ended.
   async expireGraceWindows(): Promise<Result<number>> {
-    const expired = await this.#deps.registry.expirePredecessors(this.#deps.clock.now());
+    const now = this.#deps.clock.now();
+    const expired = await this.#deps.registry.expirePredecessors(now);
     if (!expired.ok) return expired;
+    const revoked = await this.#revokeUnrenewed(now);
+    if (!revoked.ok) return revoked;
     const published = await this.publishRevocations();
-    return published.ok ? expired : published;
+    if (!published.ok) return published;
+    const kept = revoked.value.consumersKept;
+    if (kept.length > 0) return err(consumersKept(kept));
+    return ok(expired.value + revoked.value.revoked);
   }
 
   // Sends the broker the complete revocation list when part of it is new.
@@ -152,8 +200,8 @@ export class EnrollmentService {
     return this.#deps.registry.publishRevocations((revocations) => this.#deps.broker.publishRevocations(revocations));
   }
 
-  // The worker and generation a presented control-plane bearer belongs to;
-  // unknown, revoked, or past the grace window are alike `forbidden`.
+  // The worker and generation of a control-plane bearer; unknown, revoked,
+  // and a dropped or expired predecessor are alike `forbidden`.
   async authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>> {
     const worker = await this.#deps.registry.workerByCredentialHash(this.#deps.secrets.hashOf(secret));
     if (!worker.ok) return worker;
@@ -171,6 +219,23 @@ export class EnrollmentService {
     } catch {
       return false;
     }
+  }
+
+  // Each worker whose rotation was never renewed by its deadline is revoked,
+  // then its command consumer removed; a removal that fails is reported.
+  async #revokeUnrenewed(now: Instant): Promise<Result<{ revoked: number; consumersKept: readonly WorkerId[] }>> {
+    const due = await this.#deps.registry.unrenewedRotations(now);
+    if (!due.ok) return due;
+    let revoked = 0;
+    const consumersKept: WorkerId[] = [];
+    for (const workerId of due.value) {
+      const expired = await this.#deps.registry.expireRotation(workerId, now);
+      if (!expired.ok) return expired;
+      if (!expired.value) continue;
+      revoked += 1;
+      if (!(await this.#deps.commandConsumers.remove(workerId)).ok) consumersKept.push(workerId);
+    }
+    return ok({ revoked, consumersKept });
   }
 
   async #activeWorker(workerId: WorkerId): Promise<Result<EnrolledWorker>> {
@@ -205,6 +270,26 @@ export class EnrollmentService {
 
 function reasoned(code: 'forbidden' | 'precondition-failed' | 'conflict', reason: string, message: string) {
   return failure(code, message, { reason });
+}
+
+// A renewal repeated with the same material gets the stored answer.
+function renewedAnswer(
+  rotation: RotationRequest,
+  current: CredentialGeneration,
+  request: CredentialRenewalRequest,
+): Result<RenewedCredentials> | undefined {
+  if (rotation.brokerUserJwt === undefined) return undefined;
+  const same = current.brokerUserKey === request.brokerUserPublicKey && current.controlPlaneHash === request.controlPlaneSecretSha256;
+  return same ? ok(renewal(rotation)) : err(rotationConflict('renewal-mismatch'));
+}
+
+function renewal(rotation: RotationRequest): RenewedCredentials {
+  return Object.freeze({ credentialGeneration: rotation.generation, brokerUserJwt: rotation.brokerUserJwt!, deadline: rotation.deadline });
+}
+
+function consumersKept(workers: readonly WorkerId[]) {
+  const message = `the command consumer of revoked worker ${workers.join(', ')} was not removed; a control-plane start retries it`;
+  return failure('unavailable', message, { workers: workers.join(',') });
 }
 
 function notAuthorized() {

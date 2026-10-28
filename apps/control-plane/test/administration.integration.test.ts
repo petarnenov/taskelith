@@ -9,7 +9,7 @@ import { Administration, adminMain, repairCommandConsumers, type AdminIo } from 
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
 import type { EnrollmentService } from '@taskelith/fleet';
-import { err, failure, parseIdentifier } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { createAccount } from '@nats-io/nkeys';
 import {
   BrokerAuthority,
@@ -115,7 +115,14 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
     assert.equal(statSync(join(dataRoot, 'control-plane', name)).mode & 0o777, 0o600, name);
   }
   assert.equal(new X509Certificate(controlPlaneFile('api-certificate.pem')).checkHost('localhost'), 'localhost');
-  assert.equal((await admin(['init', ...ADMIN])).output.error !== undefined, true, 'a second initialization fails');
+  const again = await admin(['init', ...ADMIN]);
+  assert.equal((again.output.error as { code: string }).code, 'conflict', 'a second initialization fails');
+  const ownerTrail = await rows(database, 'SELECT * FROM access_audit_events ORDER BY position') as Array<Record<string, unknown>>;
+  assert.deepEqual(ownerTrail.map((event) => [event.kind, event.actor]), [
+    ['access.owner-created', 'root@control-plane-1'], ['access.owner-bootstrap-refused', 'root@control-plane-1'],
+  ]);
+  assert.equal(ownerTrail[1]?.principal_id, ownerTrail[0]?.principal_id);
+  assert.doesNotMatch(JSON.stringify(ownerTrail), new RegExp(operatorSecret), 'the refusal names no secret');
 
   const refused = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: 'tkop_wrong' });
   assert.deepEqual([refused.status, (refused.output.error as { code: string }).code], [1, 'forbidden']);
@@ -174,9 +181,19 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal(received?.json<{ hello: string }>().hello, 'worker');
   received?.ack();
 
-  const rotated = await admin(['rotate-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  const unexplained = await admin(['rotate-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  assert.deepEqual([unexplained.status, (unexplained.output.error as { code: string }).code], [1, 'invalid'], 'actor and reason');
+  const rotation = ['rotate-worker', enrolled.workerId, '--actor', 'ops', '--reason', 'scheduled'];
+  const rotated = await admin(rotation, { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  assert.deepEqual(Object.keys(rotated.output).sort(), ['credentialGeneration', 'deadline', 'workerId'], 'no secret is printed');
   assert.equal((rotated.output as { credentialGeneration: number }).credentialGeneration, 2);
-  assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'grace window');
+  assert.deepEqual((await admin(rotation, { TASKELITH_OPERATOR_TOKEN: operatorSecret })).output, rotated.output, 'an open request');
+  assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'N stays valid');
+  const notices = await rows(database, "SELECT message::jsonb->>'subject' AS subject FROM outbox WHERE event_type = 'worker.credentials.rotation-requested'");
+  const subject = `workers.${enrolled.workerId}.commands`;
+  assert.deepEqual(notices, [{ subject }, { subject }], 'each request sends the notice');
+  const audited = await rows(database, "SELECT subject, kind, actor, reason, generation FROM audit_events WHERE kind LIKE 'worker-credential.%'");
+  assert.deepEqual(audited, [{ subject: enrolled.workerId, kind: 'worker-credential.rotation-requested', actor: 'ops', reason: 'scheduled', generation: 2 }]);
 
   // A grant before the revocation, which the administration must invalidate.
   const store = new PostgresDatabase(database);
@@ -184,7 +201,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   await sql(database, "UPDATE workers SET reachable = true, worker_admission = 'admitted'");
   await createLaunchRun(store);
   const { taskId, request } = await placedTask(store, 'task-1', enrolled.workerId);
-  const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 2 }, request));
+  const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 1 }, request));
   assert.equal(granted.kind, 'granted');
 
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
@@ -325,4 +342,48 @@ test('a missing setting fails with its name only', async () => {
   const status = await adminMain(['init', ...ADMIN], { environment: {}, platform: process.platform, ownerUid, write: (line) => lines.push(line) });
   assert.equal(status, 1);
   assert.match(lines[0]!, /TASKELITH_POSTGRES_URL is not set/);
+});
+
+async function adminWithSecret(argv: string[], token: string, secret: string | Result<string>): Promise<{ status: number; output: Record<string, unknown> }> {
+  const lines: string[] = [];
+  const io: AdminIo = {
+    environment: { ...ENVIRONMENT, TASKELITH_OPERATOR_TOKEN: token }, platform: process.platform, ownerUid,
+    write: (line) => lines.push(line), readSecret: async () => (typeof secret === 'string' ? ok(secret) : secret),
+  };
+  const status = await adminMain(argv, io);
+  return { status, output: JSON.parse(lines.join('\n')) };
+}
+
+test('the owner exists from initialization, and only its credential manages principals and roles', { timeout: 60_000 }, async () => {
+  const reset = await admin(['reset-operator-credential', ...ADMIN]);
+  const token = (reset.output as { operatorSecret: string }).operatorSecret;
+  const password = 'a password of bob that is long';
+  const [owner] = await rows(database, 'SELECT p.principal_id, p.login_name FROM operator_principal o JOIN principals p USING (principal_id)') as Array<{ login_name: string }>;
+  assert.equal(owner?.login_name, 'owner');
+  const created = await adminWithSecret(['create-principal', '--login-name', 'Bob', ...ADMIN], token, '');
+  assert.deepEqual([created.status, (created.output as { loginName: string }).loginName], [0, 'bob']);
+  assert.equal((await adminWithSecret(['create-principal', '--login-name', 'eve', ...ADMIN], 'tkop_wrong', '')).status, 1);
+  const set = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, password);
+  assert.deepEqual([set.status, (set.output as { sessionsEnded: number }).sessionsEnded], [0, 0]);
+  const weak = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, 'short');
+  assert.equal(weak.status, 1);
+  const role = ['--project', 'alpha', '--login-name', 'bob', ...ADMIN];
+  assert.equal((await adminWithSecret(['assign-project-role', ...role, '--role', 'project-operator'], token, '')).status, 0);
+  assert.deepEqual(await rows(database, 'SELECT project_id, role FROM project_roles'), [{ project_id: 'alpha', role: 'project-operator' }]);
+  assert.equal((await adminWithSecret(['remove-project-role', ...role], token, '')).status, 0);
+  assert.deepEqual(await rows(database, 'SELECT project_id FROM project_roles'), []);
+  const audit = await rows(database, 'SELECT kind, actor FROM access_audit_events ORDER BY position') as Array<{ kind: string; actor: string }>;
+  assert.deepEqual(audit.map((event) => event.kind), [
+    'access.owner-created', 'access.owner-bootstrap-refused', 'access.principal-created', 'access.password-set',
+    'access.project-role-assigned', 'access.project-role-removed',
+  ]);
+  const [stored] = await rows(database, "SELECT password_hash FROM principals WHERE login_name = 'bob'") as Array<{ password_hash: string }>;
+  assert.match(stored?.password_hash ?? '', /^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);
+  assert.doesNotMatch(JSON.stringify([set.output, weak.output, audit]), new RegExp(password));
+  const state = () => Promise.all(['SELECT password_hash FROM principals', 'SELECT kind FROM access_audit_events', 'SELECT * FROM browser_sessions']
+    .map((query) => rows(database, query)));
+  const before = await state();
+  const cancel = err(failure('invalid', 'the input was cancelled', { reason: 'cancelled' }));
+  const cancelled = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, cancel);
+  assert.deepEqual([cancelled.status, await state()], [1, before], 'a cancelled set-password changes nothing');
 });

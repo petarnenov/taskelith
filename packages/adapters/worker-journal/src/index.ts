@@ -37,13 +37,22 @@ export {
   type VolumeSpaceReader,
 } from './volume.js';
 export {
+  adoptGeneration,
+  finishAdoption,
+  readPendingGeneration,
+  removeSupersededGeneration,
+  storePendingGeneration,
+  type PendingGeneration,
+} from './credential-rotation-files.js';
+export {
   credentialReferencesOf,
+  readCredentialFiles,
   readInstallationCaPin,
   readWorkerCredentials,
   type WorkerCredentials,
   type WorkerEnrollment,
 } from './worker-credentials.js';
-export { IDENTITY_FORMAT, readIdentity, type CredentialReferences, type WorkerIdentity } from './worker-identity.js';
+export { IDENTITY_FORMAT, readIdentity, type CredentialReferences, type KeptGeneration, type WorkerIdentity } from './worker-identity.js';
 export {
   claimWorkerRoot,
   enrollWorkerRoot,

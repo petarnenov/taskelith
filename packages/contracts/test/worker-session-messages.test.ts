@@ -139,8 +139,8 @@ function enumAt(schema: Json, ...path: string[]): string[] {
   return (node.enum ?? [node.const]) as string[];
 }
 
-test('the execution messages are at version 0.8.0 with the session commands and observations on the worker channels', () => {
-  assert.equal(EXECUTION.info.version, '0.8.0');
+test('the execution messages are at version 0.9.0 with the session commands and observations on the worker channels', () => {
+  assert.equal(EXECUTION.info.version, '0.9.0');
   const titles = (channel: string) => Object.values(EXECUTION.channels[channel]!.messages).map(({ $ref }) =>
     EXECUTION.components.messages[$ref.replace('#/components/messages/', '')]!.title);
   for (const [type, schema] of Object.entries(SESSION_COMMANDS)) {

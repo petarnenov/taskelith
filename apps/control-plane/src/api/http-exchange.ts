@@ -9,17 +9,29 @@ export const MAX_BODY_BYTES = 1024 ** 2;
 export const MAX_EVIDENCE_BYTES = 64 * 1024 ** 2;
 export const MAX_CONCURRENT_UPLOADS = 4;
 
-export interface JsonResponse {
+// Headers such as Set-Cookie; a failure keeps its redacted code and
+// details for the request log.
+interface ResponseExtras {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly failure?: Failure;
+}
+
+export interface JsonResponse extends ResponseExtras {
   readonly status: number;
   readonly body: unknown;
 }
 
-export interface BinaryResponse {
+export interface BinaryResponse extends ResponseExtras {
   readonly status: number;
   readonly binary: Uint8Array;
 }
 
-export type ApiResponse = JsonResponse | BinaryResponse;
+export interface EmptyResponse extends ResponseExtras {
+  readonly status: number;
+  readonly empty: true;
+}
+
+export type ApiResponse = JsonResponse | BinaryResponse | EmptyResponse;
 
 // The bearer token of the Authorization header, or undefined without one.
 export function bearerToken(request: IncomingMessage): string | undefined {
@@ -57,9 +69,10 @@ export function parseJson(bytes: Buffer): Result<unknown> {
 
 export function writeResponse(response: ServerResponse, answer: ApiResponse, correlationId: string): void {
   const binary = 'binary' in answer;
-  const content = binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
+  const content = 'empty' in answer ? Buffer.alloc(0) : binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
   response.writeHead(answer.status, {
-    'content-type': binary ? 'application/octet-stream' : 'application/json',
+    ...answer.headers,
+    ...('empty' in answer ? {} : { 'content-type': binary ? 'application/octet-stream' : 'application/json' }),
     'content-length': content.byteLength,
     'x-correlation-id': correlationId,
     'cache-control': 'no-store',
@@ -71,6 +84,7 @@ export function writeResponse(response: ServerResponse, answer: ApiResponse, cor
 
 // A failure leaves the process with its secrets redacted (trust model 5).
 export function failureResponse(status: number, failed: Failure): JsonResponse {
-  const { code, message, details } = redactFailure(failed);
-  return { status, body: { code, message, details } };
+  const redacted = redactFailure(failed);
+  const { code, message, details } = redacted;
+  return { status, body: { code, message, details }, failure: redacted };
 }

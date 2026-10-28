@@ -4,7 +4,7 @@ G3 item 9 (`define-g3-wire-contracts`, [G3 work plan](/docs/g3-plan.md) row 9) o
 
 ## What Changes
 
-- `packages/contracts/documents/execution.asyncapi.json` from 0.7.0 to 0.8.0, execution protocol version 2:
+- `packages/contracts/documents/execution.asyncapi.json` from 0.8.0 to 0.9.0, execution protocol version 2:
   - commands `session.turn.deliver`, `session.response.deliver`, `session.delegation-result.deliver`, and the notice `execution.scm-credential.refreshed`;
   - observations `session.generation.started`, `session.generation.ended`, `session.turn.delivered`, `session.turn.not-delivered`, `session.turn.acceptance-unknown` (architect, 2026-10-28, review pass 1 finding 3), `session.turn.ended`, `session.request.recorded`, `session.response.delivery-reported`, `session.output.appended`, `session.limit.signaled`, `execution.scm-credential.adopted`, and `execution.scm-credential.not-adopted`;
   - the agent session binding of an offer of protocol version 2, `AssignmentSessionBinding`, with the session, harness, model, effort, and resume point (architect, 2026-10-28);
@@ -12,9 +12,9 @@ G3 item 9 (`define-g3-wire-contracts`, [G3 work plan](/docs/g3-plan.md) row 9) o
   - the session schemas of 9b, `DelegationResult` and `DelegationSummary` of 9c, and `ExternalId`, copied unchanged.
 - New `packages/contracts/documents/terminal.asyncapi.json` 0.1.0: the browser terminal frames and the worker relay frames, registered with the generator.
 - `control-plane.openapi.json` from 0.2.0 to 0.3.0: `openTerminal`, the terminal WebSocket upgrade, with `TerminalRefusal`.
-- `execution.openapi.json` from 0.6.0 to 0.7.0: `openWorkerRelay`, the worker relay upgrade, with `RelayRefusal`.
+- `execution.openapi.json` from 0.7.0 to 0.8.0: `openWorkerRelay`, the worker relay upgrade, with `RelayRefusal`.
 - `SESSION_PROTOCOL_VERSION` (2) exported by `@taskelith/contracts`; `EXECUTION_PROTOCOL_VERSION` stays 1.
-- `packages/contracts/breaking-changes.json`: the 110 additions that the asyncapi diff lists for `execution.asyncapi.json` 0.8.0.
+- `packages/contracts/breaking-changes.json`: the 110 additions that the asyncapi diff lists for `execution.asyncapi.json` 0.9.0.
 - Contract tests `worker-session-messages.test.ts` and `terminal-contracts.test.ts`, and updated document versions and shared names in the existing tests.
 - New contract page `docs/contracts/worker-messages-and-terminal.md`, linked from the execution and control-plane wire contract pages; the operation `recordTurnAcceptanceUnknown` added to the [session timeline contract](/docs/contracts/session-timeline.md) section 4.4; the refreshed credential wording fixed in the G3 plan row 9 and the source control contract.
 - The [agent harness port](/docs/contracts/agent-harness-port.md) section 6: a refused `submitTurn` names the running turn in the detail `runningTurnId` (`RUNNING_TURN_DETAIL`), with the scripted harness and the conformance suite (architect's amendment of 2026-10-28, review pass 2).

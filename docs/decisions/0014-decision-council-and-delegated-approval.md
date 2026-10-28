@@ -1,7 +1,7 @@
 # ADR 0014: The decision council and delegated approval authority
 
 Date: 2026-10-25
-Status: Decided by the owner on 2026-10-25 in the project conversation. Recorded; no council, decision record, or communication plugin exists yet. Implementation is not authorized: it starts only on an explicit owner authorization, and not before Claude Code, Codex, and OpenCode are admitted.
+Status: Decided by the owner on 2026-10-25 in the project conversation. Recorded; no council, decision record, or communication plugin exists yet. Implementation is not authorized: it starts only on an explicit owner authorization, and not before Claude Code, Codex, and OpenCode are admitted. [ADR 0016](0016-delivery-gates-for-intents-and-council.md) fixes the council's delivery gate as G10, after G9 (2026-10-28).
 
 ## Context
 

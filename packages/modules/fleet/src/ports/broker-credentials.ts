@@ -11,10 +11,18 @@ export interface IssuedBrokerCredential {
   readonly issuedAt: Instant;
 }
 
+// A user JWT signed for a key the worker generated; no seed is involved.
+export interface SignedBrokerUser {
+  readonly jwt: string;
+  readonly issuedAt: Instant;
+}
+
 // Issues per-worker broker users limited to the worker's own subjects, and
 // revokes them without a server reload (decisions D9 (a) and O2 (a)).
 export interface BrokerCredentials {
   issue(installation: InstallationIdentity, workerId: WorkerId, generation: number): Promise<Result<IssuedBrokerCredential>>;
+  // `invalid` when `userKey` is not an NKey user public key.
+  sign(installation: InstallationIdentity, workerId: WorkerId, generation: number, userKey: string): Promise<Result<SignedBrokerUser>>;
   // Makes `revocations` the broker's complete list of revoked users.
   publishRevocations(revocations: readonly BrokerRevocation[]): Promise<Result<void>>;
 }

@@ -1,0 +1,87 @@
+{
+  "change": "schedule-intent-and-council-gates",
+  "generatedAt": "2026-10-28T12:53:23.542Z",
+  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
+  "headCommit": "f36f7e748b78fdf43711b5d5d958fe73666c83f4",
+  "features": {
+    "linesChanged": 76,
+    "filesChanged": 7,
+    "capabilities": [
+      "delivery-planning"
+    ],
+    "touches": {
+      "code": false,
+      "tests": false,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": true
+    },
+    "externalFacts": false,
+    "size": "S-M",
+    "capabilityHistory": {
+      "changes": 2,
+      "thirdPassShare": 0.5,
+      "mediumOrWorsePerChange": 2
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "standard",
+    "triggers": [],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "standard",
+    "confidence": 0.76,
+    "probabilities": {
+      "standard": 0.88,
+      "elevated": 0.12
+    },
+    "expectedPasses": 2.1,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 272
+  }
+}

@@ -14,6 +14,7 @@ import {
   encodeJson,
   HeartbeatReceiver,
   INVENTORY_REPORTED,
+  isCredentialsRejected,
   JetStreamPublisher,
   NatsCommandConsumers,
   OBSERVATION_SCHEMAS,
@@ -268,15 +269,16 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
   assert.equal((await publisher.publishPending()).ok, false);
 });
 
-test('a confirmation and an inventory request are published without a message identity, a command with its own', async () => {
+test('a confirmation and the request notices are published without a message identity, a command with its own', async () => {
   const confirmation = { ...outboxRow('o1', 'workers.w1.commands'), metadata: { eventId: 'o1', eventType: 'execution.observations.confirmed' } };
   const request = { ...outboxRow('i1', 'workers.w1.commands'), metadata: { eventId: 'i1', eventType: 'worker.inventory.requested' } };
-  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never, request as never]);
+  const rotation = { ...outboxRow('r1', 'workers.w1.commands'), metadata: { eventId: 'r1', eventType: 'worker.credentials.rotation-requested' } };
+  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never, request as never, rotation as never]);
   const sent: Array<[string, string | undefined]> = [];
   const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(new Set(), sent)), address);
-  assert.deepEqual(await publisher.publishPending(), ok({ published: 3, deferred: 0 }));
-  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined, undefined]);
-  assert.deepEqual(outbox.published, ['e1', 'o1', 'i1']);
+  assert.deepEqual(await publisher.publishPending(), ok({ published: 4, deferred: 0 }));
+  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined, undefined, undefined]);
+  assert.deepEqual(outbox.published, ['e1', 'o1', 'i1', 'r1']);
 });
 
 test('a failed publication is logged with its event identity and backoff', async () => {
@@ -311,6 +313,25 @@ test('a broker failure is unavailable and names the subject', async () => {
   assert.deepEqual(sent.error.details, { cause: 'timeout' });
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('stored'));
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('duplicate'));
+});
+
+test('a refused user is credentials-rejected, also behind a cause; other failures are not', async () => {
+  const rejectedBy = (error: Error) => ({ publish: async () => Promise.reject(error) }) as unknown as JetStreamClient;
+  const named = (name: string, message: string) => Object.assign(new Error(message), { name });
+  const refusals = [
+    named('AuthorizationError', "'Authorization Violation'"),
+    named('UserAuthenticationExpiredError', 'expired'),
+    new Error('wrapped', { cause: new Error("'User Authentication Revoked'") }),
+  ];
+  for (const refusal of refusals) {
+    const sent = await new JetStreamPublisher(rejectedBy(refusal)).publish({ subject: 's', body: bytes({}), messageId: 'x' });
+    assert.ok(!sent.ok);
+    assert.ok(isCredentialsRejected(sent.error), refusal.message);
+    assert.equal(sent.error.code, 'unavailable', 'the code stays, so no other retry changes');
+  }
+  const other = await new JetStreamPublisher(rejectedBy(new Error('connection refused'))).publish({ subject: 's', body: bytes({}), messageId: 'x' });
+  assert.ok(!other.ok);
+  assert.equal(isCredentialsRejected(other.error), false);
 });
 
 function deletingConsumers(failure?: Error): { deleted: string[]; jsm: JetStreamManager } {

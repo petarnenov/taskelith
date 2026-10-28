@@ -10,7 +10,12 @@ import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { certificateSha256, executionAccountOf, seededUuids, value, withTestBrokerCa, type SeededRandom } from '@taskelith/testing';
 import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
-import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import {
+  HttpCredentialRenewalClient,
+  HttpEnrollmentClient,
+  HttpInstallationCaSource,
+  HttpLaunchAuthorityClient,
+} from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
 import {
@@ -180,6 +185,7 @@ export class ScenarioWorker {
     return {
       installationCa: new HttpInstallationCaSource(endpoint),
       enrollment: (installationCa) => new HttpEnrollmentClient({ ...endpoint, installationCa }),
+      renewal: (installationCa) => new HttpCredentialRenewalClient({ ...endpoint, installationCa }),
       connect: async (endpoint) => {
         const connected = await connectWorkerTransport(withTestBrokerCa(endpoint));
         return connected.ok ? ok(wrapTransport(connected.value)) : connected;
@@ -194,7 +200,7 @@ export class ScenarioWorker {
       admissionChecks: [this.#admissionCheck()],
       sleep: scaledSleep, draw, logger,
       launching: {
-        authority: (credential, installationCa) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential, installationCa })),
+        authority: (bearer, installationCa) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, bearer, installationCa })),
         host: (settings, executions) => this.#launchHost(settings, executions),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),

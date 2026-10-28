@@ -12,6 +12,11 @@ export interface RunResult {
   readonly stderr: string;
 }
 
+// A parsed JSON object, never an array or null.
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // Adapter over ajv: callers see readable violations, never ajv's own types.
 export function ajvSchemaCheck(schema: object, references: readonly object[] = []): SchemaCheck {
   const ajv = new Ajv2020({ allErrors: true, strict: true });

@@ -1,5 +1,16 @@
 import { join } from 'node:path';
-import { OperatorCredentialService, type AdministrativeInvocation } from '@taskelith/access';
+import {
+  OperatorAuthentication,
+  OperatorCredentialService,
+  OwnerBootstrapService,
+  PrincipalAdministration,
+  type AccessStore,
+  type AdministrativeInvocation,
+  type PasswordHasher,
+  type PrincipalId,
+  type PrincipalSummary,
+  type ProjectRoleChange,
+} from '@taskelith/access';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import { ControlPlaneNamespace, FileInstallationRecord } from '@taskelith/control-plane-store';
@@ -12,12 +23,12 @@ import {
   type InitializedInstallation,
   type InstallationIdentity,
   type IssuedCertificate,
-  type RotatedCredentials,
+  type RequestedRotation,
   type WorkerAdmissionSnapshot,
   type WorkerCommandConsumers,
   type WorkerRevocation,
 } from '@taskelith/fleet';
-import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   connectSystemAccount,
   connectTransport,
@@ -33,10 +44,11 @@ import {
   CommittingOperatorCredentials,
   CommittingWorkerAdmissions,
   migrate,
+  PostgresAccessStore,
   PostgresDatabase,
 } from '@taskelith/postgres';
-import { NodeSecrets, RandomIdentifiers } from '@taskelith/secrets';
-import { LaunchRevokingFleetRegistry } from '../composition/launch-revoking-fleet-registry.js';
+import { Argon2idPasswordHasher, NodeSecrets, RandomIdentifiers } from '@taskelith/secrets';
+import { RotationNoticingFleetRegistry } from '../composition/rotation-noticing-fleet-registry.js';
 import { ensureBrokerTrust, readBrokerAuthority } from './broker-trust.js';
 import {
   ensureInstallationAuthority,
@@ -75,7 +87,20 @@ export interface AdministrationSettings {
 export interface Initialization extends InitializedInstallation {
   readonly brokerServerConfig: string;
   readonly installationCa: string;
+  readonly ownerPrincipalId: PrincipalId;
 }
+
+// The Access adapters the control plane shares with these commands.
+export interface AccessAdapters {
+  readonly store: AccessStore;
+  readonly hasher: PasswordHasher;
+  readonly secrets: NodeSecrets;
+}
+
+// Who creates the owner at a start that finds none (design decision 7).
+export const START_OWNER_INVOCATION: AdministrativeInvocation = Object.freeze({
+  actor: 'control-plane', reason: 'bootstrap owner from the G2 operator credential',
+});
 
 // Commands run on the control-plane host: host access authorizes the init and
 // the operator reset (trust model 2); the others need the operator secret.
@@ -86,10 +111,13 @@ export class Administration {
   readonly #secrets = new NodeSecrets();
   readonly #issuer = new X509CertificateIssuer();
   readonly #operator: OperatorCredentialService;
+  readonly #access: AccessStore;
+  readonly #hasher: PasswordHasher;
 
-  private constructor(settings: AdministrationSettings, namespace: ControlPlaneNamespace) {
+  private constructor(settings: AdministrationSettings, namespace: ControlPlaneNamespace, hasher: PasswordHasher) {
     this.#settings = settings;
     this.#namespace = namespace;
+    this.#hasher = hasher;
     this.#database = new PostgresDatabase(settings.postgres, {
       ...(settings.logger === undefined ? {} : { logger: settings.logger }),
       ...(settings.metrics === undefined ? {} : { metrics: settings.metrics }),
@@ -97,11 +125,15 @@ export class Administration {
     this.#operator = new OperatorCredentialService({
       credentials: new CommittingOperatorCredentials(this.#database), secrets: this.#secrets, clock: this.#clock,
     });
+    this.#access = new PostgresAccessStore(this.#database);
   }
 
+  // Fails closed without crypto.argon2, before anything else is opened.
   static open(settings: AdministrationSettings): Result<Administration> {
+    const hasher = Argon2idPasswordHasher.create();
+    if (!hasher.ok) return hasher;
     const namespace = ControlPlaneNamespace.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
-    return namespace.ok ? ok(new Administration(settings, namespace.value)) : namespace;
+    return namespace.ok ? ok(new Administration(settings, namespace.value, hasher.value)) : namespace;
   }
 
   close(): Promise<void> {
@@ -123,9 +155,62 @@ export class Administration {
     const certificates = installed ? undefined : await this.#issue(authority.value);
     if (certificates !== undefined && !certificates.ok) return certificates;
     const initialized = await this.#installation().initialize(invocation);
-    if (!initialized.ok) return initialized;
+    if (!initialized.ok) return this.#refusedInitialization(initialized.error, invocation);
+    const owner = await this.#ownerBootstrap().ensureOwner(invocation);
+    if (!owner.ok) return owner;
     const installationCa = join(this.#namespace.directory, INSTALLATION_CA_FILE);
-    return ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath, installationCa });
+    return ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath, installationCa, ownerPrincipalId: owner.value.principalId });
+  }
+
+  // A rerun of `init` is refused, and the owner bootstrap audits the refusal.
+  async #refusedInitialization(refused: Failure, invocation: AdministrativeInvocation): Promise<Result<never>> {
+    if (refused.code !== 'conflict') return err(refused);
+    const audited = await this.#ownerBootstrap().recordRefusedBootstrap(invocation);
+    return audited.ok ? err(refused) : audited;
+  }
+
+  // The owner of an installation from before item 10, created once at the
+  // start that first finds a credential but no owner.
+  async ensureOwner(invocation: AdministrativeInvocation): Promise<Result<PrincipalId | undefined>> {
+    const credential = await new CommittingOperatorCredentials(this.#database).current();
+    if (!credential.ok) return credential;
+    if (credential.value === undefined) return ok(undefined);
+    const owner = await this.#ownerBootstrap().ensureOwner(invocation);
+    return owner.ok ? ok(owner.value.principalId) : owner;
+  }
+
+  // The bearer authenticates the owner principal (wire contracts 2).
+  get operatorPrincipal(): OperatorAuthentication {
+    return new OperatorAuthentication(this.#operator, this.#access);
+  }
+
+  get access(): AccessAdapters {
+    return { store: this.#access, hasher: this.#hasher, secrets: this.#secrets };
+  }
+
+  createPrincipal(operatorSecret: string, loginName: string, invocation: AdministrativeInvocation): Promise<Result<PrincipalSummary>> {
+    return this.#asOwner(operatorSecret, (owner) => this.#principals().createPrincipal(owner, loginName, invocation));
+  }
+
+  // The password comes from standard input, never from an argument.
+  setPassword(operatorSecret: string, loginName: string, password: string, invocation: AdministrativeInvocation) {
+    return this.#asOwner(operatorSecret, (owner) => this.#principals().setPassword(owner, loginName, password, invocation));
+  }
+
+  assignProjectRole(
+    operatorSecret: string,
+    target: { readonly projectId: string; readonly loginName: string; readonly role: string },
+    invocation: AdministrativeInvocation,
+  ): Promise<Result<ProjectRoleChange>> {
+    return this.#asOwner(operatorSecret, (owner) => this.#principals().assignProjectRole(owner, target, invocation));
+  }
+
+  removeProjectRole(
+    operatorSecret: string,
+    target: { readonly projectId: string; readonly loginName: string },
+    invocation: AdministrativeInvocation,
+  ): Promise<Result<ProjectRoleChange>> {
+    return this.#asOwner(operatorSecret, (owner) => this.#principals().removeProjectRole(owner, target, invocation));
   }
 
   // New server certificates from the stored authority (`make
@@ -164,8 +249,9 @@ export class Administration {
     });
   }
 
-  rotateWorker(operatorSecret: string, workerId: string): Promise<Result<RotatedCredentials>> {
-    return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.rotate(id)));
+  // Requests the next generation; nothing secret is made or printed.
+  rotateWorker(operatorSecret: string, workerId: string, invocation: AdministrativeInvocation): Promise<Result<RequestedRotation>> {
+    return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.requestRotation(id, invocation)));
   }
 
   revokeWorker(operatorSecret: string, workerId: string): Promise<Result<WorkerRevocation>> {
@@ -221,7 +307,7 @@ export class Administration {
     const service = new EnrollmentService({
       installation: identity.value,
       serverProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
-      registry: new LaunchRevokingFleetRegistry(this.#database),
+      registry: new RotationNoticingFleetRegistry(this.#database),
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),
       broker: new NatsBrokerCredentials(authority.value, system.value.connection),
@@ -229,6 +315,19 @@ export class Administration {
       clock: this.#clock,
     });
     return ok({ service, close: () => system.value.close() });
+  }
+
+  async #asOwner<T>(operatorSecret: string, command: (owner: PrincipalId) => Promise<Result<T>>): Promise<Result<T>> {
+    const owner = await this.operatorPrincipal.authenticate(operatorSecret);
+    return owner.ok ? command(owner.value) : owner;
+  }
+
+  #ownerBootstrap(): OwnerBootstrapService {
+    return new OwnerBootstrapService({ store: this.#access, random: this.#secrets, clock: this.#clock });
+  }
+
+  #principals(): PrincipalAdministration {
+    return new PrincipalAdministration({ store: this.#access, hasher: this.#hasher, random: this.#secrets, clock: this.#clock });
   }
 
   async #asOperator<T>(operatorSecret: string, command: (enrollment: EnrollmentService) => Promise<Result<T>>): Promise<Result<T>> {

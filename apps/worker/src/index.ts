@@ -42,6 +42,8 @@ export type {
 export { LAUNCH_POLL_MILLISECONDS, LaunchOrchestrator, type LaunchContact, type LaunchOrchestratorOptions } from './launch-orchestrator.js';
 export { LOST_CONTACT_MILLISECONDS, WorkerContact, type WorkerContactOptions } from './worker-contact.js';
 export { BrokerSession, type BrokerLink, type BrokerSessionOptions } from './broker-session.js';
+export { BrokerDial, REJECTED_ROUNDS_LIMIT, credentialsExpired, type BrokerDialOptions, type GenerationLink } from './broker-dial.js';
+export { CredentialRotation, type BrokerCandidate, type CredentialRotationOptions, type RotationNotice } from './credential-rotation.js';
 export { TaskGroup } from './task-group.js';
 export { HEARTBEAT_MILLISECONDS, heartbeatMessage, runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 export {

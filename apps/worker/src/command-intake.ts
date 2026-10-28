@@ -17,6 +17,7 @@ import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import type { DeliveredMessage, Publication, PublishOutcome } from '@taskelith/nats';
 import type { AdmissionCheck } from './admission-pressure.js';
 import { refusalOf } from './assignment-admission.js';
+import type { RotationNotice } from './credential-rotation.js';
 import { publishInventory } from './inventory-report.js';
 
 type Offer = MessageSchemas['AssignmentOfferCommand'];
@@ -24,6 +25,7 @@ type Cancellation = MessageSchemas['CancellationCommand'];
 type AssignmentEnd = MessageSchemas['AssignmentEndCommand'];
 type Confirmation = MessageSchemas['ObservationsConfirmed'];
 type InventoryRequest = MessageSchemas['InventoryRequested'];
+type RotationRequested = MessageSchemas['CredentialRotationRequested'];
 
 // The fields every delivered command keeps in every protocol version.
 type Versioned = MessageSchemas['VersionedCommand'];
@@ -41,6 +43,8 @@ export interface CommandIntakeOptions {
   readonly journalFault: () => Failure | undefined;
   // Called after each W1 commit, so a launch can start at once.
   readonly onRecorded?: () => void;
+  // Stores a requested credential generation before the acknowledgement.
+  readonly onRotationRequested?: (notice: RotationNotice) => Result<void>;
 }
 
 // The worker's command handler: the consumer acks a message only after
@@ -60,6 +64,8 @@ export class CommandIntake {
         return this.#confirm(checked<Confirmation>(message));
       case 'worker.inventory.requested':
         return this.#answerInventory(checked<InventoryRequest>(message));
+      case 'worker.credentials.rotation-requested':
+        return this.#rotate(checked<RotationRequested>(message));
       default: {
         const command = this.#journaled(checked<Versioned>(message));
         const recorded = command.ok ? this.#options.journal.recordCommand(command.value) : command;
@@ -132,6 +138,14 @@ export class CommandIntake {
     const sequence = parseSequence(confirmation.confirmedThrough);
     const confirmed = sequence.ok ? this.#options.journal.confirmThrough(sequence.value) : sequence;
     return !confirmed.ok && confirmed.error.code === 'invalid' ? ok(undefined) : confirmed;
+  }
+
+  // A notice for another worker, or without a rotation driver, is
+  // acknowledged and ignored.
+  #rotate(notice: RotationRequested): Result<unknown> {
+    const { onRotationRequested } = this.#options;
+    if (notice.workerId !== this.#workerId || onRotationRequested === undefined) return ok(undefined);
+    return onRotationRequested({ credentialGeneration: notice.credentialGeneration });
   }
 
   // A failed part fails the answer; the redelivered request takes a new

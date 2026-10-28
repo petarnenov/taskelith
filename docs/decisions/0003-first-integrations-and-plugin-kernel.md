@@ -1,7 +1,7 @@
 # ADR 0003: First integrations, closed-harness scope, and plugin microkernel
 
 Date: 2026-10-24
-Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day; decision 11 was amended by [ADR 0008](0008-product-ui-and-integration-authority.md) the same day. Recording, independent review, implementation, and qualification are pending.
+Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day; decision 11 was amended by [ADR 0008](0008-product-ui-and-integration-authority.md) the same day. Decision 1's delivery order was amended by [ADR 0016](0016-delivery-gates-for-intents-and-council.md) on 2026-10-28. Recording, independent review, implementation, and qualification are pending.
 
 ## Context
 
@@ -9,7 +9,7 @@ The architecture required an open-source first harness, a second harness, and a 
 
 ## Decisions
 
-1. **Agent harnesses.** The owner selected Claude Code, OpenAI Codex CLI, Antigravity CLI (`agy`), and OpenCode, to be delivered in that order. Claude Code is the first real harness (G3). Codex is the second (G4). Antigravity and OpenCode follow as additional plugins. Exact versions are pinned at qualification.
+1. **Agent harnesses.** The owner selected Claude Code, OpenAI Codex CLI, Antigravity CLI (`agy`), and OpenCode, to be delivered in that order. Claude Code is the first real harness (G3). Codex is the second (G4). Antigravity and OpenCode follow as additional plugins. Exact versions are pinned at qualification. *Amendment, 2026-10-28 ([ADR 0016](0016-delivery-gates-for-intents-and-council.md) decision 4):* OpenCode may be admitted before Antigravity CLI, in G10.
 2. **Scope change for closed harnesses.** Closed-source harnesses and closed model providers are admissible as full harness integrations on equal terms with open-source ones. For agent harnesses and their model providers, this replaces the rule that the baseline must have no mandatory closed provider. All other parts of the open-source policy are unchanged: infrastructure, storage, messaging, the SDLC framework, and build tooling. Each closed harness still needs recorded license terms, provider dependency, data-handling terms, version, maintenance, and security evidence before admission.
 3. **SCM.** Forgejo is the first SCM integration. The line and version are chosen at qualification, with an LTS line preferred. (Superseded on 2026-10-24 by [ADR 0006](0006-github-first-scm.md): GitHub.com is the first SCM, and Forgejo a later second SCM plugin.)
 4. **Telemetry.** A component whose telemetry is on by default is admissible if the telemetry can be disabled by configuration, and a network-egress test confirms the configuration works.

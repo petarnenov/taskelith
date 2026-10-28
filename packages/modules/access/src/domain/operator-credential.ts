@@ -9,11 +9,22 @@ export interface OperatorCredential {
   readonly issuedAt: Instant;
 }
 
-export type AuditEventKind = 'operator-credential.bootstrapped' | 'operator-credential.reset';
+export type AuditEventKind =
+  | 'operator-credential.bootstrapped'
+  | 'operator-credential.reset'
+  | 'worker-credential.rotation-requested'
+  | 'worker-credential.renewed'
+  | 'worker-credential.confirmed'
+  | 'worker-credential.rotation-expired';
 
-// An immutable record of who changed the credential, from where, and why.
+// The subject of the operator credential's events; a worker's events name
+// the worker identifier.
+export const OPERATOR_AUDIT_SUBJECT = 'operator';
+
+// An immutable record of who changed a credential, from where, and why.
 export interface AuditEvent {
   readonly kind: AuditEventKind;
+  readonly subject: string;
   readonly generation: number;
   readonly actor: string;
   readonly reason: string;

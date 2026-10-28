@@ -28,10 +28,16 @@ export interface BrokerSessionOptions<Link extends BrokerLink> {
 export class BrokerSession<Link extends BrokerLink> {
   readonly #options: BrokerSessionOptions<Link>;
   readonly #logger: Logger;
+  #held: AbortController | undefined;
 
   constructor(options: BrokerSessionOptions<Link>) {
     this.#options = options;
     this.#logger = options.logger ?? SILENT_LOGGER;
+  }
+
+  // Ends the held link, so `connect` dials again; nothing while none is held.
+  redial(): void {
+    this.#held?.abort();
   }
 
   async run(signal: AbortSignal): Promise<void> {
@@ -47,6 +53,8 @@ export class BrokerSession<Link extends BrokerLink> {
       const connected = await this.#attempt(signal);
       if (connected === STOPPED) return undefined;
       if (connected.ok) return connected.value;
+      // No retry can pass a `forbidden` refusal; it stops the worker.
+      if (connected.error.code === 'forbidden') throw connected.error;
       this.#logger.warn('worker.broker.connect-failed', { retry, reason: connected.error.message });
       await this.#options.sleep(launchRetryDelay(retry, this.#options.draw()), signal);
     }
@@ -75,12 +83,14 @@ export class BrokerSession<Link extends BrokerLink> {
   // fails; the link is closed after every task of it ended.
   async #hold(link: Link, signal: AbortSignal): Promise<void> {
     const ended = new AbortController();
+    this.#held = ended;
     const tasks = new TaskGroup(AbortSignal.any([signal, ended.signal]));
     try {
       tasks.add(this.#watch(link, tasks).finally(() => ended.abort()));
       tasks.add(this.#options.serve(link, tasks.signal));
       await tasks.settled();
     } finally {
+      this.#held = undefined;
       this.#options.contact.linkDown();
       await link.close();
     }

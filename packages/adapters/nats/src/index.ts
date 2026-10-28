@@ -1,5 +1,6 @@
 export { applyOnce } from './deduplication.js';
-export { BrokerAuthority, type BrokerAuthorityKeys, type IssuedUser } from './broker-authority.js';
+export { BrokerAuthority, brokerUserPublicKey, newBrokerUserKey, type BrokerAuthorityKeys, type IssuedUser } from './broker-authority.js';
+export { CREDENTIALS_REJECTED, isCredentialsRejected } from './broker-failure.js';
 export { accountJwt, credsFile, operatorJwt, userJwt, type ClaimTime, type UserPermissions } from './broker-jwt.js';
 export { NatsBrokerCredentials } from './nats-broker-credentials.js';
 export { NatsCommandConsumers } from './nats-command-consumers.js';

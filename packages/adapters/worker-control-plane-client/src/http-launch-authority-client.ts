@@ -13,23 +13,23 @@ import { pinnedTarget, postJson, statusFailure, type ControlPlaneEndpoint, type 
 import { sanitizeFailureText } from './failure-cause.js';
 
 export interface ControlPlaneClientSettings extends ControlPlaneEndpoint {
-  // The control-plane secret of the worker's current credential generation.
-  readonly credential: string;
+  // Read per request: a rotation changes the current generation's secret.
+  readonly bearer: () => string;
 }
 
 // `authorizeLaunch` over pinned TLS. A 503, a timeout, or a lost
 // connection is `unavailable`: no decision was reached.
 export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
   readonly #target: HttpTarget;
-  readonly #credential: string;
+  readonly #bearer: () => string;
 
   constructor(settings: ControlPlaneClientSettings) {
     this.#target = pinnedTarget(settings);
-    this.#credential = settings.credential;
+    this.#bearer = settings.bearer;
   }
 
   async authorize(request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
-    const answered = await postJson(this.#target, 'launch-authorizations', this.#credential, request);
+    const answered = await postJson(this.#target, 'launch-authorizations', this.#bearer(), request);
     if (!answered.ok) return answered;
     const { status, body } = answered.value;
     if (status !== 200) return err(statusFailure('authorizeLaunch', answered.value));
