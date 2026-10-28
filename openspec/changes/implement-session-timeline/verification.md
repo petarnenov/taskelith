@@ -9,7 +9,9 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13a, developed by a briefed s
 - Base: `dev` `62217e7a`; the change was opened in `b80ccbf3`. `origin/dev` had not moved when the change was routed, so nothing was merged.
 - `64ea6d1d` `chore: implement the session timeline store, service, and PostgreSQL adapter` (domain, ports, in-memory store, service, PostgreSQL adapter and migration, digest and redaction adapters, key file, service start, tests, the contract row of the key file, and the design, proposal, deltas, and tasks with the coordinator's answers).
 - `6814dcab` `docs: route the implement session timeline change` (`route.json`, unedited).
-- The commit after it: `make record` and this record.
+- The commit after it, `12c1035c`: `make record` and this record.
+- `c87d0653` `chore: compare session request and response repeats by their whole unredacted input` (the fixes of review pass 1, findings 1 to 5, with their tests, the design, and the session-turn-model delta).
+- The commits after it: the corrected fail-before evidence of findings 5 and 6, then `make record`, the pass 1 record, and `findings.jsonl` and `passes.jsonl`.
 
 ## Environment
 
@@ -18,16 +20,16 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js 24.22.1 of 
 ## Author self-check
 
 - Scope: every answer is applied as the coordinator gave it. Q8 as changed: `control-plane.openapi.json` and the wire `TurnState` are untouched; `board-session-contracts.test.ts` compares the wire enumeration with `WIRE_TURN_STATES`, the domain's `TURN_STATES` without `refused`, and nothing maps a domain `refused` turn onto the wire. Q5: the service answers `SessionView`, a session without its output window, and has no output read; output is read only through the store in tests.
-- Idempotency (checklist `contract-drift`): a turn's digest covers the whole request identity, the author (a principal, or the host with its delegation request key) and the unredacted text; a response's digest covers the answer and the responder. Tests show that the same key from another author with the same text, and two texts that redact alike, fail with `conflict` and the detail `reason` `idempotency-key-reused`, in memory and on PostgreSQL after a new pool.
+- Idempotency (checklist `contract-drift`): a turn's digest covers the whole request identity, the author (a principal, or the host with its delegation request key) and the unredacted text; since `c87d0653` a response's digest covers the answer, the responder, and the attempt with its ownership generation, and a native request key holds the digest of its unredacted kind, turn, and text (review pass 1, findings 1 and 2). Tests show that the same turn key from another author with the same text fails with `conflict` and the detail `reason` `idempotency-key-reused` in memory and on PostgreSQL after a new pool. Two turn texts that redact alike were tested only in memory at `64ea6d1d`, which this record overstated (finding 5); `c87d0653` adds that test on PostgreSQL after a new pool with `SecretTextRedactor`, together with request texts that redact alike and response keys reused by another attempt or ownership generation.
 - Q4: `SessionInputDigestKeyFile.create` writes `control-plane/session-input-digest.key` through `ControlPlaneNamespace.create` with mode `0600` (tested); no code logs it or puts it in a record; `HmacInputDigest.fromKey` and `startSessionTimelineService` refuse a missing or wrong-size key with a reason that names only the file or the size, tested with sentinel key bytes. No command creates the key yet; 13b wires the service and the key's creation at `init`.
 - Races (checklist `concurrency-race`) run on PostgreSQL 18.6 with two real transactions that both read before either writes, held by a `Barrier` inside the work, never by a sleep; the in-memory store runs one transaction at a time.
-- Requirement texts of both deltas are under 500 characters; the longest is "Session timeline tables", 417. The change validates strictly, and an archive of it in a scratch copy of `openspec/` added 8 requirements, after which `openspec validate --specs --strict` passed 71 of 71 items.
+- Requirement texts of both deltas are under 500 characters; the longest is "Durable session timeline service", 494 since `c87d0653` ("Session timeline tables", 417, before it). The change validates strictly, and an archive of it in a scratch copy of `openspec/`, repeated at `c87d0653`, added 8 requirements, after which `openspec validate --specs --strict` passed 71 of 71 items.
 - Comments: `npm run verify:comments` passes. No AI attribution in commits.
 - Evidence check: the counts below are copied from the runs named with them.
 
 ## Fail-before
 
-Each new behavioral test was written before its code and run failing:
+Each new behavioral test was written before its code and run failing, except the down migration test, which a later mutation run checks (last row):
 
 | Tests | How they failed before the change |
 | --- | --- |
@@ -38,9 +40,11 @@ Each new behavioral test was written before its code and run failing:
 | The same file and `session-timeline-service.test.ts`, mutant A: the service resolves no stored key | 9 failed: on PostgreSQL the races of one key and input, one key and two inputs, and one key and one answer, and another author after a new pool; in memory the retried duplicate, another author, texts that redact alike, the repeated response key, and the reused response key |
 | `session-timeline.integration.test.ts`, mutant B: the adapter writes no attempt row and trims no output | 3 failed: the attempt and output-window conformance cases and the concurrent binding of one attempt |
 | `session-timeline-crash.integration.test.ts` (10) | Run against the adapter without the `SessionTimelineCommit` commit point (the pre-change `commitPoints`): 10 of 10 failed, every child exiting without `SIGKILL` |
-| `migrations.integration.test.ts` "the session timeline down migration removes the session timeline tables" | Run with the migration file moved away, after the commit: failed with `ENOENT` on the migration file |
+| `session-timeline-service.test.ts`, the 4 tests of review pass 1 (findings 1 to 4) | Run against the service of `64ea6d1d`: 4 of 24 failed by assertion (`expected a failure`): request texts that redact alike, overlong request text, a response key from another attempt or ownership generation, and an overlong output chunk; the 20 older tests passed |
+| `session-timeline.integration.test.ts`, the 4 tests of review pass 1 (findings 1, 2, and 5) | Run against the service of `64ea6d1d`: 3 of 22 failed by assertion: request texts that redact alike after a new pool, the race of two such recordings, and a response key from another attempt or ownership generation after a new pool. Two turn texts that redact alike after a new pool passed, because `64ea6d1d` already resolved them; it adds the PostgreSQL evidence of finding 5 |
+| `migrations.integration.test.ts` "the session timeline down migration removes the session timeline tables" | A mutation run after the commit, not before it (finding 6): with the up migration in place and the down migration's four `DROP TABLE` statements removed, it failed by assertion, four tables still present where none were expected; with the statements restored it passed. The earlier run with the migration file moved away failed only with `ENOENT` and proved nothing about the down migration |
 
-The stubs and mutants were restored from the real files before the commit. After the change, `session-timeline.integration.test.ts` passed 18 of 18 in eight consecutive runs and `session-timeline-crash.integration.test.ts` 10 of 10.
+The stubs and mutants were restored from the real files before the commit. After the change, `session-timeline.integration.test.ts` passed 18 of 18 in eight consecutive runs and `session-timeline-crash.integration.test.ts` 10 of 10. After `c87d0653` the first passed 22 of 22 in five consecutive runs and the second 10 of 10.
 
 ## Checks
 
