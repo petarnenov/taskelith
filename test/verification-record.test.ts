@@ -344,7 +344,7 @@ test('invalid commands print the usage with status 2', () => {
 
 test('the system probes report the real validations of this repository', () => {
   const probes = systemProbes(repository);
-  assert.match(probes.findingsValidate(), /^passed, `Every findings file is valid: \d+ file\(s\); every pass summary file is valid: \d+ file\(s\)\.`$/);
+  assert.match(probes.findingsValidate(), /^passed, `Every findings file is valid: \d+ file\(s\); every pass summary file is valid: \d+ file\(s\); every route file is valid: \d+ file\(s\)\.`$/);
   assert.match(probes.openspecValidate('no-such-change-for-the-test', false), /^failed, `/);
 });
 

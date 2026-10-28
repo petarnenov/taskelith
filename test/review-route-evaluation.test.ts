@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { inspect } from 'node:util';
-import type { RunResult } from '../scripts/findings.ts';
+import type { RunResult } from '../scripts/findings-common.ts';
 import { passPlans, SKIPPED_SHADOW, type RouteFeatures, type ShadowDecision } from '../scripts/review-route.ts';
 import { commitInfos, GIT_EVALUATION_ENVIRONMENT } from '../scripts/review-route-environment.ts';
 import {
@@ -15,7 +15,6 @@ import {
   evaluationText,
   isPullRequestMerge,
   RetryOnceRouter,
-  reviewOutcome,
   reviewsSeveralArtifacts,
   routeEvaluationDependencies,
   runRouteEvaluation,
@@ -23,6 +22,7 @@ import {
   type EvaluationEnvironment,
   type EvaluationLine,
 } from '../scripts/review-route-evaluation.ts';
+import { reviewOutcome } from '../scripts/review-route-effect.ts';
 import { RouteRefusal } from '../scripts/review-route-features.ts';
 import { CREDENTIAL_VARIABLE } from '../scripts/review-route-jev.ts';
 import { RuleRouter } from '../scripts/review-route-rules.ts';
@@ -69,7 +69,6 @@ test('archived records are grouped per change with or without pass summaries', (
 
 test('the outcome is the highest pass and the findings of passes 1 and 2', () => {
   const outcome = reviewOutcome({
-    directory: 'd',
     findings: [
       { pass: 1, severity: 'high' },
       { pass: 1, severity: 'low' },
@@ -85,7 +84,7 @@ test('the outcome is the highest pass and the findings of passes 1 and 2', () =>
     passSummaries: false,
     findings: { pass1: { critical: 0, high: 1, medium: 0, low: 1 }, pass2: { critical: 0, high: 0, medium: 1, low: 0 } },
   });
-  const empty = reviewOutcome({ directory: 'd', findings: [], passes: [] });
+  const empty = reviewOutcome({ findings: [], passes: [] });
   assert.equal(empty.passesNeeded, 1);
   assert.equal(empty.passSummaries, true);
 });

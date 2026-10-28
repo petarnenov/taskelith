@@ -18,6 +18,40 @@ export interface ReviewOutcome {
   readonly findings: { readonly pass1: SeverityCounts; readonly pass2: SeverityCounts };
 }
 
+// The pass and severity of a findings.jsonl or passes.jsonl line.
+export interface RecordLine {
+  readonly pass?: number;
+  readonly severity?: Severity;
+  readonly artifact?: string;
+}
+
+export interface ReviewRecords {
+  readonly findings: readonly RecordLine[];
+  // Undefined without passes.jsonl.
+  readonly passes: readonly RecordLine[] | undefined;
+}
+
+// At least one pass ran, also when it recorded nothing. A review that the
+// conditional third pass ended after pass 2 has two passes.
+export function reviewOutcome(records: ReviewRecords): ReviewOutcome {
+  const passNumbers = [...records.findings, ...(records.passes ?? [])].map(({ pass }) => pass ?? 0);
+  const passesNeeded = Math.max(1, ...passNumbers);
+  return {
+    passesNeeded,
+    thirdPass: passesNeeded >= THIRD_PASS,
+    passSummaries: records.passes !== undefined,
+    findings: { pass1: severityCounts(records.findings, 1), pass2: severityCounts(records.findings, 2) },
+  };
+}
+
+function severityCounts(findings: readonly RecordLine[], pass: number): SeverityCounts {
+  const counts: Record<Severity, number> = { ...NO_FINDINGS };
+  for (const { severity } of findings.filter((finding) => finding.pass === pass)) {
+    if (severity !== undefined && severity in counts) counts[severity] += 1;
+  }
+  return counts;
+}
+
 export interface RoutedChange {
   readonly change: string;
   readonly rule: Tier;
@@ -129,7 +163,7 @@ export function agreement(answered: readonly Answered[]): Agreement {
   return { changes: total, agreeing, share: rounded(share), kappa: chance === 1 ? null : rounded((share - chance) / (1 - chance)) };
 }
 
-const percent = (share: number | null) => (share === null ? 'n/a' : `${Math.round(share * 100)}%`);
+export const percent = (share: number | null) => (share === null ? 'n/a' : `${Math.round(share * 100)}%`);
 const figure = (value: number | null) => (value === null ? 'n/a' : value.toFixed(2));
 
 export function formatOutcomeFigures(label: string, figures: OutcomeFigures): string {

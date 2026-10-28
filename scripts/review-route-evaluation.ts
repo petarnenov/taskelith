@@ -3,8 +3,8 @@ import { join, posix } from 'node:path';
 import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { CHECKLIST_SCHEMA_PATH } from './checklist-record.ts';
-import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings.ts';
-import { changeOfDirectory, contentLines, secretLikeStrings, type SchemaCheck, type Severity } from './review-findings.ts';
+import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings-common.ts';
+import { changeOfDirectory, contentLines, secretLikeStrings, type SchemaCheck } from './review-findings.ts';
 import {
   ROUTE_SCHEMA_PATH,
   SKIPPED_SHADOW,
@@ -16,15 +16,15 @@ import {
 import {
   formatOutcomeFigures,
   formatRoutingFigures,
-  NO_FINDINGS,
   outcomeFigures,
+  reviewOutcome,
   routingFigures,
-  THIRD_PASS,
   type OutcomeFigures,
+  type RecordLine,
   type ReviewOutcome,
+  type ReviewRecords,
   type RoutedChange,
   type RoutingFigures,
-  type SeverityCounts,
 } from './review-route-effect.ts';
 import { GIT_EVALUATION_ENVIRONMENT } from './review-route-environment.ts';
 import {
@@ -104,17 +104,8 @@ export interface Evaluation {
   readonly excluded: readonly Exclusion[];
 }
 
-interface RecordLine {
-  readonly pass?: number;
-  readonly severity?: Severity;
-  readonly artifact?: string;
-}
-
-export interface ArchivedRecords {
+export interface ArchivedRecords extends ReviewRecords {
   readonly directory: string;
-  readonly findings: readonly RecordLine[];
-  // Undefined without passes.jsonl.
-  readonly passes: readonly RecordLine[] | undefined;
 }
 
 export class RetryOnceRouter implements ReviewRouter<ShadowDecision> {
@@ -169,26 +160,6 @@ function parseRecordLines(path: string, text: string): RecordLine[] {
 
 export function reviewsSeveralArtifacts({ findings, passes }: ArchivedRecords): boolean {
   return [...findings, ...(passes ?? [])].some(({ artifact }) => artifact !== undefined);
-}
-
-// At least one pass ran, also when it recorded nothing.
-export function reviewOutcome(records: ArchivedRecords): ReviewOutcome {
-  const passNumbers = [...records.findings, ...(records.passes ?? [])].map(({ pass }) => pass ?? 0);
-  const passesNeeded = Math.max(1, ...passNumbers);
-  return {
-    passesNeeded,
-    thirdPass: passesNeeded >= THIRD_PASS,
-    passSummaries: records.passes !== undefined,
-    findings: { pass1: severityCounts(records.findings, 1), pass2: severityCounts(records.findings, 2) },
-  };
-}
-
-function severityCounts(findings: readonly RecordLine[], pass: number): SeverityCounts {
-  const counts: Record<Severity, number> = { ...NO_FINDINGS };
-  for (const { severity } of findings.filter((finding) => finding.pass === pass)) {
-    if (severity !== undefined && severity in counts) counts[severity] += 1;
-  }
-  return counts;
 }
 
 function required<Value>(value: Value | undefined, refusal: string): Value {

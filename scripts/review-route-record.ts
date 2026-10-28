@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { reviewerKey, secretLikeStrings, type SchemaCheck } from './review-findings.ts';
+import { reviewerKey, secretLikeStrings, type Problem, type SchemaCheck } from './review-findings.ts';
 import {
   passPlans,
   type PassPlans,
@@ -64,6 +64,42 @@ function ruleProblems({ rule, features }: RouteRecord): string[] {
 function shadowProblems({ shadow, features }: RouteRecord): string[] {
   if (shadow.status !== 'answered' || isDeepStrictEqual(shadow.passes, passPlans(shadow.tier, features))) return [];
   return [`shadow passes are not the reviewer table's for tier ${shadow.tier}`];
+}
+
+// A change directory and its route.json, if any.
+export interface RouteLocation {
+  readonly directory: string;
+  readonly change: string;
+  readonly file?: { readonly path: string; readonly text: string };
+}
+
+export interface LocatedRoute {
+  readonly location: RouteLocation;
+  readonly record: RouteRecord;
+}
+
+// Every route.json, active and archived; a change without one is fine.
+export function checkRoutes(locations: readonly RouteLocation[], checkSchema: SchemaCheck) {
+  const located: LocatedRoute[] = [];
+  const problems: Problem[] = [];
+  for (const location of locations) {
+    if (location.file === undefined) continue;
+    const parsed = parseRouteRecord(location.file.text, location.change, checkSchema);
+    if (parsed.record !== undefined) located.push({ location, record: parsed.record });
+    problems.push(...parsed.problems.map((message) => ({ file: location.file!.path, message })));
+  }
+  return { located, problems };
+}
+
+function parseRouteRecord(text: string, change: string, checkSchema: SchemaCheck): { record?: RouteRecord; problems: string[] } {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { problems: ['not valid JSON'] };
+  }
+  const problems = routeRecordProblems(value, change, checkSchema);
+  return problems.length === 0 ? { record: value as RouteRecord, problems } : { problems };
 }
 
 export function formatRouteSummary({ rule, shadow }: RouteRecord): string {

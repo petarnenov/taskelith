@@ -222,6 +222,7 @@ test('effect adds a routing row per archived change with route.json', () => {
     change: 'quiet',
     rule: { tier: 'standard', triggers: [] },
     shadow: { status: 'failed', reason: 'timeout' },
+    route: { pass1: 'codex gpt-6.1-sol#medium', pass2: 'claude claude-opus-5-5#high' },
     reviewers: { pass1: 'codex gpt-6.1-sol#medium', pass2: 'claude claude-opus-5-5#high' },
     followedRoute: true,
     passesNeeded: 2,

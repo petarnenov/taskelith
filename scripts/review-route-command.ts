@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CHECKLIST_SCHEMA_PATH } from './checklist-record.ts';
-import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings.ts';
+import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings-common.ts';
 import type { SchemaCheck } from './review-findings.ts';
 import { ROUTE_FILE, ROUTE_SCHEMA_PATH, SKIPPED_SHADOW, type ReviewRouter, type RuleDecision, type ShadowDecision } from './review-route.ts';
 import { GIT_ROUTE_ENVIRONMENT } from './review-route-environment.ts';
