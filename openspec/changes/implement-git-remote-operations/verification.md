@@ -15,7 +15,11 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16c, developed by a briefed s
 - `ba442610` `docs: record the verification of implement-git-remote-operations`: the head that review pass 1 reviewed.
 - `683feb1c` `chore: parse the remote head before redaction and bound the Git time limit`: the fixes of review pass 1 with their tests.
 - `501840c6` `docs: record the pass 1 fixes in the implement-git-remote-operations design` (design decisions 6 and 9).
-- The pass 1 records (`findings.jsonl`, `passes.jsonl`, this file) follow; the `make verify` of "After review pass 1" ran on their clean tree, and the commit that completes this record changes no checked input other than this file.
+- The pass 1 records (`findings.jsonl`, `passes.jsonl`, this file) follow, up to `54780a6a`, the head that review pass 2 reviewed; the `make verify` of "After review pass 1" ran on their clean tree.
+- `4bb55a92` `chore: scrub whole Git failure messages and settle a failed push by the remote head`: the source fixes of review pass 2 with their tests.
+- `ab145df9` `docs: specify scrubbed parser output and the failed push outcome` (spec delta and design decisions 3 and 9).
+- `cdc72db4` `docs: correct the fail-before record of implement-git-remote-operations` (finding L4).
+- The pass 2 records follow; the `make verify` of "After review pass 2" ran on their clean tree, and the commit that completes this record changes no checked input other than this file.
 
 ## Environment
 
@@ -100,6 +104,29 @@ Fail-before of the fixes: on the working tree of `683feb1c` with fixes 1 to 3 re
 
 Route: the fixes changed the diff, but worker step 4 asks for a new route only after fixes of the pre-review `make verify` run, not after review fixes (finding 5 of `route-reviewers-by-change-complexity`, pass 2), so `route.json` stays the pre-review record of `fcf5a2f4`.
 
+### Pass 2
+
+- Reviewer B: Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, editing tools disallowed (`claude claude-opus-5-5#high`). The route record recommends `xhigh` for pass 2; it only recommends (governance "Routed effort").
+- Invocation, run by the coordinator session: `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`.
+- Model confirmation: the session's `modelUsage` names only `claude-opus-5-5`.
+- Session: `d3d895f6-cd86-4187-b164-c27c38b721aa`.
+- Reviewed: `803c7057..54780a6a`. Snapshot of the worktree before and after the pass: `9e11e44a317cc3f8c0f62f2532976458c87d4cc7fc1833a8cdcf4bdd254160e1` both times, so the reviewer changed no file.
+- Pass 1 findings: the reviewer confirmed all 5 fixed.
+- Counts: Critical 0, High 0, Medium 2, Low 4, as in `passes.jsonl`. M2, L2, L3, and L4 were present at `ba442610`, so `findings.jsonl` records them as missed by pass 1 (reviewer A); M1 and L1 came from the pass 1 fix.
+
+Findings and resolutions:
+
+1. **M1, Medium, spec-wording** (`specs/git-workspace-port/spec.md:47`): the pass 1 fix let the parser read raw output, but the living requirement "Scrubbed Git output" still demanded scrubbing every standard output of a process with the credential, and the delta did not modify it. Fixed in `ab145df9`: the delta modifies that requirement (a parser in the runner reads the raw output, and only its value leaves unscrubbed; failure messages are scrubbed whole with their details), with the scenarios "Short secret in the task branch ref" and "Short secret in a failure message"; `npm run verify:archive` passes, so the archived requirement stays under 500 characters.
+2. **M2, Medium, redaction** (`git-runner.ts:171`): `succeeded()` composed the failure message outside the runner, so its fixed text and exit code were not scrubbed. Fixed in `4bb55a92`: `GitRunner.runChecked` and `runParsed` compose the message from the raw standard error and scrub the whole message once; the push and the clone, the processes besides `ls-remote` that carry a credential, use `runChecked`, and `succeeded` remains only for local processes. Test: "a failure message is scrubbed whole, its fixed text and exit code included" (secret `128`, exit code 128).
+3. **L1, Low, redaction** (`git-runner.ts:110`): `runParsed` passed a parser's failure details through unscrubbed. Fixed in `4bb55a92`: every detail value is scrubbed. Test: "a parser failure is scrubbed with its details, and a failed process is not parsed".
+4. **L2, Low, redaction** (`git-fixture.ts:180`): the header echo answered only `git-upload-pack`, so the push case failed in its `ls-remote` and `git push` never met it. Fixed in `4bb55a92`: the echo can name one service; the push case echoes from `git-receive-pack` and asserts that the message is the push's own ("the push failed ..."), with `<redacted>` and no form.
+5. **L3, Low, error-handling** (`git-workspaces.ts:266`): a push that the remote took but whose answer was lost returned `remote-moved`, and a push killed at its time limit waited up to a second full limit on the re-read. Fixed in `4bb55a92`: a re-read that equals the pushed head returns the head, and a time-limit failure, which the runner marks (`exceededTimeLimit`), skips the re-read. Tests: "a push whose answer is lost after the remote took it returns the head" (the fixture serves the `git-receive-pack` request and then destroys the connection) and "a stalled remote fails push as unavailable at the time limit and kills its process group" (a stalled `git-receive-pack`, the injected timer fired after the server's `beforeAnswer` signal, and no Git process after the push).
+6. **L4, Low, evidence-mismatch** (`verification.md:35`): the fail-before record counted 30 failures but named 29 and called all 126 passing tests those of 16b. Fixed in `cdc72db4` under "Fail-before".
+
+Fail-before of the fixes: on the working tree of `cdc72db4` with `packages/adapters/git-workspace/src` restored from `54780a6a`, then from `HEAD` (`git status` clean for the source), `npm run build` and `node --experimental-strip-types --test --test-reporter=spec packages/adapters/git-workspace/test/git-runner.test.ts packages/adapters/git-workspace/test/remote-operations.test.ts` gave tests 38, pass 33, fail 5: "a failure message is scrubbed whole, its fixed text and exit code included", "a parser failure is scrubbed with its details, and a failed process is not parsed", "a parser reads the raw output, so a short secret cannot corrupt the data" (its new `runChecked` assertion), "a push whose answer is lost after the remote took it returns the head", and "a stalled remote fails push as unavailable at the time limit and kills its process group". With the fixes: tests 38, pass 38. The push case of the echo test (L2) passes without the source fixes, because the stderr scrub already covered what `git push` printed; it fixes the test's coverage, not the code.
+
+Pass 3: required (governance "Conditional third pass"), because the pass 2 fixes change source and a spec delta, not only records and documentation; reviewer A confirms.
+
 ## Limitations
 
 - Ran on Linux with the host's Git 2.55.0 behind a recording wrapper, not with the pinned Linux Git 2.43.0 or Apple's 2.50.1, and not natively on macOS; the test remote is plain HTTP on `127.0.0.1` with the policy `https-or-loopback-http`, so the HTTPS transport itself did not run.
@@ -114,7 +141,7 @@ Route: the fixes changed the diff, but worker step 4 asks for a new route only a
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B, and pass 3 only as governance requires.
+- Review pass 3 by reviewer A, required because the pass 2 fixes change source and a spec delta.
 - Integration into dev by the coordinator (single pull request).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator; it now includes the remote cases and the smart-HTTP server.
 - 16d: the hand-off, the reclaim program and its containment, `WS5` to `WS10`, and the Linux tests in the worker image with the pinned Git, which un-skip the last 6 cases.
