@@ -1,0 +1,1 @@
+{"change": "align-git-workspace-adapter-contract", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18059-178f-78d2-8df7-e369e3562b7a", "counts": {"critical": 0, "high": 0, "medium": 8, "low": 3}}
