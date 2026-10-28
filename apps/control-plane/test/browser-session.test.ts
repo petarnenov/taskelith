@@ -22,7 +22,7 @@ import {
 import { err, failure, instantFromEpochMilliseconds, ok } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
-import { value } from '@taskelith/testing';
+import { failed, value } from '@taskelith/testing';
 
 const OPERATOR = `tkop_${'B'.repeat(43)}`;
 const OWNER_PASSWORD = 'owner password of this test';
@@ -86,6 +86,7 @@ const handlers: ApiHandlers = {
   authenticateWorker: (secret) => api.authenticateWorker(secret),
   authenticateSession: (sessionId) => api.authenticateSession(sessionId),
   authorize: (principalId, requirement) => api.authorize(principalId, requirement),
+  authorizeResource: (operationId, caller, parameters) => api.authorizeResource(operationId, caller, parameters),
   handle: async (operationId, request, bearer) => (PROBES.some((probe) => probe.operationId === operationId)
     ? ok(undefined)
     : api.handle(operationId, request, bearer)),
@@ -96,7 +97,12 @@ const SESSION_RUN_PROBE: RouteDefinition = {
   ...ROUTES.find((route) => route.operationId === 'createRun')!, pattern: /^\/session-runs$/,
   security: ['browserSession', 'operatorToken'], reasons: { 'role-required': 403 },
 };
-const server = createApiServer(handlers, { routes: [...ROUTES, ...PROBES, SESSION_RUN_PROBE], logger: new Logger(sink, { now: () => '2026-10-28T09:00:00.000Z' as never }) });
+// `submitTask` likewise; its role check comes before its body.
+const SESSION_TASK_PROBE: RouteDefinition = {
+  ...ROUTES.find((route) => route.operationId === 'submitTask')!, pattern: /^\/session-runs\/([^/]+)\/tasks$/,
+  security: ['browserSession', 'operatorToken'], reasons: { 'role-required': 403 },
+};
+const server = createApiServer(handlers, { routes: [...ROUTES, ...PROBES, SESSION_RUN_PROBE, SESSION_TASK_PROBE], logger: new Logger(sink, { now: () => '2026-10-28T09:00:00.000Z' as never }) });
 let base: string;
 
 before(async () => {
@@ -320,13 +326,25 @@ test('a foreign evidence record and an unknown one answer the same 404, to a ses
 });
 
 test('a foreign run and an unknown one are denied alike, and the G2 bridge passes the owner', async () => {
-  const foreignRun = await api.handle('readTaskResult', request(alice, 'r-beta', 't'), '');
-  const unknownRun = await api.handle('readTaskResult', request(alice, 'r-none', 't'), '');
+  const foreignRun = await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-beta', 't']);
+  const unknownRun = await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-none', 't']);
   assert.ok(!foreignRun.ok && !unknownRun.ok);
   assert.deepEqual([foreignRun.error.code, foreignRun.error.details], ['forbidden', { reason: 'role-required', requiredRole: 'project-viewer' }]);
   assert.deepEqual(unknownRun.error, foreignRun.error);
-  assert.deepEqual(value(await api.handle('readTaskResult', request(alice, 'r-alpha', 't'), '')), 'read');
-  assert.deepEqual(value(await api.handle('readTaskResult', request(owner, 'r-none', 't'), '')), 'read', 'the G2 bridge passes the owner');
+  value(await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-alpha', 't']));
+  value(await api.authorizeResource('readTaskResult', { principalId: owner }, ['r-none', 't']));
+  assert.equal(failed(await api.authorizeResource('readTaskResult', {}, ['r-alpha', 't'])).details.reason, 'unauthenticated');
+  assert.deepEqual(value(await api.handle('readTaskResult', request(alice, 'r-beta', 't'), '')), 'read', 'checked before the handler');
+});
+
+test('submitTask checks the role on its run\'s project before it reads the body', async () => {
+  const browser = remember(await loggedIn('alice', ALICE_PASSWORD));
+  const signed = { cookie: browser.cookie, 'x-csrf-token': browser.csrfToken };
+  const denied = await call('POST', '/session-runs/r-beta/tasks', signed, { not: 'a task' });
+  assert.deepEqual([denied.status, denied.body.details], [403, { reason: 'role-required', requiredRole: 'project-operator' }]);
+  const unknown = await call('POST', '/session-runs/r-none/tasks', signed, { not: 'a task' });
+  assert.deepEqual([unknown.status, unknown.text], [denied.status, denied.text], 'an unknown run is denied alike');
+  assert.deepEqual(stateReads, [], 'no state is read before the role passes');
 });
 
 test('no log line, failure body, or audit event holds a password, session identifier, or CSRF token', async () => {

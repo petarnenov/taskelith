@@ -64,6 +64,8 @@ export interface ApiHandlers {
   authenticateWorker(secret: string): Promise<Result<WorkerPrincipal>>;
   authenticateSession(sessionId: string): Promise<Result<LiveSession>>;
   authorize(principalId: PrincipalId, requirement: AccessRequirement): Promise<Result<void>>;
+  // The role on the project of the path's resource, ok for other operations.
+  authorizeResource(operationId: string, caller: Caller, parameters: readonly string[]): Promise<Result<void>>;
   handle(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>>;
 }
 
@@ -167,6 +169,8 @@ async function answerRoute(
     const authorized = await authorizeCaller(handlers, caller.value, requirement);
     if (authorized !== undefined) return authorized;
   }
+  const resource = await handlers.authorizeResource(route.operationId, caller.value, parameters);
+  if (!resource.ok) return failureResponse(statusOf(route, resource.error), resource.error);
   const handled = async (): Promise<ApiResponse> => {
     const body = await validatedBody(request, route);
     if (!body.ok) return failureResponse(400, body.error);

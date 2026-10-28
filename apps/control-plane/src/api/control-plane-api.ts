@@ -6,6 +6,7 @@ import {
   type LiveSession,
   type LoginAttempt,
   type PrincipalId,
+  type ProjectRole,
   type SessionAnswer,
 } from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
@@ -20,7 +21,7 @@ import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
 import { viewOf as viewOfSession } from '@taskelith/access';
-import { StatusAnswer, type ApiHandlers, type ApiRequest, type Upload } from './api-server.js';
+import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
 import { ruleOf } from './access-requirements.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
@@ -86,8 +87,18 @@ export class ControlPlaneApi implements ApiHandlers {
     return this.#services.authorization.authorize(principalId, requirement);
   }
 
+  // The role on the project of the resource that the path names, which the
+  // server checks before the body (wire contracts section 2).
+  authorizeResource(operationId: string, caller: Caller, parameters: readonly string[]): Promise<Result<void>> {
+    const rule = ruleOf(operationId);
+    const [first = ''] = parameters;
+    if (rule.kind === 'evidence-project') return this.#authorizeEvidence(caller.principalId, first);
+    if (rule.kind !== 'resource-project' || rule.projectIn !== 'path-resource') return Promise.resolve(ok(undefined));
+    return this.#authorizeRunProject(caller.principalId, rule.role, () => this.#services.runProjects.projectOf(first));
+  }
+
   async handle(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>> {
-    const authorized = await this.#authorizeResource(operationId, request);
+    const authorized = await this.#authorizeBodyProject(operationId, request);
     if (!authorized.ok) return authorized;
     return this.#dispatch(operationId, request, bearer);
   }
@@ -132,30 +143,30 @@ export class ControlPlaneApi implements ApiHandlers {
     }
   }
 
-  // A `resource-project` or `evidence-project` operation: its resource's
-  // project first, then the role.
-  async #authorizeResource(operationId: string, request: ApiRequest): Promise<Result<void>> {
+  // `createRun`, whose project its body names, after the body's schema check.
+  #authorizeBodyProject(operationId: string, request: ApiRequest): Promise<Result<void>> {
     const rule = ruleOf(operationId);
-    if (rule.kind !== 'resource-project' && rule.kind !== 'evidence-project') return ok(undefined);
-    if (request.principalId === undefined) return err(unauthenticated());
-    if (rule.kind === 'evidence-project') return this.#authorizeEvidence(request.principalId, request.parameters[0] ?? '');
-    const projectId = await this.#resourceProject(operationId, request);
-    if (!projectId.ok) return projectId;
-    // The temporary G2 bridge (Q5), which item 11 retires.
-    return this.#services.authorization.authorize(request.principalId, g2BridgeRequirement(projectId.value, rule.role));
+    if (rule.kind !== 'resource-project' || rule.projectIn !== 'body') return Promise.resolve(ok(undefined));
+    const { projectId } = request.body as HttpSchemas['CreateRunRequest'];
+    return this.#authorizeRunProject(request.principalId, rule.role, async () => ok(projectId));
   }
 
-  // The project, or undefined for an unknown resource, which is denied to
-  // every caller but the owner, so that no other learns it is unknown.
-  async #resourceProject(operationId: string, request: ApiRequest): Promise<Result<string | undefined>> {
-    const [first = ''] = request.parameters;
-    if (operationId === 'createRun') return ok((request.body as HttpSchemas['CreateRunRequest']).projectId);
-    return this.#services.runProjects.projectOf(first);
+  // An unknown resource, whose project is undefined, is denied to every
+  // caller but the owner, so that no other learns it is unknown.
+  async #authorizeRunProject(
+    principalId: PrincipalId | undefined, role: ProjectRole, projectOf: () => Promise<Result<string | undefined>>,
+  ): Promise<Result<void>> {
+    if (principalId === undefined) return err(unauthenticated());
+    const projectId = await projectOf();
+    if (!projectId.ok) return projectId;
+    // The temporary G2 bridge (Q5), which item 11 retires.
+    return this.#services.authorization.authorize(principalId, g2BridgeRequirement(projectId.value, role));
   }
 
   // Execution wire contracts section 8.2: a record outside the caller's
   // projects answers the same 404 as an unknown one.
-  async #authorizeEvidence(principalId: PrincipalId, evidenceId: string): Promise<Result<void>> {
+  async #authorizeEvidence(principalId: PrincipalId | undefined, evidenceId: string): Promise<Result<void>> {
+    if (principalId === undefined) return err(unauthenticated());
     const record = await this.#services.evidence.read(evidenceId);
     if (!record.ok) return record.error.code === 'not-found' ? err(evidenceNotFound()) : record;
     const authorized = await this.#services.authorization.authorize(principalId, projectRead(record.value.projectId));

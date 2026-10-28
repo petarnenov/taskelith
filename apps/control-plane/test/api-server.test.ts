@@ -36,6 +36,7 @@ const handlers: ApiHandlers = {
   authenticateWorker: async () => err(failure('forbidden', 'no worker in these tests')),
   authenticateSession: async () => err(failure('forbidden', 'no session in these tests', { reason: 'unauthenticated' })),
   authorize: async () => ok(undefined),
+  authorizeResource: async () => ok(undefined),
   handle: async (operationId) => (answers[operationId] ?? (() => err(failure('internal', 'unset'))))(),
 };
 const server = createApiServer(handlers, { logger: new Logger(sink, { now: () => '2026-10-25T09:00:00.000Z' as never }) });

@@ -1,12 +1,12 @@
 import { AUTHENTICATED, OWNER_ONLY, projectRead, projectRequirement, type AccessRequirement, type ProjectRole } from '@taskelith/access';
 
 // How an operation's requirement is found (wire contracts section 3); a
-// `resource-project` or `evidence-project` one waits for its resource.
+// resource's project comes from its path, or for `createRun` its body.
 export type RequirementRule =
   | { readonly kind: 'none' }
   | { readonly kind: 'fixed'; readonly requirement: AccessRequirement }
   | { readonly kind: 'path-project'; readonly role: ProjectRole; readonly ownerReads: boolean }
-  | { readonly kind: 'resource-project'; readonly role: ProjectRole }
+  | { readonly kind: 'resource-project'; readonly role: ProjectRole; readonly projectIn: 'path-resource' | 'body' }
   | { readonly kind: 'evidence-project' };
 
 const NONE: RequirementRule = Object.freeze({ kind: 'none' });
@@ -16,8 +16,9 @@ const PROJECT_READ: RequirementRule = Object.freeze({ kind: 'path-project', role
 const PROJECT_OPERATOR: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-operator', ownerReads: false });
 const PROJECT_MAINTAINER: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-maintainer', ownerReads: false });
 // The G2 operator operations, which the temporary G2 bridge covers (Q5).
-const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator' });
-const RUN_VIEWER: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-viewer' });
+const NEW_RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'body' });
+const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'path-resource' });
+const RUN_VIEWER: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-viewer', projectIn: 'path-resource' });
 // A section 3 read of the record's project (execution section 8.2).
 const EVIDENCE_READER: RequirementRule = Object.freeze({ kind: 'evidence-project' });
 
@@ -40,7 +41,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   listAccountSlots: OWNER, addAccountSlot: OWNER, updateAccountSlot: OWNER, revokeAccountSlot: OWNER,
   reinstateAccountSlot: OWNER, rotateSlotCredential: OWNER, removeAccountSlot: OWNER,
   createScmIntegration: OWNER, updateScmIntegration: OWNER,
-  createRun: RUN_OPERATOR, submitTask: RUN_OPERATOR,
+  createRun: NEW_RUN_OPERATOR, submitTask: RUN_OPERATOR,
   readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
   listQuarantine: OWNER, redriveQuarantined: OWNER,
   readInstallationCa: NONE, enrollWorker: NONE, authorizeLaunch: NONE, publishEvidence: NONE, requestDelegation: NONE,
