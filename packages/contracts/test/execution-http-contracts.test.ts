@@ -156,13 +156,12 @@ test('only the credential deliveries reveal a secret, and never cached', () => {
 
 test('the wire enumerations are the domain vocabularies', () => {
   const enumOf = (name: string) => (SCHEMAS[name] as { enum: string[] }).enum;
-  const ownership = ['quarantined', ...LAUNCH_REJECTION_REASONS];
 
   assert.deepEqual(enumOf('DelegationResultOutcome'), [...DELEGATION_OUTCOMES]);
   assert.deepEqual(enumOf('ExecutionEvidenceKind'), [...EXECUTION_EVIDENCE_KINDS]);
   assert.deepEqual(enumOf('ScmPermission'), [...SCM_PERMISSIONS]);
-  for (const name of ['SlotCredentialRefusal', 'ScmCredentialRefusal']) {
-    for (const reason of reasonsOf(name).slice(0, 6)) assert.ok(ownership.includes(reason), `${name}: ${reason}`);
+  for (const name of ['SlotCredentialRefusal', 'ScmCredentialRefusal'] as const) {
+    assert.deepEqual(reasonsOf(name).slice(0, 6), LAUNCH_REJECTION_REASONS.slice(0, 6), name);
   }
 });
 
@@ -240,11 +239,14 @@ test('the reconciliation queue pages by a composite position with at most 100 it
   assert.ok(violations(checkHttpSchema('UnrecordedProcess', { ...process, projectId: 'p1' })).some((text) => text.includes('projectId')));
 });
 
-test('a re-admission names the generation it read and is refused with a typed reason', () => {
-  const readmission: HttpComponents['schemas']['Readmission'] = { expectedOwnershipGeneration: 3 };
+test('a re-admission names its project, key, and generation and is refused with a typed reason', () => {
+  const readmission: HttpComponents['schemas']['Readmission'] = { readmissionId: 'readmission-1', expectedOwnershipGeneration: 3 };
+  const query = operation('readmitTask').parameters!.filter(({ in: place }) => place === 'query');
 
+  assert.deepEqual(query.map(({ name, required }) => [name, required]), [['projectId', true]]);
   assert.ok(checkHttpSchema('Readmission', readmission).ok);
   assert.ok(violations(checkHttpSchema('Readmission', {})).some((text) => text.includes('expectedOwnershipGeneration')));
+  assert.ok(violations(checkHttpSchema('Readmission', { expectedOwnershipGeneration: 3 })).some((text) => text.includes('readmissionId')));
   assert.deepEqual(responseSchema('readmitTask', '201'), { $ref: '#/components/schemas/TaskSubmission' });
   assert.ok('409' in operation('readmitTask').responses);
   assert.deepEqual(reasonsOf('ReadmissionRefusal'), ['attempt-active', 'admission-not-dispatched', 'admission-refused']);
@@ -311,7 +313,7 @@ test('every SCM credential issue and fetch re-checks the bound remote with the b
   assert.ok(violations(checkHttpSchema('ScmCredentialRefusal', { ...refusal('remote-origin-mismatch'), code: 'forbidden' })).some((text) => text.includes('/code')));
 });
 
-test('a page boundary between equal identifiers keeps its position', () => {
+test('a page cursor names both parts of its composite position', () => {
   const executions = ['task-1', 'task-2'].map((taskId) => ({
     projectId: 'p1', runId: 'run-1', taskId, attemptId: `${taskId}-attempt`, ownershipGeneration: 1, executionId: 'execution-1',
     workerId: 'worker-1', state: 'started', evidence: [{ kind: 'uncertain', observedAt: AT }],
@@ -338,4 +340,12 @@ test('an unknown execution keeps all its evidence, not only an unapplied cancell
   assert.ok(checkHttpSchema('UnknownExecution', { ...unknown, evidence: Array(65).fill({ kind: 'uncertain', observedAt: AT }) }).ok);
   for (const kind of others) assert.ok(checkHttpSchema('UnknownExecution', { ...unknown, evidence: [notApplied, { kind, observedAt: AT }] }).ok, kind);
   assert.ok(violations(checkHttpSchema('UnknownExecution', { ...unknown, evidence: [notApplied, notApplied] })).some((text) => text.includes('/evidence')));
+});
+
+test('an unknown execution or run of a worker is a typed refusal, not a 404', () => {
+  for (const id of ['fetchSlotCredential', 'issueRunScmCredential']) assert.ok(!('404' in operation(id).responses), id);
+  assert.ok('404' in operation('fetchRunScmCredential').responses);
+  for (const name of ['SlotCredentialRefusal', 'ScmCredentialRefusal'] as const) {
+    assert.ok(checkHttpSchema(name, refusal('assignment-not-active')).ok, name);
+  }
 });

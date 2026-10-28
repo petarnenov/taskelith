@@ -613,7 +613,7 @@
       "delete": {
         "operationId": "retireEvidence",
         "summary": "Retire an evidence record after its minimum retention",
-        "description": "A `project-maintainer` on the record's project removes the record once 365 days have passed since its publication (`publishedAt`), then its content once no record refers to the digest (G2 `implement-evidence-store` decision Q2).",
+        "description": "A `project-maintainer` on the record's project removes the record once 365 days have passed since its publication (`publishedAt`), then its content once no record refers to the digest (G2 `implement-evidence-store` decision Q2). The record is read before the role, as for `readEvidence`: a principal that may not read it gets the 404 of an unknown record, and a reader below `project-maintainer` gets 403.",
         "security": [
           {
             "browserSession": [],
@@ -636,7 +636,7 @@
         ],
         "responses": {
           "204": {
-            "description": "The record is retired."
+            "description": "The record is retired. Its content is removed with it or, when that removal fails, later by the sweep of unreferenced digests; the record stays retired."
           },
           "400": {
             "description": "The path is not valid.",
@@ -659,7 +659,7 @@
             }
           },
           "403": {
-            "description": "The principal lacks the role, or a session request carried no valid CSRF token; nothing took effect.",
+            "description": "The principal reads the record but is not a `project-maintainer` of its project, or a session request carried no valid CSRF token; nothing took effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -696,7 +696,7 @@
             }
           },
           "500": {
-            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "description": "The control plane failed before the record was removed; nothing took effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -706,7 +706,7 @@
             }
           },
           "503": {
-            "description": "The database or the evidence volume is not available.",
+            "description": "The database is not available; nothing took effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -774,7 +774,7 @@
             }
           },
           "404": {
-            "description": "The evidence record does not exist, or the principal holds no role that reads it.",
+            "description": "The evidence record does not exist, the principal holds no role that reads it, or the record was retired between the read of the record and the read of its content.",
             "content": {
               "application/json": {
                 "schema": {
@@ -784,7 +784,7 @@
             }
           },
           "500": {
-            "description": "The stored content is missing or does not match its digest, so it is not served.",
+            "description": "The content of a record that still exists is missing or does not match its digest, so it is not served.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1281,7 +1281,7 @@
       "post": {
         "operationId": "readmitTask",
         "summary": "Re-admit a task at its next ownership generation",
-        "description": "A `project-operator` or above on the task's project re-admits a task whose last attempt ended, for example after a revoked launch grant, through the writer of admissions (G2 `rebindAdmission`); the new admission is bound at the task's next ownership generation.",
+        "description": "A `project-operator` or above on the project named in the query re-admits a task of that project whose last attempt ended, through the writer of admissions (G2 `rebindAdmission`); the new admission is bound at the task's next ownership generation. The role is checked on the named project before the run or the task is read (control-plane wire contracts section 2). A repeat with the same `readmissionId` and input returns the first 201.",
         "security": [
           {
             "browserSession": [],
@@ -1309,6 +1309,15 @@
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "description": "The project of the run, on which the role is checked before the run or the task is read.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
           }
         ],
         "requestBody": {
@@ -1323,7 +1332,7 @@
         },
         "responses": {
           "201": {
-            "description": "The task is re-admitted with its new admission.",
+            "description": "The task is re-admitted with its new admission, or a repeat of the same `readmissionId` and input returns the first answer.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1333,7 +1342,7 @@
             }
           },
           "400": {
-            "description": "The path or the body is not valid.",
+            "description": "The path, the query, or the body is not valid.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1353,7 +1362,7 @@
             }
           },
           "403": {
-            "description": "The principal lacks the role, or a session request carried no valid CSRF token; nothing took effect.",
+            "description": "The principal holds no role of `project-operator` or above on the named project, or a session request carried no valid CSRF token; nothing took effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1370,7 +1379,7 @@
             }
           },
           "404": {
-            "description": "The run or the task does not exist.",
+            "description": "The project, the run, or the task does not exist, or the run is not of the named project.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1380,7 +1389,7 @@
             }
           },
           "409": {
-            "description": "The task's ownership generation is no longer the expected one; nothing took effect.",
+            "description": "The task's ownership generation is no longer the expected one, or the `readmissionId` was used with another input; nothing took effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1426,7 +1435,7 @@
       "get": {
         "operationId": "fetchSlotCredential",
         "summary": "Fetch the credential of a reserved slot for an execution",
-        "description": "Slot credential delivery of account pool contract sections 7 and 7.3, first and repeated: after its launch authorization, and again whenever it starts or adopts the execution, the worker that owns the execution fetches the credential of a slot that the reservation of the execution's attempt names. The first fetch returns the slot's current credential version; a later fetch re-delivers that version. `LaunchGrant` carries no credential. The response is never cached, and a log of the request never holds its body.",
+        "description": "Slot credential delivery of account pool contract sections 7 and 7.3, first and repeated: after its launch authorization, and again whenever it starts or adopts the execution, the worker that owns the execution fetches the credential of a slot that the reservation of the execution's attempt names. The control plane finds the execution by the `attemptId` of the query and the `executionId` of the path, because an execution identifier is unique only within its task. An `authorized` execution with no earlier delivery also needs its launch grant unexpired and not `revoked` (section 7); for any other execution the ownership checks of section 7.3 stand in. The first fetch returns the slot's current credential version; a later fetch re-delivers that version. `LaunchGrant` carries no credential. The response is never cached, and a log of the request never holds its body.",
         "security": [
           {
             "workerCredential": []
@@ -1520,18 +1529,8 @@
               }
             }
           },
-          "404": {
-            "description": "The execution does not exist. A slot that the execution's reservation does not name is refused with `capacity-not-reserved`.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
           "422": {
-            "description": "The delivery is refused; nothing is revealed.",
+            "description": "The delivery is refused, an unknown attempt or execution with `assignment-not-active`; nothing is revealed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1567,7 +1566,7 @@
       "post": {
         "operationId": "issueRunScmCredential",
         "summary": "Obtain the current per-run SCM credential of a run",
-        "description": "The worker that holds an attempt of a task of the run obtains the run's current SCM credential version, which the control plane issues when the run has none; a repeat with no refresh between returns the same version, and one after a refresh the refreshed version. Every call first re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
+        "description": "The worker that holds an attempt of a task of the run obtains the run's current SCM credential version. The control plane issues the first one when the run has none, serialized per run, so that of concurrent first issues one issues and the others return its version; a repeat with no refresh between returns the same version, and one after a refresh the refreshed version. After the ownership checks of launch authorization contract section 9, every call re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
         "security": [
           {
             "workerCredential": []
@@ -1635,18 +1634,8 @@
               }
             }
           },
-          "404": {
-            "description": "The run does not exist.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Failure"
-                }
-              }
-            }
-          },
           "422": {
-            "description": "No credential is issued or revealed; the control plane records the reason.",
+            "description": "No credential is issued or revealed, an unknown run with `assignment-not-active`; the control plane records the reason.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1682,7 +1671,7 @@
       "get": {
         "operationId": "fetchRunScmCredential",
         "summary": "Fetch one version of a run's SCM credential",
-        "description": "The worker fetches the version that a refresh notice names (G3 sub-change 9d). A version is written once and never changes. Every fetch first re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
+        "description": "The worker fetches the version that a refresh notice names (G3 sub-change 9d). A version is written once and never changes. After the ownership checks of launch authorization contract section 9, every fetch re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
         "security": [
           {
             "workerCredential": []
@@ -1788,7 +1777,7 @@
             }
           },
           "404": {
-            "description": "The run does not exist, or, once the ownership and remote checks pass, the credential or the version does not.",
+            "description": "Once the ownership and remote checks pass, the run has no such credential or version.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1798,7 +1787,7 @@
             }
           },
           "422": {
-            "description": "Nothing is revealed; the control plane records the reason.",
+            "description": "Nothing is revealed, an unknown run with `assignment-not-active`; the control plane records the reason.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3709,11 +3698,16 @@
       "Readmission": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Re-admits a task at its next ownership generation; compare-and-set on the generation the caller read.",
+        "description": "Re-admits a task at its next ownership generation; compare-and-set on the generation the caller read, and idempotent by `readmissionId` (product ports contract section 2, rule 7).",
         "required": [
+          "readmissionId",
           "expectedOwnershipGeneration"
         ],
         "properties": {
+          "readmissionId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The caller's idempotency key of this re-admission, scoped to the task."
+          },
           "expectedOwnershipGeneration": {
             "$ref": "#/components/schemas/Generation",
             "description": "The task's current ownership generation as the caller read it."
@@ -3799,7 +3793,7 @@
       "SlotCredentialRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `fetchSlotCredential`, at the first fetch or a later one, checked in the order of account pool contract section 7.3: the ownership reasons of launch authorization contract section 9, `execution-conflict`, and `capacity-not-reserved` for a reservation that is released, held for another attempt, or does not name the slot, then the slot's ineligibility (`revoked`, `removed`), then `delivery-not-admitted` for a mechanism without an admitted delivery for its harness. Nothing is revealed.",
+        "description": "Status 422 of `fetchSlotCredential`, at the first fetch or a later one, checked in the order of account pool contract section 7.3: the ownership reasons of launch authorization contract section 9, with `assignment-not-active` also for an unknown attempt or execution, after the installation and worker checks; `execution-conflict` for an execution that is not the owning one, is terminal, or has a `revoked` grant, or that is `authorized` with no earlier delivery and an expired grant; `capacity-not-reserved` for a reservation that is released, held for another attempt, or does not name the slot; then the slot's ineligibility (`revoked`, `removed`); then `delivery-not-admitted`, which section 7.3 names `invalid`, for a mechanism without an admitted delivery for its harness. Nothing is revealed.",
         "required": [
           "code",
           "message",
@@ -3952,7 +3946,7 @@
       "ScmCredentialRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `issueRunScmCredential` and `fetchRunScmCredential`, checked in this order: the ownership reasons of launch authorization contract section 9; the project has no repository binding; the bound remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the SCM integration's current allowed origin; then the version's secret has ended: for a fetch, the named version by a refresh or a revocation, and for an issue, the run's current version by a revocation. Nothing is issued or revealed.",
+        "description": "Status 422 of `issueRunScmCredential` and `fetchRunScmCredential`, checked in this order: the ownership reasons of launch authorization contract section 9, with `assignment-not-active` also for an unknown run or an attempt not of a task of the run, after the installation and worker checks; the project has no repository binding; the bound remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the SCM integration's current allowed origin; then the version's secret has ended: for a fetch, the named version by a refresh, a revocation, or its expiry, and for an issue, the run's current version by a revocation or its expiry. Nothing is issued or revealed, and `message` and `details` name only the reason and identifiers, never a URL or a secret.",
         "required": [
           "code",
           "message",

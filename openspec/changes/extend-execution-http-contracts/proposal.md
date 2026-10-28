@@ -11,13 +11,13 @@ G3 item 9 (`define-g3-wire-contracts`, [G3 work plan](/docs/g3-plan.md) row 9) o
   - `retireEvidence` (`DELETE /evidence/{evidenceId}`) after the 365-day retention;
   - `readDelegationResult` for the worker of the parent task;
   - `listUnknownExecutions` and `listUnrecordedProcesses`, the reconciliation queue of item 44;
-  - `readmitTask`, the re-admission of item 44, by compare-and-set on the ownership generation;
+  - `readmitTask`, the re-admission of item 44, by compare-and-set on the ownership generation, idempotent by a key, with the role checked on the project that the request names;
   - `fetchSlotCredential`, the slot credential delivery of account pool sections 7 and 7.3, both the first fetch after the launch authorization and every re-delivery, with no credential in `LaunchGrant`;
   - `issueRunScmCredential` and `fetchRunScmCredential`, the per-run SCM credential fetched over HTTPS by version, each re-checking the bound remote URL with typed refusals.
 - The control-plane schemes `browserSession` and `csrfToken` and the schemas `AuthenticationFailure`, `AccessDenial`, `CsrfRejection`, `ExternalId`, and `RemoteUrl`, copied unchanged, as the generator requires.
 - Contract tests in `packages/contracts/test/execution-http-contracts.test.ts`.
 - `docs/contracts/execution-wire-contracts.md` section 8, linked from the G3 plan row 9 and the account pool contract section 7.
-- Spec delta: `execution-wire-contracts`.
+- Spec deltas: `execution-wire-contracts` and `evidence-store`.
 
 ## Capabilities
 
@@ -27,7 +27,8 @@ None.
 
 ### Modified Capabilities
 
-- `execution-wire-contracts`: "Execution HTTP operations" names the G3 operations and the browser session; new requirements for the G3 operations, per-project evidence reads, evidence retirement, the delegation result read, the reconciliation queue reads, task re-admission, slot credential delivery, the per-run SCM credential delivery, its remote re-check, and credential deliveries that are never kept.
+- `execution-wire-contracts`: "Execution HTTP operations" names the G3 operations and the browser session; new requirements for the G3 operations, per-project evidence reads, evidence retirement, the delegation result read, the reconciliation queue reads, task re-admission, slot credential delivery and its checks, the per-run SCM credential delivery, its remote re-check, and credential deliveries that are never kept.
+- `evidence-store`: "Evidence reads" accepts the browser session and serves a record only to a role on its project, and "Evidence retention" names `retireEvidence`, its role, and `details.retainedUntil`.
 
 ## Impact
 
