@@ -1,16 +1,18 @@
 import { inspect } from 'node:util';
 import { isRecord } from './findings-common.ts';
+import { SECRET_PATTERNS } from './review-findings.ts';
 import {
   passPlans,
   SHADOW_ROUTER,
-  TIERS,
+  tierAt,
   type AnsweredShadow,
   type FailedShadow,
+  type ReferenceRates,
   type ReviewRouter,
-  type RouteFeatures,
   type ShadowDecision,
   type ShadowFailure,
-  type Tier,
+  type ShadowInput,
+  type ShadowInputSource,
 } from './review-route.ts';
 
 // The shadow router: TypeSafe AI's Jev model over HTTP. It decides
@@ -21,9 +23,13 @@ export const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 export const JEV_MODEL = 'jev-1.14.0';
 export const JEV_TIMEOUT_MS = 2000;
 export const REDACTED = '[redacted]';
+// design.md "Threshold": 14 of 31 elevated, 2 of 19 standard had pass 3.
+export const THIRD_PASS_THRESHOLD = 0.4;
+export const WHY_LIMIT = 1200;
+export const WHAT_CHANGES_LIMIT = 1500;
 
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
-const MAX_SCORE = 2;
+const CLIPPED = '\u2026';
 
 // Holds the API key; every string form of it is [redacted].
 export class Credential {
@@ -65,23 +71,15 @@ export interface JevSettings {
   readonly clock?: () => number;
 }
 
-// The allowlist of what leaves the machine: counts, capability ids,
-// flags, the size, and the history figures; never paths or commits.
-export function shadowState(features: RouteFeatures): Record<string, unknown> {
-  const { touches, capabilityHistory } = features;
+// The allowlist of what leaves the machine: the context, counts,
+// capability ids, the size, the history, and the redacted proposal.
+export function shadowState({ features, reference, content }: ShadowInput): Record<string, unknown> {
+  const { capabilityHistory } = features;
   return {
+    context: requestContext(reference),
     linesChanged: features.linesChanged,
     filesChanged: features.filesChanged,
     capabilities: [...features.capabilities],
-    touches: {
-      code: touches.code,
-      tests: touches.tests,
-      contracts: touches.contracts,
-      specs: touches.specs,
-      docker: touches.docker,
-      security: touches.security,
-      docsOnly: touches.docsOnly,
-    },
     externalFacts: features.externalFacts,
     size: features.size,
     capabilityHistory: {
@@ -89,83 +87,81 @@ export function shadowState(features: RouteFeatures): Record<string, unknown> {
       thirdPassShare: capabilityHistory.thirdPassShare,
       mediumOrWorsePerChange: capabilityHistory.mediumOrWorsePerChange,
     },
+    content: {
+      why: redactedExcerpt(content.why, WHY_LIMIT),
+      whatChanges: redactedExcerpt(content.whatChanges, WHAT_CHANGES_LIMIT),
+      taskCount: content.taskCount,
+      specRequirementCount: content.specRequirementCount,
+    },
   };
 }
 
-const TIER_QUESTION = {
-  type: 'choice',
-  instructions: 'Which review effort does this software change need so that two review passes suffice?',
+// The criteria restate governance "Conditional third pass", not the rule.
+const THIRD_PASS_QUESTION = {
+  type: 'noul',
+  instructions: 'This software change will need a third review pass.',
   criteria: {
-    standard: 'The configured review effort is enough; the change is small or low risk.',
-    elevated: 'Higher review effort is needed; the change is large, broad, or touches security, contracts, or containers.',
+    true: 'Reviewer B in pass 2 will find a Critical or High issue, or pass 2 will include a Medium issue and its fixes, including fixes for accompanying Low issues, will change files other than records and documentation.',
+    false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
   },
 } as const;
 
-const PASSES_QUESTION = {
-  type: 'score',
-  instructions: 'How many review passes will this software change need?',
-  criteria: ['1 pass', '2 passes', '3 passes'],
+const FIELD_MEANINGS = {
+  linesChanged: 'lines added plus removed in the change',
+  filesChanged: 'number of files changed',
+  capabilities: 'specification areas the change affects',
+  externalFacts: 'true when the review must check facts outside the repository',
+  size: 'planned size S, S-M, M, M-L or L; null when not planned',
+  capabilityHistory: 'past reviewed changes in the same areas: count, share that needed a third pass, Medium-or-worse findings per change',
+  content: 'the change proposal: why it is made, what it changes, its task count and specification requirement count',
 } as const;
 
-export function jevRequestBody(features: RouteFeatures, model: string): string {
-  return JSON.stringify({
-    model,
-    state: shadowState(features),
-    questions: { tier: TIER_QUESTION, passes: PASSES_QUESTION },
-  });
+export function requestContext({ thirdPassShare, byLinesChanged }: ReferenceRates): Record<string, unknown> {
+  const bands = byLinesChanged.map(({ band, thirdPassShare: share }) => `${band} ${percent(share)}`);
+  return {
+    meaning: 'Features of one software change in the Taskelith repository, measured before its independent code review.',
+    review: 'Each change gets review passes: pass 1 by reviewer A, pass 2 by reviewer B. A third pass is required only when pass 2 found a Critical or High finding, or when the fixes after pass 2 changed more than records and documentation.',
+    baseRate: `In this repository ${percent(thirdPassShare)} of reviewed changes needed a third pass.`,
+    byLinesChanged: `Third-pass rate by lines changed: ${bands.join(', ')}.`,
+    fields: FIELD_MEANINGS,
+  };
+}
+
+function percent(share: number | null): string {
+  return share === null ? 'unknown' : `${Math.round(share * 100)}%`;
+}
+
+// A whole PEM block, to its end line or, when that is missing, to the end
+// of the text, since its body lines may be shorter than the run pattern.
+const PEM_BLOCK = /-----BEGIN [A-Z ]*(?:PRIVATE KEY(?: BLOCK)?|NKEY SEED|USER JWT)-----[\s\S]*?(?:-----END [A-Z ]*-----|$)/;
+
+const REDACTION_PATTERNS: readonly RegExp[] = [PEM_BLOCK, ...SECRET_PATTERNS, /[A-Za-z0-9+/_-]{40,}/].map(
+  ({ source, flags }) => new RegExp(source, `${flags}g`),
+);
+
+// Redacted before clipping, so that a clipped secret cannot slip past.
+export function redactedExcerpt(text: string, limit: number): string {
+  const redacted = REDACTION_PATTERNS.reduce((result, pattern) => result.replace(pattern, REDACTED), text);
+  return redacted.length > limit ? `${redacted.slice(0, limit)}${CLIPPED}` : redacted;
+}
+
+export function jevRequestBody(input: ShadowInput, model: string): string {
+  return JSON.stringify({ model, state: shadowState(input), questions: { third: THIRD_PASS_QUESTION } });
 }
 
 export interface JevAnswer {
   readonly model: string;
-  readonly tier: Tier;
-  readonly confidence: number;
-  readonly probabilities: Readonly<Record<Tier, number>>;
-  readonly expectedPasses: number;
+  readonly thirdPassProbability: number;
 }
 
-// Undefined for any body outside the documented shapes, so that no part
+// Undefined for any body outside the documented shape, so that no part
 // of an unexpected body reaches the record.
 export function parseJevAnswer(body: unknown): JevAnswer | undefined {
   if (!isRecord(body) || !isRecord(body.answers)) return undefined;
-  const { tier, passes } = body.answers;
+  const { third } = body.answers;
   if (typeof body.model !== 'string' || !MODEL_ID.test(body.model)) return undefined;
-  if (!isTierAnswer(tier) || !isPassesAnswer(passes)) return undefined;
-  return {
-    model: body.model,
-    tier: tier.choice,
-    confidence: tier.confidence,
-    probabilities: { standard: tier.probabilities.standard, elevated: tier.probabilities.elevated },
-    expectedPasses: passes.score + 1,
-  };
-}
-
-interface TierAnswer {
-  readonly choice: Tier;
-  readonly confidence: number;
-  readonly probabilities: Readonly<Record<Tier, number>>;
-}
-
-function isTierAnswer(answer: unknown): answer is TierAnswer {
-  if (!isRecord(answer) || answer.type !== 'choice') return false;
-  if (!isTier(answer.choice) || !isProbability(answer.confidence)) return false;
-  return isTierProbabilities(answer.probabilities);
-}
-
-function isTierProbabilities(probabilities: unknown): boolean {
-  if (!isRecord(probabilities)) return false;
-  const keys = Object.keys(probabilities);
-  if (keys.length !== TIERS.length || !keys.every(isTier)) return false;
-  return TIERS.every((tier) => isProbability(probabilities[tier]));
-}
-
-function isPassesAnswer(answer: unknown): answer is { readonly score: number } {
-  if (!isRecord(answer) || answer.type !== 'score') return false;
-  const { score } = answer;
-  return isFiniteNumber(score) && score >= 0 && score <= MAX_SCORE && isProbability(answer.confidence);
-}
-
-function isTier(value: unknown): value is Tier {
-  return TIERS.includes(value as Tier);
+  if (!isRecord(third) || third.type !== 'noul' || !isProbability(third.noul)) return undefined;
+  return { model: body.model, thirdPassProbability: third.noul };
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -185,7 +181,7 @@ const STATUS_FAILURES: ReadonlyMap<number, ShadowFailure> = new Map([
   [529, 'overloaded'],
 ]);
 
-export class JevRouter implements ReviewRouter<ShadowDecision> {
+export class JevRouter implements ReviewRouter<ShadowDecision, ShadowInputSource> {
   readonly #credential: Credential | undefined;
   readonly #endpoint: string;
   readonly #model: string;
@@ -202,23 +198,25 @@ export class JevRouter implements ReviewRouter<ShadowDecision> {
     this.#clock = settings.clock ?? (() => performance.now());
   }
 
-  async route(features: RouteFeatures): Promise<ShadowDecision> {
+  async route(source: ShadowInputSource): Promise<ShadowDecision> {
     if (this.#credential === undefined) return failed({ reason: 'missing-credential' }, 0);
+    const input = builtInput(source);
+    if (input === undefined) return failed({ reason: 'input-unavailable' }, 0);
     const started = this.#clock();
-    const exchange = await this.#exchange(this.#credential, features).catch(() => ({ reason: 'invalid-response' as const }));
+    const exchange = await this.#exchange(this.#credential, input).catch(() => ({ reason: 'invalid-response' as const }));
     const latencyMs = Math.max(0, Math.round(this.#clock() - started));
     if ('reason' in exchange) return failed(exchange, latencyMs);
-    return answered(exchange.answer, features, latencyMs);
+    return answered(exchange.answer, input, latencyMs);
   }
 
-  async #exchange(credential: Credential, features: RouteFeatures): Promise<Exchange> {
+  async #exchange(credential: Credential, input: ShadowInput): Promise<Exchange> {
     const signal = AbortSignal.timeout(this.#timeoutMs);
     let response: Response;
     try {
       response = await this.#fetch(this.#endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: credential.authorizationHeader() },
-        body: jevRequestBody(features, this.#model),
+        body: jevRequestBody(input, this.#model),
         signal,
       });
     } catch (error) {
@@ -245,6 +243,16 @@ async function answerOf(response: Response): Promise<Exchange> {
   return answer === undefined ? { reason: 'invalid-response' } : { answer };
 }
 
+// Undefined when the archive or the proposal cannot be read, so that the
+// rule routes alone instead of the command failing.
+function builtInput(source: ShadowInputSource): ShadowInput | undefined {
+  try {
+    return source();
+  } catch {
+    return undefined;
+  }
+}
+
 function isTimeout(error: unknown): boolean {
   return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
 }
@@ -254,16 +262,16 @@ function failed({ reason, httpStatus }: { reason: ShadowFailure; httpStatus?: nu
   return { router: SHADOW_ROUTER, status: 'failed', reason, ...status, latencyMs };
 }
 
-function answered(answer: JevAnswer, features: RouteFeatures, latencyMs: number): AnsweredShadow {
+function answered(answer: JevAnswer, { features }: ShadowInput, latencyMs: number): AnsweredShadow {
+  const tier = tierAt(answer.thirdPassProbability, THIRD_PASS_THRESHOLD);
   return {
     router: SHADOW_ROUTER,
     status: 'answered',
     model: answer.model,
-    tier: answer.tier,
-    confidence: answer.confidence,
-    probabilities: answer.probabilities,
-    expectedPasses: answer.expectedPasses,
-    passes: passPlans(answer.tier, features),
+    tier,
+    thirdPassProbability: answer.thirdPassProbability,
+    threshold: THIRD_PASS_THRESHOLD,
+    passes: passPlans(tier, features),
     latencyMs,
   };
 }

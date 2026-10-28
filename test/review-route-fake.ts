@@ -1,17 +1,33 @@
-import type { ReviewRouter, RouteFeatures } from '../scripts/review-route.ts';
+import type { ReviewRouter, RouteFeatures, ShadowDecision, ShadowInput, ShadowInputSource } from '../scripts/review-route.ts';
 
 // Test doubles of the review route: a fixed-answer router and features.
 
-export class FakeRouter<Decision> implements ReviewRouter<Decision> {
-  readonly calls: RouteFeatures[] = [];
+export class FakeRouter<Decision, Input = RouteFeatures> implements ReviewRouter<Decision, Input> {
+  readonly calls: Input[] = [];
   readonly #decision: Decision;
 
   constructor(decision: Decision) {
     this.#decision = decision;
   }
 
-  route(features: RouteFeatures): Promise<Decision> {
-    this.calls.push(features);
+  route(input: Input): Promise<Decision> {
+    this.calls.push(input);
+    return Promise.resolve(this.#decision);
+  }
+}
+
+// A shadow router that builds each input it is given, as Jev does with a
+// credential, and records it.
+export class FakeShadowRouter implements ReviewRouter<ShadowDecision, ShadowInputSource> {
+  readonly calls: ShadowInput[] = [];
+  readonly #decision: ShadowDecision;
+
+  constructor(decision: ShadowDecision) {
+    this.#decision = decision;
+  }
+
+  route(source: ShadowInputSource): Promise<ShadowDecision> {
+    this.calls.push(source());
     return Promise.resolve(this.#decision);
   }
 }
@@ -32,4 +48,22 @@ export function featuresWith(overrides: Partial<RouteFeatures>): RouteFeatures {
 
 export function touching(touches: Partial<RouteFeatures['touches']>): RouteFeatures {
   return featuresWith({ touches: { ...QUIET_FEATURES.touches, ...touches } });
+}
+
+export const QUIET_INPUT: ShadowInput = {
+  features: QUIET_FEATURES,
+  reference: {
+    changes: 50,
+    thirdPassShare: 0.32,
+    byLinesChanged: [
+      { band: 'under 100 lines', changes: 20, thirdPassShare: 0.1 },
+      { band: '100 to 399 lines', changes: 15, thirdPassShare: 0.4 },
+      { band: '400 lines and more', changes: 15, thirdPassShare: 0.6 },
+    ],
+  },
+  content: { why: 'The request is badly shaped.', whatChanges: '- One question.', taskCount: 9, specRequirementCount: 3 },
+};
+
+export function inputWith(features: Partial<RouteFeatures>): ShadowInput {
+  return { ...QUIET_INPUT, features: featuresWith(features) };
 }

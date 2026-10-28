@@ -54,6 +54,17 @@ CMD ["node", "apps/control-plane/dist/main.js"]
 FROM runtime AS worker
 ARG SOURCE_DATE_EPOCH
 USER root
+# The pinned Git client (contract section 7); its version string does not
+# show the package revision, so the build checks the package itself.
+ARG GIT_PACKAGE_VERSION=1:2.43.0-1ubuntu7.4
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends "git=${GIT_PACKAGE_VERSION}" \
+  && test "$(dpkg-query --show --showformat='${Version}' git)" = "${GIT_PACKAGE_VERSION}" \
+  && test "$(/usr/bin/git --version)" = "git version 2.43.0" \
+  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*.bin /var/cache/debconf/*-old /var/lib/dpkg/*-old \
+    /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache \
+  && find /etc /usr /var \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -newermt "@${SOURCE_DATE_EPOCH:?}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
 RUN useradd --uid 10003 --user-group --no-create-home --shell /usr/sbin/nologin taskelith-exec \
   && find /etc \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
     -o -newermt "@${SOURCE_DATE_EPOCH:?}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +

@@ -1,5 +1,14 @@
 import type { Severity } from './review-findings.ts';
-import { SHADOW_FAILURES, TIERS, type ShadowDecision, type ShadowFailure, type Tier } from './review-route.ts';
+import {
+  isThirdPassAnswer,
+  SHADOW_FAILURES,
+  TIERS,
+  type AnsweredShadow,
+  type LegacyAnsweredShadow,
+  type ShadowDecision,
+  type ShadowFailure,
+  type Tier,
+} from './review-route.ts';
 
 // Pure routing figures of routed changes against their review outcome:
 // the third pass share per tier, agreement, and the shadow's errors.
@@ -77,14 +86,29 @@ export interface Agreement {
   readonly kappa: number | null;
 }
 
+// Scores of P(third) against the outcome; AUC is null without both
+// outcomes.
+export interface ThirdPassScore {
+  readonly changes: number;
+  readonly brierScore: number | null;
+  readonly auc: number | null;
+}
+
+// Scores of the answers to the earlier tier and passes questions.
+export interface TierRequestScore {
+  readonly changes: number;
+  readonly brierScore: number | null;
+  readonly passesMeanAbsoluteError: number | null;
+}
+
 export interface ShadowFigures {
   readonly answered: number;
   readonly failed: Readonly<Partial<Record<ShadowFailure, number>>>;
   readonly skipped: number;
   readonly tiers: TierFigures;
   readonly agreement: Agreement;
-  readonly brierScore: number | null;
-  readonly passesMeanAbsoluteError: number | null;
+  readonly thirdPass: ThirdPassScore;
+  readonly tierRequest: TierRequestScore;
 }
 
 export interface RoutingFigures {
@@ -116,9 +140,13 @@ function tierFigures<Change extends RoutedChange>(changes: readonly Change[], ti
   return { standard: figuresOf('standard'), elevated: figuresOf('elevated') };
 }
 
-type Answered = RoutedChange & { readonly shadow: Extract<ShadowDecision, { status: 'answered' }> };
+type Answered = RoutedChange & { readonly shadow: AnsweredShadow | LegacyAnsweredShadow };
+type ThirdPassAnswered = RoutedChange & { readonly shadow: AnsweredShadow };
+type LegacyAnswered = RoutedChange & { readonly shadow: LegacyAnsweredShadow };
 
 const isAnswered = (change: RoutedChange): change is Answered => change.shadow.status === 'answered';
+const isThirdPassAnswered = (change: Answered): change is ThirdPassAnswered => isThirdPassAnswer(change.shadow);
+const isLegacyAnswered = (change: Answered): change is LegacyAnswered => !isThirdPassAnswer(change.shadow);
 
 export function routingFigures(changes: readonly RoutedChange[]): RoutingFigures {
   return {
@@ -137,9 +165,42 @@ function shadowFigures(changes: readonly RoutedChange[]): ShadowFigures {
     skipped: changes.filter(({ shadow }) => shadow.status === 'skipped').length,
     tiers: tierFigures(answered, ({ shadow }) => shadow.tier),
     agreement: agreement(answered),
-    brierScore: mean(answered.map(({ shadow, outcome }) => (shadow.probabilities.elevated - Number(outcome.thirdPass)) ** 2)),
-    passesMeanAbsoluteError: mean(answered.map(({ shadow, outcome }) => Math.abs(shadow.expectedPasses - outcome.passesNeeded))),
+    thirdPass: thirdPassScore(answered.filter(isThirdPassAnswered)),
+    tierRequest: tierRequestScore(answered.filter(isLegacyAnswered)),
   };
+}
+
+function tierRequestScore(legacy: readonly LegacyAnswered[]): TierRequestScore {
+  return {
+    changes: legacy.length,
+    brierScore: mean(legacy.map(({ shadow, outcome }) => (shadow.probabilities.elevated - Number(outcome.thirdPass)) ** 2)),
+    passesMeanAbsoluteError: mean(legacy.map(({ shadow, outcome }) => Math.abs(shadow.expectedPasses - outcome.passesNeeded))),
+  };
+}
+
+function thirdPassScore(answered: readonly ThirdPassAnswered[]): ThirdPassScore {
+  const forecasts = answered.map(({ shadow, outcome }) => ({ probability: shadow.thirdPassProbability, thirdPass: outcome.thirdPass }));
+  return {
+    changes: forecasts.length,
+    brierScore: mean(forecasts.map(({ probability, thirdPass }) => (probability - Number(thirdPass)) ** 2)),
+    auc: areaUnderCurve(forecasts),
+  };
+}
+
+interface Forecast {
+  readonly probability: number;
+  readonly thirdPass: boolean;
+}
+
+// The share of third pass and other pairs that the probability orders
+// correctly; ties count half.
+export function areaUnderCurve(forecasts: readonly Forecast[]): number | null {
+  const positives = forecasts.filter(({ thirdPass }) => thirdPass).map(({ probability }) => probability);
+  const negatives = forecasts.filter(({ thirdPass }) => !thirdPass).map(({ probability }) => probability);
+  if (positives.length === 0 || negatives.length === 0) return null;
+  const pairScore = (positive: number, negative: number) => (positive > negative ? 1 : positive === negative ? 0.5 : 0);
+  const total = positives.reduce((sum, positive) => sum + negatives.reduce((inner, negative) => inner + pairScore(positive, negative), 0), 0);
+  return rounded(total / (positives.length * negatives.length));
 }
 
 function failureCounts(changes: readonly RoutedChange[]): Partial<Record<ShadowFailure, number>> {
@@ -180,11 +241,17 @@ export function formatRoutingFigures({ rule, shadow }: RoutingFigures): string[]
   const lines = TIERS.map((tier) => `  ${formatOutcomeFigures(`rule ${tier}`, rule[tier])}`);
   if (shadow.answered === 0) return [...lines, `  shadow: no answer (${shadowCounts(shadow)})`];
   const { agreement: agreed } = shadow;
+  const { thirdPass, tierRequest } = shadow;
   return [
     ...lines,
     ...TIERS.map((tier) => `  ${formatOutcomeFigures(`shadow ${tier}`, shadow.tiers[tier])}`),
     `  shadow: ${shadowCounts(shadow)}; agreement ${agreed.agreeing} of ${agreed.changes} (${percent(agreed.share)}), kappa ${figure(agreed.kappa)}`,
-    `  shadow: Brier score of P(elevated) ${figure(shadow.brierScore)}, mean absolute error of passes ${figure(shadow.passesMeanAbsoluteError)}`,
+    ...(thirdPass.changes === 0 ? [] : [
+      `  shadow: P(third) of ${thirdPass.changes} change(s), Brier score ${figure(thirdPass.brierScore)}, AUC ${figure(thirdPass.auc)}`,
+    ]),
+    ...(tierRequest.changes === 0 ? [] : [
+      `  shadow: tier request of ${tierRequest.changes} change(s), Brier score of P(elevated) ${figure(tierRequest.brierScore)}, mean absolute error of passes ${figure(tierRequest.passesMeanAbsoluteError)}`,
+    ]),
   ];
 }
 
