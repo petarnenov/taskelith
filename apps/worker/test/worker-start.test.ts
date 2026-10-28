@@ -24,6 +24,7 @@ import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/na
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, id, value } from '@taskelith/testing';
 import {
+  composeWorkspace,
   launchFailureLine,
   serveUntilStopped,
   startWorker,
@@ -36,6 +37,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
   type WorkerWorkspace,
+  type WorkspaceHost,
 } from '@taskelith/worker';
 import { workspaceFailure } from '@taskelith/workspace';
 import { ManualTimers, StatusStream } from './contact-fakes.ts';
@@ -844,6 +846,45 @@ test('a capacity declaration that a reclaim owes is journaled by the next start 
   const restarted = await start({ ...settings, launch: LAUNCH });
   const declarations = value(restarted.root.journal.dueForPublication(T0)).flatMap(({ fact }) => (fact.kind === 'capacity-declared' ? [fact.declaration] : []));
   assert.equal(declarations.at(-1), 2);
+});
+
+const PRIVATE_PATH = '/private/checkout/customer-note';
+const privateFault = () => Object.assign(new Error(`EACCES: permission denied, open '${PRIVATE_PATH}'`), { code: 'EACCES', syscall: 'open' });
+
+function faultingWorkspace(fault: 'sweep' | 'read'): WorkerDependencies['workspace'] {
+  const fake = new FakeWorkspace();
+  if (fault === 'sweep') fake.sweepFault = privateFault();
+  else fake.readFault = privateFault();
+  return async () => ok(fake);
+}
+
+const UNREADABLE_HARDLINKS: WorkspaceHost = {
+  readProtectedHardlinks: () => {
+    throw privateFault();
+  },
+  setUmask: () => {},
+  verifyGitClient: async () => err(failure('internal', 'no Git client gate expected')),
+};
+
+test('the entry reports a workspace start failure with its fault code and never the path of the fault', async () => {
+  const environment = {
+    TASKELITH_DATA_DIR: settings.dataRoot, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane/', TASKELITH_NATS_URL: 'nats://broker:4222',
+    TASKELITH_ENROLLMENT_TOKEN: TOKEN, TASKELITH_INSTALLATION_CA_SHA256: INSTALLATION_CA.sha256,
+  };
+  const linux: WorkerSettings = { ...settings, containmentParent: '/sys/fs/cgroup/executions', launch: { ...LAUNCH, executionAccount: { uid: 10003, gid: 10003 } } };
+  const failures = {
+    'fs.protected_hardlinks cannot be read (EACCES)': async () => composeWorkspace(linux, UNREADABLE_HARDLINKS),
+    'the workspaces cannot be swept (EACCES)': faultingWorkspace('sweep'),
+    'the hand-off records cannot be read (EACCES)': faultingWorkspace('read'),
+  };
+  for (const [message, composed] of Object.entries(failures)) {
+    workspace = composed;
+    const lines: string[] = [];
+    assert.equal(await workerMain(environment, (line) => lines.push(line), () => dependencies()), undefined, message);
+    assert.equal(lines.length, 1, message);
+    assert.equal(lines[0]!.includes(PRIVATE_PATH), false, message);
+    assert.equal(JSON.parse(lines[0]!).error.message, message);
+  }
 });
 
 test('hand-off records or a sweep that fail fail the start and release the root', async () => {

@@ -2,6 +2,7 @@ import type { AttemptId } from '@taskelith/execution';
 import type { HandedOffWorkspace, ReclaimContainment } from '@taskelith/git-workspace';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
+import { faultMessage } from './fault-code.js';
 import type { WorkerWorkspace } from './workspace-composition.js';
 
 export const RECLAIM_FAILED_EVENT = 'worker.workspace.reclaim-failed';
@@ -83,7 +84,7 @@ async function readRecords(workspace: Pick<WorkerWorkspace, 'handOffRecords'>): 
   try {
     return ok(await workspace.handOffRecords());
   } catch (error) {
-    return err(failure('unavailable', `the hand-off records cannot be read: ${(error as Error).message}`));
+    return err(failure('unavailable', faultMessage('the hand-off records cannot be read', error)));
   }
 }
 

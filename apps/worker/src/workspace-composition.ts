@@ -11,6 +11,7 @@ import {
 } from '@taskelith/git-workspace';
 import { ok, type Result } from '@taskelith/kernel';
 import { GIT_CLIENT_PINS, workspaceFailure, type GitClientPin } from '@taskelith/workspace';
+import { faultMessage } from './fault-code.js';
 import type { WorkerSettings } from './settings.js';
 
 // What the worker's start and its slot service use of the Git workspace
@@ -64,7 +65,7 @@ function checkProtectedHardlinks(host: WorkspaceHost): Result<void> {
   try {
     content = host.readProtectedHardlinks();
   } catch (error) {
-    return hardlinksUnprotected(`fs.protected_hardlinks cannot be read: ${(error as Error).message}`);
+    return hardlinksUnprotected(faultMessage('fs.protected_hardlinks cannot be read', error));
   }
   if (/^1\n?$/.test(content)) return ok(undefined);
   return hardlinksUnprotected('fs.protected_hardlinks must be 1 for a worker whose executions run under a separate account');

@@ -85,15 +85,9 @@ test('the start holds a slot for each hand-off record and keeps the cgroups they
   assert.deepEqual(reclaimFailedLines(sink), []);
 });
 
-test('hand-off records that cannot be read fail the opening, so a held slot is never read as free', async () => {
+test('hand-off records that cannot be read fail the opening with the fault code and without its path', async () => {
   const workspace = new FakeWorkspace();
-  workspace.readFault = new Error('EIO: i/o error');
-  const journal = new FakeCapacityJournal();
-  const logger = new Logger(new InMemoryLogSink(), { now: () => T0 });
-  const refused = failed(await WorkspaceSlots.open({ workspace, oweCapacityDeclaration: journal.owe, declareCapacity: journal.declare, logger }));
-  assert.equal(refused.code, 'unavailable');
-  assert.match(refused.message, /EIO/);
-});
+  workspace.readFault = Object.assign(new Error(`EIO: i/o error, open '${CHECKOUT}/notes.txt'`), { code: 'EIO', syscall: 'open' });
   const journal = new FakeCapacityJournal();
   const logger = new Logger(new InMemoryLogSink(), { now: () => T0 });
   const refused = failed(await WorkspaceSlots.open({ workspace, oweCapacityDeclaration: journal.owe, declareCapacity: journal.declare, logger }));

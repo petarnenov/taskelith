@@ -43,6 +43,7 @@ import { CommandIntake } from './command-intake.js';
 import { CredentialRotation } from './credential-rotation.js';
 import type { DaemonOverheadSource } from './daemon-overhead.js';
 import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
+import { faultMessage } from './fault-code.js';
 import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
@@ -277,7 +278,7 @@ async function openWorkspaceSlots(
   try {
     await workspace.sweep();
   } catch (error) {
-    return err(failure('unavailable', `the workspaces cannot be swept: ${(error as Error).message}`));
+    return err(failure('unavailable', faultMessage('the workspaces cannot be swept', error)));
   }
   const oweCapacityDeclaration = () => root.journal.oweCapacityDeclaration();
   return WorkspaceSlots.open({ workspace, oweCapacityDeclaration, declareCapacity: () => declareCapacity(settings, root), logger });
