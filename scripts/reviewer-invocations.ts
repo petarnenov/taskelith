@@ -1,3 +1,4 @@
+import { isRecord } from './findings-common.ts';
 import { reviewerKey, type Reviewer } from './review-findings.ts';
 
 // The fixed invocation of every authorized reviewer, the variables its
@@ -29,6 +30,13 @@ export interface ReviewerOutput {
   readonly modelSource?: string;
 }
 
+// A run setting, such as the effort, that the reviewer's output reports.
+export interface ReportedSetting {
+  readonly name: string;
+  readonly expected: string;
+  readonly reported: string | undefined;
+}
+
 export interface ReviewerInvocation {
   readonly reviewer: Required<Reviewer>;
   readonly environment: readonly string[];
@@ -39,6 +47,8 @@ export interface ReviewerInvocation {
   session(output: ReviewerOutput): string | undefined;
   // The model reported, as the key names it; undefined when none is.
   model(output: ReviewerOutput): string | undefined;
+  // Further settings that the output reports and the run must match.
+  settings?(output: ReviewerOutput): readonly ReportedSetting[];
 }
 
 // Every reviewer gets these and nothing else of the caller's environment.
@@ -50,10 +60,6 @@ const OPENCODE_ENVIRONMENT = ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOM
 
 function headerValue(output: string, name: string): string | undefined {
   return new RegExp(`^${name}:[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(output)?.[1];
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parsedJson(text: string): unknown {
@@ -94,6 +100,10 @@ function codex(model: string, effort: string): ReviewerInvocation {
     }),
     session: ({ output }) => headerValue(output, 'session id'),
     model: ({ output }) => headerValue(output, 'model'),
+    settings: ({ output }) => [
+      { name: 'effort', expected: effort, reported: headerValue(output, 'reasoning effort') },
+      { name: 'sandbox', expected: 'read-only', reported: headerValue(output, 'sandbox') },
+    ],
   };
 }
 
@@ -116,8 +126,9 @@ function claude(model: string, effort: string): ReviewerInvocation {
     invocation: ({ promptText }) => ({
       command: 'claude',
       args: [
-        '-p', promptText, '--model', model, '--effort', effort, '--permission-mode', 'plan',
+        '-p', '--model', model, '--effort', effort, '--permission-mode', 'plan',
         '--disallowedTools', 'Edit', 'Write', 'NotebookEdit', '--output-format', 'stream-json', '--verbose',
+        '--', promptText,
       ],
       stdin: 'closed',
     }),
@@ -149,7 +160,7 @@ function opencode(model: string, variant: string): ReviewerInvocation {
     writesCliLog: false,
     invocation: ({ change, promptText }) => ({
       command: 'opencode',
-      args: ['run', '--standalone', '--agent', 'reviewer', '-m', modelArgument, '--format', 'json', '--title', change, promptText],
+      args: ['run', '--standalone', '--agent', 'reviewer', '-m', modelArgument, '--format', 'json', '--title', change, '--', promptText],
       stdin: 'closed',
     }),
     modelSource: (session) => ({
@@ -173,6 +184,7 @@ function antigravity(model: string, label: string, effort: string): ReviewerInvo
     reviewer: { harness: 'agy', model, variant: effort },
     environment: [],
     writesCliLog: true,
+    // -p takes the prompt as its value, so a leading dash is safe.
     invocation: ({ promptText, cliLog }) => ({
       command: 'agy',
       args: ['-p', promptText, '--model', model, '--effort', effort, '--mode', 'plan', '--output-format', 'json', '--log-file', cliLog],

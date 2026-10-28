@@ -6,7 +6,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ajvSchemaCheck, SCHEMA_PATH } from '../scripts/findings-common.ts';
+import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from '../scripts/findings-common.ts';
 import { PASS_SCHEMA_PATH } from '../scripts/findings.ts';
 import { CREDENTIAL_VARIABLE } from '../scripts/review-route-jev.ts';
 import {
@@ -34,6 +34,8 @@ const AGY = 'agy gemini-4-argon-medium#medium';
 // The stub's sh sets these itself.
 const ADDED_BY_SHELL = ['PWD', 'SHLVL', '_', 'OLDPWD'];
 const CODEX_SESSION = '01a181b7-647f-7d90-abe6-9892355ab6ca';
+const STARTED = new Date('2026-10-28T12:00:00Z');
+const ROUTED = `${JSON.stringify({ routedBy: 'fake route' })}\n`;
 
 interface Fixture {
   readonly root: string;
@@ -41,6 +43,7 @@ interface Fixture {
   readonly prompt: string;
   readonly log: string;
   readonly routed: string[];
+  readonly printed: string[];
   readonly environment: Record<string, string>;
 }
 
@@ -48,7 +51,7 @@ const CODEX_STUB = `#!/bin/sh
 env > "$STUB_DIR/env.txt"
 printf '%s\\n' "$@" > "$STUB_DIR/args.txt"
 cat > "$STUB_DIR/stdin.txt"
-printf 'model: %s\\nsandbox: read-only\\nsession id: %s\\n' "\${STUB_MODEL:-gpt-6.1-sol}" ${CODEX_SESSION}
+printf 'model: %s\\nsandbox: read-only\\nreasoning effort: medium\\nsession id: %s\\n' "\${STUB_MODEL:-gpt-6.1-sol}" ${CODEX_SESSION}
 exit "\${STUB_STATUS:-0}"
 `;
 
@@ -111,7 +114,7 @@ async function withFixture(body: (fixture: Fixture) => Promise<void>): Promise<v
     const environment = {
       PATH: `${bin}:/usr/bin:/bin`, HOME: base, LANG: 'C', [CREDENTIAL_VARIABLE]: SENTINEL, TASKELITH_FAKE_SECRET: SENTINEL,
     };
-    await body({ root, scratch, prompt, log: join(scratch, 'pass.log'), routed: [], environment });
+    await body({ root, scratch, prompt, log: join(scratch, 'pass.log'), routed: [], printed: [], environment });
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
@@ -122,8 +125,11 @@ function dependencies(fixture: Fixture, routeExit = 0): ReviewDependencies {
     root: fixture.root,
     environment: fixture.environment,
     toolchain: () => TOOLCHAIN,
+    print: (line) => fixture.printed.push(line),
+    now: () => STARTED,
     route: async (change) => {
       fixture.routed.push(change);
+      if (routeExit === 0) writeFileSync(join(fixture.root, ROUTE), ROUTED);
       return { exitCode: routeExit, stdout: 'route: standard (no trigger)\n', stderr: routeExit === 0 ? '' : 'route: refused\n' };
     },
   };
@@ -133,9 +139,14 @@ function review(fixture: Fixture, pass: string, reviewer = CODEX, routeExit = 0)
   return reviewFiles(fixture, pass, reviewer, { prompt: fixture.prompt, log: fixture.log }, routeExit);
 }
 
-function reviewFiles(fixture: Fixture, pass: string, reviewer: string, files: { prompt: string; log: string }, routeExit = 0) {
+// The lines printed while the pass ran come first, as on a terminal.
+async function reviewFiles(
+  fixture: Fixture, pass: string, reviewer: string, files: { prompt: string; log: string }, routeExit = 0,
+): Promise<RunResult> {
   const role = pass === '2' ? 'B' : 'A';
-  return runReview([CHANGE, pass, role, reviewer, files.prompt, files.log], dependencies(fixture, routeExit));
+  fixture.printed.length = 0;
+  const result = await runReview([CHANGE, pass, role, reviewer, files.prompt, files.log], dependencies(fixture, routeExit));
+  return { ...result, stdout: fixture.printed.map((line) => `${line}\n`).join('') + result.stdout };
 }
 
 function binOf(fixture: Fixture): string {
@@ -205,6 +216,7 @@ test('pass 1 without route.json on a stamped tree routes and stops for the commi
     assert.equal(result.exitCode, EXIT_ROUTED);
     assert.deepEqual(fixture.routed, [CHANGE]);
     assert.match(result.stderr, /so it was routed:\nroute: standard \(no trigger\)\nCommit .*route\.json, run make verify/);
+    assert.equal(readFileSync(join(fixture.root, ROUTE), 'utf8'), ROUTED);
     assert.equal(existsSync(join(fixture.scratch, 'env.txt')), false);
   });
 });
@@ -216,16 +228,32 @@ test('a stale route on a stamped tree is deleted, routed again, and recorded as 
     const result = await review(fixture, '1');
     assert.equal(result.exitCode, EXIT_ROUTED);
     assert.match(result.stderr, /record in verification\.md why it was routed again/);
-    assert.equal(existsSync(join(fixture.root, ROUTE)), false);
+    assert.equal(readFileSync(join(fixture.root, ROUTE), 'utf8'), ROUTED);
   });
 });
 
-test('a failed route refuses the pass', async () => {
+test('a failed route refuses the pass and restores the stale route.json', async () => {
   await withFixture(async (fixture) => {
+    writeRoute(fixture.root, git(fixture.root, 'rev-parse', 'HEAD~1'));
+    const stale = readFileSync(join(fixture.root, ROUTE), 'utf8');
     stamp(fixture.root);
     const result = await review(fixture, '1', CODEX, 1);
     assert.equal(result.exitCode, EXIT_REFUSED);
-    assert.match(result.stderr, /routing failed:\nroute: refused/);
+    assert.match(result.stderr, /routing failed, so .*route\.json was restored:\nroute: refused/);
+    assert.equal(readFileSync(join(fixture.root, ROUTE), 'utf8'), stale);
+    assert.equal(git(fixture.root, 'status', '--porcelain'), '');
+  });
+});
+
+test('a route.json whose headCommit is an option is stale and never reaches git', async () => {
+  await withFixture(async (fixture) => {
+    const planted = join(fixture.scratch, 'diff.txt');
+    writeRoute(fixture.root, `--output=${planted}`);
+    stamp(fixture.root);
+    const result = await review(fixture, '1');
+    assert.equal(result.exitCode, EXIT_ROUTED, result.stderr);
+    assert.match(result.stderr, /route\.json was made for another tree/);
+    assert.equal(existsSync(planted), false);
   });
 });
 
@@ -247,6 +275,67 @@ test('pass 1 with a fresh route runs the reviewer with exactly its allowlist', a
     assert.equal(readFileSync(join(fixture.scratch, 'stdin.txt'), 'utf8'), 'Review the change.\n');
     assert.match(result.stdout, /^route: route\.json was made for this tree$/m);
     assert.match(result.stdout, new RegExp(`^session: ${CODEX_SESSION}$`, 'm'));
+    assert.match(result.stdout, /^effort: medium \(reported\)\nsandbox: read-only \(reported\)$/m);
+  });
+});
+
+test('a failed attempt keeps the lines printed before the reviewer started', async () => {
+  await withFixture(async (fixture) => {
+    writeRoute(fixture.root, git(fixture.root, 'rev-parse', 'HEAD'));
+    writeStub(binOf(fixture), 'codex', CODEX_STUB.replace('${STUB_STATUS:-0}', '3'), fixture.scratch);
+    const result = await review(fixture, '1');
+    assert.equal(result.exitCode, EXIT_REVIEWER_FAILED);
+    const printed = [
+      'route: route.json was made for this tree',
+      `review: codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C ${fixture.root} -`,
+      'environment: PATH HOME LANG',
+      `log: ${fixture.log}`,
+      `started: ${STARTED.toISOString()}`,
+    ];
+    assert.equal(result.stdout, printed.map((line) => `${line}\n`).join(''));
+  });
+});
+
+test('Codex is confirmed by the effort and sandbox of its header', async () => {
+  await withFixture(async (fixture) => {
+    const stubs: [string, RegExp][] = [
+      [CODEX_STUB.replace('reasoning effort: medium', 'reasoning effort: high'), /reported effort high, not medium/],
+      [CODEX_STUB.replace('sandbox: read-only', 'sandbox: workspace-write'), /reported sandbox workspace-write, not read-only/],
+      [CODEX_STUB.replace('reasoning effort: medium\\n', ''), /reported effort none, not medium/],
+    ];
+    for (const [stub, message] of stubs) {
+      writeStub(binOf(fixture), 'codex', stub, fixture.scratch);
+      const failed = await review(fixture, '2');
+      assert.equal(failed.exitCode, EXIT_REVIEWER_FAILED, stub);
+      assert.match(failed.stderr, message);
+    }
+  });
+});
+
+function writeRecommendation(root: string, passA: object, passB: object): void {
+  const rule = { passes: [{ reviewer: passA }, { reviewer: passB }] };
+  writeFileSync(join(root, ROUTE), `${JSON.stringify({ rule })}\n`);
+}
+
+const CODEX_HIGH = { harness: 'codex', model: 'gpt-6.1-sol', variant: 'high' };
+const CLAUDE_XHIGH = { harness: 'claude', model: 'claude-opus-5-5', variant: 'xhigh' };
+
+test('the route recommendation tells an effort apart from another reviewer', async () => {
+  await withFixture(async (fixture) => {
+    writeRecommendation(fixture.root, CODEX_HIGH, CLAUDE_XHIGH);
+    const second = await review(fixture, '2', CLAUDE);
+    assert.match(second.stdout, /^route: recommends effort xhigh; the authorized high applies \(policy version 7\)$/m);
+    assert.doesNotMatch(second.stdout, /reviewer A|coordinator/);
+    const third = await review(fixture, '3');
+    assert.match(third.stdout, /^route: recommends effort high; the authorized medium applies \(policy version 7\)$/m);
+    writeRecommendation(fixture.root, { ...CODEX_HIGH, variant: 'medium' }, CLAUDE_XHIGH);
+    assert.match((await review(fixture, '3')).stdout, /^route: recommends codex gpt-6\.1-sol#medium$/m);
+    writeRecommendation(fixture.root, { ...CODEX_HIGH, model: 'gpt-6-astra' }, { ...CLAUDE_XHIGH, model: 'claude-fable-5-1' });
+    const otherA = await review(fixture, '3');
+    assert.match(otherA.stdout, new RegExp('^route: recommends codex gpt-6-astra#high; the brief\'s codex gpt-6\\.1-sol#medium '
+      + 'stays, so report the other reviewer A to the coordinator$', 'm'));
+    const otherB = await review(fixture, '2', CLAUDE);
+    assert.match(otherB.stdout, /^route: recommends claude claude-fable-5-1#xhigh; the brief's claude claude-opus-5-5#high stays$/m);
   });
 });
 
@@ -313,6 +402,8 @@ test('wrong arguments and files inside the worktree are refused with the usage',
       [[CHANGE, '1', 'A', CODEX, fixture.prompt], EXIT_USAGE, /every argument is required/],
       [[CHANGE, '0', 'A', CODEX, fixture.prompt, fixture.log], EXIT_USAGE, /PASS "0"/],
       [[CHANGE, '1', 'C', CODEX, fixture.prompt, fixture.log], EXIT_USAGE, /ROLE "C"/],
+      [[CHANGE, '2', 'A', CODEX, fixture.prompt, fixture.log], EXIT_USAGE, /ROLE "A" is not the role of pass 2, which is B/],
+      [[CHANGE, '3', 'B', CLAUDE, fixture.prompt, fixture.log], EXIT_USAGE, /ROLE "B" is not the role of pass 3, which is A/],
       [[CHANGE, '1', 'A', 'codex gpt-6.1-sol#high', fixture.prompt, fixture.log], EXIT_USAGE, /Reviewer keys:\n {2}codex gpt-6\.1-sol#medium/],
       [['Bad', '1', 'A', CODEX, fixture.prompt, fixture.log], EXIT_USAGE, /CHANGE "Bad"/],
       [['other-change', '1', 'A', CODEX, fixture.prompt, fixture.log], EXIT_REFUSED, /is no active change/],

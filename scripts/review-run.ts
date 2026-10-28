@@ -2,7 +2,7 @@ import { execFileSync, spawn, type ChildProcess, type StdioOptions } from 'node:
 import { closeSync, existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RunResult } from './findings-common.ts';
+import { isRecord, type RunResult } from './findings-common.ts';
 import { reviewerKey, type Reviewer, type Role } from './review-findings.ts';
 import { PASSES_FILE, type PassSummary } from './review-passes.ts';
 import { ROUTE_FILE } from './review-route.ts';
@@ -10,11 +10,11 @@ import { routeDependencies, runRoute } from './review-route-command.ts';
 import { changeDirectory } from './review-route-features.ts';
 import { checkReviewFiles, openFreshLog, openPrompt, readPrompt, ReviewFileError } from './review-files.ts';
 import {
-  isRecord,
   REVIEWER_INVOCATIONS,
   reviewerEnvironment,
   type Invocation,
   type ReviewerInvocation,
+  type ReportedSetting,
 } from './reviewer-invocations.ts';
 import {
   checkStamp, currentToolchain, decideProfile, gitIn, mergeBase, type Environment, type Git, type Toolchain,
@@ -34,6 +34,9 @@ export const EXIT_REVIEWER_FAILED = 4;
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const MAX_PASS = 9;
+const COMMIT = /^[0-9a-f]{40}$/;
+// Governance policy version 5: reviewer A makes passes 1 and 3, B pass 2.
+const PASS_ROLES: ReadonlyMap<number, Role> = new Map([[1, 'A'], [2, 'B'], [3, 'A']]);
 const CLI_LOG_SUFFIX = '.cli.log';
 // Started with -i and the allowlist, the reviewer inherits nothing else.
 const ENV_COMMAND = '/usr/bin/env';
@@ -53,6 +56,9 @@ export interface ReviewDependencies {
   readonly toolchain: () => Toolchain;
   // The route command of make findings, for the change named.
   readonly route: (change: string) => Promise<RunResult>;
+  // Takes each stdout line when it is known, so a failed run keeps it.
+  readonly print: (line: string) => void;
+  readonly now: () => Date;
 }
 
 // A precondition that does not hold; the message says what to do.
@@ -68,15 +74,19 @@ class ReviewRefusal extends Error {
 export async function runReview(args: readonly string[], dependencies: ReviewDependencies): Promise<RunResult> {
   try {
     const request = parseRequest(args, dependencies.root);
-    const gate = await routeGate(request, dependencies);
-    const advice = recommendation(dependencies.root, request);
-    const run = await runReviewer(request, dependencies);
-    return { exitCode: 0, stdout: [...gate, ...advice, ...run].join('\n') + '\n', stderr: '' };
+    printAll(dependencies, await routeGate(request, dependencies));
+    printAll(dependencies, recommendation(dependencies.root, request));
+    await runReviewer(request, dependencies);
+    return { exitCode: 0, stdout: '', stderr: '' };
   } catch (error) {
     const exitCode = refusalExitCode(error);
     if (exitCode === undefined) throw error;
     return { exitCode, stdout: '', stderr: `make review: ${(error as Error).message}\n` };
   }
+}
+
+function printAll({ print }: ReviewDependencies, lines: readonly string[]): void {
+  for (const line of lines) print(line);
 }
 
 function refusalExitCode(error: unknown): number | undefined {
@@ -95,6 +105,8 @@ export function parseRequest(args: readonly string[], root: string): ReviewReque
   if (!CHANGE_NAME.test(change) || change === 'archive') throw usage(`CHANGE "${change}" is no change name`);
   if (!/^[1-9]$/.test(pass) || Number(pass) > MAX_PASS) throw usage(`PASS "${pass}" is none of 1 to ${MAX_PASS}`);
   if (role !== 'A' && role !== 'B') throw usage(`ROLE "${role}" is neither A nor B`);
+  const passRole = PASS_ROLES.get(Number(pass));
+  if (passRole !== undefined && role !== passRole) throw usage(`ROLE "${role}" is not the role of pass ${pass}, which is ${passRole}`);
   const reviewer = REVIEWER_INVOCATIONS.get(key);
   if (reviewer === undefined) throw usage(`REVIEWER "${key}" is no authorized reviewer key`);
   if (!existsSync(join(root, changeDirectory(change)))) throw new ReviewRefusal(`${changeDirectory(change)} is no active change`);
@@ -159,9 +171,10 @@ export function routeState(root: string, change: string, git: Git): RouteState {
   const path = routePath(root, change);
   if (!existsSync(path)) return 'missing';
   const routed = routeRecord(path) as RoutedRevision | undefined;
-  if (routed === undefined || typeof routed.headCommit !== 'string' || routed.devCommit !== mergeBase(git)) return 'stale';
+  const { headCommit } = routed ?? {};
+  if (typeof headCommit !== 'string' || !COMMIT.test(headCommit) || routed?.devCommit !== mergeBase(git)) return 'stale';
   try {
-    git(['diff', '--quiet', routed.headCommit, 'HEAD', '--', '.', `:(exclude)${changeDirectory(change)}`]);
+    git(['diff', '--quiet', headCommit, 'HEAD', '--', '.', `:(exclude)${changeDirectory(change)}`]);
     return 'fresh';
   } catch {
     return 'stale';
@@ -182,9 +195,11 @@ async function routeGate(request: ReviewRequest, dependencies: ReviewDependencie
   if (!stamp.verified) {
     throw new ReviewRefusal(`${why}, and ${stamp.message}; commit the change and pass make verify first`);
   }
-  if (state === 'stale') rmSync(routePath(root, request.change));
-  const routed = await dependencies.route(request.change);
-  if (routed.exitCode !== 0) throw new ReviewRefusal(`${why}; routing failed:\n${routed.stderr.trimEnd()}`);
+  const routed = await routeAgain(state, request.change, dependencies, git);
+  if (routed.exitCode !== 0) {
+    const restored = state === 'stale' ? `, so ${route} was restored` : '';
+    throw new ReviewRefusal(`${why}; routing failed${restored}:\n${routed.stderr.trimEnd()}`);
+  }
   const recordWhy = state === 'stale' ? ', record in verification.md why it was routed again' : '';
   throw new ReviewRefusal(
     `${why}, so it was routed:\n${routed.stdout.trimEnd()}\n`
@@ -193,18 +208,42 @@ async function routeGate(request: ReviewRequest, dependencies: ReviewDependencie
   );
 }
 
+// A stale route is deleted first and restored when routing fails, so
+// that a failed attempt leaves the tree clean.
+async function routeAgain(state: RouteState, change: string, dependencies: ReviewDependencies, git: Git): Promise<RunResult> {
+  if (state === 'missing') return dependencies.route(change);
+  rmSync(routePath(dependencies.root, change));
+  let routed: RunResult | undefined;
+  try {
+    routed = await dependencies.route(change);
+    return routed;
+  } finally {
+    if (routed?.exitCode !== 0) git(['checkout', 'HEAD', '--', `${changeDirectory(change)}/${ROUTE_FILE}`]);
+  }
+}
+
 // route.json only recommends: the authorized effort stays (governance
 // "Routed effort", policy version 7); pass 3 keeps pass 1's reviewer.
 function recommendation(root: string, request: ReviewRequest): string[] {
   const path = routePath(root, request.change);
   const rule = existsSync(path) ? routeRecord(path)?.rule : undefined;
   const passes = isRecord(rule) && Array.isArray(rule.passes) ? rule.passes : [];
-  const recommended = plannedReviewer(passes[request.pass === 2 ? 1 : 0]);
+  const recommended = plannedReviewer(passes[request.role === 'B' ? 1 : 0]);
   if (recommended === undefined) return [];
-  const chosen = reviewerKey(request.reviewer.reviewer);
-  const key = reviewerKey(recommended);
-  if (key === chosen) return [`route: recommends ${chosen}`];
-  return [`route: recommends ${key}; ${chosen} runs at its authorized effort, and another reviewer A goes to the coordinator`];
+  const chosen = request.reviewer.reviewer;
+  if (recommended.harness !== chosen.harness || recommended.model !== chosen.model) {
+    return [otherReviewer(reviewerKey(recommended), request)];
+  }
+  if (recommended.variant === undefined || recommended.variant === chosen.variant) {
+    return [`route: recommends ${reviewerKey(recommended)}`];
+  }
+  return [`route: recommends effort ${recommended.variant}; the authorized ${chosen.variant} applies (policy version 7)`];
+}
+
+// Only another reviewer A goes to the coordinator; the brief's stays.
+function otherReviewer(recommended: string, request: ReviewRequest): string {
+  const kept = `route: recommends ${recommended}; the brief's ${reviewerKey(request.reviewer.reviewer)} stays`;
+  return request.role === 'A' ? `${kept}, so report the other reviewer A to the coordinator` : kept;
 }
 
 function plannedReviewer(plan: unknown): Reviewer | undefined {
@@ -214,7 +253,7 @@ function plannedReviewer(plan: unknown): Reviewer | undefined {
   return { harness: reviewer.harness, model: reviewer.model, ...variant };
 }
 
-async function runReviewer(request: ReviewRequest, dependencies: ReviewDependencies): Promise<string[]> {
+async function runReviewer(request: ReviewRequest, dependencies: ReviewDependencies): Promise<void> {
   const { reviewer } = request;
   const cliLog = cliLogOf(request);
   const invocation = reviewer.invocation({
@@ -227,6 +266,12 @@ async function runReviewer(request: ReviewRequest, dependencies: ReviewDependenc
   const environment = reviewerEnvironment(reviewer, dependencies.environment);
   const run: CleanRun = { env: environment, cwd: dependencies.root, log: request.log };
   if (reviewer.writesCliLog) closeSync(openFreshLog(cliLog));
+  printAll(dependencies, [
+    `review: ${invocation.command} ${shownArgs(invocation).join(' ')}`,
+    `environment: ${Object.keys(environment).join(' ')}`,
+    `log: ${request.log}`,
+    `started: ${dependencies.now().toISOString()}`,
+  ]);
   const status = await launch(invocation, run, request.promptFile);
   const key = reviewerKey(reviewer.reviewer);
   if (status !== 0) throw failed(`${key} exited with status ${status}`, request.log);
@@ -236,20 +281,27 @@ async function runReviewer(request: ReviewRequest, dependencies: ReviewDependenc
   if (session === undefined || !SESSION.test(session)) throw failed(`${key} reported no valid session ID`, request.log);
   const modelSource = await readModelSource(reviewer, session, run);
   confirmModel(reviewer, reviewer.model({ output, cliLog: cliText, modelSource }), request.log);
-  return [
-    `review: ${invocation.command} ${shownArgs(invocation).join(' ')}`,
-    `environment: ${Object.keys(environment).join(' ')}`,
-    `log: ${request.log}`,
+  const settings = reviewer.settings?.({ output, cliLog: cliText }) ?? [];
+  confirmSettings(reviewer, settings, request.log);
+  printAll(dependencies, [
     `session: ${session}`,
     `model: ${reviewer.reviewer.model} (reported)`,
+    ...settings.map(({ name, expected }) => `${name}: ${expected} (reported)`),
     `${PASSES_FILE} template: ${passLineTemplate(request, session)}`,
     `No line was written: after the report, replace each count placeholder and append the line to ${PASSES_FILE}.`,
-  ];
+  ]);
 }
 
 function confirmModel(reviewer: ReviewerInvocation, model: string | undefined, log: string): void {
   const expected = reviewer.reviewer.model;
   if (model !== expected) throw failed(`${reviewerKey(reviewer.reviewer)} reported model ${model ?? 'none'}, not ${expected}`, log);
+}
+
+function confirmSettings(reviewer: ReviewerInvocation, settings: readonly ReportedSetting[], log: string): void {
+  const other = settings.find(({ expected, reported }) => reported !== expected);
+  if (other === undefined) return;
+  const key = reviewerKey(reviewer.reviewer);
+  throw failed(`${key} reported ${other.name} ${other.reported ?? 'none'}, not ${other.expected}`, log);
 }
 
 // How a reviewer command runs: its environment, directory, and log.
@@ -339,6 +391,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     environment: process.env,
     toolchain: currentToolchain,
     route: (change) => routeChange(root, change),
+    print: (line) => process.stdout.write(`${line}\n`),
+    now: () => new Date(),
   });
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);

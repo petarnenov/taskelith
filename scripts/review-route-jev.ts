@@ -1,4 +1,5 @@
 import { inspect } from 'node:util';
+import { isRecord } from './findings-common.ts';
 import {
   passPlans,
   SHADOW_ROUTER,
@@ -125,7 +126,7 @@ export interface JevAnswer {
 // Undefined for any body outside the documented shapes, so that no part
 // of an unexpected body reaches the record.
 export function parseJevAnswer(body: unknown): JevAnswer | undefined {
-  if (!isObject(body) || !isObject(body.answers)) return undefined;
+  if (!isRecord(body) || !isRecord(body.answers)) return undefined;
   const { tier, passes } = body.answers;
   if (typeof body.model !== 'string' || !MODEL_ID.test(body.model)) return undefined;
   if (!isTierAnswer(tier) || !isPassesAnswer(passes)) return undefined;
@@ -145,26 +146,22 @@ interface TierAnswer {
 }
 
 function isTierAnswer(answer: unknown): answer is TierAnswer {
-  if (!isObject(answer) || answer.type !== 'choice') return false;
+  if (!isRecord(answer) || answer.type !== 'choice') return false;
   if (!isTier(answer.choice) || !isProbability(answer.confidence)) return false;
   return isTierProbabilities(answer.probabilities);
 }
 
 function isTierProbabilities(probabilities: unknown): boolean {
-  if (!isObject(probabilities)) return false;
+  if (!isRecord(probabilities)) return false;
   const keys = Object.keys(probabilities);
   if (keys.length !== TIERS.length || !keys.every(isTier)) return false;
   return TIERS.every((tier) => isProbability(probabilities[tier]));
 }
 
 function isPassesAnswer(answer: unknown): answer is { readonly score: number } {
-  if (!isObject(answer) || answer.type !== 'score') return false;
+  if (!isRecord(answer) || answer.type !== 'score') return false;
   const { score } = answer;
   return isFiniteNumber(score) && score >= 0 && score <= MAX_SCORE && isProbability(answer.confidence);
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isTier(value: unknown): value is Tier {

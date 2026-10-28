@@ -56,12 +56,13 @@ test('Claude Code runs in plan mode without editing tools and with stdin closed'
   assert.deepEqual(invocationOf('claude claude-opus-5-5#high').invocation(CONTEXT), {
     command: 'claude',
     args: [
-      '-p', 'Review the change.', '--model', 'claude-opus-5-5', '--effort', 'high', '--permission-mode', 'plan',
+      '-p', '--model', 'claude-opus-5-5', '--effort', 'high', '--permission-mode', 'plan',
       '--disallowedTools', 'Edit', 'Write', 'NotebookEdit', '--output-format', 'stream-json', '--verbose',
+      '--', 'Review the change.',
     ],
     stdin: 'closed',
   });
-  assert.deepEqual(invocationOf('claude claude-fable-5-1#medium').invocation(CONTEXT).args.slice(2, 6),
+  assert.deepEqual(invocationOf('claude claude-fable-5-1#medium').invocation(CONTEXT).args.slice(1, 5),
     ['--model', 'claude-fable-5-1', '--effort', 'medium']);
 });
 
@@ -70,7 +71,7 @@ test('OpenCode runs standalone with -m, its variant, and stdin closed, never --a
     command: 'opencode',
     args: [
       'run', '--standalone', '--agent', 'reviewer', '-m', 'opencode-go/kimi-k3.1-pro#high',
-      '--format', 'json', '--title', 'some-change', 'Review the change.',
+      '--format', 'json', '--title', 'some-change', '--', 'Review the change.',
     ],
     stdin: 'closed',
   });
@@ -90,6 +91,17 @@ test('Antigravity runs in plan mode and writes its own log', () => {
     ],
     stdin: 'closed',
   });
+});
+
+// Antigravity's -p takes the prompt as its value, even one with a dash.
+test('a prompt that starts with a dash is never read as an option', () => {
+  const dashed = { ...CONTEXT, promptText: '-x Review the change.' };
+  for (const [key, invocation] of REVIEWER_INVOCATIONS) {
+    const { args } = invocation.invocation(dashed);
+    const at = args.indexOf(dashed.promptText);
+    if (at === -1) continue;
+    assert.equal(args[at - 1], invocation.reviewer.harness === 'agy' ? '-p' : '--', key);
+  }
 });
 
 test('the environment keeps only the base variables and the reviewer\'s own', () => {
@@ -162,6 +174,10 @@ test('the session and model come from each reviewer\'s output', () => {
   const codex = invocationOf('codex gpt-6.1-sol#medium');
   assert.equal(codex.session({ output: CODEX_OUTPUT }), '01a181b7-647f-7d90-abe6-9892355ab6ca');
   assert.equal(codex.model({ output: CODEX_OUTPUT }), 'gpt-6.1-sol');
+  assert.deepEqual(codex.settings?.({ output: CODEX_OUTPUT }), [
+    { name: 'effort', expected: 'medium', reported: 'medium' },
+    { name: 'sandbox', expected: 'read-only', reported: 'read-only' },
+  ]);
   const claude = invocationOf('claude claude-opus-5-5#high');
   assert.equal(claude.session({ output: CLAUDE_OUTPUT }), 'd58a9021-a9a3-40ca-8b5d-d7e096f085bb');
   assert.equal(claude.model({ output: CLAUDE_OUTPUT }), 'claude-opus-5-5');
@@ -183,6 +199,10 @@ test('a Claude Code run without a result line or with another model confirms not
   const codex = invocationOf('codex gpt-6.1-sol#medium');
   assert.equal(codex.session({ output: 'error: quota\n' }), undefined);
   assert.equal(codex.model({ output: 'error: quota\n' }), undefined);
+  assert.deepEqual(codex.settings?.({ output: 'error: quota\n' }).map(({ reported }) => reported), [undefined, undefined]);
+  for (const [key, invocation] of REVIEWER_INVOCATIONS) {
+    assert.equal(invocation.settings === undefined, invocation.reviewer.harness !== 'codex', key);
+  }
 });
 
 test('OpenCode reads its model from the session export, which names the variant', () => {
