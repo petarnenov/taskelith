@@ -61,11 +61,11 @@ Before pass 1, `a67e3ac7` merged `origin/dev` at `7efc48d3` (pull requests #394 
 - **Spec deltas.** `4f3f2a81` first carried dev's new text of "Execution HTTP operations" with this change's two operations; that text exceeded 500 characters and failed `verify:archive`, so `1211ef8a` drops the modified requirement and the added "Credential rotation notice" now defines `renewWorkerCredentials` and `confirmWorkerCredentials`. The other modified requirements are on capabilities that `dev` did not change.
 - **Breaking changes.** `dev` did not change `packages/contracts/breaking-changes.json`. `43aef0a8` lists this change's three AsyncAPI breaking changes against `7efc48d3`, entries unchanged. `make contract-compatibility` reports 0 breaking changes for every document against `7efc48d330b4` except `execution.asyncapi.json` with 3, and "Contract documents have no undeclared breaking change."
 - **Checks.** `npm run openspec -- validate --all --strict`: 72 passed, 0 failed. `make verify` on the clean tree at `1211ef8a` passed with the full profile and wrote the stamp (generated checks below). `make verify-installation` was not run: the merge touched no installation code path.
-- **Route.** `route.json` was derived before the merge and was not routed again.
+- **Route.** The merge changed the diff against the new merge base, so `route.json` was deleted (`ee76ce9a`) and routed again against `7efc48d3`: tier `elevated` (lines, files, capabilities, security, contracts, size), rule version 1; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; the shadow router agrees.
 
 ## Review
 
-The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3 (pass 3 conditional), and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. `route.json` recommends the efforts `high` and `xhigh`, which only governance can authorize. No pass has run.
+The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol` with effort `medium`, for passes 1 and 3 (pass 3 conditional), and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. `route.json` recommends the efforts `high` and `xhigh`, which only governance can authorize; the coordinator confirmed that the reviews run at the brief's efforts until the owner authorizes routed effort. No pass has run.
 
 <!-- make record: begin -->
 ## Generated checks
