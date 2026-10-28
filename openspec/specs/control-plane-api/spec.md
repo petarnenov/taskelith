@@ -63,14 +63,14 @@ The outbox publisher SHALL publish no row while the installation is quarantined 
 - **THEN** the answer is 401
 
 ### Requirement: Background loops and observability
-The service SHALL run the outbox publisher, the quarantine keeper, the grace-window sweep, the observability sampler, and the lag monitor until it stops. It SHALL log every request with its correlation and without any secret.
+The service SHALL run the outbox publisher, the quarantine keeper, the grace-window sweep, which also enforces rotation deadlines, the observability sampler, and the lag monitor until it stops. It SHALL log every request with its correlation and without any secret.
 
 #### Scenario: Request log
 - **WHEN** a request carries `x-correlation-id`
 - **THEN** the response echoes it, and its log line carries it with no bearer token
 
 ### Requirement: Worker credential scheme
-An operation with the `workerCredential` scheme SHALL run only after the server has authenticated the bearer as a worker, and SHALL receive that worker and generation. A refused credential SHALL be answered 401 with the same failure whether it is unknown, revoked, or past its grace window, and a store that cannot answer SHALL be answered 503, whatever the route declares.
+An operation with the `workerCredential` scheme SHALL run only after the server has authenticated the bearer as a worker, and SHALL receive that worker and generation. A refused credential SHALL be answered 401 with the same failure whether it is unknown, revoked, or a predecessor dropped by a confirmation or past its rotation's deadline, and a store that cannot answer SHALL be answered 503, whatever the route declares.
 
 #### Scenario: Refused worker bearer
 - **WHEN** a worker route is called with a bearer that is not a valid worker credential
@@ -141,7 +141,7 @@ The control plane SHALL serve `readSession`, `logIn`, and `logOut` on the browse
 - **THEN** the session ends, the cookie is expired, the answer is 204, and a repeat answers 401 `unauthenticated`
 
 ### Requirement: Authentication, CSRF, and role order
-For every operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF header on a session-authenticated operation other than GET, then check the caller's role through the `Access` module, and only then read the request body. `createRun`, whose project is in its body, SHALL validate the body against its schema alone first and read no state before the role check. The bearer SHALL be refused on `logIn` and `logOut`.
+For every operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF header on a session-authenticated operation other than GET, then check the caller's role through the `Access` module if the operation requires one, and only then read the request body. `createRun`, whose project is in its body, SHALL validate the body against its schema alone first and read no state before the role check. The bearer SHALL be refused on `logIn` and `logOut`.
 
 #### Scenario: Missing CSRF header
 - **WHEN** a session-authenticated mutation arrives without `X-CSRF-Token` or with another session's token
@@ -162,6 +162,10 @@ For every operation with a session or bearer requirement, the control plane SHAL
 #### Scenario: Bearer and cookie together
 - **WHEN** an operation that accepts both the operator bearer and the session cookie receives both without a CSRF header
 - **THEN** the bearer authenticates the request, the cookie is ignored, and no CSRF token is required
+
+#### Scenario: Worker credential operations
+- **WHEN** a worker calls `renewWorkerCredentials` or `confirmWorkerCredentials` with its worker credential
+- **THEN** the control plane authenticates the worker credential, checks no operator role, and runs the operation
 
 ### Requirement: Per-project evidence authorization
 `readEvidence` and `downloadEvidence` SHALL accept the session cookie or the operator bearer and SHALL require `project-viewer` or above on the evidence record's project, or `installation-owner`, checked before any content is read. A caller that does not pass the check SHALL get the 404 of an unknown record, with the same body for an unknown identifier as for a record of another project (execution wire contracts section 8.2).
@@ -209,3 +213,14 @@ For a run or task resource found by its own identifier, a caller without the req
 #### Scenario: Unknown and foreign run
 - **WHEN** a principal without a role on a run's project calls `submitTask` with an invalid body on that run and on an unknown run
 - **THEN** both answers are the same 403 `role-required` body
+
+### Requirement: Credential renewal and confirmation operations
+`renewWorkerCredentials` and `confirmWorkerCredentials` SHALL run under the worker credential and answer 200 with `CredentialRenewal` and `CredentialConfirmation`; an invalid body or public key SHALL be 400, a refused bearer 401, a `conflict` 409 with its reason, an unavailable store 503, and any other failure 500.
+
+#### Scenario: Renewal answer
+- **WHEN** a worker renews a requested generation over HTTP
+- **THEN** the answer is 200 with the generation, the JWT for its key, and the deadline, and carries no secret
+
+#### Scenario: Invalid public key
+- **WHEN** a renewal names a public key that is not an NKey user key
+- **THEN** the answer is 400 and the worker's credentials are unchanged

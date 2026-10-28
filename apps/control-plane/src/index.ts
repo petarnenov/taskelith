@@ -78,6 +78,7 @@ export { repairCommandConsumers, REVOKED_CONSUMER_REMOVALS_PER_START } from './c
 export { requestStartInventories } from './composition/start-inventory-requests.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
+export { RotationNoticingFleetRegistry } from './composition/rotation-noticing-fleet-registry.js';
 export {
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,

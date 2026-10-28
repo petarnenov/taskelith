@@ -246,7 +246,7 @@ test('the API authenticates a worker bearer through enrollment', async () => {
     sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
-    enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
+    enrollment: { enroll: undefined as never, renew: undefined as never, confirm: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
   assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
   assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);
@@ -393,6 +393,31 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   const { worker: _worker, ...anonymous } = request;
   assert.equal(failed(await api.handle('authorizeLaunch', anonymous, '')).code, 'internal');
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
+});
+
+test('a refused renewal is logged with its worker, generation, code, and reason, and never its key or hash', async () => {
+  const renewalSink = new InMemoryLogSink();
+  const failures = [
+    failure('conflict', 'another key or hash', { reason: 'renewal-mismatch' }),
+    failure('forbidden', 'the worker is not authorized', { reason: 'worker-not-authorized' }),
+    failure('unavailable', 'the database is down'),
+  ];
+  const api = new ControlPlaneApi({
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never, launches: undefined as never,
+    enrollment: { renew: async () => err(failures.shift()!) } as never,
+    logger: new Logger(renewalSink, { now: () => '2026-10-25T09:00:00.000Z' as never }),
+  } as never);
+  const body = { credentialGeneration: 2, brokerUserPublicKey: `U${'K'.repeat(55)}`, controlPlaneSecretSha256: 'a'.repeat(64) };
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  const codes = [];
+  for (let call = 0; call < 3; call += 1) codes.push(failed(await api.handle('renewWorkerCredentials', request, '')).code);
+  assert.deepEqual(codes, ['conflict', 'forbidden', 'unavailable'], 'the failures pass unchanged');
+  assert.deepEqual(renewalSink.records.map(({ level, event, correlation, fields }) => ({ level, event, correlation, fields })), [
+    { level: 'warn', event: 'fleet.credentials.renewal-refused', correlation: { workerId: 'worker-1' }, fields: { generation: 2, code: 'conflict', reason: 'renewal-mismatch' } },
+    { level: 'warn', event: 'fleet.credentials.renewal-refused', correlation: { workerId: 'worker-1' }, fields: { generation: 2, code: 'forbidden', reason: 'worker-not-authorized' } },
+  ], 'an unavailable store refuses nothing');
+  assert.doesNotMatch(JSON.stringify(renewalSink.records), /KKKK|aaaa/);
 });
 
 test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {

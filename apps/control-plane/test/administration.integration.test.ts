@@ -181,9 +181,19 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal(received?.json<{ hello: string }>().hello, 'worker');
   received?.ack();
 
-  const rotated = await admin(['rotate-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  const unexplained = await admin(['rotate-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  assert.deepEqual([unexplained.status, (unexplained.output.error as { code: string }).code], [1, 'invalid'], 'actor and reason');
+  const rotation = ['rotate-worker', enrolled.workerId, '--actor', 'ops', '--reason', 'scheduled'];
+  const rotated = await admin(rotation, { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  assert.deepEqual(Object.keys(rotated.output).sort(), ['credentialGeneration', 'deadline', 'workerId'], 'no secret is printed');
   assert.equal((rotated.output as { credentialGeneration: number }).credentialGeneration, 2);
-  assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'grace window');
+  assert.deepEqual((await admin(rotation, { TASKELITH_OPERATOR_TOKEN: operatorSecret })).output, rotated.output, 'an open request');
+  assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'N stays valid');
+  const notices = await rows(database, "SELECT message::jsonb->>'subject' AS subject FROM outbox WHERE event_type = 'worker.credentials.rotation-requested'");
+  const subject = `workers.${enrolled.workerId}.commands`;
+  assert.deepEqual(notices, [{ subject }, { subject }], 'each request sends the notice');
+  const audited = await rows(database, "SELECT subject, kind, actor, reason, generation FROM audit_events WHERE kind LIKE 'worker-credential.%'");
+  assert.deepEqual(audited, [{ subject: enrolled.workerId, kind: 'worker-credential.rotation-requested', actor: 'ops', reason: 'scheduled', generation: 2 }]);
 
   // A grant before the revocation, which the administration must invalidate.
   const store = new PostgresDatabase(database);
@@ -191,7 +201,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   await sql(database, "UPDATE workers SET reachable = true, worker_admission = 'admitted'");
   await createLaunchRun(store);
   const { taskId, request } = await placedTask(store, 'task-1', enrolled.workerId);
-  const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 2 }, request));
+  const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 1 }, request));
   assert.equal(granted.kind, 'granted');
 
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });

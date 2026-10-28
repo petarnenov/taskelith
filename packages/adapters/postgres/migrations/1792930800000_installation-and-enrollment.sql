@@ -14,10 +14,12 @@ CREATE TABLE operator_credentials (
   issued_at timestamptz NOT NULL
 );
 
--- Who bootstrapped or reset the operator credential; rows never change.
+-- Who changed a credential, the operator's or a worker's (`subject`, G3
+-- item 26c); rows never change.
 CREATE TABLE audit_events (
   position bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   kind text NOT NULL,
+  subject text NOT NULL,
   generation integer NOT NULL CHECK (generation >= 1),
   actor text NOT NULL,
   reason text NOT NULL,
@@ -42,12 +44,13 @@ CREATE TABLE enrollment_tokens (
   used_at timestamptz
 );
 
--- An enrolled worker's record as JSON text; a journal enrolls one worker,
--- and the end of a rotation's grace window is a query column.
+-- An enrolled worker's record as JSON text; a journal enrolls one worker.
+-- A predecessor's deadline and an unrenewed rotation's are query columns.
 ALTER TABLE workers
   ADD COLUMN journal_id text UNIQUE,
   ADD COLUMN enrollment text,
-  ADD COLUMN predecessor_valid_until timestamptz;
+  ADD COLUMN predecessor_valid_until timestamptz,
+  ADD COLUMN rotation_deadline timestamptz;
 
 -- Broker users to revoke, kept until the broker has the complete list;
 -- every publication sends all of them (installation contract §6).
@@ -63,6 +66,7 @@ CREATE TABLE broker_revocations (
 DROP TABLE broker_revocations;
 
 ALTER TABLE workers
+  DROP COLUMN rotation_deadline,
   DROP COLUMN predecessor_valid_until,
   DROP COLUMN enrollment,
   DROP COLUMN journal_id;

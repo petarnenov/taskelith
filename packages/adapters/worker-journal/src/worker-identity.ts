@@ -10,26 +10,42 @@ export interface CredentialReferences {
   readonly broker: string;
 }
 
-// `worker/identity`: the binding, and the credential generation with the
-// references to its files (installation and enrollment contract, item 20).
+// A generation the worker keeps while its successor is unconfirmed.
+export interface KeptGeneration {
+  readonly credentialGeneration: number;
+  readonly credentials: CredentialReferences;
+}
+
+// `worker/identity`: the binding and the current generation's files;
+// `previous` only between an adoption and its confirmation (contract sec. 6).
 export interface WorkerIdentity {
   readonly installationId: InstallationId;
   readonly workerId: WorkerId;
   readonly journalId: JournalId;
   readonly credentialGeneration: number;
   readonly credentials: CredentialReferences;
+  readonly previous?: KeptGeneration;
 }
 
-export const IDENTITY_FORMAT = 1;
+// Format 2 adds `previous`; format 1 is still read.
+export const IDENTITY_FORMAT = 2;
 
 // A reference names one file directly under `worker/credentials/`.
 const CREDENTIAL_REFERENCE = /^credentials\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 
 export function serializeIdentity(identity: WorkerIdentity): string {
-  const { installationId, workerId, journalId, credentialGeneration, credentials } = identity;
-  const { controlPlane, broker } = credentials;
-  const stored = { format: IDENTITY_FORMAT, installationId, workerId, journalId, credentialGeneration, credentials: { controlPlane, broker } };
+  const { installationId, workerId, journalId, credentialGeneration, credentials, previous } = identity;
+  const stored = {
+    format: IDENTITY_FORMAT, installationId, workerId, journalId, credentialGeneration, credentials: storedReferences(credentials),
+    ...(previous === undefined ? {} : {
+      previous: { credentialGeneration: previous.credentialGeneration, credentials: storedReferences(previous.credentials) },
+    }),
+  };
   return `${JSON.stringify(stored)}\n`;
+}
+
+function storedReferences({ controlPlane, broker }: CredentialReferences): CredentialReferences {
+  return { controlPlane, broker };
 }
 
 // No identity means the worker is not enrolled (contract section 8).
@@ -51,12 +67,25 @@ export function readIdentity(path: string): Result<WorkerIdentity> {
   const journalId = parseIdentifier('JournalId', String(stored.journalId));
   const credentials = credentialReferences(stored.credentials);
   const { credentialGeneration } = stored;
-  if (!installationId.ok || !workerId.ok || !journalId.ok || credentials === undefined || !isGeneration(credentialGeneration)) {
+  const previous = keptGeneration(stored.previous);
+  if (!installationId.ok || !workerId.ok || !journalId.ok || credentials === undefined || !isGeneration(credentialGeneration)
+    || previous === INVALID || (previous !== undefined && previous.credentialGeneration !== credentialGeneration - 1)) {
     return err(rootFailure('corrupt', `the worker identity ${path} has invalid values`, { path }));
   }
   return ok(Object.freeze({
     installationId: installationId.value, workerId: workerId.value, journalId: journalId.value, credentialGeneration, credentials,
+    ...(previous === undefined ? {} : { previous }),
   }));
+}
+
+const INVALID = Symbol('invalid');
+
+function keptGeneration(stored: unknown): KeptGeneration | undefined | typeof INVALID {
+  if (stored === undefined) return undefined;
+  const { credentialGeneration, credentials } = (stored ?? {}) as Record<string, unknown>;
+  const references = credentialReferences(credentials);
+  if (!isGeneration(credentialGeneration) || references === undefined) return INVALID;
+  return Object.freeze({ credentialGeneration, credentials: references });
 }
 
 function credentialReferences(stored: unknown): CredentialReferences | undefined {

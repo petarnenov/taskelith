@@ -60,6 +60,15 @@ test('every G2 operator operation is checked on the project of its resource', ()
   assert.deepEqual(['listQuarantine', 'redriveQuarantined'].map(rowOf), ['owner', 'owner']);
 });
 
+test('the credential renewal and confirmation take the worker credential and need no operator role', () => {
+  for (const operationId of ['renewWorkerCredentials', 'confirmWorkerCredentials']) {
+    const operation = executionOperations.find((candidate) => candidate.operationId === operationId)!;
+    assert.deepEqual(schemesOf(operation), ['workerCredential'], operationId);
+    assert.equal(rowOf(operationId), 'none', operationId);
+    assert.equal(requirementBeforeBody(operationId, []), undefined, operationId);
+  }
+});
+
 test('a served operation of the control-plane document accepts the schemes the document declares', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
   assert.deepEqual(served.map((route) => route.operationId).sort(), ['logIn', 'logOut', 'readSession']);

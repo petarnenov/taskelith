@@ -1,0 +1,100 @@
+{
+  "change": "deliver-rotated-worker-credentials",
+  "generatedAt": "2026-10-28T12:58:35.386Z",
+  "devCommit": "f3a53f172dc265d5e710105df3f5dbe5be99a24a",
+  "query": {
+    "capabilities": [
+      "installation-enrollment",
+      "worker-runtime",
+      "control-plane-api",
+      "nats-transport"
+    ],
+    "files": [],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 7
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "redaction",
+        "count": 5
+      },
+      {
+        "category": "docs",
+        "count": 4
+      },
+      {
+        "category": "spec-wording",
+        "count": 3
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 405,
+        "inChecklist": 328
+      },
+      "mediumOrWorse": {
+        "findings": 176,
+        "inChecklist": 150
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 75
+      },
+      {
+        "category": "docs",
+        "count": 50
+      },
+      {
+        "category": "spec-wording",
+        "count": 41
+      },
+      {
+        "category": "stale-citation",
+        "count": 31
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 235,
+        "inChecklist": 233
+      },
+      "mediumOrWorse": {
+        "findings": 37,
+        "inChecklist": 37
+      }
+    }
+  }
+}

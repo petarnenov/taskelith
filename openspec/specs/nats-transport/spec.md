@@ -114,3 +114,14 @@ The installation's broker SHALL require TLS on its installation certificate. Wit
 #### Scenario: Lost installation CA
 - **WHEN** an initialized installation's `installation-ca.pem` is missing, a symbolic link, readable by others, or owned by another user, and `TASKELITH_NATS_CA` is not set
 - **THEN** the control plane and the broker commands of the administrative entry fail with the file's path before connecting
+
+### Requirement: Rejected broker credentials
+A broker failure caused by an authorization violation or an expired user authentication SHALL keep the code `unavailable` and SHALL carry the reason `credentials-rejected`, so that a worker can tell refused credentials from an unreachable broker; every other broker failure SHALL carry no such reason.
+
+#### Scenario: Revoked user
+- **WHEN** a worker connects with the `.creds` of a revoked broker user
+- **THEN** the connection fails with reason `credentials-rejected`
+
+#### Scenario: Unreachable broker
+- **WHEN** the broker cannot be reached
+- **THEN** the connection fails without reason `credentials-rejected`

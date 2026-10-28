@@ -1,6 +1,6 @@
 import { parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
-import type { AuditEvent, OperatorCredential } from '../domain/operator-credential.js';
+import { OPERATOR_AUDIT_SUBJECT, type AuditEvent, type OperatorCredential } from '../domain/operator-credential.js';
 import type { OperatorCredentials } from './operator-credentials.js';
 import type { SecretHash } from '../domain/secret-hash.js';
 
@@ -19,7 +19,7 @@ function credential(generation: number): OperatorCredential {
 
 function event(generation: number): AuditEvent {
   const kind = generation === 1 ? 'operator-credential.bootstrapped' : 'operator-credential.reset';
-  return Object.freeze({ kind, generation, actor: 'admin@host', reason: generation === 1 ? 'bootstrap' : 'lost', occurredAt: AT });
+  return Object.freeze({ kind, subject: OPERATOR_AUDIT_SUBJECT, generation, actor: 'admin@host', reason: generation === 1 ? 'bootstrap' : 'lost', occurredAt: AT });
 }
 
 export const OPERATOR_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<OperatorCredentials>[] = Object.freeze([
