@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below; review has not run yet.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1 and 2 and their fixes; pass 3 is pending.
 
 ## Scope and source
 
@@ -39,9 +39,9 @@ macOS 26.6.2 arm64 (Apple M3, `Mac15,13`, `uname -m` `arm64`), Node.js 24.22.1 f
 
 ## Fails before the change
 
-Each test below ran against the base sources and failed, then the tree was restored to `HEAD` and rebuilt, and it passed.
+Each test below failed before its fix and passed after it; each item names the revision it ran against, and an item shown by mutation names what was mutated. After each run the tree was restored to `HEAD` and rebuilt.
 
-- **Base sources.** `git checkout 1c73e1a7 -- apps/worker/src packages/adapters/worker-control-plane-client/src packages/adapters/worker-journal/src packages/modules/fleet/src`, the new `http-installation-ca-source.ts` and the four packages' `dist` moved aside, `npm run build`, over the tests of `782a437e`; the line numbers are those of that file.
+- **Base sources** of the first four items. `git checkout 1c73e1a7 -- apps/worker/src packages/adapters/worker-control-plane-client/src packages/adapters/worker-journal/src packages/modules/fleet/src`, the new `http-installation-ca-source.ts` and the four packages' `dist` moved aside, `npm run build`, over the tests of `782a437e`; the line numbers are those of that file.
 - **Fingerprint mismatch.** `apps/worker/test/enrollment-tls.test.ts`, "a CA with another fingerprint aborts the start before the token is sent": failed at line 154, `worker` was a started worker instead of `undefined`; the base ignored the fingerprint and sent the token to the fake control plane.
 - **System-trusted foreign certificate.** Same file, "a system-trusted certificate that the installation CA did not issue gets no token": failed at line 162; the base's global `fetch` trusted the foreign CA as a default root, the impostor got the token, and the worker started.
 - **Broker pinning.** Same file, "a worker enrolls over pinned TLS, pins the broker too, and listens on nothing": failed at line 174, the broker endpoint's `tls` was `undefined` instead of `{ca: <installation CA>}`. With the adapter file below, that run was 4 tests, 0 pass, 4 fail.
