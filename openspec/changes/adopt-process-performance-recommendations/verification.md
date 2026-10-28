@@ -15,6 +15,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - Review pass 2 fixes, on `1e1cd10f`: `4818a7b7` scripts, tests, and `Makefile` (findings 1, 2, 3, 5, 6, 7, and 10); `149058b8` spec deltas, design, protocol, and coordinator skill (finding 4 and the text of the others); `0be2c4ab` this record (findings 8 and 9); then the pass 2 records.
 - Review pass 3 fixes, on `d9d191dd`, unreviewed under "At most three passes": `945b09f7` `scripts/integrate.sh` and its tests (findings 1 and 2); then this record.
 - `make verify` of the pass 2 and pass 3 fixes passed on `4e0b20a3`; `make record` and `make record-check` passed on the record commit that follows it, whose tree differs from `4e0b20a3`'s only in this record and `tasks.md`.
+- Pre-push fix, found by the `pre-push` hook after the three-pass cap and unreviewed: `12c8d75d` `scripts/verify-stamp.ts` and its test (see "Blocked push"); then this record.
 
 ## Environment
 
@@ -175,6 +176,20 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
   - Snapshot: `c2b5011fc68efc40b8a101232f132dd8c77d13744d4333c6870a1700804ea20d` before and after, unchanged.
   - Result: Critical 0, High 0, Medium 0, Low 0; no findings, so `findings.jsonl` has no line for it.
 
+## Blocked push
+
+- **Symptom.** The first `git push` of the archived branch (archive commit `7345968f`, kept as `backup/adopt-ppr-archive-7345968f`) ran the `pre-push` hook, whose full `make verify` failed with 18 failures, all in this change's tests: `test/verify-stamp.test.ts` and `test/verification-record.test.ts` (for example "the verified tree 88b8ca32e87a is not in this clone", "no generated part", a merge base mismatch in the spec diff). A direct `make verify` of the same code on `4e0b20a3` had passed with 0 failures.
+- **Cause.** Git exports `GIT_DIR` to hooks; in this linked worktree a probe hook saw `GIT_DIR=<common git dir>/worktrees/<name>`, `GIT_PREFIX`, `GIT_EDITOR`, `GIT_EXEC_PATH`, and, in the probe, `GIT_CONFIG_PARAMETERS`. `gitIn` in `scripts/verify-stamp.ts`, which `scripts/verification-record.ts` also uses, ran `git` with the inherited environment, so `GIT_DIR` overrode its `cwd`. The tests call `gitIn` in process on temporary repositories, so under the hook their `git` commands read the real worktree, not the fixture. In the real hook `GIT_DIR` names the same worktree that `cwd` is, so the tool itself read the right repository; no wrong stamp or profile of a real tree was seen.
+- **Side effect.** The failing run wrote a fixture stamp (tree `other`) into `taskelith-verify-stamps` of the real common git directory. It can match no real tree; it was deleted. The fixed tests write nothing there.
+- **Fix.** `12c8d75d`: `gitIn` runs `git` without any `GIT_` variable, the approach of the checklist git adapter (`scripts/checklist-environment.ts`) and of `test/git-fixture-env.ts`. Only the environment changes; the stamp and record logic is unchanged.
+- **Regression test.** "git reads the given root, whatever GIT_DIR a pre-push hook exported" in `test/verify-stamp.test.ts` points `GIT_DIR` at another repository in process and asserts that `headRevision` and `stampDirectory` still read the given root, so it fails before the fix however the suite is launched.
+- **Red and green.** `node --experimental-strip-types --test test/verify-stamp.test.ts test/verification-record.test.ts test/pre-push-hook.test.ts`, 50 tests:
+  - Before the fix, with the hook's `GIT_DIR` of this worktree exported: pass 31, fail 19, the 18 failures of the push and the new test.
+  - Before the fix, with a clean environment: pass 49, fail 1, the new test.
+  - After the fix: pass 50, fail 0, with the hook's variables exported and with a clean environment.
+- **Unreviewed fix.** The change has had its three passes; like the pass 3 fixes, `12c8d75d` is fixed under "At most three passes" and no reviewer has checked it.
+- **Non-Docker checks** on `12c8d75d`: `npx tsc -p tsconfig.check.json --noEmit`, `npm run verify:comments`, `verify:findings`, `verify:links`, and `verify:archive` passed; OpenSpec strict 70 of 70. The full `make verify` has not run on this fix (see "Remaining gates").
+
 ## Limitations
 
 - `make integrate` was never run against GitHub; its tests use a local bare origin and stubs of `make`, `npm`, and `gh`.
@@ -190,6 +205,8 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
+- Full `make verify` of the head with `12c8d75d`, in the Docker slot
+- `make record` and `make record-check` of that run
 - Archive of the change, as the last commit
-- Handoff to the coordinator
+- Push (the `pre-push` hook) and handoff
 - Integration into dev by the coordinator (single pull request)

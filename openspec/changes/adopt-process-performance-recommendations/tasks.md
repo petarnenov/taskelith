@@ -28,4 +28,6 @@
 - [x] 4.4 Review pass 2 (reviewer B) and its fixes: 10 findings fixed in `4818a7b7`, `149058b8`, and `0be2c4ab`
 - [x] 4.5 Review pass 3 (reviewer A), required by "Conditional third pass": 2 Medium findings fixed unreviewed in `945b09f7` under "At most three passes"
 - [x] 4.6 `make verify`, `make record`, and `make record-check` of the pass 2 and pass 3 fixes: passed on `4e0b20a3`
-- [ ] 4.7 Archive the change
+- [x] 4.7 Fix the blocked push: `gitIn` drops inherited `GIT_` variables, unreviewed after the cap, in `12c8d75d`
+- [ ] 4.8 `make verify`, `make record`, and `make record-check` of `12c8d75d`
+- [ ] 4.9 Archive the change
