@@ -166,9 +166,21 @@ test('the containment check fails when the probe fails for another reason than a
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
 
+// Appends a MiB of zeros, past a pipe buffer, to a tar stream when
+// FAKE_TAR_TRAILER is set, and keeps the writer's SIGPIPE status.
+const tarTrailer = `trailed() {
+  [ -n "$FAKE_TAR_TRAILER" ] || exec cat
+  archive=$(mktemp)
+  cat > "$archive" && head -c 1048576 /dev/zero >> "$archive"
+  cat "$archive"; status=$?
+  rm -f "$archive"
+  return "$status"
+}`;
+
 // Models builds tagged -first and -second: a saved manifest.json, layers, and
 // an image ID the check ignores; FAKE_ statuses fail steps.
 const buildDocker = `#!/bin/sh
+${tarTrailer}
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case "$*" in
   *-first|*"-first "*) manifest=$FAKE_FIRST_MANIFEST layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
@@ -183,8 +195,9 @@ case "$*" in
   "image save "*)
     saved=$(mktemp -d)
     printf '%s' "$manifest" > "$saved/manifest.json"
-    tar -cf - -C "$saved" manifest.json
+    tar -cf - -C "$saved" manifest.json | trailed; status=$?
     rm -rf "$saved"
+    [ "$status" -eq 0 ] || exit "$status"
     exit "\${FAKE_SAVE_STATUS:-0}" ;;
   "image inspect --format {{.Id}} "*) echo "$id" ;;
   "image inspect --format {{range .RootFS.Layers}}"*) echo "$layers"; exit "\${FAKE_LAYERS_STATUS:-0}" ;;
@@ -194,8 +207,10 @@ exit 0
 `;
 
 // Fails \`git stash create\` with FAKE_STASH_STATUS and \`git log\` with
-// FAKE_LOG_STATUS when they are set.
+// FAKE_LOG_STATUS when they are set; trails \`git archive\`.
 const stashGit = `#!/bin/sh
+${tarTrailer}
+if [ -n "$FAKE_TAR_TRAILER" ] && [ "$3" = "archive" ]; then /usr/bin/git "$@" | trailed; exit; fi
 if [ -n "$FAKE_STASH_STATUS" ] && [ "$3 $4" = "stash create" ]; then exit "$FAKE_STASH_STATUS"; fi
 if [ -n "$FAKE_LOG_STATUS" ] && [ "$3" = "log" ]; then exit "$FAKE_LOG_STATUS"; fi
 exec /usr/bin/git "$@"
@@ -350,6 +365,12 @@ test('the reproducibility check fails on a differing layer of two indexes with t
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /layer 0 differs: sha256:base and sha256:other/);
   assert.doesNotMatch(outcome.stderr, /configs differ/);
+});
+
+test('the reproducibility check passes when tar stops reading before the end of its stream', () => {
+  const outcome = checkReproducible({}, {}, { FAKE_TAR_TRAILER: '1' });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.match(outcome.stdout, new RegExp(`both builds gave the worker image config ${CONFIG}`));
 });
 
 test('the reproducibility check names a layer that only one build has', () => {
