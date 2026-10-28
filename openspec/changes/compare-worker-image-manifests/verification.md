@@ -16,8 +16,8 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`, Docker
 
 ## Author self-check
 
-- **Scope.** Only `check_reproducible` and `finish_reproducible` changed in `scripts/installation.sh`, plus four new helpers: `config_digest`, `image_layers`, `report_layers`, and `compare_builds`. `build_image` and every other command are unchanged; the check passes `--no-cache --metadata-file <temporary directory>/<first|second>.json` through its existing extra arguments.
-- **Errors.** A metadata file without a `sha256:` hexadecimal config digest fails the check with `names no image config digest`; a failed `docker image inspect` of the layers fails it with that status; neither prints the pass line. The temporary metadata directory is removed with the build context on exit.
+- **Scope.** Only `check_reproducible` and `finish_reproducible` changed in `scripts/installation.sh`, plus five new helpers: `saved_manifest`, `config_digest`, `image_layers`, `report_layers`, and `compare_builds`. `build_image` and every other command are unchanged; the check passes `--no-cache` through its existing extra arguments. (Before the pass 1 fix `2f1e02bf` it also passed `--metadata-file`; see "Review".)
+- **Errors.** A failed `docker image save` or `tar` fails the check with `the manifest.json of the saved image <image> cannot be read`; a saved manifest without exactly one `Config` entry fails it with `names <n> image configs, not one`, and an entry that is not `blobs/sha256/` and 64 hexadecimal digits with `names no image config blob`; a failed `docker image inspect` of the layers fails it with that status; none prints the pass line.
 - **Compatibility.** The script runs under macOS `/bin/bash` 3.2 (the tests start `bash` from `/usr/bin:/bin`), so the layer comparison uses `read -r -a` and indexed loops, not `mapfile`.
 - **Docs.** `docs/local-installation.md` describes the comparison and the containerd image ID; the requirement "Pinned image inputs" and the description of the image ID in the Dockerfile item stay, because they claim equal image IDs only on the classic store, where the image ID is the config digest.
 - **Spec.** The modified requirement "Opt-in reproducibility check" has 499 characters, under the 500 of the pinned OpenSpec.
@@ -25,8 +25,8 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`, Docker
 
 ## Evidence check
 
-- **Metadata key.** A scratch image (`FROM scratch`, one `COPY`) built with `docker build --no-cache --metadata-file` on this host wrote `containerimage.config.digest` equal to its image ID, `sha256:7942d2c7174341eb8fe2769c6d66d2a4fcf28daf8af1bfe4a31070c1b0136619`, and `docker image inspect` printed its `RootFS.Layers`.
-- **Containerd store.** Not measured: this host uses the classic store. The containerd path, an image ID that is the index digest while config and layers are equal, is covered only by the stub test `the reproducibility check passes when only the image IDs differ, as the index digests of the containerd store`.
+- **Saved manifest.** On this host the `Config` entry of `docker image save <image> | tar -xOf - manifest.json`, read by the script's `config_digest`, equals the image ID for `busybox:latest` (`sha256:aaef90e06523...`), `alpine:3.20` (`sha256:bf8527eb54c3...`), and a scratch image (`FROM scratch`, one `COPY`) built with `docker build --no-cache`, `sha256:fd28bcfe4c0d841f3238c5cf8129ecf32447874d8f1fe8a5c08c5ad3e4ce4c16`; each manifest had one entry of the form `blobs/sha256/<hex>`. A missing image fails `config_digest` with `cannot be read`, status 1.
+- **Containerd store.** Not measured: this host uses the classic store. The containerd path, an image ID that is the index digest while config and layers are equal, is covered only by the stub tests `the reproducibility check passes on one platform image in two indexes with their own attestations` and `... fails on a differing layer of two indexes with their own attestations`; the stub writes BuildKit's metadata of an index without a config digest.
 - **Links.** The records link only inside the change directory or root-relative; `npm run verify:links` runs in `make verify`.
 
 ## Fail-before
@@ -53,8 +53,9 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Limitations
 
-- The containerd image store was not available on this host; its path is covered by the stub test only, and the key `containerimage.config.digest` on that store is taken from BuildKit's exporter, not measured.
-- `--metadata-file` needs the BuildKit builder; the legacy builder rejects the flag, which fails the check.
+- The containerd image store was not available on this host; its path is covered by the stub tests only, and that `docker image save` there writes one `manifest.json` entry, for the platform image, is not measured; another entry would fail the check, not pass it.
+- `docker image save` streams each whole image through `tar` on every check.
+- An engine before Docker 25 names the config `<hex>.json`, which fails the check with `names no image config blob`.
 
 ## Remaining gates
 
