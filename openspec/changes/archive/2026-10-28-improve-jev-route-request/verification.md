@@ -61,6 +61,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a18395-0197-7492-a1db-2affd744e68b` | 0 | 0 | 1 | 0 |
 <!-- make record: end -->
 
+## Archive checks
+
+Checked state: the tree of the archive commit `docs: archive the improve-jev-route-request change`, which is the working tree after `npm run openspec -- archive improve-jev-route-request --yes` (2 added and 2 modified requirements in `openspec/specs/review-process/spec.md`) on top of `93e8f86c`.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `make verify` (full profile, uncommitted working tree, no stamp): passed; tests 3345, pass 3330, fail 0, skipped 15; all files 99.47% lines, 92.66% branches, 99.06% functions. The log has no occurrence of the shadow router credential.
+- `npm run openspec -- validate --archived --no-interactive`: the line of this change is `✓ change/2026-10-28-improve-jev-route-request`; the command fails as a whole only on older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/review-process/spec.md`, 35 insertions and 5 deletions, which modify "Shadow routing" and "Shadow router failure" and add "Shadow request content" and "Shadow third pass score", this change's intended edits.
+- The moved change has `findings.jsonl` (10 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"` passed: 76 findings files, 56 pass summary files, and 12 route files valid.
+
 ## Limitations
 
 - No response to the new question is stored; the test fixture is constructed from the OpenAPI document (design.md D8).
