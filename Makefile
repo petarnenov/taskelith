@@ -1,4 +1,9 @@
 # Single definition of the repository checks: the pre-push gate and CI `verify`.
+
+# Exported arguments get expanded, by make 4.4 already for the $(shell) calls
+# below, so these reach scripts under other names, as typed, without MAKEFLAGS.
+unexport BRANCH TITLE BODY RESUME CHANGE LOG
+
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
 
@@ -77,8 +82,8 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
-# Review records tool: ARGS is validate, index, reviewers, or effect (the last
-# three take --json), or checklist; a usage error prints every option.
+# Review records tool: ARGS is validate, index, reviewers, effect, checklist,
+# route, or route-evaluation; a usage error prints every option.
 findings:
 	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
@@ -271,10 +276,6 @@ speckit-lock:
 	docker run --rm --user "$$(id -u):$$(id -g)" --env HOME=/tmp --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
-
-# make would expand these arguments when it exports them, so they reach
-# the script under other names, as typed; its makes get no MAKEFLAGS.
-unexport BRANCH TITLE BODY RESUME CHANGE LOG
 
 # Coordinator: integrates the archived change BRANCH into dev with one pull
 # request (scripts/integrate.sh); only RESUME=1 continues a stopped one.

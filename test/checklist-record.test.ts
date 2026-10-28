@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ROUTE_SCHEMA_PATH } from '../scripts/review-route.ts';
 import { CHECKLIST_SCHEMA_PATH, LANDING_CHANGE } from '../scripts/checklist-record.ts';
 import type { ArchiveSnapshot, ChecklistEnvironment } from '../scripts/checklist-environment.ts';
 import { PASS_SCHEMA_PATH, parseCommand, runFindings, SCHEMA_PATH, UsageError } from '../scripts/findings.ts';
@@ -73,7 +74,7 @@ function activeChange(change: string): Record<string, string> {
 
 function repository(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'checklist-record-'));
-  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH]) cpSync(path, join(root, path));
+  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH, ROUTE_SCHEMA_PATH]) cpSync(path, join(root, path));
   mkdirSync(join(root, 'openspec/specs/review-process'), { recursive: true });
   mkdirSync(join(root, 'openspec/specs/agent-task-protocol'), { recursive: true });
   for (const [path, text] of Object.entries(files)) {

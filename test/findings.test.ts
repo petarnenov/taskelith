@@ -4,6 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ROUTE_SCHEMA_PATH } from '../scripts/review-route.ts';
 import { DEFAULT_TOP, PASS_SCHEMA_PATH, parseCommand, runFindings, SCHEMA_PATH, splitList, UsageError, USAGE } from '../scripts/findings.ts';
 import { matchesQuery, VOCABULARY_PATH, type Finding } from '../scripts/review-findings.ts';
 import { CHECKLIST_SCHEMA_PATH } from '../scripts/checklist-record.ts';
@@ -42,7 +43,7 @@ function summary(change: string, pass: number, counts: Partial<typeof NO_COUNTS>
 
 function repository(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'findings-'));
-  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH]) cpSync(path, join(root, path));
+  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH, ROUTE_SCHEMA_PATH]) cpSync(path, join(root, path));
   mkdirSync(join(root, 'openspec/changes/archive/2026-10-01-old-change'), { recursive: true });
   mkdirSync(join(root, 'openspec/specs/review-process'), { recursive: true });
   for (const [path, text] of Object.entries(files)) {
@@ -113,7 +114,7 @@ test('a list splits at commas outside braces and drops empty items', () => {
 test('validate passes on valid files, empty active files, and archives without a file', () => {
   const root = repository(ARCHIVED);
   try {
-    const stdout = 'Every findings file is valid: 3 file(s); every pass summary file is valid: 1 file(s).';
+    const stdout = 'Every findings file is valid: 3 file(s); every pass summary file is valid: 1 file(s); every route file is valid: 0 file(s).';
     assert.deepEqual(runFindings(['validate'], root, NO_GIT), { exitCode: 0, stdout, stderr: '' });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -512,5 +513,5 @@ test('make findings passes a glob through without shell expansion', () => {
 
 test('the npm script validates this repository', () => {
   const output = execFileSync(process.execPath, ['--experimental-strip-types', 'scripts/findings.ts', 'validate'], { encoding: 'utf8' });
-  assert.match(output, /^Every findings file is valid: \d+ file\(s\); every pass summary file is valid: \d+ file\(s\)\.\n$/);
+  assert.match(output, /^Every findings file is valid: \d+ file\(s\); every pass summary file is valid: \d+ file\(s\); every route file is valid: \d+ file\(s\)\.\n$/);
 });
