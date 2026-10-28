@@ -85,6 +85,19 @@ async function send(target: HttpTarget, path: string, exchange: Exchange): Promi
   }
 }
 
+// Node's codes for a server certificate that TLS did not verify; the
+// handshake failed, so no request, and no secret, was sent.
+const CERTIFICATE_REFUSALS: ReadonlySet<string> = new Set([
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID',
+  'CERT_SIGNATURE_FAILURE', 'CERT_UNTRUSTED', 'CERT_REJECTED', 'INVALID_CA', 'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+export function isCertificateRefusal(refused: Failure): boolean {
+  const code = refused.details.causeCode;
+  return refused.code === 'unavailable' && code !== undefined && CERTIFICATE_REFUSALS.has(code);
+}
+
 // A 503, or a proxy's timeout or bad gateway, reached no decision, so the
 // same operation is retried; every other status ends it.
 const STATUS_CODES: ReadonlyMap<number, FailureCode> = new Map([

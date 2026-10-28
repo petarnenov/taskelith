@@ -146,7 +146,8 @@ test('a server the pinned CA issued gets the token; a system-trusted foreign one
   value(await new HttpEnrollmentClient(endpoint(pinnedUrl)).enroll(TOKEN, request));
   assert.equal(pinned.seen.at(-1)?.authorization, `Bearer ${TOKEN}`);
   const refused = failed(await new HttpEnrollmentClient(endpoint(impostorUrl)).enroll(TOKEN, request));
-  assert.equal(refused.code, 'unavailable');
+  // Refused at the handshake, so the token was not sent and is not spent.
+  assert.deepEqual([refused.code, refused.details.reason], ['precondition-failed', 'installation-ca-untrusted']);
   assert.match(refused.details.cause ?? '', /UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED|unable to verify/i);
   assert.deepEqual(impostor.seen, [], 'the foreign server saw no request and no token');
   pinned.status = 200;
@@ -172,7 +173,7 @@ test('NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign server get the token
   impostor.status = 201;
   const refused = failed(await new HttpEnrollmentClient(endpoint(impostorUrl)).enroll(TOKEN, ENROLLMENT_REQUEST));
   impostor.status = 200;
-  assert.equal(refused.code, 'unavailable');
+  assert.deepEqual([refused.code, refused.details.reason], ['precondition-failed', 'installation-ca-untrusted']);
   const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), credential: CREDENTIAL });
   assert.equal(failed(await launch.authorize({} as never)).code, 'unavailable');
   assert.deepEqual(impostor.seen, [], 'no token and no bearer reached the foreign server');

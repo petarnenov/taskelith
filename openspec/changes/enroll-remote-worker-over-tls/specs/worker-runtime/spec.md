@@ -60,6 +60,7 @@ An enrolled worker SHALL keep the checked CA as `worker/installation-ca.pem` and
 #### Scenario: System-trusted foreign certificate
 - **WHEN** the control plane's address presents a certificate of another CA that the process's default trust includes
 - **THEN** the call fails before its request is sent, and no token or bearer reaches that server
+- **AND** an enrollment so refused fails with `precondition-failed` and reason `installation-ca-untrusted`, and its token is not spent
 
 #### Scenario: Verification turned off by the environment
 - **WHEN** `NODE_TLS_REJECT_UNAUTHORIZED` is `0` and the control plane's address or the broker presents a certificate of another CA

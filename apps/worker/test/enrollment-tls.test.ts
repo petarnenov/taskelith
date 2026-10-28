@@ -162,7 +162,8 @@ test('a CA with another fingerprint aborts the start before the token is sent', 
 test('a system-trusted certificate that the installation CA did not issue gets no token', async () => {
   const { worker, lines } = await start(environment(impostorUrl, sha256(installation.certificatePem)));
   assert.equal(worker, undefined);
-  assert.equal(JSON.parse(lines[0] ?? '{}').error.code, 'unavailable');
+  const { code, details } = JSON.parse(lines[0] ?? '{}').error;
+  assert.deepEqual([code, details.reason], ['precondition-failed', 'installation-ca-untrusted']);
   assert.deepEqual(impostor.tokens, [], 'the foreign server got no token');
 });
 
