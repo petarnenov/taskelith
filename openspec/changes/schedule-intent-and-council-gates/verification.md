@@ -48,6 +48,24 @@ Checks after the fixes:
 - `npm run verify:links`: `Every checked link conforms.`
 - `make verify` on `f17bcee8` (tree `70668be2`), docs-only profile: passed, exit 0.
 
+## Review pass 2
+
+Reviewer B, Claude Code (claude-opus-5-5, effort high), session `5a0c0907-4313-477f-a00a-94241fca3a1e`, read-only at `2b058a2d`: 0 Critical, 0 High, 3 Medium, 6 Low, all fixed in `077a26ee`. Pass 1 missed M1, M3, L1, and L4. Every claim was checked against the files before the fix.
+
+- **M1 (docs).** The project's integration branch row is covered by the item 9a contract (`docs/contracts/control-plane-wire-contracts.md:61` at `10fc3bbe`) and the `RepositoryBindingInput` schema, which requires `integrationBranch`, and binds item 11. Item 11's scope note stays; it does not call the row open.
+- **M2 (stale-citation).** The table is pinned to `10fc3bbe`. Every citation of the table and of the design was reread there: only `docs/contracts/product-ports.md` moved, `:208` to `:211`, `:230` to `:233`, and `:271` to `:274`.
+- **M3 (spec-wording).** "Intent and council delivery gates" states that the council is not constituted and human approvals apply until OpenCode is admitted; the requirement is 491 characters.
+- **L1 to L6.** The G6 pilot scenario, the design's D2 and D6, ADR 0016 decision 1, the workspace row's base branch, the architecture's first integrations row, and this record, as `findings.jsonl` states.
+
+No pass 3 runs, under governance "Conditional third pass": pass 2 reported no Critical or High finding, and its fixes change only documentation, records, and the spec delta. The fixes are recorded as `fixed-unreviewed`.
+
+Checks after the fixes:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 72 passed, 0 failed (72 items)`.
+- `make findings ARGS="validate"`: `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`
+- `npm run verify:links`: `Every checked link conforms.`
+- An archive in a scratch copy of the tree: `+ 3` requirements in `delivery-planning`, then `Totals: 71 passed, 0 failed (71 items)`.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -66,6 +84,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review, passes as `route.json` and the coordinator assign.
 - Archive of the change on the branch.
 - Integration into dev by the coordinator (single pull request).
