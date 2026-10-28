@@ -1,0 +1,1 @@
+{"change": "wire-git-workspace-into-worker", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18418-c2ef-7430-8b47-0d49b8341c30", "counts": {"critical": 0, "high": 1, "medium": 3, "low": 1}}
