@@ -37,11 +37,24 @@ Author checks, run on `56a63b3b` and its working tree:
 - `node --experimental-strip-types --test 'packages/modules/*/test/*.test.ts' packages/contracts/test/*.test.ts`: 786 tests, 785 pass, 0 fail, 1 skipped.
 - Coverage of `packages/modules/sdlc/dist/domain/*.js` over `packages/modules/sdlc/test/*.test.ts` with `--experimental-test-coverage`: `code-head.js` and `gate.js` 100% lines, branches, and functions.
 - `make contract-compatibility`: the SDLC AsyncAPI document has 132 breaking changes against `a899d5d2`, declared by 0.4.0; the other documents have none; it passed. The author ran it before noticing that it starts the `oasdiff` image with `docker run --network none` for the two OpenAPI documents, outside the brief's rule of no Docker command; it is part of `make verify` and runs again there. The coordinator (Niki, 2026-10-28) accepted that container.
+- `make verify` after the merge of dev, on `5657fbc6` (tree `b91b0e27`), ended 08:42 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2658, pass 2651, fail 0, cancelled 0, skipped 7; coverage 99.36% lines, 92.52% branches, 99.06% functions. `make test` took the Docker slot itself; the head-bound gate of the gate repository suite passed against PostgreSQL in it (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log, and `make record-check` passed.
 
 ## Fails before the change
 
 - With `packages/modules/sdlc/src` and `packages/modules/workspace/src` of `a899d5d2` restored and built, `code-head-binding.test.ts` fails to load: `The requested module '@taskelith/sdlc' does not provide an export named 'isGateOutdatedByCodeHead'` (0 pass, 1 fail). The sources were restored afterwards.
 - A probe on that base build, with the base API only, showed each gap: a gate opened with a `codeHead` that is approved stays passed after a new head, because `markGateStale` with the unchanged specification is rejected and nothing else marks it; after a specification edit and its revert, `reopenGate` and the superseded approval pass the gate again; and an approval at another head passes the gate. On `56a63b3b` the same probe stops at `reopenGate`, which refuses the head-bound gate.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `b91b0e270ce8e2653ac42229088a008f3d59a912`; tests 2658, pass 2651, fail 0, skipped 7; all files 99.36% lines, 92.52% branches, 99.06% functions.
+- `npm run openspec -- validate bind-evidence-to-code-head --strict`: passed, `Change 'bind-evidence-to-code-head' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s).`.
+- Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
 
 ## Independent review
 
@@ -49,14 +62,13 @@ None yet; the coordinator assigns the passes.
 
 ## Limitations
 
-- The gate repository suite's new head-bound case runs against the PostgreSQL adapter only in `make verify` (Docker); the author ran it against the in-memory adapter.
 - No service marks a run's gates stale when its head moves; item 21 does.
 - An evidence record's `codeRevision` cannot decide a head-bound gate until the follow-up change `align-code-head-names` (design decision 1 (i)), which must land before G3 item 21.
 - Whether every gate requires a code head is G3 item 21's decision (design decision 6, option (a) chosen by the coordinator).
 
 ## Remaining gates
 
-- `make verify` on the final committed tree and `make record-check` before pass 1.
+- `make record-check` before pass 1, and `make verify` again after each round of review fixes.
 - Review passes 1 and 2 (and 3 if needed) with their records.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)

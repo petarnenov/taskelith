@@ -14,7 +14,7 @@
 ## 3. Records and gates
 
 - [x] 3.1 `npm run openspec -- validate bind-evidence-to-code-head --strict` and the checks without Docker
-- [ ] 3.2 `make verify`, `make record`, and `make record-check`
+- [x] 3.2 `make verify`, `make record`, and `make record-check`
 - [ ] 3.3 Review passes and their records
 
 ## Follow-ups
