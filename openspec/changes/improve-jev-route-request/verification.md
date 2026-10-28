@@ -8,6 +8,7 @@ The coordinator's brief of 2026-10-28 (Niki) for the change `improve-jev-route-r
 
 - **Base revision:** `1234e540` (`origin/dev`, merge of pull request #399).
 - **Implementation:** `4e5738a1`: the scripts, schema, protocol text, tests, fixture, and this change's proposal, design, spec delta, tasks, and `checklist.json`. `32c920a9` commits `route.json` unedited, from `make findings ARGS="route --change improve-jev-route-request"` on the clean tree of `4e5738a1`. It recorded tier `elevated` (triggers `lines`, `files`; 1,090 lines in 22 files), rule version 1, recommending `codex gpt-6.1-sol#high` and `claude claude-opus-5-5#xhigh`. The shadow router `jev-1.14.0`, asked with the new request, answered P(third) 0.80 at threshold 0.4, tier `elevated`, in 267 ms, and agreed. The brief's reviewers and efforts stand (governance "Routed effort").
+- **Coordinator decisions:** on 2026-10-28 the coordinator approved, as architect decisions, the full-archive leave-one-out reference rates, the exclusion of several-artifact changes from them (design.md D2), and redaction before clipping (D3); design.md "Risks" records the threshold re-tuning.
 - **Checklist:** saved with the brief's invocation, `--at 1234e540009aa623ed24c5a278de2fdf81f5aaf0 --size M`.
 
 ## Environment
@@ -54,7 +55,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Limitations
 
 - No response to the new question is stored; the test fixture is constructed from the OpenAPI document (design.md D8).
-- The reference rates now count the changes archived after the experiment, so the base rate (49%) is higher than the experiment's (32%); P(third) and the share of `elevated` shadow tiers at 0.4 may differ from the experiment until the re-evaluation measures them.
+- The reference rates now count the changes archived after the experiment, so the base rate (49%) is higher than the experiment's (32%), and most changes may be shadow-elevated at 0.4. The coordinator approved keeping these rates on 2026-10-28; the threshold is re-tuned at the re-evaluation (design.md "Risks").
 - Changes without a recorded `route.json` or evaluation line count in the overall rate but in no lines band.
 - Redaction covers the finding validator's secret patterns and runs of 40 or more token characters; a shorter secret of another shape would be sent.
 
