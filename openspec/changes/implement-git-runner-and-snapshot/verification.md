@@ -90,6 +90,21 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 | `make findings ARGS="validate"` | `6e61f97d` | "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)." |
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `f188e722308c8c8129f993f2a06e22017728fac9`; tests 3027, pass 2965, fail 0, skipped 62; all files 99.34% lines, 92.72% branches, 98.99% functions.
+- `npm run openspec -- validate implement-git-runner-and-snapshot --strict`: passed, `Change 'implement-git-runner-and-snapshot' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 1 file(s).`.
+- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18102-c0f5-7983-95e3-33e834d7e67a` | 0 | 3 | 6 | 2 |
+| 2 | B | `claude claude-opus-5-5#high` | `3d9ff410-49d2-4b60-bea5-ebe488545c33` | 0 | 4 | 3 | 5 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18140-db5c-7bd1-a3c8-0adcf2124b71` | 0 | 0 | 1 | 0 |
 <!-- make record: end -->
 
 ## Review
