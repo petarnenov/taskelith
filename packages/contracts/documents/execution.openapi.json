@@ -2,10 +2,50 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.4.0",
-    "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
+    "version": "0.5.0",
+    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
+    "/installation/ca": {
+      "get": {
+        "operationId": "readInstallationCa",
+        "summary": "Read the installation CA certificate, which a worker checks against its enrollment fingerprint",
+        "description": "Public: it declares no credential and answers the certificate only, never key material. A worker trusts the answer only when its SHA-256 equals the fingerprint of its enrollment bundle.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The installation CA certificate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationCa"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/workers/enrollments": {
       "post": {
         "operationId": "enrollWorker",
@@ -2216,6 +2256,22 @@
             "type": "string",
             "maxLength": 256,
             "description": "The new Nats-Msg-Id, `<original>.redrive.<n>`; absent for a message without one."
+          }
+        }
+      },
+      "InstallationCa": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The public certificate of the installation CA (G3 item 26), which the worker pins after it checks its SHA-256 against the enrollment bundle.",
+        "required": [
+          "certificate"
+        ],
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "maxLength": 16384,
+            "pattern": "^-----BEGIN CERTIFICATE-----\\r?\\n(?:[A-Za-z0-9+/=]{1,76}\\r?\\n)+-----END CERTIFICATE-----\\r?\\n?$",
+            "description": "One PEM certificate block and nothing else."
           }
         }
       }
