@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 
 const script = resolve('scripts/installation.sh');
@@ -327,4 +327,92 @@ test('a failed read of the commit time stops every build before any image is bui
     assert.notEqual(outcome.status, 0, args[0]);
     assert.equal(builds(outcome.calls).length, 0, args[0]);
   }
+});
+
+// Prints the views FAKE_VIEWS/1, /2, ... of successive `worker-admission`
+// runs, and FAKE_VIEWS/last after them.
+const admissionDocker = `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case " $* " in
+  *" admin worker-admission "*)
+    count=$(($(cat "$FAKE_VIEWS/count") + 1))
+    echo "$count" > "$FAKE_VIEWS/count"
+    if [ -f "$FAKE_VIEWS/$count" ]; then cat "$FAKE_VIEWS/$count"; else cat "$FAKE_VIEWS/last"; fi ;;
+esac
+exit 0
+`;
+
+const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
+const VIEW_TIME = '2026-10-28T10:00:05.000Z';
+
+function admissionView(admission: string, outcome?: string, details: readonly string[] = []): string {
+  const results = outcome === undefined ? [] : [{ checkId: 'linux-containment', outcome, details }];
+  return JSON.stringify({ asOf: VIEW_TIME, workers: [{ workerId: 'worker-1', admission, reportedAt: '2026-10-28T10:00:01.000Z', results }] });
+}
+
+function checkAdmission(views: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-'));
+  try {
+    writeFileSync(join(root, 'docker'), admissionDocker);
+    chmodSync(join(root, 'docker'), 0o755);
+    const directory = join(root, 'views');
+    mkdirSync(directory);
+    writeFileSync(join(directory, 'count'), '0');
+    views.forEach((view, index) => writeFileSync(join(directory, String(index + 1)), view));
+    writeFileSync(join(directory, 'last'), views[views.length - 1] ?? '');
+    const calls = join(root, 'calls');
+    writeFileSync(calls, '');
+    const run = spawnSync('bash', [script, 'check-admission', 'installation-script-test'], {
+      encoding: 'utf8',
+      env: {
+        PATH: [root, dirname(process.execPath), '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls, FAKE_VIEWS: directory,
+        TASKELITH_OPERATOR_TOKEN: OPERATOR_TOKEN, ...environment,
+      },
+    });
+    const recorded = readFileSync(calls, 'utf8').trim().split('\n');
+    assert.ok(!`${run.stdout}${run.stderr}${recorded.join('\n')}`.includes(OPERATOR_TOKEN), 'the operator secret is never printed');
+    return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const admissionReads = (outcome: Outcome) => outcome.calls.filter((call) => call.endsWith(' admin worker-admission'));
+
+test('the admission check polls the workers view until the worker is admitted with a passed containment check', () => {
+  const outcome = checkAdmission([admissionView('awaiting-self-check'), admissionView('admitted', 'passed')]);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(outcome.stdout.trim(), VIEW_TIME);
+  const reads = admissionReads(outcome);
+  assert.equal(reads.length, 2);
+  for (const read of reads) assert.match(read, /run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission$/);
+});
+
+test('a failed self-check fails the admission check at once and names the failed check', () => {
+  const outcome = checkAdmission([admissionView('self-check-failed', 'failed', ['the execution account can write cgroup.procs'])]);
+  assert.equal(outcome.status, 1);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.match(outcome.stderr, /self-check-failed: linux-containment \(the execution account can write cgroup\.procs\)/);
+  assert.match(outcome.stderr, /the worker admission check failed/);
+});
+
+test('a worker still awaiting its self-check at the deadline fails the admission check as a timeout', () => {
+  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '0' });
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /the worker is awaiting-self-check/);
+  assert.match(outcome.stderr, /the worker was not admitted within 0s/);
+});
+
+test('a refused read of the workers view fails the admission check at once', () => {
+  const outcome = checkAdmission([JSON.stringify({ error: { code: 'forbidden', message: 'the operator credential is not valid' } })]);
+  assert.equal(outcome.status, 1);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.match(outcome.stderr, /could not be read: forbidden: the operator credential is not valid/);
+});
+
+test('a deadline that is not whole seconds is a usage error before any read', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '5m' });
+  assert.equal(outcome.status, 2);
+  assert.equal(admissionReads(outcome).length, 0);
+  assert.match(outcome.stderr, /TASKELITH_ADMISSION_SECONDS must be whole seconds/);
 });

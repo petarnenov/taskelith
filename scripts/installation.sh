@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|certificates|installation-ca|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|certificates|installation-ca|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|check-admission|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
   exit 2
 }
 
@@ -12,6 +12,7 @@ if [ "$#" -ne 2 ]; then usage; fi
 repository="$(cd "$(dirname "$0")/.." && pwd)"
 compose_files=(--file "$repository/infra/installation/compose.yaml")
 smoke_directory="$repository/infra/installation/smoke"
+verify_directory="$repository/infra/installation/verify"
 command="$1"
 project="$2"
 case "$project" in
@@ -26,6 +27,9 @@ control_plane_image="taskelith-control-plane:$project"
 worker_image="taskelith-worker:$project"
 # Covers the restart, the worker's broker reconnect, and a 10 s heartbeat.
 CONTACT_SECONDS=90
+# Minutes, for a loaded host: a start, its self-check, and its report.
+ADMISSION_SECONDS="${TASKELITH_ADMISSION_SECONDS:-300}"
+ADMISSION_POLL_SECONDS=5
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -307,6 +311,8 @@ remove_throwaway() {
 # Opt-in end-to-end check on a fresh throwaway project with random secrets
 # and ephemeral host ports, removed with its volumes and images at the end.
 verify() {
+  local admitted_at
+  compose_files+=(--file "$verify_directory/compose.yaml")
   sentinel=".installation-sentinel-$$"
   fresh_project
   trap 'finish_verify $?' EXIT
@@ -318,12 +324,48 @@ verify() {
   broker_config
   start
   enroll
+  admitted_at="$(await_worker_admission '')" || exit 1
   stop
   start
   check_running
+  await_worker_admission "$admitted_at" > /dev/null || exit 1
   certificates
   check_reissued_certificates
-  remove_throwaway "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"
+  remove_throwaway "built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed"
+}
+
+# The workers view of the administrative entry, as JSON.
+worker_admission() {
+  compose run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission
+}
+
+# Polls the workers view until the one worker is admitted with a passed
+# linux-containment check reported after AFTER; prints the view's asOf.
+await_worker_admission() {
+  local deadline output status log
+  case "$ADMISSION_SECONDS" in
+    ''|*[!0-9]*) echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be whole seconds" >&2; return 2 ;;
+  esac
+  deadline=$((SECONDS + ADMISSION_SECONDS))
+  log="$(mktemp "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
+  while true; do
+    output="$(worker_admission 2> "$log")" || true
+    status=0
+    printf '%s' "$output" | node --experimental-strip-types "$repository/scripts/installation-admission.ts" \
+      linux-containment "$1" 2>> "$log" || status=$?
+    if [ "$status" -ne 3 ] || [ "$SECONDS" -ge "$deadline" ]; then break; fi
+    sleep "$ADMISSION_POLL_SECONDS"
+  done
+  if [ "$status" -ne 0 ]; then
+    cat "$log" >&2
+    if [ "$status" -eq 3 ]; then
+      echo "installation.sh: the worker was not admitted within ${ADMISSION_SECONDS}s" >&2
+    else
+      echo "installation.sh: the worker admission check failed" >&2
+    fi
+  fi
+  rm -f "$log"
+  return "$status"
 }
 
 # After `certificates`, with no restart of its own: new certificates served,
@@ -448,6 +490,7 @@ case "$command" in
   check-reproducible) check_reproducible ;;
   smoke) smoke ;;
   check-containment) check_containment ;;
+  check-admission) await_worker_admission '' ;;
   scenario-fresh-composition) fresh_composition_scenario ;;
   scenario-worker-disk-loss) disk_loss_scenario ;;
   scenario-worker-kill) worker_kill_scenario ;;
