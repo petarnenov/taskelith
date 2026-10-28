@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { reviewerKey } from '../scripts/review-findings.ts';
 import { passPlans, versionedPassPlans, type RouteFeatures, type Tier, type Trigger } from '../scripts/review-route.ts';
-import { firedTriggers, RULE_VERSION, ruleDecision, RuleRouter } from '../scripts/review-route-rules.ts';
+import { firedTriggers, RULE_VERSION, ruleDecision, RuleRouter, versionedTriggers } from '../scripts/review-route-rules.ts';
 import { featuresWith, QUIET_FEATURES, touching } from './review-route-fake.ts';
 
 // The rule router against design.md "Rule table", row by row.
@@ -28,6 +28,12 @@ test('rule version 1 keeps its reviewer table', () => {
   const keys = versionedPassPlans(1, 'elevated', { externalFacts: false })!.map(({ reviewer }) => reviewerKey(reviewer));
   assert.deepEqual(keys, ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
   assert.equal(versionedPassPlans(0, 'standard', { externalFacts: false }), undefined);
+});
+
+test('rule version 1 keeps its thresholds', () => {
+  assert.deepEqual(versionedTriggers(1, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
+  assert.deepEqual(versionedTriggers(1, featuresWith({ linesChanged: 399 })), []);
+  assert.equal(versionedTriggers(0, QUIET_FEATURES), undefined);
 });
 
 test('pass plans name pass 1 reviewer A and pass 2 reviewer B', () => {

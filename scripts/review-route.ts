@@ -97,8 +97,8 @@ export interface ReviewRouter<Decision> {
   route(features: RouteFeatures): Promise<Decision>;
 }
 
-// The version of the rule's triggers and of its reviewer table. A change
-// of either bumps it; older tables stay, so archived records stay valid.
+// The version of the rule's thresholds and of its reviewer table. A change
+// of either bumps it; older ones stay, so archived records stay valid.
 export const RULE_VERSION = 1;
 
 interface TierEfforts {
@@ -111,6 +111,23 @@ interface ReviewerTable {
   readonly networkedReviewerA: Pick<Reviewer, 'harness' | 'model'>;
   readonly reviewerB: Pick<Reviewer, 'harness' | 'model'>;
   readonly efforts: Readonly<Record<Tier, TierEfforts>>;
+}
+
+export interface TriggerThresholds {
+  readonly linesChanged: number;
+  readonly filesChanged: number;
+  readonly capabilities: number;
+  readonly elevatedSizes: readonly Size[];
+}
+
+// The thresholds of design.md "Rule table", per rule version.
+const TRIGGER_THRESHOLDS: ReadonlyMap<number, TriggerThresholds> = new Map([
+  [1, { linesChanged: 400, filesChanged: 18, capabilities: 3, elevatedSizes: ['M-L', 'L'] }],
+]);
+
+// Undefined for an unknown rule version.
+export function triggerThresholds(version: number): TriggerThresholds | undefined {
+  return TRIGGER_THRESHOLDS.get(version);
 }
 
 // standard is the configured effort of the reviewer assignment of

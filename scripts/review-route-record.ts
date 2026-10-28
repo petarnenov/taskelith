@@ -7,6 +7,7 @@ import {
   type RuleDecision,
   type ShadowDecision,
 } from './review-route.ts';
+import { versionedTriggers } from './review-route-rules.ts';
 
 // The route record, route.json: its shape, its validation against the
 // schema and the reviewer table, and its printed summary.
@@ -49,17 +50,20 @@ function secretProblems(record: RouteRecord): string[] {
   return secrets === 0 ? [] : [`${secrets} value(s) look like a secret`];
 }
 
-// Both pass plans are checked against the reviewer table of the
-// record's own rule version, so a later table leaves it valid.
+// The triggers and both pass plans are checked against the record's own
+// rule version, so a later version leaves it valid.
 function ruleProblems({ rule, features }: RouteRecord): string[] {
-  const elevated = rule.triggers.length > 0;
-  const tierProblems = (rule.tier === 'elevated') === elevated
+  const tierProblems = (rule.tier === 'elevated') === (rule.triggers.length > 0)
     ? []
     : [`rule tier ${rule.tier} does not match ${rule.triggers.length} fired trigger(s)`];
-  const expected = versionedPassPlans(rule.version, rule.tier, features);
-  if (expected === undefined) return [...tierProblems, `rule version ${rule.version} has no reviewer table`];
-  if (isDeepStrictEqual(rule.passes, expected)) return tierProblems;
-  return [...tierProblems, `rule passes are not the reviewer table's for tier ${rule.tier}`];
+  const triggers = versionedTriggers(rule.version, features);
+  const passes = versionedPassPlans(rule.version, rule.tier, features);
+  if (triggers === undefined || passes === undefined) return [...tierProblems, `rule version ${rule.version} has no reviewer table`];
+  return [
+    ...tierProblems,
+    ...(isDeepStrictEqual(rule.triggers, triggers) ? [] : [`rule triggers are not those of rule version ${rule.version} for the features`]),
+    ...(isDeepStrictEqual(rule.passes, passes) ? [] : [`rule passes are not the reviewer table's for tier ${rule.tier}`]),
+  ];
 }
 
 function shadowProblems({ shadow, features, rule }: RouteRecord): string[] {

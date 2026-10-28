@@ -1,32 +1,46 @@
-import type { Size } from './checklist-record.ts';
-import { passPlans, RULE_VERSION, TRIGGERS, type ReviewRouter, type RouteFeatures, type RuleDecision, type Trigger } from './review-route.ts';
+import {
+  passPlans,
+  RULE_VERSION,
+  triggerThresholds,
+  TRIGGERS,
+  type ReviewRouter,
+  type RouteFeatures,
+  type RuleDecision,
+  type Trigger,
+  type TriggerThresholds,
+} from './review-route.ts';
 
 // The rule router, the floor of the review route: deterministic triggers
 // read off the archived review records (design.md "Rule table").
 
 export { RULE_VERSION };
 
-export const THRESHOLDS = {
-  linesChanged: 400,
-  filesChanged: 18,
-  capabilities: 3,
-} as const;
+type TriggerCondition = (features: RouteFeatures, thresholds: TriggerThresholds) => boolean;
 
-export const ELEVATED_SIZES: ReadonlySet<Size> = new Set<Size>(['M-L', 'L']);
-
-const TRIGGER_CONDITIONS: Readonly<Record<Trigger, (features: RouteFeatures) => boolean>> = {
-  lines: ({ linesChanged }) => linesChanged >= THRESHOLDS.linesChanged,
-  files: ({ filesChanged }) => filesChanged >= THRESHOLDS.filesChanged,
-  capabilities: ({ capabilities }) => capabilities.length >= THRESHOLDS.capabilities,
+const TRIGGER_CONDITIONS: Readonly<Record<Trigger, TriggerCondition>> = {
+  lines: ({ linesChanged }, thresholds) => linesChanged >= thresholds.linesChanged,
+  files: ({ filesChanged }, thresholds) => filesChanged >= thresholds.filesChanged,
+  capabilities: ({ capabilities }, thresholds) => capabilities.length >= thresholds.capabilities,
   security: ({ touches }) => touches.security,
   contracts: ({ touches }) => touches.contracts,
   docker: ({ touches }) => touches.docker,
-  size: ({ size }) => size !== null && ELEVATED_SIZES.has(size),
+  size: ({ size }, thresholds) => size !== null && thresholds.elevatedSizes.includes(size),
 };
 
-// In the rule table's order, so equal features give equal decisions.
+// The triggers of the current rule version.
 export function firedTriggers(features: RouteFeatures): Trigger[] {
-  return TRIGGERS.filter((trigger) => TRIGGER_CONDITIONS[trigger](features));
+  return triggersOf(features, triggerThresholds(RULE_VERSION)!);
+}
+
+// The triggers of the given rule version; undefined for an unknown one.
+export function versionedTriggers(version: number, features: RouteFeatures): Trigger[] | undefined {
+  const thresholds = triggerThresholds(version);
+  return thresholds === undefined ? undefined : triggersOf(features, thresholds);
+}
+
+// In the rule table's order, so equal features give equal decisions.
+function triggersOf(features: RouteFeatures, thresholds: TriggerThresholds): Trigger[] {
+  return TRIGGERS.filter((trigger) => TRIGGER_CONDITIONS[trigger](features, thresholds));
 }
 
 export function ruleDecision(features: RouteFeatures): RuleDecision {

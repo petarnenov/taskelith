@@ -162,7 +162,8 @@ test('validate reports each invalid route.json by file', () => {
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-20-renamed/route.json: change "other-change" is not its directory's change "renamed"`)), result.stderr);
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-21-broken/route.json: not valid JSON`)), result.stderr);
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-22-extra/route.json: / must NOT have additional properties`)), result.stderr);
-  assert.match(lines.at(-1)!, /^Review findings: 4 problem\(s\); the formats are .*docs\/review-findings\/route\.schema\.json/);
+  assert.ok(lines.some((line) => line.startsWith('openspec/changes/active-change/route.json: rule triggers are not those of rule version 1')), result.stderr);
+  assert.match(lines.at(-1)!, /^Review findings: 5 problem\(s\); the formats are .*docs\/review-findings\/route\.schema\.json/);
 });
 
 test('a change without route.json is not reported', () => {
