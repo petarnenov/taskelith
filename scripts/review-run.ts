@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, closeSync, existsSync, openSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunResult } from './findings-common.ts';
@@ -18,8 +18,8 @@ import {
   checkStamp, currentToolchain, decideProfile, gitIn, mergeBase, type Environment, type Git, type Toolchain,
 } from './verify-stamp.ts';
 
-// make review: the route gate before pass 1, the reviewer's fixed
-// invocation in a clean environment, and its line in passes.jsonl.
+// make review: the route gate before pass 1, and the reviewer's fixed
+// invocation in a clean environment; the worker writes the pass line.
 
 export const REVIEW_USAGE = 'usage: make review CHANGE=<change> PASS=<1-9> ROLE=<A|B> '
   + 'REVIEWER=<reviewer key> PROMPT=<prompt file> LOG=<log file>';
@@ -110,7 +110,7 @@ function passesPath(root: string, change: string): string {
   return join(root, changeDirectory(change), PASSES_FILE);
 }
 
-// Checked before the reviewer runs, so that a second pass line costs no run.
+// A pass with a line has run; refusing it early saves a second run.
 function refuseSummarizedPass(root: string, { change, pass }: ReviewRequest): void {
   const path = passesPath(root, change);
   if (!existsSync(path)) throw new ReviewRefusal(`${changeDirectory(change)}/${PASSES_FILE} is missing`);
@@ -223,15 +223,14 @@ async function runReviewer(request: ReviewRequest, dependencies: ReviewDependenc
   const { session, model } = reviewer.confirm({ output, cliLog: cliText });
   if (session === undefined || !SESSION.test(session)) throw failed(`${key} reported no valid session ID`, request.log);
   const modelLine = confirmedModel(reviewer, model, key, request.log);
-  const summary = appendSummary(dependencies.root, request, session);
   return [
     `review: ${invocation.command} ${shownArgs(invocation).join(' ')}`,
     `environment: ${Object.keys(environment).join(' ')}`,
     `log: ${request.log}`,
     `session: ${session}`,
     modelLine,
-    `${PASSES_FILE}: ${JSON.stringify(summary)}`,
-    'The counts are 0: set them when you record the findings in findings.jsonl.',
+    `${PASSES_FILE} template: ${passLineTemplate(request, session)}`,
+    `No line was written: after the report, replace each count placeholder and append the line to ${PASSES_FILE}.`,
   ];
 }
 
@@ -265,20 +264,17 @@ function launch(invocation: Invocation, env: Record<string, string>, request: Re
   });
 }
 
-function appendSummary(root: string, request: ReviewRequest, session: string): PassSummary {
-  const summary: PassSummary = {
+// String placeholders fail the pass schema until the worker counts.
+function passLineTemplate(request: ReviewRequest, session: string): string {
+  const template = {
     change: request.change,
     pass: request.pass,
     role: request.role,
     reviewer: request.reviewer.reviewer,
     session,
-    counts: { critical: 0, high: 0, medium: 0, low: 0 },
+    counts: { critical: '<critical>', high: '<high>', medium: '<medium>', low: '<low>' },
   };
-  const path = passesPath(root, request.change);
-  const existing = readFileSync(path, 'utf8');
-  const separator = existing === '' || existing.endsWith('\n') ? '' : '\n';
-  appendFileSync(path, `${separator}${JSON.stringify(summary)}\n`);
-  return summary;
+  return JSON.stringify(template);
 }
 
 // The composition root; the route command reads the inherited credential.

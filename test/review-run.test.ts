@@ -204,18 +204,28 @@ test('pass 1 with a fresh route runs the reviewer without the caller\'s secrets'
   });
 });
 
-test('a pass appends its schema-valid line with the reported session', async () => {
+const PASS_LINE = {
+  change: CHANGE, pass: 2, role: 'B', reviewer: { harness: 'claude', model: 'claude-opus-5-5', variant: 'high' },
+  session: 'c3aae8d2',
+};
+
+function passSchemaErrors(line: unknown): unknown[] {
+  const read = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as object;
+  return ajvSchemaCheck(read(PASS_SCHEMA_PATH), [read(SCHEMA_PATH)])(line);
+}
+
+test('a pass writes no line and prints a template that is invalid until filled', async () => {
   await withFixture(async (fixture) => {
     const result = await review(fixture, '2', CLAUDE);
     assert.equal(result.exitCode, 0, result.stderr);
-    const lines = passLines(fixture.root);
-    assert.deepEqual(lines, [{
-      change: CHANGE, pass: 2, role: 'B', reviewer: { harness: 'claude', model: 'claude-opus-5-5', variant: 'high' },
-      session: 'c3aae8d2', counts: { critical: 0, high: 0, medium: 0, low: 0 },
-    }]);
-    const read = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as object;
-    const check = ajvSchemaCheck(read(PASS_SCHEMA_PATH), [read(SCHEMA_PATH)]);
-    assert.deepEqual(check(lines[0]), []);
+    assert.deepEqual(passLines(fixture.root), []);
+    const printed = /^passes\.jsonl template: (.*)$/m.exec(result.stdout);
+    assert.ok(printed, result.stdout);
+    const template = JSON.parse(printed[1]!) as object;
+    const placeholders = { critical: '<critical>', high: '<high>', medium: '<medium>', low: '<low>' };
+    assert.deepEqual(template, { ...PASS_LINE, counts: placeholders });
+    assert.notDeepEqual(passSchemaErrors(template), []);
+    assert.deepEqual(passSchemaErrors({ ...template, counts: { critical: 0, high: 1, medium: 0, low: 2 } }), []);
     assert.deepEqual(fixture.routed, []);
     assert.equal(readFileSync(join(fixture.scratch, 'env.txt'), 'utf8').includes(SENTINEL), false);
   });
@@ -223,8 +233,8 @@ test('a pass appends its schema-valid line with the reported session', async () 
 
 test('a pass that already has a line is refused before the reviewer runs', async () => {
   await withFixture(async (fixture) => {
-    assert.equal((await review(fixture, '2', CLAUDE)).exitCode, 0);
-    rmSync(join(fixture.scratch, 'env.txt'));
+    const line = { ...PASS_LINE, counts: { critical: 0, high: 0, medium: 0, low: 0 } };
+    writeFileSync(join(fixture.root, PASSES), `${JSON.stringify(line)}\n`);
     const again = await review(fixture, '2', CLAUDE);
     assert.equal(again.exitCode, EXIT_REFUSED);
     assert.match(again.stderr, /pass 2 already has a line in passes\.jsonl/);

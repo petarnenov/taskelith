@@ -309,8 +309,8 @@ record-check:
 	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
 		node --experimental-strip-types scripts/verification-record.ts check "$$TASKELITH_RECORD_CHANGE"
 
-# Runs reviewer REVIEWER for PASS of CHANGE in a clean environment, routes
-# a stamped tree before pass 1, and appends the pass line to passes.jsonl.
+# Runs reviewer REVIEWER for PASS of CHANGE in a clean environment and
+# routes a stamped tree before pass 1; it writes no passes.jsonl line.
 review: export TASKELITH_REVIEW_CHANGE := $(value CHANGE)
 review: export TASKELITH_REVIEW_PASS := $(value PASS)
 review: export TASKELITH_REVIEW_ROLE := $(value ROLE)

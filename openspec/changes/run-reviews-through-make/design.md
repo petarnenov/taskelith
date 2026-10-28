@@ -10,8 +10,20 @@ The brief (coordinator Niki, owner-approved 2026-10-28, size S-M) asks for one c
 - **Gate outcome.** With a missing or stale route and a clean tree that has a passing `make verify` stamp of its profile (the `verify-stamp.ts` check the `pre-push` hook uses), the command deletes a stale `route.json`, runs the route command in process with the inherited environment, which holds the credential, and stops with exit status 3. It does not run the reviewer then, because worker step 4 needs `route.json` committed before the `make verify` that `make record` records and that `make record-check` checks before pass 1. Without the stamp it refuses with exit status 1 and routes nothing.
 - **Environment.** The child gets an explicit environment object with only the allowed names that are set; nothing is inherited, the effect of `env -i`. The per-reviewer additions are configuration locations only: `CODEX_HOME`; `CLAUDE_CONFIG_DIR`; `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, and `OPENCODE_CONFIG`; none for Antigravity.
 - **Output and confirmation.** The log takes stdout and stderr. Codex: `model:` and `session id:` of the header. Claude Code: the last `"type":"result"` line, its `session_id` and the `modelUsage` keys. OpenCode: the first `sessionID` of the JSON events; the model is not in the events, so the command says that the stored messages confirm it. Antigravity: `conversation_id` of the JSON output, and the model in its own log, `<LOG>.cli.log`. A non-zero exit, a missing or schema-invalid session ID, or another model reported exits 4 and writes no line, because a failed attempt is no pass.
-- **Pass line.** The line has counts 0, because parsing findings is out of scope; the worker sets them when recording the findings, and `make findings ARGS="validate"` already fails when counts and findings disagree. A pass that already has a line is refused before the reviewer runs.
+- **Pass line.** The command writes no `passes.jsonl` line, because parsing findings is out of scope and a line with counts 0 would be a false record until edited. It prints a template with the change, pass, role, reviewer, and session filled and the strings `<critical>`, `<high>`, `<medium>`, and `<low>` as counts, which fail the pass schema if pasted unfilled; the worker appends the filled line after the report. A pass that already has a line is refused before the reviewer runs, because it has already run.
 - **Make arguments.** As for `make integrate` and `make record`, every argument is unexported and reaches the script through `$(value ...)`, so a `#`, spaces, or `$(...)` arrive as typed.
+
+## Coordinator decisions
+
+Niki decided the open questions on 2026-10-28:
+
+1. **Routing stops.** After routing, `make review` exits 3 without launching the reviewer (kept).
+2. **Prompt and log.** `PROMPT=` and `LOG=` are required and must lie outside the worktree (kept).
+3. **No pass line.** `make review` writes no `passes.jsonl` line, because a line with counts 0 is a false record until edited; the worker writes it after the report, as before. The command prints a line template whose count placeholders do not validate; the refusal of a pass that already has a line and the session and model confirmation (exit 4) stay (changed).
+4. **Variant.** `REVIEWER` carries the variant, the authorized effort (kept).
+5. **Recommendation.** The reviewer that `route.json` recommends is only printed; the effort follows governance policy version 7 (kept).
+
+The allowlists are checked against real CLIs only by this change's own pass 1 (Codex) and pass 2 (Claude Code), run through `make review`; Antigravity and OpenCode stay unverified.
 
 ## Risks
 

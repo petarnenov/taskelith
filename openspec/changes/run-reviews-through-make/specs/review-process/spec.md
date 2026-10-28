@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Review command
-`make review` SHALL run one review pass of an active change with the authorized reviewer that its canonical key names, using the fixed command and mandatory flags of that reviewer in `scripts/reviewer-invocations.ts` and the effort of governance "Authorized reviewers", with the prompt and log outside the worktree. After a run that exits 0 and reports a valid session ID and the expected model, it SHALL append the pass line to `passes.jsonl`.
+`make review` SHALL run one review pass of an active change with the authorized reviewer its canonical key names, using that reviewer's fixed command and flags in `scripts/reviewer-invocations.ts` and the effort of governance "Authorized reviewers", with the prompt and log outside the worktree. It SHALL write no `passes.jsonl` line; after a run that exits 0 and reports a valid session ID and the expected model, it SHALL print a line template whose counts fail validation until filled.
 
 #### Scenario: Fixed flags
 - **WHEN** a pass runs with the key `codex gpt-6.1-sol#medium`
@@ -15,9 +15,9 @@
 - **WHEN** the reviewer exits non-zero, reports no session ID, or reports another model
 - **THEN** `scripts/review-run.ts` exits 4 and writes no pass line
 
-#### Scenario: Pass line
+#### Scenario: Pass line template
 - **WHEN** a pass runs to a report
-- **THEN** `passes.jsonl` gets one schema-valid line with the pass, role, reviewer, session, and counts 0
+- **THEN** `passes.jsonl` is unchanged, and the printed template has the pass, role, reviewer, and session and fails the pass schema until its count placeholders are filled
 
 ### Requirement: Review route gate
 Before pass 1, when the change's `route.json` is missing or was made for another merge base or another tree outside the change directory, `make review` SHALL route the change only on a clean tree with a passing `make verify` stamp and then stop for the commit, and SHALL otherwise refuse without routing. Later passes SHALL NOT route.
