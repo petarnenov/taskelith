@@ -18,7 +18,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`. `JEV_M
 ## Author self-check
 
 - **Scope.** Rule v1 (`scripts/review-route-rules.ts`, the trigger thresholds, the reviewer table) is unchanged; `route.json` still records `touches` in `features`. Nothing routes on the shadow answer, and no routed effort is added.
-- **Request.** `shadowState` sends `context`, `linesChanged`, `filesChanged`, `capabilities`, `externalFacts`, `size`, `capabilityHistory`, and `content`; `jevRequestBody` asks only `third`. The criteria are the brief's text verbatim.
+- **Request.** `shadowState` sends `context`, `linesChanged`, `filesChanged`, `capabilities`, `externalFacts`, `size`, `capabilityHistory`, and `content`; `jevRequestBody` asks only `third`. The criteria were the brief's text verbatim; after review pass 1 the false criterion is the coordinator's wording of 2026-10-28 (see "Review pass 1").
 - **Compatibility.** The 11 archived `route.json` files and the archived `evaluation.jsonl`, which hold the earlier answer shape, stay valid (`make findings ARGS="validate"`: 12 route files valid, this change's included).
 - **Spec.** The modified and added requirements have 463, 483, and 358 characters; `npm run verify:archive` archives the change into strictly valid specs.
 - New comments are at most two lines of at most 80 characters; `npm run verify:comments` passes. Commit types are `chore` and `docs`, without attribution.
@@ -57,10 +57,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - No response to the new question is stored; the test fixture is constructed from the OpenAPI document (design.md D8).
 - The reference rates now count the changes archived after the experiment, so the base rate (49%) is higher than the experiment's (32%), and most changes may be shadow-elevated at 0.4. The coordinator approved keeping these rates on 2026-10-28; the threshold is re-tuned at the re-evaluation (design.md "Risks").
 - Changes without a recorded `route.json` or evaluation line count in the overall rate but in no lines band.
-- Redaction covers the finding validator's secret patterns and runs of 40 or more token characters; a shorter secret of another shape would be sent.
+- Redaction covers whole PEM private key blocks, the finding validator's secret patterns, and runs of 40 or more token characters; a shorter secret of another shape would be sent.
 
 ## Remaining gates
 
 - Independent review passes 1 and 2 (pass 3 only as governance "Conditional third pass" requires) by the coordinator-assigned reviewers.
 - Re-evaluation of Jev: after 30 to 40 new changes have been routed with this request and archived, the owner decides to keep or drop Jev from the `effect` report's P(third) Brier score and AUC (design.md D7).
 - Integration into dev by the coordinator (single pull request)
+
+## Review pass 1
+
+Reviewer A, Codex CLI `codex gpt-6.1-sol#medium`, session `01a1837a-ac3f-7181-9293-d3a23ffbb5b0`, started 2026-10-28T17:06:56.869Z. `make review CHANGE=improve-jev-route-request PASS=1 ROLE=A REVIEWER='codex gpt-6.1-sol#medium' PROMPT=<scratch> LOG=<scratch>` ran `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C <worktree> -` with the environment `PATH`, `HOME`, `USER`, `LANG`, `TERM`, and `TMPDIR`; the header reported model `gpt-6.1-sol`, effort `medium`, and sandbox `read-only`. Route gate: `route.json` was made for this tree and recommends effort `high`; the authorized `medium` applied (policy version 7). The worktree snapshot was `8b8e1ba849bec92ad0153625341f2e151cb16b5ed910e156659c81224504cb62` before and after. Findings: 0 Critical, 1 High, 1 Medium, 0 Low, both fixed in `e6e35714`. The reviewer noted that its sandbox blocked the 3 local HTTP server tests (`listen EPERM`); `make verify` runs them.
+
+- **H1 (redaction).** `SECRET_PATTERNS` matches only the header line of a PEM private key, and the run pattern only runs of 40 or more token characters, so a key with shorter base64 lines, for example 32 characters, kept its body in the content sent to TypeSafe. `redactedExcerpt` now first replaces the whole block (`PEM_BLOCK` in `scripts/review-route-jev.ts`), through its end line or, without one, to the end of the text, before the other patterns and the clip. New tests cover 32-character body lines, standard 64-character lines, and a truncated block without an end line. `SECRET_PATTERNS` is unchanged, so the findings validation that tests values against it behaves as before; design.md D3 says so.
+- **M1 (contract-drift).** The false criterion described only a pass 2 with Medium or Low findings and missed a clean pass 2 and a review ending after a Low-only pass, which governance "Conditional third pass" allows. By the coordinator's architect decision of 2026-10-28 (the earlier sentence was the coordinator's, not the owner's) it is now "No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation."; the true criterion is unchanged. The test and design.md D1 follow; D1 records that the wording changed after the experiment and that the re-evaluation gate after 30 to 40 changes (D7) covers any calibration shift. `route.json` stays as recorded, because later passes do not route.
