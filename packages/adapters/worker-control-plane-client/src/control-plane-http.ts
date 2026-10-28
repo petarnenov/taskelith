@@ -1,6 +1,6 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
-import { Agent, type Dispatcher } from 'undici';
 import { describeFailureCause, sanitizeFailureText } from './failure-cause.js';
+import { undiciFetch } from './undici-fetch.js';
 
 // Where the control-plane API is and how long one call may take.
 export interface ControlPlaneAddress {
@@ -18,9 +18,12 @@ export interface HttpInit {
   readonly headers: Record<string, string>;
   readonly body?: string | FormData;
   readonly signal: AbortSignal;
-  // Its TLS: the pinned CA, or none verified for the CA read.
-  readonly dispatcher: Dispatcher;
+  readonly trust: ServerTrust;
 }
+
+// A call's TLS trust: the pinned CA only, or no verification for the CA
+// read, whose answer the fingerprint check decides.
+export type ServerTrust = { readonly kind: 'pinned'; readonly ca: string } | { readonly kind: 'unverified' };
 
 // An address with the pinned installation CA in PEM, the only CA that a
 // call trusts (installation contract section 10).
@@ -30,14 +33,18 @@ export interface ControlPlaneEndpoint extends ControlPlaneAddress {
 
 // An address with the TLS that its calls use.
 export interface HttpTarget extends ControlPlaneAddress {
-  readonly dispatcher: Dispatcher;
+  readonly trust: ServerTrust;
 }
 
 // With a CA, Node's TLS trusts only it: neither the system roots nor
 // NODE_EXTRA_CA_CERTS, so a certificate they issued is refused.
 export function pinnedTarget(endpoint: ControlPlaneEndpoint): HttpTarget {
   const { installationCa, ...address } = endpoint;
-  return { ...address, dispatcher: new Agent({ connect: { ca: installationCa } }) };
+  return { ...address, trust: Object.freeze({ kind: 'pinned', ca: installationCa }) };
+}
+
+export function unverifiedTarget(address: ControlPlaneAddress): HttpTarget {
+  return { ...address, trust: Object.freeze({ kind: 'unverified' }) };
 }
 
 export interface HttpAnswer {
@@ -63,14 +70,11 @@ export function getJson(target: HttpTarget, path: string): Promise<Result<HttpAn
 
 type Exchange = Pick<HttpInit, 'method' | 'headers' | 'body'>;
 
-// Node's fetch takes an undici dispatcher, which its types do not declare.
-const nodeFetch: HttpFetch = (url, init) => fetch(url, init as RequestInit);
-
 async function send(target: HttpTarget, path: string, exchange: Exchange): Promise<Result<HttpAnswer>> {
-  const fetchWith = target.fetch ?? nodeFetch;
+  const fetchWith = target.fetch ?? undiciFetch;
   try {
     const response = await fetchWith(new URL(path, withTrailingSlash(target.baseUrl)), {
-      ...exchange, signal: AbortSignal.timeout(target.timeoutMilliseconds), dispatcher: target.dispatcher,
+      ...exchange, signal: AbortSignal.timeout(target.timeoutMilliseconds), trust: target.trust,
     });
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {

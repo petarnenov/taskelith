@@ -2,8 +2,7 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { checkHttpSchema } from '@taskelith/contracts';
 import type { InstallationCa, InstallationCaSource } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { Agent } from 'undici';
-import { getJson, statusFailure, type ControlPlaneAddress, type HttpTarget } from './control-plane-http.js';
+import { getJson, statusFailure, unverifiedTarget, type ControlPlaneAddress, type HttpTarget } from './control-plane-http.js';
 
 // `readInstallationCa` before the worker trusts any CA: its TLS verifies no
 // server, so the caller trusts the answer only by its fingerprint.
@@ -11,7 +10,7 @@ export class HttpInstallationCaSource implements InstallationCaSource {
   readonly #target: HttpTarget;
 
   constructor(address: ControlPlaneAddress) {
-    this.#target = { ...address, dispatcher: new Agent({ connect: { rejectUnauthorized: false } }) };
+    this.#target = unverifiedTarget(address);
   }
 
   async read(): Promise<Result<InstallationCa>> {
