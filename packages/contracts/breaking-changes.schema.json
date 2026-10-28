@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:contract-breaking-changes",
+  "title": "Taskelith contract breaking-change declarations",
+  "description": "packages/contracts/breaking-changes.json: per contract document and per version that declared breaking changes, the reason and the exact changes make contract-compatibility computes. Entries of earlier versions stay as history. make contract-compatibility also checks the paths, the versions, and the order.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["declarations"],
+  "properties": {
+    "declarations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/declaration" }
+    }
+  },
+  "$defs": {
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "version", "reason", "breakingChanges"],
+      "properties": {
+        "path": {
+          "description": "A contract document path of CONTRACT_DOCUMENTS in scripts/generate-contracts.ts.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "The info.version that declared the changes, a semantic version.",
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "description": "A short English reason for the breaking changes.",
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 500
+        },
+        "breakingChanges": {
+          "description": "The changes as the check reports them, sorted by UTF-16 code units and unique.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
