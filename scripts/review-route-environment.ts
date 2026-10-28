@@ -2,16 +2,17 @@ import { execFileSync } from 'node:child_process';
 import { posix } from 'node:path';
 import type { CommitInfo, EvaluationEnvironment } from './review-route-evaluation.ts';
 import { CHANGES_DIRECTORY, type ChangedFile, type RouteEnvironment } from './review-route-features.ts';
+import { CREDENTIAL_VARIABLE } from './review-route-jev.ts';
 
 // The git adapter of RouteEnvironment. Every method returns undefined
 // when git fails, so that a failure never passes for an empty result.
 
 const DEV_BRANCH = 'origin/dev';
 
-// Hook variables such as GIT_DIR are dropped, and the ceiling keeps git
-// from using a repository above the given root.
+// Hook variables such as GIT_DIR and the router credential are dropped;
+// the ceiling keeps git from using a repository above the given root.
 export function gitEnvironment(inherited: NodeJS.ProcessEnv, root: string): NodeJS.ProcessEnv {
-  const kept = Object.entries(inherited).filter(([name]) => !name.startsWith('GIT_'));
+  const kept = Object.entries(inherited).filter(([name]) => !name.startsWith('GIT_') && name !== CREDENTIAL_VARIABLE);
   return { ...Object.fromEntries(kept), GIT_CEILING_DIRECTORIES: posix.dirname(root) };
 }
 
