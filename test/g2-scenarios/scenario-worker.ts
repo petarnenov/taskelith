@@ -13,7 +13,9 @@ import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSetting
 import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
-import { SCENARIO_LAUNCH, cgroupHost, workerContainmentParent } from './scenario-launch.ts';
+import {
+  SCENARIO_LAUNCH, SCENARIO_LAUNCH_HOST, UNWRAPPED_RECOVERY, workerContainmentParent, workerLaunchHost, type RecoveryWrap,
+} from './scenario-launch.ts';
 import { within } from './waiting.ts';
 
 // The worker's own timers (heartbeats, broker retries, lost contact) and
@@ -53,6 +55,8 @@ export interface ScenarioWorkerOptions {
   readonly freeBytes?: () => number;
   // Awaited before each supervisor starts, after W4.
   readonly beforeSupervisorStart?: () => Promise<void>;
+  // Wraps each recovery of the worker's own supervisor; native launch only.
+  readonly aroundSupervisorRecover?: RecoveryWrap;
   // Offered slots; two unless a scenario says.
   readonly slots?: number;
   // Wraps the broker connection, for a test-side crash point.
@@ -60,7 +64,7 @@ export interface ScenarioWorkerOptions {
 }
 
 // The product's startWorker with scaled timers, seeded draws and IDs, and
-// the cgroup launch host under SCENARIO_LAUNCH, else the process-group one.
+// the worker's own launch host under a native launch, else the test one.
 export class ScenarioWorker {
   readonly logs = new InMemoryLogSink();
   readonly dataRoot: string;
@@ -125,7 +129,7 @@ export class ScenarioWorker {
     const { enrollmentToken, runMilliseconds } = this.#options;
     return {
       dataRoot: this.dataRoot, controlPlaneUrl: this.#site.apiUrl, natsUrl: this.#options.nats,
-      host: { platform: 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
+      host: { platform: SCENARIO_LAUNCH_HOST === 'macos-supervisor' ? 'darwin' : 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
       capacity: { slots: this.#options.slots ?? 2, cpuMillicores: 4_000, memoryMebibytes: 8_192, controls: [] },
       launch: this.#launch(runMilliseconds),
       ...(this.#containmentParent === undefined ? {} : { containmentParent: this.#containmentParent }),
@@ -144,14 +148,24 @@ export class ScenarioWorker {
 
   #launchHost(settings: WorkerSettings, executions: string): Result<LaunchHost> {
     const beforeStart = this.#options.beforeSupervisorStart ?? (async () => undefined);
-    if (SCENARIO_LAUNCH !== undefined) return cgroupHost(settings, executions, beforeStart);
+    if (SCENARIO_LAUNCH_HOST !== 'process-group') {
+      const aroundRecover = this.#options.aroundSupervisorRecover ?? UNWRAPPED_RECOVERY;
+      return workerLaunchHost(settings, executions, { beforeStart, aroundRecover });
+    }
     return ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), beforeStart));
   }
 
-  // The worker's own Linux containment check under the cgroup supervisor;
-  // a passing stub on the process-group host, which has no containment.
+  // The worker's own admission check under a native launch, as apps/worker
+  // composes it; a passing stub on the process-group host.
   #admissionCheck(): WorkerAdmissionCheck {
-    return SCENARIO_LAUNCH === undefined ? stubAdmissionCheck() : linuxContainmentCheck(this.#settings());
+    return SCENARIO_LAUNCH_HOST === 'process-group' ? stubAdmissionCheck() : linuxContainmentCheck(this.#settings());
+  }
+
+  // The real probe on macOS; the Linux test volume may be tmpfs, which the
+  // real probe refuses.
+  #volumeProbe(): Pick<WorkerDependencies, 'probe'> {
+    if (SCENARIO_LAUNCH_HOST === 'macos-supervisor') return {};
+    return { probe: () => ok({ platform: 'linux' as const, magic: EXT4_MAGIC }) };
   }
 
   #dependencies(): WorkerDependencies {
@@ -172,8 +186,7 @@ export class ScenarioWorker {
       },
       newJournalId: () => randomBytes(16).toString('hex'),
       clock: SYSTEM_CLOCK,
-      // The test volume may be tmpfs, which the real probe refuses.
-      probe: () => ok({ platform: 'linux' as const, magic: EXT4_MAGIC }),
+      ...this.#volumeProbe(),
       space: () => ok({ availableBytes: freeBytes(), totalBytes: 2048 * GIBIBYTE }),
       daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: idleUntil },
       pressurePollMilliseconds: LAUNCH_POLL_MILLISECONDS,

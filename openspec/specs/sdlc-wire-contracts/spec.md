@@ -53,7 +53,7 @@ The OpenAPI document SHALL define `createRun` (`POST /runs`), `submitTask` (`POS
 - **THEN** the request body is invalid
 
 ### Requirement: Generated types
-The build that `make verify` runs SHALL validate every AsyncAPI document with `@asyncapi/parser`, failing on errors and warnings. It SHALL generate the TypeScript types of all documents and one HTTP and one message schema bundle under `packages/contracts/src/generated/`, which is not committed, and SHALL fail when two OpenAPI documents define the same path.
+The build that `make verify` runs SHALL validate every AsyncAPI document with `@asyncapi/parser`, failing on errors and warnings. It SHALL generate the TypeScript types of all documents and one HTTP and one message schema bundle under `packages/contracts/src/generated/`, which is not committed, and SHALL fail when two OpenAPI documents define the same path or define one security scheme name differently.
 
 #### Scenario: Invalid AsyncAPI document
 - **WHEN** the parser reports an error or a warning for an AsyncAPI document
@@ -62,6 +62,10 @@ The build that `make verify` runs SHALL validate every AsyncAPI document with `@
 #### Scenario: Path defined twice
 - **WHEN** two OpenAPI documents define the same path
 - **THEN** generation fails and names the path
+
+#### Scenario: Security scheme with two meanings
+- **WHEN** two OpenAPI documents define different security schemes under one name
+- **THEN** generation fails and names the scheme and both documents
 
 ### Requirement: Generated validators
 The package SHALL export `checkHttpSchema` and `checkMessageSchema`, which validate an input against a named schema of the documents with ajv in strict mode (JSON Schema 2020-12 for HTTP, draft-07 for messages) and return the typed value or readable violations.
@@ -106,3 +110,10 @@ Because the AsyncAPI parser reserves the prefix `x-parser-` for its annotations,
 #### Scenario: Reserved prefix
 - **WHEN** the AsyncAPI document names an operation or a property `x-parser-user`
 - **THEN** the check fails and names the key
+
+### Requirement: Code head on the wire
+The SDLC AsyncAPI document SHALL define `CodeHeadIdentity` with a repository identifier and commit and tree names of 40 or 64 lowercase hexadecimal characters, rejecting other properties, and the gate and each of the three evidence kinds SHALL carry it as the optional property `codeHead`; each evidence kind SHALL carry the optional `gateId`, an identifier, and the optional `gateGeneration`, a generation.
+
+#### Scenario: Head-bound gate event
+- **WHEN** a head-bound gate decided by evidence at its code head is serialized as JSON in a decided event
+- **THEN** the event is valid, and the gate with an abbreviated commit name is not

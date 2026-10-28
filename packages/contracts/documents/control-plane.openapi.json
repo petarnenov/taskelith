@@ -1,0 +1,5044 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Taskelith control-plane access API",
+    "version": "0.1.0",
+    "description": "Login and sessions, projects with their members, defaults, auto-merge setting, and repository binding, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver (G3 item 9a). A browser authenticates with the session cookie and sends the CSRF token on every mutation; the CLI and the owner use the operator credential. No response carries a stored secret; only issuing or rotating an enrollment token reveals its secret, once."
+  },
+  "paths": {
+    "/session": {
+      "get": {
+        "operationId": "readSession",
+        "summary": "Read the caller's session, starting an anonymous one when none is presented",
+        "description": "Needs no credential. Without a valid session cookie it starts an anonymous server-side session, sets its cookie, and returns its CSRF token, which the login request needs.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "The session.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the response.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Present only when the request named no valid session: the cookie of the new anonymous session, with the attributes of the `browserSession` scheme.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionState"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "logIn",
+        "summary": "Log in with a login name and password",
+        "description": "Authenticated by the anonymous session cookie and its CSRF token. On success the session gets a new identifier and a new CSRF token, so a session identifier known before the login is worthless after it.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the response.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Set-Cookie": {
+                "description": "The session cookie `__Host-taskelith-session` with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`.",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticatedSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No anonymous session was presented (`unauthenticated`), or the login name and password do not match (`login-failed`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The CSRF token is missing or wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfRejection"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "logOut",
+        "summary": "End the caller's session",
+        "description": "Ends the server-side session and expires its cookie; a repeat after it ended answers 401.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The session ended.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "The session cookie `__Host-taskelith-session` with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`.",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The CSRF token is missing or wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfRejection"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "List the projects the caller holds a role on, or every project for an installation-owner",
+        "description": "Any authenticated principal.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of projects.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProject",
+        "summary": "Create a project with its defaults",
+        "description": "Requires `installation-owner`. The project has no members until an installation-owner assigns them; its auto-merge setting starts on.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The project was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}": {
+      "get": {
+        "operationId": "readProject",
+        "summary": "Read a project",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProject",
+        "summary": "Rename a project by compare-and-set on its revision",
+        "description": "Requires `project-maintainer` on the project.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The project was updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/members": {
+      "get": {
+        "operationId": "listProjectMembers",
+        "summary": "List a project's members and their roles",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of members.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMemberPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/members/{principalId}": {
+      "put": {
+        "operationId": "assignProjectMember",
+        "summary": "Give a principal its one role on a project, replacing any earlier role",
+        "description": "Requires `installation-owner`, who manages operator principals (trust model section 3). Names no revision: a reassignment replaces the earlier role, and of two concurrent assignments the one serialized last stays.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "principalId",
+            "in": "path",
+            "required": true,
+            "description": "The principal.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The member and its role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such project or principal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeProjectMember",
+        "summary": "Remove a principal's role on a project",
+        "description": "Requires `installation-owner`. Removing a principal that is not a member succeeds.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "principalId",
+            "in": "path",
+            "required": true,
+            "description": "The principal.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The principal has no role on the project."
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/defaults": {
+      "get": {
+        "operationId": "readProjectDefaults",
+        "summary": "Read a project's defaults",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The defaults.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDefaults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateProjectDefaults",
+        "summary": "Replace a project's defaults by compare-and-set on their revision",
+        "description": "Requires `project-maintainer` on the project. The defaults apply to tasks created afterwards; no existing run changes.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDefaultsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The defaults were replaced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDefaults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/auto-merge": {
+      "get": {
+        "operationId": "readAutoMergeSetting",
+        "summary": "Read a project's auto-merge setting",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The setting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoMergeSetting"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAutoMergeSetting",
+        "summary": "Turn auto-merge on or off by compare-and-set on its revision",
+        "description": "Requires `project-maintainer` on the project. The same transaction records or revokes the push standing rule (product ports sections 5 and 6.2).",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoMergeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The setting was changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoMergeSetting"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/repository": {
+      "get": {
+        "operationId": "readRepositoryBinding",
+        "summary": "Read a project's repository binding",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such project, or the project is not bound.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "bindRepository",
+        "summary": "Bind a project to one repository of an SCM integration, or change the binding by compare-and-set",
+        "description": "Requires `project-maintainer` on the project, who manages project integrations (trust model section 3). The control plane normalizes the remote URL's origin and compares it with the integration's allowed origin; it re-checks a bound remote URL against the integration's current origin every time it issues or re-delivers a per-run SCM credential.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryBindingUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such project or SCM integration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one, or it is absent while the project is bound.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The remote URL is not HTTPS, holds user information, a query, or a fragment, or lies outside the integration's allowed origin; or the integration's plugin does not declare the merge method, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/account-slots": {
+      "get": {
+        "operationId": "listProjectAccountSlots",
+        "summary": "List the active slots of a project's pools, without other projects' names or any credential",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner` (account pool contract section 2, rule 1).",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of slots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAccountSlotPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers": {
+      "get": {
+        "operationId": "listWorkers",
+        "summary": "Read the workers view",
+        "description": "Requires `installation-owner` (worker admission contract section 8). Every self-check detail is redacted again before it is returned.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The workers view.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A source of the view cannot be read; no partial data is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollment-tokens": {
+      "get": {
+        "operationId": "listEnrollmentTokens",
+        "summary": "List the pending enrollment tokens, without their secrets",
+        "description": "Requires `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "issueEnrollmentToken",
+        "summary": "Issue a single-use enrollment token and reveal its secret once",
+        "description": "Requires `installation-owner` (trust model section 4). The token is valid for the enrollment token TTL.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostConstraints"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The token and its secret, which no later response repeats.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the response.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollment-tokens/{tokenId}": {
+      "delete": {
+        "operationId": "revokeEnrollmentToken",
+        "summary": "Revoke a pending enrollment token",
+        "description": "Requires `installation-owner`. Serialized with a redemption on the token's row lock: exactly one of them wins, and a redemption treats a revoked token as `token-invalid`. Revoking a revoked or expired token succeeds, since neither can be redeemed.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "description": "The token.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The token can no longer be redeemed."
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The token was already used (reason `token-used`), so revoke the enrolled worker instead, or a rotation replaced it (reason `token-rotated`), and `details.replacementTokenId` names the new token, which stays redeemable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollment-tokens/{tokenId}/rotation": {
+      "post": {
+        "operationId": "rotateEnrollmentToken",
+        "summary": "Replace a pending enrollment token by a new one with the same constraints and reveal its secret once",
+        "description": "Requires `installation-owner`. One transaction revokes the old token and issues the new one, with a new TTL; it is serialized with a redemption of the old token on its row lock.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "description": "The token to replace.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The new token and its secret, which no later response repeats.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the response.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The token is used, expired, or revoked (reason `token-not-pending`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots": {
+      "get": {
+        "operationId": "listAccountSlots",
+        "summary": "List every account slot, without its credential",
+        "description": "Requires `installation-owner`.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of slots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlotPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addAccountSlot",
+        "summary": "Add a slot with its write-only credential",
+        "description": "Requires `installation-owner` (account pool contract section 2, rule 1). The credential is stored encrypted before the record is added.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountSlotAddition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The slot was added.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid, the mechanism has no admitted delivery for the harness, or the harness's slot limit is reached (account pool contract sections 3.1 and 7.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots/{slotId}": {
+      "patch": {
+        "operationId": "updateAccountSlot",
+        "summary": "Change a slot's allowed projects or concurrency limit by compare-and-set on its revision",
+        "description": "Requires `installation-owner`.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "The slot.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountSlotUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots/{slotId}/revocation": {
+      "post": {
+        "operationId": "revokeAccountSlot",
+        "summary": "Revoke an active slot and cancel the attempts whose reservations name it",
+        "description": "Requires `installation-owner` (account pool contract section 8).",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "The slot.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotTransition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one, or the slot is not active.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots/{slotId}/reinstatement": {
+      "post": {
+        "operationId": "reinstateAccountSlot",
+        "summary": "Return a revoked slot to its pools",
+        "description": "Requires `installation-owner` (account pool contract section 8).",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "The slot.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotTransition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one, or the slot is not revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots/{slotId}/credential": {
+      "put": {
+        "operationId": "rotateSlotCredential",
+        "summary": "Replace a revoked slot's write-only credential",
+        "description": "Requires `installation-owner`. Refused while the slot is active or a held reservation names it (account pool contract section 8.1).",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "The slot.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotCredentialRotation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The slot, healthy, on its new credential, as read after the rotation's final revision advance (account pool contract section 8.1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one, the slot is not revoked, or a held reservation names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account-slots/{slotId}/removal": {
+      "post": {
+        "operationId": "removeAccountSlot",
+        "summary": "Remove a slot and destroy every version of its credential",
+        "description": "Requires `installation-owner`. The record stays as a tombstone (account pool contract section 8).",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "The slot.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotTransition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The removed slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSlot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one, or the slot is already removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scm-integrations": {
+      "get": {
+        "operationId": "listScmIntegrations",
+        "summary": "List the SCM integrations, without their secrets",
+        "description": "Any authenticated principal: a project-maintainer chooses one to bind a repository.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Read the page after this identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of integrations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmIntegrationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createScmIntegration",
+        "summary": "Set up an SCM integration with its write-only secrets",
+        "description": "Requires `installation-owner`, who manages installation settings (trust model section 3). The plugin checks its settings and secrets. The control plane normalizes the allowed origin.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScmIntegrationCreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The integration was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmIntegration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No SCM plugin has this identifier.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scm-integrations/{integrationId}": {
+      "get": {
+        "operationId": "readScmIntegration",
+        "summary": "Read an SCM integration, without its secrets",
+        "description": "Any authenticated principal.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "description": "The integration.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The integration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmIntegration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateScmIntegration",
+        "summary": "Change an SCM integration by compare-and-set on its revision",
+        "description": "Requires `installation-owner`.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "description": "The integration.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScmIntegrationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The integration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmIntegration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the required role (`role-required`), or the CSRF token is missing or wrong (`csrf-token-invalid`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The expected revision is not the current one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scm-integrations/{integrationId}/webhooks": {
+      "post": {
+        "operationId": "receiveScmWebhook",
+        "summary": "Receive a webhook delivery of an SCM integration",
+        "description": "Needs no session, CSRF token, or operator credential: the integration's plugin verifies the signature over the body bytes exactly as received, with the headers in lower case, before any payload is trusted (source control contract section 6). Redeliveries are deduplicated by the verified delivery identifier.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "integrationId",
+            "in": "path",
+            "required": true,
+            "description": "The integration whose plugin verifies the delivery.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The delivery body, read as bytes and never parsed before verification.",
+          "content": {
+            "*/*": {}
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The delivery was verified and recorded, or it repeats a recorded delivery."
+          },
+          "400": {
+            "description": "The delivery verified, but its plugin cannot parse the payload (`invalid`); nothing is recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The integration is unknown, its identifier included, or the signature is missing or does not verify; the answer does not say which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookRejection"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body exceeds the receiver's limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Failure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "description": "A kernel failure: callers branch on the code, never on the message.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid",
+              "not-found",
+              "conflict",
+              "precondition-failed",
+              "forbidden",
+              "unavailable",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[\\x21-\\x7e]+$",
+        "description": "An opaque identifier of 1-128 printable ASCII characters without whitespace."
+      },
+      "Instant": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+        "description": "A UTC time in the form YYYY-MM-DDTHH:mm:ss.sssZ."
+      },
+      "DisplayText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "description": "Text shown to people and never interpreted, without control characters."
+      },
+      "Generation": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "A compare-and-set generation that starts at 1."
+      },
+      "Platform": {
+        "type": "string",
+        "description": "The worker operating system.",
+        "enum": [
+          "linux",
+          "darwin"
+        ]
+      },
+      "Architecture": {
+        "type": "string",
+        "enum": [
+          "x64",
+          "arm64"
+        ]
+      },
+      "SelfCheckResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check passed.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "passed"
+              },
+              "details": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check failed; each detail is a problem.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "failed"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DisplayText"
+                },
+                "minItems": 1,
+                "maxItems": 8
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check does not apply at this start; the one detail is the reason.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "not-applicable"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/NotApplicableReason"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "SelfCheckId": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+        "description": "A worker admission check: 1-64 lowercase letters, digits, and '-', starting with a letter."
+      },
+      "NotApplicableReason": {
+        "type": "string",
+        "description": "Why a check does not apply at this start, derived on the worker from its platform and launch settings.",
+        "enum": [
+          "platform-not-covered",
+          "no-launch-command"
+        ]
+      },
+      "AuthenticationFailure": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 401: `unauthenticated` when no valid session cookie or operator credential was presented, `login-failed` when a login name and password do not match, without saying which.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "unauthenticated",
+                  "login-failed"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AccessDenial": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 403: the authenticated principal lacks the role the operation requires.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "role-required"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CsrfRejection": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 403: a mutation authenticated by the session cookie carried no `X-CSRF-Token` header, or one that is not its session's token; nothing took effect.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "csrf-token-invalid"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WebhookRejection": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 401 of the webhook receiver: an unknown integration or a missing or failed signature, with one body that does not say which.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "signature-invalid"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CsrfToken": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "description": "The CSRF token of the caller's server-side session: 256 random bits in base64url. It authenticates nothing without the session cookie; the client sends it in the `X-CSRF-Token` header of every mutation."
+      },
+      "LoginName": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+        "description": "The name a principal logs in with: 1-64 lowercase letters, digits, '.', '_', or '-', starting with a letter or digit."
+      },
+      "Password": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "writeOnly": true,
+        "description": "A login password. Write-only: no response, log, or failure carries it; item 10 sets the password policy."
+      },
+      "LoginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "loginName",
+          "password"
+        ],
+        "properties": {
+          "loginName": {
+            "$ref": "#/components/schemas/LoginName"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Password"
+          }
+        }
+      },
+      "InstallationRole": {
+        "type": "string",
+        "enum": [
+          "installation-owner"
+        ],
+        "description": "An installation-wide role (trust model section 3)."
+      },
+      "ProjectRole": {
+        "type": "string",
+        "enum": [
+          "project-maintainer",
+          "project-operator",
+          "project-viewer"
+        ],
+        "description": "A per-project role (trust model section 3)."
+      },
+      "Principal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An operator principal of the Access module.",
+        "required": [
+          "principalId",
+          "loginName"
+        ],
+        "properties": {
+          "principalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "loginName": {
+            "$ref": "#/components/schemas/LoginName"
+          }
+        }
+      },
+      "AnonymousSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A server-side session before login; its CSRF token protects the login request.",
+        "required": [
+          "state",
+          "csrfToken"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "anonymous"
+          },
+          "csrfToken": {
+            "$ref": "#/components/schemas/CsrfToken"
+          }
+        }
+      },
+      "AuthenticatedSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A logged-in server-side session.",
+        "required": [
+          "state",
+          "csrfToken",
+          "principal",
+          "installationRoles",
+          "expiresAt"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "authenticated"
+          },
+          "csrfToken": {
+            "$ref": "#/components/schemas/CsrfToken"
+          },
+          "principal": {
+            "$ref": "#/components/schemas/Principal"
+          },
+          "installationRoles": {
+            "type": "array",
+            "maxItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/InstallationRole"
+            }
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "When the server-side session ends unless it is renewed; item 10 sets the lifetime."
+          }
+        }
+      },
+      "SessionState": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AnonymousSession"
+          },
+          {
+            "$ref": "#/components/schemas/AuthenticatedSession"
+          }
+        ]
+      },
+      "Project": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "name",
+          "createdAt",
+          "revision"
+        ],
+        "properties": {
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "name": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "ProjectPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Projects in identifier order.",
+        "required": [
+          "projects"
+        ],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "FrameworkSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginId"
+        ],
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The SDLC framework plugin that new runs of the project bind to; the version is fixed at binding."
+          }
+        }
+      },
+      "SpecApprover": {
+        "type": "string",
+        "enum": [
+          "delegated-reviewer",
+          "project-maintainer"
+        ],
+        "description": "Who approves a task's specification by default (product ports section 6.1)."
+      },
+      "NoEligibleSlotPolicy": {
+        "type": "string",
+        "enum": [
+          "wait",
+          "reject"
+        ],
+        "description": "What a new session does when its pool has no eligible slot (account pool contract section 4.5)."
+      },
+      "HarnessPreference": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "uniqueItems": true,
+        "items": {
+          "$ref": "#/components/schemas/Identifier"
+        },
+        "description": "Harness plugin identifiers in the project's order of preference: the first is the default implementer, and the rest are tried in order after a limit (account pool contract section 4.4)."
+      },
+      "ProjectDefaultsInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "framework",
+          "implementers",
+          "reviewer",
+          "specApprover",
+          "noEligibleSlot"
+        ],
+        "properties": {
+          "framework": {
+            "$ref": "#/components/schemas/FrameworkSelection"
+          },
+          "implementers": {
+            "$ref": "#/components/schemas/HarnessPreference"
+          },
+          "reviewer": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The default independent reviewer."
+          },
+          "specApprover": {
+            "$ref": "#/components/schemas/SpecApprover"
+          },
+          "noEligibleSlot": {
+            "$ref": "#/components/schemas/NoEligibleSlotPolicy"
+          }
+        }
+      },
+      "ProjectDefaults": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "framework",
+          "implementers",
+          "reviewer",
+          "specApprover",
+          "noEligibleSlot",
+          "revision"
+        ],
+        "properties": {
+          "framework": {
+            "$ref": "#/components/schemas/FrameworkSelection"
+          },
+          "implementers": {
+            "$ref": "#/components/schemas/HarnessPreference"
+          },
+          "reviewer": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "specApprover": {
+            "$ref": "#/components/schemas/SpecApprover"
+          },
+          "noEligibleSlot": {
+            "$ref": "#/components/schemas/NoEligibleSlotPolicy"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "changedBy": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The principal of the last change; absent until the first change after creation."
+          },
+          "changedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "ProjectDefaultsUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "defaults"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/ProjectDefaultsInput"
+          }
+        }
+      },
+      "ProjectCreation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "defaults"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/ProjectDefaultsInput"
+          }
+        }
+      },
+      "ProjectUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "name"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "name": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "ProjectMember": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "principal",
+          "role"
+        ],
+        "properties": {
+          "principal": {
+            "$ref": "#/components/schemas/Principal"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          }
+        }
+      },
+      "ProjectMemberPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Members in principal identifier order.",
+        "required": [
+          "members"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "MemberAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          }
+        }
+      },
+      "AutoMergeSetting": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The project's auto-merge setting (product ports section 6.2).",
+        "required": [
+          "enabled",
+          "revision"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "On by default."
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "changedBy": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The maintainer of the last change; absent until the first change."
+          },
+          "changedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "AutoMergeUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "enabled"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ExternalId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "description": "An identifier that an external service issues, compared exactly and never parsed (source control contract section 2, rule 3)."
+      },
+      "BranchName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^(?!-)(?!/)(?!\\.)(?!HEAD$)(?!.*(?:\\.\\.|@\\{|//|/\\.|\\.lock(?:/|$)|[/.]$))[^\\x00-\\x20\\x7f~^:?*\\[\\\\]+$",
+        "description": "A branch name that `git check-ref-format --branch` accepts, non-ASCII letters included: no control character, space, '~', '^', ':', '?', '*', '[', or '\\'; no '..', '@{', or '//'; no component that starts with '.' or ends with '.lock'; not starting with '-' or '/', not ending with '/' or '.', and not 'HEAD'. Git sets no length limit; at most 1024 characters only bound the request, as `ExternalId` does."
+      },
+      "RemoteUrl": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[^?#\\s]*)?$",
+        "description": "A bound remote URL: HTTPS with a host name and an optional port from 1 to 65535, without IPv6 literal, user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
+      },
+      "RemoteUrlCandidate": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://\\S+$",
+        "description": "A remote URL that `bindRepository` checks: an absolute URL with an authority and no white space. A URL that is not HTTPS, holds user information, a query, or a fragment, or whose normalized origin is not the integration's allowed origin is refused with 422 `BindingRefusal`."
+      },
+      "AllowedOrigin": {
+        "type": "string",
+        "maxLength": 300,
+        "pattern": "^[Hh][Tt][Tt][Pp][Ss]://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$",
+        "description": "The origin that the integration's remote URLs must have: the scheme https, a host name, and an optional port from 1 to 65535, with no IPv6 literal, user information, path, query, or fragment. Only an `installation-owner` sets it. The control plane stores it normalized as `NormalizedOrigin`."
+      },
+      "NormalizedOrigin": {
+        "type": "string",
+        "maxLength": 300,
+        "pattern": "^https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
+        "description": "An origin after normalization: scheme and host in lower case and the port explicit, 443 when none was given. Origins are compared only in this form."
+      },
+      "BindingRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `bindRepository`, checked in this order: the remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the integration's allowed origin; or the integration's plugin does not declare the merge method in its `SourceControlCapabilities`.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "remote-not-https",
+                  "remote-userinfo",
+                  "remote-query",
+                  "remote-fragment",
+                  "remote-origin-mismatch",
+                  "merge-method-undeclared"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MergeMethod": {
+        "type": "string",
+        "enum": [
+          "merge-commit",
+          "squash",
+          "rebase"
+        ]
+      },
+      "RepositoryBindingInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "integrationId",
+          "repository",
+          "remoteUrl",
+          "integrationBranch",
+          "mergeMethod"
+        ],
+        "properties": {
+          "integrationId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The SCM integration that serves the repository."
+          },
+          "repository": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "remoteUrl": {
+            "$ref": "#/components/schemas/RemoteUrlCandidate"
+          },
+          "integrationBranch": {
+            "$ref": "#/components/schemas/BranchName",
+            "description": "The target branch of the project's merges (product ports section 6.3) and the base branch of its workspaces (git workspace contract section 3)."
+          },
+          "mergeMethod": {
+            "$ref": "#/components/schemas/MergeMethod"
+          }
+        }
+      },
+      "RepositoryBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "integrationId",
+          "repository",
+          "remoteUrl",
+          "integrationBranch",
+          "mergeMethod",
+          "revision"
+        ],
+        "properties": {
+          "integrationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "remoteUrl": {
+            "$ref": "#/components/schemas/RemoteUrl"
+          },
+          "integrationBranch": {
+            "$ref": "#/components/schemas/BranchName"
+          },
+          "mergeMethod": {
+            "$ref": "#/components/schemas/MergeMethod"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "RepositoryBindingUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "binding"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "Required when the project is bound; absent for the first binding."
+          },
+          "binding": {
+            "$ref": "#/components/schemas/RepositoryBindingInput"
+          }
+        }
+      },
+      "WorkerHost": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "platform",
+          "architecture",
+          "hostname"
+        ],
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "architecture": {
+            "$ref": "#/components/schemas/Architecture"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "WorkerAdmissionState": {
+        "type": "string",
+        "enum": [
+          "awaiting-self-check",
+          "admitted",
+          "self-check-failed"
+        ]
+      },
+      "WorkerAdmissionEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workerId",
+          "host",
+          "enrolledAt",
+          "admission",
+          "results"
+        ],
+        "properties": {
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "host": {
+            "$ref": "#/components/schemas/WorkerHost"
+          },
+          "enrolledAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/WorkerAdmissionState"
+          },
+          "reportedAt": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "When the last report was consumed; absent before the first."
+          },
+          "results": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/SelfCheckResult"
+            },
+            "description": "The stored results, in check identifier order."
+          }
+        }
+      },
+      "WorkersView": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The workers view (worker admission contract section 8); it holds no credential or credential hash.",
+        "required": [
+          "asOf",
+          "workers"
+        ],
+        "properties": {
+          "asOf": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkerAdmissionEntry"
+            },
+            "description": "Every enrolled worker that is not revoked, in identifier order; never partial."
+          }
+        }
+      },
+      "HostConstraints": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "What an enrollment token binds the enrolling host to; an absent field accepts any host.",
+        "required": [],
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "architecture": {
+            "$ref": "#/components/schemas/Architecture"
+          },
+          "hostname": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "EnrollmentToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An unused enrollment token; never its secret.",
+        "required": [
+          "tokenId",
+          "issuedAt",
+          "expiresAt",
+          "constraints"
+        ],
+        "properties": {
+          "tokenId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/HostConstraints"
+          }
+        }
+      },
+      "EnrollmentTokenPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Pending tokens (unused, unexpired, and not revoked) in identifier order.",
+        "required": [
+          "tokens"
+        ],
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/EnrollmentToken"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "EnrollmentTokenSecret": {
+        "type": "string",
+        "pattern": "^tken_[A-Za-z0-9_-]{43}$",
+        "description": "The single-use enrollment token: `tken_` and 256 random bits in base64url (installation contract section 5)."
+      },
+      "IssuedEnrollmentToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The one response that reveals a token's secret; only its hash is stored, so it cannot be read again.",
+        "required": [
+          "token",
+          "secret"
+        ],
+        "properties": {
+          "token": {
+            "$ref": "#/components/schemas/EnrollmentToken"
+          },
+          "secret": {
+            "$ref": "#/components/schemas/EnrollmentTokenSecret"
+          }
+        }
+      },
+      "SlotState": {
+        "type": "string",
+        "enum": [
+          "active",
+          "revoked",
+          "removed"
+        ]
+      },
+      "SlotHealth": {
+        "type": "string",
+        "enum": [
+          "healthy",
+          "unhealthy"
+        ]
+      },
+      "SlotCooldown": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "endsAt",
+          "source"
+        ],
+        "properties": {
+          "endsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "reported-reset",
+              "default"
+            ]
+          }
+        }
+      },
+      "SlotUsage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fraction",
+          "windowEndsAt"
+        ],
+        "properties": {
+          "fraction": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "windowEndsAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "ConcurrencyLimit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2147483647,
+        "description": "Concurrent held reservations of a slot."
+      },
+      "AllowedProjects": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1000,
+        "uniqueItems": true,
+        "items": {
+          "$ref": "#/components/schemas/Identifier"
+        }
+      },
+      "SlotCredential": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "writeOnly": true,
+        "description": "A slot credential. Write-only: stored encrypted and revealed only to the run that reserved the slot, never in a response."
+      },
+      "AccountSlot": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A slot record without its credential (account pool contract section 3.1).",
+        "required": [
+          "slotId",
+          "harnessId",
+          "mechanismId",
+          "allowedProjects",
+          "concurrencyLimit",
+          "state",
+          "health",
+          "revision"
+        ],
+        "properties": {
+          "slotId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "harnessId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "mechanismId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "allowedProjects": {
+            "$ref": "#/components/schemas/AllowedProjects"
+          },
+          "concurrencyLimit": {
+            "$ref": "#/components/schemas/ConcurrencyLimit"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SlotState"
+          },
+          "health": {
+            "$ref": "#/components/schemas/SlotHealth"
+          },
+          "cooldown": {
+            "$ref": "#/components/schemas/SlotCooldown"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SlotUsage"
+          },
+          "lastReservedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "AccountSlotPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Slots in identifier order.",
+        "required": [
+          "slots"
+        ],
+        "properties": {
+          "slots": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/AccountSlot"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "ProjectAccountSlot": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An active slot of the project's pools, as a project member sees it.",
+        "required": [
+          "slotId",
+          "harnessId",
+          "mechanismId",
+          "sharedWithOtherProjects",
+          "concurrencyLimit",
+          "health"
+        ],
+        "properties": {
+          "slotId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "harnessId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "mechanismId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "sharedWithOtherProjects": {
+            "type": "boolean",
+            "description": "Whether the slot also serves other projects, which are never named."
+          },
+          "concurrencyLimit": {
+            "$ref": "#/components/schemas/ConcurrencyLimit"
+          },
+          "health": {
+            "$ref": "#/components/schemas/SlotHealth"
+          },
+          "cooldown": {
+            "$ref": "#/components/schemas/SlotCooldown"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SlotUsage"
+          }
+        }
+      },
+      "ProjectAccountSlotPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The project's pool slots in identifier order.",
+        "required": [
+          "slots"
+        ],
+        "properties": {
+          "slots": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ProjectAccountSlot"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "AccountSlotAddition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "harnessId",
+          "mechanismId",
+          "allowedProjects",
+          "credential"
+        ],
+        "properties": {
+          "harnessId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "mechanismId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "allowedProjects": {
+            "$ref": "#/components/schemas/AllowedProjects"
+          },
+          "concurrencyLimit": {
+            "$ref": "#/components/schemas/ConcurrencyLimit",
+            "description": "By default 4 (`DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY`)."
+          },
+          "credential": {
+            "$ref": "#/components/schemas/SlotCredential"
+          }
+        }
+      },
+      "AccountSlotUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "allowedProjects": {
+            "$ref": "#/components/schemas/AllowedProjects"
+          },
+          "concurrencyLimit": {
+            "$ref": "#/components/schemas/ConcurrencyLimit"
+          }
+        },
+        "minProperties": 2
+      },
+      "SlotTransition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "SlotCredentialRotation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "credential"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "credential": {
+            "$ref": "#/components/schemas/SlotCredential"
+          }
+        }
+      },
+      "SettingName": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+        "description": "A setting or secret name that the SCM plugin defines."
+      },
+      "ScmSettings": {
+        "type": "object",
+        "maxProperties": 32,
+        "propertyNames": {
+          "$ref": "#/components/schemas/SettingName"
+        },
+        "additionalProperties": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "description": "Non-secret settings that the SCM plugin defines and checks."
+      },
+      "ScmSecrets": {
+        "type": "object",
+        "maxProperties": 32,
+        "writeOnly": true,
+        "propertyNames": {
+          "$ref": "#/components/schemas/SettingName"
+        },
+        "additionalProperties": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "description": "Secret values that the SCM plugin defines, such as its signing key and webhook secret. Write-only: stored encrypted, never returned."
+      },
+      "ScmIntegration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "integrationId",
+          "pluginId",
+          "label",
+          "allowedOrigin",
+          "settings",
+          "secretNames",
+          "revision"
+        ],
+        "properties": {
+          "integrationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "pluginId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The SCM plugin."
+          },
+          "label": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/NormalizedOrigin"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ScmSettings"
+          },
+          "secretNames": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/SettingName"
+            },
+            "description": "The names of the stored secrets, never their values."
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "ScmIntegrationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Integrations in identifier order.",
+        "required": [
+          "integrations"
+        ],
+        "properties": {
+          "integrations": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ScmIntegration"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+          }
+        }
+      },
+      "ScmIntegrationCreation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginId",
+          "label",
+          "allowedOrigin",
+          "settings",
+          "secrets"
+        ],
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "label": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/AllowedOrigin"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ScmSettings"
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/ScmSecrets"
+          }
+        }
+      },
+      "ScmIntegrationUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "label": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "allowedOrigin": {
+            "$ref": "#/components/schemas/AllowedOrigin",
+            "description": "Replaces the allowed origin; the next credential issue for each binding re-checks it."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ScmSettings",
+            "description": "Replaces every setting."
+          },
+          "secrets": {
+            "$ref": "#/components/schemas/ScmSecrets",
+            "description": "Replaces the named secrets and keeps the others."
+          }
+        },
+        "minProperties": 2
+      }
+    },
+    "securitySchemes": {
+      "browserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-taskelith-session",
+        "description": "The server-side session identifier, 256 random bits, in a cookie set with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`. The `__Host-` prefix makes the browser refuse the cookie without `Secure` and `Path=/` or with `Domain`; `HttpOnly` and `SameSite=Strict` rest on the server alone. Never readable by scripts and never in a response body."
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "The CSRF token of the session that the cookie names, required with the cookie on every operation other than GET; compared in constant time."
+      },
+      "operatorToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The installation bootstrap credential."
+      }
+    }
+  }
+}

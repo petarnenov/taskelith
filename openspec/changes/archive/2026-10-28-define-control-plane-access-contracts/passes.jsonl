@@ -1,0 +1,3 @@
+{"change": "define-control-plane-access-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a181dd-9282-7cc3-9cac-62361e988c19", "counts": {"critical": 0, "high": 0, "medium": 6, "low": 3}}
+{"change":"define-control-plane-access-contracts","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-opus-5-5","variant":"high"},"session":"cb157568-8906-453c-8fd2-df2e21c2aae4","counts":{"critical":0,"high":1,"medium":5,"low":10}}
+{"change":"define-control-plane-access-contracts","pass":3,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a1821c-85ed-7cd3-b861-f080b504b255","counts":{"critical":0,"high":0,"medium":0,"low":1}}

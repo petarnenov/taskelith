@@ -72,7 +72,9 @@ function gate(stage: string, id = `${stage}-approval`): Gate {
 
 function passed(stage: string, id?: string): Gate {
   const pending = gate(stage, id);
-  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [REVISION], recordedAt: LATER, reference: 'review' });
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [REVISION], recordedAt: LATER, reference: 'review',
+    gateId: pending.id, gateGeneration: pending.generation,
+  });
   assert.ok(evidence.ok);
   const result = recordGateEvidence(pending, pending.generation, evidence.value, LATER);
   assert.ok(result.ok);

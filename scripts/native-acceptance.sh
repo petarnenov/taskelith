@@ -82,6 +82,18 @@ macos_entry() {
       $node_test --test-name-pattern="$cancellation_pattern" $cancellation_suites
     prove connectivity acceptance-connectivity-suites host-test-suite $node_test $connectivity_suites
   }
+  macos_scenario_proofs
+}
+
+# The G2 races, race g included, and partitions through the worker's own
+# macOS supervisor.
+macos_scenario_proofs() {
+  local target="$make_command --no-print-directory verify-macos-g2-scenarios"
+  # shellcheck disable=SC2086
+  prove cancellation acceptance-cancellation-races harness-composition \
+    $target FILES="$cancellation_scenarios"
+  # shellcheck disable=SC2086
+  prove connectivity acceptance-partition harness-composition $target FILES="$partition_scenarios"
 }
 
 # Reports a proof this host cannot run: ROW SCENARIO REASON; it never fails.

@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith SDLC messages",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Command and event envelopes of the SDLC module and its admission and gate events. Transport bindings, subjects, and servers are chosen with the broker in G2, so channel addresses are not yet fixed."
   },
   "defaultContentType": "application/json",
@@ -252,6 +252,32 @@
           }
         }
       },
+      "CodeObjectId": {
+        "type": "string",
+        "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+        "description": "A full lowercase hexadecimal object name of a commit or a tree."
+      },
+      "CodeHeadIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "commit",
+          "tree"
+        ],
+        "description": "The repository, commit, and tree that head-bound evidence and gates name; equal only when all three are equal.",
+        "properties": {
+          "repository": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/CodeObjectId"
+          },
+          "tree": {
+            "$ref": "#/components/schemas/CodeObjectId"
+          }
+        }
+      },
       "StructuralValidation": {
         "type": "object",
         "additionalProperties": false,
@@ -284,6 +310,15 @@
             "items": {
               "$ref": "#/components/schemas/ArtifactRevision"
             }
+          },
+          "codeHead": {
+            "$ref": "#/components/schemas/CodeHeadIdentity"
+          },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
           },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"
@@ -326,6 +361,15 @@
               "$ref": "#/components/schemas/ArtifactRevision"
             }
           },
+          "codeHead": {
+            "$ref": "#/components/schemas/CodeHeadIdentity"
+          },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"
           },
@@ -366,6 +410,15 @@
             "items": {
               "$ref": "#/components/schemas/ArtifactRevision"
             }
+          },
+          "codeHead": {
+            "$ref": "#/components/schemas/CodeHeadIdentity"
+          },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
           },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"
@@ -421,6 +474,9 @@
             "items": {
               "$ref": "#/components/schemas/ArtifactRevision"
             }
+          },
+          "codeHead": {
+            "$ref": "#/components/schemas/CodeHeadIdentity"
           },
           "state": {
             "type": "string",
@@ -816,7 +872,7 @@
           "metadata",
           "payload"
         ],
-        "description": "A new artifact revision outdated a gate.",
+        "description": "A new artifact revision or code head outdated a gate.",
         "properties": {
           "metadata": {
             "allOf": [
@@ -846,7 +902,7 @@
           "metadata",
           "payload"
         ],
-        "description": "A gate returned to pending for a new subject.",
+        "description": "A gate returned to pending for a new subject, and a head-bound gate for a subject at a code head.",
         "properties": {
           "metadata": {
             "allOf": [
@@ -929,7 +985,7 @@
       "gateStale": {
         "name": "sdlc.gate.stale",
         "title": "GateStale",
-        "summary": "A new artifact revision outdated a gate.",
+        "summary": "A new artifact revision or code head outdated a gate.",
         "payload": {
           "$ref": "#/components/schemas/GateStaleEvent"
         }
@@ -937,7 +993,7 @@
       "gateReopened": {
         "name": "sdlc.gate.reopened",
         "title": "GateReopened",
-        "summary": "A gate returned to pending for a new subject.",
+        "summary": "A gate returned to pending for a new subject, and a head-bound gate for a subject at a code head.",
         "payload": {
           "$ref": "#/components/schemas/GateReopenedEvent"
         }
