@@ -4,7 +4,7 @@ Date: 2026-10-28. The author's verification and `make verify` are recorded below
 
 ## Scope and source
 
-The coordinator's brief of 2026-10-28 (Niki) for the change `show-task-progress`, size S-M, commit type `chore`, from the owner's decision of 2026-10-28: a dynamic progress bar per worker task, from the brief to the landing, derived from records the protocol already creates, with no new worker step. Scope items 1 to 7 of the brief, as [design.md](design.md) D1 to D5 implement them. Out of scope: worker steps, review rules, and `scripts/integrate.sh`.
+The coordinator's brief of 2026-10-28 (Niki) for the change `show-task-progress`, size S-M, commit type `chore`, from the owner's decision of 2026-10-28: a dynamic progress bar per worker task, from the brief to the landing, derived from records the protocol already creates, with no new worker step. Scope items 1 to 7 of the brief, with the owner's follow-up requirement of the same day that the bars stack one task per line in `make progress` and the status line, as [design.md](design.md) D1 to D6 implement them. Out of scope: worker steps, review rules, and `scripts/integrate.sh`.
 
 - **Base revision:** `16667399` (`origin/dev`, merge of pull request #405).
 - **Checklist:** saved with the brief's invocation, `--at 1666739982106ec3e9663978b4f86cdd2fb72f1f --size S-M`.

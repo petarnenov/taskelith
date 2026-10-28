@@ -85,27 +85,32 @@ function stageLabel(task: TaskProgress): string {
   return `${task.stage}/${STAGES.length} ${task.stageName}${stopped}`;
 }
 
-function taskLines(host: string, task: TaskProgress, now: number): string[] {
+type Row = readonly string[];
+
+function taskRow(host: string, task: TaskProgress, now: number): Row {
   const elapsed = elapsedSeconds(task, now);
   const times = task.reached.map((stage) => `${stage.name} ${stage.at === undefined ? '-' : clock(stage.at)}`);
-  return [
-    `${host}  ${task.change}  ${progressBar(task.stage)}  ${stageLabel(task)}  ${elapsed === undefined ? '' : formatDuration(elapsed)}`.trimEnd(),
-    `  ${times.join('  ')}`,
-  ];
+  return [host, task.change, progressBar(task.stage), stageLabel(task), elapsed === undefined ? '' : formatDuration(elapsed), times.join(', ')];
+}
+
+function hostRows(host: HostReport, now: number): Row[] {
+  if (host.status !== 'ok') return [[host.name, `${host.status}${host.detail === undefined ? '' : ` (${host.detail})`}`]];
+  if (host.tasks.length === 0) return [[host.name, 'no open task']];
+  return host.tasks.map((task) => taskRow(host.name, task, now));
+}
+
+// One row per task, stacked, with every column but the last aligned.
+function alignRows(rows: readonly Row[]): string[] {
+  const widths: number[] = [];
+  for (const row of rows) row.slice(0, -1).forEach((cell, index) => { widths[index] = Math.max(widths[index] ?? 0, cell.length); });
+  return rows.map((row) => row.map((cell, index) => (index < row.length - 1 ? cell.padEnd(widths[index] ?? 0) : cell)).join('  ').trimEnd());
 }
 
 export function renderReport(report: ProgressReport): string {
   const now = report.generatedAtEpoch;
   const lines = [`Task progress at ${report.generatedAt} (stages: ${STAGES.map((name, index) => `${index + 1} ${name}`).join(', ')})`];
   for (const problem of report.problems) lines.push(`hosts file: ${problem}`);
-  for (const host of report.hosts) {
-    if (host.status !== 'ok') {
-      lines.push(`${host.name}  ${host.status}${host.detail === undefined ? '' : ` (${host.detail})`}`);
-      continue;
-    }
-    if (host.tasks.length === 0) lines.push(`${host.name}  no open task`);
-    for (const task of host.tasks) lines.push(...taskLines(host.name, task, now));
-  }
+  lines.push(...alignRows(report.hosts.flatMap((host) => hostRows(host, now))));
   return `${lines.join('\n')}\n`;
 }
 

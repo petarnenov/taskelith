@@ -69,13 +69,21 @@ belongs to a dead refresh and is taken over. `ARGS="--if-older-than 60"`
 skips a cache younger than 60 seconds, so a refresh that the status line
 started just after another one finished does no work.
 
-### D5 Status line
+### D5 Stacked rows
+
+`make progress` prints one row per task, stacked one under another with
+aligned columns (owner requirement, 2026-10-28): host, change, bar, stage,
+elapsed time, and the time of every reached stage.
+
+### D6 Status line
 
 The status line script lives outside the repository and is not committed.
-Inside a `taskelith` working directory it reads the cache, shows one bar
-of 11 cells per task below stage 11 with its host, change (20
-characters), stage name, and elapsed time, and appends "stale" when the
-cache is older than 180 seconds. When the cache is older than 60 seconds,
+Inside a `taskelith` working directory it reads the cache and, below its
+first line, stacks one row per task below stage 11, one under another
+(owner requirement, 2026-10-28): host, change (24 characters), a bar of
+11 cells, stage name, and elapsed time, in aligned columns; an
+unreachable host gets its own row. The first row ends with "stale" when
+the cache is older than 180 seconds. When the cache is older than 60 seconds,
 missing, or unreadable and no live lock exists, it starts `nohup make -s
 -C <clone> progress-refresh ARGS="--if-older-than 60"` in a new session
 and never waits for it. The clone is the nearest ancestor of the working

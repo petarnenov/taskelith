@@ -288,9 +288,30 @@ test('an unreachable host is reported and never fails the run', () => {
     write(fixture.config, { 'progress-hosts.json': JSON.stringify([{ name: 'Zaki', ssh: 'petar@hpz600', repo: '~/taskelith' }]) });
     const result = runCommand(['show'], options(fixture, () => ({ status: 255, stdout: '' })));
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /^local {2}demo-task {2}█░{10} {2}1\/11 brief {2}19h00m$/m);
-    assert.match(result.stdout, /^Zaki {2}unreachable$/m);
+    assert.match(result.stdout, /^local {2}demo-task {2}█░{10} {2}1\/11 brief {2}19h00m {2}brief \d\d-\d\d \d\d:00$/m);
+    assert.match(result.stdout, /^Zaki {3}unreachable$/m);
   });
+});
+
+function stagedTask(change: string, stage: number, startedAt: number): TaskProgress {
+  return {
+    branch: change, change, worktree: `/w/${change}`, stage, stageName: 'route', review: { passes: 0, stopped: false },
+    reached: [{ stage: 1, name: 'brief', at: startedAt }], startedAt,
+  };
+}
+
+test('the bars are stacked, one task per line, in aligned columns', () => {
+  const report = {
+    generatedAt: '', generatedAtEpoch: NOW, problems: [], hosts: [
+      { name: 'local', status: 'ok' as const, tasks: [stagedTask('short', 1, NOW - 60), stagedTask('a-much-longer-change', 4, NOW - HOUR)] },
+      { name: 'Zaki', status: 'ok' as const, tasks: [stagedTask('remote', 9, NOW - 2 * HOUR)] },
+    ],
+  };
+  const rows = renderReport(report).split('\n').slice(1, -1);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map((row) => row.split(/\s{2,}/).slice(0, 2)), [['local', 'short'], ['local', 'a-much-longer-change'], ['Zaki', 'remote']]);
+  assert.deepEqual(new Set(rows.map((row) => row.search(/[█░]/))).size, 1, 'every bar starts in the same column');
+  assert.deepEqual(rows.map((row) => row.match(/[█░]+/)?.[0]), [progressBar(1), progressBar(4), progressBar(9)]);
 });
 
 test('an invalid hosts file is reported and the local host still shows', () => {
