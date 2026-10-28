@@ -71,10 +71,10 @@ Author checks on `34d99f3a` and its working tree, without Docker:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `5c70c8b2de0360aece26f0243957add7f541998e`; tests 3066, pass 3042, fail 0, skipped 24; all files 99.38% lines, 92.68% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `cc0b3ef3bfd1f236425695f4c918d6a1e6461685`; tests 3134, pass 3119, fail 0, skipped 15; all files 99.40% lines, 92.68% branches, 99.07% functions.
 - `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s).`.
-- Spec diff against the merge base `24d259385778` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 69 file(s); every pass summary file is valid: 49 file(s); every route file is valid: 5 file(s).`.
+- Spec diff against the merge base `964f0b570013` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -151,6 +151,7 @@ Unreviewed fixes: pass 2 reported only Low findings, so under the governance rul
 - **Merge** `0fdc4cfd` of `origin/dev` `964f0b57`; merge base before it `24d25938`. One conflict, the `.PHONY` line of the `Makefile`: the resolution keeps both sides, this change's `contract-breaking-changes` and dev's `verify-macos-g2-scenarios`; both target bodies merged without conflict. `package-lock.json` is unchanged, so `make setup` did not run again.
 - **Reconciliation.** Between `24d25938` and `964f0b57`, dev changed `openspec/specs/sdlc-wire-contracts/spec.md` only in "Generated types": it adds "or define one security scheme name differently" and the scenario "Security scheme with two meanings". Dev did not change "Breaking-change check", the only requirement this delta modifies, and added no requirement on breaking-change declarations, so the delta stays unchanged. A trial archive in a scratch copy of the merged tree applied `+ 4, ~ 1`, kept dev's "Generated types" text, and `npm run openspec -- validate --all --strict` passed 71 of 71; the copy was deleted.
 - **Contracts.** Dev added `packages/contracts/documents/control-plane.openapi.json` (0.1.0) to `CONTRACT_DOCUMENTS` in `scripts/generate-contracts.ts`; the declarations reader takes its known paths from that list and the schema has no path enum, so no change was needed. The other four documents keep their versions. `make contract-breaking-changes` against the new merge base `964f0b57` and with `BASE=24d25938`: 0 breaking changes of each document (control-plane absent at `24d25938`), empty `declarations`; `make contract-compatibility`: `Contract documents have no undeclared breaking change.`
+- **`make verify`** on `dbd174b1` (tree `cc0b3ef3`), full profile, exit 0, stamp written: tests 3134, pass 3119, fail 0, skipped 15; coverage 99.40% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `964f0b57`. `make record` wrote "Generated checks" from its log.
 
 ## Remaining gates
 
