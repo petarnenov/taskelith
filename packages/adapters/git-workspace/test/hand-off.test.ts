@@ -16,7 +16,7 @@ import {
   type ReclaimHost,
 } from '@taskelith/git-workspace';
 import { WORKSPACE_LAYOUT, WORKSPACE_MODES, type PrepareWorkspace } from '@taskelith/workspace';
-import { CountingHost, createGitFixture, simulatedSeparateAccount, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
+import { CountingHost, createGitFixture, killedWorker, simulatedSeparateAccount, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
 
 const FIRST = id('AttemptId', 'attempt-1') as AttemptId;
 const SECOND = id('AttemptId', 'attempt-2') as AttemptId;
@@ -41,12 +41,12 @@ async function withFixture(run: (git: GitFixture) => Promise<void>, options: Git
 // A shell program that signals readiness and waits for `go` like the
 // fixed one, then runs `body`.
 const shellProgram = (body: string) => ({ executable: '/bin/sh', args: ['-c', `echo ready; read go; ${body}`, 'reclaim'] });
-const failingHost = () => new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(shellProgram('exit 1'))));
+const FAILING_PROGRAM = shellProgram('exit 1');
+const failingHost = () => new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(FAILING_PROGRAM)));
 
 // Runs until the file `hold` is gone; the process group outlives a crash.
-function holdingHost(hold: string) {
-  return new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(shellProgram(`while [ -e '${hold}' ]; do sleep 0.05; done`))));
-}
+const holdingProgram = (hold: string) => shellProgram(`while [ -e '${hold}' ]; do sleep 0.05; done`);
+const holdingHost = (hold: string) => new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(holdingProgram(hold))));
 
 const recordPath = (git: GitFixture, attemptId = FIRST) => join(git.checkout(attemptId), '..', WORKSPACE_LAYOUT.handOffRecord);
 const readRecord = async (git: GitFixture) => parseHandOffRecord(await readFile(recordPath(git), 'utf8'));
@@ -115,11 +115,12 @@ const HAND_OFF_CRASHES: readonly [GitWorkspaceCrashPoint, boolean][] = [
 const RECLAIM_CRASHES: readonly GitWorkspaceCrashPoint[] = [
   'WS7.before', 'WS7.after', 'WS8.before', 'WS8', 'WS8.after', 'WS9.before', 'WS9.after', 'WS10.before',
 ];
+const SEPARATE_ACCOUNT = { kind: 'separate-account' } as const;
 
 for (const [point, handedOff] of HAND_OFF_CRASHES) {
-  test(`a crash at ${point} of a hand-off leaves ${handedOff ? 'a handed-off' : 'a reclaimed'} workspace`, () => withFixture(async (git) => {
+  test(`a worker killed at ${point} of a hand-off leaves ${handedOff ? 'a handed-off' : 'a reclaimed'} workspace`, () => withFixture(async (git) => {
     value(await git.local.prepare(request(git)));
-    await assert.rejects(git.reopen(new CrashPoints({ point, occurrence: 1, action: 'throw' })).handOff(FIRST), { name: 'SimulatedCrash' });
+    await killedWorker(git, { operation: 'handOff', attemptId: FIRST, point, host: SEPARATE_ACCOUNT });
     const restarted = git.reopen();
     assert.deepEqual(await restarted.handedOff(), handedOff ? [FIRST] : []);
     value(await restarted.handOff(FIRST));
@@ -128,10 +129,10 @@ for (const [point, handedOff] of HAND_OFF_CRASHES) {
 }
 
 for (const point of RECLAIM_CRASHES) {
-  test(`a crash at ${point} of a reclaim keeps the workspace handed off until a reclaim completes`, () => withFixture(async (git) => {
+  test(`a worker killed at ${point} of a reclaim keeps the workspace handed off until a reclaim completes`, () => withFixture(async (git) => {
     value(await git.local.prepare(request(git)));
     value(await git.local.handOff(FIRST));
-    await assert.rejects(git.reopen(new CrashPoints({ point, occurrence: 1, action: 'throw' })).reclaim(FIRST), { name: 'SimulatedCrash' });
+    await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point, host: SEPARATE_ACCOUNT });
     const restarted = git.reopen();
     assert.deepEqual(await restarted.handedOff(), [FIRST]);
     assert.equal(failed(await restarted.inspect(FIRST)).details.reason, 'workspace-handed-off');
@@ -142,17 +143,36 @@ for (const point of RECLAIM_CRASHES) {
   }, { reclaimHost: simulatedSeparateAccount() }));
 }
 
-test('a crash after the record is written leaves no started program behind', () => {
-  const host = new CountingHost(simulatedSeparateAccount());
-  return withFixture(async (git) => {
-    value(await git.local.prepare(request(git)));
-    value(await git.local.handOff(FIRST));
-    await assert.rejects(git.reopen(new CrashPoints({ point: 'WS7.after', occurrence: 1, action: 'throw' })).reclaim(FIRST), { name: 'SimulatedCrash' });
-    const [containment] = host.launched;
-    assert.deepEqual((await readRecord(git))?.containment, containment);
-    assert.equal(await waitUntilEmpty(host, containment!), true);
-  }, { reclaimHost: host });
-});
+test('a worker killed at WS10.after of a reclaim leaves a reclaimed workspace', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.handOff(FIRST));
+  await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point: 'WS10.after', host: SEPARATE_ACCOUNT });
+  const restarted = git.reopen();
+  assert.deepEqual(await restarted.handedOff(), []);
+  assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutReclaimed);
+  value(await restarted.inspect(FIRST));
+  value(await restarted.reclaim(FIRST));
+  value(await restarted.handOff(FIRST));
+}, { reclaimHost: simulatedSeparateAccount() }));
+
+// Without `abandon`, which SIGKILL skips: the closed input ends the program.
+for (const point of ['WS7.after', 'WS8.before'] as const) {
+  test(`a worker killed at ${point} leaves its waiting program to exit without a change`, () => {
+    const host = new ProcessGroupReclaimHost();
+    return withFixture(async (git) => {
+      value(await git.local.prepare(request(git)));
+      value(await git.local.handOff(FIRST));
+      const agentFile = join(git.checkout(FIRST), 'agent-file');
+      await writeFile(agentFile, 'text');
+      await chmod(agentFile, 0o600);
+      await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point, host: SEPARATE_ACCOUNT });
+      const containment = (await readRecord(git))?.containment;
+      assert.equal(containment?.kind, 'process-group');
+      assert.equal(await waitUntilEmpty(host, containment!), true);
+      assert.equal(await modeOf(agentFile), 0o600, 'the program changed nothing');
+    }, { reclaimHost: simulatedSeparateAccount(host) });
+  });
+}
 
 async function waitUntilEmpty(host: ReclaimHost, containment: ReclaimContainment): Promise<boolean> {
   for (let polls = 0; polls < 100; polls += 1) {
@@ -180,20 +200,21 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
   }, { reclaimHost: host });
 });
 
-test('a crash after a failed program and before its record runs the program once more', () => {
+test('a worker killed after a failed program and before its record runs the program once more', () => {
   const host = failingHost();
   return withFixture(async (git) => {
     value(await git.local.prepare(request(git)));
     value(await git.local.handOff(FIRST));
-    await assert.rejects(git.reopen(new CrashPoints({ point: 'WS8.after', occurrence: 1, action: 'throw' })).reclaim(FIRST), { name: 'SimulatedCrash' });
+    const crashed = { kind: 'separate-account', program: FAILING_PROGRAM } as const;
+    await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point: 'WS8.after', host: crashed });
     assert.equal((await readRecord(git))?.reclaimFailed, false);
     assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
     assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
-    assert.equal(host.launched.length, 2);
+    assert.equal(host.launched.length, 1, 'the restarted worker ran it once');
   }, { reclaimHost: host });
 });
 
-test('a reclaim program that survives a crash holds the workspace until it is proven gone', async () => {
+test('a reclaim program that survives a killed worker holds the workspace until it is proven gone', async () => {
   const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
   const hold = join(holdDirectory, 'hold');
   await writeFile(hold, '');
@@ -202,7 +223,9 @@ test('a reclaim program that survives a crash holds the workspace until it is pr
     value(await git.local.prepare(request(git)));
     value(await git.local.prepare(request(git, SECOND)));
     value(await git.local.handOff(FIRST));
-    await assert.rejects(git.reopen(new CrashPoints({ point: 'WS8', occurrence: 1, action: 'throw' })).reclaim(FIRST), { name: 'SimulatedCrash' });
+    await killedWorker(git, { operation: 'reclaim', attemptId: FIRST, point: 'WS8', host: { kind: 'separate-account', program: holdingProgram(hold) } });
+    const survivor = (await readRecord(git))?.containment;
+    assert.equal(await host.populated(survivor!), true, 'the program got go and runs');
     const restarted = git.reopen();
     const started = Date.now();
     assert.equal(failed(await restarted.reclaim(FIRST)).code, 'unavailable');
@@ -211,11 +234,11 @@ test('a reclaim program that survives a crash holds the workspace until it is pr
     assert.equal(failed(await restarted.inspect(FIRST)).details.reason, 'workspace-handed-off');
     assert.equal(failed(await restarted.handOff(SECOND)).details.reason, 'other-workspace-handed-off');
     assert.deepEqual(await restarted.handedOff(), [FIRST]);
-    assert.equal(host.launched.length, 1, 'no program runs while one survives');
-    assert.equal(await host.populated(host.launched[0]!), true, 'the surviving program is never killed');
+    assert.equal(host.launched.length, 0, 'no program runs while one survives');
+    assert.equal(await host.populated(survivor!), true, 'the surviving program is never killed');
     await rm(hold);
     value(await restarted.reclaim(FIRST));
-    assert.equal(host.launched.length, 2);
+    assert.equal(host.launched.length, 1);
     assert.deepEqual(await restarted.handedOff(), []);
   }, { reclaimHost: host, reclaimProofBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });

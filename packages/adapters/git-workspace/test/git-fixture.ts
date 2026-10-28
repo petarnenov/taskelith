@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
+import { crashEnvironment } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import {
   GitWorkspaces,
@@ -13,9 +14,12 @@ import {
   sha256IdentifierDigest,
   verifyGitClient,
   type CrashPointHook,
+  type ExecutionAccount,
   type GitTimer,
+  type GitWorkspaceCrashPoint,
   type ReclaimContainment,
   type ReclaimHost,
+  type ReclaimProgram,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
 import {
@@ -370,6 +374,37 @@ export function credential(credentialId: string, repositories: string[], permiss
 }
 
 const RECLAIM_LAUNCHER = fileURLToPath(new URL('./reclaim-launcher.ts', import.meta.url));
+const CRASH_WORKER = fileURLToPath(new URL('./crash-worker.ts', import.meta.url));
+
+// The reclaim host a crash worker composes, as JSON can carry it.
+export type CrashWorkerHost =
+  | { readonly kind: 'separate-account'; readonly program?: ReclaimProgram }
+  | { readonly kind: 'linux'; readonly containmentParent: string; readonly executionAccount: ExecutionAccount; readonly program?: ReclaimProgram };
+
+export interface CrashedOperation {
+  readonly operation: 'handOff' | 'reclaim';
+  readonly attemptId: AttemptId;
+  readonly point: GitWorkspaceCrashPoint;
+  readonly host: CrashWorkerHost;
+}
+
+export interface CrashWorkerConfig extends CrashedOperation {
+  readonly dataRoot: string;
+  readonly pin: GitClientPin;
+}
+
+// Runs the operation in a worker process of its own over the fixture's
+// data root and waits until SIGKILL ends it at the point; nothing cleans up.
+export async function killedWorker(git: GitFixture, operation: CrashedOperation): Promise<void> {
+  const config: CrashWorkerConfig = { ...operation, dataRoot: git.dataRoot, pin: git.fixture.gitClient };
+  const worker = spawn(process.execPath, ['--experimental-strip-types', CRASH_WORKER, JSON.stringify(config)], {
+    env: { ...process.env, ...crashEnvironment(operation.point) }, stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  worker.stderr.on('data', (chunk: Buffer) => (stderr += String(chunk)));
+  const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((done) => worker.once('close', (...ended) => done(ended)));
+  if (signal !== 'SIGKILL') throw new Error(`the worker did not die at ${operation.point}: exit ${code}, ${stderr}`);
+}
 
 // Launches the fixed reclaim program from a process of its own, which then
 // dies by SIGKILL before `go`; returns the program's containment.

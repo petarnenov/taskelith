@@ -8,7 +8,7 @@
 - [x] 2.1 Hand-off record, hand-off chain, `handOff`, `reclaim`, and `handedOff` with the crash points `WS5` to `WS10`
 - [x] 2.2 The reclaim program, `LinuxReclaimHost`, and `ProcessGroupReclaimHost`
 - [x] 2.3 Un-skip the 6 deferred conformance cases, retire the skip list, and run the hand-off cases with an execution account
-- [x] 2.4 Adapter tests of the hand-off, the reclaim, every crash point, and the failed, surviving, and abandoned program, and their failing run against the 16c adapter
+- [x] 2.4 Adapter tests of the hand-off, the reclaim, and the failed, surviving, and abandoned program, and their failing run against the 16c adapter; on the host each of the 13 crash points `WS5.before` to `WS10.after` kills a worker process by SIGKILL and a new worker recovers, and in the worker image the `WS8` crash of a surviving program does (review pass 1, finding 2)
 - [x] 2.5 The pinned Git in the worker image, `make verify-linux-git-workspace`, and the Linux tests, run in the worker image
 - [x] 2.6 Rewrite `.git/config` with mode `0660`
 - [x] 2.7 The reclaim program's window for `go` and the `abandoned` outcome, with their fail-before tests (coordinator decision Q3)
