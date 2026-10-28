@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3 and their fixes. The review is complete after three passes; the fix of pass 3 is unreviewed.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3 and their fixes, the merge of `dev` with its reconciliation review, and the checks after the merge. The review is complete after three passes; the fix of pass 3 is unreviewed.
 
 ## Scope and source
 
@@ -8,6 +8,7 @@ G3 sub-change 26b of item 26 `secure-remote-connectivity` ([G3 plan](/docs/g3-pl
 
 - **Base revision:** `1c73e1a7` (`origin/dev`, merge of pull request #381).
 - **Revision verified:** `79c77a63`, with this record's final edit uncommitted. After the first handoff (`54607dbc`): the authorization before the CA read (`8e53aa2f`), `undici` behind the `HttpFetch` port (`0ebd089d`), the missing pin's message and the https-only message test (`0111a251`), the contract and register wording (`79c77a63`). Before it: the contract, spec deltas, and docs (`bf25c6d5`); the control plane (`4a99002f`); the worker (`b94e3ef7`); the worker tests and harnesses (`cf94d761`, `782a437e`); the installation (`7d1fdf22`); the control-plane integration tests (`ddc79b74`); the dependency register and journal layout (`2dbd4c43`); the run-time key of the keyed CA test (`f75d4678`).
+- **Merge of `dev`:** `73838584` merges `origin/dev` `f3a53f17` into `22acc117`; see "Merge of dev and reconciliation".
 - **Scope:** the CA fingerprint in the enrollment bundle; the public `readInstallationCa` operation; the CA check before the token; the pinned CA for the worker's HTTPS calls and its broker TLS; `worker/installation-ca.pem`; `https:` only; the outbound-only test over TLS; the local installation and the harnesses that start workers.
 - **Out of scope:** mutual TLS, rotation delivery (26c), CA rollover (G6), the private-network bind and the acceptance worker (26d).
 
@@ -136,6 +137,29 @@ Fails before the fix: `http-enrollment-client.test.ts`, "every certificate refus
 
 After pass 3, `make verify` on `e7d1b3a2` with these records: exit 0; `ℹ tests 2553`, `ℹ suites 45`, `ℹ pass 2546`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.52 | 99.06`; "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The one new test accounts for 2553 against 2552.
 
+## Merge of dev and reconciliation
+
+- **Merge.** `73838584` merges `origin/dev` `f3a53f17` into the branch at `22acc117` with a merge commit; merge base `1c73e1a7`, the change's base. `dev` had gained `adopt-process-performance-recommendations` (#383) and `assert-worker-image-admission`.
+- **Conflict.** One textual conflict, in `apps/control-plane/src/index.ts`: both exports are kept, `printableWorkerAdmission` from `dev` and `type EnrollmentBundle` from this change.
+- **Auto-merged overlapping files.** `scripts/installation.sh`, `test/installation-composition.test.ts`, `apps/control-plane/src/admin/administration.ts`, `apps/control-plane/src/admin/admin-main.ts`, and `docs/contracts/installation-and-enrollment.md` changed on both sides and merged without conflict.
+- **Reconciled deltas.** `git diff 1c73e1a7 f3a53f17 -- openspec/specs`: `dev` added requirements to `installation-enrollment` and `local-installation` and modified "Opt-in bring-up check" of `local-installation`, besides specs of its own process change. No delta of this change modifies, removes, or renames a requirement that `dev` changed: in `local-installation` it modifies only "TLS of the local installation" and adds one requirement. No delta needed reconciliation.
+- **Review.** Ordered by the coordinator outside the three-pass count, reviewer A reviewed the merge, recorded as artifact `merge-reconciliation`, pass 1, in `passes.jsonl` and `findings.jsonl`.
+  - Reviewer: A, Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, run by the coordinator.
+  - Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+  - Session: `01a18136-568a-7ba2-a1ed-49935b2cd1f3`, as the coordinator relayed it.
+  - Revision reviewed: `73838584` against both parents, `22acc117` and `f3a53f17`.
+  - Snapshot: the hashes before and after the pass differed only by the untracked file `.installation-sentinel-39401`. `scripts/installation.sh` (`sentinel=".installation-sentinel-$$"`, about line 321) created it at 08:34 during the session's own concurrent `make verify-installation`, whose process 39401 was `bash scripts/installation.sh verify`; the reviewer did not write it. Recomputed without that file, the after hash equals the before hash `7278d8d80ab70af36c3ca696db69857ced18749af044f07cd2abe36bba950f43`.
+  - Scope of the reviewer's checks: it ran 25 targeted tests, `npm run verify:comments`, and `bash -n`, and confirmed both exports kept, the CA fingerprint in the bundle, the removed worker trust volume, the admission wait before and after the restart, the redacted workers view, and that the five spec deltas apply over `dev`'s specs and keep `dev`'s edits.
+  - Result: Critical 0, High 0, Medium 1, Low 0; no finding in the merge.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Medium | Pre-existing, outside the merge: `openAdministration` in `apps/control-plane/src/admin/admin-main.ts:97` reads the broker TLS (`readBrokerTls`) before the operator credential is checked, so with a missing CA and no `TASKELITH_NATS_CA` the administrative entry can answer `precondition-failed` where `forbidden` is due | **Deferred** (`deferred`) to a coordinator follow-up task: the same line is at the base `1c73e1a7`, so it predates this change |
+
+- **Checks after the merge**, on the tree of `73838584`:
+  - `make verify`: passed, profile full, tree `1b80fc14ae9bf54edfec4550963f30928e7b0337`, stamp written; 45 suites, tests 2673, pass 2666, fail 0, cancelled 0, skipped 7; all files 99.35% lines, 92.53% branches, 99.06% functions; 60 findings files and 40 pass summary files valid; `validate --all --strict` 70 passed, 0 failed. "Generated checks" below is `make record` of its log.
+  - `make verify-installation` (Docker): exit 0, "built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed"; its log holds no `PRIVATE KEY` line and no `tken_` token.
+
 ## Limitations
 
 - The Linux scenario runs and the native scenario depend on hosts this change could not exercise here: `make verify-linux-g2-scenarios` and `make verify-linux-crash-windows` need a Linux host network that Docker Desktop on macOS does not give (26a's record shows `ECONNREFUSED`), and `make scenario-native-worker-lifecycle` needs free host disk above the worker's floor. These files changed for them and ran only where `make verify` runs them: `test/g2-scenarios/scenario-worker.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, `test/g2-scenarios/scenario-installation.ts` (a comment), `scripts/installation-scenarios.sh` (the native worker's start), and `apps/control-plane/test/harness-composition.ts` and `apps/control-plane/test/fixtures/worker-composition.ts`, whose Linux paths only the Linux suites run.
@@ -146,5 +170,6 @@ After pass 3, `make verify` on `e7d1b3a2` with these records: exit 0; `ℹ tests
 ## Remaining gates
 
 - Archive of the change on this branch (worker step 7).
-- The Linux suites and the native scenario rerun on the final head by Liki, as the coordinator schedules them.
+- Liki's Linux reruns on the archive head, as the coordinator schedules them: `make verify-linux-g2-scenarios`, `make verify-linux-crash-windows`, `make scenario-native-worker-lifecycle`, and `make installation-smoke`.
+- The deferred pre-existing Medium of the merge reconciliation review (`admin-main.ts:97`), as a coordinator follow-up task.
 - Integration into dev by the coordinator (single pull request).
