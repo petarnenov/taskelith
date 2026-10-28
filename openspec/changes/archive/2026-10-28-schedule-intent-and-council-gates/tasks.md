@@ -13,4 +13,4 @@
 - [x] 3.1 `npm run openspec -- validate schedule-intent-and-council-gates --strict` and `npm run openspec -- validate --all --strict`
 - [x] 3.2 `make findings ARGS="route --change schedule-intent-and-council-gates"`, `make verify`, `make record`, and `make record-check`
 - [x] 3.3 Independent review and its records
-- [ ] 3.4 Archive
+- [x] 3.4 Archive

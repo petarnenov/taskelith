@@ -67,15 +67,26 @@ Checks after the fixes:
 - An archive in a scratch copy of the tree: `+ 3` requirements in `delivery-planning`, then `Totals: 71 passed, 0 failed (71 items)`.
 - `make verify` on `d9dac478` (tree `1f38bfd9`), docs-only profile: passed, exit 0; `make record` wrote the generated part below from its log.
 
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the schedule intent and council gates change`, the working tree the checks ran on (tree `81ae2659` before this record was written into it):
+
+- `npm run openspec -- archive schedule-intent-and-council-gates --yes`: `delivery-planning` + 3 added; archived as `2026-10-28-schedule-intent-and-council-gates`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-schedule-intent-and-council-gates`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `10fc3bbe`): only this change's intended edits, `delivery-planning/spec.md` 37 insertions, the three added requirements and their seven scenarios.
+- Moved change's files: `findings.jsonl` 11 lines, `passes.jsonl` 2 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s). `npm run verify:links`: passed.
+- `make verify` on tree `81ae2659`: passed, profile docs-only; no test totals, because the profile skips the test suites; 0 breaking changes of each contract document against the merge base `10fc3bbe`. `make record CHANGE=schedule-intent-and-council-gates LOG=<log>` wrote "Generated checks" from its log, and `make record-check` matched it. The archive commit differs from that tree only in this record.
+
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile docs-only, tree `1f38bfd974d4560472e8a7d61dd11e8e7dc17abc`; no test totals in the log; no coverage totals.
-- `npm run openspec -- validate schedule-intent-and-council-gates --strict`: passed, `Change 'schedule-intent-and-council-gates' is valid`.
+- `make verify`: passed, profile docs-only, tree `81ae26599be5063529b67908343d6efe6f67feb7`; no test totals in the log; no coverage totals.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 71 passed, 0 failed (71 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
-- Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: `openspec/specs/delivery-planning/spec.md | 37 ++++++++++++++++++++++++++++++++`, `1 file changed, 37 insertions(+)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -86,5 +97,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Archive of the change on the branch.
 - Integration into dev by the coordinator (single pull request).
