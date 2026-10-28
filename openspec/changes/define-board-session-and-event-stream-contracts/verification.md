@@ -61,7 +61,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `dc27ddab7337bc1066c66efc4258045a761e7b3a`; tests 3123, pass 3061, fail 0, skipped 62; all files 99.41% lines, 92.79% branches, 98.99% functions.
+- `make verify`: passed, profile full, tree `047947162839c312483c416f906d515f789e1034`; tests 3125, pass 3063, fail 0, skipped 62; all files 99.41% lines, 92.78% branches, 98.99% functions.
 - `npm run openspec -- validate define-board-session-and-event-stream-contracts --strict`: passed, `Change 'define-board-session-and-event-stream-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).`.
 - Spec diff against the merge base `ff7ab7a0622d` with `origin/dev`: no change under `openspec/specs`.
@@ -70,6 +70,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18257-d0b5-7471-beb5-90c86b982182` | 0 | 3 | 3 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `49ff1147-fb38-49ae-b4cb-e855abfb579f` | 0 | 0 | 4 | 12 |
 <!-- make record: end -->
 
 ## Independent review
@@ -132,6 +133,7 @@ The fixes change contracts, not only records, and pass 1 found High findings, so
 | `tsc --noEmit --strict` over the changed test files and `control-plane-document.ts` with `allowImportingTsExtensions` | Exit 0 |
 | Spec delta requirement body lengths, in characters, changed and new ones | Operation roles 479, Native request responses on the wire 476, Inbox items about native requests 223, One bound for an input answer 180, Event streams 438, Slow stream consumers 224, Stream end on a role change 377, Event payloads and session text 333, Idempotency before redaction 417; Needs you items answered once by their source 462, Acknowledgement of an uncertain delivery 433; none over 479 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+| `make verify` on `b8764178`, clean tree (log `bsec-verify-3.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `04794716`, stamp written: tests 3125, pass 3063, fail 0, skipped 62; all files 99.41% lines, 92.78% branches, 98.99% functions; generated part below |
 
 The pass 2 fixes change the document, a port type, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
