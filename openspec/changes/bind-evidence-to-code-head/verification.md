@@ -1,12 +1,12 @@
 # Verification
 
-Record before the review passes, which are pending (Remaining gates).
+Record of the change through review pass 1 and its fix; later passes are pending (Remaining gates).
 
 ## Scope and source
 
 - **Source:** the coordinator's brief (Niki, 2026-10-28) for G3 item 17 (`docs/g3-plan.md`, row 17). Size M.
 - **Base revision:** `a899d5d2` (`origin/dev`, merge of pull request #382).
-- **Merge of dev:** `origin/dev` `f3a53f17` (merge of pull request #383, `adopt-process-performance-recommendations`) merged into the branch with merge commit `1206034c`, without conflicts.
+- **Merge of dev:** `origin/dev` `f3a53f17` (merge of pull request #383, `adopt-process-performance-recommendations`) merged into the branch with merge commit `1206034c`, without conflicts. After review pass 1, `origin/dev` `9196804b` (pull requests #384, `fix-make-argument-expansion`; #385, `route-reviewers-by-change-complexity`, governance policy version 7; #386, `define-session-turn-model`) merged with merge commit `08677e80`, without conflicts.
 - **Revision verified:** `56a63b3b`: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`).
 - **Scope:** head-bound SDLC gates and gate evidence; the code head owned by the SDLC module and refined by the workspace module (design decision 1); staleness for a new code head; no restored approval after an artifact edit; rejection of evidence from another head; the SDLC AsyncAPI document 0.4.0; a head-bound gate in the gate repository suite; the Git workspace contract sections 5 and 14.
 - **Out of scope:** the review and verification stages (item 21), auto-merge (item 23), the SCM plugin (item 20), the UI, and the evidence record's `codeRevision` and the merge queue's `CodeHead` (design decision 1 (i), chosen by the coordinator: the follow-up change `align-code-head-names`).
@@ -58,7 +58,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-None yet; the coordinator assigns the passes.
+Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: assigned by the coordinator.
+
+### Review pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, session `01a18144-6e30-7fd3-b8e6-1788fa5b1766`; run by the coordinator.
+- **Revision reviewed:** `cf335fe8`, before the merge of dev `9196804b`.
+- **Invocation:** `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, as in the protocol's "Reviewer invocations".
+- **Model confirmation:** model, reasoning effort, read-only sandbox, and session ID in the output header, as the coordinator reported them.
+- **Snapshot:** before and after the pass identical, as the coordinator reported it.
+- **Result:** Critical 0, High 1, Medium 0, Low 0, as in `passes.jsonl` line 1 and `findings.jsonl` line 1. File lines are those of `cf335fe8`.
+- **H1, contract-drift** (`packages/modules/sdlc/src/domain/gate.ts:105`, `reopenGateAtCodeHead` at line 148): a superseded approval could pass a head-bound gate again. Approved at head A, made stale by an artifact edit, reopened with the original subject at A, the gate accepted the old approval and passed; the same held after a new head B made it stale and the gate was reopened at A. The check compared only the subject and the code head, so it could not tell evidence of an earlier decision from new evidence, against `sdlc-gates` "Approval not restored by an artifact edit"; `code-head-binding.test.ts:86` covered only a reopening at a third commit. Resolution: see "Pass 1 fixes".
 
 ## Limitations
 
