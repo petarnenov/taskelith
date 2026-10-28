@@ -158,15 +158,19 @@ The fixture SHALL report each Git process at its start with its arguments, proce
 - **THEN** no finding contains that value, its base64 part, or the secret
 
 ### Requirement: Failed reclaim program
-A reclaim program that exits with a failure or is killed SHALL leave the workspace handed off, SHALL make `reclaim` fail with `precondition-failed` and reason `reclaim-failed`, also on a later call and after a restart, and SHALL be reported for reconciliation; the worker SHALL never run the program again for that hand-off.
+A reclaim program that exits with a failure or is killed SHALL leave the workspace handed off, SHALL make `reclaim` fail with `precondition-failed` and reason `reclaim-failed`, and SHALL be reported for reconciliation; once that outcome is durable in the hand-off record, `reclaim` SHALL fail so on every later call and after a restart, and the worker SHALL never run the program again for that hand-off. A crash before that write MAY run the program once more.
 
 #### Scenario: Killed reclaim program
 - **WHEN** the reclaim program is killed
 - **THEN** `reclaim` fails with reason `reclaim-failed` and the workspace stays handed off
 
-#### Scenario: Reclaim after a failed program and a restart
-- **WHEN** the worker restarts after its reclaim program failed and `reclaim` is called again
+#### Scenario: Reclaim after a recorded failure and a restart
+- **WHEN** the worker restarts after the hand-off record durably holds the program's failure, and `reclaim` is called again
 - **THEN** it fails with reason `reclaim-failed` without starting the program
+
+#### Scenario: Crash before the failure is recorded
+- **WHEN** the worker is killed after its reclaim program failed and before the failure is durable in the hand-off record, and `reclaim` is called after the restart
+- **THEN** the worker proves the containment empty and runs the program again, and a failure again is recorded and fails with reason `reclaim-failed`
 
 ### Requirement: Reclaim program on one account
 Where the execution and worker identities are the same account, as on macOS, the reclaim program SHALL run as the worker identity, without a containment, in a process group of its own, which the hand-off record SHALL name before the program starts and which the worker SHALL prove empty, as it does a containment, before it reclaims again, runs Git on the workspace, or hands it off.
