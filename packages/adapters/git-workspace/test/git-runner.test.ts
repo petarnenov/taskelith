@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { failed, value } from '@taskelith/testing';
-import { GitRunner, scrubCredential, verifyGitClient } from '@taskelith/git-workspace';
+import { GitRunner, scrubCredential, verifyGitClient, type VerifiedGitClient } from '@taskelith/git-workspace';
 import {
   GIT_NEUTRAL_DIRECTORY,
   REDACTED_VALUE,
@@ -159,4 +159,10 @@ test('the Git client gate accepts only the pinned version string', async () => {
   }
   const system = (await runProcess(SYSTEM_GIT, ['--version'])).stdout.toString('utf8').trim();
   assert.equal(pin.version, system);
+});
+
+test('only the gate makes a verified client, also for the type checker', () => {
+  // @ts-expect-error A client with a runner alone has not passed the gate.
+  const unverified: VerifiedGitClient = { runner: new GitRunner(pin) };
+  assert.equal(unverified.runner.pin, pin);
 });

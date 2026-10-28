@@ -48,7 +48,7 @@ const CONTRACT_VALUES = [
     WORKSPACE_FAILURE_REASONS,
     ['head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
       'workspace-handed-off', 'other-workspace-handed-off', 'reclaim-failed', 'unsafe-checkout', 'gitlink-in-tree',
-      'insecure-remote', 'git-client-mismatch', 'non-utf8-path'],
+      'insecure-remote', 'git-client-mismatch', 'non-utf8-path', 'unsafe-tree-path'],
   ],
 ] as const;
 
@@ -261,16 +261,17 @@ test('the built Git environment holds the contract settings, the header last', (
   assert.deepEqual(GIT_COMMAND_SCOPE_SETTINGS, [
     ['core.hooksPath', '/dev/null'], ['credential.helper', ''], ['diff.ignoreSubmodules', 'all'],
     ['status.submoduleSummary', 'false'], ['submodule.recurse', 'false'], ['fetch.recurseSubmodules', 'false'],
-    ['push.recurseSubmodules', 'no'], ['core.untrackedCache', 'false'],
+    ['push.recurseSubmodules', 'no'], ['core.untrackedCache', 'false'], ['core.commitGraph', 'false'],
+    ['core.multiPackIndex', 'false'],
   ]);
   const local = gitConfigEnvironment();
-  assert.equal(local.GIT_CONFIG_COUNT, '8');
+  assert.equal(local.GIT_CONFIG_COUNT, '10');
   assert.equal(local.GIT_CONFIG_KEY_0, 'core.hooksPath');
   assert.equal(local.GIT_CONFIG_VALUE_1, '');
-  assert.equal(local.GIT_CONFIG_KEY_8, undefined);
+  assert.equal(local.GIT_CONFIG_KEY_10, undefined);
   const remote = gitConfigEnvironment('Basic dG9rZW4=');
-  assert.equal(remote.GIT_CONFIG_COUNT, '9');
-  assert.deepEqual([remote.GIT_CONFIG_KEY_8, remote.GIT_CONFIG_VALUE_8], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
+  assert.equal(remote.GIT_CONFIG_COUNT, '11');
+  assert.deepEqual([remote.GIT_CONFIG_KEY_10, remote.GIT_CONFIG_VALUE_10], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
   assert.equal(remote.GIT_TERMINAL_PROMPT, '0');
 });
 

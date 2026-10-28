@@ -403,3 +403,127 @@ test('a failing revision lookup fails a prepare instead of reading as a missing 
   assert.equal(failed(await failing.prepare(request(git))).code, 'internal');
   assert.deepEqual([await failing.list(), await fixture.leftovers()], [[], []]);
 }));
+
+// A Git file's trailing SHA-1 renewed after an agent edited its bytes.
+function withTrailingChecksum(bytes: Buffer): Buffer {
+  const body = bytes.subarray(0, -20);
+  return Buffer.concat([body, createHash('sha1').update(body).digest()]);
+}
+
+const indexPath = (git: GitFixture) => join(git.checkout(FIRST), '.git', 'index');
+
+async function expectHiddenWorkFound(git: GitFixture, nativeStatus: readonly string[]): Promise<void> {
+  assert.equal(await native(git, ['status', '--porcelain', '--untracked-files=all', ...nativeStatus]), '', 'the forgery hides the work from Git');
+  assert.deepEqual(value(await git.local.inspect(FIRST)).dirtyReasons, ['modified']);
+  for (const result of [await git.local.snapshot(FIRST), await git.local.remove(FIRST)] as Result<unknown>[]) {
+    assert.equal(failed(result).details.reason, 'workspace-dirty');
+  }
+}
+
+test('a gitlink added only to the index never hides a directory of work', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  await git.fixture.writeFile(FIRST, 'work/notes.txt', 'unpublished\n');
+  await native(git, ['update-index', '--add', '--cacheinfo', `160000,${await native(git, ['rev-parse', 'HEAD'])},work`]);
+  await expectHiddenWorkFound(git, ['--ignore-submodules=all']);
+}));
+
+// The stat fields of a version 2 index entry, which precede its object
+// name, flags, and path (62 bytes for SHA-1).
+const STAT_FIELDS = ['ctime', 'ctimeNanoseconds', 'mtime', 'mtimeNanoseconds', 'dev', 'ino', 'mode', 'uid', 'gid', 'size'] as const;
+
+test('forged stat data in the index never hides a modified tracked file', () => withFixture(async (git) => {
+  const { fixture } = git;
+  value(await git.local.prepare(request(git)));
+  const path = join(git.checkout(FIRST), fixture.trackedPath);
+  await writeFile(path, 'BASE\n');
+  const past = new Date(Date.now() - 60_000);
+  await utimes(path, past, past);
+  const stat = await lstat(path, { bigint: true });
+  const values = [stat.ctimeNs / 1_000_000_000n, stat.ctimeNs % 1_000_000_000n, stat.mtimeNs / 1_000_000_000n, stat.mtimeNs % 1_000_000_000n, stat.dev, stat.ino, stat.mode, stat.uid, stat.gid, stat.size];
+  const index = await readFile(indexPath(git));
+  const entry = index.indexOf(`${fixture.trackedPath}\0`) - 62;
+  STAT_FIELDS.forEach((_, at) => index.writeUInt32BE(Number(values[at]! & 0xffffffffn), entry + 4 * at));
+  await writeFile(indexPath(git), withTrailingChecksum(index));
+  await expectHiddenWorkFound(git, []);
+}));
+
+// Splices one index's TREE extension, its cache tree, into another.
+function withCacheTree(index: Buffer, from: Buffer): Buffer {
+  const extension = (bytes: Buffer) => {
+    const at = bytes.indexOf('TREE');
+    return [at, at + 8 + bytes.readUInt32BE(at + 4)] as const;
+  };
+  const [start, end] = extension(index);
+  const [fromStart, fromEnd] = extension(from);
+  return withTrailingChecksum(Buffer.concat([index.subarray(0, start), from.subarray(fromStart, fromEnd), index.subarray(end)]));
+}
+
+test('a forged cache tree never hides a staged change', () => withFixture(async (git) => {
+  const { fixture } = git;
+  value(await git.local.prepare(request(git)));
+  await fixture.writeFile(FIRST, 'src/file.txt', 'one\n');
+  await fixture.commitAll(FIRST, 'src');
+  const committed = await readFile(indexPath(git));
+  await fixture.writeFile(FIRST, 'src/file.txt', 'staged\n');
+  await fixture.stage(FIRST, 'src/file.txt');
+  await writeFile(indexPath(git), withCacheTree(await readFile(indexPath(git)), committed));
+  await expectHiddenWorkFound(git, []);
+}));
+
+// A pack whose index names `object` for the bytes of `forged`, with the
+// loose object gone, so that Git reads the forged bytes for that name.
+async function forgeObject(git: GitFixture, object: string, forged: string): Promise<void> {
+  const pack = join(git.checkout(FIRST), '.git', 'objects', 'pack');
+  await native(git, ['pack-objects', '-q', join(pack, 'pack')], `${await native(git, ['hash-object', '-w', '--stdin'], forged)}\n`);
+  const idx = join(pack, (await readdir(pack)).find((name) => name.endsWith('.idx'))!);
+  await chmod(idx, 0o644);
+  const bytes = await readFile(idx);
+  const name = Buffer.from(object, 'hex');
+  name.copy(bytes, 8 + 256 * 4);
+  for (let first = 0; first < 256; first += 1) bytes.writeUInt32BE(first >= name[0]! ? 1 : 0, 8 + 4 * first);
+  await writeFile(idx, withTrailingChecksum(bytes));
+  await rm(join(git.checkout(FIRST), '.git', 'objects', object.slice(0, 2), object.slice(2)));
+}
+
+test('an object whose bytes do not hash to its name fails the snapshot', () => withFixture(async (git) => {
+  const { fixture, local } = git;
+  value(await local.prepare(request(git)));
+  await fixture.writeFile(FIRST, 'real.txt', 'real\n');
+  await fixture.commitAll(FIRST, 'real');
+  const blob = await native(git, ['rev-parse', 'HEAD:real.txt']);
+  await forgeObject(git, blob, 'forged\n');
+  assert.equal(await native(git, ['cat-file', '-p', blob]), 'forged', 'Git reads the forged bytes');
+  assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, []);
+  assert.equal(failed(await local.snapshot(FIRST)).code, 'internal');
+}));
+
+test('a forged commit-graph never changes what status reads', () => withFixture(async (git) => {
+  const { fixture, local } = git;
+  value(await local.prepare(request(git)));
+  await fixture.writeFile(FIRST, 'real.txt', 'real\n');
+  await fixture.commitAll(FIRST, 'real');
+  const head = await fixture.nativeHead(FIRST);
+  const before = value(await local.snapshot(FIRST)).content;
+  await native(git, ['commit-graph', 'write', '--reachable']);
+  const graph = join(git.checkout(FIRST), '.git', 'objects', 'info', 'commit-graph');
+  await chmod(graph, 0o644);
+  const bytes = await readFile(graph);
+  Buffer.from(await native(git, ['rev-parse', 'HEAD~1^{tree}']), 'hex').copy(bytes, bytes.indexOf(Buffer.from(head.tree, 'hex')));
+  await writeFile(graph, withTrailingChecksum(bytes));
+  assert.notEqual(await native(git, ['status', '--porcelain']), '', 'Git reads the forged root tree');
+  const status = value(await local.inspect(FIRST));
+  assert.deepEqual([status.head.commit, status.head.tree, status.dirtyReasons], [head.commit, head.tree, []]);
+  assert.ok(sameBytes(value(await local.snapshot(FIRST)).content, before));
+}));
+
+test('a file system fault at the rename into place leaves no staging entry', () => withFixture(async (git) => {
+  const faulty = git.reopen(faultAt('WS2.before'));
+  assert.equal(failed(await faulty.prepare(request(git))).code, 'unavailable');
+  assert.deepEqual([await faulty.list(), await git.fixture.leftovers()], [[], []]);
+}));
+
+test('a fault after the rename into place fails the prepare and keeps the ready workspace', () => withFixture(async (git) => {
+  assert.equal(failed(await git.reopen(faultAt('WS2.after')).prepare(request(git))).code, 'unavailable');
+  assert.deepEqual([await git.local.list(), await git.fixture.leftovers()], [[FIRST], []]);
+  value(await git.local.inspect(FIRST));
+}));

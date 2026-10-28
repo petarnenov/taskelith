@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { failed, value } from '@taskelith/testing';
 import { checkCheckoutSafety, repositoryConfigText, writeRepositoryConfig } from '@taskelith/git-workspace';
-import { nativeGit } from './git-fixture.ts';
+import { nativeGit, runProcess } from './git-fixture.ts';
 
 let scratch: string;
 let checkout: string;
@@ -33,7 +33,7 @@ test('a fresh clone with links in its working tree is safe', async () => {
   value(await checkCheckoutSafety(checkout, owner));
 });
 
-const UNSAFE: readonly [string, () => Promise<unknown>][] = [
+const UNSAFE: readonly (readonly [string, () => Promise<unknown>])[] = [
   ['a link in .git', () => symlink(join(scratch, 'record'), join(checkout, '.git', 'refs', 'linked'))],
   ['a missing .git', () => rm(join(checkout, '.git'), { recursive: true })],
   ['a gitfile at the top', async () => {
@@ -48,6 +48,13 @@ const UNSAFE: readonly [string, () => Promise<unknown>][] = [
   ['alternates', () => writeFile(join(checkout, '.git', 'objects', 'info', 'alternates'), '/elsewhere/objects\n')],
   ['a nested gitfile', () => writeFile(join(checkout, 'src', 'deep', '.git'), `gitdir: ${scratch}\n`)],
   ['a nested Git directory', () => mkdir(join(checkout, 'src', '.git'))],
+  ['a nested Git directory in another case', () => mkdir(join(checkout, 'src', '.GIT'))],
+  ...(process.platform === 'darwin' ? [] : [['a second Git directory in another case at the top', () => mkdir(join(checkout, '.Git'))] as const]),
+  ['a FIFO as .git/index', async () => {
+    await rm(join(checkout, '.git', 'index'), { force: true });
+    await runProcess('/usr/bin/mkfifo', [join(checkout, '.git', 'index')]);
+  }],
+  ['a FIFO deeper in .git', () => runProcess('/usr/bin/mkfifo', [join(checkout, '.git', 'refs', 'fifo')])],
 ];
 
 for (const [label, plant] of UNSAFE) {
@@ -72,6 +79,15 @@ test('directories whose names are not UTF-8 are walked by their bytes', NOT_UTF8
   await mkdir(refs);
   await symlink(join(scratch, 'record'), named(refs, '/linked'));
   await expectUnsafe('a link in .git below a name that is not UTF-8');
+});
+
+test('a file system error other than absence rejects instead of reading as unsafe', { skip: process.getuid?.() === 0 ? 'root ignores the mode' : false }, async () => {
+  await chmod(scratch, 0o600);
+  try {
+    await assert.rejects(checkCheckoutSafety(checkout, owner), { code: 'EACCES' });
+  } finally {
+    await chmod(scratch, 0o700);
+  }
 });
 
 test('a checkout of another owner, or one that is a link, is unsafe', async () => {
