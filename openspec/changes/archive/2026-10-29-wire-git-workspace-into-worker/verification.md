@@ -219,3 +219,15 @@ No reviewer pass ran on the return: the coordinator checked the unreviewed fixes
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
 - Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the wire git workspace into worker change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive wire-git-workspace-into-worker --yes` on `b246cc5a`, with every task of `tasks.md` ticked, and only this section was added afterward. This is the second archive, after the return; the first, `fde11070`, was reverted in `666525ea`.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-29-wire-git-workspace-into-worker` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `8b18c540`) | Only this change's deltas: `git-workspace-port` and `worker-runtime`, 162 insertions and 35 deletions, 11 requirements added, 3 modified, and 2 removed |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present (15 findings, 3 passes); `Every findings file is valid: 84 file(s); every pass summary file is valid: 64 file(s); every route file is valid: 20 file(s).` |
+| `make verify` on the archive working tree (log `16e-verify-rearchive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3618 tests, 3571 passed, 0 failed, 47 skipped; all files 99.37% lines, 92.78% branches, 98.76% functions |
