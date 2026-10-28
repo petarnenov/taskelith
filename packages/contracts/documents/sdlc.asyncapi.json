@@ -314,6 +314,9 @@
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
           },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"
           },
@@ -358,6 +361,9 @@
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
           },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"
           },
@@ -401,6 +407,9 @@
           },
           "codeHead": {
             "$ref": "#/components/schemas/CodeHeadIdentity"
+          },
+          "gateGeneration": {
+            "$ref": "#/components/schemas/Generation"
           },
           "recordedAt": {
             "$ref": "#/components/schemas/Instant"

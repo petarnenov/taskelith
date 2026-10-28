@@ -15,7 +15,8 @@
 
 - [x] 3.1 `npm run openspec -- validate bind-evidence-to-code-head --strict` and the checks without Docker
 - [x] 3.2 `make verify`, `make record`, and `make record-check`
-- [ ] 3.3 Review passes and their records
+- [x] 3.3 Review pass 1 record and the fix of its finding H1: head-bound evidence names the gate generation it was recorded for (design decision 8)
+- [ ] 3.4 Review passes 2 (and 3 if needed) and their records
 
 ## Follow-ups
 

@@ -4,6 +4,7 @@ import { codeHeadField, type CodeHeadIdentity } from './code-head.js';
 import { fieldFailure } from './field-failure.js';
 import { isDisplayText } from './display-text.js';
 import { parseGateSubject, type GateSubject } from './gate-subject.js';
+import type { Generation } from './generation.js';
 
 // Evidence from a validator, a reviewer, or a platform record (architecture
 // section 6); a gate accepts only its kind, so no validator replaces review.
@@ -31,11 +32,13 @@ export type EvidenceReference = string & { readonly [evidenceReferenceBrand]: tr
 
 export const MAX_EVIDENCE_REFERENCE_LENGTH = 1024;
 
-// `codeHead` is the head that head-bound evidence was recorded at.
+// Head-bound evidence names the head it was recorded at and the generation
+// of the pending gate it was recorded for, so it decides only that cycle.
 interface EvidenceFacts<Verdict extends string> {
   readonly verdict: Verdict;
   readonly subject: GateSubject;
   readonly codeHead?: CodeHeadIdentity;
+  readonly gateGeneration?: Generation;
   readonly recordedAt: Instant;
   readonly reference: EvidenceReference;
 }
@@ -61,6 +64,7 @@ interface EvidenceFactsInput {
   readonly verdict: string;
   readonly subject: readonly ArtifactRevision[];
   readonly codeHead?: CodeHeadIdentity;
+  readonly gateGeneration?: Generation;
   readonly recordedAt: Instant;
   readonly reference: string;
 }
@@ -143,6 +147,7 @@ function parseEvidenceFacts<Verdict extends string>(
     verdict: input.verdict as Verdict,
     subject: subject.value,
     ...codeHeadField(input.codeHead),
+    ...(input.gateGeneration === undefined ? {} : { gateGeneration: input.gateGeneration }),
     recordedAt: input.recordedAt,
     reference: reference.value,
   });

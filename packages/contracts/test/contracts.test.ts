@@ -97,8 +97,8 @@ function headBoundGate() {
   const gate = { id: 'code-review', stageId: 'review', requiredEvidence: 'semantic-approval', subject: [SPEC], codeHead: CODE_HEAD };
   const pending = openGate(gate, AT);
   assert.ok(pending.ok);
-  const approval = { approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], codeHead: CODE_HEAD, recordedAt: AT, reference: 'review-2' };
-  const evidence = parseSemanticApproval(approval);
+  const atHead = { subject: [SPEC], codeHead: CODE_HEAD, gateGeneration: pending.value.generation };
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', ...atHead, recordedAt: AT, reference: 'review-2' });
   assert.ok(evidence.ok);
   const result = recordGateEvidence(pending.value, pending.value.generation, evidence.value, AT);
   assert.ok(result.ok);
@@ -161,6 +161,7 @@ test('a head-bound gate and its evidence carry the full code head on the wire', 
 
   assert.deepEqual(gate.codeHead, CODE_HEAD);
   assert.deepEqual(gate.decision.codeHead, CODE_HEAD);
+  assert.equal(gate.decision.gateGeneration, 1);
   assert.ok(checkMessageSchema('GateDecidedEvent', decided).ok);
   const abbreviated = { ...gate, codeHead: { ...CODE_HEAD, commit: '1234567' } };
   assert.ok(violations(checkMessageSchema('Gate', abbreviated)).some((text) => text.includes('/codeHead/commit')));

@@ -6,8 +6,8 @@ Architecture section 6 requires that "a changed code head invalidates head-bound
 
 - **Code head in the SDLC module.** `CodeHeadIdentity` (repository, commit, tree), `RepositoryId`, and `isSameCodeHead` move into `@taskelith/sdlc`, with a new opaque `CodeObjectId` for the commit and tree names, as a value that module only compares. The workspace module's `CodeHeadIdentity` extends it with Git object names and re-exports `isSameCodeHead` and `RepositoryId`, so its exports keep their names and a workspace head is an SDLC head without a conversion.
 - **Head-bound gates.** A gate opened with a `codeHead` is head-bound for its life. Evidence decides it only when it names the same code head. `isGateOutdatedByCodeHead` and `markGateStaleByCodeHead` make it stale for any other head, keeping its decision. `reopenGateAtCodeHead` reopens it for a subject at a new head; `reopenGate` refuses it.
-- **Evidence at a code head.** The three evidence kinds take an optional `codeHead`.
-- **Wire contract.** The SDLC AsyncAPI document defines `CodeHeadIdentity` and `CodeObjectId` and an optional `codeHead` on the gate and the three evidence kinds, version 0.4.0.
+- **Evidence at a code head.** The three evidence kinds take an optional `codeHead` and an optional `gateGeneration`; a head-bound gate accepts evidence only for its current generation, so a superseded approval never decides a reopened gate (design decision 8).
+- **Wire contract.** The SDLC AsyncAPI document defines `CodeHeadIdentity` and `CodeObjectId` and an optional `codeHead` on the gate and the three evidence kinds, and an optional `gateGeneration` on the evidence kinds, version 0.4.0.
 - **Repository conformance.** The gate repository suite stores and reads back a head-bound gate.
 - **Naming decision.** The evidence record's `codeRevision` and the merge queue's `CodeHead` stay as they are; a follow-up change replaces both with `CodeHeadIdentity` (design decision 1).
 - **Docs.** The Git workspace contract sections 5 and 14.
