@@ -20,6 +20,7 @@
 ## 5. Checks and review
 
 - [x] 5.1 `make verify`, `make record`, and `make record-check`.
-- [ ] 5.2 Review pass 1 by reviewer A, then the further passes that governance requires.
+- [x] 5.2 Review pass 1 by reviewer A, then the further passes that governance requires.
 - [x] 5.3 Fix the eight findings of review pass 1 with fail-before tests, and record them in `findings.jsonl` and `verification.md`.
 - [x] 5.4 Fix the thirteen findings of review pass 2 with fail-before tests where code changed, and record them in `findings.jsonl` and `verification.md`.
+- [x] 5.5 Fix the finding of review pass 3 with a fail-before test, and record it in `findings.jsonl` and `verification.md` as unreviewed.

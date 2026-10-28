@@ -51,9 +51,9 @@ Before the change both test files fail to load, because the scripts do not exist
 ## Checks
 
 - `npm run openspec -- validate run-reviews-through-make --strict`: `Change 'run-reviews-through-make' is valid`.
-- `node --experimental-strip-types --test test/review-run.test.ts test/reviewer-invocations.test.ts`: 21 tests, 21 pass before review; 28 tests, 28 pass after the pass 1 fixes, with and without `NODE_V8_COVERAGE` set; 33 tests, 33 pass after the pass 2 fixes.
-- After the pass 2 fixes: `npm run verify:comments` passes, `tsc -p tsconfig.check.json` reports nothing, and `make findings ARGS="validate"` passes with the thirteen pass 2 lines.
-- After decision 3, `make verify` on `75452e81` failed in its type check (`TS4104` at `test/review-run.test.ts`, a mutable return type; fixed in `7aba1c6b`), and on `7aba1c6b` in strict OpenSpec validation (task 4.2 under group 5; moved in `21888276`). It passed on `21888276`, whose stamp the route gate needed, and on `b927de52` with the new `route.json`. After the pass 1 fixes and again after the pass 2 fixes it ran on the committed tree; the last run is recorded below.
+- `node --experimental-strip-types --test test/review-run.test.ts test/reviewer-invocations.test.ts`: 21 tests, 21 pass before review; 28 tests, 28 pass after the pass 1 fixes, with and without `NODE_V8_COVERAGE` set; 33 tests, 33 pass after the pass 2 fixes; 34 tests, 34 pass after the pass 3 fix.
+- After the pass 2 fixes: `npm run verify:comments` passes, `tsc -p tsconfig.check.json` reports nothing, and `make findings ARGS="validate"` passes with the thirteen pass 2 lines, and after the pass 3 fix with its line.
+- After decision 3, `make verify` on `75452e81` failed in its type check (`TS4104` at `test/review-run.test.ts`, a mutable return type; fixed in `7aba1c6b`), and on `7aba1c6b` in strict OpenSpec validation (task 4.2 under group 5; moved in `21888276`). It passed on `21888276`, whose stamp the route gate needed, and on `b927de52` with the new `route.json`. After the pass 1, pass 2, and pass 3 fixes it ran on the committed tree; the last run is recorded below.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -109,15 +109,23 @@ Reviewer B: Claude Code, `claude claude-opus-5-5#high`, run through `make review
 
 Fail-before: the new and changed tests were run against the scripts of `b708164d` (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/a47a64d8-7019-44c2-84cc-37b09a09a7cd/scratchpad/mr-p2fix-fail-before.log`): 12 of 33 tests failed, the failed-route test (no restore), the `headCommit` test (the route counted as fresh), the fresh-route and Codex settings tests (no effort or sandbox check), the failed-attempt test (no printed lines), the recommendation test, the arguments test (`PASS=2 ROLE=A` ran), the Claude Code, OpenCode, and dash-prompt table tests (no `--`), and the two table tests of Codex settings; with the fixes, 33 of 33 pass. Findings 8 to 11 change no behavior, and findings 12 and 13 are tests, so they have no fail-before run of their own.
 
+### Pass 3
+
+Reviewer A: Codex CLI, `codex gpt-6.1-sol#medium`, run through `make review CHANGE=run-reviews-through-make PASS=3 ROLE=A ...` itself on `1fa1376d`, session `01a182af-ddfa-72f0-9164-d6b9725f4e7a`. `make review` printed the model, `effort: medium (reported)`, and `sandbox: read-only (reported)`, and exited 0, so the Codex effort and sandbox check of pass 2 finding 5 ran against the real CLI for the first time. The worktree snapshot, beginning `bdedb11ef359`, was the same before and after the pass. The reviewer confirmed the pass 2 fixes, finding 1 and findings 2 and 4 to 13, and found finding 3 only partly fixed. Counts: Critical 0, High 0, Medium 0, Low 1:
+
+1. **Low, rejected reroute.** When the route dependency rejected instead of returning a failure, the stale `route.json` was restored, but the error escaped `runReview` instead of the exit 1 refusal that says so; the test covered only a returned failure. Fixed after the last pass in `c2a2e75f`, so unreviewed (`fixed-unreviewed` in `findings.jsonl`): a rejected route counts as a failed one, the stale `route.json` is restored, and the pass is refused with exit 1 and `routing failed, so ... route.json was restored`. The new test `a route that rejects refuses the pass and restores the stale route.json` checks exit 1, that message, the unchanged `route.json`, a clean tree, the attempted route, and that no reviewer started.
+
+Fail-before: the new test was run against the scripts of `1fa1376d` (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/a47a64d8-7019-44c2-84cc-37b09a09a7cd/scratchpad/mr-p3fix-fail-before.log`): it failed with the uncaught `Error: route crashed` from `routeAgain`; with the fix, 23 of 23 tests of `test/review-run.test.ts` pass.
+
 ## Limitations
 
-- The tests stub the reviewer CLIs; a CLI that needs another variable fails its first run, which is no pass. Pass 1 checked the Codex row and pass 2 the Claude Code row against the real CLIs through `make review`; the Antigravity and OpenCode rows stay unverified through `make review`.
-- The Codex effort and sandbox check and the `--` of the Claude Code and OpenCode rows were added after passes 1 and 2 ran, so no real review has run with them yet; the `--` was probed only up to the CLIs' login and model checks.
+- The tests stub the reviewer CLIs; a CLI that needs another variable fails its first run, which is no pass. Passes 1 and 3 checked the Codex row and pass 2 the Claude Code row against the real CLIs through `make review`; the Antigravity and OpenCode rows stay unverified through `make review`.
+- Pass 3 confirmed the Codex effort and sandbox check against the real CLI, which closes that limitation of the pass 2 fixes. The `--` of the Claude Code and OpenCode rows has not run in a real review yet; it was probed only up to the CLIs' login and model checks.
 - The Antigravity model label line is taken from the CLI's own default logs of 2026-10-24, not from a `--log-file` log of a `make review` run, and its `conversation_id` reading follows the protocol's description; the OpenCode export format is taken from one real export. Both stay unverified until a first `make review` run of each.
+- The pass 3 fix is unreviewed, because it was made after the last pass.
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A (Codex CLI gpt-6.1-sol, effort medium), which governance "Conditional third pass" requires because the pass 2 fixes change code, run through `make review`, to confirm the pass 2 fixes.
+- Review is complete after three passes; the pass 3 fix is unreviewed.
 - The Antigravity and OpenCode allowlists stay unverified against their real CLIs until a first `make review` run of each.
-- Archive on the branch (worker step 7) and handoff.
 - Integration into dev by the coordinator (single pull request)
