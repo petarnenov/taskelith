@@ -2,6 +2,7 @@ import {
   g2BridgeRequirement,
   projectRead,
   unauthenticated,
+  viewOf as viewOfSession,
   type AccessRequirement,
   type LiveSession,
   type LoginAttempt,
@@ -20,7 +21,6 @@ import type { DelegationService } from '../application/delegation-service.js';
 import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
-import { viewOf as viewOfSession } from '@taskelith/access';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
 import { ruleOf } from './access-requirements.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
@@ -39,7 +39,7 @@ export interface ApiServices {
   readonly operator: { authenticate(secret: string): Promise<Result<PrincipalId>> };
   readonly sessions: {
     authenticate(sessionId: string): Promise<Result<LiveSession>>;
-    read(sessionId: undefined): Promise<Result<SessionAnswer>>;
+    start(): Promise<Result<SessionAnswer>>;
     logIn(live: LiveSession, attempt: LoginAttempt): Promise<Result<SessionAnswer>>;
     logOut(live: LiveSession): Promise<Result<void>>;
   };
@@ -176,7 +176,7 @@ export class ControlPlaneApi implements ApiHandlers {
 
   async #readSession(request: ApiRequest): Promise<Result<StatusAnswer>> {
     if (request.session !== undefined) return ok(sessionAnswer({ view: viewOfSession(request.session) }));
-    const started = await this.#services.sessions.read(undefined);
+    const started = await this.#services.sessions.start();
     return started.ok ? ok(sessionAnswer(started.value)) : started;
   }
 

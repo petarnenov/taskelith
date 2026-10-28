@@ -192,11 +192,11 @@ class MemorySessions implements Sessions {
     return ok(purged.length);
   }
 
-  async trimAnonymous(cap: number): Promise<Result<number>> {
+  async trimAnonymous(cap: number, limit: number): Promise<Result<number>> {
     const anonymous = [...this.state.sessions.values()]
       .filter((session) => session.principalId === undefined)
       .sort((left, right) => (left.createdAt < right.createdAt ? -1 : left.createdAt > right.createdAt ? 1 : 0));
-    const excess = anonymous.slice(0, Math.max(0, anonymous.length - cap));
+    const excess = anonymous.slice(0, Math.min(limit, Math.max(0, anonymous.length - cap)));
     for (const session of excess) this.state.sessions.delete(session.idHash);
     return ok(excess.length);
   }

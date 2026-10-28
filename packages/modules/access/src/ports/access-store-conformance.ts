@@ -128,9 +128,10 @@ export const ACCESS_STORE_CONFORMANCE: readonly ConformanceCase<AccessStore>[] =
       expectSame(problems, 'kept', must(await run(store, (tx) => tx.sessions.get('k1' as SecretHash)))?.endedAt, undefined);
       expectSame(problems, 'purge limit', must(await run(store, (tx) => tx.sessions.purge(at(5), 1))), 1);
       expectSame(problems, 'purge rest', must(await run(store, (tx) => tx.sessions.purge(at(5), 10))), 1);
-      expectSame(problems, 'trim', must(await run(store, (tx) => tx.sessions.trimAnonymous(1))), 2);
-      expectSame(problems, 'newest anonymous kept', must(await run(store, (tx) => tx.sessions.get('n3' as SecretHash)))?.idHash, 'n3');
+      expectSame(problems, 'trim limit', must(await run(store, (tx) => tx.sessions.trimAnonymous(1, 1))), 1);
       expectSame(problems, 'oldest trimmed', must(await run(store, (tx) => tx.sessions.get('n1' as SecretHash))), undefined);
+      expectSame(problems, 'trim rest', must(await run(store, (tx) => tx.sessions.trimAnonymous(1, 10))), 1);
+      expectSame(problems, 'newest anonymous kept', must(await run(store, (tx) => tx.sessions.get('n3' as SecretHash)))?.idHash, 'n3');
       expectSame(problems, 'expired purged', must(await run(store, (tx) => tx.sessions.purge(at(30), 10))), 2);
       return problems;
     },

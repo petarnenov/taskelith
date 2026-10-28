@@ -58,8 +58,9 @@ export interface Sessions {
   endAllOf(principalId: PrincipalId, endedAt: Instant, except?: SecretHash): Promise<Result<number>>;
   // Deletes at most `limit` ended or expired sessions; answers how many.
   purge(now: Instant, limit: number): Promise<Result<number>>;
-  // Deletes the oldest anonymous sessions beyond `cap`; answers how many.
-  trimAnonymous(cap: number): Promise<Result<number>>;
+  // Deletes at most `limit` of the oldest anonymous sessions beyond `cap`;
+  // answers how many.
+  trimAnonymous(cap: number, limit: number): Promise<Result<number>>;
 }
 
 // Append-only, in the order of appending.

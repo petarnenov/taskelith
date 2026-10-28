@@ -52,21 +52,25 @@ export class PostgresAccessStore implements AccessStore {
 
 interface PrincipalRow {
   readonly principal_id: string;
+  readonly kind: string;
   readonly login_name: string;
   readonly password_hash: string | null;
   readonly created_at: Date;
   readonly disabled_at: Date | null;
 }
 
-const PRINCIPAL_COLUMNS = 'principal_id, login_name, password_hash, created_at, disabled_at';
+const PRINCIPAL_COLUMNS = 'principal_id, kind, login_name, password_hash, created_at, disabled_at';
 
-function principalOf(row: PrincipalRow): Principal {
-  return Object.freeze({
-    principalId: row.principal_id as PrincipalId, kind: 'operator', loginName: row.login_name as LoginName,
+// A row of a kind this release does not know is refused, never relabelled.
+function principalOf(row: PrincipalRow | undefined): Result<Principal | undefined> {
+  if (row === undefined) return ok(undefined);
+  if (row.kind !== 'operator') return err(failure('internal', `the principal ${row.principal_id} has an unknown kind`));
+  return ok(Object.freeze({
+    principalId: row.principal_id as PrincipalId, kind: row.kind, loginName: row.login_name as LoginName,
     ...(row.password_hash === null ? {} : { passwordHash: row.password_hash as PasswordHash }),
     createdAt: instant(row.created_at),
     ...(row.disabled_at === null ? {} : { disabledAt: instant(row.disabled_at) }),
-  });
+  }));
 }
 
 const unknownPrincipal = (principalId: PrincipalId) => err(failure('not-found', `no principal ${principalId}`, { principal: principalId }));
@@ -90,12 +94,12 @@ class PostgresPrincipals implements Principals {
 
   async get(principalId: PrincipalId): Promise<Result<Principal | undefined>> {
     const { rows } = await this.#session.query<PrincipalRow>(`SELECT ${PRINCIPAL_COLUMNS} FROM principals WHERE principal_id = $1`, [principalId]);
-    return ok(rows[0] === undefined ? undefined : principalOf(rows[0]));
+    return principalOf(rows[0]);
   }
 
   async findByLoginName(loginName: LoginName): Promise<Result<Principal | undefined>> {
     const { rows } = await this.#session.query<PrincipalRow>(`SELECT ${PRINCIPAL_COLUMNS} FROM principals WHERE login_name = $1`, [loginName]);
-    return ok(rows[0] === undefined ? undefined : principalOf(rows[0]));
+    return principalOf(rows[0]);
   }
 
   async setPasswordHash(principalId: PrincipalId, hash: PasswordHash): Promise<Result<void>> {
@@ -276,12 +280,14 @@ class PostgresSessions implements Sessions {
     return ok(rowCount ?? 0);
   }
 
-  async trimAnonymous(cap: number): Promise<Result<number>> {
+  async trimAnonymous(cap: number, limit: number): Promise<Result<number>> {
     const { rowCount } = await this.#session.query(
       `DELETE FROM browser_sessions WHERE id_hash IN (
-         SELECT id_hash FROM browser_sessions WHERE principal_id IS NULL
-         ORDER BY created_at DESC, id_hash OFFSET $1)`,
-      [cap],
+         SELECT id_hash FROM (
+           SELECT id_hash, created_at FROM browser_sessions WHERE principal_id IS NULL
+           ORDER BY created_at DESC, id_hash OFFSET $1) AS excess
+         ORDER BY created_at, id_hash DESC LIMIT $2)`,
+      [cap, limit],
     );
     return ok(rowCount ?? 0);
   }

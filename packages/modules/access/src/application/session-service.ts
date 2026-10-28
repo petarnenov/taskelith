@@ -115,7 +115,7 @@ export class SessionService {
       if (live.ok) return ok({ view: viewOf(live.value) });
       if (live.error.code !== 'forbidden') return live;
     }
-    return this.#start();
+    return this.start();
   }
 
   // Rotates the session's identifier and CSRF token in one write, with a
@@ -143,18 +143,19 @@ export class SessionService {
     return err(unauthenticated());
   }
 
-  // Deletes ended and expired sessions in a batch, then the oldest
-  // anonymous ones beyond the cap; answers how many went.
+  // Deletes ended and expired sessions, then the oldest anonymous ones
+  // beyond the cap, each in a batch; answers how many went.
   purgeExpired(batch: number = SESSION_PURGE_BATCH): Promise<Result<number>> {
     return this.#deps.store.transaction(async (tx) => {
       const purged = await tx.sessions.purge(this.#deps.clock.now(), batch);
       if (!purged.ok) return purged;
-      const trimmed = await tx.sessions.trimAnonymous(this.#lifetime.anonymousCap);
+      const trimmed = await tx.sessions.trimAnonymous(this.#lifetime.anonymousCap, batch);
       return trimmed.ok ? ok(purged.value + trimmed.value) : trimmed;
     });
   }
 
-  async #start(): Promise<Result<SessionAnswer>> {
+  // A new anonymous session and its cookie.
+  async start(): Promise<Result<SessionAnswer>> {
     const sessionId = this.#deps.random.sessionToken();
     const session = anonymousSession(this.#deps.secrets.hashOf(sessionId), this.#deps.random.sessionToken(), this.#deps.clock.now(), this.#lifetime);
     const added = await this.#deps.store.transaction((tx) => tx.sessions.add(session));
