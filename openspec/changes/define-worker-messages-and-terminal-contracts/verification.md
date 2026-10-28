@@ -92,10 +92,10 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `3b9f33717d98f6c8b29ea6bc43cc7f877af4ad42`; tests 3225, pass 3172, fail 0, skipped 53; all files 99.45% lines, 92.81% branches, 99.03% functions.
+- `make verify`: passed, profile full, tree `6ac5a938dde138770fbe94c71a884b34474197da`; tests 3420, pass 3367, fail 0, skipped 53; all files 99.45% lines, 92.72% branches, 99.02% functions.
 - `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`: passed, `Change 'define-worker-messages-and-terminal-contracts' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
-- Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 77 file(s); every pass summary file is valid: 57 file(s); every route file is valid: 13 file(s).`.
+- Spec diff against the merge base `7442b1bbd4f1` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -190,6 +190,20 @@ The fixes change contracts, not only records, and pass 1 found High findings, so
 | `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
 
 The pass 2 fixes change contracts, the agent harness port, and tests, not only records, and pass 2 found a High finding, so governance "Conditional third pass" requires pass 3 by reviewer A.
+
+## Merge of dev 7442b1bb
+
+- `b5dc60d6` merges `dev` `7442b1bb` (#400 `deliver-rotated-worker-credentials`, 26c, and #399) into the branch; the merge base was `10fc3bbe`.
+- Conflicts and their resolution, keeping both sides:
+  1. `execution.asyncapi.json`: 26c had already taken it to 0.8.0 with `worker.credentials.rotation-requested`. Both sides' messages, schemas, and operation entries are kept; the rotation notice keeps its place in `sendWorkerCommand` before this change's four commands, so no published index moves; `info.description` keeps 26c's sentence and appends this change's. This change moves to 0.9.0.
+  2. `execution.openapi.json`: 26c had already taken it to 0.7.0 with `renewWorkerCredentials` and `confirmWorkerCredentials`. Both sides' operations and schemas are kept, `RelayRefusal` beside the credential schemas, and the descriptions joined; this change moves to 0.8.0.
+  3. `breaking-changes.json`: 26c's 0.8.0 entry is unchanged; this change's entry is now 0.9.0, listed against `7442b1bb`. `make contract-breaking-changes BASE=7442b1bb` printed 110 additions, the same set as the former 0.8.0 entry against `10fc3bbe`.
+  4. `execution-wire-contracts.md` section 1: the two rows take 26c's text with this change's 9d clauses and the versions 0.9.0 and 0.8.0.
+- Versions changed with them: contract page sections 1 and 13, `design.md` decisions 15 and 17 and the later 0.8.0 entry notes, `proposal.md`, `tasks.md` 2.1 and 2.3, the deltas "Worker channels" and "G3 execution operations", and the version tests of `worker-session-messages.test.ts` and `execution-http-contracts.test.ts`. The table rows and decisions above this section that name 0.8.0, 0.7.0, or `10fc3bbe` record their checks as run.
+- Delta "Worker channels" now also lists 26c's inventory request and rotation notice, so the archive keeps `dev`'s text; its body is 488 characters, and an archive in a scratch copy validated 71 specs strictly.
+- Semantic conflict: 26c's `apps/control-plane/test/access-requirements.test.ts` requires an access rule per control-plane operation, so `24ad1bd3` gives `openTerminal` the `project-operator` rule of wire contracts section 3.
+- The file:line citations into files the merge changed are current; `docs/g3-plan.md:187` is the row "The harness port exposes model and effort per session (ADR 0014)".
+- `make verify` on `b5dc60d6` (log `9d-verify-11-failed.log`) failed in two tests: the access rule above, and the timing test `a bound with a leading zero is read in base 10` of `test/installation-script.test.ts` (ended after 9.045 s, below its 10 s bound), which this change does not touch and which passed when run alone. After `24ad1bd3`, `make verify` on the clean tree (log `9d-verify-11.log`) passed: profile full, tree `6ac5a938dde138770fbe94c71a884b34474197da`, 3420 tests, 3367 passed, 0 failed, 53 skipped; generated part above. `g2-cancellation-races` needed no rerun.
 
 ## Remaining gates
 
