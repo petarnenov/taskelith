@@ -82,6 +82,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18236-6bcc-7be2-a94b-9740320041c8` | 0 | 0 | 5 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `d3d895f6-cd86-4187-b164-c27c38b721aa` | 0 | 0 | 2 | 4 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18251-3ace-7b90-bdd1-1cc3f82aa195` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Review
@@ -130,6 +131,18 @@ Fail-before of the fixes: on the working tree of `cdc72db4` with `packages/adapt
 
 Pass 3: required (governance "Conditional third pass"), because the pass 2 fixes change source and a spec delta, not only records and documentation; reviewer A confirms.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox (`codex gpt-6.1-sol#medium`).
+- Invocation, run by the coordinator session: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: the Codex session ran `gpt-6.1-sol` with reasoning effort `medium`, as the coordinator's pass report states.
+- Session: `01a18251-3ace-7b90-bdd1-1cc3f82aa195`.
+- Reviewed head `0c881f71`; scope: confirm the pass 2 fixes and look for regressions they introduced. Snapshot of the worktree before and after the pass: `af0b04a7e1838902c8a0b4535be3fba50b0c5610b874a9f9493a77a4a22e16b8` both times, so the reviewer changed no file. The reviewer ran no tests.
+- Result: all six pass 2 findings (M1, M2, L1, L2, L3, L4) confirmed fixed; no regression. Counts: Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl`; `findings.jsonl` has no line for the pass. The reviewer wrote in Bulgarian; this is the author's English summary.
+- Contract section 8: the reviewer accepted the author's call (L3) that a push whose answer was lost returns the head when the re-read remote head equals the pushed commit. After a push with the required ancestry check and exact lease, that read confirms the intended remote state, though not who wrote the identical commit; the spec delta states the behavior.
+
+The review is complete: pass 3 found nothing, and governance allows at most three passes.
+
 ## Limitations
 
 - Ran on Linux with the host's Git 2.55.0 behind a recording wrapper, not with the pinned Linux Git 2.43.0 or Apple's 2.50.1, and not natively on macOS; the test remote is plain HTTP on `127.0.0.1` with the policy `https-or-loopback-http`, so the HTTPS transport itself did not run.
@@ -144,8 +157,7 @@ Pass 3: required (governance "Conditional third pass"), because the pass 2 fixes
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, required because the pass 2 fixes change source and a spec delta.
-- Integration into dev by the coordinator (single pull request).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator; it now includes the remote cases and the smart-HTTP server.
 - 16d: the hand-off, the reclaim program and its containment, `WS5` to `WS10`, and the Linux tests in the worker image with the pinned Git, which un-skip the last 6 cases.
 - 16e: the worker wiring and admission, the execution group, the single slot, the clone umask, and the macOS composition.
+- Integration into dev by the coordinator (single pull request).
