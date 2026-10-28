@@ -279,7 +279,7 @@ test('a hand-off record parses only its own shapes', () => {
     containment: { kind: 'cgroup', name: 'reclaim-a' }, reclaimFailed: true,
   });
   assert.deepEqual(parseHandOffRecord('{"containment":{"kind":"process-group","id":42},"reclaimFailed":false}')?.containment, { kind: 'process-group', id: 42 });
-  for (const text of ['', 'null', '[]', '{"containment":null}', '{"containment":{"kind":"cgroup","name":"../x"},"reclaimFailed":false}',
+  for (const text of ['', 'null', '[]', '{"containment":null}', '{"reclaimFailed":false}', '{"containment":{"kind":"cgroup","name":"../x"},"reclaimFailed":false}',
     '{"containment":{"kind":"process-group","id":1},"reclaimFailed":false}', '{"containment":{"kind":"other"},"reclaimFailed":false}']) {
     assert.equal(parseHandOffRecord(text), null, text);
   }

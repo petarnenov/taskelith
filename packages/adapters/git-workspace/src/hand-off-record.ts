@@ -13,7 +13,7 @@ export type ReclaimContainment =
 // The worker's hand-off state beside the checkout; its presence alone
 // means handed off, also where no mode changes.
 export interface HandOffRecord {
-  // The reclaim program's containment, recorded before the program starts.
+  // The reclaim program's containment, recorded before the program acts.
   readonly containment: ReclaimContainment | null;
   // The program failed or was killed; it never runs again by itself.
   readonly reclaimFailed: boolean;
@@ -53,8 +53,8 @@ export function parseHandOffRecord(text: string): HandOffRecord | null {
   } catch {
     return null;
   }
-  if (typeof record !== 'object' || record === null || typeof record.reclaimFailed !== 'boolean') return null;
-  const containment = record.containment ?? null;
+  if (typeof record !== 'object' || record === null || !('containment' in record) || typeof record.reclaimFailed !== 'boolean') return null;
+  const containment: unknown = record.containment;
   return containment === null || isContainment(containment) ? { containment, reclaimFailed: record.reclaimFailed } : null;
 }
 
