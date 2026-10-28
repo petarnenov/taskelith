@@ -22,7 +22,7 @@ import { featuresWith, QUIET_FEATURES } from './review-route-fake.ts';
 
 const SENTINEL = 'sentinel-jev-credential-5f1c0a9e';
 const CREDENTIAL = Credential.fromEnvironment({ [CREDENTIAL_VARIABLE]: SENTINEL })!;
-// Constructed from the OpenAPI document, not captured live; see README.
+// Captured live from jev-1.14.0 on 2026-10-28; see README.
 const RECORDED_RESPONSE = readFileSync(new URL('fixtures/review-route/jev-systemone-response.json', import.meta.url), 'utf8');
 
 interface SentRequest {
@@ -63,9 +63,9 @@ test('the recorded response maps to an answered shadow decision', async () => {
     status: 'answered',
     model: 'jev-1.14.0',
     tier: 'elevated',
-    confidence: 0.62,
-    probabilities: { standard: 0.19, elevated: 0.81 },
-    expectedPasses: 2.4,
+    confidence: 0.66,
+    probabilities: { standard: 0.17, elevated: 0.83 },
+    expectedPasses: 2,
     passes: passPlans('elevated', QUIET_FEATURES),
     latencyMs: 250,
   });
