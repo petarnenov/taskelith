@@ -61,12 +61,25 @@ Author checks on `34d99f3a` and its working tree, without Docker:
     - Passing, as expected: the 7 tests of `24d25938`, which cover unchanged behaviour (`declaresBreakingChange`, `versionProblems`, `compatibilityProblems`, the oasdiff and AsyncAPI change filters, the parser prefix); and 3 new tests whose assertions expect no problem from `declarationProblems`, which a stub returning `[]` satisfies: `a matching entry passes whatever the order of the changes`, `entries at or below the merge-base version and of other documents are history`, and `the existing rule still applies when the head version declares nothing` (its second assertion runs the unchanged `compatibilityProblems`). They guard the fix against false failures, not the gap.
 - After the fix, `34d99f3a`: 21 tests, 21 pass; it adds two tests that were not part of the fail-before set, the command line (`parseMode`) and the in-process AsyncAPI diff.
 
+## Route and make verify
+
+- `make findings ARGS="route --change declare-contract-breaking-changes"` on `90931857`, committed unedited as `route.json` in `26a9c763`: `elevated (lines, contracts), rule version 1`; pass 1, reviewer A: `codex gpt-6.1-sol#high`; pass 2, reviewer B: `claude claude-opus-5-5#xhigh`; shadow `jev-1.14.0` elevated (0.94), agrees with the rule; recommendation only.
+- `make verify` on `26a9c763` (tree `20f9f56a`), full profile, exit 0: the first run of the new check with Docker reports 0 breaking changes of each document against the merge base `24d25938` and `Contract documents have no undeclared breaking change.`; totals below.
+
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `20f9f56affc74eae7637e3b7735586a3dac6695f`; tests 3061, pass 3037, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
+- `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s).`.
+- Spec diff against the merge base `24d259385778` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Remaining gates
 
-- `make verify`, `make record`, and `make record-check`, including the first run of the new check with Docker.
 - Independent review passes and their records.
 - Archive.
 - Integration into dev by the coordinator (single pull request).
