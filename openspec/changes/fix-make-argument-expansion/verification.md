@@ -61,6 +61,20 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - **Snapshot:** the same before and after the pass (`2e4eb301`).
 - **Findings:** Critical 0, High 0, Medium 0, Low 0. The reviewer checked all six arguments from the command line and the environment under GNU Make 3.81 and 4.4.1, the absence of `include` lines before the `unexport`, sub-make isolation, and a missing `gmake`.
 
+### Pass 2 (reviewer B)
+
+- **Reviewer:** Claude Code, `claude-opus-5-5`, effort high, plan mode with Edit, Write, and NotebookEdit disallowed; `claude-opus-5-5` in the `modelUsage` of the last result line.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, prompt and log outside the worktree.
+- **Session:** `36d32c77-543a-4229-a7f1-a54173f11108`.
+- **Reviewed revision:** `dc2fe5e9`; pass 1 had no findings, so the pass reviewed the whole change independently.
+- **Snapshot:** the same before and after the pass (`74c57fad`).
+- **Findings:** Critical 0, High 0, Medium 2, Low 3, all fixed:
+  - M1, stale records and a failing `make record-check`: `make verify` and `make record` ran again (`3c90ab43`).
+  - M2, only GNU Make 4.4 hosts catch the regression: design D2 and the limitations say so; GNU Make 4.3 was checked in the pinned `ubuntu:24.04` image (`19890efb`).
+  - L1, no shell payload in `BRANCH` or `RESUME`: the integrate test passes one in each and fails when either leaves the `unexport` line under GNU Make 4.4.1 (`1b2783d5`, `b3f51341`).
+  - L2, pass 1 still open in the records: task 4.1 ticked and the gate removed (`cd7ee291`).
+  - L3, the spec delta dropped the change from the record requirement: it names CHANGE's `verification.md` again, 499 characters (`b3f51341`).
+
 ## Limitations
 
 - The fix was checked under GNU Make 3.81 and 4.4.1 only; the Linux check ran the shell repro, not the Node.js tests.
@@ -69,6 +83,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 2 (reviewer B) record, and pass 3 if the review process requires it.
+- Review pass 3 (reviewer A), required because the pass 2 fixes change a test.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
