@@ -67,7 +67,7 @@ Reviewer B, Claude Code `claude-opus-5-5` at high in plan mode, reviewed `13029b
 11. **N12, fixed in `055323b2`.** A test races `git.local.handOff(FIRST)` with `git.reopen().handOff(SECOND)`; with the root chain bypassed it and the conformance case fail.
 12. **N13, fixed in `055323b2`.** The hand-off crash tests at `WS5.after`, `WS6.before`, and `WS6.after` check the `workspace-handed-off` refusal of `inspect` and a completing `reclaim`.
 13. **N14, fixed in `eb3e3430`.** The proposal lists the two modified reclaim requirements.
-14. **N15 and N16, fixed in the commit of these records.** `verification.md` says 26 conformance cases and 8 section 13 tests; decision 11 names every channel of the secret test.
+14. **N15 and N16, fixed in `36290e5d`.** `verification.md` says 26 conformance cases and 8 section 13 tests; decision 11 names every channel of the secret test.
 15. **N17, fixed in `055323b2`.** The test is named "the containment is recorded once the program is ready, before go, and the record goes last".
 16. **N18, fixed in `eb3e3430`.** `docs/local-installation.md` lists `make verify-linux-git-workspace`.
 17. **N19, fixed in `5bd54589`.** `build` and `build_worker` call one helper, `build_stages`; the installation script tests pass unchanged.
