@@ -56,6 +56,10 @@ Questions that belong to the owner (see Roles) go to the coordinator with option
 3. **Clean up.** `make integrate` updates the main clone, removes the integration worktree and local branch, and deletes the remote branch ([releases](releases.md#parallel-work-with-worktrees)); after a return, remove the integration worktree and local branch yourself. Remove a worker's worktree only on the worker's own machine, by the worker (worker step 9).
 4. **Release the worker.** Tell the worker that its task is merged, so that it cleans up, and brief its next task right after the landing report; the worker keeps its session.
 
+## Task progress
+
+`make progress` prints, for every task worktree on this host and on the SSH hosts listed in `~/.config/taskelith/progress-hosts.json` (a JSON list of `{"name", "ssh", "repo"}`, for example `[{"name": "Zaki", "ssh": "petar@hpz600", "repo": "~/taskelith"}]`, kept outside the repository), its stage from 1 brief to 11 landed, derived only from the records these steps already create: the checklist, code commits, the verify stamp, `route.json`, `passes.jsonl`, the archive commit, the coordinator's integration queue, and the merge into `origin/dev`; an unreachable host is reported and never fails the run. `make progress-refresh` writes the same view atomically to `~/.config/taskelith/progress.json`, which the coordinator's status line reads and refreshes in the background when it is older than 60 seconds. Workers take no extra step for it.
+
 ## Subagent execution
 
 The owner set this rule on 2026-10-26; it applies to tasks assigned from that day on.
