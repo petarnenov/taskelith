@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. Review passes 1, 2, and 3 ran and their findings are fixed (section "Review"); the fixes of pass 3 are unreviewed. After the second merge of `dev`, reviewer A reviewed the reconciliation and confirmed its Medium fix (section "Merge of dev").
+Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. Review passes 1, 2, and 3 ran and their findings are fixed (section "Review"); the fixes of pass 3 are unreviewed. After the second merge of `dev`, reviewer A reviewed the reconciliation and confirmed its Medium fix (section "Merge of dev"). The archive checks follow the limitations.
 
 ## Scope and source
 
@@ -200,7 +200,20 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The 7-day cap and the 10-minute floor are provisional, verified in G6.
 - `make installation-smoke` was not run.
 
+## Archive checks
+
+Checked state: the tree of the archive commit (`docs: archive the deliver rotated worker credentials change`), the working tree on which the checks below ran, on top of `4474a405`, with `origin/dev` at `1234e540`, the merge base. The generated part above stays the record of the tree `2a4679ba`.
+
+- `tasks.md`: every task ticked, 4.4 and 4.5 included; 4.5, the handoff, follows the archive commit and changes no file.
+- `npm run openspec -- archive deliver-rotated-worker-credentials --yes`: archived as `2026-10-28-deliver-rotated-worker-credentials`; `control-plane-api` 1 added, 3 modified; `execution-wire-contracts` 1 added, 1 modified; `installation-enrollment` 4 added, 2 modified; `nats-transport` 1 added; `worker-journal-adapter` 1 added; `worker-runtime` 3 added; totals 11 added, 6 modified, 0 removed.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- This change's line in `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-28-deliver-rotated-worker-credentials`. The command as a whole gives 236 passed, 14 failed: 13 archived changes of 2026-10-24 to 2026-10-26 with open tasks, and `2026-10-28-adopt-process-performance-recommendations`, whose task 4.8 its record leaves open.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `1234e540`: 6 files, 174 insertions, 9 deletions, only this change's edits: `control-plane-api` "Credential renewal and confirmation operations" added, "Background loops and observability", "Worker credential scheme", and "Authentication, CSRF, and role order" modified, the last keeping #398's text and scenarios; `execution-wire-contracts` "Credential rotation contracts" added, "Worker channels" modified; `installation-enrollment` "Rotation request", "Credential renewal", "Credential confirmation", and "Credential audit events" added, "Worker credentials" and "Worker bearer authentication" modified; `nats-transport` "Rejected broker credentials" added; `worker-journal-adapter` "Credential adoption files" added; `worker-runtime` "Credential rotation on the worker", "Rotation resumed at every start", and "Expired broker credentials" added. The specs of #398 and #399, already on `dev`, are not in the diff.
+- The moved change has `findings.jsonl` (20 lines), `passes.jsonl` (5 lines), `checklist.json`, and `route.json`; `make findings ARGS="validate"`: "Every findings file is valid: 76 file(s); every pass summary file is valid: 56 file(s); every route file is valid: 12 file(s)."
+- `make verify` on that working tree: passed, profile full, "uncommitted working tree; no stamp written"; 46 suites, tests 3369, pass 3354, fail 0, cancelled 0, skipped 15, todo 0; all files 99.45% lines, 92.62% branches, 99.07% functions; 0 breaking changes in the contract documents against `1234e540009a` except the 3 declared ones of `execution.asyncapi.json`; verified 767 package paths; `validate --all --strict` 71 passed, 0 failed; every checked link conforms; no active OpenSpec change, nothing to archive; the packed file allowlist and installed CLI checks passed.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a `make verify` of the committed archive tree: the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty, and the working tree differs from the verified tree `2a4679ba0ca1` in the moved change and the six living specs. The `make verify` of the committed archive head runs before the push and writes the stamp that the `pre-push` hook reuses; its result goes into the handoff, not this tree.
+
 ## Remaining gates
 
-- Archive under worker step 7.
+- `make verify` of the committed archive head before the push, the push, and the handoff to the coordinator with its result.
 - Integration into dev by the coordinator (single pull request).
