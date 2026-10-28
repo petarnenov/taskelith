@@ -11,6 +11,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - Review pass 1 fixes: `b1201019` Docker slot (findings 2 and 3); `eeece5b3` stamp key and detached HEAD (findings 4 and 13); `deee0864` record generator (findings 10 and 11); `fd663be2` `make integrate` (findings 1, 5, 6, 7, 8, and 9); `6f795c93` protocol and coordinator skill; `31184e8b` design and spec deltas (findings 12 and 15); then this record (finding 14).
 - Merges of `origin/dev`: `1cfe104f` (`6b68d6c7`, no conflict); `f93316de` (`14e1a46e`, a conflict in `docs/agent-task-protocol.md` resolved by taking `dev`'s coordinator step 1 and keeping this change's step 2; `dev` changed no requirement that the spec deltas modify); `f726edbf` (`579c227d`, no conflict). The full `make verify` passed on `f726edbf`; `make record` and `make record-check` passed on `16987d29`, whose tree differs from `f726edbf`'s only in this record. The pass 1 fixes have not yet run `make verify`.
 - `make verify` of the pass 1 fixes passed on `1089addf`, the merge of `origin/dev` `3f23516a` (no conflict; it changed only the Claude Code reviewer rows of `docs/agent-task-protocol.md` and two living specs that no delta of this change touches); `make record` and `make record-check` passed.
+- Merge `1a758b85` of `origin/dev` `1c73e1a7` (#380, #381) into `8d4b3c7a`, with conflicts; the full `make verify` passed on it, and `make record` and `make record-check` passed on the record commit that follows it (see "Merge reconciliation").
 
 ## Environment
 
@@ -52,15 +53,16 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `83772c1a11800cee9ac281d7c27bd666f6f89b75`; tests 2424, pass 2421, fail 0, skipped 3; all files 99.34% lines, 92.28% branches, 99.03% functions.
+- `make verify`: passed, profile full, tree `b3749b81cf95925fe79d1fc4cdbefd739e79e33a`; tests 2621, pass 2614, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
 - `npm run openspec -- validate adopt-process-performance-recommendations --strict`: passed, `Change 'adopt-process-performance-recommendations' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 53 file(s); every pass summary file is valid: 33 file(s).`.
-- Spec diff against the merge base `3f23516a2e4e` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s).`.
+- Spec diff against the merge base `1c73e1a70d92` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a17f4c-3d06-77b2-b410-2f9550f5ebbd` | 0 | 5 | 8 | 2 |
+| merge-reconciliation 1 | A | `codex gpt-6.1-sol#medium` | `01a180d6-1001-7141-84d8-062eca3daa7c` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -94,9 +96,27 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 | 14 | Low | evidence-mismatch | This record listed passed gates as remaining and missed `16987d29` | `42f78be3`: revision, ticks, gates, and citations updated |
 | 15 | Low | docs | The design said CI is never stamped | `31184e8b`: "CI never reuses a stamp" |
 
-- **Checks after the fixes:** under "Checks and results"; `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 50 findings files and 30 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`. The generated part above still shows the state of `f726edbf` and no review pass; `make record` after the next `make verify` regenerates it.
+- **Checks after the fixes:** under "Checks and results"; `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 50 findings files and 30 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`. At that point the generated part above still showed the state of `f726edbf` and no review pass; `make record` after the next `make verify` regenerated it (see "Merge reconciliation").
 - **Note, found after pass 1:** `make record` and `make record-check` let `make` expand `CHANGE` and `LOG`, the class of finding 1; the worker found it after pass 1, not a reviewer, so `findings.jsonl` has no line for it. The fix applies the `make integrate` pattern, and a real `make` run in `test/verification-record.test.ts` proves the arguments arrive as typed (it fails against the old `Makefile`: `make record ran a $(shell) of the arguments`). It is unreviewed until pass 2.
 - **Note, found after pass 1:** `make record-check` accepted a tree that differs from the verified one only in `verification.md`, so ticking the verify task in `tasks.md` and appending review passes to `findings.jsonl` and `passes.jsonl` made the documented flow fail. The worker found it after pass 1, not a reviewer, so `findings.jsonl` has no line for it. The check now also accepts the change's `tasks.md`, `findings.jsonl`, and `passes.jsonl`, and still fails on any other path, `design.md` of the change included. The new test in `test/verification-record.test.ts` fails against the old script (`the working tree differs from the verified tree …: openspec/changes/demo-change/findings.jsonl, openspec/changes/demo-change/tasks.md`). It is unreviewed until pass 2.
+
+## Merge reconciliation
+
+- **Merge.** `1a758b85` merges `origin/dev` `1c73e1a7` (#380 and #381) into `8d4b3c7a` with a merge commit. Base: `git merge-base 8d4b3c7a 1c73e1a7` = `3f23516a`. `git show 1a758b85 --cc` shows the resolutions.
+- **Conflicts and resolutions.** Both sides' intent is kept in each file:
+  - `.claude/skills/taskelith-task-protocol/SKILL.md`: dev's unavailable-reviewer paragraph, which adds "may take the role under `docs/governance.md` \"Reviewer assignment\"", next to this change's subagent paragraph.
+  - `Makefile`: the `.PHONY` list is the union of this change's targets (`verify-stamped`, `integrate`, `record`, `record-check`, `docker-slot`) and dev's (`verify-linux-g2-scenarios`, `installation-certificates`, `installation-ca`); dev's `npm run verify:private-keys` in `verify-checks` merged without conflict.
+  - `docs/agent-task-protocol.md`, two hunks: worker step 5 keeps this change's "Conditional third pass" and takes dev's "Two alternating reviewers per task" reference; coordinator step 1 is dev's, with "Reviewer assignment".
+  - `docs/governance.md`, two hunks: "Two alternating reviewers per task", "Reviewer assignment", "Rotation", and "Unavailable reviewer" are dev's text, and this change's "Conditional third pass" follows them unchanged.
+- **Reconciled deltas.** Of the seven MODIFIED requirements of this change, `git diff 3f23516a 1c73e1a7 -- openspec/specs` shows that dev reworded only "Authorized alternating reviewers" of `review-process`. Its delta in `specs/review-process/spec.md` now carries dev's living text from `openspec/specs/review-process/spec.md` with this change's scenario edit, so the archive does not revert dev's wording. The other six were checked against dev and needed no edit.
+- **First `make verify`** on `1a758b85`, 06:47:04 to 06:47:24 local, 2026-10-28: failed at the build with `TS2307` for `@peculiar/x509` and `@taskelith/certificates`, a dependency dev added that was not installed in the worktree. `npm ci` fixed it and changed no tracked file.
+- **Second `make verify`** on `1a758b85`, 06:47:54 to 06:51:59: passed, profile full, tree `b3749b81cf95925fe79d1fc4cdbefd739e79e33a`, stamp written; tests 2621, pass 2614, fail 0, cancelled 0, skipped 7, suites 45; all files 99.36% lines, 92.50% branches, 99.06% functions; OpenSpec strict 70 of 70. "Generated checks" above is `make record` of its log.
+- **Review.** Reviewer A reviewed the resolved merge and the reconciled delta as artifact `merge-reconciliation`, pass 1, in `passes.jsonl`, so the pass does not count against the change's three passes.
+  - Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt and log outside the worktree.
+  - Confirmation: the output header records model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`; session `01a180d6-1001-7141-84d8-062eca3daa7c`.
+  - Revision reviewed: `1a758b85`.
+  - Snapshot: `c2b5011fc68efc40b8a101232f132dd8c77d13744d4333c6870a1700804ea20d` before and after, unchanged.
+  - Result: Critical 0, High 0, Medium 0, Low 0; no findings, so `findings.jsonl` has no line for it.
 
 ## Limitations
 
@@ -113,6 +133,6 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
-- Independent review: pass 2 (reviewer B), and pass 3 if "Conditional third pass" requires it
+- Independent review: pass 2 by reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), is next; then pass 3 (reviewer A) if "Conditional third pass" requires it
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)
