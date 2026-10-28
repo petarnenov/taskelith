@@ -22,9 +22,9 @@
 
 ## 5. Verification
 
-- [ ] 5.1 `route.json` from `make findings ARGS="route --change show-task-progress"`, committed unedited
-- [ ] 5.2 `npm run openspec -- validate show-task-progress --strict` and `make verify`
-- [ ] 5.3 Record `verification.md`
+- [x] 5.1 `route.json` from `make findings ARGS="route --change show-task-progress"`, committed unedited
+- [x] 5.2 `npm run openspec -- validate show-task-progress --strict` and `make verify`
+- [x] 5.3 Record `verification.md`
 
 ## 6. Review and archive
 
