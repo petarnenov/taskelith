@@ -32,6 +32,7 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 
 - `npm run openspec -- validate continue-after-context-warning --strict`: `Change 'continue-after-context-warning' is valid`.
 - `make verify` on the clean tree of `5eea428b`: passed on its first run, profile full, tree `cf236e19`, stamp written; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/06b2129b-88b1-474a-982f-61d6a1728b94/scratchpad/verify-cacw-1.log`).
+- `make verify` after the pass 1 fixes, on the clean tree of `8e87d94e`: passed, profile full, tree `bc1336b8`, stamp written; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/06b2129b-88b1-474a-982f-61d6a1728b94/scratchpad/verify-cacw-1b.log`).
 
 ## Review
 
@@ -49,11 +50,15 @@ Architect check of the unreviewed fixes by the coordinator (Niki): pending.
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `cf236e19c6a47f236bb3ef5fb1b65123670a1e0e`; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions.
+- `make verify`: passed, profile full, tree `bc1336b8d3dccb8bf566384cb49f4b4daa102194`; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions.
 - `npm run openspec -- validate continue-after-context-warning --strict`: passed, `Change 'continue-after-context-warning' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 83 file(s); every pass summary file is valid: 63 file(s); every route file is valid: 19 file(s).`.
 - Spec diff against the merge base `c49cb6a3a2e1` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1846b-5306-7c80-9325-a7f8b6da5f6c` | 0 | 0 | 0 | 2 |
 <!-- make record: end -->
 
 ## Limitations
