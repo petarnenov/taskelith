@@ -211,14 +211,20 @@ async function routeGate(request: ReviewRequest, dependencies: ReviewDependencie
 // A stale route is deleted first and restored when routing fails, so
 // that a failed attempt leaves the tree clean.
 async function routeAgain(state: RouteState, change: string, dependencies: ReviewDependencies, git: Git): Promise<RunResult> {
-  if (state === 'missing') return dependencies.route(change);
+  if (state === 'missing') return attemptRoute(change, dependencies);
   rmSync(routePath(dependencies.root, change));
-  let routed: RunResult | undefined;
+  const routed = await attemptRoute(change, dependencies);
+  if (routed.exitCode !== 0) git(['checkout', 'HEAD', '--', `${changeDirectory(change)}/${ROUTE_FILE}`]);
+  return routed;
+}
+
+// A route that rejects counts as one that failed, so the pass is refused.
+async function attemptRoute(change: string, dependencies: ReviewDependencies): Promise<RunResult> {
   try {
-    routed = await dependencies.route(change);
-    return routed;
-  } finally {
-    if (routed?.exitCode !== 0) git(['checkout', 'HEAD', '--', `${changeDirectory(change)}/${ROUTE_FILE}`]);
+    return await dependencies.route(change);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { exitCode: EXIT_REFUSED, stdout: '', stderr: `${message}\n` };
   }
 }
 

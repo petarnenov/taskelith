@@ -245,6 +245,28 @@ test('a failed route refuses the pass and restores the stale route.json', async 
   });
 });
 
+test('a route that rejects refuses the pass and restores the stale route.json', async () => {
+  await withFixture(async (fixture) => {
+    writeRoute(fixture.root, git(fixture.root, 'rev-parse', 'HEAD~1'));
+    const stale = readFileSync(join(fixture.root, ROUTE), 'utf8');
+    stamp(fixture.root);
+    const rejecting: ReviewDependencies = {
+      ...dependencies(fixture),
+      route: async (change) => {
+        fixture.routed.push(change);
+        throw new Error('route crashed');
+      },
+    };
+    const result = await runReview([CHANGE, '1', 'A', CODEX, fixture.prompt, fixture.log], rejecting);
+    assert.equal(result.exitCode, EXIT_REFUSED);
+    assert.match(result.stderr, /routing failed, so .*route\.json was restored:\nroute crashed/);
+    assert.deepEqual(fixture.routed, [CHANGE]);
+    assert.equal(readFileSync(join(fixture.root, ROUTE), 'utf8'), stale);
+    assert.equal(git(fixture.root, 'status', '--porcelain'), '');
+    assert.equal(existsSync(join(fixture.scratch, 'env.txt')), false);
+  });
+});
+
 test('a route.json whose headCommit is an option is stale and never reaches git', async () => {
   await withFixture(async (fixture) => {
     const planted = join(fixture.scratch, 'diff.txt');
