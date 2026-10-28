@@ -13,7 +13,7 @@
 ## 3. Worker
 
 - [x] 3.1 `InstallationCaSource` port; the CA read and the pinned `undici` `Agent` in `@taskelith/worker-control-plane-client`; register row for `undici@7.30.1`
-- [x] 3.2 `worker/installation-ca.pem` in `@taskelith/worker-journal`
+- [x] 3.2 `worker/installation-ca.pem` in `@taskelith/worker-journal`; a root without it fails closed and names the remedy (no migration, pre-release)
 - [x] 3.3 Settings: `TASKELITH_INSTALLATION_CA_SHA256`, `https:` only, no `TASKELITH_NATS_CA`
 - [x] 3.4 The check before the token; the pinned CA for the launch authority and the broker
 - [x] 3.5 Tests: fingerprint mismatch, system-trusted foreign certificate, no listening socket
