@@ -1,0 +1,1 @@
+{"change":"compare-worker-image-manifests","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a1831a-5209-7d10-8002-cb76a2a8363d","counts":{"critical":0,"high":1,"medium":1,"low":0}}
