@@ -72,7 +72,7 @@ The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol` with effort `medium
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `1f9b5ff07cc77205ede5c6218d74a23e69f8796f`; tests 3217, pass 3202, fail 0, skipped 15; all files 99.43% lines, 92.62% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `5abca8629b6f6def56b77221b1ce249e5a27271a`; tests 3217, pass 3202, fail 0, skipped 15; all files 99.43% lines, 92.63% branches, 99.08% functions.
 - `npm run openspec -- validate deliver-rotated-worker-credentials --strict`: passed, `Change 'deliver-rotated-worker-credentials' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
 - Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
