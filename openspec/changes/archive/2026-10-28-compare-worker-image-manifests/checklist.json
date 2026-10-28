@@ -1,0 +1,101 @@
+{
+  "change": "compare-worker-image-manifests",
+  "generatedAt": "2026-10-28T15:00:46.989Z",
+  "devCommit": "a10ceaaf860c547708632721431954a5f5cbf3ef",
+  "query": {
+    "capabilities": [
+      "local-installation"
+    ],
+    "files": [
+      "scripts/installation.sh",
+      "Makefile",
+      "test/installation-*"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 9
+      },
+      {
+        "category": "docs",
+        "count": 6
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 4
+      },
+      {
+        "category": "spec-wording",
+        "count": 4
+      },
+      {
+        "category": "contract-drift",
+        "count": 3
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      },
+      {
+        "category": "naming",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 577,
+        "inChecklist": 468
+      },
+      "mediumOrWorse": {
+        "findings": 258,
+        "inChecklist": 192
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 97
+      },
+      {
+        "category": "spec-wording",
+        "count": 66
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 35
+      },
+      {
+        "category": "contract-drift",
+        "count": 17
+      },
+      {
+        "category": "process",
+        "count": 17
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 303,
+        "inChecklist": 299
+      },
+      "mediumOrWorse": {
+        "findings": 54,
+        "inChecklist": 52
+      }
+    }
+  }
+}
