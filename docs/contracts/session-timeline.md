@@ -106,7 +106,8 @@ A request is keyed by its session, its generation, and its `NativeRequestId` (ag
 
 1. Text outside its bound fails with `invalid`.
 2. A key the session holds changes nothing when the kind, turn, and text are equal, and fails with `conflict` otherwise.
-3. A generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
+3. An unknown turn fails with `not-found`.
+4. A generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
 
 The request is `open`. A request enters the timeline only this way, so it is persisted before any read of section 5.5 can show it (architecture section 7).
 
@@ -154,7 +155,7 @@ These states are final. They are shown, and they lead to no answer, no resend, a
 
 ## 7. Output stream and cursor
 
-`appendOutput(session, output)` records the port's `output` event from its turn, generation, and text, at the next session-wide position, from 1 without gaps. Text outside its bound fails with `invalid`; a generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
+`appendOutput(session, output)` records the port's `output` event from its turn, generation, and text, at the next session-wide position, from 1 without gaps. Text outside its bound fails with `invalid`; an unknown turn fails with `not-found`; a generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
 
 The session retains a window of its latest entries of at most `OUTPUT_RETENTION_BYTES`, 10,485,760 bytes (`10 MiB`) of UTF-8 text, the [operational targets](../operational-targets.md) bound of the live session stream buffer per active attempt. Appending drops the oldest entries until the window fits; positions are never reused.
 
@@ -162,7 +163,7 @@ The session retains a window of its latest entries of at most `OUTPUT_RETENTION_
 
 ## 8. Limit and handoff
 
-A session is stopped by a turn that ends as `account-limit-reached` (section 4.3) or by `recordLimitSignal(session, signal)`, the port's `limit` account signal of the session's slot with its `resetsAt` when known. A later signal records a reset time that the stop does not have yet; otherwise it changes nothing. A stopped session accepts no new turn, delivery, or generation; outcomes, requests, responses, delivery reports, and output of its running turn are still recorded.
+A session is stopped by a turn that ends as `account-limit-reached` (section 4.3) or by `recordLimitSignal(session, signal)`, the port's `limit` account signal of the session's slot with its `resetsAt` when known. A later signal records a reset time that the stop does not have yet; otherwise it changes nothing. `isStopped(session)` tells whether the session is stopped. A stopped session accepts no new turn, delivery, or generation; outcomes, requests, responses, delivery reports, and output of its running turn are still recorded.
 
 `writeHandoff(session, evidence)` records the handoff once the stopped session's generation has ended, so that its unresolved requests are final. The host writes it; no agent-written text is in it. It holds:
 

@@ -29,7 +29,7 @@ Pending.
 
 ## Fail-before
 
-Pending (task 3.2).
+On the fail-before commit (`test: add the failing session timeline tests`), whose domain functions are stubs that throw `not implemented` and whose `parseSessionGeneration` returns an `internal` failure for every positive value, after `npm run build`: `node --experimental-strip-types --test packages/modules/execution/test/session-*.test.ts` over the five new test files (`session-attempts`, `session-turns`, `session-requests`, `session-output`, and `session-handoff`) reported 49 tests, 3 pass, 46 fail, exit status 1. Every failing test failed on a stub (`Error: not implemented`) or on the stubbed parser. The 3 passing tests pin the contract constants that the stubs already declare (`TURN_STATES`, `REQUEST_STATES` with `DELIVERY_STATES`, and `OUTPUT_RETENTION_BYTES`), so they test no behavior.
 
 ## Checks
 
