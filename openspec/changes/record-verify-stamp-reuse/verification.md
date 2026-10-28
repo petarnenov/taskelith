@@ -52,7 +52,26 @@ Fail-before: the two resume tests were run against `scripts/integrate.sh` of `78
 
 ### Pass 2
 
-Pending: pass 2 (role B, `claude claude-opus-5-5#medium`), and pass 3 (role A, `codex gpt-6.1-sol#medium`) only after a pass 2 with a Medium or worse finding, assigned by the coordinator.
+Reviewer B: Claude Code, `claude claude-opus-5-5#medium`, run as `make review CHANGE=record-verify-stamp-reuse PASS=2 REVIEWER='claude claude-opus-5-5#medium'`, model `claude-opus-5-5` reported, effort medium, session `a7c8c597-e510-406c-a739-08652cf32c55`. The worktree snapshot was `b792357549d5ff7acd96274f6ed95425364e65d18bc33262fa85545c246eb4a8` before and after the pass. It confirmed the pass 1 fix. Counts: Critical 0, High 0, Medium 0, Low 5, each recorded in `findings.jsonl` as `fixed-unreviewed`:
+
+1. **Low, error-handling, `scripts/integrate.sh:231-232`.** The archive check matched `archive/*-<branch>`, but the change name used `archive/<YYYY-MM-DD>-<branch>`; a branch `foo` with only `2026-10-27-bar-foo` passed the check and then exited 1 without a marker under `set -e` and `pipefail`. Fixed in `017ac7a3`: both use the dated pattern in `archived`, so a mismatch prints `NOT ARCHIVED <branch>` and exits 5, as coordinator step 2 of `docs/agent-task-protocol.md` already describes (`openspec/changes/archive/<date>-<change>/`). The new test "a branch whose name only ends another archived change is not integrated" failed before the fix (exit 1, expected 5) and passes after it.
+2. **Low, clean-code (recorded as `naming`, the closest category), `scripts/integrate.sh:122-133`.** `record_integration` silently set the global `integration_line` that later steps read. Fixed in `017ac7a3`: `format_integration_line` prints the line of the merged tree, the caller assigns `integration_line="$(format_integration_line "$merged_tree")"`, and `record_integration` only prints the line and appends the JSON record. Behavior is unchanged; the existing tests of the line cover it.
+3. **Low, missing test (recorded as `missing-fail-before-test`), `test/integrate-script.test.ts`.** No test showed that a failed `gh pr view` or `gh pr edit` on resume stops before `gh pr merge`. Fixed in `017ac7a3`: the `gh` stub fails `pr edit` under `FAKE_EDIT=fail`, and the test "a resume whose body edit fails stops before the merge" expects a non-zero exit, `gh pr edit` as the last `gh` call, no `gh pr merge`, and no `LANDED`. It guards existing behavior, so it passed before the fix as well.
+4. **Low, contract-drift, `proposal.md:8` and `tasks.md:13`.** Neither mentioned appending the line to an open pull request on resume. Fixed in `4347c936`.
+5. **Low, evidence-mismatch, `verification.md:24`.** The requirement body was given as 395 characters; the pass 1 fix grew it to 457, counted exactly on the body line of the spec delta. Fixed in `4347c936`.
+
+Fail-before: the two new tests were run against `scripts/integrate.sh` of `a9dc4e88`, the pre-fix file restored in the worktree for the run and the fixed file put back: "a branch whose name only ends another archived change is not integrated" failed (status 1, expected 5), and "a resume whose body edit fails stops before the merge" passed, as it covers existing behavior. With the fixes, `test/integrate-script.test.ts` passes 30 of 30.
+
+The review ended at pass 2: it reported only Low findings, so no pass 3 runs (governance "Review sequence").
+
+### Unreviewed fixes
+
+No later pass reviews these fixes; each is marked unreviewed for the coordinator's architect check (governance "Architect check of unreviewed fixes").
+
+1. Pass 2 findings 1 to 3 (`017ac7a3`): `scripts/integrate.sh` (the shared `archived` pattern, `format_integration_line`) and `test/integrate-script.test.ts` (two tests, the `FAKE_EDIT` stub mode).
+2. Pass 2 findings 4 and 5 (`4347c936`): `proposal.md`, `tasks.md`, and the spec bullet of this record.
+
+Architect check: pending, by the coordinator (Niki).
 
 <!-- make record: begin -->
 ## Generated checks
@@ -78,6 +97,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review passes, assigned by the coordinator
-- Archive the change after the review
+- Archive the change
+- Architect check of the unreviewed fixes by the coordinator (Niki)
 - Integration into dev by the coordinator (single pull request)
