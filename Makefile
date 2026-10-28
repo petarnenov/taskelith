@@ -127,7 +127,7 @@ verify-linux-g2-scenarios:
 	@$(MAKE) --no-print-directory linux-test-image
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
-		$(or $(FILES),$(G2_SCENARIO_FILES))
+		-- $(or $(FILES),$(G2_SCENARIO_FILES))
 
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.

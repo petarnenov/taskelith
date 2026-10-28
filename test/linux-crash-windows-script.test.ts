@@ -41,3 +41,31 @@ test('the partition scenarios reach Toxiproxy and the proxied services', () => {
     assert.match(options, new RegExp(`^--env\\n${variable}$`, 'm'));
   }
 });
+
+// The node:test arguments of tools/linux-cgroup/crash-windows.sh.
+function testArguments(...args: string[]): string[] {
+  const run = spawnSync('bash', ['-c', 'source tools/linux-cgroup/crash-windows.sh; test_arguments "$@"', 'bash', ...args], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout.split('\n').filter((line) => line !== '');
+}
+
+const CRASH_WINDOWS = 'apps/control-plane/test/crash-windows.integration.test.ts';
+const RACES = 'test/g2-cancellation-races.test.ts';
+
+test('a pattern with its value attached keeps the crash windows by default', () => {
+  assert.deepEqual(testArguments('--test-name-pattern=redelivered'), ['--test-name-pattern=redelivered', CRASH_WINDOWS]);
+});
+
+test('a pattern with its value apart is never taken for a test file', () => {
+  assert.deepEqual(testArguments('--test-name-pattern', 'redelivered'), ['--test-name-pattern', 'redelivered', CRASH_WINDOWS]);
+});
+
+test('files after the separator replace the crash windows, whatever the pattern form', () => {
+  assert.deepEqual(testArguments('--test-name-pattern=a b', '--', RACES), ['--test-name-pattern=a b', RACES]);
+  assert.deepEqual(testArguments('--test-name-pattern', 'a', '--', RACES, CRASH_WINDOWS), ['--test-name-pattern', 'a', RACES, CRASH_WINDOWS]);
+});
+
+test('no arguments, or a separator without files, run the crash windows', () => {
+  assert.deepEqual(testArguments(), [CRASH_WINDOWS]);
+  assert.deepEqual(testArguments('--'), [CRASH_WINDOWS]);
+});

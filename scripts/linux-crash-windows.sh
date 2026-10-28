@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
-  echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_OPTIONS...] [TEST_FILES...]" >&2
+  echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_OPTIONS...] [-- TEST_FILES...]" >&2
   exit 2
 fi
 if [ -z "${TASKELITH_SERVICES_SECRETS:-}" ]; then
