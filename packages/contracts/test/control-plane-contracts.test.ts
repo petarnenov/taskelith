@@ -292,14 +292,18 @@ test('a binding branch is any name that git check-ref-format --branch accepts', 
   for (const name of refused) assert.ok(violations(checkHttpSchema('BranchName', name)).length > 0, name);
 });
 
+const INVALID_HOSTS = ['https://scm.example:99999', 'https://scm.example:0', 'https://[.]:443', 'https://[12345::]:443', 'https://[::1]:443'];
+
 test('a bound remote is an HTTPS URL without user information, query, or fragment', () => {
   const refused = [
     'http://scm.example/acme/project.git', 'https://agent@scm.example/acme/project.git', 'https://:token@scm.example/acme/project.git',
     'ssh://git@scm.example/acme/project.git', 'scm.example:acme/project.git', 'https://scm.example/a b',
     'https://scm.example/acme/project.git?x=1', 'https://scm.example/acme/project.git#main',
+    ...INVALID_HOSTS.map((origin) => `${origin}/acme/project.git`),
   ];
 
   assert.ok(checkHttpSchema('RemoteUrl', 'https://scm.example/acme/project.git').ok);
+  assert.ok(checkHttpSchema('RemoteUrl', 'https://scm.example:65535/acme/project.git').ok);
   for (const remote of refused) assert.ok(violations(checkHttpSchema('RemoteUrl', remote)).length > 0, remote);
 });
 
@@ -324,12 +328,12 @@ test('only an installation owner sets the allowed origin of an SCM integration, 
     reachable(requestBody?.content['application/json']?.schema).some((schema) => holdsKey(schema, '$ref', '#/components/schemas/AllowedOrigin')));
 
   assert.deepEqual(setters.map(({ operationId }) => operationId), owned);
-  for (const origin of ['https://scm.example', 'HTTPS://SCM.Example:8443', 'https://[::1]:443']) assert.ok(checkHttpSchema('AllowedOrigin', origin).ok, origin);
-  for (const origin of ['http://scm.example', 'https://a@scm.example', 'https://scm.example/', 'https://scm.example?x', 'https://scm.example#x']) {
+  for (const origin of ['https://scm.example', 'HTTPS://SCM.Example:8443', 'https://scm.example:1']) assert.ok(checkHttpSchema('AllowedOrigin', origin).ok, origin);
+  for (const origin of ['http://scm.example', 'https://a@scm.example', 'https://scm.example/', 'https://scm.example?x', 'https://scm.example#x', ...INVALID_HOSTS]) {
     assert.ok(violations(checkHttpSchema('AllowedOrigin', origin)).length > 0, origin);
   }
   assert.ok(checkHttpSchema('NormalizedOrigin', 'https://scm.example:443').ok);
-  for (const origin of ['https://scm.example', 'https://SCM.example:443']) assert.ok(violations(checkHttpSchema('NormalizedOrigin', origin)).length > 0, origin);
+  for (const origin of ['https://scm.example', 'https://SCM.example:443', ...INVALID_HOSTS]) assert.ok(violations(checkHttpSchema('NormalizedOrigin', origin)).length > 0, origin);
   assert.ok(violations(checkHttpSchema('ScmIntegrationCreation', { pluginId: 'scm-plugin', label: 'Main', settings: {}, secrets: {} })).some((text) => text.includes('allowedOrigin')));
   assert.ok(checkHttpSchema('ScmIntegrationUpdate', { expectedRevision: 1, allowedOrigin: 'https://scm.example' }).ok);
 });

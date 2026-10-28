@@ -4268,8 +4268,8 @@
       "RemoteUrl": {
         "type": "string",
         "maxLength": 2048,
-        "pattern": "^https://[^/?#@\\s]+(?:/[^?#\\s]*)?$",
-        "description": "A bound remote URL: HTTPS without user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
+        "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[^?#\\s]*)?$",
+        "description": "A bound remote URL: HTTPS with a host name and an optional port from 1 to 65535, without IPv6 literal, user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
       },
       "RemoteUrlCandidate": {
         "type": "string",
@@ -4280,13 +4280,13 @@
       "AllowedOrigin": {
         "type": "string",
         "maxLength": 300,
-        "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?$",
-        "description": "The origin that the integration's remote URLs must have: the scheme https, a host, and an optional port, with no user information, path, query, or fragment. Only an `installation-owner` sets it. The control plane stores it normalized as `NormalizedOrigin`."
+        "pattern": "^[Hh][Tt][Tt][Pp][Ss]://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$",
+        "description": "The origin that the integration's remote URLs must have: the scheme https, a host name, and an optional port from 1 to 65535, with no IPv6 literal, user information, path, query, or fragment. Only an `installation-owner` sets it. The control plane stores it normalized as `NormalizedOrigin`."
       },
       "NormalizedOrigin": {
         "type": "string",
         "maxLength": 300,
-        "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\\[[0-9a-f:.]+\\]):[0-9]{1,5}$",
+        "pattern": "^https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
         "description": "An origin after normalization: scheme and host in lower case and the port explicit, 443 when none was given. Origins are compared only in this form."
       },
       "BindingRefusal": {
