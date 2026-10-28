@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification, the evidence runs, and `make verify` are recorded below; no review pass has run yet.
+Date: 2026-10-28. The author's verification, the evidence runs, `make verify`, and the fixes of review pass 1 are recorded below.
 
 ## Scope and source
 
@@ -14,6 +14,7 @@ Worker Pepi's brief of 2026-10-28 from coordinator Niki for G3 item 43 (`docs/g3
 
 - `67cb1122`: the test tooling, target, runner, and `docs/local-installation.md`; the evidence runs ran on this commit.
 - The next commit adds the OpenSpec records, `results.jsonl`, `acceptance.md`, and the `docs/worker-platforms.md` and `docs/g3-plan.md` edits; it changes no file that the evidence runs execute.
+- Review pass 1 fixes: `f62ce2d1` (race g's recovery hold, M1), `5774715e` (the macOS guard's unit tests, M2), `911d75d8` (L1), and `8796da32` (L2). The evidence runs were repeated on `8796da32`; the records commit after it changes no file that they execute.
 
 ## Environment
 
@@ -32,12 +33,15 @@ macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64 (2020 Intel iMac), APFS boot data vo
 
 - **First run.** `make verify-macos-g2-scenarios` on the uncommitted change before race g: tests 18, pass 17, skipped 1 (the race g stub); every scenario passed through the macOS supervisor.
 - **Race g, before its final assertions.** The first race g waited for the task to end after the released child; it timed out in both seeds, because the execution correctly stays `started` and becomes `uncertain` (a diagnostic run printed the evidence `cancellation-not-applied` then `uncertain` and the result `pending`). The final assertions check that state ([design](design.md) decision 5).
-- **Evidence runs.** Two `make native-acceptance ENTRIES=macos` runs on `67cb1122` with seeds `20261026` and `7`: exit 0 each, `every proof passed`, 57 records each, 114 in all, every one `passed` ([acceptance](acceptance.md)).
+- **Evidence runs.** Two `make native-acceptance ENTRIES=macos` runs on `67cb1122` with seeds `20261026` and `7`: exit 0 each, `every proof passed`, 57 records each, 114 in all, every one `passed`. After the pass 1 fixes both runs were repeated on `8796da32` with the same seeds: exit 0 each, `every proof passed`, 57 records each, 114 in all, every one `passed`; they replace the first runs in `results.jsonl` ([acceptance](acceptance.md)). Race g recorded `cancel before the adopter started` with seed `20261026` and `cancel while the adopter observed` with seed `7`.
+- **Race g alone after the fix.** `make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^g\.'` on `5774715e` with `TASKELITH_TEST_SEED` `20261026` and `7`: tests 1, pass 1 each.
 
 ## Fail-before
 
 - **Race g against a signalling adopter.** With `packages/adapters/worker-supervisor/src/adoption.ts` changed locally to send the group `SIGTERM` after recording `not-applied`, rebuilt, `make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^g\.'` with `TASKELITH_TEST_SEED` `1` and `2`: race g failed in both seeds with `the adopter signalled nothing: the child still runs` (actual `[]`, expected the child's process ID). The change was reverted and the checkout rebuilt; it was never committed.
-- **The macOS guard against a process that is not a launch supervisor's child.** With the guard changed locally to accept only adopting supervisors as parents, `TASKELITH_TEST_SEED=20261026 make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^h\.'`: race h failed with `process 81955 is a child of 81930, not of a supervisor of /var/folders/.../unauthorized-start`. Reverted; never committed.
+- **The macOS guard reaches its check.** With the guard changed locally to accept only adopting supervisors as parents, `TASKELITH_TEST_SEED=20261026 make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^h\.'`: race h failed with `process 81955 is a child of 81930, not of a supervisor of /var/folders/.../unauthorized-start`. Reverted; never committed. This shows that race h reaches the check with the correct launching supervisor, not that the check rejects a wrong parent; the next item shows that (review pass 1, M2).
+- **The macOS guard rejects a wrong parent.** `test/g2-scenario-launch.test.ts`, "the macOS guard", spawns real processes: a child of a fake supervisor process naming `SUPERVISOR_MAIN` and the worker's data root (accepted), and children of a test-side parent that names the data root but not the supervisor program, of a fake supervisor of another worker's data root, and of the test process itself (each rejected with `not of a supervisor of`). With `assertMacosSupervised` changed locally to return before its check, `node --experimental-strip-types --test test/g2-scenario-launch.test.ts` on `5774715e`: pass 7, fail 3, the three rejections failing with `Missing expected exception` and the acceptance passing. Restored, pass 10, fail 0; the bypass was never committed.
+- **Race g's order.** Race g now holds the worker's next supervisor recovery before it kills the launching supervisor (review pass 1, M1), and with seed `20261026` asserts that no adopting supervisor runs once the cancel committed. With the test changed locally to release the hold and wait for the adoption before that cancel, `TASKELITH_TEST_SEED=20261026 make verify-macos-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='^g\.'` on `5774715e` failed with `no adopter before the cancel committed` (actual: the adopting `supervisor-main.js adopt` process). Reverted; never committed.
 - **Unit tests.** `test/g2-scenario-launch.test.ts` covers the switch, its refusal off macOS, the launch host kinds and cancel signals, and the `ps` parsing; `test/native-acceptance-runner.test.ts` covers the two new macOS proofs.
 
 ## Checks
@@ -58,7 +62,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Review
 
-No review pass has run. Reviewers A and B are assigned by the coordinator.
+### Pass 1 (reviewer A)
+
+Reviewer details: recorded by the worker.
+
+Fixes:
+
+- **M1** (race g's order unproven): race g holds the worker's next supervisor recovery, through the new test-side `aroundSupervisorRecover` wrap, before it kills the launching supervisor; with the cancel before adoption it commits the cancel, checks that no adopter runs, and only then releases the hold; with the cancel during the watch it releases first and cancels once the recovery reported `adopted` and one adopting supervisor runs. Evidence runs repeated on `8796da32`; `design.md` decision 5 and `acceptance.md` describe the hold in the records commit. Commit `f62ce2d1`.
+- **M2** (the guard's negative cases untested): unit tests of `assertMacosSupervised` with real processes, a positive control and three rejections (a test-side parent, another worker's supervisor, the test process), with the fail-before run above. Commit `5774715e`.
+- **L1** (docs): `docs/worker-platforms.md` names network changes among the open Connectivity (G2) parts on macOS. Commit `911d75d8`.
+- **L2** (record): `design.md` says the guard covers races c, g, and h. Commit `8796da32`; `tasks.md` 2.3 says the same in the records commit.
 
 ## Limitations
 

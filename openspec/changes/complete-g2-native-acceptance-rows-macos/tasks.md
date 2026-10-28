@@ -6,7 +6,7 @@
 
 - [x] 2.1 Add the macOS launch switch, the launch host kinds, and their cancel signals, with unit tests
 - [x] 2.2 Launch the scenario workers, the crash-before-ack worker included, through the worker's own launch host on macOS, and list leftover processes through `ps` there
-- [x] 2.3 Generalize the guard of races c and h to the macOS supervisor; record its fail-before run
+- [x] 2.3 Generalize the guard of races c, g, and h to the macOS supervisor; record its fail-before run
 - [x] 2.4 Run race g through the macOS supervisor; record its fail-before run
 - [x] 2.5 Add `make verify-macos-g2-scenarios`
 
