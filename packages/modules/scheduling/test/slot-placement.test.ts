@@ -90,6 +90,8 @@ interface Fixture {
   readonly tx: CapacityTransaction;
   readonly task: Task;
   readonly slots: InMemoryAccountSlots;
+  readonly assignments: InMemoryAssignmentRepository;
+  readonly outbox: InMemoryOutbox;
 }
 
 // One worker per entry, with that many free slots.
@@ -109,10 +111,11 @@ async function fixture(workerSlots: readonly number[]): Promise<Fixture> {
   }));
   const slots = new InMemoryAccountSlots();
   const quotas = new InMemoryQuotaSettings();
+  const outbox = new InMemoryOutbox();
   return {
-    task, slots,
+    task, slots, assignments, outbox,
     tx: {
-      assignments, admissions, tasks, lineage, outbox: new InMemoryOutbox(), accountSlots: slots,
+      assignments, admissions, tasks, lineage, outbox, accountSlots: slots,
       workers: new InMemoryPlacementWorkers(workers, () => assignments.all()),
       installation: new InMemoryInstallationGuard(false), quotas,
       ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage),
@@ -200,6 +203,17 @@ test('an attempt without a slot request reserves no provider credential', async 
   const placed = value(await placeInTransaction(tx, request(task, 'worker-1', undefined)));
   assert.ok(placed.kind === 'placed');
   assert.deepEqual(placed.assignment.reservation.providerCredentials, []);
+});
+
+test('a slot request for another project than the task\'s is invalid and reserves nothing', async () => {
+  const { tx, task, slots, assignments, outbox } = await fixture([2]);
+  const other = id('ProjectId', 'other-project') as ProjectId;
+  value(await slots.add(slotRecord('slot-1', { allowedProjects: [other] })));
+  const placed = await placeInTransaction(tx, request(task, 'worker-1', { ...NEW_SESSION, projectId: other }));
+  assert.ok(!placed.ok);
+  assert.equal(placed.error.code, 'invalid');
+  assert.deepEqual([assignments.all(), outbox.messages], [[], []]);
+  assert.equal(value(await slots.get(id('ProviderCredentialId', 'slot-1'))).revision, 1);
 });
 
 const PINNED = { harnessId: HARNESS, slotId: id('ProviderCredentialId', 'slot-1') };

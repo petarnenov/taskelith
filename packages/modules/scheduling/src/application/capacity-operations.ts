@@ -72,11 +72,25 @@ export async function placeInTransaction(tx: CapacityTransaction, request: Place
   const fenced = checkPlacementClaim(task.value, request);
   if (!fenced.ok) return fenced;
   const charged = await tx.ledger.isCharged(request.attemptId);
-  const slot = request.slotRequest === undefined ? ok(undefined) : await selectSlotInTransaction(tx, request.slotRequest);
+  const slot = await selectSlotForTask(tx, request.slotRequest, lineage);
   if (!slot.ok) return slot;
   const decision = decidePlacement(await readPlacementSnapshot(tx, request, task.value, lineage, root, charged, slot.value));
   if (!decision.fits) return outcome(decision.reason);
   return insertPlacement(tx, request, task.value, lineage, charged, reservedSlot(slot.value));
+}
+
+// The reservation records the lineage's project, so the selection serves
+// only that project's pool (pool section 3.1).
+async function selectSlotForTask(
+  tx: CapacityTransaction, slotRequest: SlotRequest | undefined, lineage: TaskLineageLink,
+): Promise<Result<SlotSelection | undefined>> {
+  if (slotRequest === undefined) return ok(undefined);
+  if (slotRequest.projectId !== lineage.projectId) {
+    return err(failure('invalid', `the slot request names project ${slotRequest.projectId}, not the task's project`, {
+      project: slotRequest.projectId, taskProject: lineage.projectId,
+    }));
+  }
+  return selectSlotInTransaction(tx, slotRequest);
 }
 
 // D-B: without an execution that can run, the assignment ends, releases,
