@@ -20,22 +20,24 @@ services:
       timeout: 5s
       retries: 60
 
-  # One-shot, as root: copies the broker trust from the control-plane data
-  # root and hands the NATS volumes to the broker's unprivileged user.
+  # One-shot, as root: copies the broker trust and TLS files from the data
+  # root, the public CA for the worker, and hands NATS its volumes.
   nats-setup:
     image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
     profiles: [setup]
     entrypoint: ["sh", "-euc"]
     command:
       - >-
-        install -o 10002 -g 10002 -m 0400
-        /control-plane-data/control-plane/nats-authority.conf
-        /etc/nats/authority/nats-authority.conf
+        cd /control-plane-data/control-plane
+        && install -o 10002 -g 10002 -m 0400 nats-authority.conf nats-certificate.pem nats-key.pem
+        /etc/nats/authority/
+        && install -m 0444 installation-ca.pem /etc/taskelith/trust/installation-ca.pem
         && chown 10002:10002 /etc/nats/authority /data
     network_mode: none
     volumes:
       - control-plane-data:/control-plane-data:ro
       - nats-authority:/etc/nats/authority
+      - installation-trust:/etc/taskelith/trust
       - nats-data:/data
 
   nats:
@@ -45,7 +47,7 @@ services:
       - ./nats-server.conf:/etc/nats/nats-server.conf:ro
       - nats-authority:/etc/nats/authority:ro
       - nats-data:/data
-    # Plain connections on localhost only: TLS is G3 work.
+    # TLS only (nats-server.conf), published on localhost only.
     ports:
       - "127.0.0.1:${TASKELITH_NATS_PUBLISH_PORT-4222}:4222"
     restart: unless-stopped
@@ -60,14 +62,16 @@ services:
     pull_policy: never
     environment:
       TASKELITH_POSTGRES_URL: *postgres-url
+      # The broker CA defaults to the installation CA in the data root.
       TASKELITH_NATS_URL: nats://nats:4222
       # 1 GiB per stream fits the broker's file store (nats-server.conf).
       TASKELITH_STREAM_MAX_BYTES: "1073741824"
     volumes:
       - control-plane-data:/var/lib/taskelith
-    # Plain HTTP on localhost only: TLS is G3 work.
+    # HTTPS only: the worker API and the browser endpoint, on localhost.
     ports:
       - "127.0.0.1:${TASKELITH_API_PUBLISH_PORT-8080}:8080"
+      - "127.0.0.1:${TASKELITH_BROWSER_PUBLISH_PORT-8443}:8443"
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +94,10 @@ services:
     environment:
       TASKELITH_POSTGRES_URL: *postgres-url
       TASKELITH_NATS_URL: nats://nats:4222
+      # The names that the server certificates of init and
+      # issue-installation-certificates hold.
+      TASKELITH_API_HOSTS: ${TASKELITH_API_HOSTS:-control-plane,localhost,127.0.0.1}
+      TASKELITH_NATS_HOSTS: ${TASKELITH_NATS_HOSTS:-nats,localhost,127.0.0.1}
     volumes:
       - control-plane-data:/var/lib/taskelith
 
@@ -109,12 +117,16 @@ services:
     # Reaps executions whose supervisor ended first.
     init: true
     environment:
-      TASKELITH_CONTROL_PLANE_URL: http://control-plane:8080
+      TASKELITH_CONTROL_PLANE_URL: https://control-plane:8080
       TASKELITH_NATS_URL: nats://nats:4222
+      # The installation CA from the setup step; 26b pins it at enrollment.
+      TASKELITH_NATS_CA: /etc/taskelith/trust/installation-ca.pem
+      NODE_EXTRA_CA_CERTS: /etc/taskelith/trust/installation-ca.pem
       # Read only on the first start, which enrolls the worker.
       TASKELITH_ENROLLMENT_TOKEN: ${TASKELITH_ENROLLMENT_TOKEN:-}
     volumes:
       - worker-data:/var/lib/taskelith
+      - installation-trust:/etc/taskelith/trust:ro
     depends_on:
       control-plane:
         condition: service_healthy
@@ -124,5 +136,6 @@ volumes:
   postgres-data:
   control-plane-data:
   nats-authority:
+  installation-trust:
   nats-data:
   worker-data:

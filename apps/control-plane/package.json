@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@taskelith/access": "0.0.0",
+    "@taskelith/certificates": "0.0.0",
     "@taskelith/contracts": "0.0.0",
     "@taskelith/control-plane-store": "0.0.0",
     "@taskelith/data-root": "0.0.0",

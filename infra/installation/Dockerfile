@@ -45,8 +45,8 @@ ENV NODE_ENV=production TASKELITH_DATA_DIR=/var/lib/taskelith
 USER taskelith
 
 FROM runtime AS control-plane
-ENV TASKELITH_API_HOST=0.0.0.0
-EXPOSE 8080
+ENV TASKELITH_API_HOST=0.0.0.0 TASKELITH_BROWSER_HOST=0.0.0.0
+EXPOSE 8080 8443
 CMD ["node", "apps/control-plane/dist/main.js"]
 
 # Each execution runs as taskelith-exec, which owns no cgroup of the worker;

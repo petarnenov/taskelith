@@ -1,5 +1,12 @@
 import type { LogCorrelation, LogFields, LogValue } from './log-record.js';
-import { MARKED_SECRET_RULES, REDACTED, redactWith, SECRET_SEGMENTS, SECRET_SHAPE_RULES } from './redaction-rules.js';
+import {
+  MARKED_SECRET_RULES,
+  REDACTED,
+  redactPemPrivateKeys,
+  redactWith,
+  SECRET_SEGMENTS,
+  TOKEN_SHAPE_RULES,
+} from './redaction-rules.js';
 
 // `promptTokens` is a count, but `accessToken` and `api_key` are dropped.
 export function isSecretFieldName(name: string): boolean {
@@ -9,8 +16,9 @@ export function isSecretFieldName(name: string): boolean {
   return [...segments, ...pairs].some((segment) => SECRET_SEGMENTS.has(segment));
 }
 
-// Secrets that can hide inside free text, such as a failure message.
-const LOG_TEXT_RULES = [...MARKED_SECRET_RULES, ...SECRET_SHAPE_RULES];
+// Secrets that can hide inside free text, such as a failure message; PEM
+// keys first, as a marked secret's rule would cut a key's begin marker.
+const LOG_TEXT_RULES = [redactPemPrivateKeys, ...MARKED_SECRET_RULES, ...TOKEN_SHAPE_RULES];
 
 export function redactText(text: string): string {
   return redactWith(text, LOG_TEXT_RULES);

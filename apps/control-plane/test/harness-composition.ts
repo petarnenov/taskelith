@@ -16,7 +16,18 @@ import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, uncoveredEnvironment, value } from '@taskelith/testing';
+import {
+  CRASH_POINT_VARIABLE,
+  crashEnvironment,
+  integrationEndpoint,
+  integrationSecret,
+  integrationSecretPath,
+  ScenarioProcess,
+  SEED_VARIABLE,
+  trustCertificateAuthority,
+  uncoveredEnvironment,
+  value,
+} from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
 import { CRASH_TRACE_VARIABLE, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
 
@@ -229,9 +240,12 @@ export class HarnessInstallation {
     if (LINUX_LAUNCH !== undefined) admitExecutionAccount(base, LINUX_LAUNCH);
     const dataRoot = join(base, 'control-plane');
     const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), { signal });
-    const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
+    const environment = adminEnvironment(dataRoot, database);
     const init = ['init', '--actor', 'root@test', '--reason', 'crash scenario'];
-    const initialized = await bounded('the installation init', () => admin(environment, init), { signal }) as { identity: { installationId: string }; operatorSecret: string };
+    const initialized = await bounded('the installation init', () => admin(environment, init), { signal }) as {
+      identity: { installationId: string }; operatorSecret: string; installationCa: string;
+    };
+    trustCertificateAuthority(readFileSync(initialized.installationCa, 'utf8'));
     const address = value(TransportAddress.of(initialized.identity.installationId));
     releases.add(() => deleteStreams(authority, address));
     const logs = new InMemoryLogSink();
@@ -253,7 +267,12 @@ export class HarnessInstallation {
   }
 
   get apiUrl(): string {
-    return `http://127.0.0.1:${this.#apiPort}/`;
+    return `https://127.0.0.1:${this.#apiPort}/`;
+  }
+
+  // The installation CA, which a worker process trusts for the API.
+  get installationCa(): string {
+    return join(this.#identity.base, 'control-plane', 'control-plane', 'installation-ca.pem');
   }
 
   get address(): TransportAddress {
@@ -262,7 +281,7 @@ export class HarnessInstallation {
 
   async enrollmentToken(): Promise<string> {
     const { database, base, operator } = this.#identity;
-    const environment = { TASKELITH_DATA_DIR: join(base, 'control-plane'), TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
+    const environment = adminEnvironment(join(base, 'control-plane'), database);
     const issue = () => admin({ ...environment, TASKELITH_OPERATOR_TOKEN: operator }, ['issue-enrollment-token']);
     const issued = await bounded('the enrollment token', issue, { signal: this.#signal });
     return issued.enrollmentToken as string;
@@ -343,9 +362,17 @@ async function registeredAuthority(dataRoot: string): Promise<BrokerAuthority> {
   return authority;
 }
 
+// The test broker's CA, which its server certificate is issued by.
+function adminEnvironment(dataRoot: string, database: URL): Record<string, string> {
+  return {
+    TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href,
+    TASKELITH_NATS_CA: integrationSecretPath('ca.pem'),
+  };
+}
+
 function controlPlaneSettings(dataRoot: string, database: URL, logs: InMemoryLogSink): ControlPlaneSettings {
   return {
-    dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
+    dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 },
     workflows: [{ definition: WORKFLOW, digest: DIGEST }], logSink: logs,
     sweepMilliseconds: 200, placementMilliseconds: 200, shutdownMilliseconds: 1000, transportLimits: LIMITS,
   };
@@ -391,6 +418,7 @@ export class ComposedWorker {
       ...(run.failsFirstPrepare === true ? { [FAIL_FIRST_PREPARE_VARIABLE]: '1' } : {}),
       [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation.base),
       TASKELITH_DATA_DIR: join(installation.base, 'worker'), TASKELITH_CONTROL_PLANE_URL: installation.apiUrl,
+      NODE_EXTRA_CA_CERTS: installation.installationCa,
       TASKELITH_NATS_URL: NATS.href, TASKELITH_ENROLLMENT_TOKEN: enrollmentToken, TASKELITH_WORKER_COMMAND: childCommand(installation),
       ...LINUX_LAUNCH,
     };

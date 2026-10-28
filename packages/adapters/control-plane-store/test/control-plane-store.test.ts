@@ -78,6 +78,17 @@ test('a readable subtree or document is refused, since it holds signing seeds', 
   assert.equal(failed(namespace.read('installation')).details.reason, 'unsafe-path');
 });
 
+test('a text file is read back only while it is owner-only', () => {
+  const namespace = value(ControlPlaneNamespace.open({ dataRoot: dataRoot(), ownerUid }));
+  assert.equal(value(namespace.readText('api-key.pem')), undefined);
+  value(namespace.writeText('api-key.pem', 'key text\n'));
+  assert.equal(mode(join(namespace.directory, 'api-key.pem')), 0o600);
+  assert.equal(value(namespace.readText('api-key.pem')), 'key text\n');
+  chmodSync(join(namespace.directory, 'api-key.pem'), 0o640);
+  assert.equal(failed(namespace.readText('api-key.pem')).details.reason, 'unsafe-path');
+  assert.equal(failed(namespace.readText('../api-key.pem')).code, 'invalid');
+});
+
 test('the installation record holds the identity outside the database', async () => {
   const namespace = value(ControlPlaneNamespace.open({ dataRoot: dataRoot(), ownerUid }));
   const record = new FileInstallationRecord(namespace);
