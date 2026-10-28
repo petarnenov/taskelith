@@ -1,11 +1,38 @@
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
+
+export interface NamedProcess {
+  readonly pid: number;
+  readonly commandLine: string;
+}
 
 // Supervisors and scripted processes outlive a stopped worker by design;
 // a scenario finds those whose command line names its directory.
-export function processesNaming(marker: string): { pid: number; commandLine: string }[] {
-  return readdirSync('/proc').filter((entry) => /^\d+$/.test(entry) && Number(entry) !== process.pid)
-    .map((entry) => ({ pid: Number(entry), commandLine: commandLine(entry) }))
-    .filter((found) => found.commandLine.includes(marker));
+export function processesNaming(marker: string): NamedProcess[] {
+  const listed = process.platform === 'darwin' ? psProcesses() : procProcesses();
+  return listed.filter((found) => found.pid !== process.pid && found.commandLine.includes(marker));
+}
+
+function procProcesses(): NamedProcess[] {
+  return readdirSync('/proc').filter((entry) => /^\d+$/.test(entry))
+    .map((entry) => ({ pid: Number(entry), commandLine: procCommandLine(commandLine(entry)) }));
+}
+
+// /proc ends each argument with NUL; ps separates them with spaces.
+export function procCommandLine(cmdline: string): string {
+  return cmdline.replaceAll('\0', ' ');
+}
+
+// macOS has no /proc; ps prints each process's whole argument list.
+function psProcesses(): NamedProcess[] {
+  return parsePsListing(execFileSync('ps', ['-axww', '-o', 'pid=,args='], { encoding: 'utf8' }));
+}
+
+export function parsePsListing(listing: string): NamedProcess[] {
+  return listing.split('\n').flatMap((line) => {
+    const match = /^\s*(\d+)\s(.*)$/.exec(line);
+    return match === null ? [] : [{ pid: Number(match[1]), commandLine: match[2]! }];
+  });
 }
 
 export function killProcessesNaming(marker: string): number {
