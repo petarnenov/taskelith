@@ -1,0 +1,197 @@
+## MODIFIED Requirements
+
+### Requirement: Prepare refusals
+`prepare` SHALL refuse in this order: a head of another repository with `invalid`, a remote URL that is not HTTPS or holds user information with `invalid` and reason `insecure-remote`, an out-of-scope credential with `forbidden`, a missing base branch or head commit with `not-found`, a head whose tree is not its commit's tree with `invalid` and reason `head-mismatch`, and an existing workspace with `conflict`; a refusal SHALL create no workspace and SHALL leave an existing one unchanged.
+
+#### Scenario: Mismatched tree
+- **WHEN** an `at-head` workspace is prepared with a known commit and a tree that is not that commit's tree
+- **THEN** the prepare fails with `invalid` and reason `head-mismatch`, and no workspace or leftover exists
+
+#### Scenario: Second prepare
+- **WHEN** a workspace with an untracked file is prepared again for the same attempt
+- **THEN** the prepare fails with `conflict` and the workspace still holds the untracked file
+
+#### Scenario: Plain HTTP remote
+- **WHEN** a workspace is prepared with a binding whose remote is `http://scm.example/acme/project.git`
+- **THEN** the prepare fails with `invalid` and reason `insecure-remote`, and no workspace or leftover exists
+
+### Requirement: Crash-safe lifecycle
+A prepare SHALL build the clone in a staging entry and rename it into place, a removal SHALL rename the workspace to a removing entry before deleting it, `list` SHALL return only ready workspaces, and `sweep` SHALL delete staging and removing leftovers; a ready workspace SHALL survive a worker restart. Each step SHALL be a crash point `WS1` to `WS10` of the contract section 3, with `.before` and `.after`, and `WS8` while the reclaim program runs.
+
+#### Scenario: Restart after interrupted operations
+- **WHEN** a worker restarts after a crash during one prepare and one removal
+- **THEN** neither attempt is listed, `sweep` deletes both leftovers, and every ready workspace is still listed
+
+#### Scenario: Crash before the rename into place
+- **WHEN** the worker is killed at `WS2.before` and restarts
+- **THEN** the attempt is not listed and `sweep` deletes its staging entry
+
+#### Scenario: Crash after the hand-off record
+- **WHEN** the worker is killed at `WS5.after` and restarts
+- **THEN** `handedOff` returns the attempt and Git work on it fails with reason `workspace-handed-off`
+
+### Requirement: Per-run credential use
+The workspace SHALL use the source control contract's run credential passed to each remote operation, SHALL require `read-code` to prepare or read the remote head and `write-code` to push on the bound repository, failing with `forbidden` before any remote call, SHALL pass the secret to Git only as `http.extraHeader` in command-scope environment configuration, and SHALL never write it into the workspace, a file, a credential helper, an argument, or a log.
+
+#### Scenario: Read-only credential push
+- **WHEN** a push uses a credential without `write-code`
+- **THEN** it fails with `forbidden`, the service sees no remote call, and the remote task branch is unchanged
+
+#### Scenario: Foreign writer push
+- **WHEN** a push uses a credential with `write-code` on another repository only
+- **THEN** it fails with `forbidden` and the service sees no remote call
+
+#### Scenario: Secret after use
+- **WHEN** a workspace has been prepared and pushed with run credentials
+- **THEN** no byte under the workspace's directory contains a credential's secret
+
+#### Scenario: Secret in no argument
+- **WHEN** a workspace has been prepared, its remote head read, and pushed with run credentials
+- **THEN** no argument of any Git process holds a secret, and every Git process has `GIT_CONFIG_COUNT` in its environment
+
+### Requirement: Fast-forward task branch push
+A push SHALL name the remote task branch head the caller expects, SHALL fail with `conflict` and reason `remote-moved` when the remote head differs or `not-fast-forward` when the local head does not descend from it, SHALL update only the task branch, and SHALL never force: the branch SHALL never move to a commit that does not descend from the leased head, and the only push options SHALL be `--atomic --force-with-lease=refs/heads/<branch>:<expected>`.
+
+#### Scenario: Remote moved
+- **WHEN** another party advanced the remote task branch after the caller last saw it
+- **THEN** the push fails with `conflict` and the remote keeps the other party's head
+
+#### Scenario: Branch created by another party
+- **WHEN** a push expects no task branch and another party has created it
+- **THEN** the push fails with `conflict` and reason `remote-moved`, and the remote keeps the other party's head
+
+#### Scenario: Head beside the remote head
+- **WHEN** a push expects the current remote head and the workspace's head does not descend from it
+- **THEN** the push fails with `conflict` and reason `not-fast-forward`, and the remote is unchanged
+
+#### Scenario: Leased push
+- **WHEN** a push succeeds
+- **THEN** its one push process has `--atomic` and `--force-with-lease=refs/heads/<branch>:<expected>`, empty on a first push, and no `--force`, bare lease, or `+` refspec
+
+### Requirement: Head evidence snapshot
+`snapshot` SHALL return the workspace's current clean head, with all three parts, and Taskelith's own tar archive of content type `application/x-tar`, built from the head's tree and never by `git archive`, holding exactly its files with mode and bytes and its links with target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace, commit, or Git version, for storage under its SHA-256 digest with kind `code-head-snapshot`.
+
+#### Scenario: Same head in two workspaces
+- **WHEN** a pushed head is snapshotted in the implementation workspace and in a fresh review workspace at that head
+- **THEN** both snapshots have the same bytes
+
+#### Scenario: Empty commit
+- **WHEN** a clean head is snapshotted before and after an empty commit
+- **THEN** both snapshots have the same bytes
+
+#### Scenario: Gitlink in the tree
+- **WHEN** a clean head whose tree holds a gitlink is snapshotted
+- **THEN** the snapshot fails with `precondition-failed` and reason `gitlink-in-tree`
+
+### Requirement: Hand-off state
+On every platform the worker's `handed-off` record in the attempt directory SHALL be the hand-off state, written before the checkout opens and removed after it closes; while it exists, `inspect`, `snapshot`, `push`, and `remove` SHALL fail with `precondition-failed` and reason `workspace-handed-off`, after the checks of the workspace, its kind, and the credential, the workspace SHALL stay listed, and `handedOff` SHALL return it.
+
+#### Scenario: Git work while handed off
+- **WHEN** a handed-off `task-branch` workspace is inspected, snapshotted, pushed with a writing credential, or removed
+- **THEN** each fails with `precondition-failed` and reason `workspace-handed-off`, and the workspace stays listed
+
+#### Scenario: Hand-off on one account
+- **WHEN** a worker whose executions run as its own account hands a workspace off and restarts
+- **THEN** Git work on it still fails with reason `workspace-handed-off`
+
+#### Scenario: Push at a head while handed off
+- **WHEN** a handed-off `at-head` workspace is pushed
+- **THEN** the push fails with `invalid` and reason `read-only-workspace`
+
+#### Scenario: Handed-off workspaces after a restart
+- **WHEN** one of two workspaces is handed off and the worker restarts
+- **THEN** `handedOff` returns that attempt only, and after its reclaim returns none
+
+### Requirement: Reclaim program containment
+Before it starts the reclaim program, the worker SHALL record its containment `reclaim-<name>`, under its containment parent, in the hand-off record, its scan for unrecorded processes SHALL skip it, and after a restart or an interrupted reclaim it SHALL poll, without a kill, until it is empty before it reclaims again, runs Git on the workspace, or hands it off, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
+
+#### Scenario: Surviving reclaim program
+- **WHEN** the worker restarts while the reclaim program of its previous run still runs
+- **THEN** it does not reclaim again, run Git on the workspace, or hand it off until that program's process set is proven empty
+
+#### Scenario: Failed reclaim program
+- **WHEN** the reclaim program exits with a failure
+- **THEN** `reclaim` fails with `precondition-failed` and reason `reclaim-failed`, the workspace stays handed off, and the program does not run again
+
+#### Scenario: Reclaim containment at start
+- **WHEN** the worker restarts while a reclaim program runs in the containment that a hand-off record names
+- **THEN** it reports no unrecorded process for that containment and kills no process of it
+
+#### Scenario: Program past the bound
+- **WHEN** the containment that a hand-off record names is still populated at the bound
+- **THEN** the workspace stays handed off and is reported for reconciliation
+
+## ADDED Requirements
+
+### Requirement: Failed reclaim program
+A reclaim program that exits with a failure or is killed SHALL leave the workspace handed off, SHALL make `reclaim` fail with `precondition-failed` and reason `reclaim-failed`, also on a later call and after a restart, and SHALL be reported for reconciliation; the worker SHALL never run the program again for that hand-off.
+
+#### Scenario: Killed reclaim program
+- **WHEN** the reclaim program is killed
+- **THEN** `reclaim` fails with reason `reclaim-failed` and the workspace stays handed off
+
+#### Scenario: Reclaim after a failed program and a restart
+- **WHEN** the worker restarts after its reclaim program failed and `reclaim` is called again
+- **THEN** it fails with reason `reclaim-failed` without starting the program
+
+### Requirement: Reclaim program on one account
+Where the execution and worker identities are the same account, as on macOS, the reclaim program SHALL run as the worker identity, without a containment, in a process group of its own, which the hand-off record SHALL name before the program starts and which the worker SHALL prove empty, as it does a containment, before it reclaims again, runs Git on the workspace, or hands it off.
+
+#### Scenario: Reclaim program on macOS
+- **WHEN** a macOS worker reclaims a workspace
+- **THEN** the reclaim program runs as the worker's account in its own process group, which the hand-off record names while it runs
+
+### Requirement: Single slot with a shared execution account
+A Linux worker whose executions share a separate account SHALL refuse to start when `TASKELITH_WORKER_SLOTS` is greater than `1`, with an error that names the variable and the execution account, SHALL declare one slot when the variable is unset, and SHALL count the slot held by a handed-off workspace through `handedOff`; a worker whose executions run as its own account SHALL keep the slot count it is given.
+
+#### Scenario: Two slots requested
+- **WHEN** a Linux worker with the execution account `taskelith-exec` starts with `TASKELITH_WORKER_SLOTS=2`
+- **THEN** it refuses to start with an error that names `TASKELITH_WORKER_SLOTS` and `taskelith-exec`
+
+### Requirement: Pinned Git client
+The adapter SHALL run Git only through the explicit path of the worker's tool manifest and SHALL accept it only when `git --version` prints exactly the pinned string, `git version 2.43.0` of the package `git=1:2.43.0-1ubuntu7.4` on Linux and `git version 2.50.1 (Apple Git-155)` of Apple's `/usr/bin/git` on macOS, refusing otherwise with `precondition-failed` and reason `git-client-mismatch`; the pin SHALL be injectable for tests.
+
+#### Scenario: Other Git version
+- **WHEN** the client at the manifest's path prints `git version 2.56.0`
+- **THEN** the gate fails with `precondition-failed` and reason `git-client-mismatch`
+
+#### Scenario: Git first in the path
+- **WHEN** another `git` comes first in `PATH`
+- **THEN** the adapter still runs the client at the manifest's path
+
+### Requirement: HTTPS remotes
+A binding's remote URL SHALL be HTTPS without user information; `prepare` SHALL refuse any other remote with `invalid` and reason `insecure-remote` before its credential check and any remote call, and plain HTTP SHALL be accepted only to `127.0.0.1` where a test composes the adapter to allow it.
+
+#### Scenario: Remote with a user
+- **WHEN** a workspace is prepared with a binding whose remote is `https://agent@scm.example/acme/project.git`
+- **THEN** the prepare fails with `invalid` and reason `insecure-remote` and the service sees no remote call
+
+#### Scenario: Loopback HTTP in production
+- **WHEN** the worker's composition prepares a workspace with the remote `http://127.0.0.1:8080/acme/project.git`
+- **THEN** the prepare fails with reason `insecure-remote`
+
+### Requirement: Snapshot archive format
+The snapshot archive SHALL hold one ustar entry per file and link and no directory entry, in byte order of the UTF-8 paths, with mode `0644` or `0755` for files and `0777` for links, owner, group, and time `0`, empty user and group names, a pax header before an entry whose path, target, or size exceeds its ustar field, and two zero blocks at the end; a tree that holds a gitlink SHALL be refused with reason `gitlink-in-tree`.
+
+#### Scenario: Entries in any order
+- **WHEN** the same tree's entries are archived in two orders
+- **THEN** both archives have the same bytes, and the system `tar` extracts every file, link, and long path
+
+### Requirement: Conformance of the adapter's Git use
+Through the fixture's hooks that observe Git processes and plant `.git` settings, the suite SHALL report an adapter that pushes over a moved remote, pushes a head that does not descend from the leased one, pushes without a lease on the expected head, forgets hand-offs across a restart, passes a secret in an argument, runs Git in the inherited environment, keeps settings the agent planted, snapshots a gitlink, or clones from a remote that is not HTTPS.
+
+#### Scenario: Defective lease
+- **WHEN** the suite runs against an adapter that pushes over a moved remote task branch
+- **THEN** the remote-moved case reports a finding
+
+#### Scenario: Lease without ancestry
+- **WHEN** the suite runs against an adapter that pushes any head when the lease matches
+- **THEN** the not-fast-forward case reports a finding
+
+#### Scenario: Forgotten hand-off
+- **WHEN** the suite runs against an adapter whose `handedOff` forgets a hand-off across a restart
+- **THEN** the handed-off read case reports a finding
+
+#### Scenario: Planted settings kept
+- **WHEN** the suite runs against an adapter that keeps the settings the agent planted in `.git/config`
+- **THEN** the planted settings case reports a finding

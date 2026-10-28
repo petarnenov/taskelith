@@ -1,0 +1,97 @@
+{
+  "change": "align-git-workspace-adapter-contract",
+  "generatedAt": "2026-10-28T02:12:13.498Z",
+  "devCommit": "b099b9955119101d86b59d8c2ec9ed44cda35d23",
+  "query": {
+    "capabilities": [
+      "git-workspace-port"
+    ],
+    "files": [],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "spec-wording",
+        "count": 11
+      },
+      {
+        "category": "contract-drift",
+        "count": 9
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "concurrency-race",
+        "count": 3
+      },
+      {
+        "category": "docs",
+        "count": 2
+      },
+      {
+        "category": "redaction",
+        "count": 1
+      },
+      {
+        "category": "stale-citation",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 356,
+        "inChecklist": 277
+      },
+      "mediumOrWorse": {
+        "findings": 144,
+        "inChecklist": 124
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 69
+      },
+      {
+        "category": "docs",
+        "count": 49
+      },
+      {
+        "category": "spec-wording",
+        "count": 35
+      },
+      {
+        "category": "stale-citation",
+        "count": 29
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "contract-drift",
+        "count": 13
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 215,
+        "inChecklist": 214
+      },
+      "mediumOrWorse": {
+        "findings": 32,
+        "inChecklist": 32
+      }
+    }
+  }
+}
