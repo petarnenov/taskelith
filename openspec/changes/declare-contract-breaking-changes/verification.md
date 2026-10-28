@@ -71,11 +71,15 @@ Author checks on `34d99f3a` and its working tree, without Docker:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `20f9f56affc74eae7637e3b7735586a3dac6695f`; tests 3061, pass 3037, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `9579d89e899731ef3b08dac1e898bd40f31987c3`; tests 3064, pass 3040, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
 - `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 66 file(s); every pass summary file is valid: 46 file(s); every route file is valid: 3 file(s).`.
 - Spec diff against the merge base `24d259385778` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18236-3ca3-7db2-9678-9e40b1ea808a` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Independent review
@@ -93,6 +97,18 @@ Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: Claud
 - **M1, contract-drift** (`scripts/check-contract-compatibility.ts:41`, also lines 53 and 69): the version components and numeric prerelease identifiers were compared as `Number`, which loses precision above 2^53. With base and head `0.4.9007199254740992`, an entry for `0.4.9007199254740993` counted as history instead of stale, against "Stale and historical declarations"; adjacent large prerelease identifiers compared equal. Resolution: see "Pass 1 fixes".
 - **L1, contract-drift** (`scripts/check-contract-compatibility.ts:184`): entries for one path with versions `0.5.0+linux` and `0.5.0+mac`, equal in precedence, were rejected as `repeats`, though their path and version differ, against "Breaking-change declarations". Resolution: see "Pass 1 fixes".
 - **L2, spec-wording** (`specs/sdlc-wire-contracts/spec.md:22`): the scenario "Matching entry" accepted the listed changes "in any order", while `readDeclarations` rejects an entry whose `breakingChanges` are not sorted; the test called `declarationProblems` directly and so bypassed that validation. Resolution: see "Pass 1 fixes".
+
+### Pass 1 fixes
+
+Not yet reviewed; reviewer B checks them in pass 2.
+
+- **M1 fix** (`5809ba1d`): `parseVersion` reads the major, minor, and patch components as `BigInt`, and `compareIdentifiers` compares numeric prerelease identifiers as `BigInt`, through the new `compareNumbers`; `declaresBreakingChange` and `compareVersions` use them. Design decision 5 says so. File: `scripts/check-contract-compatibility.ts`.
+- **L1 fix** (`5809ba1d`, `8ac254f8`): `compareDeclarations` breaks a tie in precedence by the version text, so a repeat is the same path and version string, and `0.5.0+linux` sorts before `0.5.0+mac`. "Breaking-change declarations" (489 characters) now names the order, "path, version precedence, then version text", with the new scenario "Build metadata"; design decision 3 changes with it.
+- **L2 fix** (`8ac254f8`): the scenario "Matching entry" reads "the file's entry for 0.5.0 is valid, so its changes are sorted, and lists exactly the found changes, whatever order the check finds them in".
+- **Tests** (`640d7c06`, `test/check-contract-compatibility.test.ts`): `versions above 2^53 compare without loss of precision` (M1: a major and a minor bump, a stale entry `0.4.9007199254740993` over `0.4.9007199254740992`, and two adjacent prerelease identifiers); `versions that differ only in build metadata are distinct and ordered by their text` (L1, scenario "Build metadata"; the reverse order fails as unsorted, the same string as a repeat); `a valid, sorted entry read from the file matches found changes in any order` (L2, scenario "Matching entry": `readDeclarations`, then `declarationProblems`).
+- **Fails before the fix.** The test file of `640d7c06` against its unchanged script (that of `5820ce71`), `node --experimental-strip-types --test test/check-contract-compatibility.test.ts`: tests 24, pass 22, fail 2, the M1 test (`declaresBreakingChange` of `9007199254740992.0.0` to `9007199254740993.0.0`: `actual: false`, `expected: true`) and the L1 test (`repeats ... 0.5.0+mac` instead of a valid file). The L2 test passed before the fix: it pins the validation-then-comparison path that already held and that the reviewer found untested. After the fix, `5809ba1d`: tests 24, pass 24.
+- **Author checks after the fix:** `npm run verify:comments`: passed; `npx tsc -p tsconfig.check.json`, filtered to the changed script and test: no errors; coverage of `scripts/check-contract-compatibility.ts` over its test file: 76.98% lines, 97.71% branches, 82.76% functions; `npm run openspec -- validate declare-contract-breaking-changes --strict`: valid; an archive of the change in a scratch copy, then `npm run openspec -- validate --specs --strict`: 70 passed, 0 failed.
+- **`make verify`** on `8ac254f8` (tree `9579d89e`), full profile, exit 0, stamp written: tests 3064, pass 3040, fail 0, skipped 24; coverage 99.38% lines, 92.69% branches, 99.07% functions; 0 breaking changes of each document against the merge base `24d25938`. `make record` wrote "Generated checks" from its log.
 
 ## Remaining gates
 
