@@ -6,7 +6,7 @@ Date: 2026-10-28. The author's self-check, the checks, and the fail-before evide
 
 G3 sub-change 26c of item 26 `secure-remote-connectivity` ([G3 plan](/docs/g3-plan.md#work-items), row 26): the delivery of a rotated credential generation to an enrolled worker. The decisions come from away run `20261027T221048Z-claude-63826` (item 26), decisions 6, 7, and 9, and away run `20261028T065320Z-claude-17941` (the away delegate Claude Fable 5.1), decisions 1 to 8, both relayed by the coordinator (Niki); the author's choices are marked in [design.md](design.md). It was developed in a briefed subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)) in worktree `taskelith-worktrees/deliver-rotated-worker-credentials` on branch `deliver-rotated-worker-credentials`.
 
-- **Base revision:** `a3a0ac4c` (`origin/dev`, merge of pull request #393).
+- **Base revision:** `a3a0ac4c` (`origin/dev`, merge of pull request #393); since the merge of `dev` below, `7efc48d3` (merge of pull request #396).
 - **Revision verified:** `d56b211f`, with this record uncommitted. Commits: the contracts, spec deltas, and docs (`9cfd0c46`); the implementation (`43ba12ee`); the tests (`c154b121`); the route record (`24b8f426`); the outbox query of the administration test (`13cd280f`); the route dropped and recorded again after that fix (`fb9b06a6`, `d56b211f`).
 - **Scope:** request-only `rotate-worker --actor --reason`; the notice `worker.credentials.rotation-requested` through the outbox; `renewWorkerCredentials` and `confirmWorkerCredentials`; the hard cap in the grace-window sweep; the audit subject and the four worker-credential kinds; the worker's pending and adoption files, identity format 2, rotation driver, broker re-dial, bearer read per request, and the bounded stop on rejected broker credentials.
 - **Out of scope:** 26d (the private-network bind and the second-host acceptance), mutual TLS, a worker-generated NKey at enrollment (a follow-up line under row 26 of the G3 plan), an HTTP status endpoint for rotations.
@@ -17,7 +17,7 @@ macOS 26.6.2 arm64 (Apple M3), Node.js 24.22.1 from `.nvmrc`, Docker Desktop; th
 
 ## Author self-check
 
-- **Contract first.** `9cfd0c46` holds the proposal, design, six spec deltas, the execution OpenAPI document 0.5.0 to 0.6.0 (two operations, four schemas), the execution AsyncAPI document 0.7.0 to 0.8.0 (the notice), the declaration of the AsyncAPI document's three breaking changes in `packages/contracts/breaking-changes.json`, and the contract and guide sections, before any code commit. The OpenAPI additions report no breaking change.
+- **Contract first.** `9cfd0c46` holds the proposal, design, six spec deltas, the execution OpenAPI document 0.5.0 to 0.6.0 (two operations, four schemas; 0.7.0 since the merge of `dev` below), the execution AsyncAPI document 0.7.0 to 0.8.0 (the notice), the declaration of the AsyncAPI document's three breaking changes in `packages/contracts/breaking-changes.json`, and the contract and guide sections, before any code commit. The OpenAPI additions report no breaking change.
 - **Architecture.** The renewal client port (`CredentialRenewalClient`) and the broker signing port (`BrokerCredentials.sign`) are in `@taskelith/fleet`; the HTTP client is in `@taskelith/worker-control-plane-client`; the NKey and JWT work and the `credentials-rejected` classification are in `@taskelith/nats`; the pending and adoption files are in `@taskelith/worker-journal`; the audit write helper is in `@taskelith/postgres`; the driver (`credential-rotation.ts`) and the bounded dial (`broker-dial.ts`) are in `apps/worker`. `npm run check:boundaries` passes.
 - **Secrets.** No seed, bearer, or token crosses the wire on a renewal: the request carries the NKey public key and the SHA-256 of the new bearer. Log lines name generations, codes, and reasons only; `credential-rotation.test.ts` checks that no secret reaches the log, and the worker's terminal line holds no bearer (`worker-start.test.ts`). The pending file is created at mode `0600`.
 - **Errors.** A refused renewal or confirmation is logged; no answer is retried with the launch retry delay; a journal file failure fails the driver and stops the worker; the sweep reports a command consumer it could not remove.
@@ -52,6 +52,17 @@ Base `a3a0ac4c` had no renewal, confirmation, notice, driver, or audit subject, 
 
 The PostgreSQL registry runs the same conformance cases in `fleet-conformance.integration.test.ts`, and `broker-credentials.integration.test.ts` checks against the test NATS server that a revoked user's connection fails with reason `credentials-rejected`, a TLS failure without it, and a worker-generated key connects with the JWT signed for it. The end-to-end test in `control-plane-api.integration.test.ts`, "a rotation reaches the running worker, which renews, re-dials with N+1, and confirms", runs the real worker against the running control plane: the audit trail holds `rotation-requested`, `renewed`, and `confirmed` for generation 2, the old bearer is refused, and the restarted worker connects with generation 2. These integration tests were written with the implementation and passed in `make verify`; they have no separate fail-before run.
 
+## Merge of dev
+
+Before pass 1, `a67e3ac7` merged `origin/dev` at `7efc48d3` (pull requests #394 `define-board-session-and-event-stream-contracts`, #395 `extend-execution-http-contracts`, and #396 `schedule-intent-and-council-gates`) into the branch head `469da7b8`.
+
+- **Conflicts.** `packages/contracts/documents/execution.openapi.json` conflicted in `info.description` and at the end of `components.schemas`, where both sides added schemas. It was resolved by a three-way JSON merge: dev's 9c operations and schemas and this change's two operations and four schemas are all kept, the renewal and confirmation paths stay after `/workers/enrollments`, and the description is dev's with the 26c clause. `docs/contracts/execution-wire-contracts.md` conflicted in the version table: AsyncAPI 0.8.0 from this change, and the OpenAPI row of dev with the 26c operations. `docs/g3-plan.md` merged without a conflict.
+- **Version.** Sub-change 9c took OpenAPI 0.6.0 on `dev`, so the execution OpenAPI document moves to 0.7.0, one minor above it; the AsyncAPI document stays 0.8.0, since `dev` did not change it. `8affae67` moves the 9c version test to 0.7.0, and `4f3f2a81` the proposal, design, and tasks.
+- **Spec deltas.** `4f3f2a81` first carried dev's new text of "Execution HTTP operations" with this change's two operations; that text exceeded 500 characters and failed `verify:archive`, so `1211ef8a` drops the modified requirement and the added "Credential rotation notice" now defines `renewWorkerCredentials` and `confirmWorkerCredentials`. The other modified requirements are on capabilities that `dev` did not change.
+- **Breaking changes.** `dev` did not change `packages/contracts/breaking-changes.json`. `43aef0a8` lists this change's three AsyncAPI breaking changes against `7efc48d3`, entries unchanged. `make contract-compatibility` reports 0 breaking changes for every document against `7efc48d330b4` except `execution.asyncapi.json` with 3, and "Contract documents have no undeclared breaking change."
+- **Checks.** `npm run openspec -- validate --all --strict`: 72 passed, 0 failed. `make verify` on the clean tree at `1211ef8a` passed with the full profile and wrote the stamp (generated checks below). `make verify-installation` was not run: the merge touched no installation code path.
+- **Route.** `route.json` was derived before the merge and was not routed again.
+
 ## Review
 
 The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3 (pass 3 conditional), and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. `route.json` recommends the efforts `high` and `xhigh`, which only governance can authorize. No pass has run.
@@ -61,10 +72,10 @@ The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `9eb26fae38fa168bc719d5079fabd87684d9360d`; tests 3177, pass 3162, fail 0, skipped 15; all files 99.38% lines, 92.64% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `1f9b5ff07cc77205ede5c6218d74a23e69f8796f`; tests 3217, pass 3202, fail 0, skipped 15; all files 99.43% lines, 92.62% branches, 99.08% functions.
 - `npm run openspec -- validate deliver-rotated-worker-credentials --strict`: passed, `Change 'deliver-rotated-worker-credentials' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s).`.
-- Spec diff against the merge base `a3a0ac4cea7c` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
+- Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
