@@ -190,3 +190,54 @@ test('store and hasher failures are passed on, never answered as a login', async
   const fresh = await anonymous(rehashing);
   assert.equal(failed(await rehashing.logIn(fresh.live, { loginName: 'alice', password: PASSWORD, sourceAddress: SOURCE })).code, 'unavailable');
 });
+
+// A hasher whose verifications wait until the test opens the gate.
+function gatedHasher(hasher: ReturnType<typeof recordingHasher>) {
+  let open!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => { open = resolve; });
+  const waiting = new Promise<void>((resolve) => { entered = resolve; });
+  const verify: typeof hasher.verify = async (password, stored) => {
+    entered();
+    await gate;
+    return hasher.verify(password, stored);
+  };
+  return { gated: { ...hasher, verify }, waiting, open };
+}
+
+async function gatedFixture(passwordHash: string) {
+  const base = await fixture(passwordHash);
+  const { gated, waiting, open } = gatedHasher(base.hasher);
+  const { throttle } = recordingThrottle(base.clock);
+  const sessions = new SessionService({ store: base.store, hasher: gated, secrets: plainSecrets, random: countingRandom(), clock: base.clock, throttle });
+  return { ...base, sessions, waiting, open };
+}
+
+for (const stored of [`new:${PASSWORD}`, `old:${PASSWORD}`]) {
+  test(`a login verified against ${stored.split(':')[0]} hash fails when the password changes before its rotation`, async () => {
+    const { sessions, store, clock, waiting, open } = await gatedFixture(stored);
+    const { cookie, live } = await anonymous(sessions);
+    const login = sessions.logIn(live, { loginName: 'alice', password: PASSWORD, sourceAddress: SOURCE });
+    await waiting;
+    const changed = 'new:another long passphrase' as PasswordHash;
+    value(await store.transaction(async (tx) => {
+      value(await tx.principals.setPasswordHash(ALICE, changed));
+      return tx.sessions.endAllOf(ALICE, clock.now());
+    }));
+    open();
+    assert.equal(failed(await login).details.reason, 'login-failed');
+    assert.equal(value(await store.transaction((tx) => tx.principals.get(ALICE)))?.passwordHash, changed, 'the new password stays');
+    assert.equal(value(await sessions.authenticate(cookie)).principal, undefined, 'no login');
+  });
+}
+
+test('a login fails when its anonymous session expires before its rotation', async () => {
+  const { sessions, clock, waiting, open } = await gatedFixture(`new:${PASSWORD}`);
+  const { cookie, live } = await anonymous(sessions);
+  const login = sessions.logIn(live, { loginName: 'alice', password: PASSWORD, sourceAddress: SOURCE });
+  await waiting;
+  clock.advance(SESSION_LIFETIME.anonymousMilliseconds);
+  open();
+  assert.equal(failed(await login).details.reason, 'unauthenticated');
+  assert.equal(failed(await sessions.authenticate(cookie)).details.reason, 'unauthenticated');
+});

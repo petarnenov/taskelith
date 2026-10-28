@@ -172,8 +172,11 @@ export class SessionService {
     const rotation = {
       idHash: this.#deps.secrets.hashOf(sessionId), csrfToken: this.#deps.random.sessionToken(), principalId: principal.principalId,
     };
-    const next = loggedInSession(previous, rotation, this.#deps.clock.now(), this.#lifetime);
+    const now = this.#deps.clock.now();
+    const next = loggedInSession(previous, rotation, now, this.#lifetime);
     const rotated = await this.#deps.store.transaction(async (tx) => {
+      const confirmed = await confirmLogin(tx, previous, principal, now);
+      if (!confirmed.ok) return confirmed;
       const replaced = await tx.sessions.replace(previous.idHash, next);
       if (!replaced.ok) return replaced;
       if (rehash !== undefined) {
@@ -189,6 +192,19 @@ export class SessionService {
 
 function throttleKeys(loginName: string, sourceAddress: string): readonly string[] {
   return [`login-name:${loginName}`, `source-address:${sourceAddress}`];
+}
+
+// A login holds only when, at its rotation, the session is still live and
+// the principal still enabled with the verified hash.
+async function confirmLogin(tx: AccessTransaction, previous: StoredSession, principal: Principal, now: Instant): Promise<Result<void>> {
+  const session = await tx.sessions.get(previous.idHash);
+  if (!session.ok) return session;
+  if (session.value === undefined || !isLive(session.value, now)) return err(unauthenticated());
+  const current = await tx.principals.get(principal.principalId);
+  if (!current.ok) return current;
+  const unchanged = current.value !== undefined && current.value.disabledAt === undefined
+    && current.value.passwordHash === principal.passwordHash;
+  return unchanged ? ok(undefined) : err(loginFailed());
 }
 
 // A session whose principal is gone or disabled authenticates nothing.
