@@ -52,6 +52,7 @@ const DEV_BRANCH = 'origin/dev';
 const PASS_ONE_SUBJECT = /\bpass 1\b/i;
 const PULL_REQUEST_MERGE = /^Merge pull request #\d+ /;
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const REFUSED_STATUSES: ReadonlySet<number> = new Set([401, 402, 403]);
 
 export interface CommitInfo {
   readonly sha: string;
@@ -224,9 +225,18 @@ async function evaluationLine(
     approximate,
     features,
     rule: await rule.route(features),
-    shadow: shadow === undefined ? SKIPPED_SHADOW : await shadow.route(features),
+    shadow: shadow === undefined ? SKIPPED_SHADOW : unlessRefused(await shadow.route(features)),
     outcome: reviewOutcome(subject.records),
   };
+}
+
+// A bad key, no credits, or a forbidden account fails every later
+// request too, so the evaluation stops before sending them.
+function unlessRefused(decision: ShadowDecision): ShadowDecision {
+  if (decision.status === 'failed' && REFUSED_STATUSES.has(decision.httpStatus ?? 0)) {
+    throw new RouteRefusal(`the shadow router was refused (HTTP ${decision.httpStatus})`);
+  }
+  return decision;
 }
 
 interface TimedFeatures {
