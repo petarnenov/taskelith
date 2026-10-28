@@ -19,6 +19,9 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16b, developed by a briefed s
 - Pass 2 fixes: `e20e2f33` `test: cover the pass 2 findings of the Git workspace adapter before their fixes` (the fail-before run of pass 2 ran on this commit); `41da9696` (module: the reason `unsafe-tree-path`, `isSafeTreeName`, `core.commitGraph=false` and `core.multiPackIndex=false`; the deletion of the adapter's `src/index-flags.ts`, which belongs to the next commit, landed here by mistake and is left there because the branch is never rewritten); `3cb0f27c` (adapter: verified objects, the index rebuild and comparison, the Git directory's entry types and `.git` in any case, absence only on `ENOENT` or `ENOTDIR`, the nominal verified client, the prepare's staging cleanup, and the adapted tests); `5b941461` (contract sections 3, 6, 7, 9, and 10, design, proposal, spec delta, tasks); `6e61f97d` (`passes.jsonl` and `findings.jsonl` of pass 2). The latest checks ran on `6e61f97d`.
 - The commit that adds this record changes no checked input other than this file.
 - Merge `a29577a3` of `origin/dev` `f3a53f17` (#383, adopt-process-performance-recommendations) between pass 2 and pass 3, without conflict; it changed no file under `packages/modules/workspace`, `packages/adapters/git-workspace`, `docs/contracts/git-workspace.md`, or `openspec/specs/git-workspace-port`, nor this change's directory. The full `make verify` of the merged tree and its `make record` are under "Generated checks".
+- `4b704d4c` added the `make record` markers and is the head that review pass 3 reviewed.
+- Merge `795b32c4` of `origin/dev` `9196804b` after pass 3, without conflict. The brief named `f6696995` (#384, GNU Make 4.4 argument expansion); the merged dev head also holds #385 (route-reviewers-by-change-complexity) and #386 (define-session-turn-model). It changed no file under `packages/modules/workspace`, `packages/adapters/git-workspace`, `docs/contracts/git-workspace.md`, or `openspec/specs/git-workspace-port`, nor this change's directory (`git diff --name-only 4b704d4c 795b32c4`).
+- Pass 3 fix: `2d7d7ca2` `test: cover directory entries of the head tree before the snapshot checks them` (the fail-before run of pass 3 ran on this commit); `1b797b86` `chore: check the directory entries of the head tree before the snapshot drops them`; then the commit that records pass 3 in `passes.jsonl`, `findings.jsonl`, this file, and `design.md`. The pass 3 checks ran on that commit; `make record` below names its tree.
 
 ## Environment
 
@@ -54,6 +57,10 @@ On `c5f0b006`: `node --experimental-strip-types --test --test-reporter=spec pack
 ### Pass 2 fixes
 
 On `e20e2f33`: `node --experimental-strip-types --test --test-reporter=spec packages/adapters/git-workspace/test/*.test.ts packages/modules/workspace/test/snapshot-archive.test.ts packages/modules/workspace/test/workspace-domain.test.ts` gave tests 143, pass 113, fail 15, skipped 15, each failure for its finding's reason: "a gitlink added only to the index never hides a directory of work" (H1, dirty reasons `[]`); "forged stat data in the index never hides a modified tracked file" (H2, `[]`); "a forged cache tree never hides a staged change" (H3, `[]`); "an object whose bytes do not hash to its name fails the snapshot" (H4, the snapshot succeeded) and "a forged commit-graph never changes what status reads" (H4, `modified` instead of `[]`); "a FIFO as .git/index" and "a FIFO deeper in .git" (M1); "a path that Git refuses, or a file that is also a directory, is refused" and `git-objects.test.ts`, whose exports did not exist (M2); "a file system error other than absence rejects instead of reading as unsafe" (L1); "a file system fault at the rename into place leaves no staging entry" (L3, the staging entry stayed); "a nested Git directory in another case" and "a second Git directory in another case at the top" (L4); and the module's reason list and "the built Git environment holds the contract settings, the header last". The type check (`npx tsc -p tsconfig.check.json`) reported "Unused '@ts-expect-error' directive" in "only the gate makes a verified client, also for the type checker" (L2). After the fixes the adapter and module tests gave tests 239, pass 224, fail 0, skipped 15, and the type check passed. The test "a fault after the rename into place fails the prepare and keeps the ready workspace" records the L3 decision and passed before and after. M3 and L5 are documentation.
+
+### Pass 3 fix
+
+On `2d7d7ca2`, after `npm run build`: `node --experimental-strip-types --test --test-reporter=spec --test-name-pattern='head tree|empty directory named' packages/adapters/git-workspace/test/git-objects.test.ts packages/adapters/git-workspace/test/git-workspaces.test.ts` gave tests 7, pass 2, fail 5, exit 1. Each failure was "expected a failure" where the snapshot succeeded: "a directory of the head tree with a name Git refuses fails the snapshot" (an empty directory `..`, `.`, `.git`, `GIT~1`, or `.git `), "two directories of one name in a head tree fail the snapshot", "a file and a directory of one name in a head tree fail the snapshot", "the head tree checks a gitlink, then UTF-8, then the directory names" (its UTF-8 part: an empty directory whose name is not UTF-8 passed), and "a clean head with an empty directory named .. fails the snapshot", the end-to-end case through `snapshot`, after its check that `inspect` reports the crafted head clean. The two passing tests were "the head tree gives the files of its directories and no empty directory", which keeps the behavior, and the first workspace test, which the pattern matched. The tree objects are written with `git hash-object -t tree --literally` (unit tests) and `git mktree` (end-to-end), with correct names. On `1b797b86` the adapter's tests (`packages/adapters/git-workspace/test/*.test.ts`) gave tests 115, pass 100, fail 0, skipped 15.
 
 ## After the change
 
@@ -91,7 +98,8 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a18102-c0f5-7983-95e3-33e834d7e67a` | SHA-256 before = after = `1d8f06582a26eec18ea9cbeedaa3ebc4e0a6b09b7104b6a3ff2dbf63b9e3d3ce` | Reviewed head `3a037731`: critical 0, high 3, medium 6, low 2 | All 11 fixed (below) |
 | 2 | Claude Code `claude-opus-5-5`, high | B | `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>` | The last result line's `modelUsage` holds only `claude-opus-5-5` | `3d9ff410-49d2-4b60-bea5-ebe488545c33` | SHA-256 before = after = `d04b1763ac2d977ce5a143201103e97b8cee78f3b6bc38102bc4b1739c7c2bdc` | Reviewed head `55b0fb23`: critical 0, high 4, medium 3, low 5 | All 12 fixed (below) |
-| 3 | Codex `gpt-6.1-sol` | A | Pending | Pending | Pending | Pending | Pending | Pending |
+| 3 | Codex `gpt-6.1-sol`, medium | A | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only | `01a18140-db5c-7bd1-a3c8-0adcf2124b71` | SHA-256 before = after = `25d97d841f00bc73b0732fc8c9697f1d02e8151c78a5c2dc7d6dd87739df2c55`, by the worker's command; the reviewer reported its own computation `d95e9e7c…`, which is not the proof | Reviewed head `4b704d4c`: critical 0, high 0, medium 1, low 0 | Fixed (below) |
+| 4 | Codex `gpt-6.1-sol` | A | Pending | Pending | Pending | Pending | Pending | Pending |
 
 Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync git EPERM`), so the reviewer ran the checker's logic read-only over the 2682 tracked files, which passed. Findings and resolutions, recorded in `findings.jsonl`:
 
@@ -122,6 +130,12 @@ Pass 2 confirmed all 11 pass 1 fixes. Its brief was read-only and it ran no test
 11. Low (L4), `.git` compared case-sensitively: any case (`3cb0f27c`).
 12. Low (L5), the proposal was stale: updated (`5b941461`).
 
+Pass 3 confirmed the pass 2 fixes H1 to H4, M1, M3, and L1 to L5, and found M2 incomplete. Finding and resolution, recorded in `findings.jsonl`:
+
+1. Medium, `readHeadTree` kept only files and gitlinks, so directory entries were gone before the path check: an empty directory named `..`, two directories `dir` with `a` and `b`, or a file and an empty directory both named `dir` gave an archive. Every entry is kept and checked, directories included, with the reason order gitlink, then UTF-8, then `unsafe-tree-path`; design D10 and D16 (`2d7d7ca2`, `1b797b86`). No `missedBy`: the gap was in the pass 2 fix `41da9696`, which no earlier pass reviewed.
+
+The owner decided on 2026-10-28 to fix M2 and to have reviewer A review only that fix in pass 4, beyond the three-pass cap, by the owner's permission (design, "Owner decisions"). Pass 4 is pending.
+
 ## Limitations
 
 - Ran on Linux with the host's Git 2.55.0 behind a recording wrapper, not with the pinned Linux Git 2.43.0 or Apple's 2.50.1, and not natively on macOS; the test that commits names that are not UTF-8 skips on macOS, whose APFS refuses them.
@@ -131,7 +145,7 @@ Pass 2 confirmed all 11 pass 1 fixes. Its brief was read-only and it ran no test
 
 ## Remaining gates
 
-- Independent review pass 3 (reviewer A above), recorded in `passes.jsonl` and `findings.jsonl`; pass 3 confirms the pass 2 fixes.
+- Independent review pass 4 (reviewer A above) of the M2 fix only, by the owner's decision, recorded in `passes.jsonl` and `findings.jsonl`.
 - The archive of this change in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 (contract section 13, pending gate), run by the owner.
