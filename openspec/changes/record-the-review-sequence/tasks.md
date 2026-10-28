@@ -32,4 +32,4 @@
 ## 6. Review and archive
 
 - [x] 6.1 Independent review passes of the review sequence, assigned by the coordinator
-- [ ] 6.2 Archive the change
+- [x] 6.2 Archive the change
