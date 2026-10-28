@@ -245,7 +245,7 @@ interface TimedFeatures {
   readonly approximate: boolean;
 }
 
-// The revision that pass 1 reviewed where the branch names it; otherwise
+// The revision named by the branch's first "pass 1" commit; otherwise
 // the merged diff, which review fixes enlarge, flagged approximate.
 function featuresOfItsTime(
   root: string,
@@ -261,8 +261,8 @@ function featuresOfItsTime(
   return { revision: merged, features, approximate: true };
 }
 
-// The parent of the earliest branch commit whose subject names pass 1:
-// the revision that pass 1 reviewed, before its fixes.
+// The parent of the earliest branch commit whose subject names pass 1;
+// fixes committed before that commit are included.
 function reviewedRevision(root: string, change: string, merge: CommitInfo, environment: EvaluationEnvironment): FeatureRevision | undefined {
   const [devTip, branchTip] = merge.parents as [string, string];
   const commits = required(environment.branchCommits(root, devTip, branchTip), `cannot read the branch of ${change}`);

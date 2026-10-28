@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:taskelith:review-route-evaluation",
   "title": "Taskelith review route evaluation line",
-  "description": "One line of the offline route evaluation's evaluation.jsonl: an archived change with review records, its features as of the revision that review pass 1 reviewed, the rule and shadow decisions on those features, and the review outcome. It reuses definitions of the route schema, urn:taskelith:review-route, and the finding schema, urn:taskelith:review-finding. Unknown properties are rejected, and no property holds free text.",
+  "description": "One line of the offline route evaluation's evaluation.jsonl: an archived change with review records, its features as of the revision named by the branch's first \"pass 1\" commit, the rule and shadow decisions on those features, and the review outcome. It reuses definitions of the route schema, urn:taskelith:review-route, and the finding schema, urn:taskelith:review-finding. Unknown properties are rejected, and no property holds free text.",
   "type": "object",
   "additionalProperties": false,
   "required": ["change", "mergeCommit", "devCommit", "reviewedCommit", "approximate", "features", "rule", "shadow", "outcome"],
