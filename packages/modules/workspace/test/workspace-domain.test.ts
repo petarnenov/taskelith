@@ -48,7 +48,7 @@ const CONTRACT_VALUES = [
     WORKSPACE_FAILURE_REASONS,
     ['head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
       'workspace-handed-off', 'other-workspace-handed-off', 'reclaim-failed', 'unsafe-checkout', 'gitlink-in-tree',
-      'insecure-remote', 'git-client-mismatch', 'non-utf8-path'],
+      'insecure-remote', 'git-client-mismatch', 'non-utf8-path', 'unsafe-tree-path'],
   ],
 ] as const;
 
@@ -256,20 +256,22 @@ test('the push command is exactly the leased options, the remote, and one refspe
 
 test('the built Git environment holds the contract settings, the header last', () => {
   assert.deepEqual(GIT_BUILT_ENVIRONMENT, {
-    PATH: '/usr/bin:/bin', HOME: '/nonexistent', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' });
+    PATH: '/usr/bin:/bin', HOME: '/nonexistent', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
+    GIT_NO_REPLACE_OBJECTS: '1' });
   assert.deepEqual(GIT_COMMAND_SCOPE_SETTINGS, [
     ['core.hooksPath', '/dev/null'], ['credential.helper', ''], ['diff.ignoreSubmodules', 'all'],
     ['status.submoduleSummary', 'false'], ['submodule.recurse', 'false'], ['fetch.recurseSubmodules', 'false'],
-    ['push.recurseSubmodules', 'no'],
+    ['push.recurseSubmodules', 'no'], ['core.untrackedCache', 'false'], ['core.commitGraph', 'false'],
+    ['core.multiPackIndex', 'false'],
   ]);
   const local = gitConfigEnvironment();
-  assert.equal(local.GIT_CONFIG_COUNT, '7');
+  assert.equal(local.GIT_CONFIG_COUNT, '10');
   assert.equal(local.GIT_CONFIG_KEY_0, 'core.hooksPath');
   assert.equal(local.GIT_CONFIG_VALUE_1, '');
-  assert.equal(local.GIT_CONFIG_KEY_7, undefined);
+  assert.equal(local.GIT_CONFIG_KEY_10, undefined);
   const remote = gitConfigEnvironment('Basic dG9rZW4=');
-  assert.equal(remote.GIT_CONFIG_COUNT, '8');
-  assert.deepEqual([remote.GIT_CONFIG_KEY_7, remote.GIT_CONFIG_VALUE_7], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
+  assert.equal(remote.GIT_CONFIG_COUNT, '11');
+  assert.deepEqual([remote.GIT_CONFIG_KEY_10, remote.GIT_CONFIG_VALUE_10], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
   assert.equal(remote.GIT_TERMINAL_PROMPT, '0');
 });
 

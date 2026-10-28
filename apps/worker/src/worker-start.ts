@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
-import { parseInstallationId, type Enrollment, type EnrollmentClient, type StartFacts, type WorkerAdmissionCheck } from '@taskelith/fleet';
+import {
+  parseInstallationId,
+  type Enrollment,
+  type EnrollmentClient,
+  type InstallationCaSource,
+  type StartFacts,
+  type WorkerAdmissionCheck,
+} from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
@@ -16,6 +23,7 @@ import {
   claimWorkerRoot,
   failureReason,
   openWorkerRoot,
+  readInstallationCaPin,
   readVolumeSpace,
   readWorkerCredentials,
   truncateBufferedLogs,
@@ -43,7 +51,9 @@ import { runTogether, TaskGroup } from './task-group.js';
 import { WorkerContact } from './worker-contact.js';
 
 export interface WorkerDependencies {
-  readonly enrollment: EnrollmentClient;
+  // Reads the CA before the token is sent; enrollment then pins it.
+  readonly installationCa: InstallationCaSource;
+  readonly enrollment: (installationCa: string) => EnrollmentClient;
   readonly connect: (endpoint: WorkerTransportEndpoint) => Promise<Result<TransportConnection>>;
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
@@ -66,9 +76,9 @@ export interface WorkerDependencies {
 }
 
 // What launches need beyond the journal: the launch authority with the
-// worker's control-plane credential, and the supervision of one host.
+// worker's control-plane credential and pinned CA, and the supervision.
 export interface LaunchingDependencies {
-  readonly authority: (credential: string) => LaunchAuthorityClient;
+  readonly authority: (credential: string, installationCa: string) => LaunchAuthorityClient;
   readonly host: (settings: WorkerSettings, executions: string) => Result<LaunchHost>;
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly draw: () => number;
@@ -122,16 +132,21 @@ function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies)
 // The first start claims the root before it asks the control plane, so a
 // root that cannot be created never spends the token.
 async function enroll(settings: WorkerSettings, dependencies: WorkerDependencies, options: WorkerRootOptions): Promise<Result<WorkerRoot>> {
-  const { enrollmentToken } = settings;
+  const { enrollmentToken, installationCaSha256 } = settings;
   if (enrollmentToken === undefined) {
     return err(failure('not-found', 'the worker is not enrolled; set TASKELITH_ENROLLMENT_TOKEN for its first start', {
       reason: 'not-enrolled', variable: 'TASKELITH_ENROLLMENT_TOKEN',
     }));
   }
+  if (installationCaSha256 === undefined) {
+    return err(failure('invalid', 'set TASKELITH_INSTALLATION_CA_SHA256 from the enrollment bundle for the first start', {
+      variable: 'TASKELITH_INSTALLATION_CA_SHA256',
+    }));
+  }
   const claim = claimWorkerRoot(options);
   if (!claim.ok) return claim;
   try {
-    const binding = await requestEnrollment(enrollmentToken, settings, dependencies);
+    const binding = await requestEnrollment({ token: enrollmentToken, installationCaSha256 }, settings, dependencies);
     if (!binding.ok) claim.value.abandon();
     return binding.ok ? claim.value.complete(binding.value) : binding;
   } catch (error) {
@@ -140,22 +155,42 @@ async function enroll(settings: WorkerSettings, dependencies: WorkerDependencies
   }
 }
 
-async function requestEnrollment(token: string, settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<WorkerEnrollment>> {
+// The token and the fingerprint of the operator's enrollment bundle.
+interface EnrollmentBundle {
+  readonly token: string;
+  readonly installationCaSha256: string;
+}
+
+// The token goes only to a server that TLS pinned to the checked CA.
+async function requestEnrollment(bundle: EnrollmentBundle, settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<WorkerEnrollment>> {
+  const installationCa = await checkedInstallationCa(dependencies.installationCa, bundle.installationCaSha256);
+  if (!installationCa.ok) return installationCa;
   const journalId = parseIdentifier('JournalId', dependencies.newJournalId());
   if (!journalId.ok) return journalId;
-  const enrolled = await dependencies.enrollment.enroll(token, {
+  const enrolled = await dependencies.enrollment(installationCa.value).enroll(bundle.token, {
     journalId: journalId.value, host: settings.host, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, capacity: settings.capacity,
   });
-  return enrolled.ok ? rootEnrollment(enrolled.value, journalId.value) : enrolled;
+  return enrolled.ok ? rootEnrollment(enrolled.value, journalId.value, installationCa.value) : enrolled;
+}
+
+// No trust on first use: only the fingerprint handed over out of band
+// makes the CA, read over unverified TLS, trusted.
+async function checkedInstallationCa(source: InstallationCaSource, expectedSha256: string): Promise<Result<string>> {
+  const read = await source.read();
+  if (!read.ok) return read;
+  if (read.value.sha256 === expectedSha256) return ok(read.value.certificatePem);
+  return err(failure('precondition-failed', 'the installation CA does not match TASKELITH_INSTALLATION_CA_SHA256; no token was sent', {
+    reason: 'installation-ca-mismatch', variable: 'TASKELITH_INSTALLATION_CA_SHA256',
+  }));
 }
 
 // The installation identifier becomes a subject token, so it is checked
 // before the root exists.
-function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<WorkerEnrollment> {
+function rootEnrollment(enrollment: Enrollment, journalId: JournalId, installationCa: string): Result<WorkerEnrollment> {
   const installationId = parseInstallationId(enrollment.installationId);
   if (!installationId.ok) return installationId;
   const { workerId, recoveryEpoch, credentialGeneration, credentials } = enrollment;
-  return ok({ installationId: installationId.value, workerId, journalId, recoveryEpoch, credentialGeneration, credentials });
+  return ok({ installationId: installationId.value, workerId, journalId, recoveryEpoch, credentialGeneration, credentials, installationCa });
 }
 
 // The launches, reconciliation, and pressure watch run at once; the
@@ -164,6 +199,8 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const { identity } = root;
   const credentials = readWorkerCredentials(root.paths, identity);
   if (!credentials.ok) return credentials;
+  const installationCa = readInstallationCaPin(root.paths);
+  if (!installationCa.ok) return installationCa;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;
   const subjects = workerSubjects(address.value, identity.workerId);
@@ -177,7 +214,7 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const selfCheck = await runSelfCheck(dependencies.admissionChecks, startFacts(settings));
   if (!selfCheck.ok) return selfCheck;
   const selfCheckFailed = hasFailedCheck(selfCheck.value);
-  const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure, selfCheckFailed });
+  const launcher = launchOrchestrator({ settings, dependencies, root, credential, installationCa: installationCa.value, contact, pressure, selfCheckFailed });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
@@ -187,7 +224,7 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   if (!reported.ok) return reported;
   const session = brokerSession({
     settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
-    selfCheckFailed, ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
+    installationCa: installationCa.value, selfCheckFailed, ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
   tasks.add(session.run(tasks.signal));
   tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
@@ -228,6 +265,7 @@ interface OrchestratorContext {
   readonly dependencies: WorkerDependencies;
   readonly root: WorkerRoot;
   readonly credential: string;
+  readonly installationCa: string;
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
   readonly selfCheckFailed: boolean;
@@ -236,7 +274,7 @@ interface OrchestratorContext {
 // The host reconciles and removes records with or without a launch
 // command; only a command and a passed self-check add the launch authority.
 function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
-  const { settings, dependencies, root, credential, contact, pressure, selfCheckFailed } = context;
+  const { settings, dependencies, root, credential, installationCa, contact, pressure, selfCheckFailed } = context;
   const { launching } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
@@ -246,7 +284,7 @@ function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestr
   const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
     journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
-    ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(credential) }),
+    ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(credential, installationCa) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(containments === undefined ? {} : { containments }),
     ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
@@ -278,6 +316,7 @@ interface SessionContext {
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
   readonly broker: string;
+  readonly installationCa: string;
   readonly selfCheckFailed: boolean;
   readonly launcher?: LaunchOrchestrator;
 }
@@ -287,13 +326,11 @@ interface TransportLink extends BrokerLink {
 }
 
 function brokerSession(context: SessionContext): BrokerSession<TransportLink> {
-  const { settings, dependencies, root, address, subjects, contact, broker } = context;
+  const { settings, dependencies, root, address, subjects, contact, broker, installationCa } = context;
   const { sleep, draw, limits } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
-  const endpoint = {
-    server: settings.natsUrl, creds: broker, address, workerId: root.identity.workerId,
-    ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
-  };
+  // The pinned CA is the broker TLS's only CA, never the system's.
+  const endpoint = { server: settings.natsUrl, creds: broker, address, workerId: root.identity.workerId, tls: { ca: installationCa } };
   return new BrokerSession<TransportLink>({
     connect: async () => {
       const connected = await dependencies.connect(endpoint);

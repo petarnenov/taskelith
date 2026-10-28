@@ -7,6 +7,9 @@ import type { LaunchAuthorizationRequest } from '@taskelith/execution';
 import { HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { failed, id, value } from '@taskelith/testing';
 
+// These servers are plain HTTP, so the pinned CA is never used.
+const PLAIN_HTTP_CA = 'unused CA';
+
 const CREDENTIAL = `tkwk_${'A'.repeat(43)}`;
 const REQUEST = {
   operationId: id('OperationId', 'operation-1'), recoveryEpoch: 1, assignmentId: id('AssignmentId', 'assignment-1'),
@@ -49,7 +52,7 @@ async function text(request: IncomingMessage): Promise<string> {
 }
 
 function client(timeoutMilliseconds = 2000): HttpLaunchAuthorityClient {
-  return new HttpLaunchAuthorityClient({ baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
+  return new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
 }
 
 test('a request carries the bearer and the contract body, and a grant comes back as the domain grant', async () => {
@@ -68,7 +71,7 @@ test('a request carries the bearer and the contract body, and a grant comes back
 test('a base without a trailing slash keeps its path', async () => {
   answer = { status: 200, body: { outcome: 'expired' } };
   const bare = new URL(baseUrl.href.replace(/\/$/, ''));
-  value(await new HttpLaunchAuthorityClient({ baseUrl: bare, credential: CREDENTIAL, timeoutMilliseconds: 2000 }).authorize(REQUEST));
+  value(await new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: bare, credential: CREDENTIAL, timeoutMilliseconds: 2000 }).authorize(REQUEST));
   assert.equal(seen.at(-1)!.path, '/api/launch-authorizations');
 });
 
@@ -88,7 +91,7 @@ test('only a 503, a timeout, or no connection is undecided', async () => {
   assert.deepEqual([failed(await client().authorize(REQUEST)).code, failed(await client().authorize(REQUEST)).details.status], ['unavailable', '503']);
   answer = { status: 200, body: { outcome: 'expired' }, delayMilliseconds: 300 };
   assert.equal(failed(await client(50).authorize(REQUEST)).code, 'unavailable');
-  const closed = new HttpLaunchAuthorityClient({ baseUrl: new URL('http://127.0.0.1:1/'), credential: CREDENTIAL, timeoutMilliseconds: 500 });
+  const closed = new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://127.0.0.1:1/'), credential: CREDENTIAL, timeoutMilliseconds: 500 });
   assert.equal(failed(await closed.authorize(REQUEST)).code, 'unavailable');
   for (const [status, code] of [[502, 'unavailable'], [504, 'unavailable'], [401, 'forbidden'], [400, 'invalid'], [500, 'internal']] as const) {
     answer = { status, body: { ...failure, code } };

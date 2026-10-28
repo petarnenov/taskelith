@@ -50,17 +50,21 @@ export {
   type ValidatorId,
 } from './domain/gate-evidence.js';
 export type { GateSubject } from './domain/gate-subject.js';
+export { isSameCodeHead, type CodeHeadIdentity, type CodeObjectId, type RepositoryId } from './domain/code-head.js';
 export {
   GATE_STATES,
   GATE_TRANSITIONS,
   MAX_BLOCK_REASON_LENGTH,
   blockGate,
   isGateOutdatedBy,
+  isGateOutdatedByCodeHead,
   markGateStale,
+  markGateStaleByCodeHead,
   openGate,
   parseBlockReason,
   recordGateEvidence,
   reopenGate,
+  reopenGateAtCodeHead,
   type BlockReason,
   type Gate,
   type GateId,

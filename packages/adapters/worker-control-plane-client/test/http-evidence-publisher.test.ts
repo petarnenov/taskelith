@@ -7,6 +7,9 @@ import { parseEvidencePublication, type EvidencePublication } from '@taskelith/e
 import { HttpEvidencePublisher } from '@taskelith/worker-control-plane-client';
 import { failed, value } from '@taskelith/testing';
 
+// These servers are plain HTTP, so the pinned CA is never used.
+const PLAIN_HTTP_CA = 'unused CA';
+
 const CREDENTIAL = `tkwk_${'A'.repeat(43)}`;
 const CONTENT = new TextEncoder().encode('{"exit":0}\n');
 const PUBLICATION_INPUT = {
@@ -64,7 +67,7 @@ async function bytes(request: IncomingMessage): Promise<Buffer> {
 }
 
 function publisher(timeoutMilliseconds = 2000): HttpEvidencePublisher {
-  return new HttpEvidencePublisher({ baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
+  return new HttpEvidencePublisher({ installationCa: PLAIN_HTTP_CA, baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
 }
 
 test('a publication posts the record and the content as two parts with the bearer', async () => {

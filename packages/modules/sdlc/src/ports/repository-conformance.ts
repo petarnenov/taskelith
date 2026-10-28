@@ -1,5 +1,6 @@
 import { parseEventMetadata, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { parseArtifactRevision, type ArtifactRevision } from '../domain/artifact-revision.js';
+import type { CodeHeadIdentity, CodeObjectId, RepositoryId } from '../domain/code-head.js';
 import { openGate, recordGateEvidence, type Gate } from '../domain/gate.js';
 import { parseSemanticApproval } from '../domain/gate-evidence.js';
 import { nextGeneration, parseGeneration, type Generation } from '../domain/generation.js';
@@ -68,13 +69,26 @@ function dispatched(admitted: TaskAdmission): TaskAdmission {
   return must(useAdmission(admitted, admitted.generation, LATER, must(parseOwnershipGeneration(1))));
 }
 
+const CODE_HEAD: CodeHeadIdentity = Object.freeze({
+  repository: must(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId,
+  commit: '1'.repeat(40) as CodeObjectId,
+  tree: 'a'.repeat(40) as CodeObjectId,
+});
+
 function gate(id: string): Gate {
   return must(openGate({ id, stageId: 'specs', requiredEvidence: 'semantic-approval', subject: [revision('spec', 'aa')] }, AT));
+}
+
+function headBoundGate(id: string): Gate {
+  const subject = [revision('spec', 'aa')];
+  return must(openGate({ id, stageId: 'apply', requiredEvidence: 'semantic-approval', subject, codeHead: CODE_HEAD }, AT));
 }
 
 function passed(pending: Gate): Gate {
   const evidence = must(parseSemanticApproval({
     approver: 'reviewer-1', verdict: 'approved', subject: pending.subject, recordedAt: LATER, reference: 'review-1',
+    gateId: pending.id, gateGeneration: pending.generation,
+    ...(pending.codeHead === undefined ? {} : { codeHead: pending.codeHead }),
   }));
   return must(recordGateEvidence(pending, pending.generation, evidence, LATER));
 }
@@ -223,9 +237,11 @@ export const GATE_REPOSITORY_CONFORMANCE: readonly ConformanceCase<GateRepositor
       const decided = passed(gate('gate-1'));
       expectSuccess(problems, 'add decided', await repository.add(first.id, decided));
       expectSuccess(problems, 'add pending', await repository.add(first.id, gate('gate-2')));
-      expectSuccess(problems, 'add other run', await repository.add(second.id, gate('gate-3')));
+      const headBound = passed(headBoundGate('gate-3'));
+      expectSuccess(problems, 'add other run', await repository.add(second.id, headBound));
       expectCode(problems, 'second add', await repository.add(second.id, decided), 'conflict');
       expectRead(problems, 'get', await repository.get(decided.id), decided);
+      expectRead(problems, 'get head-bound', await repository.get(headBound.id), headBound);
       expectCode(problems, 'get unknown', await repository.get(gate('gate-x').id), 'not-found');
       expectSame(problems, 'listed', await repository.listByRun(first.id), [decided, gate('gate-2')]);
       expectSame(problems, 'listed empty', await repository.listByRun(run('run-x').id), []);

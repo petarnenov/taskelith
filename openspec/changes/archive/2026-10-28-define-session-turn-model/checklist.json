@@ -1,0 +1,95 @@
+{
+  "change": "define-session-turn-model",
+  "generatedAt": "2026-10-28T05:11:07.967Z",
+  "devCommit": "1c73e1a70d92fab0883f3972672dd56b1d01ae77",
+  "query": {
+    "capabilities": [
+      "agent-harness-port",
+      "capacity-reservation",
+      "execution-model"
+    ],
+    "files": [
+      "packages/modules/**/session*",
+      "docs/contracts/capacity-reservation.md",
+      "docs/contracts/agent-harness*.md"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 7
+      },
+      {
+        "category": "contract-drift",
+        "count": 3
+      },
+      {
+        "category": "naming",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 1
+      },
+      {
+        "category": "stale-citation",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 379,
+        "inChecklist": 244
+      },
+      "mediumOrWorse": {
+        "findings": 158,
+        "inChecklist": 91
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 71
+      },
+      {
+        "category": "docs",
+        "count": 49
+      },
+      {
+        "category": "spec-wording",
+        "count": 40
+      },
+      {
+        "category": "stale-citation",
+        "count": 29
+      },
+      {
+        "category": "contract-drift",
+        "count": 14
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 225,
+        "inChecklist": 223
+      },
+      "mediumOrWorse": {
+        "findings": 35,
+        "inChecklist": 35
+      }
+    }
+  }
+}

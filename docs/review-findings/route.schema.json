@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:review-route",
+  "title": "Taskelith review route",
+  "description": "An OpenSpec change's route.json: the structured features of the change before review pass 1, the rule router's tier and pass plans, which decide, and the shadow router's answer, which decides nothing. It reuses definitions of the finding schema, urn:taskelith:review-finding, and the checklist schema, urn:taskelith:review-checklist. Unknown properties are rejected, and no property holds free text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change", "generatedAt", "devCommit", "headCommit", "features", "rule", "shadow"],
+  "properties": {
+    "change": { "$ref": "urn:taskelith:review-finding#/properties/change" },
+    "generatedAt": { "$ref": "urn:taskelith:review-checklist#/properties/generatedAt" },
+    "devCommit": {
+      "description": "Full SHA of the merge base of HEAD and origin/dev, against which the diff features were taken.",
+      "$ref": "#/$defs/sha"
+    },
+    "headCommit": {
+      "description": "Full SHA of HEAD, the committed state that the features describe.",
+      "$ref": "#/$defs/sha"
+    },
+    "features": { "$ref": "#/$defs/features" },
+    "rule": {
+      "description": "The rule router's decision, the floor that assigns the reviewers and effort of passes 1 and 2.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "tier", "triggers", "passes"],
+      "properties": {
+        "version": { "description": "Version of the rule table.", "type": "integer", "minimum": 1, "maximum": 999 },
+        "tier": { "$ref": "#/$defs/tier" },
+        "triggers": {
+          "description": "The triggers that fired, in the rule table's order; empty exactly when the tier is standard.",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 7,
+          "items": { "enum": ["lines", "files", "capabilities", "security", "contracts", "docker", "size"] }
+        },
+        "passes": { "$ref": "#/$defs/passes" }
+      }
+    },
+    "shadow": {
+      "description": "The shadow router's answer, or why there is none. It decides nothing.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["router", "status", "model", "tier", "confidence", "probabilities", "expectedPasses", "passes", "latencyMs"],
+          "properties": {
+            "router": { "$ref": "#/$defs/router" },
+            "status": { "const": "answered" },
+            "model": {
+              "description": "The versioned model ID that answered, as the response names it.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "tier": { "$ref": "#/$defs/tier" },
+            "confidence": { "$ref": "#/$defs/probability" },
+            "probabilities": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["standard", "elevated"],
+              "properties": {
+                "standard": { "$ref": "#/$defs/probability" },
+                "elevated": { "$ref": "#/$defs/probability" }
+              }
+            },
+            "expectedPasses": { "description": "The score answer plus one, from 1 to 3.", "type": "number", "minimum": 1, "maximum": 3 },
+            "passes": { "$ref": "#/$defs/passes" },
+            "latencyMs": { "$ref": "#/$defs/latency" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["router", "status", "reason", "latencyMs"],
+          "properties": {
+            "router": { "$ref": "#/$defs/router" },
+            "status": { "const": "failed" },
+            "reason": { "enum": ["missing-credential", "timeout", "network", "rate-limited", "overloaded", "http-error", "invalid-response"] },
+            "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+            "latencyMs": { "$ref": "#/$defs/latency" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["router", "status"],
+          "properties": {
+            "router": { "$ref": "#/$defs/router" },
+            "status": { "const": "skipped" }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "tier": { "type": "string", "enum": ["standard", "elevated"] },
+    "router": { "description": "The shadow adapter.", "const": "jev" },
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "latency": { "description": "Milliseconds from request to answer or failure.", "type": "integer", "minimum": 0, "maximum": 600000 },
+    "count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+    "passes": {
+      "description": "Reviewer and effort of pass 1, reviewer A, and pass 2, reviewer B.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        { "$ref": "#/$defs/passPlanOne" },
+        { "$ref": "#/$defs/passPlanTwo" }
+      ],
+      "items": false
+    },
+    "passPlanOne": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "role", "reviewer"],
+      "properties": {
+        "pass": { "const": 1 },
+        "role": { "const": "A" },
+        "reviewer": { "$ref": "urn:taskelith:review-finding#/properties/reviewer" }
+      }
+    },
+    "passPlanTwo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "role", "reviewer"],
+      "properties": {
+        "pass": { "const": 2 },
+        "role": { "const": "B" },
+        "reviewer": { "$ref": "urn:taskelith:review-finding#/properties/reviewer" }
+      }
+    },
+    "features": {
+      "description": "The router input, derived from committed state; all of it, and nothing else, is sent to the shadow router.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linesChanged", "filesChanged", "capabilities", "touches", "externalFacts", "size", "capabilityHistory"],
+      "properties": {
+        "linesChanged": { "description": "Insertions plus deletions outside openspec/changes/ between devCommit and headCommit.", "$ref": "#/$defs/count" },
+        "filesChanged": { "description": "Changed paths outside openspec/changes/.", "$ref": "#/$defs/count" },
+        "capabilities": {
+          "description": "Capabilities of the change's spec delta, sorted.",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": { "$ref": "urn:taskelith:review-finding#/$defs/identifier" }
+        },
+        "touches": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "tests", "contracts", "specs", "docker", "security", "docsOnly"],
+          "properties": {
+            "code": { "type": "boolean" },
+            "tests": { "type": "boolean" },
+            "contracts": { "type": "boolean" },
+            "specs": { "type": "boolean" },
+            "docker": { "type": "boolean" },
+            "security": { "type": "boolean" },
+            "docsOnly": { "type": "boolean" }
+          }
+        },
+        "externalFacts": { "description": "The change's design.md has an External facts section, so reviewer A needs network access.", "type": "boolean" },
+        "size": {
+          "oneOf": [
+            { "$ref": "urn:taskelith:review-checklist#/properties/size" },
+            { "type": "null" }
+          ]
+        },
+        "capabilityHistory": {
+          "description": "Archived changes with review records, as of devCommit, that concern one of the capabilities.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["changes", "thirdPassShare", "mediumOrWorsePerChange"],
+          "properties": {
+            "changes": { "$ref": "#/$defs/count" },
+            "thirdPassShare": { "oneOf": [{ "$ref": "#/$defs/probability" }, { "type": "null" }] },
+            "mediumOrWorsePerChange": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1000 }, { "type": "null" }] }
+          }
+        }
+      }
+    }
+  }
+}

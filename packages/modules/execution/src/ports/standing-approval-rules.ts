@@ -1,8 +1,8 @@
-import type { Identifier, Instant, Result } from '@taskelith/kernel';
+import type { Instant, Result } from '@taskelith/kernel';
 import type { OwnershipGeneration, PolicyRevision, ProjectId } from '@taskelith/sdlc';
-import type { AttemptId, NativeRequestId, PrincipalId } from '../domain/identifiers.js';
+import type { AttemptId, NativeRequestId, PrincipalId, StandingRuleId } from '../domain/identifiers.js';
 
-export type StandingRuleId = Identifier<'StandingRuleId'>;
+export type { StandingRuleId };
 
 // Normalized operations a rule may approve; the harness port classifies a
 // native request, and an unclassified request matches no rule.

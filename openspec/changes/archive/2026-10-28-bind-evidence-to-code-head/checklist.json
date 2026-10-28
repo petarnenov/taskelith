@@ -1,0 +1,74 @@
+{
+  "change": "bind-evidence-to-code-head",
+  "generatedAt": "2026-10-28T06:09:08.208Z",
+  "devCommit": "a899d5d2e42f504ede22fd18ac9f71b280982ca8",
+  "query": {
+    "capabilities": [
+      "sdlc-gates",
+      "evidence-store",
+      "sdlc-workflow-model"
+    ],
+    "files": [
+      "packages/modules/sdlc/**",
+      "docs/contracts/sdlc*.md",
+      "docs/contracts/evidence*.md"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [],
+    "baseline": {
+      "all": {
+        "findings": 384,
+        "inChecklist": 0
+      },
+      "mediumOrWorse": {
+        "findings": 159,
+        "inChecklist": 0
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 73
+      },
+      {
+        "category": "docs",
+        "count": 49
+      },
+      {
+        "category": "spec-wording",
+        "count": 41
+      },
+      {
+        "category": "stale-citation",
+        "count": 30
+      },
+      {
+        "category": "contract-drift",
+        "count": 14
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 229,
+        "inChecklist": 227
+      },
+      "mediumOrWorse": {
+        "findings": 35,
+        "inChecklist": 35
+      }
+    }
+  }
+}

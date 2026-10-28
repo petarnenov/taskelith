@@ -89,7 +89,9 @@ function run(): RunContext {
 
 function passedGate(): Gate {
   const pending = must(openGate({ id: 'specs-approval', stageId: 'specs', requiredEvidence: 'semantic-approval', subject: [SPEC] }, AT));
-  const approval = must(parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], recordedAt: AT, reference: 'review' }));
+  const approval = must(parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], recordedAt: AT, reference: 'review',
+    gateId: pending.id, gateGeneration: pending.generation,
+  }));
   return must(recordGateEvidence(pending, pending.generation, approval, AT));
 }
 

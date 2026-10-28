@@ -15,6 +15,9 @@ import {
   recordGateEvidence,
   useAdmission,
   type ArtifactRevision,
+  type CodeHeadIdentity,
+  type CodeObjectId,
+  type RepositoryId,
 } from '@taskelith/sdlc';
 
 function document(name: string): { components: { schemas: Record<string, unknown> } } {
@@ -77,7 +80,27 @@ function admission() {
 function decidedGate() {
   const pending = openGate({ id: 'specs-approval', stageId: 'specs', requiredEvidence: 'semantic-approval', subject: [SPEC] }, AT);
   assert.ok(pending.ok);
-  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], recordedAt: AT, reference: 'review-1' });
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [SPEC], recordedAt: AT, reference: 'review-1',
+    gateId: pending.value.id, gateGeneration: pending.value.generation,
+  });
+  assert.ok(evidence.ok);
+  const result = recordGateEvidence(pending.value, pending.value.generation, evidence.value, AT);
+  assert.ok(result.ok);
+  return result.value;
+}
+
+const CODE_HEAD = {
+  repository: 'acme/project' as RepositoryId,
+  commit: '1'.repeat(40) as CodeObjectId,
+  tree: 'a'.repeat(40) as CodeObjectId,
+} satisfies CodeHeadIdentity;
+
+function headBoundGate() {
+  const gate = { id: 'code-review', stageId: 'review', requiredEvidence: 'semantic-approval', subject: [SPEC], codeHead: CODE_HEAD };
+  const pending = openGate(gate, AT);
+  assert.ok(pending.ok);
+  const atHead = { subject: [SPEC], codeHead: CODE_HEAD, gateId: pending.value.id, gateGeneration: pending.value.generation };
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', ...atHead, recordedAt: AT, reference: 'review-2' });
   assert.ok(evidence.ok);
   const result = recordGateEvidence(pending.value, pending.value.generation, evidence.value, AT);
   assert.ok(result.ok);
@@ -132,6 +155,19 @@ test('admission and gate events carry the event envelope and their own event typ
   assert.ok(checkMessageSchema('AdmissionAdmittedEvent', JSON.parse(JSON.stringify(admitted))).ok);
   assert.ok(checkMessageSchema('GateDecidedEvent', decided).ok);
   assert.ok(violations(checkMessageSchema('AdmissionInvalidatedEvent', JSON.parse(JSON.stringify(admitted)))).some((text) => text.includes('/metadata/eventType')));
+});
+
+test('a head-bound gate and its evidence carry the full code head on the wire', () => {
+  const gate = JSON.parse(JSON.stringify(headBoundGate()));
+  const decided = { metadata: eventMetadata('sdlc.gate.decided'), payload: { runId: 'run-1', gate } };
+
+  assert.deepEqual(gate.codeHead, CODE_HEAD);
+  assert.deepEqual(gate.decision.codeHead, CODE_HEAD);
+  assert.equal(gate.decision.gateId, 'code-review');
+  assert.equal(gate.decision.gateGeneration, 1);
+  assert.ok(checkMessageSchema('GateDecidedEvent', decided).ok);
+  const abbreviated = { ...gate, codeHead: { ...CODE_HEAD, commit: '1234567' } };
+  assert.ok(violations(checkMessageSchema('Gate', abbreviated)).some((text) => text.includes('/codeHead/commit')));
 });
 
 test('an event without its producer sequence or with an unknown field is rejected', () => {

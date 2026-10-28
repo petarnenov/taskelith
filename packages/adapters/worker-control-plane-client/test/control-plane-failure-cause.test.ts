@@ -7,6 +7,9 @@ import type { Failure } from '@taskelith/kernel';
 import { HttpEnrollmentClient } from '@taskelith/worker-control-plane-client';
 import { failed, id } from '@taskelith/testing';
 
+// These servers are plain HTTP, so the pinned CA is never used.
+const PLAIN_HTTP_CA = 'unused CA';
+
 const TOKEN = `tken_${'B'.repeat(43)}`;
 const REQUEST: EnrollmentRequest = {
   journalId: id('JournalId', 'journal-1'),
@@ -18,7 +21,7 @@ const REQUEST: EnrollmentRequest = {
 // The failure of one request whose fetch throws the given value.
 async function failureOf(thrown: unknown): Promise<Failure> {
   const fetch = () => Promise.reject(thrown);
-  const client = new HttpEnrollmentClient({ baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
+  const client = new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
   return failed(await client.enroll(TOKEN, REQUEST));
 }
 
@@ -68,7 +71,7 @@ async function closedPort(): Promise<number> {
 // Another process may take the port before the request, which resets it.
 test('a real refused connection reports ECONNREFUSED', async () => {
   const baseUrl = new URL(`http://127.0.0.1:${await closedPort()}/`);
-  const unreachable = new HttpEnrollmentClient({ baseUrl, timeoutMilliseconds: 500 });
+  const unreachable = new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl, timeoutMilliseconds: 500 });
   const failure = failed(await unreachable.enroll(TOKEN, REQUEST));
   assert.equal(failure.code, 'unavailable');
   assert.match(failure.details.causeCode ?? '', /^(?:ECONNREFUSED|ECONNRESET)$/);
@@ -118,7 +121,7 @@ test('a message cannot fake a link of the cause chain', async () => {
 // One request answered with the given status and body.
 async function statusFailureOf(status: number, body: unknown): Promise<Failure> {
   const fetch = () => Promise.resolve(new Response(JSON.stringify(body), { status }));
-  const client = new HttpEnrollmentClient({ baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
+  const client = new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
   return failed(await client.enroll(TOKEN, REQUEST));
 }
 
@@ -196,7 +199,7 @@ test('a schema violation naming a 2000-character property is bounded', async () 
     ['name '.repeat(400)]: 1,
   };
   const fetch = () => Promise.resolve(new Response(JSON.stringify(enrollment), { status: 201 }));
-  const client = new HttpEnrollmentClient({ baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
+  const client = new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
   const failure = failed(await client.enroll(TOKEN, REQUEST));
   assert.equal(failure.code, 'internal');
   assert.match(failure.details.violation ?? '', /must NOT have additional properties "name name/);

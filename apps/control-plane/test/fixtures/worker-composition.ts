@@ -5,7 +5,7 @@ import type { LaunchAuthorityClient } from '@taskelith/execution';
 import { stubAdmissionCheck } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type TransportConnection } from '@taskelith/nats';
-import { SeededRandom, seedFromEnvironment } from '@taskelith/testing';
+import { SeededRandom, seedFromEnvironment, withTestBrokerCa } from '@taskelith/testing';
 import {
   productionDependencies,
   serveUntilStopped,
@@ -38,11 +38,14 @@ function composedDependencies(settings: WorkerSettings): WorkerDependencies {
     ...production, draw, limits: LIMITS, admissionChecks: [stubAdmissionCheck()],
     space: () => ok({ availableBytes: 2 ** 40, totalBytes: 2 ** 41 }),
     daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: async () => undefined },
-    ...(hold === undefined ? {} : { connect: async (endpoint) => hold.connection(await production.connect(endpoint)) }),
+    connect: async (endpoint) => {
+      const connected = await production.connect(withTestBrokerCa(endpoint));
+      return hold === undefined ? connected : hold.connection(connected);
+    },
     launching: {
       ...launching, draw, pollMilliseconds: POLL_MILLISECONDS,
       host: (hostSettings, executions) => armedHost(launching.host(hostSettings, executions), executions),
-      ...(hold === undefined ? {} : { authority: (credential) => hold.authority(launching.authority(credential)) }),
+      ...(hold === undefined ? {} : { authority: (credential, ca) => hold.authority(launching.authority(credential, ca)) }),
     },
   };
 }

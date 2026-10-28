@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
@@ -8,9 +8,9 @@ import { ok, type Result } from '@taskelith/kernel';
 import { connectWorkerTransport, type TransportConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
-import { executionAccountOf, seededUuids, value, type SeededRandom } from '@taskelith/testing';
+import { certificateSha256, executionAccountOf, seededUuids, value, withTestBrokerCa, type SeededRandom } from '@taskelith/testing';
 import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
-import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
 import {
@@ -31,10 +31,11 @@ const runningWorkers = new Set<ScenarioWorker>();
 export const HELD_RUN = 'held';
 export type ScriptedRun = number | typeof HELD_RUN;
 
-// Where a worker finds its installation: the API, and the base directory
-// that holds the scenario's data roots.
+// Where a worker finds its installation: the API, the CA file whose
+// fingerprint it enrolls with, and the base of the scenario's data roots.
 export interface WorkerSite {
   readonly apiUrl: URL;
+  readonly installationCa: string;
   readonly base: string;
 }
 
@@ -132,7 +133,7 @@ export class ScenarioWorker {
       capacity: { slots: this.#options.slots ?? 2, cpuMillicores: 4_000, memoryMebibytes: 8_192, controls: [] },
       launch: this.#launch(runMilliseconds),
       ...(this.#containmentParent === undefined ? {} : { containmentParent: this.#containmentParent }),
-      ...(enrollmentToken === undefined ? {} : { enrollmentToken }),
+      ...(enrollmentToken === undefined ? {} : { enrollmentToken, installationCaSha256: certificateSha256(readFileSync(this.#site.installationCa, 'utf8')) }),
     };
   }
 
@@ -177,9 +178,10 @@ export class ScenarioWorker {
     const freeBytes = this.#options.freeBytes ?? (() => 1024 * GIBIBYTE);
     const wrapTransport = this.#options.transport ?? ((transport: TransportConnection) => transport);
     return {
-      enrollment: new HttpEnrollmentClient(endpoint),
+      installationCa: new HttpInstallationCaSource(endpoint),
+      enrollment: (installationCa) => new HttpEnrollmentClient({ ...endpoint, installationCa }),
       connect: async (endpoint) => {
-        const connected = await connectWorkerTransport(endpoint);
+        const connected = await connectWorkerTransport(withTestBrokerCa(endpoint));
         return connected.ok ? ok(wrapTransport(connected.value)) : connected;
       },
       newJournalId: () => randomBytes(16).toString('hex'),
@@ -192,7 +194,7 @@ export class ScenarioWorker {
       admissionChecks: [this.#admissionCheck()],
       sleep: scaledSleep, draw, logger,
       launching: {
-        authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),
+        authority: (credential, installationCa) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential, installationCa })),
         host: (settings, executions) => this.#launchHost(settings, executions),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),

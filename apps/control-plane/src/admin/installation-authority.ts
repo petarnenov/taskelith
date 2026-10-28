@@ -1,3 +1,4 @@
+import { createHash, X509Certificate } from 'node:crypto';
 import { join } from 'node:path';
 import type { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import {
@@ -111,6 +112,34 @@ export function readServerCertificate(namespace: ControlPlaneNamespace, name: Se
   const path = join(namespace.directory, files.certificate);
   const keyPath = join(namespace.directory, files.key);
   return ok({ certificatePem: certificatePem.value, privateKeyPem: privateKeyPem.value, path, keyPath });
+}
+
+// One PEM certificate block and nothing else, as `InstallationCa` admits.
+const SINGLE_CERTIFICATE = /^-----BEGIN CERTIFICATE-----\r?\n(?:[A-Za-z0-9+/=]{1,76}\r?\n)+-----END CERTIFICATE-----\r?\n?$/;
+
+// The public authority certificate that workers check and pin; a failure
+// names the file and never quotes it, since it may hold a key.
+export function readInstallationCa(namespace: ControlPlaneNamespace): Result<string> {
+  const text = readRequired(namespace, INSTALLATION_CA_FILE);
+  if (!text.ok) return text;
+  const path = join(namespace.directory, INSTALLATION_CA_FILE);
+  return isCaCertificate(text.value)
+    ? ok(text.value)
+    : err(failure('precondition-failed', `${path} must hold exactly one CA certificate; run issue-installation-certificates`, { path }));
+}
+
+function isCaCertificate(text: string): boolean {
+  if (!SINGLE_CERTIFICATE.test(text)) return false;
+  try {
+    return new X509Certificate(text).ca;
+  } catch {
+    return false;
+  }
+}
+
+// The enrollment bundle's fingerprint: SHA-256 of the DER, lowercase hex.
+export function installationCaFingerprint(certificatePem: string): string {
+  return createHash('sha256').update(new X509Certificate(certificatePem).raw).digest('hex');
 }
 
 function readRequired(namespace: ControlPlaneNamespace, name: string): Result<string> {

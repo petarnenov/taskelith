@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ROUTE_SCHEMA_PATH } from '../scripts/review-route.ts';
 import { archiveSnapshot, GIT_ENVIRONMENT } from '../scripts/checklist-environment.ts';
 import { CHECKLIST_SCHEMA_PATH, LANDING_CHANGE } from '../scripts/checklist-record.ts';
 import { PASS_SCHEMA_PATH, runFindings, SCHEMA_PATH } from '../scripts/findings.ts';
@@ -15,7 +16,7 @@ function withGitRepository(check: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'checklist-git-'));
   try {
     git(root, 'init', '--quiet');
-    for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH]) {
+    for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH, ROUTE_SCHEMA_PATH]) {
       mkdirSync(join(root, path, '..'), { recursive: true });
       cpSync(path, join(root, path));
     }

@@ -14,10 +14,12 @@ export interface WorkerCredentials {
   readonly broker: string;
 }
 
-// What enrollment returns for the root: the binding and generation 1.
+// What enrollment returns for the root: the binding, generation 1, and
+// the installation CA certificate that the worker checked before it.
 export interface WorkerEnrollment extends JournalBinding {
   readonly credentialGeneration: number;
   readonly credentials: WorkerCredentials;
+  readonly installationCa: string;
 }
 
 export function credentialReferencesOf(generation: number): CredentialReferences {
@@ -48,12 +50,31 @@ export function readWorkerCredentials(paths: WorkerPaths, identity: WorkerIdenti
 }
 
 function readCredential(paths: WorkerPaths, reference: string): Result<string> {
-  const path = join(paths.worker, reference);
+  return readControlFile(paths, join(paths.worker, reference), `the credential ${reference}`);
+}
+
+// Written once, after the journal and before the identity, so an identity
+// always has its pin.
+export function writeInstallationCaPin(paths: WorkerPaths, enrollment: WorkerEnrollment): Result<void> {
+  return createOnce(paths.installationCa, enrollment.installationCa);
+}
+
+// The pinned CA, the only CA of the worker's TLS; a root enrolled without
+// one, before 26b, fails closed: no migration, as nothing was released.
+export function readInstallationCaPin(paths: WorkerPaths): Result<string> {
+  const missing = 'remove worker/ and enroll again with a new token and its fingerprint';
+  return readControlFile(paths, paths.installationCa, 'the pinned installation CA', missing);
+}
+
+function readControlFile(paths: WorkerPaths, path: string, name: string, remedy?: string): Result<string> {
   const safe = checkControlPath(paths.dataRoot, path, ownerUid());
   if (!safe.ok) return safe;
-  if (!existsSync(path)) return err(rootFailure('corrupt', `the credential ${reference} the identity names is missing`, { path }));
+  if (!existsSync(path)) {
+    const message = remedy === undefined ? `${name} is missing` : `${name} is missing; ${remedy}`;
+    return err(rootFailure('corrupt', message, { path }));
+  }
   const synced = syncBeforeUse(path);
   if (!synced.ok) return synced;
   const content = readFileSync(path, 'utf8');
-  return content === '' ? err(rootFailure('corrupt', `the credential ${reference} is empty`, { path })) : ok(content);
+  return content === '' ? err(rootFailure('corrupt', `${name} is empty`, { path })) : ok(content);
 }

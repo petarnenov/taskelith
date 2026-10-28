@@ -1,18 +1,18 @@
-import { err, failure, ok, parseIdentifier, type Identifier, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import type { CodeHeadIdentity as SdlcCodeHead, CodeObjectId } from '@taskelith/sdlc';
 
-// The SCM port's opaque repository name, compared exactly, never parsed.
-export type RepositoryId = Identifier<'RepositoryId'>;
+export { isSameCodeHead, type RepositoryId } from '@taskelith/sdlc';
 
 declare const gitObjectIdBrand: unique symbol;
 
 // A full lowercase Git object name: SHA-1 or SHA-256.
-export type GitObjectId = string & { readonly [gitObjectIdBrand]: true };
+export type GitObjectId = CodeObjectId & { readonly [gitObjectIdBrand]: true };
 
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-// What head-bound verification and review record (contract section 5).
-export interface CodeHeadIdentity {
-  readonly repository: RepositoryId;
+// What head-bound verification and review record (contract section 5):
+// the SDLC module's code head with Git object names.
+export interface CodeHeadIdentity extends SdlcCodeHead {
   readonly commit: GitObjectId;
   readonly tree: GitObjectId;
 }
@@ -41,12 +41,6 @@ export function parseCodeHeadIdentity(input: CodeHeadInput): Result<CodeHeadIden
     return fieldError('tree', 'the commit and the tree must use one object format');
   }
   return ok(Object.freeze({ repository: repository.value, commit: commit.value, tree: tree.value }));
-}
-
-// One head is another only when all three parts match; a new commit with
-// an unchanged tree is still a new head.
-export function isSameCodeHead(left: CodeHeadIdentity, right: CodeHeadIdentity): boolean {
-  return left.repository === right.repository && left.commit === right.commit && left.tree === right.tree;
 }
 
 function fieldError(field: string, message: string): Result<never> {
