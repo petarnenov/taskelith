@@ -3,7 +3,7 @@
   "info": {
     "title": "Taskelith execution API",
     "version": "0.8.0",
-    "description": "X Since G3 sub-change 9d, the worker's terminal relay connection, whose frames `terminal.asyncapi.json` defines."
+    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), the renewal and confirmation of a rotated worker credential generation (G3 sub-change 26c), launch authorization (G2 decision D12 (a)), delegation and its result, task results, evidence with its retirement, the reconciliation queue and re-admission, and the delivery of slot and per-run SCM credentials to a worker (G3 sub-change 9c). Worker operations use the per-worker credential. Operator operations use the installation bootstrap credential (G2 decision D10 (a)); since 9c the evidence, reconciliation, and re-admission operations also accept the browser session of the control-plane document. Since G3 sub-change 9d, the worker's terminal relay connection, whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
     "/installation/ca": {
