@@ -11,6 +11,7 @@ import {
   endGeneration,
   recordDeliveryReport,
   recordRequest,
+  recordTurnOutcome,
   requestsAwaitingAnswer,
   startGeneration,
   uncertainDeliveries,
@@ -33,6 +34,7 @@ import {
   requestKey,
   sessionWithOpenRequest,
   sessionWithRunningTurn,
+  submitted,
   turnId,
 } from './session-fixtures.ts';
 
@@ -92,6 +94,17 @@ test('a request needs a delivered turn of the running generation and text within
   assert.equal(failed(recordRequest(running, permissionRequest('r', 'turn-1', 2))).code, 'precondition-failed');
   const long = { ...permissionRequest('r'), text: 'x'.repeat(MAX_HARNESS_TEXT_LENGTH + 1) };
   assert.equal(failed(recordRequest(running, long)).code, 'invalid');
+});
+
+test('a request for a queued turn of the running generation fails with precondition-failed', () => {
+  const queued = submitted(sessionWithRunningTurn(), 'turn-2');
+  assert.equal(failed(recordRequest(queued, permissionRequest('r', 'turn-2'))).code, 'precondition-failed');
+});
+
+test('a request for an ended turn of the running generation fails with precondition-failed', () => {
+  const end = { turnId: turnId('turn-1'), generation: generation(1), outcome: 'completed' as const };
+  const ended = value(recordTurnOutcome(sessionWithRunningTurn(), end));
+  assert.equal(failed(recordRequest(ended, permissionRequest('r'))).code, 'precondition-failed');
 });
 
 test('the first valid response is consumed with its responder and attempt, pending delivery', () => {

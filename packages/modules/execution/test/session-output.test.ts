@@ -71,7 +71,7 @@ test('empty output records no entry and takes no position, so it never grows the
   assert.deepEqual(empties.output, { entries: [{ turnId: 'turn-1', generation: 1, text: 'a', position: 1 }], retainedBytes: 1, lastPosition: 1 });
 });
 
-test('one-byte output counts one byte each, so the window holds at most as many entries as bytes', () => {
+test('one-byte output counts one byte each and drops only the entries that no longer fit', () => {
   const tiny = appended(chunks(CHUNKS_IN_WINDOW), 'y', 'y', 'y');
   assert.equal(tiny.output.entries[0]?.position, 2);
   assert.equal(tiny.output.entries.length, CHUNKS_IN_WINDOW + 2);

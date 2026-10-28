@@ -22,6 +22,7 @@ import {
   SESSION,
   TASK,
   allow,
+  delivered,
   generation,
   newSession,
   permissionRequest,
@@ -36,12 +37,9 @@ import {
 
 const RESET = instant('2026-10-28T12:00:00.000Z');
 const SNAPSHOT = evidence('timeline-snapshot-1');
+
 function firstTurnEnd() {
   return { turnId: turnId('turn-1'), generation: generation(1), outcome: 'completed' as const };
-}
-
-function delivered(session: Session, name: string): Session {
-  return value(deliverTurn(submitted(session, name), { turnId: turnId(name), generation: generation(1) }));
 }
 
 // turn-1 completed, turn-2 runs with an open request when the limit comes.
