@@ -1,0 +1,1 @@
+{"change": "define-board-session-and-event-stream-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18257-d0b5-7471-beb5-90c86b982182", "counts": {"critical": 0, "high": 3, "medium": 3, "low": 0}}

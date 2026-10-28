@@ -1,6 +1,6 @@
 # Verification: define-board-session-and-event-stream-contracts
 
-Status: developed and verified by the author; independent review pending (passes 1 and 2, and pass 3 if governance "Conditional third pass" requires it); not archived.
+Status: developed and verified by the author; review pass 1 done and its findings fixed; pass 2 pending, and pass 3 if governance "Conditional third pass" requires it; not archived.
 
 ## Scope and source
 
@@ -15,7 +15,9 @@ Status: developed and verified by the author; independent review pending (passes
 - `94a93f73` `chore: define the board, session, and event stream contracts` (document, `NEEDS_YOU_KINDS` and `NeedsYouAnswer`, contract and product ports tests, contract pages).
 - `bf681fe0` `docs: open the define board session and event stream contracts change` (proposal, design, tasks, spec deltas, `checklist.json`, empty `findings.jsonl` and `passes.jsonl`).
 - `d1ff822e` `docs: route the define board session and event stream contracts change` (`route.json`, unedited). The `make verify` run below checked this commit's tree.
-- The commit that adds this record changes only this file and `tasks.md`; it is the head that review pass 1 reviews.
+- `d4a09607` `docs: record the fail-before run of the board, session, and event stream contracts`: the head that review pass 1 reviewed.
+- `41042399` `chore: fix review pass 1 findings of the board, session, and event stream contracts` (contract page sections 7, 9, 10, and 12, product ports section 4.2, document `BoardChangedEvent` and descriptions, design decisions 10, 15, 16, and 18, spec deltas, three tests).
+- The commit `docs: record review pass 1 of the board, session, and event stream contracts` adds `passes.jsonl`, `findings.jsonl`, and this section; the `make verify` run of pass 1's fixes checked its tree, and the commit after it records that run.
 
 ## Environment
 
@@ -66,17 +68,40 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A if governance "Conditional third pass" requires it; the session runs them.
+### Pass 1
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, variant `medium`, session `01a18257-d0b5-7471-beb5-90c86b982182`, read-only, on `d4a09607`; the snapshot was unchanged by the review.
+- Result: Critical 0, High 3, Medium 3, Low 0, all fixed in `41042399` and recorded in `findings.jsonl`.
+  1. High, a valid cursor could cause an endless `resync`: a cursor is now a boundary of the installation-wide sequence, valid from the retention floor to its head, `0` included (contract page section 10, design decision 16).
+  2. High, redaction before recording broke idempotency: repeats compare a keyed digest of the unredacted input (contract page section 7, design decisions 10 and 18, requirement "Idempotency before redaction").
+  3. High, a secret split across output chunks passed redaction: a generation's output is redacted as one text, holding back a tail that could be part of a secret (contract page section 7, design decision 18).
+  4. Medium, no event for `Board.workersOnline`: `board-changed` carries it on the project stream, also with no cards (contract page section 10, design decision 15).
+  5. Medium, the native response requirement refused an idempotent repeat: it answers 200 when the key and response repeat, else 409 (contract page section 9).
+  6. Medium, the product ports delta refused an idempotent repeat: it returns the first outcome (product ports section 4.2).
+- Architect's edit in the same commit: contract page section 12 gives evidence retirement, the reconciliation queue, and re-admission of item 44 to 9c alone.
+- Fix checks, on the working tree of `41042399`:
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate define-board-session-and-event-stream-contracts --strict` | `Change 'define-board-session-and-event-stream-contracts' is valid` |
+| `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments` | Every checked link conforms; every active OpenSpec change archives into strictly valid specs; every comment is within the comment length rule |
+| `node --experimental-strip-types --test --test-isolation=none packages/contracts/test/board-session-contracts.test.ts packages/contracts/test/control-plane-contracts.test.ts packages/contracts/test/contracts.test.ts packages/modules/execution/test/product-ports.test.ts`, after `npm run build` | 75 tests, all passed |
+| Fail-before: the same `board-session-contracts.test.ts` with the document of `d4a09607`, after `npm run build` | tests 17, pass 14, fail 3: `a change of the workers online reaches the project stream, also for a board with no cards`, `a stream cursor is a boundary of the installation-wide sequence`, `a repeated command is compared before redaction, ahead of the refusal of an answered one`; restored, 17 of 17 pass |
+| `tsc --noEmit --strict` over the changed test files with `allowImportingTsExtensions` | Exit 0 |
+| Spec delta requirement body lengths, in characters, changed ones | Native request responses on the wire 476, Event stream cursor and resynchronization 458, Event payloads and agent text 331, Idempotency before redaction 335; Needs you items answered once by their source 496 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+
+The fixes change contracts, not only records, and pass 1 found High findings, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
 ## Remaining gates
 
-- Review passes 1 and 2, and pass 3 if required, with their fixes and records.
+- Review pass 2 by reviewer B, and pass 3 by reviewer A if required, with their fixes and records.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-ups
 
-- Item 13: the session timeline service with the idempotency keys of turns and responses, the redaction of agent text before it is recorded, and the native request source that opens `delivery-acknowledgement` items (contract page sections 7, 8.1, and 9).
-- Item 14: positions after the commit in commit order, stream retention, bounded buffers, keep-alive, and ending a stream at logout or a role change (contract page section 10).
+- Item 13: the session timeline service with the idempotency keys of turns and responses and the keyed digests of their unredacted inputs, the redaction of agent text before it is recorded, output redacted across chunks, and the native request source that opens `delivery-acknowledgement` items (contract page sections 7, 8.1, and 9).
+- Item 14: positions after the commit in commit order, cursors as boundaries of the sequence, stream retention long enough to resume a view just read, `board-changed` events, bounded buffers, keep-alive, and ending a stream at logout or a role change (contract page section 10).
 - Item 15: the board and inbox handlers (contract page section 8).
 - 9d: the worker messages reuse the session schemas of design decision 3 unchanged.
