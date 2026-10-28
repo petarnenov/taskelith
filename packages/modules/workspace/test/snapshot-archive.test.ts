@@ -20,8 +20,10 @@ const TREE: Readonly<Record<string, GitTreeEntry>> = {
   [LONG_PATH]: { type: 'file', mode: '100644', content: new Uint8Array(1025).fill(7) },
 };
 
+const snapshot = (tree: Readonly<Record<string, GitTreeEntry>>) => encodeHeadSnapshot(new Map(Object.entries(tree)));
+
 function encoded(tree: Readonly<Record<string, GitTreeEntry>>): Uint8Array {
-  const archive = encodeHeadSnapshot(tree);
+  const archive = snapshot(tree);
   assert.ok(archive.ok);
   return archive.value;
 }
@@ -79,7 +81,7 @@ test('an empty tree is two zero blocks', () => {
 });
 
 test('a tree that holds a gitlink is refused', () => {
-  const archive = encodeHeadSnapshot({ ...TREE, 'vendor/module': { type: 'gitlink', commit: 'f'.repeat(40) } });
+  const archive = snapshot({ ...TREE, 'vendor/module': { type: 'gitlink', commit: 'f'.repeat(40) } });
   assert.ok(!archive.ok);
   assert.equal(archive.error.code, 'precondition-failed');
   assert.deepEqual(archive.error.details, { reason: 'gitlink-in-tree' });
@@ -92,8 +94,38 @@ test('a path or link target that UTF-8 cannot carry is refused', () => {
     { link: { type: 'link', target: 'lone\uDC00' } },
   ];
   for (const tree of trees) {
-    const archive = encodeHeadSnapshot(tree);
+    const archive = snapshot(tree);
     assert.ok(!archive.ok);
     assert.deepEqual(archive.error.details, { reason: 'non-utf8-path' });
   }
+});
+
+test('a gitlink is refused before text that is not UTF-8', () => {
+  const archive = snapshot({ 'lone\uD800': { type: 'file', mode: '100644', content: text('x') }, module: { type: 'gitlink', commit: 'f'.repeat(40) } });
+  assert.ok(!archive.ok);
+  assert.deepEqual(archive.error.details, { reason: 'gitlink-in-tree' });
+});
+
+test('entries follow UTF-8 byte order, not UTF-16 code unit order', async () => {
+  const astral = '\u{1F600}.txt';
+  const private_ = '\uE000.txt';
+  assert.ok(astral < private_);
+  const tree = { [astral]: { type: 'file', mode: '100644', content: text('a') }, [private_]: { type: 'file', mode: '100644', content: text('b') } } as const;
+  const { directory, listing } = await extracted(encoded(tree));
+  await rm(directory, { recursive: true, force: true });
+  assert.deepEqual(listing.trim().split('\n'), [private_, astral]);
+});
+
+test('a path of 100 bytes fits the ustar name, and one of 101 needs pax', () => {
+  const typeOfFirst = (path: string) => String.fromCharCode(encoded({ [path]: { type: 'file', mode: '100644', content: text('x') } })[156]!);
+  assert.equal(typeOfFirst('p'.repeat(100)), '0');
+  assert.equal(typeOfFirst('p'.repeat(101)), 'x');
+  assert.equal(typeOfFirst(`${'p'.repeat(99)}\u00e9`), 'x');
+});
+
+test('a file named __proto__ is archived', () => {
+  const tree = new Map<string, GitTreeEntry>([['__proto__', { type: 'file', mode: '100644', content: text('proto') }]]);
+  const archive = encodeHeadSnapshot(tree);
+  assert.ok(archive.ok);
+  assert.equal(new TextDecoder().decode(archive.value.subarray(0, 9)), '__proto__');
 });

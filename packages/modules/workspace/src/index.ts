@@ -12,6 +12,7 @@ export {
   GIT_CLIENT_PINS,
   GIT_COMMAND_SCOPE_SETTINGS,
   GIT_CREDENTIAL_SETTING,
+  GIT_NEUTRAL_DIRECTORY,
   checkGitClient,
   gitConfigEnvironment,
   type GitClientPin,
@@ -35,7 +36,6 @@ export {
   reclaimContainmentName,
   taskBranchName,
   taskBranchPushArguments,
-  taskBranchPushOptions,
   workspaceDirectoryName,
   workspaceFailure,
   type DirtyReason,
@@ -53,8 +53,9 @@ export {
   type WorkspaceStatus,
   type WorkspaceTarget,
 } from './domain/workspace.js';
+export { holdsSensitive, sensitiveValues } from './ports/git-process-checks.js';
 export { WORKSPACE_CONFORMANCE } from './ports/workspace-conformance.js';
-export { REDACTED_VALUE, type FixtureCredentials, type GitProcessObservation, type WorkspaceFixture } from './ports/workspace-fixture.js';
+export { REDACTED_VALUE, redactedHeader, type FixtureCredentials, type GitProcessObservation, type WorkspaceFixture } from './ports/workspace-fixture.js';
 export type {
   PrepareWorkspace,
   PushTaskBranch,

@@ -49,6 +49,7 @@ const ONE_HAND_OFF = 'holds one handed-off workspace at a time where executions 
 const CONCURRENT_HAND_OFF = 'lets one of two concurrent hand-offs through where executions share a separate account';
 const GIT_PROCESSES = 'runs Git in an environment it builds, with no credential in an argument';
 const PLANTED_SETTINGS = 'writes the repository configuration anew, so settings the agent planted never act';
+const NEUTRAL_REMOTE_HEAD = 'reads the remote head of a handed-off workspace outside every repository';
 
 const EVERY_CASE = WORKSPACE_CONFORMANCE.map(({ name }) => name);
 
@@ -93,6 +94,11 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['uses the planted settings, then rewrites the configuration', { rewritesConfigAfterGit: true }, [PLANTED_SETTINGS]],
   ['snapshots a tree that holds a gitlink', { snapshotsGitlink: true }, [GITLINK]],
   ['clones from a remote that is not HTTPS', { acceptsInsecureRemote: true }, [REJECT]],
+  ['reads the remote head in the checkout', { readsRemoteInCheckout: true }, [GIT_PROCESSES, NEUTRAL_REMOTE_HEAD]],
+  ['inherits the user environment', { inheritsUserEnvironment: true }, [GIT_PROCESSES]],
+  ['sends the secret as the whole header value', { sendsSecretAsHeader: true }, [GIT_PROCESSES]],
+  ['calls the remote before the remote URL check', { callsRemoteBeforeTransport: true }, [REJECT]],
+  ['runs the first git in the path', { runsGitFromPath: true }, [GIT_PROCESSES]],
   ['cannot reach the remote for any prepare', { refusesEveryPrepare: true }, EVERY_CASE.filter((name) => name !== DIGEST)],
 ];
 
@@ -108,7 +114,9 @@ function credentialForms(fixture: WorkspaceFixture): string[] {
   return [read, write, foreign].flatMap(({ secret, authorization }) => [secret, authorization, authorization.split(' ')[1]!]);
 }
 
-const LEAKING_DEFECTS: readonly DoubleDefects[] = [{ passesSecretInArguments: true }, { passesHeaderInArguments: true }, { storesSecret: true }];
+const LEAKING_DEFECTS: readonly DoubleDefects[] = [
+  { passesSecretInArguments: true }, { passesHeaderInArguments: true }, { storesSecret: true }, { sendsSecretAsHeader: true },
+];
 
 for (const defects of LEAKING_DEFECTS) {
   test(`a finding never repeats the credential it found (${Object.keys(defects)[0]})`, async () => {

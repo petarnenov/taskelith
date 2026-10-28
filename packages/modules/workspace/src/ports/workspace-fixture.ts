@@ -14,13 +14,22 @@ export interface FixtureCredentials {
 // What an observation shows in place of a value that holds a credential.
 export const REDACTED_VALUE = '<redacted>';
 
+// What it shows for exactly `Authorization: <authorization>` of the
+// credential, so that the suite can tell whose header a process carries.
+export function redactedHeader(credentialId: string): string {
+  return `<authorization-header:${credentialId}>`;
+}
+
 // One Git process that the adapter started, as the fixture observed it at
 // its start; environment values that hold a credential are redacted.
 export interface GitProcessObservation {
   readonly argv: readonly string[];
   readonly pid: number;
+  // The directory the process started in.
+  readonly cwd: string;
   readonly environment: Readonly<Record<string, string>>;
-  // The checkout's `.git/config` as the process found it; null without one.
+  // The configuration of the repository that Git finds from `cwd`, as the
+  // process found it; null outside a repository.
   readonly repositoryConfig: string | null;
 }
 

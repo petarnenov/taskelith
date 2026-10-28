@@ -1,6 +1,6 @@
-import { GIT_BUILT_ENVIRONMENT, GIT_COMMAND_SCOPE_SETTINGS, GIT_CREDENTIAL_SETTING } from '../domain/git-client.js';
+import { GIT_BUILT_ENVIRONMENT, GIT_CLIENT_PINS, GIT_COMMAND_SCOPE_SETTINGS, GIT_CREDENTIAL_SETTING, GIT_NEUTRAL_DIRECTORY } from '../domain/git-client.js';
 import type { WorkspaceCredential } from '../domain/workspace.js';
-import { REDACTED_VALUE, type GitProcessObservation } from './workspace-fixture.js';
+import { REDACTED_VALUE, redactedHeader, type GitProcessObservation } from './workspace-fixture.js';
 
 // Checks of the Git processes an adapter starts (contract section 7);
 // no message holds an argument or value that could carry a credential.
@@ -10,6 +10,10 @@ const GIT_OPERATIONS = new Set([
   'merge-base', 'push', 'read-tree', 'rev-parse', 'status', 'update-index', 'update-ref',
 ]);
 const SENSITIVE_MINIMUM_LENGTH = 8;
+// Operations that reach only the remote and so start in no repository.
+const NEUTRAL_OPERATIONS = new Set(['clone', 'ls-remote']);
+const PINNED_PATHS = new Set<string>(Object.values(GIT_CLIENT_PINS).map(({ path }) => path));
+const HEADER_MARKER_PREFIX = redactedHeader('').slice(0, -1);
 
 const base64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
 
@@ -52,37 +56,52 @@ export function pushArgumentProblems(process: GitProcessObservation, expected: r
   return [`${processLabel(process)}: arguments ${shown}, expected ${JSON.stringify(expected)}`];
 }
 
-export function gitProcessProblems(process: GitProcessObservation, reachesRemote: boolean, sensitive: readonly string[]): string[] {
+// What a process may carry: the header of `credentialId` toward the
+// remote, or none.
+export interface ExpectedGitProcess {
+  readonly credentialId: string | null;
+}
+
+export function gitProcessProblems(process: GitProcessObservation, expected: ExpectedGitProcess, sensitive: readonly string[]): string[] {
   const label = processLabel(process);
   const problems: string[] = [];
   if (!Number.isSafeInteger(process.pid) || process.pid <= 0) problems.push(`${label}: no process identifier`);
+  if (!PINNED_PATHS.has(process.argv[0] ?? '')) problems.push(`${label}: not started through the pinned client's path`);
   if (process.argv.some((arg) => holdsSensitive(arg, sensitive))) problems.push(`${label}: a credential in an argument`);
-  problems.push(...environmentProblems(label, process.environment, reachesRemote));
+  if (NEUTRAL_OPERATIONS.has(operationOf(process.argv)) && (process.cwd !== GIT_NEUTRAL_DIRECTORY || process.repositoryConfig !== null)) {
+    problems.push(`${label}: needs no checkout but starts in a repository or outside ${GIT_NEUTRAL_DIRECTORY}`);
+  }
+  problems.push(...environmentProblems(label, process.environment, expected, sensitive));
   return problems;
 }
 
-// The built values, exactly the command-scope settings, the header only
-// toward the remote, and no other Git variable (contract section 7).
-function environmentProblems(label: string, environment: Readonly<Record<string, string>>, reachesRemote: boolean): string[] {
+// Exactly the built values and the command-scope settings, the header of
+// the expected credential last, and nothing else (contract section 7).
+function environmentProblems(label: string, environment: Readonly<Record<string, string>>, expected: ExpectedGitProcess, sensitive: readonly string[]): string[] {
   const problems: string[] = [];
-  for (const [key, expected] of Object.entries(GIT_BUILT_ENVIRONMENT)) {
-    if (environment[key] !== expected) problems.push(`${label}: ${key} is not "${expected}"`);
+  for (const [key, value] of Object.entries(GIT_BUILT_ENVIRONMENT)) {
+    if (environment[key] !== value) problems.push(`${label}: ${key} is not "${value}"`);
   }
   const count = Number(environment.GIT_CONFIG_COUNT);
   const indexes = Number.isSafeInteger(count) && count >= 0 ? [...Array(count).keys()] : [];
   const settings = indexes.map((index) => [environment[`GIT_CONFIG_KEY_${index}`], environment[`GIT_CONFIG_VALUE_${index}`]]);
-  const header = reachesRemote ? [[GIT_CREDENTIAL_SETTING, REDACTED_VALUE]] : [];
-  const expected = [...GIT_COMMAND_SCOPE_SETTINGS, ...header];
-  if (JSON.stringify(settings) !== JSON.stringify(expected)) {
+  const header = expected.credentialId === null ? [] : [[GIT_CREDENTIAL_SETTING, redactedHeader(expected.credentialId)]];
+  if (JSON.stringify(settings) !== JSON.stringify([...GIT_COMMAND_SCOPE_SETTINGS, ...header])) {
     const keys = settings.map(([key]) => key);
-    problems.push(`${label}: command-scope settings ${JSON.stringify(keys)} are not the contract's${reachesRemote ? ' with the header' : ''}`);
+    const whose = expected.credentialId === null ? '' : ` with the header of ${expected.credentialId}`;
+    problems.push(`${label}: command-scope settings ${JSON.stringify(keys)} are not the contract's${whose}`);
   }
-  const known = new Set([...Object.keys(GIT_BUILT_ENVIRONMENT), 'GIT_CONFIG_COUNT', ...indexes.flatMap((index) => [`GIT_CONFIG_KEY_${index}`, `GIT_CONFIG_VALUE_${index}`])]);
-  const foreign = Object.keys(environment).filter((key) => (key.startsWith('GIT_') && !known.has(key)) || key === 'SUDO_UID');
-  if (foreign.length > 0) problems.push(`${label}: inherited variables ${JSON.stringify(foreign.sort())}`);
-  const redactedKeys = Object.keys(environment).filter((key) => environment[key] === REDACTED_VALUE);
+  const allowed = new Set([...Object.keys(GIT_BUILT_ENVIRONMENT), 'GIT_CONFIG_COUNT', ...indexes.flatMap((index) => [`GIT_CONFIG_KEY_${index}`, `GIT_CONFIG_VALUE_${index}`])]);
+  const foreign = Object.keys(environment).filter((key) => !allowed.has(key));
+  if (foreign.length > 0) problems.push(`${label}: variables outside the built environment ${JSON.stringify(foreign.sort())}`);
   const headerKey = `GIT_CONFIG_VALUE_${GIT_COMMAND_SCOPE_SETTINGS.length}`;
-  const misplaced = redactedKeys.filter((key) => !(reachesRemote && key === headerKey));
-  if (misplaced.length > 0) problems.push(`${label}: a credential in ${JSON.stringify(misplaced)}`);
+  const carrying = Object.keys(environment).filter((key) => key !== headerKey && carriesCredential(environment[key]!, sensitive));
+  if (carrying.length > 0) problems.push(`${label}: a credential in ${JSON.stringify(carrying.sort())}`);
   return problems;
+}
+
+// A redacted value, a header marker, or a credential form the fixture
+// left unredacted.
+function carriesCredential(value: string, sensitive: readonly string[]): boolean {
+  return value === REDACTED_VALUE || value.startsWith(HEADER_MARKER_PREFIX) || holdsSensitive(value, sensitive);
 }

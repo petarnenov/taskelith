@@ -10,6 +10,7 @@ import type { AttemptId } from '@taskelith/execution';
 import {
   DIRTY_REASONS,
   GIT_CLIENT_PINS,
+  GIT_NEUTRAL_DIRECTORY,
   HEAD_SNAPSHOT_CONTENT_TYPE,
   REDACTED_VALUE,
   TASK_BRANCH_PREFIX,
@@ -20,10 +21,13 @@ import {
   cleanHead,
   encodeHeadSnapshot,
   gitConfigEnvironment,
+  holdsSensitive,
   parseCodeHeadIdentity,
   parseGitObjectId,
+  redactedHeader,
+  sensitiveValues,
   taskBranchName,
-  taskBranchPushOptions,
+  taskBranchPushArguments,
   workspaceDirectoryName,
   workspaceFailure,
   type CodeHeadIdentity,
@@ -129,6 +133,13 @@ interface LocalState {
   readonly index: StoredTree;
 }
 
+// A task branch workspace's branch, remote, and checkout.
+interface TaskBranch {
+  readonly branch: string;
+  readonly remote: string;
+  readonly checkout: string;
+}
+
 // The worker's record beside the checkout, closed to the execution.
 interface Metadata {
   readonly attemptId: AttemptId;
@@ -162,10 +173,12 @@ const UNKNOWN_SUBMODULE_COMMIT = 'f'.repeat(40);
 const OPERATION_FILE = join('.git', 'operation');
 // What the double writes as `.git/config` before each Git call.
 const REPOSITORY_CONFIG = '[core]\n\trepositoryformatversion = 0\n';
-const BASE_ENVIRONMENT = { PATH: '/usr/bin:/bin', HOME: '/nonexistent' };
 // What a worker's environment could hand down, which the adapter drops.
 const INHERITED_ENVIRONMENT = { SUDO_UID: '10003', GIT_CONFIG_PARAMETERS: "'core.pager=planted'", GIT_TRACE: '1' };
+const INHERITED_USER_ENVIRONMENT = { XDG_CONFIG_HOME: '/home/worker/.config', https_proxy: 'http://proxy.example:3128', SSH_ASKPASS: '/usr/bin/ask' };
 
+// The checkout a call works in; a call without one starts in the neutral
+// directory.
 interface GitCall {
   readonly credential?: WorkspaceCredential;
   readonly checkout?: string;
@@ -222,6 +235,11 @@ export interface DoubleDefects {
   readonly snapshotsGitlink?: boolean;
   readonly acceptsInsecureRemote?: boolean;
   readonly refusesEveryPrepare?: boolean;
+  readonly readsRemoteInCheckout?: boolean;
+  readonly inheritsUserEnvironment?: boolean;
+  readonly sendsSecretAsHeader?: boolean;
+  readonly callsRemoteBeforeTransport?: boolean;
+  readonly runsGitFromPath?: boolean;
 }
 
 // One chain of hand-offs per workspace root, so that a hand-off checks
@@ -300,6 +318,8 @@ export class TempDirWorkspaces implements WorkspaceProvider {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
     const transport = checkRemoteTransport(request.binding.remote, 'https-only');
+    // The defect clones from the remote before it refuses the URL.
+    if (!transport.ok && this.defects.callsRemoteBeforeTransport) await this.runGit(['ls-remote', request.binding.remote], { credential: request.credential });
     if (!transport.ok && !this.defects.acceptsInsecureRemote) return transport;
     if (this.defects.callsRemoteBeforeScopeInPrepare) this.service.calls += 1;
     const scope = this.scope(request.credential, request.binding.repository, 'read-code');
@@ -485,7 +505,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   // The commit's entries, as each snapshot defect alters them.
-  private snapshotEntries(commit: string): Tree {
+  private snapshotEntries(commit: string): Map<string, GitTreeEntry> {
     let entries = Object.entries(this.service.entries(commit));
     if (this.defects.snapshotsGitlink) entries = entries.filter(([, entry]) => entry.type !== 'gitlink');
     if (this.defects.snapshotsWithoutMetadata) {
@@ -497,7 +517,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
       entries = entries.map(([path, entry]) => [path, lossy(entry)]);
     }
     if (this.defects.snapshotsCommit) entries = [...entries, ['COMMIT', textFile(commit)]];
-    return Object.fromEntries(entries);
+    return new Map(entries);
   }
 
   // The head with its parent's tree, as a cache that missed a commit would.
@@ -522,30 +542,34 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!current.ok) return current;
     const head = cleanHead(current.value);
     if (!head.ok) return head;
-    const { branch, remote: url } = opened.value;
+    const { branch, remote: url, checkout } = opened.value;
     await this.lsRemote(opened.value, request.credential);
     const remote = this.service.branches.get(branch) ?? null;
     if (remote !== request.expectedRemoteHead && !this.defects.ignoresLease) {
       return workspaceFailure('conflict', 'remote-moved', 'the remote task branch moved');
     }
-    if (remote !== null && !this.service.descends(head.value.commit, remote) && !this.defects.ignoresAncestry) {
+    // Without the lease, the check trusts the caller's view of the remote.
+    const base = this.defects.ignoresLease ? request.expectedRemoteHead : remote;
+    if (base !== null && !this.service.descends(head.value.commit, base) && !this.defects.ignoresAncestry) {
       return workspaceFailure('conflict', 'not-fast-forward', 'the push is not a fast-forward');
     }
-    const checkout = join(this.root, this.directoryName(request.attemptId), WORKSPACE_LAYOUT.checkout);
-    await this.runGit(['push', ...this.pushOptions(branch, request.expectedRemoteHead), url, `HEAD:refs/heads/${branch}`], { credential: request.credential, checkout });
+    await this.runGit(this.pushArguments(branch, request.expectedRemoteHead, url), { credential: request.credential, checkout });
     this.service.branches.set(branch, head.value.commit);
     return head;
   }
 
-  // The contract's options, or what each push defect passes instead.
-  private pushOptions(branch: string, expected: string | null): readonly string[] {
-    if (this.defects.pushesWithBareLease) return ['--atomic', '--force-with-lease'];
+  // The contract's arguments, or what each push defect passes instead.
+  private pushArguments(branch: string, expected: string | null, remote: string): readonly string[] {
+    const contract = taskBranchPushArguments(branch, expected, remote);
+    const [command, atomic, lease, ...target] = contract;
+    if (this.defects.pushesWithBareLease) return [command!, atomic!, '--force-with-lease', ...target];
     const cancelling = [...(this.defects.cancelsAtomic ? ['--no-atomic'] : []), ...(this.defects.cancelsLease ? ['--no-force-with-lease'] : [])];
-    return [...taskBranchPushOptions(branch, expected), ...cancelling];
+    return [command!, atomic!, lease!, ...cancelling, ...target];
   }
 
-  private async lsRemote({ branch, remote }: { branch: string; remote: string }, credential: WorkspaceCredential): Promise<void> {
-    await this.runGit(['ls-remote', remote, `refs/heads/${branch}`], { credential });
+  private async lsRemote({ branch, remote, checkout }: TaskBranch, credential: WorkspaceCredential): Promise<void> {
+    const inCheckout = this.defects.readsRemoteInCheckout ? { checkout } : {};
+    await this.runGit(['ls-remote', remote, `refs/heads/${branch}`], { credential, ...inCheckout });
   }
 
   // Records the Git process a real adapter would start, with the checkout's
@@ -554,8 +578,10 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (credential !== undefined) this.service.calls += 1;
     const repositoryConfig = checkout === undefined ? null : await readFile(join(checkout, GIT_CONFIG_FILE), 'utf8').catch(() => null);
     const pid = this.service.processes.length + FIRST_PROCESS_ID;
-    const argv = [GIT_CLIENT_PINS.linux.path, ...this.credentialArguments(credential), ...args];
-    this.service.processes.push({ argv, pid, environment: this.gitEnvironment(credential), repositoryConfig });
+    const client = this.defects.runsGitFromPath ? 'git' : GIT_CLIENT_PINS.linux.path;
+    const argv = [client, ...this.credentialArguments(credential), ...args];
+    const cwd = checkout ?? GIT_NEUTRAL_DIRECTORY;
+    this.service.processes.push({ argv, pid, cwd, environment: this.gitEnvironment(credential), repositoryConfig });
     if (checkout !== undefined && this.defects.rewritesConfigAfterGit) await writeRepositoryConfig(checkout);
   }
 
@@ -567,11 +593,13 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   private gitEnvironment(credential: WorkspaceCredential | undefined): Record<string, string> {
-    const built = gitConfigEnvironment(credential?.authorization);
-    if (this.defects.inheritsEnvironment) return { ...BASE_ENVIRONMENT, ...INHERITED_ENVIRONMENT, ...built };
-    if (this.defects.inheritsGlobalConfig) return { ...BASE_ENVIRONMENT, ...built, GIT_CONFIG_GLOBAL: '/attacker/config' };
-    if (this.defects.inheritsConfigPairs) return { ...BASE_ENVIRONMENT, ...withInheritedPair(built) };
-    return { ...BASE_ENVIRONMENT, ...built };
+    const authorization = this.defects.sendsSecretAsHeader ? credential?.secret : credential?.authorization;
+    const built = gitConfigEnvironment(authorization);
+    if (this.defects.inheritsEnvironment) return { ...INHERITED_ENVIRONMENT, ...built };
+    if (this.defects.inheritsUserEnvironment) return { ...INHERITED_USER_ENVIRONMENT, ...built };
+    if (this.defects.inheritsGlobalConfig) return { ...built, GIT_CONFIG_GLOBAL: '/attacker/config' };
+    if (this.defects.inheritsConfigPairs) return withInheritedPair(built);
+    return built;
   }
 
   directoryName(attemptId: AttemptId): string {
@@ -589,13 +617,13 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${attemptId}`));
   }
 
-  private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<{ branch: string; remote: string }>> {
+  private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<TaskBranch>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
     const { expectedBranch, remote } = await readMetadata(checkout.value);
     if (expectedBranch === null) return workspaceFailure('invalid', 'read-only-workspace', 'an at-head workspace has no task branch');
     const scope = this.scope(credential, this.repository, access);
-    return scope.ok ? ok({ branch: expectedBranch, remote }) : scope;
+    return scope.ok ? ok({ branch: expectedBranch, remote, checkout: checkout.value }) : scope;
   }
 
   private scope(credential: WorkspaceCredential, repository: RepositoryId, access: RemoteAccess): Result<void> {
@@ -850,10 +878,12 @@ function credential(credentialId: string, repositories: string[], permissions: s
   return { credentialId, secret, authorization, repositories, permissions };
 }
 
-// What a fixture shows: every environment value with a credential redacted.
+// What a fixture shows: a credential's exact header as its marker, and
+// every other environment value with a credential form redacted.
 function observed(process: GitProcessObservation, credentials: readonly WorkspaceCredential[]): GitProcessObservation {
-  const sensitive = credentials.flatMap(({ secret, authorization }) => [secret, authorization]);
-  const redact = (value: string) => (sensitive.some((part) => value.includes(part)) ? REDACTED_VALUE : value);
+  const sensitive = sensitiveValues(credentials);
+  const headers = new Map(credentials.map(({ credentialId, authorization }) => [`Authorization: ${authorization}`, redactedHeader(credentialId)]));
+  const redact = (value: string) => headers.get(value) ?? (holdsSensitive(value, sensitive) ? REDACTED_VALUE : value);
   const environment = Object.fromEntries(Object.entries(process.environment).map(([key, value]) => [key, redact(value)]));
   return { ...process, environment };
 }

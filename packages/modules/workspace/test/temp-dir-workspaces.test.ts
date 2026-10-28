@@ -232,13 +232,13 @@ test('planted settings are valid Git configuration with sections and subsections
 
 test('the snapshot reader takes pax records by length, so a path may hold a newline', () => {
   const path = `${'long/'.repeat(25)}line\nbreak.txt`;
-  const archive = encodeHeadSnapshot({ [path]: { type: 'file', mode: '100644', content: Uint8Array.of(1) } });
+  const archive = encodeHeadSnapshot(new Map([[path, { type: 'file', mode: '100644', content: Uint8Array.of(1) }]]));
   assert.ok(archive.ok);
   assert.deepEqual(Object.keys(decodeTar(archive.value)), [path]);
 });
 
 test('the snapshot reader and the working tree keep a file named __proto__', () => withFixture(async (fixture, provider) => {
-  const archive = encodeHeadSnapshot({ ['__proto__']: { type: 'file', mode: '100644', content: Uint8Array.of(1) } });
+  const archive = encodeHeadSnapshot(new Map([['__proto__', { type: 'file', mode: '100644', content: Uint8Array.of(1) }]]));
   assert.ok(archive.ok);
   assert.deepEqual(Object.keys(decodeTar(archive.value)), ['__proto__']);
   must(await provider.prepare(request(fixture)));

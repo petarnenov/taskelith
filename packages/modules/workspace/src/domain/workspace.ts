@@ -161,15 +161,11 @@ export function checkRemoteTransport(remote: string, policy: RemoteTransportPoli
   return workspaceFailure('invalid', 'insecure-remote', 'the remote must be an HTTPS URL without user information');
 }
 
-// The only push options: atomic, leased on the expected head, or on an
-// absent branch when none is expected (contract section 8).
-export function taskBranchPushOptions(branch: string, expectedRemoteHead: string | null): readonly string[] {
-  return ['--atomic', `--force-with-lease=refs/heads/${branch}:${expectedRemoteHead ?? ''}`];
-}
-
-// The whole push command after `git`: options, remote, and one refspec.
+// The whole push command after `git`: atomic, leased on the expected head
+// or on an absent branch, the remote, and one refspec (section 8).
 export function taskBranchPushArguments(branch: string, expectedRemoteHead: string | null, remote: string): readonly string[] {
-  return ['push', ...taskBranchPushOptions(branch, expectedRemoteHead), remote, `HEAD:refs/heads/${branch}`];
+  const lease = `--force-with-lease=refs/heads/${branch}:${expectedRemoteHead ?? ''}`;
+  return ['push', '--atomic', lease, remote, `HEAD:refs/heads/${branch}`];
 }
 
 // A path or link target as Git stores it, refused unless valid UTF-8.

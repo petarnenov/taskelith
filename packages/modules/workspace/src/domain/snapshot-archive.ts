@@ -11,20 +11,17 @@ const USTAR_MAX_SIZE = 0o77777777777;
 const PAX_HEADER_NAME = 'PaxHeader';
 const utf8 = (text: string) => new TextEncoder().encode(text);
 
-// Files and links only, in byte order of their UTF-8 paths, without
-// directory entries; a gitlink or text that is not UTF-8 is refused.
-export function encodeHeadSnapshot(tree: Readonly<Record<string, GitTreeEntry>>): Result<Uint8Array> {
-  const texts = Object.entries(tree).flatMap(([path, entry]) => (entry.type === 'link' ? [path, entry.target] : [path]));
+// Files and links of a map, `__proto__` included, in UTF-8 byte order;
+// a gitlink, then text that is not UTF-8, is refused.
+export function encodeHeadSnapshot(tree: ReadonlyMap<string, GitTreeEntry>): Result<Uint8Array> {
+  const gitlink = [...tree].find(([, entry]) => entry.type === 'gitlink');
+  if (gitlink !== undefined) return workspaceFailure('precondition-failed', 'gitlink-in-tree', `the tree holds a gitlink at ${gitlink[0]}`);
+  const texts = [...tree].flatMap(([path, entry]) => (entry.type === 'link' ? [path, entry.target] : [path]));
   if (!texts.every(isUtf8Text)) return nonUtf8Path();
-  const entries = Object.entries(tree).map(([path, entry]) => ({ path: utf8(path), entry }));
-  const gitlink = entries.find(({ entry }) => entry.type === 'gitlink');
-  if (gitlink !== undefined) {
-    const path = new TextDecoder().decode(gitlink.path);
-    return workspaceFailure('precondition-failed', 'gitlink-in-tree', `the tree holds a gitlink at ${path}`);
-  }
-  const blocks = entries
+  const blocks = [...tree]
+    .map(([path, entry]) => ({ path: utf8(path), entry: entry as TreeEntry }))
     .sort((left, right) => compareBytes(left.path, right.path))
-    .flatMap(({ path, entry }) => entryBlocks(path, entry as TreeEntry));
+    .flatMap(({ path, entry }) => entryBlocks(path, entry));
   return ok(concat([...blocks, new Uint8Array(2 * BLOCK)]));
 }
 

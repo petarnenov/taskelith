@@ -31,7 +31,6 @@ import {
   reclaimContainmentName,
   taskBranchName,
   taskBranchPushArguments,
-  taskBranchPushOptions,
   workspaceDirectoryName,
   type CodeHeadIdentity,
   type IdentifierDigest,
@@ -127,8 +126,10 @@ test('a remote must be HTTPS without user information; loopback HTTP only where 
 
 test('a push is atomic and leased on the expected head, or on an absent branch', () => {
   const branch = 'taskelith/task-1';
-  assert.deepEqual(taskBranchPushOptions(branch, SHA1), ['--atomic', `--force-with-lease=refs/heads/${branch}:${SHA1}`]);
-  assert.deepEqual(taskBranchPushOptions(branch, null), ['--atomic', `--force-with-lease=refs/heads/${branch}:`]);
+  const remote = 'https://scm.example/acme/project.git';
+  const refspec = `HEAD:refs/heads/${branch}`;
+  assert.deepEqual(taskBranchPushArguments(branch, SHA1, remote), ['push', '--atomic', `--force-with-lease=refs/heads/${branch}:${SHA1}`, remote, refspec]);
+  assert.deepEqual(taskBranchPushArguments(branch, null, remote), ['push', '--atomic', `--force-with-lease=refs/heads/${branch}:`, remote, refspec]);
 });
 
 const SHA1 = 'a'.repeat(40);
@@ -254,7 +255,8 @@ test('the push command is exactly the leased options, the remote, and one refspe
 });
 
 test('the built Git environment holds the contract settings, the header last', () => {
-  assert.deepEqual(GIT_BUILT_ENVIRONMENT, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' });
+  assert.deepEqual(GIT_BUILT_ENVIRONMENT, {
+    PATH: '/usr/bin:/bin', HOME: '/nonexistent', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' });
   assert.deepEqual(GIT_COMMAND_SCOPE_SETTINGS, [
     ['core.hooksPath', '/dev/null'], ['credential.helper', ''], ['diff.ignoreSubmodules', 'all'],
     ['status.submoduleSummary', 'false'], ['submodule.recurse', 'false'], ['fetch.recurseSubmodules', 'false'],

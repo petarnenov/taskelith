@@ -15,8 +15,12 @@ export const GIT_CLIENT_PINS = Object.freeze({
   darwin: Object.freeze({ path: '/usr/bin/git', version: 'git version 2.50.1 (Apple Git-155)' }),
 });
 
-// The environment the adapter builds for every Git process (section 7).
+// The environment the adapter builds for every Git process, beside the
+// command-scope settings; nothing else is inherited (section 7).
 export const GIT_BUILT_ENVIRONMENT = Object.freeze({
+  PATH: '/usr/bin:/bin',
+  HOME: '/nonexistent',
+  LC_ALL: 'C',
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_TERMINAL_PROMPT: '0',
@@ -35,6 +39,10 @@ export const GIT_COMMAND_SCOPE_SETTINGS: readonly (readonly [string, string])[] 
 ]);
 
 export const GIT_CREDENTIAL_SETTING = 'http.extraHeader';
+
+// Where a Git process that needs no checkout starts, so that it reads no
+// repository's configuration (section 7).
+export const GIT_NEUTRAL_DIRECTORY = '/';
 
 // The settings as command-scope environment; the header value is the
 // credential's whole Authorization value, never an argument.

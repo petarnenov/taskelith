@@ -2,7 +2,8 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase, type ProjectId, type TaskId } from '@taskelith/sdlc';
 import { isSameCodeHead, parseGitObjectId, type CodeHeadIdentity, type GitObjectId, type RepositoryId } from '../domain/code-head.js';
-import { HEAD_SNAPSHOT_CONTENT_TYPE } from '../domain/snapshot-archive.js';
+import { GIT_NEUTRAL_DIRECTORY } from '../domain/git-client.js';
+import { HEAD_SNAPSHOT_CONTENT_TYPE, encodeHeadSnapshot } from '../domain/snapshot-archive.js';
 import {
   WORKSPACE_LAYOUT,
   taskBranchName,
@@ -125,6 +126,22 @@ function sameHead(problems: string[], label: string, actual: CodeHeadIdentity | 
   if (actual === undefined || !isSameCodeHead(actual, expected)) problems.push(`${label}: expected the same code head`);
 }
 
+// Refused before the credential check and before any remote call.
+async function expectInsecureRemotesRefused(problems: string[], fixture: WorkspaceFixture): Promise<void> {
+  const { read, foreign } = fixture.credentials;
+  const remotes: [string, string, WorkspaceCredential][] = [
+    ['plain HTTP remote', 'http://scm.example/acme/project.git', read],
+    ['remote with a user', 'https://agent@scm.example/acme/project.git', read],
+    ['plain HTTP remote with a foreign credential', 'http://scm.example/acme/project.git', foreign],
+  ];
+  for (const [label, remote, credential] of remotes) {
+    const calls = await fixture.remoteCalls();
+    const result = await fixture.provider.prepare(request(fixture, { binding: { ...fixture.binding, remote }, credential }));
+    expectReason(problems, label, result, 'invalid', 'insecure-remote');
+    expectSame(problems, `${label}: remote calls`, await fixture.remoteCalls(), calls);
+  }
+}
+
 const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
   {
     name: 'prepares a task branch workspace at the base head',
@@ -187,14 +204,13 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
         ['unknown head', at({ repository: fixture.binding.repository, commit: UNKNOWN_COMMIT, tree }), 'not-found', undefined],
         ['mismatched tree', at({ ...base.head, tree: commit }), 'invalid', 'head-mismatch'],
         ['missing base', { binding: { ...fixture.binding, baseBranch: 'missing-base' } }, 'not-found', undefined],
-        ['plain HTTP remote', { binding: { ...fixture.binding, remote: 'http://scm.example/acme/project.git' } }, 'invalid', 'insecure-remote'],
-        ['remote with a user', { binding: { ...fixture.binding, remote: 'https://agent@scm.example/acme/project.git' } }, 'invalid', 'insecure-remote'],
       ];
       for (const [label, overrides, code, reason] of cases) {
         const result = await fixture.provider.prepare(request(fixture, overrides));
         if (reason === undefined) expectCode(problems, label, result, code);
         else expectReason(problems, label, result, code, reason);
       }
+      await expectInsecureRemotesRefused(problems, fixture);
       expectSame(problems, 'listed', await fixture.provider.list(), []);
       expectSame(problems, 'leftovers', await fixture.leftovers(), []);
       return problems;
@@ -475,6 +491,7 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
       await fixture.writeExecutable(FIRST, 'run.sh', 'echo run\n');
       await fixture.writeLink(FIRST, 'latest', 'change.txt');
       await fixture.writeBytes(FIRST, 'blob.bin', BINARY);
+      await fixture.writeFile(FIRST, '__proto__', 'proto\n');
       await fixture.commitAll(FIRST, 'tree');
       const credential = fixture.credentials.write;
       // Published, so that a fresh clone can open the same head.
@@ -490,8 +507,12 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
         'run.sh': { type: 'file', mode: '100755', content: text('echo run\n') },
         'blob.bin': { type: 'file', mode: '100644', content: BINARY },
         latest: { type: 'link', target: 'change.txt' },
+        ['__proto__']: { type: 'file', mode: '100644', content: text('proto\n') },
       });
-      expectSame(problems, 'tree', sortedTree(await fixture.readSnapshot(first.content)), expected);
+      const decoded = await fixture.readSnapshot(first.content);
+      expectSame(problems, 'tree', sortedTree(decoded), expected);
+      const encoded = encodeHeadSnapshot(new Map(Object.entries(decoded)));
+      expectSame(problems, 'bytes of the contract format', encoded.ok && sameBytes(encoded.value, first.content), true);
       const review = await prepared(problems, fixture, { attemptId: SECOND, target: { kind: 'at-head', head: first.head } });
       const elsewhere = await snapshotOf(problems, fixture, SECOND, 'snapshot elsewhere');
       if (review === undefined || elsewhere === undefined) return problems;
@@ -727,17 +748,27 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
     async check(fixture) {
       const problems: string[] = [];
       const { provider, credentials } = fixture;
-      if ((await prepared(problems, fixture)) === undefined) return problems;
+      // The credential each step passes, from its first process on.
+      const steps: { readonly from: number; readonly credentialId: string | null }[] = [];
+      const step = async <T>(credential: WorkspaceCredential | null, run: () => Promise<T>): Promise<T> => {
+        steps.push({ from: (await fixture.gitProcesses()).length, credentialId: credential?.credentialId ?? null });
+        return run();
+      };
+      if ((await step(credentials.read, () => prepared(problems, fixture))) === undefined) return problems;
       await fixture.writeFile(FIRST, 'change.txt', 'change\n');
       await fixture.commitAll(FIRST, 'change');
-      value(problems, 'snapshot', await provider.snapshot(FIRST));
-      value(problems, 'remote head', await provider.readRemoteHead({ attemptId: FIRST, credential: credentials.read }));
-      value(problems, 'push', await provider.push({ attemptId: FIRST, credential: credentials.write, expectedRemoteHead: null }));
+      value(problems, 'snapshot', await step(null, () => provider.snapshot(FIRST)));
+      value(problems, 'remote head', await step(credentials.read, () => provider.readRemoteHead({ attemptId: FIRST, credential: credentials.read })));
+      value(problems, 'push', await step(credentials.write, () => provider.push({ attemptId: FIRST, credential: credentials.write, expectedRemoteHead: null })));
       const processes = await fixture.gitProcesses();
       if (processes.length === 0) return [...problems, 'no Git process was observed'];
       const sensitive = fixtureSensitive(fixture);
       const reachesRemote = (argv: readonly string[]) => argv.includes(fixture.binding.remote);
-      for (const process of processes) problems.push(...gitProcessProblems(process, reachesRemote(process.argv), sensitive));
+      processes.forEach((process, index) => {
+        const credentialId = [...steps].reverse().find(({ from }) => from <= index)?.credentialId ?? null;
+        const expected = { credentialId: reachesRemote(process.argv) ? credentialId : null };
+        problems.push(...gitProcessProblems(process, expected, sensitive));
+      });
       const remote = processes.filter(({ argv }) => reachesRemote(argv));
       expectSame(problems, 'Git processes that reach the binding remote', remote.length >= 3, true);
       return problems;
@@ -752,9 +783,9 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       expectSuccess(problems, 'hand off', await provider.handOff(FIRST));
       for (const [key, setting] of PLANTED_SETTINGS) await fixture.plantGitSetting(FIRST, key, setting);
       await fixture.writeFile(FIRST, 'agent.txt', 'agent\n');
+      const since = (await fixture.gitProcesses()).length;
       expectSuccess(problems, 'reclaim', await provider.reclaim(FIRST));
       await fixture.commitAll(FIRST, 'agent');
-      const since = (await fixture.gitProcesses()).length;
       const pushed = value(problems, 'push', await provider.push({ attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null }));
       if (pushed === undefined) return problems;
       expectSame(problems, 'planted settings left', (await fixture.gitConfig(FIRST)).includes('planted'), false);
@@ -764,6 +795,22 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       expectSame(problems, 'Git processes that started with a planted setting', planted.length, 0);
       await expectLeasedPush(problems, fixture, since, null);
       expectSame(problems, 'remote task branch', await fixture.remoteHead(taskBranch(fixture)), pushed.commit);
+      return problems;
+    },
+  },
+  {
+    name: 'reads the remote head of a handed-off workspace outside every repository',
+    async check(fixture) {
+      const problems: string[] = [];
+      if ((await prepared(problems, fixture)) === undefined) return problems;
+      expectSuccess(problems, 'hand off', await fixture.provider.handOff(FIRST));
+      for (const [key, setting] of PLANTED_SETTINGS) await fixture.plantGitSetting(FIRST, key, setting);
+      const since = (await fixture.gitProcesses()).length;
+      expectSame(problems, 'remote head', await remoteHead(problems, fixture, FIRST), null);
+      const processes = (await fixture.gitProcesses()).slice(since);
+      if (processes.length === 0) problems.push('no Git process read the remote head');
+      const misplaced = processes.filter(({ cwd, repositoryConfig }) => cwd !== GIT_NEUTRAL_DIRECTORY || (repositoryConfig ?? '').includes('planted'));
+      expectSame(problems, 'Git processes that started in a repository', misplaced.length, 0);
       return problems;
     },
   },
