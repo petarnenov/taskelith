@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { OWNER_ONLY, projectRead, projectRequirement } from '@taskelith/access';
+import { ACCESS_REQUIREMENTS, ROUTES, requirementBeforeBody, ruleOf } from '@taskelith/control-plane';
+
+type Operation = { operationId: string; security?: Array<Record<string, string[]>> };
+const document = JSON.parse(readFileSync(new URL('../../../packages/contracts/documents/control-plane.openapi.json', import.meta.url), 'utf8'));
+const operations: Operation[] = Object.values(document.paths as Record<string, Record<string, Operation>>)
+  .flatMap((item) => Object.values(item).filter((operation) => typeof operation.operationId === 'string'));
+
+// The rows of wire contracts section 3, by operation.
+const SECTION_3: Record<string, string> = {
+  readSession: 'none', logIn: 'none', logOut: 'none', receiveScmWebhook: 'none',
+  listProjects: 'authenticated', listScmIntegrations: 'authenticated', readScmIntegration: 'authenticated',
+  readProject: 'viewer-or-owner', listProjectMembers: 'viewer-or-owner', readProjectDefaults: 'viewer-or-owner',
+  readAutoMergeSetting: 'viewer-or-owner', readRepositoryBinding: 'viewer-or-owner', listProjectAccountSlots: 'viewer-or-owner',
+  updateProject: 'maintainer', updateProjectDefaults: 'maintainer', updateAutoMergeSetting: 'maintainer', bindRepository: 'maintainer',
+};
+
+function rowOf(operationId: string): string {
+  const rule = ruleOf(operationId);
+  if (rule.kind === 'none') return 'none';
+  if (rule.kind === 'fixed') return rule.requirement.kind === 'authenticated' ? 'authenticated' : 'owner';
+  if (rule.kind === 'path-project') return rule.ownerReads ? 'viewer-or-owner' : rule.role.replace('project-', '');
+  return `resource:${rule.role}`;
+}
+
+test('every operation of the control-plane document has its own rule, as section 3 lists it', () => {
+  assert.ok(operations.length > 30);
+  for (const { operationId } of operations) {
+    assert.ok(Object.hasOwn(ACCESS_REQUIREMENTS, operationId), `${operationId} has no rule`);
+    assert.equal(rowOf(operationId), SECTION_3[operationId] ?? 'owner', operationId);
+  }
+});
+
+test('every G2 operator operation is checked on the project of its resource', () => {
+  const operator = ['createRun', 'submitTask'];
+  const viewer = ['readAdmission', 'readTaskResult', 'readEvidence', 'downloadEvidence'];
+  for (const operationId of operator) assert.equal(rowOf(operationId), 'resource:project-operator', operationId);
+  for (const operationId of viewer) assert.equal(rowOf(operationId), 'resource:project-viewer', operationId);
+  assert.deepEqual(['listQuarantine', 'redriveQuarantined'].map(rowOf), ['owner', 'owner']);
+});
+
+test('a served operation of the control-plane document accepts the schemes the document declares', () => {
+  const schemesOf = (operation: Operation) => (operation.security ?? [])
+    .map((alternative) => Object.keys(alternative).filter((scheme) => scheme !== 'csrfToken')[0] ?? 'none').sort();
+  const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
+  assert.deepEqual(served.map((route) => route.operationId).sort(), ['logIn', 'logOut', 'readSession']);
+  for (const route of served) {
+    const operation = operations.find((candidate) => candidate.operationId === route.operationId)!;
+    assert.deepEqual([...route.security].sort(), schemesOf(operation), route.operationId);
+    assert.equal(route.browserOnly, true, route.operationId);
+  }
+});
+
+test('an operation that no rule names fails closed to the installation-owner', () => {
+  assert.equal(Object.hasOwn(ACCESS_REQUIREMENTS, 'operationOfNoRule'), false);
+  assert.deepEqual(requirementBeforeBody('operationOfNoRule', []), OWNER_ONLY);
+});
+
+test('a path-project requirement names the path project, and a resource-project one waits for its resource', () => {
+  assert.deepEqual(requirementBeforeBody('readProject', ['alpha']), projectRead('alpha'));
+  assert.deepEqual(requirementBeforeBody('bindRepository', ['alpha']), projectRequirement('alpha', 'project-maintainer'));
+  assert.equal(requirementBeforeBody('readEvidence', ['e-1']), undefined);
+  assert.equal(requirementBeforeBody('logIn', []), undefined);
+});

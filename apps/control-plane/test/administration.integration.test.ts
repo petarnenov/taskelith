@@ -326,3 +326,40 @@ test('a missing setting fails with its name only', async () => {
   assert.equal(status, 1);
   assert.match(lines[0]!, /TASKELITH_POSTGRES_URL is not set/);
 });
+
+async function adminWithSecret(argv: string[], token: string, secret: string): Promise<{ status: number; output: Record<string, unknown> }> {
+  const lines: string[] = [];
+  const io: AdminIo = {
+    environment: { ...ENVIRONMENT, TASKELITH_OPERATOR_TOKEN: token }, platform: process.platform, ownerUid,
+    write: (line) => lines.push(line), readSecret: async () => secret,
+  };
+  const status = await adminMain(argv, io);
+  return { status, output: JSON.parse(lines.join('\n')) };
+}
+
+test('the owner exists from initialization, and only its credential manages principals and roles', { timeout: 60_000 }, async () => {
+  const reset = await admin(['reset-operator-credential', ...ADMIN]);
+  const token = (reset.output as { operatorSecret: string }).operatorSecret;
+  const password = 'a password of bob that is long';
+  const [owner] = await rows(database, 'SELECT p.principal_id, p.login_name FROM operator_principal o JOIN principals p USING (principal_id)') as Array<{ login_name: string }>;
+  assert.equal(owner?.login_name, 'owner');
+  const created = await adminWithSecret(['create-principal', '--login-name', 'Bob', ...ADMIN], token, '');
+  assert.deepEqual([created.status, (created.output as { loginName: string }).loginName], [0, 'bob']);
+  assert.equal((await adminWithSecret(['create-principal', '--login-name', 'eve', ...ADMIN], 'tkop_wrong', '')).status, 1);
+  const set = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, password);
+  assert.deepEqual([set.status, (set.output as { sessionsEnded: number }).sessionsEnded], [0, 0]);
+  const weak = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, 'short');
+  assert.equal(weak.status, 1);
+  const role = ['--project', 'alpha', '--login-name', 'bob', ...ADMIN];
+  assert.equal((await adminWithSecret(['assign-project-role', ...role, '--role', 'project-operator'], token, '')).status, 0);
+  assert.deepEqual(await rows(database, 'SELECT project_id, role FROM project_roles'), [{ project_id: 'alpha', role: 'project-operator' }]);
+  assert.equal((await adminWithSecret(['remove-project-role', ...role], token, '')).status, 0);
+  assert.deepEqual(await rows(database, 'SELECT project_id FROM project_roles'), []);
+  const audit = await rows(database, 'SELECT kind, actor FROM access_audit_events ORDER BY position') as Array<{ kind: string; actor: string }>;
+  assert.deepEqual(audit.map((event) => event.kind), [
+    'access.owner-created', 'access.principal-created', 'access.password-set', 'access.project-role-assigned', 'access.project-role-removed',
+  ]);
+  const [stored] = await rows(database, "SELECT password_hash FROM principals WHERE login_name = 'bob'") as Array<{ password_hash: string }>;
+  assert.match(stored?.password_hash ?? '', /^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);
+  assert.doesNotMatch(JSON.stringify([set.output, weak.output, audit]), new RegExp(password));
+});
