@@ -77,8 +77,8 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
-# Review records tool: ARGS is validate, index, reviewers, or effect (the last
-# three take --json), or checklist; a usage error prints every option.
+# Review records tool: ARGS is validate, index, reviewers, effect, checklist,
+# route, or route-evaluation; a usage error prints every option.
 findings:
 	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
