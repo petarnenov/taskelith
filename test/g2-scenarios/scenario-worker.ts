@@ -3,13 +3,13 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
-import { stubAdmissionCheck } from '@taskelith/fleet';
+import { stubAdmissionCheck, type WorkerAdmissionCheck } from '@taskelith/fleet';
 import { ok, type Result } from '@taskelith/kernel';
 import { connectWorkerTransport, type TransportConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { executionAccountOf, seededUuids, value, type SeededRandom } from '@taskelith/testing';
-import { startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
+import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
@@ -147,6 +147,12 @@ export class ScenarioWorker {
     return ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), beforeStart));
   }
 
+  // The worker's own Linux containment check under the cgroup supervisor;
+  // a passing stub on the process-group host, which has no containment.
+  #admissionCheck(): WorkerAdmissionCheck {
+    return SCENARIO_LAUNCH === undefined ? stubAdmissionCheck() : linuxContainmentCheck(this.#settings());
+  }
+
   #dependencies(): WorkerDependencies {
     const { random } = this.#options;
     const ids = seededUuids('ExecutionId', random);
@@ -170,7 +176,7 @@ export class ScenarioWorker {
       daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: idleUntil },
       pressurePollMilliseconds: LAUNCH_POLL_MILLISECONDS,
       limits: SCENARIO_LIMITS,
-      admissionChecks: [stubAdmissionCheck()],
+      admissionChecks: [this.#admissionCheck()],
       sleep: scaledSleep, draw, logger,
       launching: {
         authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),

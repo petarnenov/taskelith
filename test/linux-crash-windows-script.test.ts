@@ -35,6 +35,12 @@ test('a run outside native acceptance passes no acceptance context', () => {
   assert.doesNotMatch(options, /TASKELITH_ACCEPTANCE/);
 });
 
+test('the services secrets, with the broker CA for TLS, are mounted read-only', () => {
+  const options = dockerOptions({});
+  assert.match(options, /^--volume\n[^\n]+:\/secrets:ro$/m);
+  assert.match(options, /^--env\nTASKELITH_SERVICES_SECRETS=\/secrets$/m);
+});
+
 test('the partition scenarios reach Toxiproxy and the proxied services', () => {
   const options = dockerOptions({});
   for (const variable of ['TASKELITH_TOXIPROXY_URL', 'TASKELITH_POSTGRES_PROXY_URL', 'TASKELITH_NATS_PROXY_URL']) {
