@@ -197,7 +197,7 @@ stop_failed_control_plane() {
   exit 1
 }
 
-# Issues a single-use enrollment token; prints {"enrollmentToken": ...}.
+# Issues a single-use enrollment token; prints the token and CA fingerprint.
 enrollment_token() {
   require TASKELITH_OPERATOR_TOKEN "the operatorSecret that bootstrap printed"
   local options=()
@@ -224,13 +224,16 @@ wait_for_enrollment() {
 
 # Enrolls the Linux worker container on its first start with a fresh token.
 enroll() {
-  local token
-  token="$(TASKELITH_WORKER_PLATFORM=linux enrollment_token | field enrollmentToken)"
-  if [ -z "$token" ]; then
+  local bundle token fingerprint
+  bundle="$(TASKELITH_WORKER_PLATFORM=linux enrollment_token)"
+  token="$(printf '%s' "$bundle" | field enrollmentToken)"
+  fingerprint="$(printf '%s' "$bundle" | field installationCaSha256)"
+  if [ -z "$token" ] || [ -z "$fingerprint" ]; then
     echo "installation.sh: no enrollment token was issued" >&2
     exit 1
   fi
-  TASKELITH_ENROLLMENT_TOKEN="$token" compose --profile worker up --detach --wait --wait-timeout 120 worker
+  TASKELITH_ENROLLMENT_TOKEN="$token" TASKELITH_INSTALLATION_CA_SHA256="$fingerprint" \
+    compose --profile worker up --detach --wait --wait-timeout 120 worker
   wait_for_enrollment
 }
 

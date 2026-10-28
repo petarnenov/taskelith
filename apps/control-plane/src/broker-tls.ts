@@ -14,7 +14,7 @@ export function readBrokerTls(environment: Environment, dataRoot: string, ownerU
   if (!existsSync(join(dataRoot, CONTROL_PLANE_DIRECTORY))) return ok(undefined);
   const namespace = ControlPlaneNamespace.open({ dataRoot, ownerUid });
   if (!namespace.ok) return namespace;
-  return readInstallationCa(namespace.value);
+  return brokerTlsOf(namespace.value);
 }
 
 function readConfiguredCa(path: string): Result<TransportTls> {
@@ -26,7 +26,7 @@ function readConfiguredCa(path: string): Result<TransportTls> {
 }
 
 // Read under the namespace's checks (installation contract section 3).
-function readInstallationCa(namespace: ControlPlaneNamespace): Result<TransportTls | undefined> {
+function brokerTlsOf(namespace: ControlPlaneNamespace): Result<TransportTls | undefined> {
   const ca = namespace.readText(INSTALLATION_CA_FILE);
   if (!ca.ok) return ca;
   if (ca.value !== undefined) return ok({ ca: ca.value });

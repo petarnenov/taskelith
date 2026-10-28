@@ -130,7 +130,7 @@ The worker's seccomp profile SHALL be derived from a tracked, byte-for-byte copy
 - **THEN** `make verify` fails
 
 ### Requirement: TLS of the local installation
-The composition's NATS SHALL refuse plain clients, the control plane SHALL publish the worker API and the browser endpoint over HTTPS on localhost, both on the installation's API certificate, and the Linux worker SHALL trust the installation CA from a read-only volume. `make installation-certificates` SHALL issue the server certificates again, install the broker's files, and restart the running broker and control plane. PostgreSQL SHALL stay plain on the Compose network, unpublished.
+The composition's NATS SHALL refuse plain clients, the control plane SHALL publish the worker API and the browser endpoint over HTTPS on localhost, both on the installation's API certificate, and the Linux worker SHALL pin the CA it checked against its token's fingerprint. `make installation-certificates` SHALL issue the server certificates again, install the broker's files, and restart the running broker and control plane. PostgreSQL SHALL stay plain on the Compose network, unpublished.
 
 #### Scenario: Plain broker client
 - **WHEN** a client connects to the composition's NATS without TLS

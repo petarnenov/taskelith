@@ -1,6 +1,7 @@
 {
   "extends": "../../../tsconfig.package.json",
   "references": [
+    { "path": "../certificates" },
     { "path": "../../contracts" },
     { "path": "../../kernel" },
     { "path": "../../modules/execution" },

@@ -1,9 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { availableParallelism, hostname, totalmem } from 'node:os';
 import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostPlatform, WorkerCapacity, WorkerHost } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { TransportTls } from '@taskelith/nats';
 import type { Command, ExecutionAccount } from '@taskelith/worker-supervisor';
 
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -17,9 +15,10 @@ export interface WorkerSettings {
   readonly dataRoot: string;
   readonly controlPlaneUrl: URL;
   readonly natsUrl: URL;
-  readonly natsTls?: TransportTls;
-  // Used only by the first start, which enrolls the worker with it.
+  // Used only by the first start, which enrolls the worker with them; the
+  // fingerprint is the installation CA's SHA-256 in lowercase hex.
   readonly enrollmentToken?: string;
+  readonly installationCaSha256?: string;
   readonly host: WorkerHost;
   readonly capacity: WorkerCapacity;
   // Linux: the delegated cgroup of every execution, launched or recovered.
@@ -55,12 +54,12 @@ export function currentHost(): HostFacts {
 export function readWorkerSettings(environment: Environment, facts: HostFacts): Result<WorkerSettings> {
   const dataRoot = resolveDataRoot({ environment, platform: facts.platform });
   if (!dataRoot.ok) return dataRoot;
-  const controlPlaneUrl = readUrl(environment, 'TASKELITH_CONTROL_PLANE_URL', ['http:', 'https:']);
+  const controlPlaneUrl = readUrl(environment, 'TASKELITH_CONTROL_PLANE_URL', ['https:']);
   if (!controlPlaneUrl.ok) return controlPlaneUrl;
   const natsUrl = readUrl(environment, 'TASKELITH_NATS_URL', ['nats:']);
   if (!natsUrl.ok) return natsUrl;
-  const ca = readCa(environment.TASKELITH_NATS_CA);
-  if (!ca.ok) return ca;
+  const fingerprint = readFingerprint(environment.TASKELITH_INSTALLATION_CA_SHA256);
+  if (!fingerprint.ok) return fingerprint;
   const host = workerHost(facts);
   if (!host.ok) return host;
   const capacity = readCapacity(environment, facts);
@@ -74,7 +73,7 @@ export function readWorkerSettings(environment: Environment, facts: HostFacts): 
     dataRoot: dataRoot.value, controlPlaneUrl: controlPlaneUrl.value, natsUrl: natsUrl.value, host: host.value, capacity: capacity.value,
     ...(containmentParent.value === undefined ? {} : { containmentParent: containmentParent.value }),
     ...(launch.value === undefined ? {} : { launch: launch.value }),
-    ...(ca.value === undefined ? {} : { natsTls: { ca: ca.value } }),
+    ...(fingerprint.value === undefined ? {} : { installationCaSha256: fingerprint.value }),
     ...(token === undefined || token === '' ? {} : { enrollmentToken: token }),
   });
 }
@@ -87,13 +86,15 @@ function readUrl(environment: Environment, variable: string, protocols: readonly
   return protocols.includes(url.protocol) ? ok(url) : invalid;
 }
 
-function readCa(path: string | undefined): Result<string | undefined> {
-  if (path === undefined || path === '') return ok(undefined);
-  try {
-    return ok(readFileSync(path, 'utf8'));
-  } catch {
-    return err(failure('invalid', 'TASKELITH_NATS_CA must name a readable PEM file', { variable: 'TASKELITH_NATS_CA' }));
-  }
+const FINGERPRINT_VARIABLE = 'TASKELITH_INSTALLATION_CA_SHA256';
+
+// Hex digits as the bundle prints them, or with the colons and capitals
+// of `openssl x509 -fingerprint -sha256`.
+function readFingerprint(text: string | undefined): Result<string | undefined> {
+  if (text === undefined || text === '') return ok(undefined);
+  const digits = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}$/.test(text) ? text.replaceAll(':', '') : text;
+  if (/^[0-9A-Fa-f]{64}$/.test(digits)) return ok(digits.toLowerCase());
+  return err(failure('invalid', `${FINGERPRINT_VARIABLE} must be a SHA-256 in hexadecimal`, { variable: FINGERPRINT_VARIABLE }));
 }
 
 const PLATFORMS: readonly string[] = ['linux', 'darwin'];

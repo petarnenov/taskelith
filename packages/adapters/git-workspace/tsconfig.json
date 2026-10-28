@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [
+    { "path": "../data-root" },
+    { "path": "../../kernel" },
+    { "path": "../../modules/execution" },
+    { "path": "../../modules/sdlc" },
+    { "path": "../../modules/workspace" },
+    { "path": "../../testing" }
+  ]
+}

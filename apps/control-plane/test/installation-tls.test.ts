@@ -16,6 +16,7 @@ import {
   createTlsApiServer,
   ensureInstallationAuthority,
   issueServerCertificates,
+  readInstallationCa,
   readServerCertificate,
   storedInstallationAuthority,
   type ApiHandlers,
@@ -92,6 +93,32 @@ test('server certificates are written owner-only and read back with their path',
   const file = (path: string) => ({ name: path, details: { path } });
   value(checkServerTls({ certificate: api.certificatePem, key: api.privateKeyPem }, { certificate: file(api.path), key: file(api.keyPath) }, NOW));
   assert.equal(api.keyPath, join(store.directory, 'api-key.pem'));
+});
+
+// What workers may never pin: a key beside the CA, two certificates, a leaf.
+async function invalidInstallationCas(store: ControlPlaneNamespace): Promise<Record<string, string>> {
+  const authority = value(await ensureInstallationAuthority(store, false, issuer, NOW));
+  value(await issueServerCertificates(store, authority, issuer, LOCAL_SERVER_HOSTS, NOW));
+  const api = value(readServerCertificate(store, 'api'));
+  return {
+    'a key beside the certificate': `${authority.certificatePem}${authority.privateKeyPem}`,
+    'two certificates': `${authority.certificatePem}${api.certificatePem}`,
+    'a leaf certificate': api.certificatePem,
+  };
+}
+
+test('the installation CA is read only while it is exactly one CA certificate', async () => {
+  const store = namespace();
+  const cases = await invalidInstallationCas(store);
+  const path = join(store.directory, 'installation-ca.pem');
+  const valid = readFileSync(path, 'utf8');
+  assert.equal(value(readInstallationCa(store)), valid);
+  for (const [name, text] of Object.entries(cases)) {
+    writeFileSync(path, text);
+    const refused = failed(readInstallationCa(store));
+    assert.deepEqual([refused.code, refused.details.path], ['precondition-failed', path], name);
+    assert.doesNotMatch(JSON.stringify(refused), /BEGIN/, name);
+  }
 });
 
 test('a missing server file names its path, and a refused issuance writes nothing', async () => {

@@ -32,10 +32,12 @@ export {
   checkRemoteTransport,
   cleanHead,
   decodeGitPath,
+  isSafeTreeName,
   isUtf8Text,
   reclaimContainmentName,
   taskBranchName,
   taskBranchPushArguments,
+  unsafeTreePath,
   workspaceDirectoryName,
   workspaceFailure,
   type DirtyReason,
@@ -53,7 +55,7 @@ export {
   type WorkspaceStatus,
   type WorkspaceTarget,
 } from './domain/workspace.js';
-export { holdsSensitive, sensitiveValues } from './ports/git-process-checks.js';
+export { gitProcessProblems, holdsSensitive, sensitiveValues, type ExpectedGitProcess } from './ports/git-process-checks.js';
 export { WORKSPACE_CONFORMANCE } from './ports/workspace-conformance.js';
 export { REDACTED_VALUE, redactedHeader, type FixtureCredentials, type GitProcessObservation, type WorkspaceFixture } from './ports/workspace-fixture.js';
 export type {

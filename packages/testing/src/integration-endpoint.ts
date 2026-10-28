@@ -22,3 +22,9 @@ export function integrationSecretPath(name: string, env: NodeJS.ProcessEnv = pro
   if (!directory) throw new Error(`TASKELITH_SERVICES_SECRETS is not set; ${SERVICES_REMEDY}`);
   return join(directory, name);
 }
+
+// The integration broker's certificate is from the test CA, not the
+// installation's, so a test worker trusts that CA in place of its pin.
+export function withTestBrokerCa<T extends object>(endpoint: T, env: NodeJS.ProcessEnv = process.env): T & { readonly tls: { readonly ca: string } } {
+  return { ...endpoint, tls: { ca: integrationSecret('ca.pem', env) } };
+}

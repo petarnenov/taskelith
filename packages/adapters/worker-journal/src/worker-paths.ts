@@ -7,6 +7,8 @@ export interface WorkerPaths {
   readonly lock: string;
   readonly identity: string;
   readonly credentials: string;
+  // The installation CA the worker checked at enrollment and pins.
+  readonly installationCa: string;
   readonly fault: string;
   readonly journalDirectory: string;
   readonly journal: string;
@@ -31,6 +33,7 @@ export function workerPaths(dataRoot: string): WorkerPaths {
     lock: join(worker, 'lock'),
     identity: join(worker, 'identity'),
     credentials: join(worker, 'credentials'),
+    installationCa: join(worker, 'installation-ca.pem'),
     fault: join(worker, 'journal-fault'),
     journalDirectory,
     journal: join(journalDirectory, JOURNAL_FILE),

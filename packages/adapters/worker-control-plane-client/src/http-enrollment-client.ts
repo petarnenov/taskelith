@@ -1,28 +1,33 @@
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import { parseRecoveryEpoch } from '@taskelith/execution';
 import { parseInstallationId, parseWorkerId, type Enrollment, type EnrollmentClient, type EnrollmentRequest } from '@taskelith/fleet';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
+import { isCertificateRefusal, pinnedTarget, postJson, statusFailure, type ControlPlaneEndpoint, type HttpTarget } from './control-plane-http.js';
 import { sanitizeFailureText } from './failure-cause.js';
 
-// `enrollWorker` over HTTP. An `unavailable` answer may still have used the
-// token, so a retry can fail with `token-invalid`.
+// `enrollWorker` over TLS pinned to the checked CA. `unavailable` may have
+// used the token; a refused certificate never sent it.
 export class HttpEnrollmentClient implements EnrollmentClient {
-  readonly #endpoint: ControlPlaneEndpoint;
+  readonly #target: HttpTarget;
 
   constructor(endpoint: ControlPlaneEndpoint) {
-    this.#endpoint = endpoint;
+    this.#target = pinnedTarget(endpoint);
   }
 
   async enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>> {
-    const answered = await postJson(this.#endpoint, 'workers/enrollments', tokenSecret, wireRequest(request));
-    if (!answered.ok) return answered;
+    const answered = await postJson(this.#target, 'workers/enrollments', tokenSecret, wireRequest(request));
+    if (!answered.ok) return isCertificateRefusal(answered.error) ? err(untrustedServer(answered.error)) : answered;
     if (answered.value.status !== 201) return err(statusFailure('enrollWorker', answered.value));
     const { body } = answered.value;
     const checked = checkHttpSchema('Enrollment', body);
     if (!checked.ok) return err(failure('internal', 'the enrollment violates its schema', { violation: sanitizeFailureText(checked.error[0] ?? '') }));
     return parseEnrollment(body as HttpSchemas['Enrollment']);
   }
+}
+
+function untrustedServer(refused: Failure): Failure {
+  const message = 'the control plane presented a certificate that the installation CA did not issue; the token was not sent';
+  return failure('precondition-failed', message, { ...refused.details, reason: 'installation-ca-untrusted' });
 }
 
 function wireRequest(request: EnrollmentRequest): HttpSchemas['EnrollmentRequest'] {

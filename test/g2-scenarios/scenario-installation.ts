@@ -120,7 +120,7 @@ export class ScenarioInstallation {
     return new URL(`https://127.0.0.1:${this.#running.api.port}/`);
   }
 
-  // The installation CA, which a worker process trusts for the API.
+  // The installation CA file, whose fingerprint a worker enrolls with.
   get installationCa(): string {
     return join(this.#settings.dataRoot, 'control-plane', 'installation-ca.pem');
   }

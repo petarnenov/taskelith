@@ -132,7 +132,7 @@ async function answerRoute(
   url: URL,
   correlationId: CorrelationId,
 ): Promise<ApiResponse> {
-  const bearer = bearerToken(request);
+  const bearer = route.security === 'none' ? '' : bearerToken(request);
   if (bearer === undefined) return failureResponse(401, failure('forbidden', 'the request has no bearer credential'));
   const principal = await authenticated(handlers, route.security, bearer);
   if (!principal.ok) return refusal(principal.error);
@@ -171,13 +171,14 @@ function refusal(error: Failure): ApiResponse {
   return failureResponse(503, failure('unavailable', 'the credential store is not available'));
 }
 
-// The enrollment token is checked by its operation, which consumes it.
+// The enrollment token is checked by its operation, which consumes it; a
+// public operation has no credential to check.
 async function authenticated(
   handlers: ApiHandlers,
   scheme: SecurityScheme,
   bearer: string,
 ): Promise<Result<{ worker?: WorkerPrincipal }>> {
-  if (scheme === 'enrollmentToken') return ok({});
+  if (scheme === 'enrollmentToken' || scheme === 'none') return ok({});
   if (scheme === 'operatorToken') {
     const operator = await handlers.authenticateOperator(bearer);
     return operator.ok ? ok({}) : operator;
