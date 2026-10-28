@@ -12,7 +12,16 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 - `767b832c` `test: launch the G2 scenario workers through the Linux cgroup host`.
 - `c8e624d6` `test: run the G2 races and partitions in native acceptance on Linux` (the first evidence runs, superseded, are on this commit).
 - `09a62b39` `docs: record the Linux x86_64 rows of G3 item 43` and the commit after it (links, this record) change no input of the runs.
-- Review pass 1 fixes: `de099e67`, `f4044cd0`, `e6229c44`, `75aa2b99`; review pass 2 fixes: `c708b307`, `0783d040`, `16b937a8`, `bcee61d3` (the evidence runs are on `bcee61d3`), and the commit that records them.
+- Review pass 1 fixes: `de099e67`, `f4044cd0`, `e6229c44`, `75aa2b99`; review pass 2 fixes: `c708b307`, `0783d040`, `16b937a8`, `bcee61d3` (superseded evidence runs), and the commit that records them; review pass 3 fixes and record: `b4f6a799`, `bf793f2e`.
+- `6b84ea47`: merge of `origin/dev` `2b90d0ab` (#378 worker self-check admission, #379 installation certificates, HTTPS API, and TLS NATS). Conflicts, each resolved by keeping both sides:
+  - `Makefile`: the `.PHONY` line holds `verify-linux-g2-scenarios` and `installation-certificates installation-ca`;
+  - `apps/control-plane/test/harness-composition.ts`, `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/scenario-worker.ts`: the union of the imports;
+  - `apps/worker/src/main.ts`: imports `linuxContainmentCheck` (dev) and the moved `supervisionHost` (this change); dev did not change the inline `supervisionHost` this change moved, so it stays removed;
+  - `packages/testing/src/index.ts`: dev's `integrationSecretPath`, `NODE_CERTIFICATE_INSPECTOR`, and `trustCertificateAuthority` with the Linux launch exports;
+  - `docs/local-installation.md`: the G2 scenarios bullet and dev's `verify-installation` bullet.
+- After the merge `make setup` installed the new `@taskelith/certificates` workspace before the build.
+- `063e9818` `test: run the worker's own containment check under the cgroup host`: under the cgroup launch `ScenarioWorker` admits through `linuxContainmentCheck` instead of dev's passing stub (the process-group host keeps the stub, having no containment). Forcing the execution account to uid 0 locally made race h fail with `the authorized start not met within 20000 ms`, so the real check runs; the edit was reverted. A runner test pins the read-only secrets mount (`/secrets`, `TASKELITH_SERVICES_SECRETS`), which carries `ca.pem` for TLS NATS. TLS needed no runner change: `integrationSecretPath('ca.pem')` resolves in that mount, `installationCa` lives in the container's `/tmp` base, and the host network reaches the HTTPS API on 127.0.0.1.
+- The evidence runs are on `063e9818`.
 
 ## Environment
 
@@ -42,10 +51,12 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 | --- | --- | --- | --- | --- | --- |
 | `c8e624d6` (superseded) | `20261026` | 2026-10-28 02:17:35 to 02:24:56 | 0 | `every proof passed` | 61, all `passed`, all with an acceptance context: 12 proofs and 49 own records |
 | `c8e624d6` (superseded) | `7` | 02:24:56 to 02:32:16 | 0 | `every proof passed` | 61, the same split |
-| `bcee61d3` | `20261026` | 03:02:34 to 03:08:48 | 0 | `every proof passed` | 61, the same split |
-| `bcee61d3` | `7` | 03:08:48 to 03:14:16 | 0 | `every proof passed` | 61, the same split |
+| `bcee61d3` (superseded) | `20261026` | 03:02:34 to 03:08:48 | 0 | `every proof passed` | 61, the same split |
+| `bcee61d3` (superseded) | `7` | 03:08:48 to 03:14:16 | 0 | `every proof passed` | 61, the same split |
+| `063e9818` | `20261026` | 03:28:04 to 03:34:26 | 0 | `every proof passed` | 61, the same split |
+| `063e9818` | `7` | 03:34:26 to 03:40:14 | 0 | `every proof passed` | 61, the same split |
 
-The `bcee61d3` runs, after the fixes of review passes 1 and 2, are the evidence: every record names commit `bcee61d3c73c7a537c9ff4f8ee3fe7243851b532`, and [results.jsonl](results.jsonl) is their two files in that order (122 lines). The `c8e624d6` runs preceded the fixes; they are not kept in the change, and their records differ from these only in the order of the crash-window records within each run and in the scenario details that seeds and timing vary. The line numbers below hold for both. New proofs: `acceptance-cancellation-races` tests 12, pass 11, skipped 1 (race g), fail 0, in both runs (lines 54, 115), with 11 scenario records each (lines 43 to 53, 104 to 114); `acceptance-partition` tests 6, pass 6, fail 0 (lines 61, 122), with 6 scenario records each (lines 55 to 60, 116 to 121). Races c, e, and a granted round of f ended their process by `SIGKILL` in both runs (lines 45, 48, 50, 106, 109, 111). The unchanged proofs passed as before: crash windows 28 of 28, duplicate delivery 1 of 1, privileged cgroup tests 17 of 17, journal suites 101 of 103 with 2 skipped. The rows: [acceptance.md](acceptance.md).
+The `063e9818` runs, after the merge of `dev`, are the evidence: every record names commit `063e981859898abf8c567608cc7675794975b9b4`, and [results.jsonl](results.jsonl) is their two files in that order (122 lines). The `c8e624d6` runs preceded the review fixes and the `bcee61d3` runs the merge; neither is kept in the change, and their records differ from these in the order of records within a proof and in the scenario details that seeds and timing vary. New proofs: `acceptance-cancellation-races` tests 12, pass 11, skipped 1 (race g), fail 0, in both runs (lines 54, 115), with 11 scenario records each (lines 43 to 53, 104 to 114); `acceptance-partition` tests 6, pass 6, fail 0 (lines 61, 122), with 6 scenario records each (lines 55 to 60, 116 to 121). Races c, e, and a granted round of f ended their process by `SIGKILL` in both runs (lines 45, 48, 50; 109, 111, 112). The unchanged proofs passed as before: crash windows 28 of 28, duplicate delivery 1 of 1, privileged cgroup tests 17 of 17, journal suites 102 of 104 with 2 skipped (dev's merge added one test). The rows: [acceptance.md](acceptance.md).
 
 ## Hosted arm64 runner
 
@@ -62,6 +73,8 @@ The iMac's Docker Desktop gives no host network outside its virtual machine, whi
 - `make verify` on `09a62b39` failed only in `npm run verify:links`: the docs linked the active change's `acceptance.md`. The links became plain mentions, to be linked at the archive (task 5.1).
 - `make verify` on that working tree, the commit after `09a62b39`: exit 0; tests 2363, pass 2316, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.40 % branches, 98.95 % functions; comments within the length rule; OpenSpec 70 passed; every checked link conforms.
 - Coverage of the changed product files (lines, branches, functions): `packages/testing` `linux-launch.js` 100, 100, 100; `apps/worker` `execution-supervision.js` 97.96, 87.67, 91.67; `apps/worker` `main.js` 91.23, 91.67, 84.21 (uncovered: the entry under `import.meta.main` and the launch failure report, which the move did not touch).
+- After the merge, on `063e9818`: `make verify-linux-crash-windows` exit 0, 29 of 29; `make verify-linux-g2-scenarios` exit 0, tests 18, pass 17, skipped 1 (seeds `2791542779`, `198321456`, `3595013721`); `node --experimental-strip-types --test test/linux-crash-windows-script.test.ts` tests 9, pass 9.
+- `make verify` on `063e9818`: exit 0; tests 2492, pass 2445, fail 0, skipped 47; all files 99.32 % lines, 92.46 % branches, 98.96 % functions; findings 56 files and pass summaries 36 files valid; OpenSpec 70 passed; links and comments conform. `execution-supervision.js` 97.96, 87.67, 91.67; worker `main.js` 91.38, 91.67, 84.21.
 
 ## Review pass 1 fixes
 
