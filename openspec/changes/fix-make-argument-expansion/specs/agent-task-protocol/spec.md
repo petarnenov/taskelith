@@ -32,11 +32,11 @@ The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=
 - **THEN** the command exits with status 8 before it changes anything on the remote
 
 #### Scenario: Arguments as typed under GNU Make 3.81 and 4.4
-- **WHEN** `TITLE` or `BODY` contains `$(shell ...)`, `$$`, or backticks and the command runs under GNU Make 3.81 or 4.4
+- **WHEN** `BRANCH`, `TITLE`, `BODY`, or `RESUME` contains `$(shell ...)`, `$$`, or backticks and the command runs under GNU Make 3.81 or 4.4
 - **THEN** make runs none of it and the script receives every argument byte for byte
 
 ### Requirement: Generated verification record
-`make record CHANGE=<change> LOG=<log>`, taking both as typed, SHALL write the mechanical part of `verification.md` between generated markers: the `make verify` result, tree, test counts, and coverage of the log's last complete run, the strict OpenSpec and findings validations, the spec diff stat, and the passes of `passes.jsonl`. `make record-check` SHALL fail when that part differs from reality or from the line `make record` stored with the stamp; a worker SHALL run it before pass 1.
+`make record CHANGE=<change> LOG=<log>`, taking both as typed, SHALL write the mechanical part of CHANGE's `verification.md` between generated markers: the `make verify` result, tree, test counts, and coverage of the log's last complete run, the strict OpenSpec and findings validations, the spec diff stat, and the passes of `passes.jsonl`. `make record-check` SHALL fail when that part differs from reality or from the line `make record` stored with the stamp; a worker SHALL run it before pass 1.
 
 #### Scenario: Record refreshed
 - **WHEN** a worker runs `make record` after a passing `make verify`
