@@ -23,11 +23,15 @@ A G9 or G10 work item SHALL NOT start until that gate has its own work plan and 
 - **THEN** no G9 work item starts
 
 ### Requirement: Forward-compatibility obligations traced
-The G3 work plan SHALL list each forward-compatibility obligation of ADR 0013 and ADR 0014 with the G3 items that must honour it and its status: covered, with the file and line that meet it, or open, with the item that closes it. A brief for a listed item SHALL carry its obligations.
+The G3 work plan SHALL list each forward-compatibility obligation of ADR 0013 and ADR 0014 with the G3 items that must honour it and one status: covered, with the file and line that meet it; partly covered, with that evidence for the met part and the item or the gate, G9 or G10, that meets the rest; open, with the item that closes it; or not a G3 item, with the gate, G9 or G10, that carries it. A brief for a listed item SHALL carry its obligations.
 
 #### Scenario: Open obligation
 - **WHEN** no merged contract meets an obligation
 - **THEN** its row is marked open and names the item that closes it
+
+#### Scenario: Partly met obligation
+- **WHEN** a merged contract meets only part of an obligation
+- **THEN** its row is marked partly covered, cites the evidence for that part, and names the item or the gate, G9 or G10, that meets the rest
 
 #### Scenario: Brief for a bound item
 - **WHEN** the coordinator briefs an item that a row names
