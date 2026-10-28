@@ -12,7 +12,7 @@ The AsyncAPI document SHALL define a command channel, an observation channel, an
 - **THEN** it is `taskelith.<installationId>.workers.<workerId>.heartbeats`, and its only message is `worker.heartbeat`
 
 ### Requirement: Execution HTTP operations
-The OpenAPI document SHALL define `enrollWorker`, `renewWorkerCredentials`, `confirmWorkerCredentials`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, `downloadEvidence`, and `readInstallationCa`. Each SHALL declare its credential: an enrollment token, the worker credential, or the operator credential; only `readInstallationCa`, which answers the public installation CA certificate, SHALL declare none. Errors SHALL use the kernel failure shape.
+The OpenAPI document SHALL define `enrollWorker`, `renewWorkerCredentials`, `confirmWorkerCredentials`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, `downloadEvidence`, `readInstallationCa`, and the operations of "G3 execution operations", each with its credential: an enrollment token, the worker credential, the operator credential, or the browser session; only `readInstallationCa`, which answers the public installation CA certificate, SHALL declare none. Errors SHALL use the kernel failure shape.
 
 #### Scenario: Parent in a delegation request
 - **WHEN** a delegation request names `parentTaskId`

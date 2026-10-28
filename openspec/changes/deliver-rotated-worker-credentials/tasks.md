@@ -2,7 +2,7 @@
 
 - [x] 1.1 Proposal, design with the decisions and their sources, the review checklist in `checklist.json`
 - [x] 1.2 Spec deltas: `installation-enrollment`, `control-plane-api`, `execution-wire-contracts`, `nats-transport`, `worker-journal-adapter`, `worker-runtime`
-- [x] 1.3 Execution OpenAPI 0.6.0 (`renewWorkerCredentials`, `confirmWorkerCredentials`) and AsyncAPI 0.8.0 (`worker.credentials.rotation-requested`), with the AsyncAPI breaking changes declared in `packages/contracts/breaking-changes.json`
+- [x] 1.3 Execution OpenAPI 0.7.0 (`renewWorkerCredentials`, `confirmWorkerCredentials`) and AsyncAPI 0.8.0 (`worker.credentials.rotation-requested`), with the AsyncAPI breaking changes declared in `packages/contracts/breaking-changes.json`
 - [x] 1.4 Installation contract, worker journal contract, execution wire contracts, trust model, operational targets, and the follow-up line of G3 plan row 26
 
 ## 2. Control plane
