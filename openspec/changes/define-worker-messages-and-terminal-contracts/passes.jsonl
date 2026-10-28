@@ -1,1 +1,2 @@
 {"change": "define-worker-messages-and-terminal-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a182e0-3947-77e3-851c-7879eb0bfb88", "counts": {"critical": 0, "high": 3, "medium": 4, "low": 0}}
+{"change": "define-worker-messages-and-terminal-contracts", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "b4e6196d-e292-42e3-a914-24fb27b8bca1", "counts": {"critical": 0, "high": 1, "medium": 6, "low": 13}}
