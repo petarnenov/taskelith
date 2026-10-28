@@ -27,6 +27,6 @@
 
 - [x] 5.1 `npm run openspec -- validate enroll-remote-worker-over-tls --strict` and `make verify`
 - [x] 5.2 `verification.md` drafted
-- [ ] 5.3 Independent review passes and their fixes
+- [x] 5.3 Independent review passes and their fixes
 - [ ] 5.4 Archive under worker step 7
 - [ ] 5.5 Handoff to the coordinator

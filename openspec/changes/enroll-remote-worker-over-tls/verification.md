@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1 and 2 and their fixes; pass 3 is pending.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3 and their fixes. The review is complete after three passes; the fix of pass 3 is unreviewed.
 
 ## Scope and source
 
@@ -53,7 +53,7 @@ Each test below failed before its fix and passed after it; each item names the r
 
 ## Review
 
-The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`. Pass 3 is pending.
+The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol`, for passes 1 and 3, and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. Each pass adds its section here and a line in `passes.jsonl`. The review is complete: pass 3 was Low only, so its fix was made without another review.
 
 ### Review pass 1
 
@@ -117,6 +117,25 @@ Fails before the fixes:
 
 After pass 2, `make verify` on `55b7e5e6` with these records: exit 0; `ℹ tests 2552`, `ℹ suites 45`, `ℹ pass 2545`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.52 | 99.06`; `installation-authority` branches 83.33% (78.57% before M1); "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The four new tests (M1 twice, L3, L5) account for 2552 against 2548.
 
+### Review pass 3
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox.
+- **Invocation:** as in pass 1, run by the coordinator.
+- **Session:** `01a1812f-f208-7491-8982-288e01a74212`, as the coordinator relayed it.
+- **Revision reviewed:** `bb69fcf5`, scope `b538f0b3..bb69fcf5`.
+- **Snapshot:** identical before and after the pass, as the coordinator relayed it.
+- **Result:** Critical 0, High 0, Medium 0, Low 1. It confirmed M1, L1, L2, L3, L5, L6, L7, L8, and L9 of pass 2 complete and correct, and L4 partial, which is its finding.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low | `isCertificateRefusal` read the described `causeCode`, which keeps codes of at most 31 characters, so `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` (33) stayed `unavailable` | `send` reads the refusal from the raw cause chain against the fixed code list, under a `try`, and keeps it as `details.certificateRefusal`; `isCertificateRefusal` reads that. **Fixed without another review** (`fixed-unreviewed`), as a Low-only final pass allows | `e7d1b3a2` |
+
+Fails before the fix: `http-enrollment-client.test.ts`, "every certificate refusal code, the long ones too, is untrusted, not unavailable", on `bb69fcf5` with the test added. It throws, from an injected `fetch`, a `TypeError('fetch failed')` whose cause carries the code, as Node's `fetch` does, so the client's own error handling runs: `AssertionError [ERR_ASSERTION]: UNABLE_TO_GET_ISSUER_CERT_LOCALLY` at `http-enrollment-client.test.ts:103:12`, `actual: [ 'unavailable', undefined ]` (5 tests, 4 pass, 1 fail). The fix's first form read the chain without a `try` and failed the existing test "a thrown value whose getters throw is unknown, not a rejection"; `e7d1b3a2` guards it. With `e7d1b3a2` the adapter and worker TLS files give 50 of 50.
+
+`make findings ARGS="validate"` after recording: "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)."
+
+After pass 3, `make verify` on `e7d1b3a2` with these records: exit 0; `ℹ tests 2553`, `ℹ suites 45`, `ℹ pass 2546`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 7`; `ℹ all files | 99.35 | 92.52 | 99.06`; "Contract documents have no undeclared breaking change."; "Verified 766 package paths"; "Totals: 70 passed, 0 failed (70 items)"; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." The one new test accounts for 2553 against 2552.
+
 ## Limitations
 
 - The Linux scenario runs and the native scenario depend on hosts this change could not exercise here: `make verify-linux-g2-scenarios` and `make verify-linux-crash-windows` need a Linux host network that Docker Desktop on macOS does not give (26a's record shows `ECONNREFUSED`), and `make scenario-native-worker-lifecycle` needs free host disk above the worker's floor. These files changed for them and ran only where `make verify` runs them: `test/g2-scenarios/scenario-worker.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, `test/g2-scenarios/scenario-installation.ts` (a comment), `scripts/installation-scenarios.sh` (the native worker's start), and `apps/control-plane/test/harness-composition.ts` and `apps/control-plane/test/fixtures/worker-composition.ts`, whose Linux paths only the Linux suites run.
@@ -126,7 +145,6 @@ After pass 2, `make verify` on `55b7e5e6` with these records: exit 0; `ℹ tests
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 under the [independent review process](/docs/governance.md#independent-review-process), and their fixes.
-- The Linux suites and the native scenario on a host that can run them.
-- Archive of the change on this branch.
+- Archive of the change on this branch (worker step 7).
+- The Linux suites and the native scenario rerun on the final head by Liki, as the coordinator schedules them.
 - Integration into dev by the coordinator (single pull request).
