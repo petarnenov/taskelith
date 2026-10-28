@@ -37,6 +37,7 @@ const SESSION_OBSERVATIONS: Record<string, string> = {
   'session.generation.ended': 'GenerationEndedObservation',
   'session.turn.delivered': 'TurnDeliveredObservation',
   'session.turn.not-delivered': 'TurnNotDeliveredObservation',
+  'session.turn.acceptance-unknown': 'TurnAcceptanceUnknownObservation',
   'session.turn.ended': 'TurnEndedObservation',
   'session.request.recorded': 'RequestRecordedObservation',
   'session.response.delivery-reported': 'ResponseDeliveryReportedObservation',
@@ -106,6 +107,7 @@ const OBSERVATION_EXAMPLES: Record<string, object> = {
   'session.generation.ended': { sessionId: 'session-1', generation: 1, cause: 'session-ended', ...EPOCH },
   'session.turn.delivered': { sessionId: 'session-1', turnId: 't1', generation: 2, ...EPOCH },
   'session.turn.not-delivered': { sessionId: 'session-1', turnId: 't1', generation: 2, reason: 'generation-not-running', ...EPOCH },
+  'session.turn.acceptance-unknown': { sessionId: 'session-1', turnId: 't1', generation: 2, reason: 'conflict', ...EPOCH },
   'session.turn.ended': { sessionId: 'session-1', turnId: 't1', generation: 2, outcome: 'completed', ...EPOCH },
   'session.request.recorded': { sessionId: 'session-1', request: REQUEST, kind: 'permission-request', turnId: 't1', text: 'Allow git push?', ...EPOCH },
   'session.response.delivery-reported': { sessionId: 'session-1', request: REQUEST, report: 'delivered', ...EPOCH },
@@ -296,6 +298,26 @@ test('a permission request carries the plugin\'s classification of its operation
   assert.ok(!recorded({ operation: { kind: 'merge', ref: push.ref } }).ok);
   assert.ok(!recorded({ operation: { ...push, remote: 'origin' } }).ok);
   assert.deepEqual(enumAt(SCHEMAS.ClassifiedOperation!, 'properties', 'kind'), [...CLASSIFIED_OPERATION_KINDS]);
+});
+
+test('a turn the port may have accepted is reported apart from one it proved it never accepted', () => {
+  const report = (observationType: string, schema: string, reason: string) => checkMessageSchema(schema as keyof MessageSchemas & string,
+    observation(observationType, { ...OBSERVATION_EXAMPLES['session.turn.delivered']!, reason }));
+  const unknown = (reason: string) => report('session.turn.acceptance-unknown', 'TurnAcceptanceUnknownObservation', reason);
+  const notDelivered = (reason: string) => report('session.turn.not-delivered', 'TurnNotDeliveredObservation', reason);
+  const { reason: _unknownReason, ...unknownFields } = (SCHEMAS.TurnAcceptanceUnknownPayload as { properties: Json }).properties;
+  const { reason: _refusalReason, ...refusalFields } = (SCHEMAS.TurnNotDeliveredPayload as { properties: Json }).properties;
+
+  for (const reason of ['conflict', 'timeout', 'crash']) {
+    assert.ok(unknown(reason).ok, reason);
+    assert.ok(!notDelivered(reason).ok, reason);
+  }
+  assert.ok(notDelivered('port-refused').ok);
+  assert.ok(!unknown('port-refused').ok);
+  assert.deepEqual(enumAt(SCHEMAS.TurnAcceptanceUnknownPayload!, 'properties', 'reason'), ['conflict', 'timeout', 'crash']);
+  assert.deepEqual(enumAt(SCHEMAS.TurnNotDeliveredPayload!, 'properties', 'reason'), ['generation-not-running', 'port-refused']);
+  assert.deepEqual(unknownFields, refusalFields);
+  assert.deepEqual(SCHEMAS.TurnAcceptanceUnknownPayload!.required, SCHEMAS.TurnNotDeliveredPayload!.required);
 });
 
 test('a turn ends with one outcome of the port, with a failure exactly when it failed', () => {

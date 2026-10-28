@@ -117,6 +117,9 @@
         "turnNotDelivered": {
           "$ref": "#/components/messages/turnNotDelivered"
         },
+        "turnAcceptanceUnknown": {
+          "$ref": "#/components/messages/turnAcceptanceUnknown"
+        },
         "turnEnded": {
           "$ref": "#/components/messages/turnEnded"
         },
@@ -256,6 +259,9 @@
         },
         {
           "$ref": "#/channels/workerObservations/messages/turnNotDelivered"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/turnAcceptanceUnknown"
         },
         {
           "$ref": "#/channels/workerObservations/messages/turnEnded"
@@ -3412,7 +3418,7 @@
       "TurnNotDeliveredObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The host did not deliver the turn: its generation no longer runs, or the port refused it. The turn stays queued.",
+        "description": "The host did not deliver the turn: its generation no longer runs, or the port refused it in a way that proves it did not accept the turn. The turn stays queued.",
         "required": [
           "metadata",
           "payload"
@@ -3449,6 +3455,82 @@
           },
           "payload": {
             "$ref": "#/components/schemas/TurnNotDeliveredPayload"
+          }
+        }
+      },
+      "TurnAcceptanceUnknownPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "turnId",
+          "generation",
+          "reason",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "conflict",
+              "timeout",
+              "crash"
+            ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "TurnAcceptanceUnknownObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The host cannot tell whether the port accepted the turn: the port answered conflict for its turn ID, the submission timed out, or the host or plugin failed before it recorded the answer. The turn becomes outcome-unknown, is final, and is never resent.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.turn.acceptance-unknown"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnAcceptanceUnknownPayload"
           }
         }
       },
@@ -4231,6 +4313,13 @@
         "title": "session.turn.not-delivered",
         "payload": {
           "$ref": "#/components/schemas/TurnNotDeliveredObservation"
+        }
+      },
+      "turnAcceptanceUnknown": {
+        "name": "turnAcceptanceUnknownObservation",
+        "title": "session.turn.acceptance-unknown",
+        "payload": {
+          "$ref": "#/components/schemas/TurnAcceptanceUnknownObservation"
         }
       },
       "turnEnded": {

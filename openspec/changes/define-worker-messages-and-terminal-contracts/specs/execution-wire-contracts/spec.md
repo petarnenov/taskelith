@@ -77,11 +77,22 @@ The command channel SHALL carry `session.turn.deliver`, `session.response.delive
 - **THEN** the command is valid
 
 ### Requirement: Session command outcomes
-Each session command SHALL have an outcome observation: a turn delivery `session.turn.delivered` or `session.turn.not-delivered` with `generation-not-running` or `port-refused`, after which the turn stays queued; a response or delegation result `session.response.delivery-reported`; a notice an adoption or non-adoption. The control plane SHALL mint one `commandId` per turn and generation, and per consumed response, and reuse it on a resend.
+Each session command SHALL have an outcome observation: a turn delivery `session.turn.delivered`, `session.turn.not-delivered` with `generation-not-running` or a `port-refused` that proves non-acceptance, leaving the turn queued, or `session.turn.acceptance-unknown`; a response or delegation result `session.response.delivery-reported`; a notice an adoption or non-adoption. The control plane SHALL mint one `commandId` per turn and generation, and per consumed response.
 
 #### Scenario: Generation ended before delivery
 - **WHEN** the host receives a turn delivery for a generation that no longer runs
 - **THEN** it reports `session.turn.not-delivered` with `generation-not-running` and the turn stays queued
+
+### Requirement: Turn acceptance unknown report
+When the host cannot tell whether the port accepted a turn, it SHALL report `session.turn.acceptance-unknown` at protocol version 2 with the turn's `sessionId`, `turnId`, `generation`, and `recoveryEpoch` and the reason `conflict`, `timeout`, or `crash`, and SHALL never submit the turn again. The control plane SHALL apply it through `recordTurnAcceptanceUnknown`, so that the turn becomes `outcome-unknown`, final and never resent.
+
+#### Scenario: Turn ID already seen by the port
+- **WHEN** `submitTurn` answers `conflict` for the delivered turn ID
+- **THEN** the host reports `session.turn.acceptance-unknown` with `conflict`, and the turn is never sent again
+
+#### Scenario: Conflict reported as a refusal
+- **WHEN** `session.turn.not-delivered` carries the reason `conflict`
+- **THEN** validation fails
 
 ### Requirement: Responses from an approver
 A response delivery SHALL name its responder with the timeline's `Responder`, a principal or a standing rule and never the host, and a standing rule SHALL give only a permission answer. It SHALL carry no `delegation-result` answer. The worker SHALL pass the answer to the port and decide none itself.
@@ -132,7 +143,7 @@ After fetching a notified version, the worker SHALL pass it to every later works
 - **THEN** item 21 keeps the previous version
 
 ### Requirement: Session observations
-The observation channel SHALL carry, about an attempt, the generation start and end, turn delivered, not delivered, and ended, request recorded, response delivery reported, output appended, and limit signaled. Each SHALL have an `observationId` derived from its source, and the control plane SHALL apply each through its session timeline function. A turn's end SHALL carry a failure exactly when its outcome is `failed`.
+The observation channel SHALL carry, about an attempt, the generation start and end, turn delivered, not delivered, acceptance unknown, and ended, request recorded, response delivery reported, output appended, and limit signaled. Each SHALL have an `observationId` derived from its source, and the control plane SHALL apply each through its session timeline function. A turn's end SHALL carry a failure exactly when its outcome is `failed`.
 
 #### Scenario: Failed turn without a failure
 - **WHEN** `session.turn.ended` has outcome `failed` and no failure

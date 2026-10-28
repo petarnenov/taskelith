@@ -98,7 +98,18 @@ The turn becomes `ended` with its outcome. Each of its requests that is still `o
 | `queued` | Recorded, not yet delivered |
 | `delivered` | Delivered in its generation, without an outcome |
 | `ended` | Ended with one outcome |
-| `outcome-unknown` | Its generation ended before its outcome; final (section 6) |
+| `outcome-unknown` | Its generation ended before its outcome (section 6), or the host cannot tell whether the port accepted it (section 4.4); final |
+
+### 4.4 Acceptance unknown
+
+The architect added this operation on 2026-10-28 (G3 item 9d, `define-worker-messages-and-terminal-contracts`). The port answers `conflict` for a turn ID the native session has seen, and a host that cannot tell whether a turn reached the harness reconciles it through the timeline and never resubmits it (agent harness port contract section 6). `recordTurnAcceptanceUnknown(session, report)` records that report for a turn from its `TurnId` and the generation it was sent for. In order:
+
+1. An unknown turn or generation fails with `not-found`.
+2. A turn that is `outcome-unknown` returns the session unchanged, a repeat.
+3. A turn that is `delivered` or `ended` fails with `conflict`.
+4. A turn other than the earliest `queued` one fails with `precondition-failed`.
+
+The turn becomes `outcome-unknown` in that generation, the state that section 6 gives a delivered turn whose outcome is lost: final, never resent, and never delivered again, so `nextDeliverableTurn` moves past it to the next queued turn. A later outcome for it fails as section 4.3 states, and its output as section 7 states. The generation need not run and a stopped session takes it, because a report can follow a crash.
 
 ## 5. Native requests and responses
 
@@ -189,7 +200,7 @@ This item adds, through `make`, unit tests of the domain in `packages/modules/ex
 
 The items that build on it add:
 
-- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, and the reconciliation of section 6 applied at a restart, with the crash points of each path.
+- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, the reconciliation of section 6 applied at a restart, and `recordTurnAcceptanceUnknown` of section 4.4 in the domain and the service, with the crash points of each path.
 - Item 18: the host tests that the agent harness port contract section 11 lists, through this timeline.
 - Item 14: a reader whose cursor expired falls back to a durable snapshot.
 

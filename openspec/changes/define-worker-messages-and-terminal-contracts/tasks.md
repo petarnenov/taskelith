@@ -11,6 +11,7 @@
 - [x] 2.5 Write `docs/contracts/worker-messages-and-terminal.md`, link it from the wire contract pages, and fix the refreshed credential wording in the G3 plan row 9 and the source control contract
 - [x] 2.6 Write the `execution-wire-contracts`, `control-plane-wire-contracts`, and `scm-port` spec deltas
 - [x] 2.7 Add the agent session binding to the protocol version 2 assignment offer, as the architect decided on 2026-10-28, with its tests, contract page, spec delta, and breaking-change declaration
+- [x] 2.8 Apply the architect's answer of 2026-10-28 to review pass 1 finding 3: `session.turn.acceptance-unknown`, the narrowed `port-refused`, and the timeline operation `recordTurnAcceptanceUnknown`, with tests, contract pages, spec deltas, and breaking-change declaration
 
 ## 3. Tests
 

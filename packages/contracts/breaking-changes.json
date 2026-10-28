@@ -3,7 +3,7 @@
     {
       "path": "packages/contracts/documents/execution.asyncapi.json",
       "version": "0.8.0",
-      "reason": "G3 sub-change 9d (define-worker-messages-and-terminal-contracts): the session commands, the notice of a refreshed per-run SCM credential, the session observations, and the adoption confirmation of execution protocol version 2, and the agent session binding that an offer carries from protocol version 2 (architect, 2026-10-28), and the classified operation of a permission request (review pass 1), which the asyncapi diff lists as unclassified additions; listed against 10fc3bbe.",
+      "reason": "G3 sub-change 9d (define-worker-messages-and-terminal-contracts): the session commands and notice, the session observations, and the adoption confirmation of execution protocol version 2, the offer's session binding (architect, 2026-10-28), the classified operation of a permission request (review pass 1), and the turn acceptance unknown observation (architect, pass 1 finding 3), which the asyncapi diff lists as unclassified additions; listed against 10fc3bbe.",
       "breakingChanges": [
         "add /channels/workerCommands/messages/assignmentOffer/payload/properties/payload/else",
         "add /channels/workerCommands/messages/assignmentOffer/payload/properties/payload/if",
@@ -24,6 +24,7 @@
         "add /components/messages/scmCredentialAdopted",
         "add /components/messages/scmCredentialNotAdopted",
         "add /components/messages/scmCredentialRefreshed",
+        "add /components/messages/turnAcceptanceUnknown",
         "add /components/messages/turnDelivered",
         "add /components/messages/turnDelivery",
         "add /components/messages/turnEnded",
@@ -76,6 +77,8 @@
         "add /components/schemas/ScmCredentialRefreshedPayload",
         "add /components/schemas/SessionProtocolVersion",
         "add /components/schemas/TimelinePosition",
+        "add /components/schemas/TurnAcceptanceUnknownObservation",
+        "add /components/schemas/TurnAcceptanceUnknownPayload",
         "add /components/schemas/TurnAuthor",
         "add /components/schemas/TurnDeliveredObservation",
         "add /components/schemas/TurnDeliveredPayload",
@@ -96,6 +99,7 @@
         "add /operations/receiveWorkerObservation/channel/messages/responseDeliveryReported",
         "add /operations/receiveWorkerObservation/channel/messages/scmCredentialAdopted",
         "add /operations/receiveWorkerObservation/channel/messages/scmCredentialNotAdopted",
+        "add /operations/receiveWorkerObservation/channel/messages/turnAcceptanceUnknown",
         "add /operations/receiveWorkerObservation/channel/messages/turnDelivered",
         "add /operations/receiveWorkerObservation/channel/messages/turnEnded",
         "add /operations/receiveWorkerObservation/channel/messages/turnNotDelivered",
