@@ -50,7 +50,8 @@ Coordinator decision Q3, the reclaim program's window for `go`: on the tree of `
 
 | Check | Revision | Result |
 | --- | --- | --- |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `ae323e15`, tree `56041e78` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `d7a1b785`, after the merge `1bdc5bab`, tree `e1c9f859` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.82 % branches, 98.95 % functions. `make record` of this run is under "Generated checks" |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `ae323e15`, tree `56041e78` | Passed, profile full, stamp written: tests 3233, suites 46, pass 3186, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `254cf2d7`, tree `275cb48f` | Passed, profile full, stamp written: tests 3230, suites 46, pass 3183, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.80 % branches, 98.93 % functions. |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `34a9773d`, tree `ad07be3e` | Passed, profile full: the same counts; 98.95 % functions |
 | Coverage of `packages/adapters/git-workspace/dist/**`, summed from `coverage/lcov.info` of the recorded run | `254cf2d7` | lines 1610 of 1635 (98.47 %), branches 773 of 839 (92.13 %), functions 229 of 235 (97.45 %) |
@@ -63,10 +64,10 @@ Coordinator decision Q3, the reclaim program's window for `go`: on the tree of `
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `56041e789a748bd495ae4e3ee81bb99897972103`; tests 3233, pass 3186, fail 0, skipped 47; all files 99.38% lines, 92.80% branches, 98.93% functions.
+- `make verify`: passed, profile full, tree `e1c9f859477f0defc7bff2e53a6f9a07362501bf`; tests 3233, pass 3186, fail 0, skipped 47; all files 99.38% lines, 92.82% branches, 98.95% functions.
 - `npm run openspec -- validate implement-workspace-handoff-and-reclaim --strict`: passed, `Change 'implement-workspace-handoff-and-reclaim' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
-- Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
+- Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
