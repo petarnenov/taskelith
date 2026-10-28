@@ -24,6 +24,7 @@
 - [x] 4.2 Run `make verify` and `npm run openspec -- validate implement-git-runner-and-snapshot --strict`, and check the archive in a scratch copy
 - [x] 4.3 Write `verification.md`
 - [x] 4.4 Fix the findings of review pass 1 with fail-before tests, amend contract sections 2, 3, 6, and 7, and modify the living requirements "Git directory safety" and "Git configuration scope"
+- [x] 4.5 Fix the findings of review pass 2 with fail-before tests, add the reason `unsafe-tree-path` and the requirement "Verified Git objects", and amend contract sections 3, 6, 7, 9, and 10
 
 ## 5. Review and archive
 

@@ -16,11 +16,15 @@ The Git workspace adapter SHALL implement `prepare`, `list`, `inspect`, `snapsho
 - **THEN** the attempt is not listed, no staging entry remains, and a new prepare of it succeeds
 
 ### Requirement: Git adapter operation failures
-A failing file system call SHALL fail `prepare`, `inspect`, `snapshot`, or `remove` with `unavailable` instead of rejecting, a malformed workspace record SHALL fail them with `internal`, a revision lookup that fails other than for a missing revision SHALL fail with `internal`, and a failed prepare SHALL leave no entry behind; a crash point SHALL still reject.
+A failing file system call SHALL fail `prepare`, `inspect`, `snapshot`, or `remove` with `unavailable` instead of rejecting, never reading as an absent entry, a malformed record or a failing revision lookup SHALL fail them with `internal`, and a prepare that fails before its rename SHALL leave no entry behind; after the rename, a failure SHALL keep the ready workspace. A crash point SHALL still reject.
 
 #### Scenario: File system fault after the clone
 - **WHEN** a file system call of a prepare fails after the clone
 - **THEN** the prepare fails with `unavailable`, and no workspace and no staging entry remain
+
+#### Scenario: File system fault around the rename into place
+- **WHEN** a file system call of a prepare fails before the rename into place, or after it
+- **THEN** the prepare fails with `unavailable`, and either no entry remains or the ready workspace is listed
 
 #### Scenario: Workspace record that cannot be read
 - **WHEN** the workspace record is a directory
@@ -68,7 +72,7 @@ Before its first Git call on a ready checkout, after the checks of its Git direc
 - **THEN** the rewrite replaces the link and the control record is unchanged
 
 ### Requirement: Status parsing for dirty reasons
-After clearing every assume-unchanged and skip-worktree flag of the index, `inspect` SHALL read the head and the branch from `git status --porcelain=v2 -z --branch --untracked-files=all --ignore-submodules=all`, report `modified` for a changed or renamed entry, `untracked` for an untracked one, and `operation-in-progress` for an unmerged entry or an unfinished operation's state in `.git`, keep paths as bytes, and refuse with `internal` any record or header that is malformed.
+After writing every index entry anew, `inspect` SHALL read the head and the branch from `git status --porcelain=v2 -z --branch` with all untracked files and no submodules, report `modified` for a changed or renamed entry or merged index entries that differ from the verified head tree, `untracked` for an untracked entry, and `operation-in-progress` for an unmerged entry or an unfinished operation in `.git`, keep paths as bytes, and refuse malformed output with `internal`.
 
 #### Scenario: Unfinished bisect
 - **WHEN** the agent starts a bisect and changes no file
@@ -76,6 +80,10 @@ After clearing every assume-unchanged and skip-worktree flag of the index, `insp
 
 #### Scenario: Change hidden by an index flag
 - **WHEN** the agent sets `--assume-unchanged` or `--skip-worktree` on a tracked file and changes it
+- **THEN** `inspect` reports `modified`, and `snapshot` and `remove` fail with reason `workspace-dirty`
+
+#### Scenario: Change hidden by the index
+- **WHEN** the agent forges an entry's stat data after a change of the same size, forges the cache tree over a staged change, or adds a gitlink to the index alone over a directory of work
 - **THEN** `inspect` reports `modified`, and `snapshot` and `remove` fail with reason `workspace-dirty`
 
 #### Scenario: Forged untracked cache
@@ -87,7 +95,7 @@ After clearing every assume-unchanged and skip-worktree flag of the index, `insp
 - **THEN** `inspect` reports the workspace clean, and `snapshot` fails with reason `non-utf8-path`
 
 ### Requirement: Snapshot from Git objects
-`snapshot` SHALL read the head's tree with `git ls-tree -r -z --full-tree` and exactly its blobs with `git cat-file --batch`, never through a replace ref, refuse any malformed entry or object with `internal`, canonicalize each file mode as Git does, refuse a gitlink with `gitlink-in-tree` before it decodes any path, then refuse a path or link target that is not UTF-8 with `non-utf8-path`, and return the bytes of `encodeHeadSnapshot`.
+`snapshot` SHALL take the verified head tree and its verified blobs, canonicalize each file mode as Git does, refuse a gitlink with `gitlink-in-tree` before it decodes any path, then a path or link target that is not UTF-8 with `non-utf8-path`, then a name that Git refuses in a path, a duplicate, or a file that is also a directory with `unsafe-tree-path`, and return the bytes of `encodeHeadSnapshot`.
 
 #### Scenario: Same tree in two clones
 - **WHEN** a head is snapshotted twice in one workspace and once in a fresh `at-head` workspace at that head
@@ -97,9 +105,24 @@ After clearing every assume-unchanged and skip-worktree flag of the index, `insp
 - **WHEN** the agent makes a replace ref for a blob of the head or for the head commit
 - **THEN** `inspect` reports the head's own tree and no reason, and the snapshot's bytes are unchanged
 
+#### Scenario: Tree path that Git refuses
+- **WHEN** a tree object holds a name `..`, `.GIT`, `git~1`, or an empty name, or one name twice
+- **THEN** the snapshot fails with reason `unsafe-tree-path`
+
 #### Scenario: Gitlink beside a path that is not UTF-8
 - **WHEN** a listed tree holds a gitlink and a path that is not valid UTF-8
 - **THEN** the snapshot fails with reason `gitlink-in-tree`
+
+### Requirement: Verified Git objects
+The adapter SHALL read the head commit, every tree below it, and every blob of a snapshot with `git cat-file --batch` and check that each hashes to its name in the clone's object format, failing with `internal` otherwise, and SHALL run Git with `core.commitGraph=false` and `core.multiPackIndex=false`, so that no object, commit-graph, or multi-pack-index the agent forged changes the head tree it reports or snapshots.
+
+#### Scenario: Pack with forged bytes
+- **WHEN** the agent adds a pack whose index gives a blob of the head other bytes and deletes the loose object
+- **THEN** `inspect` reports the workspace clean, and `snapshot` fails with `internal`
+
+#### Scenario: Forged commit-graph
+- **WHEN** the agent writes a commit-graph that gives the head commit another root tree
+- **THEN** `inspect` reports the head's own tree and no reason, and the snapshot's bytes are unchanged
 
 ### Requirement: Conformance run of the local operations
 The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, with a local bare repository served on `127.0.0.1` and a recording wrapper as its pinned client, except the cases that need `push`, `readRemoteHead`, `handOff`, or `reclaim`, which SHALL be skipped with their reason and named by a list that a test checks against the suite.
@@ -111,7 +134,7 @@ The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, 
 ## MODIFIED Requirements
 
 ### Requirement: Git directory safety
-Once per operation, before its first Git call on a checkout, the adapter SHALL check without following links that the checkout and `.git` are the worker identity's, that `.git` is a directory holding no symbolic link, `commondir`, or `objects/info/alternates`, and that no entry below the top is named `.git`, refusing otherwise with `precondition-failed` and reason `unsafe-checkout`; its Git SHALL never recurse into submodules.
+Once per operation, before its first Git call on a checkout, the adapter SHALL check without following links that the checkout and `.git` are the worker identity's, that `.git` is a directory holding only directories and regular files and no `commondir` or `objects/info/alternates`, and that no entry but the top `.git` is named `.git` in any case, refusing otherwise with `precondition-failed` and reason `unsafe-checkout`; its Git SHALL never recurse into submodules.
 
 #### Scenario: Link in the Git directory
 - **WHEN** a checkout's `.git` holds a symbolic link to a control record directory
@@ -124,6 +147,14 @@ Once per operation, before its first Git call on a checkout, the adapter SHALL c
 #### Scenario: Nested gitfile
 - **WHEN** the agent leaves a gitfile below the checkout's top that names another workspace's `.git`
 - **THEN** Git work on the checkout fails with reason `unsafe-checkout`, and the other `.git` is unchanged
+
+#### Scenario: FIFO in the Git directory
+- **WHEN** the agent replaces `.git/index` with a FIFO
+- **THEN** Git work on the checkout fails with reason `unsafe-checkout` without starting a Git process
+
+#### Scenario: Git directory in another case
+- **WHEN** the agent leaves a directory `.GIT` below the checkout's top
+- **THEN** Git work on the checkout fails with reason `unsafe-checkout`
 
 #### Scenario: Name that is not UTF-8
 - **WHEN** the agent leaves a gitfile in a directory whose name is not valid UTF-8
