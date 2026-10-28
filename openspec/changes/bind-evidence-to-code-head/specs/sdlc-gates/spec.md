@@ -8,11 +8,15 @@ A gate opened with a code head SHALL be head-bound, and every transition SHALL k
 - **THEN** the reopen is rejected with code `precondition-failed` and the gate stays stale
 
 ### Requirement: Evidence bound to the code head
-Evidence SHALL decide a head-bound gate only when its code head equals the gate's code head in repository, commit, and tree; evidence of another head or without a code head SHALL be rejected with `precondition-failed`. A gate without a code head SHALL be decided whatever code head the evidence names.
+Evidence SHALL decide a head-bound gate only when its code head equals the gate's code head in repository, commit, and tree; evidence of another head or without a code head SHALL be rejected with `precondition-failed`. A gate without a code head SHALL be decided whatever code head the evidence names, or with none. Whether every gate requires a code head is G3 item 21's decision.
 
 #### Scenario: Evidence from another head
 - **WHEN** an approval of the gate's subject names another repository, another commit, or no code head
 - **THEN** recording it is rejected with code `precondition-failed` and the gate stays pending
+
+#### Scenario: Gate without a code head
+- **WHEN** an approval of the subject of a gate without a code head names any code head or none
+- **THEN** recording it passes the gate
 
 ### Requirement: Invalidation by a new code head
 A code head SHALL outdate a gate exactly when the gate is head-bound and the head differs from the gate's code head in repository, commit, or tree. `markGateStaleByCodeHead` SHALL be rejected with `precondition-failed` when the head does not outdate the gate, and the stale gate SHALL keep its code head and its decision.

@@ -116,7 +116,9 @@ test('a gate without a code head ignores code heads', () => {
   assert.equal(isGateOutdatedByCodeHead(pending, EDIT_HEAD), false);
   assertRefused(markGateStaleByCodeHead(pending, pending.generation, EDIT_HEAD, LATER), 'precondition-failed',
     'gate code-review is not outdated by that code head');
-  assert.equal(value(recordGateEvidence(pending, pending.generation, approvalAt(EDIT_HEAD), LATER)).state, 'passed');
+  for (const anyHead of [approvalAt(EDIT_HEAD), approvalAt(undefined)]) {
+    assert.equal(value(recordGateEvidence(pending, pending.generation, anyHead, LATER)).state, 'passed');
+  }
   const stale = value(markGateStale(pending, pending.generation, EDITED_SPEC, LATER));
   assertRefused(reopenGateAtCodeHead(stale, stale.generation, { subject: [EDITED_SPEC], codeHead: EDIT_HEAD }, LATER),
     'precondition-failed', 'gate code-review is not head-bound and reopens without a code head');

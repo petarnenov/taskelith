@@ -16,3 +16,9 @@
 - [x] 3.1 `npm run openspec -- validate bind-evidence-to-code-head --strict` and the checks without Docker
 - [ ] 3.2 `make verify` (coordinator's Docker slot)
 - [ ] 3.3 Review passes and their records
+
+## Follow-ups
+
+Not tasks of this change:
+
+- `align-code-head-names`: replace the execution evidence record's `codeRevision` and the integrations merge queue's `CodeHead` with the SDLC `CodeHeadIdentity` (design decision 1 (i), chosen by the coordinator); it must land before G3 item 21.
