@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ROUTE_SCHEMA_PATH } from '../scripts/review-route.ts';
 import { checklistEffect, formatChecklistEffect, type ArchivedChecklist } from '../scripts/checklist-effect.ts';
 import { GIT_ENVIRONMENT, type ChecklistEnvironment } from '../scripts/checklist-environment.ts';
 import { CHECKLIST_SCHEMA_PATH, type ChecklistRecord, type Size } from '../scripts/checklist-record.ts';
@@ -147,7 +148,7 @@ test('the effect of no recorded checklist says so', () => {
 
 function repository(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'checklist-effect-'));
-  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH]) cpSync(path, join(root, path));
+  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH, ROUTE_SCHEMA_PATH]) cpSync(path, join(root, path));
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);

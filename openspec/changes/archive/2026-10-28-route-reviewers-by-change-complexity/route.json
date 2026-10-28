@@ -1,0 +1,64 @@
+{
+  "change": "route-reviewers-by-change-complexity",
+  "generatedAt": "2026-10-28T06:42:20.204Z",
+  "devCommit": "f3a53f172dc265d5e710105df3f5dbe5be99a24a",
+  "headCommit": "8c07e22f83832d3aa5b59c79c06136ab35762ed1",
+  "features": {
+    "linesChanged": 4042,
+    "filesChanged": 36,
+    "capabilities": [
+      "agent-task-protocol",
+      "review-process"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": true,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 9,
+      "thirdPassShare": 0.5555555555555556,
+      "mediumOrWorsePerChange": 4.777777777777778
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "failed",
+    "reason": "missing-credential",
+    "latencyMs": 0
+  }
+}

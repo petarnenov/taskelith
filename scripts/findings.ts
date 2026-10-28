@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
 import { runChecklist, runEffect, type ArchiveSource, type ChecklistCommand, type CommittedArchive, type SaveTarget } from './checklist-commands.ts';
 import { GIT_ENVIRONMENT, type ChecklistEnvironment } from './checklist-environment.ts';
 import {
@@ -30,16 +29,23 @@ import {
   type SchemaCheck,
 } from './review-findings.ts';
 import { consistencyProblems, parsePassSummaries, PASSES_FILE, type PassSummary } from './review-passes.ts';
+import { ajvSchemaCheck, SCHEMA_PATH, type RunResult } from './findings-common.ts';
+import { ROUTE_FILE, ROUTE_SCHEMA_PATH } from './review-route.ts';
+import { ROUTE_USAGE, routeDependencies, runRoute } from './review-route-command.ts';
+import { EVALUATION_USAGE, routeEvaluationDependencies, runRouteEvaluation } from './review-route-evaluation.ts';
+import { checkRoutes, type LocatedRoute, type RouteLocation } from './review-route-record.ts';
+import { routingEffect, type RoutedReview } from './review-route-report.ts';
 import { reviewerKeyProblems, withCanonicalReviewer } from './reviewer-keys.ts';
 import { formatReviewerStatistics, reviewerStatistics, type ReviewedChange } from './reviewer-statistics.ts';
 
 // npm run findings: validates the review records of OpenSpec changes and
-// reports on archived ones: index, checklist, reviewers, checklist effect.
+// reports on archived ones; dispatches the routing commands.
+
+export { ajvSchemaCheck, SCHEMA_PATH, type RunResult };
 
 const CHANGES_DIRECTORY = 'openspec/changes';
 const ARCHIVE_DIRECTORY = 'archive';
 const FINDINGS_FILE = 'findings.jsonl';
-export const SCHEMA_PATH = 'docs/review-findings/finding.schema.json';
 export const PASS_SCHEMA_PATH = 'docs/review-findings/pass.schema.json';
 export const DEFAULT_TOP = 7;
 export const MAX_TOP = 10;
@@ -55,7 +61,12 @@ export const USAGE = [
   "                           as of the brief's dev commit, or as JSON",
   '            --at <dev commit> --save <change> [--size <S|S-M|M|M-L|L>]',
   `                           saved as the change's ${CHECKLIST_FILE}`,
-  '  effect [--json]          pass-1 findings of archived changes against their checklist',
+  '  effect [--json]          pass-1 findings of archived changes against their checklist,',
+  '                           and the routing of those with route.json',
+  `  ${ROUTE_USAGE.replace('Usage: ', '')}`,
+  `                           write the change's ${ROUTE_FILE}; the shadow router needs JEV_MAF_LAB`,
+  `  ${EVALUATION_USAGE.replace('Usage: ', '')}`,
+  '                           route the archived reviewed changes, as of a revision',
 ].join('\n');
 
 export type Command =
@@ -180,19 +191,6 @@ function topCount(value: string | undefined): number {
   return top;
 }
 
-// Adapter over ajv: callers see readable violations, never ajv's own types.
-export function ajvSchemaCheck(schema: object, references: readonly object[] = []): SchemaCheck {
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
-  for (const reference of references) ajv.addSchema(reference);
-  const validate = ajv.compile(schema);
-  return (value) => (validate(value) ? [] : validate.errors!.map(describeError));
-}
-
-// An unknown property's name is untrusted input, so it is never printed.
-function describeError(error: ErrorObject): string {
-  return `${error.instancePath || '/'} ${error.message}`;
-}
-
 export interface RecordFile {
   readonly path: string;
   readonly text: string;
@@ -215,8 +213,10 @@ interface Repository {
   readonly schema: object;
   readonly passSchema: object;
   readonly checklistSchema: object;
+  readonly routeSchema: object;
   readonly capabilities: readonly string[];
   readonly checklists: readonly ChecklistLocation[];
+  readonly routes: readonly RouteLocation[];
 }
 
 interface ChangeLocation {
@@ -264,8 +264,10 @@ function loadRepository(root: string): Repository {
     schema: JSON.parse(read(SCHEMA_PATH)) as object,
     passSchema: JSON.parse(read(PASS_SCHEMA_PATH)) as object,
     checklistSchema: JSON.parse(read(CHECKLIST_SCHEMA_PATH)) as object,
+    routeSchema: JSON.parse(read(ROUTE_SCHEMA_PATH)) as object,
     capabilities: directories(root, SPECS_DIRECTORY),
     checklists: locations.map((location) => ({ ...location, file: file(location.directory, CHECKLIST_FILE) })),
+    routes: locations.map((location) => ({ ...location, file: file(location.directory, ROUTE_FILE) })),
   };
 }
 
@@ -273,12 +275,6 @@ function directories(root: string, path: string): string[] {
   const full = posix.join(root, path);
   if (!existsSync(full)) return [];
   return readdirSync(full, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-}
-
-export interface RunResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
 }
 
 export function runFindings(args: readonly string[], root: string, environment: ChecklistEnvironment = GIT_ENVIRONMENT): RunResult {
@@ -370,6 +366,7 @@ function runCommand(command: Command, repository: Repository, workspace: Workspa
   };
   const checked = repository.changes.map((records) => checkChange(records, rules));
   const checklists = checkChecklists(repository.checklists, ajvSchemaCheck(repository.checklistSchema, [repository.schema]), categoryIds);
+  const routes = checkRoutes(repository.routes, ajvSchemaCheck(repository.routeSchema, [repository.schema, repository.checklistSchema]));
   const validating = command.name === 'validate';
   const problems = [
     ...vocabulary.problems,
@@ -377,6 +374,7 @@ function runCommand(command: Command, repository: Repository, workspace: Workspa
     ...checked.flatMap((change) => change.problems),
     ...(validating ? missingChecklists(repository.checklists, mustRecordChecklist(workspace)) : []),
     ...checklists.problems,
+    ...routes.problems,
   ];
   if (problems.length > 0) return { exitCode: 1, stdout: '', stderr: [...problems.map(formatProblem), problemSummary(problems)].join('\n') };
   const archivedChanges = checked.filter(({ archived }) => archived).map(withCanonicalReviewers);
@@ -389,9 +387,25 @@ function runCommand(command: Command, repository: Repository, workspace: Workspa
   if (command.name === 'effect') {
     const changes = repository.checklists.filter(({ archived: isArchived }) => isArchived).map(({ directory, change }) =>
       ({ directory, change, findings: archivedChanges.find((records) => records.directory === directory)?.findings ?? [] }));
-    return runEffect(command.json, { ...workspace, archivedChanges: changes, checklists: checklists.located });
+    const routing = routingEffect(routedReviews(routes.located, archivedChanges), unroutedChanges(repository.routes));
+    return runEffect(command.json, { ...workspace, archivedChanges: changes, checklists: checklists.located, routing });
   }
   return { exitCode: 0, stdout: commandOutput(command, repository, archivedChanges, archived), stderr: '' };
+}
+
+function routedReviews(routes: readonly LocatedRoute[], archivedChanges: readonly CheckedChange[]): RoutedReview[] {
+  return routes.filter(({ location }) => isArchivedDirectory(location.directory)).map(({ location, record }) => {
+    const records = archivedChanges.find(({ directory }) => directory === location.directory);
+    return { route: record, findings: records?.findings ?? [], summaries: records?.summaries };
+  });
+}
+
+function unroutedChanges(routes: readonly RouteLocation[]): string[] {
+  return routes.filter(({ directory, file }) => isArchivedDirectory(directory) && file === undefined).map(({ change }) => change);
+}
+
+function isArchivedDirectory(directory: string): boolean {
+  return directory.startsWith(`${posix.join(CHANGES_DIRECTORY, ARCHIVE_DIRECTORY)}/`);
 }
 
 // Before the landing commit exists, no active change needs a checklist.
@@ -420,16 +434,25 @@ function archiveSource({ root, environment }: Workspace, commit: string, rules: 
 }
 
 function problemSummary(problems: readonly Problem[]): string {
-  const formats = problems.some(({ file }) => posix.basename(file) === CHECKLIST_FILE)
-    ? `${SCHEMA_PATH}, ${PASS_SCHEMA_PATH}, and ${CHECKLIST_SCHEMA_PATH}`
-    : `${SCHEMA_PATH} and ${PASS_SCHEMA_PATH}`;
-  return `Review findings: ${problems.length} problem(s); the formats are ${formats}.`;
+  const concerns = (name: string) => problems.some(({ file }) => posix.basename(file) === name);
+  const formats = [
+    SCHEMA_PATH,
+    PASS_SCHEMA_PATH,
+    ...(concerns(CHECKLIST_FILE) ? [CHECKLIST_SCHEMA_PATH] : []),
+    ...(concerns(ROUTE_FILE) ? [ROUTE_SCHEMA_PATH] : []),
+  ];
+  return `Review findings: ${problems.length} problem(s); the formats are ${listed(formats)}.`;
+}
+
+function listed(items: readonly string[]): string {
+  if (items.length === 2) return items.join(' and ');
+  return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
 }
 
 type ReportCommand = Extract<Command, { name: 'validate' | 'index' | 'reviewers' }>;
 
 function commandOutput(command: ReportCommand, repository: Repository, archivedChanges: readonly CheckedChange[], archived: readonly Finding[]): string {
-  if (command.name === 'validate') return validOutput(repository.changes);
+  if (command.name === 'validate') return validOutput(repository);
   if (command.name === 'reviewers') {
     const statistics = reviewerStatistics(archivedChanges, repository.unrecordedArchived);
     return command.json ? JSON.stringify(statistics, null, 2) : formatReviewerStatistics(statistics);
@@ -438,15 +461,35 @@ function commandOutput(command: ReportCommand, repository: Repository, archivedC
   return command.json ? JSON.stringify(index, null, 2) : formatIndex(index);
 }
 
-function validOutput(changes: readonly ChangeRecords[]): string {
+function validOutput({ changes, routes }: Repository): string {
   const findings = changes.filter((records) => records.findings !== undefined).length;
   const passes = changes.filter((records) => records.passes !== undefined).length;
-  return `Every findings file is valid: ${findings} file(s); every pass summary file is valid: ${passes} file(s).`;
+  const routed = routes.filter(({ file }) => file !== undefined).length;
+  return `Every findings file is valid: ${findings} file(s); every pass summary file is valid: ${passes} file(s); `
+    + `every route file is valid: ${routed} file(s).`;
+}
+
+type RoutingCommand = (args: readonly string[], root: string, variables: NodeJS.ProcessEnv) => Promise<RunResult>;
+
+// Each composition root reads the credential from the given variables.
+const ROUTING_COMMANDS: Readonly<Record<string, RoutingCommand>> = {
+  route: (args, root, variables) => runRoute(args, root, routeDependencies(root, variables)),
+  'route-evaluation': (args, root, variables) => runRouteEvaluation(args, root, routeEvaluationDependencies(root, variables)),
+};
+
+export async function runFindingsCommand(args: readonly string[], root: string, variables: NodeJS.ProcessEnv): Promise<RunResult> {
+  const [name, ...rest] = args;
+  if (name !== undefined && Object.hasOwn(ROUTING_COMMANDS, name)) return ROUTING_COMMANDS[name](rest, root, variables);
+  return runFindings(args, root);
+}
+
+function printed(text: string): string {
+  return text.endsWith('\n') ? text : `${text}\n`;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { exitCode, stdout, stderr } = runFindings(process.argv.slice(2), process.cwd());
-  if (stdout !== '') console.log(stdout);
-  if (stderr !== '') console.error(stderr);
+  const { exitCode, stdout, stderr } = await runFindingsCommand(process.argv.slice(2), process.cwd(), process.env);
+  if (stdout !== '') process.stdout.write(printed(stdout));
+  if (stderr !== '') process.stderr.write(printed(stderr));
   process.exitCode = exitCode;
 }
