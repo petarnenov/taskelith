@@ -12,6 +12,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - Merges of `origin/dev`: `1cfe104f` (`6b68d6c7`, no conflict); `f93316de` (`14e1a46e`, a conflict in `docs/agent-task-protocol.md` resolved by taking `dev`'s coordinator step 1 and keeping this change's step 2; `dev` changed no requirement that the spec deltas modify); `f726edbf` (`579c227d`, no conflict). The full `make verify` passed on `f726edbf`; `make record` and `make record-check` passed on `16987d29`, whose tree differs from `f726edbf`'s only in this record.
 - `make verify` of the pass 1 fixes passed on `1089addf`, the merge of `origin/dev` `3f23516a` (no conflict; it changed only the Claude Code reviewer rows of `docs/agent-task-protocol.md` and two living specs that no delta of this change touches); `make record` and `make record-check` passed.
 - Merge `1a758b85` of `origin/dev` `1c73e1a7` (#380, #381) into `8d4b3c7a`, with conflicts; the full `make verify` passed on it, and `make record` and `make record-check` passed on the record commit that follows it (see "Merge reconciliation").
+- Review pass 2 fixes, on `1e1cd10f`: `4818a7b7` scripts, tests, and `Makefile` (findings 1, 2, 3, 5, 6, 7, and 10); `149058b8` spec deltas, design, protocol, and coordinator skill (finding 4 and the text of the others); `0be2c4ab` this record (findings 8 and 9); then the pass 2 records.
 
 ## Environment
 
@@ -47,6 +48,11 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
   - Fail-before, each new test against the scripts, `Makefile`, and tests of `16987d29` in a scratch copy: `test/docker-slot.test.ts` does not load (`CHOOSING` is not exported), and old-API copies of its two new behavior tests fail, the ticket path reused after a release (finding 2) and `first-start, second-start, first-end` for a command that outlives its killed holder (finding 3): tests 2, pass 0, fail 2. Old-API copies of the stamp tests, the same tree on a new merge base reused (finding 4) and a detached HEAD given docs-only (finding 13): tests 2, pass 0, fail 2. `test/verification-record.test.ts --test-name-pattern="only the last complete run|hand edit of the recorded"` (findings 11 and 10): tests 2, pass 0, fail 2. The nine new tests of `test/integrate-script.test.ts` (findings 1, 5, 6, 7, 8, and 9): tests 9, pass 0, fail 9; the alarm test without its message assertion still fails with `process 1273 survived`.
   - After the fixes, `node --experimental-strip-types --test --experimental-test-coverage` with the four new TypeScript scripts included, over the eight test files listed above: tests 117, pass 117, fail 0. Coverage: `verify-stamp.ts` 100% lines, 100% branches, 100% functions; `docker-slot.ts` 98.35%, 94.62%, 98.04%; `verification-record.ts` 98.26%, 92.76%, 100%; `context-warning.ts` 98.08%, 97.37%, 100%. `test/integrate-script.test.ts` has 17 tests and reaches every exit status of `scripts/integrate.sh`.
   - `npx tsc -p tsconfig.check.json`: no error in the changed scripts and tests. `npm run openspec -- validate adopt-process-performance-recommendations --strict`: valid; the longest requirement body is 491 characters. `npm run verify:comments`, `verify:links`, `verify:findings`, and `verify:archive`: pass; their outputs are under "Review pass 1".
+- Review pass 2 fixes, on `0be2c4ab` without Docker:
+  - Fail-before, each new or changed test against the code of `1e1cd10f`: `test/docker-slot.test.ts --test-name-pattern="during the poll|time zone"` (findings 1 and 6): tests 2, pass 0, fail 2. `test/integrate-script.test.ts` with the old `scripts/integrate.sh`: tests 19, pass 16, fail 3, the SIGTERM test (finding 2) and the resume and fresh-run tests after a merge commit (finding 3); the SIGTERM run left the fake `make verify` group with two `sleep 300` processes running, which the worker stopped. The dry-run test of `test/verify-stamp.test.ts` and the four usage tests of `test/context-warning.test.ts` with the old scripts (findings 5 and 7): tests 5, pass 0, fail 5. The `make integrate` arguments test with the old `Makefile` (finding 10): tests 1, pass 0, fail 1.
+  - After the fixes, `node --experimental-strip-types --test --experimental-test-coverage` with the four new TypeScript scripts included, over the eight test files listed above: tests 129, pass 129, fail 0. Coverage: `verify-stamp.ts` 100% lines, 100% branches, 100% functions; `docker-slot.ts` 98.38%, 94.74%, 98.04%; `verification-record.ts` 98.30%, 92.90%, 100%; `context-warning.ts` 98.06%, 97.30%, 100%. `test/integrate-script.test.ts` has 19 tests.
+  - `npx tsc -p tsconfig.check.json --noEmit`: no error. `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 58 findings files and 38 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --strict --all --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`; the longest requirement body of the deltas is 493 characters.
+  - Not run: `make verify`, which needs the Docker slot. `make record-check` fails until `make verify` and `make record` run on the fixed tree, because the scripts changed after the recorded tree.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -100,6 +106,31 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 - **Note, found after pass 1:** `make record` and `make record-check` let `make` expand `CHANGE` and `LOG`, the class of finding 1; the worker found it after pass 1, not a reviewer, so `findings.jsonl` has no line for it. The fix applies the `make integrate` pattern, and a real `make` run in `test/verification-record.test.ts` proves the arguments arrive as typed (it fails against the old `Makefile`: `make record ran a $(shell) of the arguments`). It is unreviewed until pass 2.
 - **Note, found after pass 1:** `make record-check` accepted a tree that differs from the verified one only in `verification.md`, so ticking the verify task in `tasks.md` and appending review passes to `findings.jsonl` and `passes.jsonl` made the documented flow fail. The worker found it after pass 1, not a reviewer, so `findings.jsonl` has no line for it. The check now also accepts the change's `tasks.md`, `findings.jsonl`, and `passes.jsonl`, and still fails on any other path, `design.md` of the change included. The new test in `test/verification-record.test.ts` fails against the old script (`the working tree differs from the verified tree …: openspec/changes/demo-change/findings.jsonl, openspec/changes/demo-change/tasks.md`). It is unreviewed until pass 2.
 
+### Review pass 2
+
+- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`, plan permission mode with `Edit`, `Write`, and `NotebookEdit` disallowed, run by the worker session from the worktree, 06:55:00 to 07:02:43 local, 2026-10-28.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, with the prompt and log outside the worktree.
+- **Revision:** `1e1cd10f`.
+- **Model confirmation:** the stream's `init` line records model `claude-opus-5-5` and permission mode `plan`, and its `result` line's `modelUsage` names only `claude-opus-5-5`; session `af5db442-7547-4c35-8c79-49fa9ddd3466`.
+- **Snapshot:** `9ae087eb1148fdfc6dd072a99aed54924532947407c8cc0a1d10d82fd635d65a` before and after; unchanged.
+- **Findings:** 0 Critical, 1 High, 3 Medium, 6 Low; each was checked against the code, none was rejected, and all are **fixed** for pass 3 to check; `findings.jsonl` has one line per finding. The reviewer found the fixes of pass 1 findings 1, 3, 4, 5, 7, 9, 10, 11, 13, and 15 complete; those of 2, 8, and 14 were incomplete, the fix of 6 caused a regression, and the issue of 12 remained in `integration-flow`, which findings 1, 3, 8, 2, and 4 below cover.
+
+| # | Severity | Category | Finding | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | High | concurrency-race | A poll read the tickets before the choosing markers, so two runs could still both hold the slot (`scripts/docker-slot.ts:203`) | `4818a7b7`: markers first; a step test interleaves B's publish inside A's poll through an injected `Processes.started` |
+| 2 | Medium | error-handling | `INT`, `TERM`, or `HUP` left `make verify` running in its own group (`scripts/integrate.sh:45`) | `4818a7b7`: the supervisor stops the group and exits 128+n, the script forwards the signals and prints `INTERRUPTED`, `make verify` reads `/dev/null`; a `SIGTERM` test checks for survivors |
+| 3 | Medium | error-handling | A resume after a GitHub merge commit merged `origin/dev` again and opened a second pull request (`scripts/integrate.sh:134`) | `4818a7b7`: a HEAD already in `origin/dev` only cleans up; the `gh` stub merges with a merge commit; resume and fresh-run tests |
+| 4 | Medium | contract-drift | The `integration-flow` delta still required `make test` in every `make verify` | `149058b8`: "`make test` (full profile only)" |
+| 5 | Low | error-handling | `make -t` or `make -q verify` wrote a stamp without checks (`scripts/verify-stamp.ts:245`) | `4818a7b7`: `t`, `q`, `--touch`, and `--question` count as dry runs |
+| 6 | Low | concurrency-race | `ps` start times depended on the time zone and locale (`scripts/docker-slot.ts:70`) | `4818a7b7`: `ps` under `TZ=UTC` and `LC_ALL=C`; a test from another time zone |
+| 7 | Low | contract-drift | The context hook counted output tokens, unlike `design.md` | `4818a7b7`: input tokens only, as designed; the design names the exclusion |
+| 8 | Low | evidence-mismatch | A stale sentence said the pass 1 fixes had not run `make verify` | `0be2c4ab`: removed |
+| 9 | Low | stale-citation | Self-check citations no longer matched after the merge | `0be2c4ab`: every self-check citation rechecked and updated |
+| 10 | Low | error-handling | `RESUME=0` also resumed (`Makefile:286`) | `4818a7b7`: only `RESUME=1` resumes; documented and tested |
+
+- **Checks after the fixes:** under "Checks and results".
+- **Pass 3:** required by "Conditional third pass", because finding 1 is High and the fixes change files under `scripts/` and the `Makefile`.
+
 ## Merge reconciliation
 
 - **Merge.** `1a758b85` merges `origin/dev` `1c73e1a7` (#380 and #381) into `8d4b3c7a` with a merge commit. Base: `git merge-base 8d4b3c7a 1c73e1a7` = `3f23516a`. `git show 1a758b85 --cc` shows the resolutions.
@@ -133,6 +164,7 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
-- Independent review: pass 2 by reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), is next; then pass 3 (reviewer A) if "Conditional third pass" requires it
+- `make verify` of the pass 2 fixes, then `make record` and `make record-check`
+- Independent review: pass 3 by reviewer A, Codex CLI (`gpt-6.1-sol`), required by "Conditional third pass"
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)
