@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { failed, value } from '@taskelith/testing';
@@ -96,6 +96,19 @@ test('only a confirmed generation has its predecessor and its pending file remov
   value(removeSupersededGeneration(paths, confirmed));
   assert.deepEqual(['control-plane.1', 'broker.1.creds', 'pending.2'].map(exists), [false, false, false]);
   assert.deepEqual(['control-plane.2', 'broker.2.creds', 'pending.3'].map(exists), [true, true, true]);
+});
+
+test('a predecessor file that cannot be removed fails the removal with a flush failure', () => {
+  const root = enroll();
+  const { paths } = root;
+  value(storePendingGeneration(paths, PENDING));
+  const { previous: _kept, ...confirmed } = value(adoptGeneration(paths, root.identity, 2, NEXT));
+  rmSync(join(paths.credentials, 'control-plane.1'));
+  mkdirSync(join(paths.credentials, 'control-plane.1', 'entry'), { recursive: true });
+  const refused = failed(removeSupersededGeneration(paths, confirmed));
+  assert.equal(failureReason(refused), 'flush-failure');
+  assert.equal(refused.details.path, join(paths.credentials, 'control-plane.1'));
+  assert.equal(existsSync(join(paths.credentials, 'pending.2')), true, 'the removal stops at the first failure');
 });
 
 test('an adoption repeated after a crash accepts its own files and refuses other content', () => {

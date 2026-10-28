@@ -97,8 +97,21 @@ export function removeSupersededGeneration(paths: WorkerPaths, identity: WorkerI
   if (previous !== undefined || credentialGeneration === 1) return ok(undefined);
   const superseded = credentialReferencesOf(credentialGeneration - 1);
   const leftovers = [superseded.controlPlane, superseded.broker].map((reference) => join(paths.worker, reference));
-  for (const path of [...leftovers, pendingPath(paths, credentialGeneration)]) rmSync(path, { force: true });
+  for (const path of [...leftovers, pendingPath(paths, credentialGeneration)]) {
+    const removed = removeFile(path);
+    if (!removed.ok) return removed;
+  }
   return syncPath(paths.credentials);
+}
+
+// A missing file counts as removed.
+function removeFile(path: string): Result<void> {
+  try {
+    rmSync(path, { force: true });
+    return ok(undefined);
+  } catch (error) {
+    return err(rootFailure('flush-failure', `cannot remove ${path}: ${(error as Error).message}`, { path }));
+  }
 }
 
 // A crash may have left the file written; only the same content counts.
