@@ -67,7 +67,9 @@ export function assertWorkerSupervised(worker: SupervisedWorker, pids: readonly 
   else assertContained(worker.containmentParent, pids);
 }
 
-function assertMacosSupervised(dataRoot: string, pids: readonly number[]): void {
+// A parent that is no supervisor naming DATAROOT fails it: a test-side
+// parent, or a supervisor of another worker.
+export function assertMacosSupervised(dataRoot: string, pids: readonly number[]): void {
   const supervisors = new Set(supervisorProcesses(dataRoot).map(({ pid }) => pid));
   for (const pid of pids) {
     const parent = parentOf(pid);
