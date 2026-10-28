@@ -30,12 +30,14 @@ export const EXIT_REFUSED = 1;
 export const EXIT_USAGE = 2;
 export const EXIT_ROUTED = 3;
 export const EXIT_REVIEWER_FAILED = 4;
+// The "Policy version" line of docs/governance.md; a test keeps them equal.
+export const GOVERNANCE_POLICY_VERSION = 8;
 
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const MAX_PASS = 9;
 const COMMIT = /^[0-9a-f]{40}$/;
-// Governance policy version 8: role A makes passes 1 and 3, B pass 2.
+// Governance "Review sequence": role A makes passes 1 and 3, B pass 2.
 const PASS_ROLES: ReadonlyMap<number, Role> = new Map([[1, 'A'], [2, 'B'], [3, 'A']]);
 // ROLE may be empty: it then defaults to the pass's role.
 const ROLE_ARGUMENT = 2;
@@ -241,7 +243,7 @@ async function attemptRoute(change: string, dependencies: ReviewDependencies): P
 }
 
 // route.json only recommends: the authorized effort stays (governance
-// "Routed effort", policy version 7).
+// "Routed effort").
 function recommendation(root: string, request: ReviewRequest): string[] {
   const path = routePath(root, request.change);
   const rule = existsSync(path) ? routeRecord(path)?.rule : undefined;
@@ -255,7 +257,7 @@ function recommendation(root: string, request: ReviewRequest): string[] {
   if (recommended.variant === undefined || recommended.variant === chosen.variant) {
     return [`route: recommends ${reviewerKey(recommended)}`];
   }
-  return [`route: recommends effort ${recommended.variant}; the authorized ${chosen.variant} applies (policy version 7)`];
+  return [`route: recommends effort ${recommended.variant}; the authorized ${chosen.variant} applies (policy version ${GOVERNANCE_POLICY_VERSION})`];
 }
 
 // Only another reviewer of role A, passes 1 and 3, goes to the coordinator;
