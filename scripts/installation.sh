@@ -75,8 +75,9 @@ source_revision() {
   echo "$revision"
 }
 
+# tar may stop at the end marker; draining the rest spares the writer SIGPIPE.
 unpack_context() {
-  git -C "$repository" archive --format=tar "$1" | tar -xf - -C "$2"
+  git -C "$repository" archive --format=tar "$1" | { tar -xf - -C "$2" && cat >/dev/null; }
 }
 
 build() (
@@ -106,8 +107,9 @@ finish_reproducible() {
 }
 
 # The manifest.json of a saved image; it names the platform image's config.
+# The stream is drained after tar, as in unpack_context.
 saved_manifest() {
-  if ! docker image save "$1" | tar -xOf - manifest.json; then
+  if ! docker image save "$1" | { tar -xOf - manifest.json && cat >/dev/null; }; then
     echo "installation.sh: the manifest.json of the saved image $1 cannot be read" >&2
     return 1
   fi
