@@ -1,6 +1,7 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { TaskRepository } from '@taskelith/execution';
 import type { AdmissionRepository } from '@taskelith/sdlc';
+import type { AccountSlots } from './account-pool.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
 import type { InstallationGuard } from './installation-guard.js';
@@ -22,6 +23,8 @@ export interface CapacityTransaction {
   readonly quotas: QuotaSettings;
   readonly lineage: TaskLineage;
   readonly ledger: CapacityLedger;
+  // Slot records, read by the selection and written with a reservation.
+  readonly accountSlots: AccountSlots;
   now(): Promise<Instant>;
 }
 

@@ -22,14 +22,16 @@ import {
   type Refusal,
 } from '../domain/assignment.js';
 import { isCertainEnd } from '../domain/automatic-retry.js';
-import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
+import { parseAccountSlot } from '../domain/account-slot.js';
 import { reasonOutcome, type CapacityReason } from '../domain/capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId, ReservationId, ResourceRequest } from '../domain/capacity-reservation.js';
 import { chargedRuns, type TaskLineageLink } from '../domain/delegation-admission.js';
 import { decidePlacement, type PlacementSnapshot, type QuotaStanding } from '../domain/placement-decision.js';
+import type { SlotRequest, SlotSelection } from '../domain/slot-selection.js';
 import { isSupersessionDue } from '../domain/supersession.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
 import { isEligibleForPlacement, type WorkerPlacementRecord } from '../ports/placement-workers.js';
+import { selectSlotInTransaction } from './slot-selection-in-transaction.js';
 import { appendWorkerCommand, cancellationPayload, endPayload, offerPayload, type CommandIdentity } from './capacity-commands.js';
 
 // The capacity operations of contract sections 4 and 6, each run inside the
@@ -46,7 +48,9 @@ export interface PlacementRequest extends CommandIdentity {
   readonly ownershipGeneration: OwnershipGeneration;
   readonly workerId: WorkerId;
   readonly requested: ResourceRequest;
-  readonly providerCredentials: readonly ProviderCredentialId[];
+  // The attempt's slot request, or none for an attempt without a provider
+  // credential; the selection replaces any caller's set (pool section 4.7).
+  readonly slotRequest?: SlotRequest;
   // An automatic retry of an earlier attempt charges the retry allowance.
   readonly automaticRetryOf?: AttemptId;
 }
@@ -68,9 +72,25 @@ export async function placeInTransaction(tx: CapacityTransaction, request: Place
   const fenced = checkPlacementClaim(task.value, request);
   if (!fenced.ok) return fenced;
   const charged = await tx.ledger.isCharged(request.attemptId);
-  const decision = decidePlacement(await readPlacementSnapshot(tx, request, task.value, lineage, root, charged));
+  const slot = await selectSlotForTask(tx, request.slotRequest, lineage);
+  if (!slot.ok) return slot;
+  const decision = decidePlacement(await readPlacementSnapshot(tx, request, task.value, lineage, root, charged, slot.value));
   if (!decision.fits) return outcome(decision.reason);
-  return insertPlacement(tx, request, task.value, lineage, charged);
+  return insertPlacement(tx, request, task.value, lineage, charged, reservedSlot(slot.value));
+}
+
+// The reservation records the lineage's project, so the selection serves
+// only that project's pool (pool section 3.1).
+async function selectSlotForTask(
+  tx: CapacityTransaction, slotRequest: SlotRequest | undefined, lineage: TaskLineageLink,
+): Promise<Result<SlotSelection | undefined>> {
+  if (slotRequest === undefined) return ok(undefined);
+  if (slotRequest.projectId !== lineage.projectId) {
+    return err(failure('invalid', `the slot request names project ${slotRequest.projectId}, not the task's project`, {
+      project: slotRequest.projectId, taskProject: lineage.projectId,
+    }));
+  }
+  return selectSlotInTransaction(tx, slotRequest);
 }
 
 // D-B: without an execution that can run, the assignment ends, releases,
@@ -181,6 +201,7 @@ function outcome(reason: CapacityReason): Result<PlacementOutcome> {
 // Everything decidePlacement compares, read inside the transaction.
 async function readPlacementSnapshot(
   tx: CapacityTransaction, request: PlacementRequest, task: Task, lineage: TaskLineageLink, root: TaskLineageLink, charged: boolean,
+  slot: SlotSelection | undefined,
 ): Promise<PlacementSnapshot> {
   return {
     quarantined: await tx.installation.quarantined(),
@@ -188,9 +209,7 @@ async function readPlacementSnapshot(
     worker: await workerStanding(tx, await tx.workers.get(request.workerId)),
     request: request.requested,
     quotas: await quotaStandings(tx, lineage, root),
-    credentials: await Promise.all(request.providerCredentials.map(async (credential) => ({
-      limit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY, held: await tx.ledger.heldForCredential(credential),
-    }))),
+    ...(slot === undefined ? {} : { slot }),
     charge: { alreadyCharged: charged, treeAttempts: await tx.ledger.treeAttempts(lineage.rootTaskId), ...await retryStanding(tx, request, task) },
   };
 }
@@ -205,6 +224,7 @@ async function retryStanding(tx: CapacityTransaction, request: PlacementRequest,
 // reservation, and the assignment command: all of them or none.
 async function insertPlacement(
   tx: CapacityTransaction, request: PlacementRequest, task: Task, lineage: TaskLineageLink, charged: boolean,
+  slotId: ProviderCredentialId | undefined,
 ): Promise<Result<PlacementOutcome>> {
   const at = await tx.now();
   const assignment = createAssignment({
@@ -217,7 +237,7 @@ async function insertPlacement(
       id: request.reservationId,
       scope: { projectId: lineage.projectId, runId: lineage.runId, taskId: request.taskId, rootTaskId: lineage.rootTaskId },
       requested: request.requested,
-      providerCredentials: request.providerCredentials,
+      providerCredentials: slotId === undefined ? [] : [slotId],
       ...(request.automaticRetryOf === undefined ? {} : { retryOf: request.automaticRetryOf }),
     },
   }, at);
@@ -225,6 +245,10 @@ async function insertPlacement(
   // index leaves this one where a serial order would: already reserved.
   const added = await tx.assignments.add(assignment);
   if (!added.ok) return added.error.details.attempt === undefined ? added : outcome('attempt-already-reserved');
+  if (slotId !== undefined) {
+    const marked = await markReserved(tx, slotId, at);
+    if (!marked.ok) return marked;
+  }
   if (!charged) {
     const charge = await tx.ledger.recordCharge({
       attemptId: request.attemptId, taskId: request.taskId, rootTaskId: lineage.rootTaskId, automaticRetry: request.automaticRetryOf !== undefined,
@@ -233,6 +257,19 @@ async function insertPlacement(
   }
   const command = await appendWorkerCommand(tx, request, 'execution.assignment.offer', assignment, at, offerPayload(assignment));
   return command.ok ? ok(Object.freeze({ kind: 'placed', assignment })) : command;
+}
+
+function reservedSlot(selection: SlotSelection | undefined): ProviderCredentialId | undefined {
+  return selection?.outcome === 'reserved' ? selection.slot.slotId : undefined;
+}
+
+// The one slot write of a placement, with the insert of its reservation
+// (account pool contract section 4.7).
+async function markReserved(tx: CapacityTransaction, slotId: ProviderCredentialId, at: Instant): Promise<Result<void>> {
+  const stored = await tx.accountSlots.get(slotId);
+  if (!stored.ok) return stored;
+  const marked = parseAccountSlot({ ...stored.value, lastReservedAt: at, revision: stored.value.revision + 1 });
+  return marked.ok ? tx.accountSlots.replace(marked.value, stored.value.revision) : marked;
 }
 
 // The placement names the ownership the task holds, and an automatic retry
