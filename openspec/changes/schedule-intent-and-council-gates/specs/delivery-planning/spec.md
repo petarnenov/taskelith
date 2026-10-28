@@ -1,15 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Intent and council delivery gates
-The delivery sequence SHALL include G9, intents, campaigns, and blueprint dispatch with human approvals, and G10, the OpenCode harness admission and the decision council, as [ADR 0016](/docs/decisions/0016-delivery-gates-for-intents-and-council.md) fixes them. G9 SHALL start only after G4 closes and SHALL close before the G6 pilot completes; G10 SHALL start only after G9 closes. G8 SHALL follow both.
+The delivery sequence SHALL include G9, intents, campaigns, and blueprint dispatch with human approvals, and G10, OpenCode's admission and the decision council, as [ADR 0016](/docs/decisions/0016-delivery-gates-for-intents-and-council.md) fixes them. G9 SHALL start only after G4 closes and SHALL close before the G6 pilot completes; G10 SHALL start only after G9 closes. G8 SHALL follow both. Until OpenCode is admitted, the council SHALL NOT be constituted and human approvals SHALL apply.
 
 #### Scenario: G9 before G4 closes
 - **WHEN** G4 has not closed
 - **THEN** no G9 work item starts
 
 #### Scenario: G6 pilot completion
-- **WHEN** the G6 pilot is about to complete
-- **THEN** G9 has closed, so the pilot ran graph-driven workload
+- **WHEN** the G6 pilot completes
+- **THEN** G9 has already closed
 
 #### Scenario: Council before OpenCode
 - **WHEN** OpenCode is not yet admitted within G10

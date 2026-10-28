@@ -5,11 +5,11 @@ ADR 0013 "Delivery and authorization" and ADR 0014 decision 8 leave the delivery
 ## Decisions
 
 - **D1. One new ADR.** The gates, their order, the ADR 0003 amendment, and the authorization rule are owner decisions, so they go into [ADR 0016](/docs/decisions/0016-delivery-gates-for-intents-and-council.md) with the sections of ADR 0013 to ADR 0015 (Date, Status, Context, Decisions, Consequences). ADR 0013, ADR 0014, and ADR 0003 keep their decisions: each gets one sentence in its status line, and ADR 0003 decision 1 gets an italic dated amendment, the form decision 11 already uses for ADR 0008.
-- **D2. The obligation trace.** Each obligation of the "Forward-compatibility obligations" sections of ADR 0013 and ADR 0014 is one row of the new G3 plan section; ADR 0013's second bullet is split into the project setting and the workspace, because different items meet them. A row is "covered" only with a `file:line` that meets it as written, and names the items that must keep it; otherwise it is "open" and names the closing item. Rows that no G3 item can meet, the blueprint mapping and the council in the board and inbox, name the gate that does.
+- **D2. The obligation trace.** Each obligation of the "Forward-compatibility obligations" sections of ADR 0013 and ADR 0014 is one row of the new G3 plan section; ADR 0013's second bullet is split into three rows, the merge target, the workspace, and the project setting, because different items meet them. A row has one of four statuses. "Covered" needs a `file:line` that meets it as written and names the items that must keep it. "Partly covered" cites the evidence for the met part and names the item or the gate, G9 or G10, that meets the rest. "Open" names the closing item. "Not a G3 item" names the gate that carries it.
 - **D3. Rows 11 and 22.** The brief asks to amend these two rows. Both get a dated scope note, the form the plan already uses for item 12, instead of a rewrite of the scope.
 - **D4. Model and effort per session.** The merged item 3 contract has no model or effort in `startSession`. The brief names items 3, 5, and 12; item 3 is merged, so the row names items 18 and 19, the first host and plugin to start sessions, as closing it through a versioned contract change. Their rows are not amended, because the brief asks only for rows 11 and 22; the trace carries the obligation into their briefs (ADR 0016 decision 1).
 - **D5. G10 exit evidence.** The owner fixed G9's exit evidence but not G10's. The architecture row needs one, so it states the author's reading of ADR 0014: OpenCode admitted, the council deciding with three seats, decisions as immutable records on the board and in the inbox, and escalation when the seats cannot convene. ADR 0016 does not state it, so the G10 plan can refine it.
-- **D6. Spec delta.** Three ADDED requirements in `delivery-planning`, each under 500 characters (403, 171, and 284), so that the archived spec passes strict validation. The gates and the obligation trace are planning rules, which is that capability's purpose.
+- **D6. Spec delta.** Three ADDED requirements in `delivery-planning`, each under 500 characters (491, 171, and 452), so that the archived spec passes strict validation. The gates and the obligation trace are planning rules, which is that capability's purpose.
 
 ## Not changed
 
@@ -19,7 +19,7 @@ ADR 0013 "Delivery and authorization" and ADR 0014 decision 8 leave the delivery
 
 ## Risks
 
-- The obligation rows cite line numbers at `a3a0ac4c`; later edits move them.
+- The obligation rows cite line numbers at `10fc3bbe`; later edits move them.
 - Item 18 and 19 briefs must carry the model and effort obligation, or the gap stays open.
 
 ## Review checklist

@@ -13,7 +13,7 @@ Status: Decided by the owner on 2026-10-28 in the project conversation, approvin
 
 ## Decisions
 
-1. **The obligations are traced in the G3 plan.** The forward-compatibility obligations of ADR 0013 and ADR 0014 are traced to the G3 work items that must honour them, each with its status, in the [G3 work plan](../g3-plan.md#adr-0013-and-adr-0014-obligations), and carried into those items' briefs. Gaps are marked open with the item that closes them.
+1. **The obligations are traced in the G3 plan.** The forward-compatibility obligations of ADR 0013 and ADR 0014 are traced to the G3 work items that must honour them, in the [G3 work plan](../g3-plan.md#adr-0013-and-adr-0014-obligations), each with its status: covered, partly covered, open, or not a G3 item, as the G3 plan's legend defines them. They are carried into those items' briefs.
 2. **G9, "Intents, campaigns, and blueprint dispatch".** G9 implements ADR 0013 decisions 1 to 8 with human approvals: until the council exists, human approvals apply (ADR 0014 decision 8).
     - **Start.** G9 starts after G4 closes, because the blueprint mapping is a new versioned operation of the framework plugin and G4 delivers versioned plugin manifests and both adapters. It builds on G3's auto-merge (item 23), merge conflict flow (item 24), and review and verification stages (item 21).
     - **Overlap.** G9 may overlap G5, and it closes before G6's pilot completes, so that the pilot runs graph-driven workload.
