@@ -11,12 +11,20 @@ On a rotation notice for its next generation a worker SHALL store a new NKey and
 - **WHEN** a worker receives a notice for its current or an older generation
 - **THEN** it acknowledges the notice and changes no file
 
+#### Scenario: Notice before the confirmation finished
+- **WHEN** a worker whose confirmation answer was lost receives the notice for the generation after its adopted one
+- **THEN** it stores the new generation before it acknowledges the notice, confirms the adopted one, and then renews the new one with the adopted bearer
+
 ### Requirement: Rotation resumed at every start
-Every worker start SHALL resume a rotation from its files: a stored generation that is not adopted SHALL be renewed, and an adopted generation that is not confirmed SHALL be confirmed once the broker connection uses it.
+Every worker start SHALL resume a rotation from its files: a stored generation that is not adopted SHALL be renewed, and an adopted generation that is not confirmed SHALL be confirmed once the broker connection uses it. With no kept predecessor, the files of the generation before the current one and the current one's pending file SHALL be removed.
 
 #### Scenario: Crash between adoption and confirmation
 - **WHEN** a worker stops after it adopted the new generation and before it confirmed it, and starts again
 - **THEN** it connects with the new generation and confirms it, and the previous generation's files are removed
+
+#### Scenario: Crash during the removal of the predecessor's files
+- **WHEN** a worker stops after its identity dropped the confirmed predecessor and before all of that generation's files and the pending file were removed, and starts again
+- **THEN** the start removes the files that are left and keeps the current generation's files
 
 ### Requirement: Expired broker credentials
 When the broker rejects a worker's credentials, the worker SHALL try every generation it holds; after 3 consecutive rounds in which every generation was rejected it SHALL stop with code `forbidden` and reason `credentials-expired` and name re-enrollment. Other broker failures SHALL keep the endless retry.

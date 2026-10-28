@@ -181,7 +181,7 @@
             }
           },
           "401": {
-            "description": "The worker credential is unknown, revoked, or past its deadline.",
+            "description": "The worker credential is unknown, revoked, or past its deadline, or this first renewal of the rotation came at or after its deadline.",
             "content": {
               "application/json": {
                 "schema": {
@@ -245,7 +245,7 @@
         },
         "responses": {
           "200": {
-            "description": "The generation is confirmed and its predecessor dropped.",
+            "description": "The generation is confirmed and its predecessor dropped; at or after the deadline the predecessor is dropped as expired instead, and a repeat answers the same.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4224,7 +4224,7 @@
       "CredentialConfirmation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The confirmed generation. revocationsPublished false: the predecessor's broker user is recorded for revocation, and the periodic sweep publishes it.",
+        "description": "The confirmed generation. revocationsPublished false: a recorded broker user revocation is still unpublished after this call, and a repeated confirmation or the periodic sweep publishes it.",
         "required": [
           "credentialGeneration",
           "revocationsPublished"

@@ -66,8 +66,12 @@ A renewal SHALL authenticate with the generation before the requested one and ca
 - **WHEN** a renewed generation is renewed again with another public key
 - **THEN** the renewal fails with `conflict` and reason `renewal-mismatch`
 
+#### Scenario: First renewal after the deadline
+- **WHEN** a worker renews a requested generation for the first time at or after the deadline, read after the record's lock, before the sweep ran
+- **THEN** the renewal fails with `forbidden` and reason `worker-not-authorized`, the credentials are unchanged, and the next sweep revokes the worker
+
 ### Requirement: Credential confirmation
-A confirmation SHALL authenticate with the generation it names, and SHALL drop the predecessor at once, recording its broker user for revocation and publishing the revocations after the commit. Confirming the current generation with no renewed rotation open SHALL succeed and drop nothing. Any other confirmation SHALL be `conflict` with reason `confirmation-mismatch`.
+A confirmation SHALL authenticate with the generation it names, and SHALL drop the predecessor at once, recording its broker user for revocation and publishing the revocations after the commit. At or after the deadline it SHALL instead expire the predecessor as the sweep does. Confirming the current generation with no renewed rotation open SHALL succeed, drop nothing, and publish any unpublished revocation. Any other confirmation SHALL be `conflict` with reason `confirmation-mismatch`.
 
 #### Scenario: Confirmation with the old bearer
 - **WHEN** a worker confirms its renewed generation with the bearer of the previous one
@@ -76,6 +80,14 @@ A confirmation SHALL authenticate with the generation it names, and SHALL drop t
 #### Scenario: Repeated confirmation
 - **WHEN** a confirmed generation is confirmed again
 - **THEN** the answer names it again, nothing is dropped, and the audit trail holds one confirmation event
+
+#### Scenario: Repeated confirmation after a failed publication
+- **WHEN** a confirmation's revocation publication failed and the generation is confirmed again while the broker still refuses the publication
+- **THEN** the answer has `revocationsPublished: false` again, and once the broker accepts it a repeat answers `true`
+
+#### Scenario: Confirmation after the deadline
+- **WHEN** a worker confirms its renewed generation at or after the deadline, before or after the sweep ran
+- **THEN** the answer succeeds, the predecessor is dropped, and the audit trail holds `worker-credential.rotation-expired` with reason `unconfirmed` and no confirmation event
 
 ### Requirement: Credential audit events
 Every audit event SHALL name its subject: `operator` for the operator credential's events and the worker identifier for a worker's. The rotation request, the renewal, the confirmation, and the expiry at the deadline SHALL each write one immutable event, `worker-credential.rotation-requested`, `.renewed`, `.confirmed`, and `.rotation-expired`, naming the new generation. A refused renewal SHALL be logged only.
