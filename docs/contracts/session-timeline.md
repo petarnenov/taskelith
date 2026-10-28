@@ -114,7 +114,7 @@ The request is `open`. A request enters the timeline only this way, so a read of
 
 ### 5.2 A single response
 
-`consumeResponse(session, response)` consumes one response: the request key, the answer, the responder, and the attempt with its ownership generation. The answer is a `permission` answer with a `PermissionDecision` and an optional message, an `input` answer with text, or a `delegation-result` with a delegation ID, a `DelegationOutcome`, and a summary, the kinds of the port's responses. The responder is a person (`PrincipalId`), a standing rule (`StandingRuleId`, [product ports contract](product-ports.md) section 5), or the host (`host`), which returns a delegated child task's outcome (agent harness port contract section 7.4). In order:
+`consumeResponse(session, response)` consumes one response: the request key, the answer, the responder, and the attempt with its ownership generation. The answer is a `permission` answer with a `PermissionDecision` and an optional message, an `input` answer with text, or a `delegation-result` with a delegation ID, a `DelegationOutcome`, and a summary, the kinds of the port's responses. The responder is a person (`PrincipalId`), a standing rule (`StandingRuleId`), which answers native permission requests only ([product ports contract](product-ports.md) section 5), or the host (`host`), which returns a delegated child task's outcome (agent harness port contract section 7.4). In order:
 
 1. Text outside its bound fails with `invalid`.
 2. An unknown request fails with `not-found`.
@@ -122,7 +122,7 @@ The request is `open`. A request enters the timeline only this way, so a read of
 4. An `expired` or `unresolved` request fails with `not-found`; neither is ever answered.
 5. An attempt or ownership generation other than the session's active bound attempt fails with `precondition-failed`.
 6. An answer whose kind does not match the request (`permission` for a permission request, `input` for an input request, `delegation-result` for a delegation request) fails with `invalid`.
-7. A `delegation-result` from a person or a standing rule, or another answer from the host, fails with `invalid`: the host returns every delegation result and answers nothing else.
+7. An answer that its responder cannot give fails with `invalid`: the host returns every delegation result and answers nothing else, and a standing rule gives only a `permission` answer.
 
 The request becomes `answered`, with the response and its delivery `pending`. A request can be answered only while its generation runs, because a generation's end leaves none `open` (section 6).
 

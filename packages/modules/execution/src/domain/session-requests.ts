@@ -25,6 +25,13 @@ const ANSWER_KIND: Readonly<Record<HarnessRequestKind, Answer['kind']>> = Object
   'delegation-request': 'delegation-result',
 });
 
+// Product ports contract, section 5: a standing rule answers permissions.
+const ANSWERS_BY_RESPONDER: Readonly<Record<Responder['kind'], readonly Answer['kind'][]>> = Object.freeze({
+  principal: Object.freeze(['permission', 'input'] as const),
+  'standing-rule': Object.freeze(['permission'] as const),
+  host: Object.freeze(['delegation-result'] as const),
+});
+
 const MAX_DELEGATION_ID_LENGTH = 128;
 
 // Records a native request in the returned session (contract, section 5.1).
@@ -116,7 +123,7 @@ function isAnswerWithinBounds(answer: Answer): boolean {
 }
 
 function isAnswerFrom(answer: Answer, responder: Responder): boolean {
-  return (answer.kind === 'delegation-result') === (responder.kind === 'host');
+  return ANSWERS_BY_RESPONDER[responder.kind].includes(answer.kind);
 }
 
 function indexOfRequest(session: Session, key: RequestKey): number {

@@ -135,6 +135,14 @@ test('a standing rule may be the responder', () => {
   assert.equal(session.requests[0]?.state, 'answered');
 });
 
+test('a standing rule answers only a permission request', () => {
+  const byRule: Responder = { kind: 'standing-rule', ruleId: RULE };
+  const session = request(sessionWithRunningTurn(), inputRequest('request-2'));
+  const input: ResponseSubmission = { ...allow('request-2'), answer: { kind: 'input', text: 'main' }, responder: byRule };
+  assert.equal(failed(consumeResponse(session, input)).code, 'invalid');
+  assert.equal(failed(consumeResponse(sessionWithDelegation(), { ...delegationResult(), responder: byRule })).code, 'invalid');
+});
+
 test('an unknown request fails with not-found', () => {
   assert.equal(failed(consumeResponse(sessionWithOpenRequest(), allow('nope'))).code, 'not-found');
 });
