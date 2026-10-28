@@ -87,7 +87,7 @@ Each session command SHALL have an outcome observation: a turn delivery `session
 When the host cannot tell whether the port accepted a turn, it SHALL report `session.turn.acceptance-unknown` at protocol version 2 with the turn's `sessionId`, `turnId`, `generation`, and `recoveryEpoch` and the reason `conflict`, `timeout`, or `crash`, and SHALL never submit the turn again. The control plane SHALL apply it through `recordTurnAcceptanceUnknown`, so that the turn becomes `outcome-unknown`, final and never resent.
 
 #### Scenario: Turn ID already seen by the port
-- **WHEN** `submitTurn` answers `conflict` for the delivered turn ID
+- **WHEN** `submitTurn` answers `conflict` for the delivered turn ID, naming no `runningTurnId` or another turn's
 - **THEN** the host reports `session.turn.acceptance-unknown` with `conflict`, and the turn is never sent again
 
 #### Scenario: Conflict reported as a refusal
