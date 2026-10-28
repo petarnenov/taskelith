@@ -36,17 +36,25 @@ const CREDENTIAL = 'refuses an out-of-scope credential before any remote call an
 const DIRTY = 'reports modified and untracked files, ignores ignored ones, and is clean after a commit';
 const STAGED = 'reports a change staged and then reverted in the working tree, and keeps that workspace';
 const PUSH = 'pushes a clean task branch fast-forward at the remote head the port reports';
+const REMOTE_MOVED = 'refuses a push whose remote task branch moved, and leaves the remote where it is';
+const NOT_FAST_FORWARD = 'refuses a push that does not descend from the remote head, and leaves the remote where it is';
 const SNAPSHOT = 'snapshots exactly the clean head tree, in bytes that depend on the tree alone';
+const GITLINK = 'refuses to snapshot a tree that holds a gitlink';
 const REMOVE = 'removes only its own clean workspace, keeps a dirty one, and never a control record';
 const SWEEP = 'sweeps interrupted prepares and removals without following links, across a restart';
+const HANDED_OFF = 'reads the handed-off workspaces from their records, also after a restart';
 const HAND_OFF = 'hands the checkout to the execution and takes it back without outside links';
 const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested';
 const ONE_HAND_OFF = 'holds one handed-off workspace at a time where executions share a separate account';
 const CONCURRENT_HAND_OFF = 'lets one of two concurrent hand-offs through where executions share a separate account';
+const GIT_PROCESSES = 'runs Git in an environment it builds, with no secret in an argument';
+const PLANTED_SETTINGS = 'writes the repository configuration anew, so settings the agent planted never act';
+
+const EVERY_CASE = WORKSPACE_CONFORMANCE.map(({ name }) => name);
 
 // Each defect of the double breaks the guarantees of the named cases.
 const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
-  ['stores the credential in the workspace', { storesSecret: true }, [CREDENTIAL]],
+  ['stores the credential in the workspace', { storesSecret: true }, [CREDENTIAL, REMOTE_MOVED, NOT_FAST_FORWARD, GIT_PROCESSES, PLANTED_SETTINGS]],
   ['calls the remote before checking the scope', { callsRemoteBeforeScope: true }, [CREDENTIAL]],
   ['calls the remote before the scope check of a prepare only', { callsRemoteBeforeScopeInPrepare: true }, [CREDENTIAL]],
   ['returns a stale tree with a snapshot', { snapshotsStaleTree: true }, [SNAPSHOT]],
@@ -59,7 +67,7 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['removes a digest-only workspace under a name with a dash', { removesDigestOnlyNameWithDash: true }, [NAMES]],
   ['digests identifiers with SHA-1', { digestsWithSha1: true }, [DIGEST]],
   ['digests the Latin-1 bytes of identifiers', { digestsLatin1Bytes: true }, [DIGEST]],
-  ['names the task branch by the raw task identifier', { namesBranchByRawTaskId: true }, [PREPARE, CONTINUE, NAMES, PUSH]],
+  ['names the task branch by the raw task identifier', { namesBranchByRawTaskId: true }, [PREPARE, CONTINUE, NAMES, PUSH, REMOTE_MOVED, NOT_FAST_FORWARD, PLANTED_SETTINGS]],
   ['accepts a tree that is not the commit tree', { acceptsMismatchedTree: true }, [REJECT]],
   ['puts the commit into the snapshot', { snapshotsCommit: true }, [SNAPSHOT]],
   ['loses modes and link targets in the snapshot', { snapshotsWithoutMetadata: true }, [SNAPSHOT]],
@@ -70,6 +78,16 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['follows a link in the Git directory', { followsGitLinks: true }, [GIT_LINK]],
   ['hands off a second workspace', { handsOffBeyondOne: true }, [ONE_HAND_OFF, CONCURRENT_HAND_OFF]],
   ['races two concurrent hand-offs', { racesHandOff: true }, [CONCURRENT_HAND_OFF]],
+  ['pushes over a moved remote branch', { ignoresLease: true }, [PUSH, REMOTE_MOVED]],
+  ['pushes a head that does not descend from the leased one', { ignoresAncestry: true }, [PUSH, NOT_FAST_FORWARD]],
+  ['pushes with a lease that names no expected head', { pushesWithBareLease: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, PLANTED_SETTINGS]],
+  ['forgets its hand-offs across a restart', { forgetsHandOffsOnRestart: true }, [HANDED_OFF]],
+  ['passes the secret in a Git argument', { passesSecretInArguments: true }, [GIT_PROCESSES]],
+  ['runs Git in the inherited environment', { inheritsEnvironment: true }, [GIT_PROCESSES]],
+  ['keeps the repository settings the agent planted', { keepsPlantedSettings: true }, [PLANTED_SETTINGS]],
+  ['snapshots a tree that holds a gitlink', { snapshotsGitlink: true }, [GITLINK]],
+  ['clones from a remote that is not HTTPS', { acceptsInsecureRemote: true }, [REJECT]],
+  ['cannot reach the remote for any prepare', { refusesEveryPrepare: true }, EVERY_CASE.filter((name) => name !== DIGEST)],
 ];
 
 for (const [name, defects, failing] of DEFECTS) {

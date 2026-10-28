@@ -7,9 +7,12 @@ export {
   type GitObjectId,
   type RepositoryId,
 } from './domain/code-head.js';
+export { GIT_CLIENT_PINS, checkGitClient, type GitClientPin } from './domain/git-client.js';
+export { HEAD_SNAPSHOT_CONTENT_TYPE, encodeHeadSnapshot } from './domain/snapshot-archive.js';
 export {
   DIRTY_REASONS,
   HEAD_SNAPSHOT_EVIDENCE_KIND,
+  RECLAIM_CONTAINMENT_PREFIX,
   TASK_BRANCH_PREFIX,
   WORKSPACE_FAILURE_REASONS,
   WORKSPACE_KINDS,
@@ -17,15 +20,21 @@ export {
   WORKSPACE_MODES,
   WORKSPACE_NAME_RULES,
   checkCredentialScope,
+  checkRemoteTransport,
   cleanHead,
+  reclaimContainmentName,
   taskBranchName,
+  taskBranchPushOptions,
   workspaceDirectoryName,
   workspaceFailure,
   type DirtyReason,
+  type GitTreeEntry,
   type HeadSnapshot,
   type IdentifierDigest,
   type RemoteAccess,
+  type RemoteTransportPolicy,
   type RepositoryBinding,
+  type TreeEntry,
   type Workspace,
   type WorkspaceCredential,
   type WorkspaceFailureReason,
@@ -34,7 +43,7 @@ export {
   type WorkspaceTarget,
 } from './domain/workspace.js';
 export { WORKSPACE_CONFORMANCE } from './ports/workspace-conformance.js';
-export type { FixtureCredentials, TreeEntry, WorkspaceFixture } from './ports/workspace-fixture.js';
+export type { FixtureCredentials, GitProcessObservation, WorkspaceFixture } from './ports/workspace-fixture.js';
 export type {
   PrepareWorkspace,
   PushTaskBranch,

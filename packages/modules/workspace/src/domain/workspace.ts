@@ -29,6 +29,8 @@ export const WORKSPACE_MODES = Object.freeze({
 
 export const TASK_BRANCH_PREFIX = 'taskelith/';
 
+export const RECLAIM_CONTAINMENT_PREFIX = 'reclaim-';
+
 // A workspace name: a readable prefix of the identifier and a digest of it
 // (contract section 2), so any identifier gives a safe, distinct name.
 export const WORKSPACE_NAME_RULES = Object.freeze({
@@ -64,17 +66,31 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'other-workspace-handed-off',
   'reclaim-failed',
   'unsafe-checkout',
+  'gitlink-in-tree',
+  'insecure-remote',
+  'git-client-mismatch',
 ] as const);
 
 export type WorkspaceFailureReason = (typeof WORKSPACE_FAILURE_REASONS)[number];
 
 export const HEAD_SNAPSHOT_EVIDENCE_KIND = 'code-head-snapshot';
 
+// One entry of a tree, with Git's file modes and exact file bytes.
+export type TreeEntry =
+  | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: Uint8Array }
+  | { readonly type: 'link'; readonly target: string };
+
+// An entry as `git ls-tree` lists it; a snapshot refuses a gitlink.
+export type GitTreeEntry = TreeEntry | { readonly type: 'gitlink'; readonly commit: string };
+
 // The run credential of the SCM port, passed per remote operation and
 // never stored in the workspace (contract section 7).
 export type WorkspaceCredential = Pick<RunCredential, 'credentialId' | 'secret' | 'repositories' | 'permissions'>;
 
 export type RemoteAccess = 'read-code' | 'write-code';
+
+// Plain HTTP to 127.0.0.1 only where a test composes the adapter.
+export type RemoteTransportPolicy = 'https-only' | 'https-or-loopback-http';
 
 export interface RepositoryBinding {
   readonly repository: RepositoryId;
@@ -128,6 +144,26 @@ export function cleanHead(status: WorkspaceStatus): Result<CodeHeadIdentity> {
 export function checkCredentialScope(credential: WorkspaceCredential, repository: RepositoryId, access: RemoteAccess): Result<void> {
   if (credential.repositories.includes(repository) && credential.permissions.includes(access)) return ok(undefined);
   return workspaceFailure('forbidden', 'credential-out-of-scope', `credential ${credential.credentialId} lacks ${access} on ${repository}`);
+}
+
+// HTTPS without user information, so no secret is ever part of a URL.
+export function checkRemoteTransport(remote: string, policy: RemoteTransportPolicy): Result<void> {
+  const url = URL.canParse(remote) ? new URL(remote) : undefined;
+  const loopbackHttp = policy === 'https-or-loopback-http' && url?.protocol === 'http:' && url.hostname === '127.0.0.1';
+  const secure = url !== undefined && (url.protocol === 'https:' || loopbackHttp);
+  if (secure && url.username === '' && url.password === '') return ok(undefined);
+  return workspaceFailure('invalid', 'insecure-remote', 'the remote must be an HTTPS URL without user information');
+}
+
+// The only push options: atomic, leased on the expected head, or on an
+// absent branch when none is expected (contract section 8).
+export function taskBranchPushOptions(branch: string, expectedRemoteHead: string | null): readonly string[] {
+  return ['--atomic', `--force-with-lease=refs/heads/${branch}:${expectedRemoteHead ?? ''}`];
+}
+
+// The reclaim program's containment, under the worker's containment parent.
+export function reclaimContainmentName(attemptId: AttemptId, digest: IdentifierDigest): string {
+  return `${RECLAIM_CONTAINMENT_PREFIX}${workspaceDirectoryName(attemptId, digest)}`;
 }
 
 export function workspaceFailure(
