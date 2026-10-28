@@ -158,11 +158,14 @@ export function sshRunner(controlDirectory: string): SshRunner {
     const result = spawnSync('ssh', [
       '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
       '-o', 'ControlMaster=auto', '-o', `ControlPath=${join(controlDirectory, 'ssh-%C')}`, '-o', 'ControlPersist=30',
-      target, command,
+      '--', target, command,
     ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: SSH_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 });
     return { status: result.status ?? SSH_UNREACHABLE, stdout: result.stdout ?? '' };
   };
 }
+
+// An ssh value starting with a dash would be read as an ssh option.
+export const HOSTS_PROBLEM = 'the hosts file is not a JSON list of {name, ssh, repo} with ssh not starting with -';
 
 export interface HostsConfig {
   readonly hosts: readonly HostConfig[];
@@ -171,7 +174,8 @@ export interface HostsConfig {
 
 function isHost(value: unknown): value is HostConfig {
   const host = value as Partial<Record<keyof HostConfig, unknown>> | null;
-  return typeof host?.name === 'string' && typeof host.ssh === 'string' && typeof host.repo === 'string';
+  return typeof host?.name === 'string' && typeof host.repo === 'string'
+    && typeof host.ssh === 'string' && host.ssh !== '' && !host.ssh.startsWith('-');
 }
 
 // A missing file means no remote host; an invalid one is reported.
@@ -183,5 +187,5 @@ export function parseHostsConfig(text: string | undefined): HostsConfig {
   } catch {
     // Reported below.
   }
-  return { hosts: [], problem: 'the hosts file is not a JSON list of {name, ssh, repo}' };
+  return { hosts: [], problem: HOSTS_PROBLEM };
 }

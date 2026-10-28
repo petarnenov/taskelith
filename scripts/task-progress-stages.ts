@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import {
-  headTree, isClean, mergeBase, NO_MERGE_BASE, stampDirectory, type Git, type StoredStamp,
+  headTree, isClean, NO_MERGE_BASE, stampDirectory, type Git, type StoredStamp,
 } from './verify-stamp.ts';
 
 // Derives the protocol stage of every task worktree from the records the
@@ -65,6 +65,9 @@ export interface Worktree {
 const BASE_REF = 'origin/dev';
 const CHANGES = 'openspec/changes';
 const ARCHIVE = `${CHANGES}/archive`;
+// An archived change directory is <yyyy-mm-dd>-<change>.
+const DATED = /^\d{4}-\d{2}-\d{2}-/;
+const DATE_PREFIX = 'yyyy-mm-dd-'.length;
 const SKIPPED_BRANCHES = new Set(['dev', 'main']);
 // Integration worktrees of the coordinator carry the worker's task.
 const INTEGRATION_PREFIX = 'itg-';
@@ -143,7 +146,7 @@ interface Located {
 // one change of the worktree.
 function locateChange(task: TaskReader, branch: string): Located | undefined {
   const active = task.reader.list(task.file(CHANGES)).filter((name) => name !== 'archive' && !name.startsWith('.'));
-  const archived = task.reader.list(task.file(ARCHIVE)).find((name) => name.endsWith(`-${branch}`) && /^\d{4}-\d{2}-\d{2}-/.test(name));
+  const archived = task.reader.list(task.file(ARCHIVE)).find((name) => DATED.test(name) && name.slice(DATE_PREFIX) === branch);
   const archivedPath = archived === undefined ? [] : [`${ARCHIVE}/${archived}`];
   const activeOf = (change: string): Located =>
     ({ change, records: `${CHANGES}/${change}`, paths: [`${CHANGES}/${change}`, ...archivedPath], archived: false });
@@ -172,7 +175,7 @@ function findLanding(task: TaskReader): Landing | undefined {
 }
 
 function baseBefore(task: TaskReader, landing: Landing | undefined): string {
-  if (landing === undefined) return mergeBase(task.git);
+  if (landing === undefined) return task.run(['merge-base', 'HEAD', BASE_REF])?.trim() || NO_MERGE_BASE;
   return task.run(['merge-base', 'HEAD', `${landing.sha}^1`])?.trim() || NO_MERGE_BASE;
 }
 
@@ -301,14 +304,42 @@ interface ReviewReach {
   readonly problems: readonly string[];
 }
 
-function reachReview(task: TaskReader, range: string, located: Located, progress: Progress, archives: boolean): ReviewReach {
+interface FindingRecord {
+  readonly pass?: unknown;
+  readonly commit?: unknown;
+}
+
+// Fix commits that the findings of a pass name, wherever they sit.
+function findingCommits(task: TaskReader, located: Located, pass: number): string[] {
+  return nonEmptyLines(task.reader.read(task.file(`${located.records}/findings.jsonl`))).flatMap((line) => {
+    try {
+      const finding = JSON.parse(line) as FindingRecord | null;
+      return finding?.pass === pass && typeof finding.commit === 'string' ? [finding.commit] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+// Fixes: commits after the last pass record outside the change records,
+// and the commits that the last pass's findings name.
+function fixTime(task: TaskReader, located: Located, lastSha: string, pass: number): number | undefined {
+  const after = task.commitTimes(`${lastSha}..HEAD`, ['--no-merges'], ['.', `:(exclude)${CHANGES}`]);
+  const named = findingCommits(task, located, pass).flatMap((sha) => {
+    const at = epoch(task.run(['log', '-1', '--format=%ct', `${sha}^{commit}`, '--'])?.trim());
+    return at === undefined ? [] : [at];
+  });
+  const times = [...after, ...named];
+  return times.length === 0 ? undefined : Math.min(...times);
+}
+
+function reachReview(task: TaskReader, range: string, located: Located, progress: Progress): ReviewReach {
   const { records, problems } = parsePasses(task.reader.read(task.file(`${located.records}/passes.jsonl`)));
   const { times, lastSha } = passTimes(task, range, located);
   records.slice(0, MAX_PASSES).forEach((_, index) => progress.reach(FIRST_PASS + index, times[index]));
   if (lastSha !== undefined && times.length === records.length && records.length > 0) {
-    const fixes = task.commitTimes(`${lastSha}..HEAD`, ['--no-merges'], []);
-    const counted = archives ? fixes.slice(0, -1) : fixes;
-    if (counted.length > 0) progress.reach(STAGES.indexOf('fixes') + 1, counted[0]);
+    const fixed = fixTime(task, located, lastSha, records.length);
+    if (fixed !== undefined) progress.reach(STAGES.indexOf('fixes') + 1, fixed);
   }
   const last = records.at(-1);
   return { review: { passes: records.length, stopped: last !== undefined && isLowOnly(last) }, problems };
@@ -334,7 +365,7 @@ function deriveTask(reader: Reader, worktree: Worktree, now: number): TaskProgre
   const route = recordReach(task, range, located, 'route.json');
   if (route !== null) progress.reach(4, route);
   const archives = lastCommitArchives(task, located);
-  const { review, problems } = reachReview(task, range, located, progress, archives);
+  const { review, problems } = reachReview(task, range, located, progress);
   if (archives) progress.reach(STAGES.indexOf('archived') + 1, epoch(task.run(['log', '-1', '--format=%ct'])?.trim()));
   if (landing !== undefined) progress.reach(LANDED, landing.at);
   const stage = progress.stage;

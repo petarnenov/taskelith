@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { once } from 'node:events';
 import test from 'node:test';
-import { acquireLock, LOCK_TIMEOUT_SECONDS, processAlive, releaseLock } from '../scripts/task-progress-lock.ts';
+import {
+  acquireLock, LOCK_MAX_AGE_SECONDS, LOCK_TIMEOUT_SECONDS, processAlive, releaseLock, TAKEOVER_TIMEOUT_SECONDS,
+} from '../scripts/task-progress-lock.ts';
 
 const LOCK_MODULE = resolve(import.meta.dirname, '../scripts/task-progress-lock.ts');
 const NOW = new Date('2026-10-28T20:00:00Z');
@@ -42,14 +44,28 @@ test('the lock names its owner and only the owner releases it', () => withDirect
   assert.deepEqual(readdirSync(join(lock, '..')), [], 'no draft or aside file remains');
 }));
 
-test('a live owner keeps the lock however old it is; a dead one loses it', () => withDirectory((lock) => {
+test('a live owner keeps the lock until the maximum age; a dead one loses it', () => withDirectory((lock) => {
   writeFileSync(lock, JSON.stringify({ pid: 4242, token: 'old' }));
-  const later = new Date(NOW.getTime() + 10 * LOCK_TIMEOUT_SECONDS * 1000);
   utimesSync(lock, NOW, NOW);
-  assert.equal(acquireLock(lock, later, alive), undefined);
-  const stolen = acquireLock(lock, NOW, (pid) => pid !== 4242);
+  const at = (seconds: number): Date => new Date(NOW.getTime() + seconds * 1000);
+  assert.equal(acquireLock(lock, at(2 * LOCK_TIMEOUT_SECONDS), alive), undefined, 'older than the timeout, alive');
+  const stolen = acquireLock(lock, at(1), (pid) => pid !== 4242);
   assert.ok(stolen);
   assert.equal(owner(lock).token, stolen.token);
+  utimesSync(lock, NOW, NOW);
+  const reused = acquireLock(lock, at(LOCK_MAX_AGE_SECONDS + 1), alive);
+  assert.ok(reused, 'a pid alive after the maximum age is taken as reused');
+  assert.equal(releaseLock(stolen), false, 'the old owner leaves the new lock');
+  assert.equal(owner(lock).token, reused.token);
+}));
+
+test('a takeover file left behind blocks takeovers only until its timeout', () => withDirectory((lock) => {
+  writeFileSync(lock, JSON.stringify({ pid: 4242, token: 'old' }));
+  writeFileSync(`${lock}.takeover`, '');
+  utimesSync(`${lock}.takeover`, NOW, NOW);
+  assert.equal(acquireLock(lock, NOW, dead), undefined);
+  assert.ok(acquireLock(lock, new Date(NOW.getTime() + (TAKEOVER_TIMEOUT_SECONDS + 1) * 1000), dead));
+  assert.equal(existsSync(`${lock}.takeover`), false);
 }));
 
 test('a lock without a readable owner is taken over only after the timeout', () => withDirectory((lock) => {
@@ -75,7 +91,7 @@ process.stdin.resume();
 process.stdin.on('end', () => { if (held) releaseLock(held); });
 `;
 
-test('concurrent refreshes: exactly one process holds the lock', () => withDirectory(async (lock) => {
+async function contend(lock: string): Promise<string[]> {
   const contenders = Array.from({ length: 8 }, () => spawn(process.execPath, [
     '--experimental-strip-types', '--input-type=module', '-e', CONTENDER, lock,
   ], { stdio: ['pipe', 'pipe', 'inherit'] }));
@@ -86,6 +102,19 @@ test('concurrent refreshes: exactly one process holds the lock', () => withDirec
   const exits = contenders.map((child) => once(child, 'exit'));
   for (const child of contenders) child.stdin.end();
   await Promise.all(exits);
-  assert.deepEqual(answers.filter((answer) => answer === 'held').length, 1, answers.join(','));
+  return answers;
+}
+
+test('concurrent refreshes: exactly one process holds a free lock', () => withDirectory(async (lock) => {
+  const answers = await contend(lock);
+  assert.equal(answers.filter((answer) => answer === 'held').length, 1, answers.join(','));
   assert.equal(existsSync(lock), false, 'the holder released it');
+}));
+
+test('concurrent takeovers of a dead owner: exactly one process holds the lock', () => withDirectory(async (lock) => {
+  const exited = spawnSync(process.execPath, ['-e', '']);
+  writeFileSync(lock, JSON.stringify({ pid: exited.pid, token: 'dead' }));
+  const answers = await contend(lock);
+  assert.equal(answers.filter((answer) => answer === 'held').length, 1, answers.join(','));
+  assert.deepEqual(readdirSync(join(lock, '..')), [], 'no lock, takeover, or draft file remains');
 }));

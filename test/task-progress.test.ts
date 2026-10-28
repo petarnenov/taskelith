@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { localReader, readSshHost, remotePath, type SshRunner } from '../scripts/task-progress-hosts.ts';
+import { HOSTS_PROBLEM, localReader, parseHostsConfig, readSshHost, remotePath, type SshRunner } from '../scripts/task-progress-hosts.ts';
 import { applyQueue, deriveTasks, LANDED_WINDOW_SECONDS, parseQueue, type TaskProgress } from '../scripts/task-progress-stages.ts';
 import {
   cacheAgeSeconds, collectProgress, formatDuration, progressBar, progressPaths, renderReport,
@@ -202,6 +202,26 @@ test('stage 8 fixes: commits after the last pass record', () => {
   });
 });
 
+test('stage 8 fixes: a fix committed before its pass record counts through findings.jsonl', () => {
+  withFixture((fixture) => {
+    routed(fixture);
+    const fixedAt = commit(fixture, { 'src/feature.ts': 'export const fixed = 1;\n' }, 'chore: fix');
+    const sha = git(fixture.task, 0, 'rev-parse', 'HEAD').trim();
+    const finding = JSON.stringify({ change: CHANGE, pass: 1, severity: 'medium', commit: sha });
+    commit(fixture, { [`${RECORDS}/passes.jsonl`]: `${pass(1, { medium: 1 })}\n`, [`${RECORDS}/findings.jsonl`]: `${finding}\n` }, 'docs: pass 1');
+    const task = only(fixture);
+    assert.deepEqual([task.stage, task.stageName, task.reached.at(-1)?.at], [8, 'fixes', fixedAt]);
+  });
+});
+
+test('stage 8 fixes: a record commit after a Low-only pass is no fix', () => {
+  withFixture((fixture) => {
+    reviewed(fixture, pass(1, { low: 1 }));
+    commit(fixture, { [`${RECORDS}/verification.md`]: '# Verification\n' }, 'docs: record pass 1');
+    assert.deepEqual([only(fixture).stage, only(fixture).stageName], [5, 'review 1']);
+  });
+});
+
 test('stage 9 archived: the archive commit is the last commit', () => {
   withFixture((fixture) => {
     reviewed(fixture, pass(1, { low: 1 }));
@@ -246,6 +266,13 @@ test('the archived change of the branch wins over another active change', () => 
     write(fixture.task, { 'openspec/changes/other-change/checklist.json': '{}\n' });
     const task = only(fixture);
     assert.deepEqual([task.change, task.stage, task.stageName], [CHANGE, 9, 'archived']);
+  });
+});
+
+test('an archive of another change whose name ends with the branch is not the task', () => {
+  withFixture((fixture) => {
+    write(fixture.task, { 'openspec/changes/archive/2026-10-27-show-demo-task/checklist.json': '{}\n' });
+    assert.deepEqual(deriveTasks(localReader, fixture.main, NOW), []);
   });
 });
 
@@ -326,7 +353,7 @@ test('an SSH host that stops answering during the fallback is unreachable', () =
   withFixture((fixture) => {
     briefed(fixture);
     const shell = localShell();
-    for (const failing of ['worktree', 'log']) {
+    for (const failing of ['worktree', 'log', 'merge-base']) {
       const dropping: SshRunner = (target, command) => (command.includes(`'${failing}'`) ? { status: 255, stdout: '' } : shell(target, command));
       assert.deepEqual(readSshHost(dropping, { name: 'Zaki', ssh: 'zaki', repo: fixture.main }, NOW),
         { name: 'Zaki', status: 'unreachable', tasks: [] }, failing);
@@ -366,11 +393,16 @@ test('the bars are stacked, one task per line, in aligned columns', () => {
   assert.deepEqual(rows.map((row) => row.match(/[█░]+/)?.[0]), [progressBar(1), progressBar(4), progressBar(9)]);
 });
 
+test('an ssh value that ssh would read as an option is rejected', () => {
+  assert.deepEqual(parseHostsConfig(JSON.stringify([{ name: 'x', ssh: '-oProxyCommand=sh', repo: '~/t' }])), { hosts: [], problem: HOSTS_PROBLEM });
+  assert.deepEqual(parseHostsConfig(JSON.stringify([{ name: 'x', ssh: 'petar@hpz600', repo: '~/t' }])).hosts.length, 1);
+});
+
 test('an invalid hosts file is reported and the local host still shows', () => {
   withFixture((fixture) => {
     write(fixture.config, { 'progress-hosts.json': '{"name":"Zaki"}' });
     const report = collectProgress(options(fixture, () => assert.fail('no host to reach')));
-    assert.deepEqual(report.problems, ['the hosts file is not a JSON list of {name, ssh, repo}']);
+    assert.deepEqual(report.problems, [HOSTS_PROBLEM]);
     assert.match(renderReport(report), /^local {2}no open task$/m);
   });
 });
@@ -420,6 +452,7 @@ test('a refresh leaves the cache alone while a live refresh holds the lock', () 
   withFixture((fixture) => {
     const paths = progressPaths(fixture.config);
     write(fixture.config, { 'progress.lock': JSON.stringify({ pid: process.pid, token: 'other' }) });
+    utimesSync(paths.lock, NOW, NOW);
     const blocked = runCommand(['refresh'], options(fixture, () => assert.fail('no refresh while locked')));
     assert.deepEqual([blocked.stdout, existsSync(paths.cache)], ['another progress refresh is running\n', false]);
     assert.equal(JSON.parse(readFileSync(paths.lock, 'utf8')).token, 'other', 'the owner keeps its lock');

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // The refresh lock: a file naming its owner's process and a token, created
-// whole by a hard link, and removed only by its owner or from a dead one.
+// whole by a hard link, and removed only by its owner or a serial takeover.
 
 export interface LockOwner {
   readonly pid: number;
@@ -19,6 +19,10 @@ export type IsAlive = (pid: number) => boolean;
 
 // A lock without a readable owner is taken over only after this age.
 export const LOCK_TIMEOUT_SECONDS = 300;
+// Any lock older than this is abandoned, in case its pid was reused.
+export const LOCK_MAX_AGE_SECONDS = 1800;
+// A takeover lasts milliseconds; an older takeover file was left behind.
+export const TAKEOVER_TIMEOUT_SECONDS = 60;
 
 export function processAlive(pid: number): boolean {
   try {
@@ -47,24 +51,31 @@ function linkExclusively(source: string, path: string): boolean {
   }
 }
 
-// Moves the lock aside and keeps it there only when it is still the one
-// expected; another lock goes back, so no contender removes a new one.
-function takeAside(path: string, aside: string, expected: string | undefined): boolean {
-  try {
-    renameSync(path, aside);
-  } catch {
-    return false;
-  }
-  if (readOwner(aside)?.token === expected) return true;
-  linkExclusively(aside, path);
-  rmSync(aside, { force: true });
-  return false;
+function ageSeconds(path: string, now: Date): number | undefined {
+  const held = statSync(path, { throwIfNoEntry: false });
+  return held === undefined ? undefined : (now.getTime() - held.mtimeMs) / 1000;
 }
 
 function isAbandoned(path: string, owner: LockOwner | undefined, now: Date, isAlive: IsAlive): boolean {
-  if (owner !== undefined) return !isAlive(owner.pid);
-  const held = statSync(path, { throwIfNoEntry: false });
-  return held !== undefined && now.getTime() - held.mtimeMs > LOCK_TIMEOUT_SECONDS * 1000;
+  const age = ageSeconds(path, now);
+  if (age === undefined) return true;
+  if (owner === undefined) return age > LOCK_TIMEOUT_SECONDS;
+  return age > LOCK_MAX_AGE_SECONDS || !isAlive(owner.pid);
+}
+
+// Only the holder of the takeover file may remove a lock it did not
+// create, so two contenders never both replace one abandoned lock.
+function takeOver(path: string, draft: string, now: Date, isAlive: IsAlive): boolean {
+  const takeover = `${path}.takeover`;
+  if ((ageSeconds(takeover, now) ?? 0) > TAKEOVER_TIMEOUT_SECONDS) rmSync(takeover, { force: true });
+  if (!linkExclusively(draft, takeover)) return false;
+  try {
+    if (!isAbandoned(path, readOwner(path), now, isAlive)) return false;
+    rmSync(path, { force: true });
+    return linkExclusively(draft, path);
+  } finally {
+    rmSync(takeover, { force: true });
+  }
 }
 
 // Returns the held lock, or undefined while a live refresh owns it.
@@ -75,21 +86,17 @@ export function acquireLock(path: string, now: Date, isAlive: IsAlive = processA
   writeFileSync(draft, JSON.stringify({ pid: process.pid, token }));
   try {
     if (linkExclusively(draft, path)) return { path, token };
-    const owner = readOwner(path);
-    if (!isAbandoned(path, owner, now, isAlive)) return undefined;
-    const aside = `${path}.${token}.stale`;
-    if (!takeAside(path, aside, owner?.token)) return undefined;
-    rmSync(aside, { force: true });
-    return linkExclusively(draft, path) ? { path, token } : undefined;
+    if (!isAbandoned(path, readOwner(path), now, isAlive)) return undefined;
+    return takeOver(path, draft, now, isAlive) ? { path, token } : undefined;
   } finally {
     rmSync(draft, { force: true });
   }
 }
 
-// Removes the lock only while it is still this owner's.
+// Removes the lock only while it is still this owner's; a live owner's
+// young lock is never taken over, so nothing replaces it in between.
 export function releaseLock(lock: HeldLock): boolean {
-  const aside = `${lock.path}.${lock.token}.release`;
-  if (!takeAside(lock.path, aside, lock.token)) return false;
-  rmSync(aside, { force: true });
+  if (readOwner(lock.path)?.token !== lock.token) return false;
+  rmSync(lock.path, { force: true });
   return true;
 }
