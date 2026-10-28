@@ -25,7 +25,7 @@ export { ProcessDaemonOverhead, type DaemonOverheadSource } from './daemon-overh
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
-export { containmentScan, fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
+export { containmentScan, fileRecordListing, fileSupervision, supervisionHost, type LaunchProgram } from './execution-supervision.js';
 export type {
   ContainmentScan,
   DeadlineClock,
@@ -52,3 +52,5 @@ export {
 } from './inventory-report.js';
 export { ExecutionWatch, LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOptions, type WatchTarget, type Watched } from './execution-watch.js';
 export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
+export { checkComposition, hasFailedCheck, runSelfCheck } from './self-check.js';
+export { LINUX_PROBE, linuxContainmentCheck, type LinuxContainmentProbe } from './linux-containment-check.js';

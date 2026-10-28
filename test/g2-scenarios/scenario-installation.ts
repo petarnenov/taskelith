@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -11,7 +11,8 @@ import { InMemoryLogSink } from '@taskelith/observability';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { integrationEndpoint, integrationSecret, requestFailure, value } from '@taskelith/testing';
+import { admitExecutionAccount, integrationEndpoint, integrationSecret, integrationSecretPath, requestFailure, trustCertificateAuthority, value } from '@taskelith/testing';
+import { SCENARIO_LAUNCH } from './scenario-launch.ts';
 import { waitFor } from './waiting.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
@@ -85,19 +86,25 @@ export class ScenarioInstallation {
     const database = withDatabase(server, databaseName);
     const routed = withDatabase(options.postgres === 'proxied' ? integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL') : server, databaseName);
     const base = mkdtempSync(join(tmpdir(), `taskelith-${name}-`));
+    // The held scripted process, as the execution account, polls a file here.
+    if (SCENARIO_LAUNCH !== undefined) admitExecutionAccount(base, SCENARIO_LAUNCH);
     const dataRoot = join(base, 'control-plane');
     const authority = await registerAccount(dataRoot);
-    const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: integrationEndpoint('TASKELITH_NATS_URL').href };
-    const initialized = await admin(environment, ['init', '--actor', 'root@scenario', '--reason', 'g2 scenarios']) as {
-      identity: { installationId: string }; operatorSecret: string;
+    const environment = {
+      TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: integrationEndpoint('TASKELITH_NATS_URL').href,
+      TASKELITH_NATS_CA: integrationSecretPath('ca.pem'),
     };
+    const initialized = await admin(environment, ['init', '--actor', 'root@scenario', '--reason', 'g2 scenarios']) as {
+      identity: { installationId: string }; operatorSecret: string; installationCa: string;
+    };
+    trustCertificateAuthority(readFileSync(initialized.installationCa, 'utf8'));
     const logs = new InMemoryLogSink();
     const installation = new ScenarioInstallation({
       base, database, server, operator: initialized.operatorSecret, authority, logs,
       address: value(TransportAddress.of(initialized.identity.installationId)),
       settings: {
         dataRoot, ownerUid: process.getuid!(), postgres: routed, nats: integrationEndpoint('TASKELITH_NATS_URL'),
-        api: { host: '127.0.0.1', port: 0 }, workflows: [{ definition: WORKFLOW, digest: DIGEST }],
+        api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, workflows: [{ definition: WORKFLOW, digest: DIGEST }],
         sweepMilliseconds: 500, placementMilliseconds: 200, shutdownMilliseconds: 2_000,
         lostContactTimeoutMilliseconds: LOST_CONTACT_TIMEOUT_MILLISECONDS, lostContactCheckMilliseconds: 250,
         transportLimits: SCENARIO_LIMITS, logSink: logs,
@@ -110,7 +117,12 @@ export class ScenarioInstallation {
 
   get apiUrl(): URL {
     assert.ok(this.#running, 'the control plane runs');
-    return new URL(`http://127.0.0.1:${this.#running.api.port}/`);
+    return new URL(`https://127.0.0.1:${this.#running.api.port}/`);
+  }
+
+  // The installation CA, which a worker process trusts for the API.
+  get installationCa(): string {
+    return join(this.#settings.dataRoot, 'control-plane', 'installation-ca.pem');
   }
 
   get store(): PostgresDatabase {
@@ -133,7 +145,7 @@ export class ScenarioInstallation {
   environment(): Record<string, string> {
     return {
       TASKELITH_DATA_DIR: this.#settings.dataRoot, TASKELITH_POSTGRES_URL: this.database.href, TASKELITH_NATS_URL: this.nats.href,
-      TASKELITH_OPERATOR_TOKEN: this.#operator,
+      TASKELITH_NATS_CA: integrationSecretPath('ca.pem'), TASKELITH_OPERATOR_TOKEN: this.#operator,
     };
   }
 

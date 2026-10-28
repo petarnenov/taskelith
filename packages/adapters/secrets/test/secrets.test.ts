@@ -81,6 +81,22 @@ test('a child environment keeps no secret variable or value', () => {
   }), { PATH: '/usr/bin', HOME: '/home/w', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222' });
 });
 
+test('a child environment drops TLS key files and PEM keys, and keeps the CA', () => {
+  const key = ['-----BEGIN EC PRIVATE KEY-----', 'MHcCAQEEI', '-----END EC PRIVATE KEY-----'].join('\n');
+  assert.deepEqual(scrubEnvironment({
+    TASKELITH_BROWSER_TLS_KEY: '/etc/tls/browser.key', NGINX_SSL_KEY: '/etc/ssl/k', TLS_KEY_FILE: '/k', INLINE: key,
+    TASKELITH_BROWSER_TLS_CERT: '/etc/tls/browser.pem', NODE_EXTRA_CA_CERTS: '/etc/taskelith/trust/installation-ca.pem',
+  }), { TASKELITH_BROWSER_TLS_CERT: '/etc/tls/browser.pem', NODE_EXTRA_CA_CERTS: '/etc/taskelith/trust/installation-ca.pem' });
+  assert.equal(redactSecrets(`failed: ${key}`), `failed: ${REDACTED}`);
+});
+
+test('a revealed value inside PEM markers leaves no part of the key', () => {
+  const key = ['-----BEGIN PRIVATE KEY-----', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49', '-----END PRIVATE KEY-----'].join('\n');
+  assert.equal(redactSecrets(`failed: ${key} end`, ['PRIVATE']), `failed: ${REDACTED} end`);
+  const redacted = redactFailure(failure('internal', `tls: ${key}`, { key }), ['PRIVATE', 'BEGIN']);
+  assert.deepEqual([redacted.message, redacted.details], [`tls: ${REDACTED}`, { key: REDACTED }]);
+});
+
 // A subscription token shape that no rule knows (account pool section 7.4).
 const SLOT_TOKEN = 'q8Rz3vLmN2pXw7Kd';
 

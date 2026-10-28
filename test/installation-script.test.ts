@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -73,6 +73,32 @@ test('a failed check prints the control-plane log before it removes the project'
   assert.ok(logs >= 0, 'the log was read');
   const removals = outcome.calls.flatMap((call, index) => (call.includes('down --volumes') ? [index] : []));
   assert.ok(logs < (removals[removals.length - 1] ?? -1), 'before the last removal');
+});
+
+// Reports every service as running, so `certificates` restarts both.
+const runningDocker = `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case " $* " in *" ps --quiet --status running "*) echo container ;; esac
+exit 0
+`;
+
+test('re-issued certificates are installed, then the running broker and control plane restart', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-certificates-'));
+  try {
+    writeFileSync(join(root, 'docker'), runningDocker);
+    chmodSync(join(root, 'docker'), 0o755);
+    const calls = join(root, 'calls');
+    writeFileSync(calls, '');
+    const run = spawnSync('bash', [script, 'certificates', 'installation-script-test'], {
+      encoding: 'utf8', env: { PATH: [root, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const recorded = readFileSync(calls, 'utf8').trim().split('\n');
+    const order = ['admin issue-installation-certificates', 'nats-setup', 'restart nats control-plane'].map((call) => indexOfCall(recorded, call));
+    assert.ok(order.every((index, position) => index >= 0 && (position === 0 || index > order[position - 1]!)), recorded.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 const WORKER_CAPABILITIES = 'CapInh:\t0000000000000000\nCapPrm:\t00000000000000e0\nCapEff:\t00000000000000e0\n'
@@ -300,5 +326,152 @@ test('a failed read of the commit time stops every build before any image is bui
     const outcome = runInFixture(script, args, { ...environment, FAKE_LOG_STATUS: '24' });
     assert.notEqual(outcome.status, 0, args[0]);
     assert.equal(builds(outcome.calls).length, 0, args[0]);
+  }
+});
+
+// Prints the views FAKE_VIEWS/1, /2, ... of successive `worker-admission`
+// runs, and FAKE_VIEWS/last after them, each after FAKE_DELAY seconds.
+const admissionDocker = `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case " $* " in
+  *" admin worker-admission "*)
+    if [ -n "$FAKE_DELAY" ]; then sleep "$FAKE_DELAY"; fi
+    count=$(($(cat "$FAKE_VIEWS/count") + 1))
+    echo "$count" > "$FAKE_VIEWS/count"
+    if [ -f "$FAKE_VIEWS/$count" ]; then cat "$FAKE_VIEWS/$count"; else cat "$FAKE_VIEWS/last"; fi ;;
+esac
+exit 0
+`;
+
+// Delays the decision of every node run by FAKE_NODE_DELAY seconds.
+const delayedNode = `#!/bin/sh
+sleep "\${FAKE_NODE_DELAY:-0}"
+exec "$REAL_NODE" "$@"
+`;
+
+const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
+const VIEW_TIME = '2026-10-28T10:00:05.000Z';
+
+function admissionView(admission: string, outcome?: string, details: readonly string[] = []): string {
+  const results = outcome === undefined ? [] : [{ checkId: 'linux-containment', outcome, details }];
+  return JSON.stringify({ asOf: VIEW_TIME, workers: [{ workerId: 'worker-1', admission, reportedAt: '2026-10-28T10:00:01.000Z', results }] });
+}
+
+function checkAdmission(views: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-'));
+  try {
+    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode]]) {
+      writeFileSync(join(root, name), source);
+      chmodSync(join(root, name), 0o755);
+    }
+    const temporary = join(root, 'tmp');
+    mkdirSync(temporary);
+    const directory = join(root, 'views');
+    mkdirSync(directory);
+    writeFileSync(join(directory, 'count'), '0');
+    views.forEach((view, index) => writeFileSync(join(directory, String(index + 1)), view));
+    writeFileSync(join(directory, 'last'), views[views.length - 1] ?? '');
+    const calls = join(root, 'calls');
+    writeFileSync(calls, '');
+    const run = spawnSync('bash', [script, 'check-admission', 'installation-script-test'], {
+      encoding: 'utf8',
+      env: {
+        PATH: [root, '/usr/bin', '/bin'].join(':'), REAL_NODE: process.execPath, TMPDIR: temporary,
+        FAKE_DOCKER_CALLS: calls, FAKE_VIEWS: directory, TASKELITH_OPERATOR_TOKEN: OPERATOR_TOKEN, ...environment,
+      },
+    });
+    const recorded = readFileSync(calls, 'utf8').trim().split('\n');
+    assert.ok(!`${run.stdout}${run.stderr}${recorded.join('\n')}`.includes(OPERATOR_TOKEN), 'the operator secret is never printed');
+    assert.deepEqual(readdirSync(temporary), [], 'no temporary file is left');
+    return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const admissionReads = (outcome: Outcome) => outcome.calls.filter((call) => call.endsWith(' admin worker-admission'));
+
+test('the admission check polls the workers view until the worker is admitted with a passed containment check', () => {
+  const outcome = checkAdmission([admissionView('awaiting-self-check'), admissionView('admitted', 'passed')]);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(outcome.stdout.trim(), VIEW_TIME);
+  const reads = admissionReads(outcome);
+  assert.equal(reads.length, 2);
+  for (const read of reads) assert.match(read, /run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission$/);
+});
+
+test('a failed self-check fails the admission check at once and names the failed check', () => {
+  const outcome = checkAdmission([admissionView('self-check-failed', 'failed', ['the execution account can write cgroup.procs'])]);
+  assert.equal(outcome.status, 1);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.match(outcome.stderr, /self-check-failed: linux-containment \(the execution account can write cgroup\.procs\)/);
+  assert.match(outcome.stderr, /the worker admission check failed/);
+});
+
+test('a worker still awaiting its self-check at the deadline fails the admission check as a timeout', () => {
+  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '3' });
+  assert.equal(outcome.status, 3);
+  assert.equal(admissionReads(outcome).length, 1, 'no read starts after the bound');
+  assert.match(outcome.stderr, /the worker is awaiting-self-check/);
+  assert.match(outcome.stderr, /the worker was not admitted within 3s/);
+});
+
+function timed(run: () => BuildOutcome): { outcome: BuildOutcome; seconds: number } {
+  const started = Date.now();
+  const outcome = run();
+  return { outcome, seconds: (Date.now() - started) / 1000 };
+}
+
+test('a read that hangs is killed at the bound and fails the admission check as a timeout', () => {
+  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.ok(seconds < 20, `ended after ${seconds}s`);
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 2s/);
+});
+
+test('a read that would return an admission only after the bound is killed', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '1', FAKE_DELAY: '3' });
+  assert.equal(outcome.status, 3);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+});
+
+test('an admission read in time but decided after the bound is a timeout', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '4', FAKE_NODE_DELAY: '6' });
+  assert.equal(outcome.status, 3);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.doesNotMatch(outcome.stderr, /did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 4s/);
+});
+
+test('a bound with a leading zero is read in base 10', () => {
+  const admitted = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '08' });
+  assert.equal(admitted.status, 0, admitted.stderr);
+  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '010', FAKE_DELAY: '30',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /the worker was not admitted within 10s/);
+  assert.ok(seconds >= 10, `ended after ${seconds}s, before 10`);
+});
+
+test('a refused read of the workers view fails the admission check at once', () => {
+  const outcome = checkAdmission([JSON.stringify({ error: { code: 'forbidden', message: 'the operator credential is not valid' } })]);
+  assert.equal(outcome.status, 1);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.match(outcome.stderr, /could not be read: forbidden: the operator credential is not valid/);
+});
+
+test('a bound that is not positive whole seconds is a usage error before any read', () => {
+  for (const bound of ['5m', '0', '00']) {
+    const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: bound });
+    assert.equal(outcome.status, 2, JSON.stringify(bound));
+    assert.equal(admissionReads(outcome).length, 0, JSON.stringify(bound));
+    assert.match(outcome.stderr, /TASKELITH_ADMISSION_SECONDS must be positive whole seconds/, JSON.stringify(bound));
   }
 });

@@ -18,13 +18,15 @@ INSTALLATION := taskelith-$(SERVICES_ID)-installation
 INSTALLATION_PINS := TASKELITH_UBUNTU_BASE=$(UBUNTU_BASE) TASKELITH_NODE_VERSION=$(NODE_PIN) \
 	TASKELITH_NODE_SHA256_AMD64=$(NODE_LINUX_X64_SHA256) TASKELITH_NODE_SHA256_ARM64=$(NODE_LINUX_ARM64_SHA256)
 
+VERIFY_STAMP := node --experimental-strip-types scripts/verify-stamp.ts
+
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
-	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check \
+	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -32,12 +34,21 @@ UV_PIN := 0.13.5
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-checks
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-stamped
 
+# Runs the checks of the branch's profile and stamps a clean tree that
+# passed them, so that the pre-push hook can reuse the run.
+verify-stamped: toolchain
+	@profile="$$($(VERIFY_STAMP) profile)" && tree="$$($(VERIFY_STAMP) start)" && \
+		$(MAKE) --no-print-directory verify-checks VERIFY_PROFILE="$$profile" && \
+		$(VERIFY_STAMP) write "$$profile" "$$tree"
+
+# VERIFY_PROFILE=docs-only skips only the Docker test suites of make test.
 verify-checks: toolchain
 	npm run verify:comments
+	npm run verify:private-keys
 	npm run verify:findings
-	$(MAKE) --no-print-directory test
+	$(if $(filter docs-only,$(VERIFY_PROFILE)),@echo "make verify: docs-only profile skips make test",$(MAKE) --no-print-directory test)
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
@@ -72,9 +83,14 @@ findings:
 	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
 # Runs npm test with the .nvmrc Node.js against its own services, which stop
-# also when tests fail; fails closed without Docker.
+# also when tests fail; fails closed without Docker. Holds the Docker slot.
 test:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/docker-slot.ts run -- \
+		bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+
+# Prints who holds the Docker slot of make test and who waits for it.
+docker-slot:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/docker-slot.ts status
 
 # Starts PostgreSQL, NATS, and Toxiproxy for manual integration test runs
 # and prints the URLs to export.
@@ -119,6 +135,16 @@ verify-linux-crash-windows:
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
 		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
 
+# Opt-in G2 races, stale generations, and partitions through the Linux
+# cgroup supervisor (privileged, host network); FILES and PATTERN select.
+G2_SCENARIO_FILES := test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts test/g2-partition.test.ts
+verify-linux-g2-scenarios:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
+		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
+		-- $(or $(FILES),$(G2_SCENARIO_FILES))
+
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.
 linux-test-suites:
@@ -142,6 +168,15 @@ installation-bootstrap:
 # Installs the broker trust again, for example after a failed bootstrap.
 installation-broker-config:
 	@bash scripts/installation.sh broker-config $(INSTALLATION)
+
+# Issues the API and NATS server certificates again (397 days, provisional)
+# and restarts the running broker and control plane to load them.
+installation-certificates:
+	@bash scripts/installation.sh certificates $(INSTALLATION)
+
+# Prints the installation's public CA, for a native worker to trust.
+installation-ca:
+	@bash scripts/installation.sh installation-ca $(INSTALLATION)
 
 installation-start:
 	@bash scripts/installation.sh start $(INSTALLATION)
@@ -236,6 +271,33 @@ speckit-lock:
 	docker run --rm --user "$$(id -u):$$(id -g)" --env HOME=/tmp --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
+
+# make would expand these arguments when it exports them, so they reach
+# the script under other names, as typed; its makes get no MAKEFLAGS.
+unexport BRANCH TITLE BODY RESUME CHANGE LOG
+
+# Coordinator: integrates the archived change BRANCH into dev with one pull
+# request (scripts/integrate.sh); only RESUME=1 continues a stopped one.
+integrate: export TASKELITH_INTEGRATE_BRANCH := $(value BRANCH)
+integrate: export TASKELITH_INTEGRATE_TITLE := $(value TITLE)
+integrate: export TASKELITH_INTEGRATE_BODY := $(value BODY)
+integrate:
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		bash scripts/integrate.sh $(if $(filter 1,$(value RESUME)),--resume) \
+		"$$TASKELITH_INTEGRATE_BRANCH" "$$TASKELITH_INTEGRATE_TITLE" "$$TASKELITH_INTEGRATE_BODY"
+
+# Writes the generated part of CHANGE's verification.md from LOG, a make
+# verify log; record-check fails when that part differs from the tree.
+record record-check: export TASKELITH_RECORD_CHANGE := $(value CHANGE)
+record: export TASKELITH_RECORD_LOG := $(value LOG)
+record:
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/verification-record.ts write \
+		"$$TASKELITH_RECORD_CHANGE" "$$TASKELITH_RECORD_LOG"
+
+record-check:
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/verification-record.ts check "$$TASKELITH_RECORD_CHANGE"
 
 # Checks that this clone can build and verify; changes nothing.
 # Uses the .nvmrc Node.js when nvm has it.

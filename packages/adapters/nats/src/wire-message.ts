@@ -34,6 +34,7 @@ export const OBSERVATION_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.
   'execution.cancellation.not-applied': 'CancellationNotAppliedObservation',
   'worker.capacity.declared': 'CapacityDeclaredObservation',
   'worker.admission-pressure.changed': 'AdmissionPressureChangedObservation',
+  'worker.self-check.reported': 'SelfCheckReportedObservation',
 });
 
 export const INVENTORY_REPORTED = 'worker.inventory.reported';

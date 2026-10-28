@@ -4,6 +4,7 @@ import type { ExecutionId, ExecutionProcess } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   FileRecordStore,
+  hostPlatform,
   LinuxContainmentScan,
   LinuxProcessInspector,
   parseLaunch,
@@ -34,6 +35,8 @@ import type {
   SupervisedRecovery,
   SupervisionFactory,
 } from './execution-supervision-port.js';
+import type { WorkerSettings } from './settings.js';
+import type { LaunchHost } from './worker-start.js';
 
 // The program every launch runs and the account it runs as.
 export interface LaunchProgram {
@@ -171,4 +174,26 @@ export function containmentScan(platform: Platform, containmentParent: string | 
       processes: processes.map(({ identity, processGroupId }) => ({ platform: 'linux' as const, ...identity, processGroupId })),
     }))));
   };
+}
+
+// The platform alone recovers and removes records; a launch command adds
+// the program each launch runs.
+export function supervisionHost(settings: WorkerSettings, executions: string, version: string): Result<LaunchHost> {
+  const { containmentParent, launch } = settings;
+  const platform = hostPlatform(containmentParent);
+  if (!platform.ok) return platform;
+  const program = launch === undefined ? undefined : {
+    command: launch.command, supervisorVersion: version,
+    ...(launch.executionAccount === undefined ? {} : { executionAccount: launch.executionAccount }),
+  };
+  const containments = containmentScan(platform.value, containmentParent);
+  return ok({
+    clock: platform.value.clock,
+    supervision: fileSupervision({
+      executions, platform: platform.value,
+      ...(containmentParent === undefined ? {} : { containmentParent }), ...(program === undefined ? {} : { program }),
+    }),
+    records: fileRecordListing(executions),
+    ...(containments === undefined ? {} : { containments }),
+  });
 }

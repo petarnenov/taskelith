@@ -1,15 +1,15 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { isFailureCode, ok, type Failure, type Result } from '@taskelith/kernel';
+import { isFailureCode, type Failure } from '@taskelith/kernel';
 import { JsonLinesLogSink, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { Logger } from '@taskelith/observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
-import { hostPlatform } from '@taskelith/worker-supervisor';
 import { ProcessDaemonOverhead } from './daemon-overhead.js';
-import { containmentScan, fileRecordListing, fileSupervision } from './execution-supervision.js';
+import { linuxContainmentCheck } from './linux-containment-check.js';
+import { supervisionHost } from './execution-supervision.js';
 import {
   CONTROL_PLANE_TIMEOUT_MILLISECONDS,
   currentHost,
@@ -17,7 +17,7 @@ import {
   type Environment,
   type WorkerSettings,
 } from './settings.js';
-import { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
+import { startWorker, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
 
 // A journal identity is 128 random bits (worker journal contract sec. 8).
 const JOURNAL_ID_BYTES = 16;
@@ -39,6 +39,7 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     draw: Math.random,
     launching: productionLaunching(settings, logger),
     logger,
+    admissionChecks: [linuxContainmentCheck(settings)],
   };
 }
 
@@ -90,28 +91,6 @@ function isFailure(value: unknown): value is Failure {
   const { code, message, details } = (value ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
   return typeof code === 'string' && isFailureCode(code) && typeof message === 'string'
     && typeof details === 'object' && details !== null && Object.values(details).every((detail) => typeof detail === 'string');
-}
-
-// The platform alone recovers and removes records; a launch command adds
-// the program each launch runs.
-function supervisionHost(settings: WorkerSettings, executions: string, version: string): Result<LaunchHost> {
-  const { containmentParent, launch } = settings;
-  const platform = hostPlatform(containmentParent);
-  if (!platform.ok) return platform;
-  const program = launch === undefined ? undefined : {
-    command: launch.command, supervisorVersion: version,
-    ...(launch.executionAccount === undefined ? {} : { executionAccount: launch.executionAccount }),
-  };
-  const containments = containmentScan(platform.value, containmentParent);
-  return ok({
-    clock: platform.value.clock,
-    supervision: fileSupervision({
-      executions, platform: platform.value,
-      ...(containmentParent === undefined ? {} : { containmentParent }), ...(program === undefined ? {} : { program }),
-    }),
-    records: fileRecordListing(executions),
-    ...(containments === undefined ? {} : { containments }),
-  });
 }
 
 // The worker entry that item 23's image runs; it exits with 1 when it cannot

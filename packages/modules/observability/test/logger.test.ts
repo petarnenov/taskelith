@@ -20,6 +20,10 @@ const SEED = `SU${'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.repeat(2).slice(0, 56)}`;
 const JWT = 'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl';
 const CREDS_BEGIN = '-----BEGIN NATS USER JWT-----';
 const CREDS_END = '------END USER NKEY SEED------';
+// Markers built in parts, so no tracked file holds a whole PEM key block.
+const pem = (edge: 'BEGIN' | 'END', type: string) => `-----${edge} ${type}-----`;
+const KEY_BODY = 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg';
+const CERTIFICATE = `${pem('BEGIN', 'CERTIFICATE')}\nMIIBkTCCATegAwIBAgIUFakeCertificateBody\n${pem('END', 'CERTIFICATE')}`;
 const CREDS = `${CREDS_BEGIN}\n${JWT}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${SEED}\n${CREDS_END}`;
 
 function logger(): { sink: InMemoryLogSink; logger: Logger } {
@@ -83,10 +87,36 @@ test('issued secrets, seeds, JWTs, and creds blocks are redacted in fields and c
   assert.equal(redactText('tkop_short and eyJa.b stay'), 'tkop_short and eyJa.b stay');
 });
 
+test('PEM private keys of every type are redacted, whole or cut, and certificates stay', () => {
+  for (const type of ['PRIVATE KEY', 'ENCRYPTED PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY']) {
+    const key = `${pem('BEGIN', type)}\n${KEY_BODY}\n${pem('END', type)}`;
+    assert.equal(redactText(`before x${key}y ${CERTIFICATE} after`), `before x${REDACTED}y ${CERTIFICATE} after`, type);
+  }
+  const two = `${pem('BEGIN', 'PRIVATE KEY')}\na\n${pem('END', 'PRIVATE KEY')} keep ${pem('BEGIN', 'EC PRIVATE KEY')}\nb\n${pem('END', 'EC PRIVATE KEY')}`;
+  assert.equal(redactText(two), `${REDACTED} keep ${REDACTED}`);
+  assert.equal(redactText(`cut: ${pem('BEGIN', 'PRIVATE KEY')}\n${KEY_BODY}`), `cut: ${REDACTED}`);
+  assert.equal(redactText(`${CERTIFICATE}\n${pem('BEGIN', 'PUBLIC KEY')}\nMFkw`), `${CERTIFICATE}\n${pem('BEGIN', 'PUBLIC KEY')}\nMFkw`);
+  const { sink, logger: log } = logger();
+  log.with({ correlationId: 'c-1' }).warn('e', { cause: `tls: ${pem('BEGIN', 'PRIVATE KEY')}\n${KEY_BODY}\n${pem('END', 'PRIVATE KEY')}` });
+  assert.equal(sink.records[0]!.fields['cause'], `tls: ${REDACTED}`);
+});
+
+test('a marked secret in front of a PEM key leaves no part of the key', () => {
+  const key = `${pem('BEGIN', 'PRIVATE KEY')}\n${KEY_BODY}\n${pem('END', 'PRIVATE KEY')}`;
+  const { sink, logger: log } = logger();
+  log.with({ correlationId: `password=${key}` }).warn('e', { cause: `password=${key}`, detail: `x token= ${key} y` });
+  const { fields, correlation } = sink.records[0]!;
+  assert.deepEqual([fields['cause'], fields['detail'], correlation.correlationId], [
+    `password=${REDACTED}`, `x token=${REDACTED} y`, `password=${REDACTED}`,
+  ]);
+});
+
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
   assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'SA', 'a://', 'a://b@']);
   assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], 400_000);
+  const keyBegin = pem('BEGIN', 'PRIVATE KEY');
+  assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], 400_000);
 });
 
 test('a name redacts only by whole segments', () => {

@@ -121,7 +121,7 @@ test('supersession is due for a gone worker at once and otherwise after its boun
     },
   }, at('2026-10-25T09:00:00.000Z'));
   const accepted = value(acceptAssignment(offered, offered.generation, offered.workerId, at('2026-10-25T09:00:30.000Z')));
-  const healthy = { revoked: false, draining: false, reachable: true };
+  const healthy = { revoked: false, draining: false, reachable: true, admitted: true };
   const minute = (minutes: number) => at(new Date(Date.parse('2026-10-25T09:00:00.000Z') + minutes * 60_000).toISOString());
   assert.equal(isSupersessionDue(offered, healthy, minute(1)), false);
   assert.equal(isSupersessionDue(offered, healthy, minute(UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS / 60_000)), true);
@@ -129,7 +129,9 @@ test('supersession is due for a gone worker at once and otherwise after its boun
   const pressured = { ...healthy, admissionPressureSince: minute(0) };
   assert.equal(isSupersessionDue(accepted, pressured, minute(9)), false);
   assert.equal(isSupersessionDue(accepted, pressured, minute(ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS / 60_000)), true);
-  for (const gone of [undefined, { ...healthy, revoked: true }, { ...healthy, draining: true }, { ...healthy, reachable: false }]) {
+  for (const gone of [
+    undefined, { ...healthy, revoked: true }, { ...healthy, draining: true }, { ...healthy, reachable: false }, { ...healthy, admitted: false },
+  ]) {
     assert.equal(isSupersessionDue(accepted, gone, minute(0)), true);
   }
 });

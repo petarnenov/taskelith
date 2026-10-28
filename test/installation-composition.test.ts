@@ -213,7 +213,19 @@ test('the smoke adds only its workflow and the scripted process', () => {
   assert.equal(variable, 'TASKELITH_WORKER_COMMAND');
   assert.equal((JSON.parse(command ?? '[]') as string[])[0], '/usr/local/bin/node');
   assert.deepEqual(Object.keys(smoke.services).sort(), Object.keys(services).sort());
-  assert.equal(services.worker.environment?.TASKELITH_WORKER_COMMAND, undefined, 'only the smoke launches');
+  assert.equal(services.worker.environment?.TASKELITH_WORKER_COMMAND, undefined, 'only the overrides launch');
+});
+
+test('the bring-up check adds only a launch command, so the containment check runs', () => {
+  const verify = resolvedComposition(['infra/installation/compose.yaml', 'infra/installation/verify/compose.yaml'], COMPOSITION_ENVIRONMENT);
+  const changed = (name: string) => Object.entries(verify.services[name].environment ?? {})
+    .filter(([variable, setting]) => services[name].environment?.[variable] !== setting);
+  const [[variable, command] = [], ...others] = changed('worker');
+  assert.equal(variable, 'TASKELITH_WORKER_COMMAND');
+  assert.equal((JSON.parse(command ?? '[]') as string[])[0], '/usr/local/bin/node');
+  assert.deepEqual(others, []);
+  for (const name of Object.keys(services).filter((service) => service !== 'worker')) assert.deepEqual(changed(name), [], name);
+  assert.deepEqual(Object.keys(verify.services).sort(), Object.keys(services).sort());
 });
 
 test('service data lives on named volumes', () => {
@@ -233,8 +245,27 @@ test('service data lives on named volumes', () => {
 
 test('host ports are published on localhost only', () => {
   const ports = Object.values(services).flatMap((service) => service.ports ?? []);
-  assert.deepEqual(ports.map((port) => port.target).sort(), [4222, 8080]);
+  assert.deepEqual(ports.map((port) => port.target).sort(), [4222, 8080, 8443]);
   for (const port of ports) assert.equal(port.host_ip, '127.0.0.1');
+});
+
+test('the broker requires TLS and the worker trusts the installation CA read-only', () => {
+  const broker = readFileSync('infra/installation/nats-server.conf', 'utf8');
+  assert.match(broker, /^tls \{[^}]*cert_file: "\/etc\/nats\/authority\/nats-certificate\.pem"[^}]*min_version: "1\.2"/m);
+  assert.doesNotMatch(broker, /^\s*allow_non_tls/m);
+  const trust = services.worker.volumes?.find((mount) => mount.source === 'installation-trust');
+  assert.deepEqual([trust?.target, (trust as { read_only?: boolean } | undefined)?.read_only], ['/etc/taskelith/trust', true]);
+  const ca = '/etc/taskelith/trust/installation-ca.pem';
+  assert.deepEqual([services.worker.environment?.TASKELITH_NATS_CA, services.worker.environment?.NODE_EXTRA_CA_CERTS], [ca, ca]);
+  assert.match(services.worker.environment?.TASKELITH_CONTROL_PLANE_URL ?? '', /^https:\/\//);
+});
+
+test('the composition passes no operator browser certificate, even when the host sets one', () => {
+  const host = { ...COMPOSITION_ENVIRONMENT, TASKELITH_BROWSER_TLS_CERT: '/host/browser.pem', TASKELITH_BROWSER_TLS_KEY: '/host/browser.key' };
+  const controlPlane = resolvedComposition('infra/installation/compose.yaml', host).services['control-plane'];
+  const browserSettings = Object.keys(controlPlane.environment ?? {}).filter((name) => name.startsWith('TASKELITH_BROWSER_TLS_'));
+  assert.deepEqual(browserSettings, []);
+  assert.equal(controlPlane.volumes?.some((mount) => mount.source?.startsWith('/host/')), false);
 });
 
 test('secrets come from the environment of the make targets', () => {

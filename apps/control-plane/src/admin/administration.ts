@@ -1,4 +1,6 @@
+import { join } from 'node:path';
 import { OperatorCredentialService, type AdministrativeInvocation } from '@taskelith/access';
+import { X509CertificateIssuer } from '@taskelith/certificates';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import { ControlPlaneNamespace, FileInstallationRecord } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
@@ -9,7 +11,9 @@ import {
   type HostConstraints,
   type InitializedInstallation,
   type InstallationIdentity,
+  type IssuedCertificate,
   type RotatedCredentials,
+  type WorkerAdmissionSnapshot,
   type WorkerCommandConsumers,
   type WorkerRevocation,
 } from '@taskelith/fleet';
@@ -27,12 +31,25 @@ import type { Logger, Metrics } from '@taskelith/observability';
 import {
   CommittingInstallationTable,
   CommittingOperatorCredentials,
+  CommittingWorkerAdmissions,
   migrate,
   PostgresDatabase,
 } from '@taskelith/postgres';
 import { NodeSecrets, RandomIdentifiers } from '@taskelith/secrets';
 import { LaunchRevokingFleetRegistry } from '../composition/launch-revoking-fleet-registry.js';
 import { ensureBrokerTrust, readBrokerAuthority } from './broker-trust.js';
+import {
+  ensureInstallationAuthority,
+  issueServerCertificates,
+  readServerCertificate,
+  storedInstallationAuthority,
+  INSTALLATION_CA_FILE,
+  type IssuedServerCertificates,
+  type ServerHosts,
+  type ServerName,
+  type StoredServerCertificate,
+} from './installation-authority.js';
+import { LOCAL_SERVER_HOSTS } from './server-hosts.js';
 
 export interface AdministrationSettings {
   readonly dataRoot: string;
@@ -40,6 +57,8 @@ export interface AdministrationSettings {
   readonly postgres: URL;
   readonly nats: URL;
   readonly natsTls?: TransportTls;
+  // The certificates' alternative names; the localhost names without them.
+  readonly serverHosts?: ServerHosts;
   readonly now?: () => Instant;
   readonly logger?: Logger;
   readonly metrics?: Metrics;
@@ -47,6 +66,7 @@ export interface AdministrationSettings {
 
 export interface Initialization extends InitializedInstallation {
   readonly brokerServerConfig: string;
+  readonly installationCa: string;
 }
 
 // Commands run on the control-plane host: host access authorizes the init and
@@ -56,6 +76,7 @@ export class Administration {
   readonly #namespace: ControlPlaneNamespace;
   readonly #database: PostgresDatabase;
   readonly #secrets = new NodeSecrets();
+  readonly #issuer = new X509CertificateIssuer();
   readonly #operator: OperatorCredentialService;
 
   private constructor(settings: AdministrationSettings, namespace: ControlPlaneNamespace) {
@@ -85,10 +106,33 @@ export class Administration {
     if (!migrated.ok) return migrated;
     const record = await new FileInstallationRecord(this.#namespace).read();
     if (!record.ok) return record;
-    const trust = ensureBrokerTrust(this.#namespace, record.value !== undefined, this.#epochSeconds());
+    const installed = record.value !== undefined;
+    const trust = ensureBrokerTrust(this.#namespace, installed, this.#epochSeconds());
     if (!trust.ok) return trust;
+    const authority = await ensureInstallationAuthority(this.#namespace, installed, this.#issuer, this.#clock.now());
+    if (!authority.ok) return authority;
+    // A rerun after success keeps the certificates and fails with conflict.
+    const certificates = installed ? undefined : await this.#issue(authority.value);
+    if (certificates !== undefined && !certificates.ok) return certificates;
     const initialized = await this.#installation().initialize(invocation);
-    return initialized.ok ? ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath }) : initialized;
+    if (!initialized.ok) return initialized;
+    const installationCa = join(this.#namespace.directory, INSTALLATION_CA_FILE);
+    return ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath, installationCa });
+  }
+
+  // New server certificates from the stored authority (`make
+  // installation-certificates`); the installation must exist.
+  async issueInstallationCertificates(): Promise<Result<IssuedServerCertificates>> {
+    const record = await new FileInstallationRecord(this.#namespace).read();
+    if (!record.ok) return record;
+    if (record.value === undefined) return err(failure('precondition-failed', 'the installation is not initialized; run init first'));
+    const authority = storedInstallationAuthority(this.#namespace);
+    return authority.ok ? this.#issue(authority.value) : authority;
+  }
+
+  // A server's certificate and key, for the control plane's listeners.
+  serverCertificate(name: ServerName): Result<StoredServerCertificate> {
+    return readServerCertificate(this.#namespace, name);
   }
 
   resetOperatorCredential(invocation: AdministrativeInvocation): Promise<Result<string>> {
@@ -109,6 +153,14 @@ export class Administration {
 
   expireGraceWindows(operatorSecret: string): Promise<Result<number>> {
     return this.#asOperator(operatorSecret, (enrollment) => enrollment.expireGraceWindows());
+  }
+
+  // The workers view; the operator credential stands for
+  // installation-owner, as for the other operator commands.
+  async workerAdmission(operatorSecret: string): Promise<Result<WorkerAdmissionSnapshot>> {
+    const authenticated = await this.#operator.authenticate(operatorSecret);
+    if (!authenticated.ok) return authenticated;
+    return new CommittingWorkerAdmissions(this.#database).workers();
   }
 
   // The service's database, operator credential, and verified installation,
@@ -196,6 +248,11 @@ export class Administration {
     } finally {
       await transport.value.close();
     }
+  }
+
+  #issue(authority: IssuedCertificate): Promise<Result<IssuedServerCertificates>> {
+    const hosts = this.#settings.serverHosts ?? LOCAL_SERVER_HOSTS;
+    return issueServerCertificates(this.#namespace, authority, this.#issuer, hosts, this.#clock.now());
   }
 
   #installation(): InstallationService {

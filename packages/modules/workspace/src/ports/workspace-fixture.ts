@@ -1,5 +1,6 @@
 import type { AttemptId } from '@taskelith/execution';
-import type { IdentifierDigest, RepositoryBinding, WorkspaceCredential } from '../domain/workspace.js';
+import type { GitClientPin } from '../domain/git-client.js';
+import type { IdentifierDigest, RepositoryBinding, TreeEntry, WorkspaceCredential } from '../domain/workspace.js';
 import type { WorkspaceProvider } from './workspace-provider.js';
 
 export interface FixtureCredentials {
@@ -11,10 +12,27 @@ export interface FixtureCredentials {
   readonly foreign: WorkspaceCredential;
 }
 
-// One entry of a tree, with Git's file modes and exact file bytes.
-export type TreeEntry =
-  | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: Uint8Array }
-  | { readonly type: 'link'; readonly target: string };
+// What an observation shows in place of a value that holds a credential.
+export const REDACTED_VALUE = '<redacted>';
+
+// What it shows for exactly `Authorization: <authorization>` of the
+// credential, so that the suite can tell whose header a process carries.
+export function redactedHeader(credentialId: string): string {
+  return `<authorization-header:${credentialId}>`;
+}
+
+// One Git process that the adapter started, as the fixture observed it at
+// its start; environment values that hold a credential are redacted.
+export interface GitProcessObservation {
+  readonly argv: readonly string[];
+  readonly pid: number;
+  // The directory the process started in.
+  readonly cwd: string;
+  readonly environment: Readonly<Record<string, string>>;
+  // The configuration of the repository that Git finds from `cwd`, as the
+  // process found it; null outside a repository.
+  readonly repositoryConfig: string | null;
+}
 
 // What an adapter's test supplies, fresh for each case (contract section 12).
 // Native helpers act as an agent or another party would, beside the port.
@@ -34,6 +52,8 @@ export interface WorkspaceFixture {
   // Executions run under a separate account that all of them share, so the
   // provider holds one handed-off workspace at a time (section 3).
   readonly separateExecutionIdentity: boolean;
+  // The Git client pin the provider was composed with (section 7).
+  readonly gitClient: GitClientPin;
   // A new provider over the same data root, as after a worker restart.
   reopen(): WorkspaceProvider;
   writeFile(attemptId: AttemptId, path: string, text: string): Promise<void>;
@@ -72,6 +92,15 @@ export interface WorkspaceFixture {
   removeGitDirectory(attemptId: AttemptId): Promise<void>;
   // A gitfile below the checkout's top naming `gitDirectory`, as a submodule.
   nestGitFile(attemptId: AttemptId, gitDirectory: string): Promise<void>;
+  // Commits a gitlink at `path`, as a submodule's entry, and nothing else.
+  commitGitlink(attemptId: AttemptId, path: string): Promise<void>;
+  // Every Git process the adapter started so far, in start order.
+  gitProcesses(): Promise<readonly GitProcessObservation[]>;
+  // Adds the setting to the checkout's `.git/config` as `git config` does,
+  // as an agent can.
+  plantGitSetting(attemptId: AttemptId, key: string, value: string): Promise<void>;
+  // The checkout's `.git/config` as it is on disk.
+  gitConfig(attemptId: AttemptId): Promise<string>;
   // A staging entry holding a symbolic link to a control record.
   interruptPrepare(attemptId: AttemptId): Promise<void>;
   // The clean workspace renamed to its removing entry, not yet deleted.

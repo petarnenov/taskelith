@@ -126,6 +126,8 @@ async function replaceJournal(
   // below the fences of the previous one.
   const restarted = await tx.reports.restartFences(workerId);
   if (!restarted.ok) return restarted;
+  const awaiting = await tx.workerAdmissions.awaitSelfCheck(workerId);
+  if (!awaiting.ok) return awaiting;
   const discarded = await tx.inventoryReports.removeByJournal(workerId, previousJournalId);
   if (!discarded.ok) return discarded;
   context.log.warn({ workerId }, 'execution.journal.replaced', { previousJournalId, journalId });

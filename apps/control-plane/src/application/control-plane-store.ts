@@ -11,7 +11,7 @@ import type {
   UnrecordedProcesses,
   WorkerId,
 } from '@taskelith/execution';
-import type { FleetRegistry } from '@taskelith/fleet';
+import type { FleetRegistry, WorkerAdmissions } from '@taskelith/fleet';
 import type {
   CapacityTransaction,
   DelegationRequests,
@@ -52,6 +52,7 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly outboxLookup: OutboxLookup;
   readonly unrecordedProcesses: UnrecordedProcesses;
   readonly reconciliation: ReconciliationQueue;
+  readonly workerAdmissions: WorkerAdmissions;
 }
 
 // An enrolled worker as the transaction reads it, revoked or not, and the

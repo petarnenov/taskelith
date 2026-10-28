@@ -71,19 +71,31 @@ The `control-plane/` subtree SHALL consist of owner-only directories and files, 
 - **WHEN** `control-plane` is a symbolic link
 - **THEN** opening the namespace fails with reason `unsafe-path`
 
-### Requirement: TLS plumbing
-Every NATS connection SHALL accept a CA and an optional client certificate, and SHALL stay plain without one.
+### Requirement: Installation certificate authority
+`init` SHALL create an installation certificate authority once, keep its key in an owner-only file of the `control-plane/` namespace, and write its public certificate beside it. A rerun SHALL keep the authority, and `init` and `issue-installation-certificates` of an initialized installation without it SHALL fail with `precondition-failed`. A NATS client SHALL accept a CA and an optional client certificate; when to require one is the nats-transport requirement "Installation broker TLS".
 
 #### Scenario: Wrong CA
 - **WHEN** a client trusts a CA that did not sign the server's certificate
 - **THEN** the connection fails
 
+#### Scenario: Rerun keeps the authority
+- **WHEN** `init` runs again after a failure that followed the authority's creation
+- **THEN** the authority's certificate is unchanged
+
+#### Scenario: Lost authority
+- **WHEN** an initialized installation's authority file is missing and `init` or `issue-installation-certificates` runs
+- **THEN** it fails with `precondition-failed` and creates no new authority
+
 ### Requirement: Secret scrubbing
-Failures that leave the process SHALL have bearer secrets, NKey seeds, NATS JWTs, and `.creds` blocks redacted, and a child process's environment SHALL keep no secret variable or value.
+Failures that leave the process SHALL have bearer secrets, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys redacted, and a child process's environment SHALL keep no secret variable or value.
 
 #### Scenario: Failure with a secret
 - **WHEN** a failure's message or details contain a worker secret
 - **THEN** the printed failure shows `[redacted]` in its place
+
+#### Scenario: Private key in a failure
+- **WHEN** a failure's message contains a PEM private-key block, whole or cut, beside a PEM certificate
+- **THEN** the printed failure shows `[redacted]` for the key and keeps the certificate
 
 ### Requirement: Worker bearer authentication
 A worker's control-plane secret SHALL authenticate without its worker identifier, by the hash of the secret, and SHALL name the worker and the generation it is of. A predecessor SHALL authenticate only within its grace window. An unknown secret, a revoked worker, and a secret past the grace window SHALL fail alike with `forbidden` and reason `worker-not-authorized`.
@@ -125,3 +137,101 @@ A revocation SHALL remove the worker's command consumer after the revocation com
 #### Scenario: Consumer already removed
 - **WHEN** the consumer of a revoked worker is removed again
 - **THEN** the removal succeeds
+
+### Requirement: Worker admission on the self-check
+A worker SHALL be `awaiting-self-check` from its enrollment and from each new journal incarnation until the control plane consumes a self-check report of it. Each report above the worker's self-check fence SHALL make it `admitted` when no result failed, and `self-check-failed` otherwise, and SHALL replace its stored results. Placement SHALL place only on an `admitted` worker.
+
+#### Scenario: Newly enrolled worker
+- **WHEN** a worker is enrolled and no self-check report of it has been consumed
+- **THEN** it is `awaiting-self-check` and placement offers it nothing
+
+#### Scenario: Failed check
+- **WHEN** a report names the `linux-containment` check as `failed` with its problems
+- **THEN** the worker is `self-check-failed`, its stored results hold that check with those problems, and placement offers it nothing
+
+#### Scenario: Passing report after a failure
+- **WHEN** a `self-check-failed` worker reports a later self-check with no failed result
+- **THEN** it is `admitted`, its stored results are replaced, and placement may offer it work
+
+#### Scenario: Linux worker without a launch command
+- **WHEN** a Linux worker without a launch command reports `linux-containment` as `not-applicable` with `no-launch-command`
+- **THEN** the worker is `admitted`
+
+#### Scenario: macOS worker
+- **WHEN** a macOS worker reports `linux-containment` as `not-applicable` with `platform-not-covered`
+- **THEN** the worker is `admitted` and its stored result is `not-applicable` with that reason
+
+#### Scenario: Stale report
+- **WHEN** a report arrives at or below the worker's self-check fence
+- **THEN** the worker admission and the stored results are unchanged
+
+#### Scenario: New journal incarnation
+- **WHEN** an `admitted` worker's journal is replaced
+- **THEN** it is `awaiting-self-check` and its stored results are cleared
+
+### Requirement: Report results checked by the control plane
+For a report that passes the wire schema, the control plane SHALL count a `not-applicable` result as `failed` unless it holds exactly one recognised reason that agrees with the worker's enrolled platform and the check's scope, SHALL count a required check missing from a report as `failed`, and SHALL store a check named more than once as one `failed` result.
+
+#### Scenario: Linux worker claiming another platform
+- **WHEN** a Linux worker reports `linux-containment` as `not-applicable` with `platform-not-covered`
+- **THEN** the result is stored as `failed` and the worker is `self-check-failed`
+
+#### Scenario: Malformed reason
+- **WHEN** a report names a check as `not-applicable` with a reason other than `platform-not-covered` or `no-launch-command`
+- **THEN** the wire schema refuses the report, it is quarantined unapplied, and the worker admission and stored results are unchanged
+
+#### Scenario: Check reported twice
+- **WHEN** an `admitted` worker's report names `linux-containment` twice, with equal or different results
+- **THEN** one `failed` result is stored for it and the worker is `self-check-failed`
+
+#### Scenario: Missing required check
+- **WHEN** a report omits `linux-containment`
+- **THEN** a `failed` result is stored for it and the worker is `self-check-failed`
+
+### Requirement: Running executions survive a failed self-check
+When a worker becomes `self-check-failed`, each of its executions already running SHALL keep its assignment, ownership, and reservation until it ends normally; a failed self-check SHALL revoke no grant.
+
+#### Scenario: Execution running during a failed self-check
+- **WHEN** a worker with an accepted, running attempt reports a failed self-check
+- **THEN** the assignment does not end, and the attempt's later exit ends the task as usual
+
+### Requirement: New grants only for admitted workers
+The launch authority SHALL refuse a new launch operation of a worker that is not `admitted` with the non-retryable `worker-not-authorized`, and SHALL answer a replay of a grant recorded earlier as it would for an admitted worker.
+
+#### Scenario: Grant after a failed self-check
+- **WHEN** a `self-check-failed` worker requests a new launch operation
+- **THEN** the operation is rejected with `worker-not-authorized`, final for that operation
+
+#### Scenario: Replay after a failed self-check
+- **WHEN** a worker that became `self-check-failed` repeats an operation that was granted while it was `admitted`
+- **THEN** the recorded grant is answered
+
+### Requirement: Installation server certificates
+The installation authority SHALL issue the server certificates of the worker API and of NATS, valid for 397 days, with the DNS names and IP addresses of `TASKELITH_API_HOSTS` and `TASKELITH_NATS_HOSTS`. `init` and `issue-installation-certificates` SHALL write each certificate and key as owner-only files of the namespace. An invalid host list SHALL fail and name its variable. An expired authority, or one that ends before the server certificate, SHALL be refused with `precondition-failed`.
+
+#### Scenario: Issued names
+- **WHEN** `issue-installation-certificates` runs with `TASKELITH_API_HOSTS=control-plane,127.0.0.1`
+- **THEN** the API certificate verifies against the authority for `control-plane` and `127.0.0.1` and not for another name
+
+#### Scenario: Wildcard host
+- **WHEN** `TASKELITH_NATS_HOSTS` holds `*.example.com`
+- **THEN** the command fails with `invalid` and names `TASKELITH_NATS_HOSTS`
+
+#### Scenario: Authority near its end
+- **WHEN** `issue-installation-certificates` runs while the authority expires within 397 days
+- **THEN** it fails with `precondition-failed`, names authority rollover as G6 work, and changes no file
+
+### Requirement: Workers view in the administrative entry
+The administrative command `worker-admission` SHALL print the workers view as JSON only after it verifies the operator credential from `TASKELITH_OPERATOR_TOKEN`, and SHALL redact every stored check detail again before it prints it. A wrong credential SHALL fail with `forbidden` and print no view.
+
+#### Scenario: Operator reads the view
+- **WHEN** the operator runs `worker-admission` with the operator credential after a worker enrolled
+- **THEN** it prints that worker as `awaiting-self-check` with no results and exits with 0
+
+#### Scenario: Wrong credential
+- **WHEN** `worker-admission` runs with another credential
+- **THEN** it exits with 1 and prints only a `forbidden` error
+
+#### Scenario: Secret in a detail
+- **WHEN** a stored check detail holds a value shaped like a secret
+- **THEN** the printed view holds the redaction marker in its place

@@ -15,7 +15,19 @@ export { SEED_VARIABLE, SeededRandom, rerunHint, seedFromEnvironment } from './s
 export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-host.js';
 export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';
 export { requestFailure } from './request-failure.js';
-export { SERVICES_REMEDY, integrationEndpoint, integrationSecret } from './integration-endpoint.js';
+export { SERVICES_REMEDY, integrationEndpoint, integrationSecret, integrationSecretPath } from './integration-endpoint.js';
+export { NODE_CERTIFICATE_INSPECTOR } from './certificate-inspector.js';
+export { trustCertificateAuthority } from './trusted-authority.js';
+export {
+  LINUX_LAUNCH_VARIABLES,
+  REQUIRE_LINUX_LAUNCH_VARIABLE,
+  admitExecutionAccount,
+  executionAccountOf,
+  linuxLaunchFromEnvironment,
+  type ExecutionAccountIds,
+  type LinuxLaunch,
+  type LinuxLaunchVariable,
+} from './linux-launch.js';
 export { acquireProcessLock, lockPort, type ReleaseLock } from './process-lock.js';
 export { failed, id, value } from './results.js';
 export {

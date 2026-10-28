@@ -6,3 +6,6 @@ coverage/
 .env.*
 .npmrc
 .DS_Store
+# Keys and certificates are generated at run time, never committed.
+*.pem
+*.key

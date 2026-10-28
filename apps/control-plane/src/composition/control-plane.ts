@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parseLaunchParameters, type LaunchParametersInput } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
   ensureAdvisoryConsumer,
@@ -29,8 +28,9 @@ import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
 import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
-import { createApiServer } from '../api/api-server.js';
+import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { HEARTBEAT_QUEUE, HeartbeatService } from '../application/heartbeat-service.js';
@@ -57,14 +57,20 @@ export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilli
 export const SHUTDOWN_DEADLINE_MILLISECONDS = 30_000;
 const CANCELLED_SETTLE_MILLISECONDS = 5_000;
 
+// Loopback by default; served over HTTPS only (installation contract 7).
 export interface ApiEndpoint {
-  // Loopback by default: G2 serves plain HTTP; TLS is G3 item 26 (D11).
   readonly host: string;
   readonly port: number;
 }
 
+// The browser endpoint: the operator's certificate, else the API's.
+export interface BrowserEndpoint extends ApiEndpoint {
+  readonly tls?: ServerTls;
+}
+
 export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logger' | 'metrics'> {
   readonly api: ApiEndpoint;
+  readonly browser: BrowserEndpoint;
   readonly workflows: readonly KnownWorkflow[];
   readonly logSink?: LogSink;
   readonly sweepMilliseconds?: number;
@@ -79,6 +85,7 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
 
 export interface RunningControlPlane {
   readonly api: ApiEndpoint;
+  readonly browser: ApiEndpoint;
   readonly metrics: InMemoryMetrics;
   // Settles when the service has stopped: `failed` after a loop defect.
   readonly stopped: Promise<'stopped' | 'failed'>;
@@ -107,6 +114,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(() => admin.value.close());
   const identity = await admin.value.verifiedInstallation();
   if (!identity.ok) return identity;
+  const tls = listenerTls(admin.value, settings);
+  if (!tls.ok) return tls;
   const authority = admin.value.brokerAuthority();
   if (!authority.ok) return authority;
   const address = TransportAddress.of(identity.value.installationId);
@@ -135,7 +144,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!parameters.ok) return parameters;
   const workflows = new WorkflowRegistry(settings.workflows);
   const launches = new LaunchAuthority(database, { workflows, parameters: parameters.value, newLaunchAuthId: () => `l${randomUUID()}` });
-  const api = createApiServer(new ControlPlaneApi({
+  const requests = createApiRequestListener(new ControlPlaneApi({
     runs: new RunService(database, workflows),
     tasks: new TaskService(database),
     evidence: new EvidenceService(database, volume.value),
@@ -146,13 +155,15 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
   }), { logger });
-  const listening = await listen(api, settings.api);
-  if (!listening.ok) return listening;
-  const closeApi = once(() => new Promise<void>((resolve) => {
-    api.close(() => resolve());
-    api.closeAllConnections();
-  }));
+  const servers = [createTlsApiServer(requests, tls.value.worker), createTlsApiServer(requests, tls.value.browser)];
+  const closeApi = once(async () => {
+    await Promise.all(servers.map((server) => close(server)));
+  });
   cleanup.push(closeApi);
+  const listening = await listen(servers[0]!, settings.api);
+  if (!listening.ok) return listening;
+  const browser = await listen(servers[1]!, settings.browser);
+  if (!browser.ok) return browser;
   const controller = new AbortController();
   const lag = new EventLoopLagMonitor();
   cleanup.push(async () => lag.stop());
@@ -214,8 +225,48 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
-  logger.info('control-plane.started', { host: listening.value.host, port: listening.value.port });
-  return ok({ api: listening.value, metrics, stopped, stop });
+  logger.info('control-plane.started', {
+    host: listening.value.host, port: listening.value.port, browserHost: browser.value.host, browserPort: browser.value.port,
+  });
+  return ok({ api: listening.value, browser: browser.value, metrics, stopped, stop });
+}
+
+const REISSUE = 'run make installation-certificates';
+const setting = (variable: string) => ({ name: variable, details: { variable } });
+const BROWSER_ORIGIN = { certificate: setting('TASKELITH_BROWSER_TLS_CERT'), key: setting('TASKELITH_BROWSER_TLS_KEY') };
+
+interface ListenerTls {
+  readonly worker: ServerTls;
+  readonly browser: ServerTls;
+}
+
+// The worker API's installation certificate, and the operator's for the
+// browser endpoint or else the same; both checked before any listen.
+function listenerTls(admin: Administration, settings: ControlPlaneSettings): Result<ListenerTls> {
+  const now = settings.now?.() ?? systemNow();
+  const stored = admin.serverCertificate('api');
+  if (!stored.ok) return stored;
+  const installation = { certificate: stored.value.certificatePem, key: stored.value.privateKeyPem };
+  const file = (path: string) => ({ name: path, details: { path } });
+  const installationOrigin = { certificate: file(stored.value.path), key: file(stored.value.keyPath), remedy: REISSUE };
+  const worker = checkServerTls(installation, installationOrigin, now);
+  if (!worker.ok) return worker;
+  if (settings.browser.tls === undefined) return ok({ worker: worker.value, browser: worker.value });
+  const browser = checkServerTls(settings.browser.tls, BROWSER_ORIGIN, now);
+  return browser.ok ? ok({ worker: worker.value, browser: browser.value }) : browser;
+}
+
+function systemNow(): Instant {
+  const now = instantFromEpochMilliseconds(Date.now());
+  if (!now.ok) throw new RangeError(now.error.message);
+  return now.value;
+}
+
+function close(server: ApiServer): Promise<void> {
+  return new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections();
+  });
 }
 
 // Releases what was acquired, newest first; a release that fails does not
@@ -274,7 +325,7 @@ function heartbeatHandler(service: HeartbeatService, address: TransportAddress) 
   return (heartbeat: ReceivedHeartbeat) => service.record({ subjectWorkerId: address.workerOfHeartbeatSubject(heartbeat.subject), body: heartbeat.body });
 }
 
-function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {
+function listen(server: ApiServer, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {
   return new Promise((resolve) => {
     server.once('error', (error) => resolve(err(failure('unavailable', `the API cannot listen: ${error.message}`))));
     server.listen(endpoint.port, endpoint.host, () => {

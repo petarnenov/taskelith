@@ -28,6 +28,7 @@ import { PostgresProducerCursors, PostgresWorkerReports } from './observation-re
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
+import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
@@ -64,6 +65,7 @@ export class PostgresTransaction {
   readonly inventoryReports: PostgresInventoryReports;
   readonly unrecordedProcesses: PostgresUnrecordedProcesses;
   readonly reconciliation: PostgresReconciliationQueue;
+  readonly workerAdmissions: PostgresWorkerAdmissions;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -101,6 +103,7 @@ export class PostgresTransaction {
     this.inventoryReports = new PostgresInventoryReports(session);
     this.unrecordedProcesses = new PostgresUnrecordedProcesses(session);
     this.reconciliation = new PostgresReconciliationQueue(session);
+    this.workerAdmissions = new PostgresWorkerAdmissions(session);
     this.outboxLookup = this.outbox;
   }
 
