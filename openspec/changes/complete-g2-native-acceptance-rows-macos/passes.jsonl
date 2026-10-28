@@ -1,0 +1,1 @@
+{"change": "complete-g2-native-acceptance-rows-macos", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a181b7-647f-7d90-abe6-9892355ab6ca", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 2}}

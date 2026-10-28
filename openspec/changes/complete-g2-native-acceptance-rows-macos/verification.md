@@ -64,7 +64,11 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ### Pass 1 (reviewer A)
 
-Reviewer details: recorded by the worker.
+- **Reviewer:** Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, confirmed in the output header.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, prompt outside the worktree.
+- **Session:** `01a181b7-647f-7d90-abe6-9892355ab6ca`.
+- **Reviewed revision:** `e94ee6e2`; snapshot the same before and after the pass (`6bf2f840`).
+- **Findings:** Critical 0, High 0, Medium 2, Low 2, all fixed.
 
 Fixes:
 
