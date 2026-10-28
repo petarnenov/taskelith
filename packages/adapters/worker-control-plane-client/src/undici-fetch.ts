@@ -14,7 +14,8 @@ const agents = new WeakMap<ServerTrust, Dispatcher>();
 function agentFor(trust: ServerTrust): Dispatcher {
   const known = agents.get(trust);
   if (known !== undefined) return known;
-  const connect = trust.kind === 'pinned' ? { ca: trust.ca } : { rejectUnauthorized: false };
+  // Explicit, so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot turn verification off.
+  const connect = trust.kind === 'pinned' ? { ca: trust.ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
   const agent = new Agent({ connect });
   agents.set(trust, agent);
   return agent;

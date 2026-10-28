@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, X509Certificate } from 'node:crypto';
+import { createServer as createPlainServer, type Server as PlainServer } from 'node:http';
 import { createServer, type Server } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
@@ -39,13 +40,16 @@ class FakeControlPlane {
   readonly seen: Seen[] = [];
   body: unknown = {};
   status = 200;
+  // A `location` header, sent with `status`, for a redirect.
+  location: string | undefined;
   readonly #server: Server;
 
   constructor(certificate: IssuedCertificate) {
     this.#server = createServer({ cert: certificate.certificatePem, key: certificate.privateKeyPem }, (request, response) => {
       this.seen.push({ method: request.method, path: request.url, authorization: request.headers.authorization });
       request.resume();
-      request.on('end', () => response.writeHead(this.status, { 'content-type': 'application/json' }).end(JSON.stringify(this.body)));
+      const headers = { 'content-type': 'application/json', ...(this.location === undefined ? {} : { location: this.location }) };
+      request.on('end', () => response.writeHead(this.status, headers).end(JSON.stringify(this.body)));
     });
   }
 
@@ -65,6 +69,9 @@ let pinned: FakeControlPlane;
 let impostor: FakeControlPlane;
 let pinnedUrl: URL;
 let impostorUrl: URL;
+let plain: PlainServer;
+let plainUrl: URL;
+const plainSeen: string[] = [];
 
 before(async () => {
   installation = await authority('Installation authority');
@@ -75,11 +82,28 @@ before(async () => {
   impostor = new FakeControlPlane(await serverCertificate(foreign));
   pinnedUrl = await pinned.listen();
   impostorUrl = await impostor.listen();
+  plain = createPlainServer((request, response) => {
+    plainSeen.push(`${request.method} ${request.url} ${request.headers.authorization ?? ''}`);
+    request.resume();
+    request.on('end', () => response.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify(pinned.body)));
+  });
+  await new Promise<void>((resolve) => plain.listen(0, '127.0.0.1', () => resolve()));
+  plainUrl = new URL(`http://127.0.0.1:${(plain.address() as AddressInfo).port}/`);
 });
 after(async () => {
   await pinned.close();
   await impostor.close();
+  await new Promise((resolve) => plain.close(resolve));
 });
+
+const ENROLLMENT_ANSWER = {
+  installationId: 'a'.repeat(32), workerId: `w${'b'.repeat(32)}`, credentialGeneration: 1, recoveryEpoch: 1,
+  protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: CREDENTIAL, broker: 'creds text' },
+};
+const ENROLLMENT_REQUEST = {
+  journalId: 'c'.repeat(32) as never, host: { platform: 'linux' as const, architecture: 'x64' as const, hostname: 'build-1' },
+  protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, controls: [] },
+};
 
 const endpoint = (baseUrl: URL) => ({ baseUrl, timeoutMilliseconds: 2000, installationCa: installation.certificatePem });
 
@@ -136,3 +160,34 @@ test('the launch authority and the evidence publisher refuse a system-trusted fo
   assert.equal(failed(await evidence.publish({} as never, new Uint8Array([1]))).code, 'unavailable');
   assert.deepEqual(impostor.seen, []);
 });
+
+test('NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign server get the token', async (t) => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  t.after(() => {
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  });
+  impostor.body = ENROLLMENT_ANSWER;
+  impostor.status = 201;
+  const refused = failed(await new HttpEnrollmentClient(endpoint(impostorUrl)).enroll(TOKEN, ENROLLMENT_REQUEST));
+  impostor.status = 200;
+  assert.equal(refused.code, 'unavailable');
+  const launch = new HttpLaunchAuthorityClient({ ...endpoint(impostorUrl), credential: CREDENTIAL });
+  assert.equal(failed(await launch.authorize({} as never)).code, 'unavailable');
+  assert.deepEqual(impostor.seen, [], 'no token and no bearer reached the foreign server');
+});
+
+for (const status of [307, 308]) {
+  test(`a ${status} redirect to plain HTTP is not followed, for the token or the CA read`, async () => {
+    pinned.status = status;
+    pinned.location = new URL('workers/enrollments', plainUrl).href;
+    const enrolled = await new HttpEnrollmentClient(endpoint(pinnedUrl)).enroll(TOKEN, ENROLLMENT_REQUEST);
+    const read = await new HttpInstallationCaSource({ baseUrl: pinnedUrl, timeoutMilliseconds: 2000 }).read();
+    pinned.status = 200;
+    pinned.location = undefined;
+    assert.equal(enrolled.ok, false, 'no enrollment through a redirect');
+    assert.equal(read.ok, false, 'no CA through a redirect');
+    assert.deepEqual(plainSeen, [], 'the plain HTTP target got nothing');
+  });
+}

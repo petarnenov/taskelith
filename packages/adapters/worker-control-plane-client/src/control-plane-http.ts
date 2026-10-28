@@ -19,6 +19,8 @@ export interface HttpInit {
   readonly body?: string | FormData;
   readonly signal: AbortSignal;
   readonly trust: ServerTrust;
+  // A redirect could lead off the pinned TLS, so none is followed.
+  readonly redirect: 'error';
 }
 
 // A call's TLS trust: the pinned CA only, or no verification for the CA
@@ -74,7 +76,7 @@ async function send(target: HttpTarget, path: string, exchange: Exchange): Promi
   const fetchWith = target.fetch ?? undiciFetch;
   try {
     const response = await fetchWith(new URL(path, withTrailingSlash(target.baseUrl)), {
-      ...exchange, signal: AbortSignal.timeout(target.timeoutMilliseconds), trust: target.trust,
+      ...exchange, signal: AbortSignal.timeout(target.timeoutMilliseconds), trust: target.trust, redirect: 'error',
     });
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {
