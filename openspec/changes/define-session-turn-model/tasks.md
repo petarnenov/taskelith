@@ -20,6 +20,6 @@
 ## 4. Verification and review
 
 - [x] 4.1 Run `make verify`
-- [ ] 4.2 Independent review by the assigned reviewers A and B
-- [ ] 4.3 Record the evidence in `verification.md`, `passes.jsonl`, and `findings.jsonl`
+- [x] 4.2 Independent review by the assigned reviewers A and B
+- [x] 4.3 Record the evidence in `verification.md`, `passes.jsonl`, and `findings.jsonl`
 - [x] 4.4 Record in `verification.md` the coordinator's follow-up outside this change: add item 4 to the handoff owners of the [agent harness port contract](/docs/contracts/agent-harness-port.md) section 4.1 ("Selection, cooldown, and handoff are items 5, 12, and 18"), which this change does not edit

@@ -1,6 +1,6 @@
 # Verification: define-session-turn-model
 
-Status: phase 2 developed; review passes 1 (reviewer A) and 2 (reviewer B) fixed, pass 3 pending.
+Status: phase 2 developed; review complete: passes 1 (reviewer A) and 2 (reviewer B) fixed, pass 3 (reviewer A) confirmed with no finding; three passes, the cap reached.
 
 ## Scope and source
 
@@ -17,6 +17,7 @@ Status: phase 2 developed; review passes 1 (reviewer A) and 2 (reviewer B) fixed
 - Phase 2 commits: `d16b3828` `docs: record the delegate decisions of the session turn model`; `a0fbf051` `docs: add the session timeline contract`; `c88e1ada` `test: add the failing session timeline tests`; `7041ebe2` `chore: implement the session timeline domain`; `a72e133d` `chore: define the shared harness values in the execution domain`; and the commit that adds this record.
 - Review pass 1 fixes: `e076bed5` `test: build the session generations inside each test`; `f9d91d1b` `chore: record no entry for empty session output`; `87a5c2af` `chore: make the host the responder of delegation results`; `ff0e2ef5` `test: cover the bounds of every session answer text`; `ba741f9e` `docs: separate recording a session request from persisting it`; and the commit that records the pass.
 - Review pass 2 fixes: `d8ea0a17` `test: cover requests of queued and ended turns and tidy the session tests`; `4f1594dd` `chore: bind no attempt to a stopped session`; `752cab87` `chore: let a standing rule give only a permission answer`; `33983762` `chore: compare the author of a retried session turn`; `93f2b51e` `chore: let the host deliver a delegation outcome as a session turn`; `1563c646` `docs: state the responder of an answer as its own requirement`; `93d8dfa9` `docs: state the failure codes of a generation start`; `dac55234` `chore: freeze only the new session output entry on append`; `4b942d6b` `chore: import the harness request kind at the top of the port data`; `bdb8b706` `docs: correct the identifiers coverage record of the session turn model`; and the commit that records the pass.
+- Review pass 3: the commit that records the pass; no fix.
 
 ## Way of working
 
@@ -97,6 +98,8 @@ The five M3 failures: "a host turn needs a delegation request that can no longer
 
 - Pass 1, reviewer A: Codex `gpt-6.1-sol`, variant `medium`, session `01a1810d-68db-72f2-bb07-f7912fe9652f`; 0 critical, 0 high, 3 medium, 2 low, all fixed ([findings](findings.jsonl), [passes](passes.jsonl)). Finding 1 is design decision 32 and finding 2 decision 33. The findings outside this directory name the capability `execution-model`, the closest existing one, because `make findings` accepts only directories under `openspec/specs` and rejects `session-turn-model` as unknown.
 - Pass 2, reviewer B: Claude Code `claude-opus-5-5`, variant `high`, session `3bad015b-b840-418b-aeb4-1944bbc559ff`; 0 critical, 0 high, 3 medium, 7 low, all fixed ([findings](findings.jsonl), [passes](passes.jsonl)). M1 is design decision 34 and M3 decision 35; M2 extends decision 33 and names `missedBy` pass 1 (reviewer A), because it is the gap of pass 1 finding 2 for standing rules. L2 has the category `docs` because the vocabulary has no performance category. L6 and L7 concern this change's records and name no capability.
+- Pass 3, reviewer A: Codex `gpt-6.1-sol`, variant `medium`, session `01a1818b-d77c-73d0-a4cb-bc5a1061d753`, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`; the header confirmed `model: gpt-6.1-sol` and `reasoning effort: medium`, and the snapshot was unchanged (`01321953…`). A confirmation pass: all 10 pass 2 fixes correct and complete, no new problem; 0 critical, 0 high, 0 medium, 0 low ([passes](passes.jsonl)). The reviewer ran `session-*.test.ts` (86/86) and the execution tests (255/255) with `--test-isolation=none`; it could not reproduce the coverage in its read-only sandbox.
+- The review is complete: three passes, the cap reached.
 
 ## Limitations
 
@@ -107,6 +110,5 @@ The five M3 failures: "a host turn needs a delegation request that can no longer
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, which confirms the fixes of passes 1 and 2.
 - Follow-up for the coordinator, outside this change: add item 4 to the handoff owners of the [agent harness port contract](/docs/contracts/agent-harness-port.md) section 4.1 ([design](design.md) source note 2).
 - Integration into dev by the coordinator (single pull request).

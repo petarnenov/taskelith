@@ -1,2 +1,3 @@
 {"change":"define-session-turn-model","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a1810d-68db-72f2-bb07-f7912fe9652f","counts":{"critical":0,"high":0,"medium":3,"low":2}}
 {"change":"define-session-turn-model","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-opus-5-5","variant":"high"},"session":"3bad015b-b840-418b-aeb4-1944bbc559ff","counts":{"critical":0,"high":0,"medium":3,"low":7}}
+{"change":"define-session-turn-model","pass":3,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a1818b-d77c-73d0-a4cb-bc5a1061d753","counts":{"critical":0,"high":0,"medium":0,"low":0}}
