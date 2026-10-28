@@ -50,7 +50,7 @@ A session SHALL bind one attempt at a time: binding while the bound attempt has 
 - **THEN** the binding fails with `precondition-failed`, and the next session of the task can bind the attempt
 
 ### Requirement: Session generations
-A generation SHALL start only under an active bound attempt; the first SHALL be 1 and record the native session ID, and each next one SHALL be exactly one more, start after the last ended, and name the same native session ID, another failing with `conflict`; a stopped session SHALL start none; ending the bound attempt SHALL end a running generation.
+A generation SHALL start only under an active bound attempt; the first SHALL be 1 and record the native session ID, and each next one SHALL be exactly one more, start after the last ended, and name the same native session ID; a generation that names another native session ID SHALL fail with `conflict`, and any other start that breaks these rules with `precondition-failed`; a stopped session SHALL start none; ending the bound attempt SHALL end a running generation.
 
 #### Scenario: Skipped generation
 - **WHEN** generation 3 starts after generation 1 ended
