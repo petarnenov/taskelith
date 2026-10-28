@@ -21,6 +21,7 @@ import {
   recordJournalFault,
   parseMacMountOptions,
   probeVolume,
+  readInstallationCa,
   readWorkerCredentials,
   resolveDataRoot,
   startNewIncarnation,
@@ -129,7 +130,7 @@ test('enrollment creates the journal before the identity, with private modes', (
     assert.equal(statSync(directory).mode & 0o777, 0o700, directory);
   }
   const credentialFiles = [join(paths.credentials, 'control-plane.1'), join(paths.credentials, 'broker.1.creds')];
-  for (const file of [paths.lock, paths.identity, paths.journal, `${paths.journal}-wal`, ...credentialFiles]) {
+  for (const file of [paths.lock, paths.identity, paths.journal, `${paths.journal}-wal`, paths.installationCa, ...credentialFiles]) {
     assert.equal(statSync(file).mode & 0o777, 0o600, file);
   }
   assert.equal(statSync(paths.credentials).mode & 0o777, 0o700);
@@ -145,7 +146,18 @@ test('enrollment creates the journal before the identity, with private modes', (
   assert.deepEqual(root.journal.binding, BINDING);
   assert.deepEqual(root.identity.credentials, credentialReferencesOf(1));
   assert.deepEqual(value(readWorkerCredentials(paths, root.identity)), ENROLLMENT.credentials);
+  assert.equal(value(readInstallationCa(paths)), ENROLLMENT.installationCa);
   assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).code, 'conflict');
+});
+
+test('the pinned installation CA is read only while present, nonempty, and safe', () => {
+  const { paths } = enroll();
+  writeFileSync(paths.installationCa, '');
+  assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
+  rmSync(paths.installationCa);
+  assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
+  symlinkSync(paths.identity, paths.installationCa);
+  assert.equal(reasonOf(readInstallationCa(paths)), 'unsafe-path');
 });
 
 test('a claim holds the root lock until it completes or is abandoned', () => {

@@ -7,7 +7,16 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/contracts';
 import type { JournalSnapshot } from '@taskelith/execution';
-import { stubAdmissionCheck, type Enrollment, type EnrollmentClient, type EnrollmentRequest, type SelfCheckRun, type WorkerAdmissionCheck } from '@taskelith/fleet';
+import {
+  stubAdmissionCheck,
+  type Enrollment,
+  type EnrollmentClient,
+  type EnrollmentRequest,
+  type InstallationCa,
+  type InstallationCaSource,
+  type SelfCheckRun,
+  type WorkerAdmissionCheck,
+} from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -48,9 +57,25 @@ const ENROLLMENT: Enrollment = {
   protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: `tkwk_${'C'.repeat(43)}`, broker: 'broker creds text' },
 };
 
-class FakeEnrollment implements EnrollmentClient {
+const INSTALLATION_CA: InstallationCa = { certificatePem: 'installation CA PEM', sha256: 'ab'.repeat(32) };
+
+// The CA reads, and the pinned CA of each enrollment client with its calls.
+class FakeEnrollment implements EnrollmentClient, InstallationCaSource {
   readonly calls: Array<{ token: string; request: EnrollmentRequest }> = [];
+  readonly pins: string[] = [];
+  reads = 0;
   answer: Result<Enrollment> = ok(ENROLLMENT);
+  ca: Result<InstallationCa> = ok(INSTALLATION_CA);
+
+  async read(): Promise<Result<InstallationCa>> {
+    this.reads += 1;
+    return this.ca;
+  }
+
+  readonly pinned = (installationCa: string): EnrollmentClient => {
+    this.pins.push(installationCa);
+    return this;
+  };
 
   async enroll(token: string, request: EnrollmentRequest): Promise<Result<Enrollment>> {
     this.calls.push({ token, request });
@@ -125,7 +150,7 @@ beforeEach(() => {
     dataRoot: join(base, 'data'), controlPlaneUrl: new URL('https://control-plane/'), natsUrl: new URL('nats://broker:4222'),
     host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 7680, controls: [] },
-    enrollmentToken: TOKEN,
+    enrollmentToken: TOKEN, installationCaSha256: INSTALLATION_CA.sha256,
   };
   enrollment = new FakeEnrollment();
   broker = new FakeBroker();
@@ -142,7 +167,7 @@ afterEach(async () => {
 
 function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
-    enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
+    installationCa: enrollment, enrollment: enrollment.pinned, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
     sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), daemon, pressurePollMilliseconds: 10,
     admissionChecks, ...(launching === undefined ? {} : { launching }),
   };
@@ -151,13 +176,15 @@ function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
 // Launch dependencies that record what the worker asked of them.
 class RecordingLaunching {
   readonly credentials: string[] = [];
+  readonly pins: string[] = [];
   readonly hosts: Array<{ launch: LaunchSettings | undefined; executions: string }> = [];
   readonly authority = new FakeAuthority();
   hostAnswer: Result<LaunchHost> = ok({ clock: new FakeClock(), supervision: new FakeSupervisions().factory });
 
   readonly dependencies: LaunchingDependencies = {
-    authority: (credential) => {
+    authority: (credential, installationCa) => {
       this.credentials.push(credential);
+      this.pins.push(installationCa);
       return this.authority;
     },
     host: (hostSettings, executions) => {
@@ -189,7 +216,36 @@ test('the first start enrolls with the token, stores the credentials, and connec
   assert.equal(readFileSync(join(paths.worker, worker.identity.credentials.controlPlane), 'utf8'), ENROLLMENT.credentials.controlPlane);
   const [endpoint] = broker.endpoints;
   assert.deepEqual([endpoint?.server.href, endpoint?.creds, endpoint?.workerId, endpoint?.address.installationId, endpoint?.tls],
-    ['nats://broker:4222', ENROLLMENT.credentials.broker, ENROLLMENT.workerId, ENROLLMENT.installationId, undefined]);
+    ['nats://broker:4222', ENROLLMENT.credentials.broker, ENROLLMENT.workerId, ENROLLMENT.installationId, { ca: INSTALLATION_CA.certificatePem }]);
+  assert.deepEqual([enrollment.reads, enrollment.pins], [1, [INSTALLATION_CA.certificatePem]]);
+  assert.equal(readFileSync(paths.installationCa, 'utf8'), INSTALLATION_CA.certificatePem);
+});
+
+test('a CA with another fingerprint aborts the start before the token is sent', async () => {
+  enrollment.ca = ok({ certificatePem: 'foreign CA PEM', sha256: 'cd'.repeat(32) });
+  const refused = failed(await startWorker(settings, dependencies()));
+  assert.deepEqual([refused.code, refused.details.reason, refused.details.variable], ['precondition-failed', 'installation-ca-mismatch', 'TASKELITH_INSTALLATION_CA_SHA256']);
+  assert.deepEqual([enrollment.calls, enrollment.pins], [[], []]);
+  assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  enrollment.ca = err(failure('unavailable', 'the control plane did not answer'));
+  assert.equal(failed(await startWorker(settings, dependencies())).code, 'unavailable');
+  assert.deepEqual([enrollment.calls, existsSync(workerPaths(settings.dataRoot).worker)], [[], false]);
+});
+
+test('an unenrolled worker without the fingerprint asks nothing and creates nothing', async () => {
+  const { installationCaSha256: _fingerprint, ...withoutFingerprint } = settings;
+  const missing = failed(await startWorker(withoutFingerprint, dependencies()));
+  assert.deepEqual([missing.code, missing.details.variable], ['invalid', 'TASKELITH_INSTALLATION_CA_SHA256']);
+  assert.deepEqual([enrollment.reads, enrollment.calls.length, existsSync(workerPaths(settings.dataRoot).worker)], [0, 0, false]);
+});
+
+test('an enrolled root without its pinned CA fails before any request or connection', async () => {
+  await (await start()).stop();
+  rmSync(workerPaths(settings.dataRoot).installationCa);
+  const launching = new RecordingLaunching();
+  const refused = failed(await startWorker({ ...settings, launch: LAUNCH }, dependencies(launching.dependencies)));
+  assert.deepEqual([refused.code, failureReason(refused)], ['precondition-failed', 'corrupt']);
+  assert.deepEqual([broker.endpoints.length, launching.credentials, enrollment.calls.length], [1, [], 1]);
 });
 
 test('the worker declares its capacity once per change and publishes it on its observation subject', async () => {
@@ -328,10 +384,10 @@ test('the worker listens on no port: every connection is outbound', async () => 
 test('a later start reuses the enrolled identity and never redeems a token again', async () => {
   const first = await start();
   await first.stop();
-  const second = await start({ ...settings, natsTls: { ca: 'PEM' } });
+  const second = await start({ ...settings, installationCaSha256: 'ef'.repeat(32) });
   assert.equal(enrollment.calls.length, 1);
   assert.deepEqual(second.identity, first.identity);
-  assert.deepEqual(broker.endpoints[1]?.tls, { ca: 'PEM' });
+  assert.deepEqual([enrollment.reads, broker.endpoints[1]?.tls], [1, { ca: INSTALLATION_CA.certificatePem }]);
   const { enrollmentToken: _token, ...withoutToken } = settings;
   await second.stop();
   assert.equal((await start(withoutToken)).identity.workerId, ENROLLMENT.workerId);
@@ -492,7 +548,7 @@ test('the entry reports a start failure redacted and returns nothing', async () 
   const environment = { TASKELITH_DATA_DIR: settings.dataRoot, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane/', TASKELITH_NATS_URL: 'nats://broker:4222' };
   assert.equal(await workerMain(environment, (line) => lines.push(line), () => dependencies()), undefined);
   assert.equal(JSON.parse(lines[0] ?? '{}').error.details.reason, 'not-enrolled');
-  const worker = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: TOKEN }, (line) => lines.push(line), () => dependencies());
+  const worker = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: TOKEN, TASKELITH_INSTALLATION_CA_SHA256: INSTALLATION_CA.sha256 }, (line) => lines.push(line), () => dependencies());
   assert.ok(worker);
   running.push(worker);
   assert.equal(lines.length, 1);
@@ -520,7 +576,7 @@ test('with a launch command, an accepted assignment is authorized with the store
   const worker = await start({ ...settings, launch: LAUNCH }, launching.dependencies);
   value(worker.root.journal.recordCommand(offer()));
   await until(() => launching.authority.requests.length > 0);
-  assert.deepEqual(launching.credentials, [ENROLLMENT.credentials.controlPlane]);
+  assert.deepEqual([launching.credentials, launching.pins], [[ENROLLMENT.credentials.controlPlane], [INSTALLATION_CA.certificatePem]]);
   assert.deepEqual(launching.hosts, [{ launch: LAUNCH, executions: workerPaths(settings.dataRoot).executions }]);
   assert.equal(launching.authority.requests[0]?.assignmentId, 'assignment-1');
   await until(() => value(worker.root.journal.snapshot()).executions[0]?.authorizations[0]?.outcome === 'rejected-final');

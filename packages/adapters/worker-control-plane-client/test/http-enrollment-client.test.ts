@@ -7,6 +7,9 @@ import type { EnrollmentRequest } from '@taskelith/fleet';
 import { HttpEnrollmentClient } from '@taskelith/worker-control-plane-client';
 import { failed, id, value } from '@taskelith/testing';
 
+// These servers are plain HTTP, so the pinned CA is never used.
+const PLAIN_HTTP_CA = 'unused CA';
+
 const TOKEN = `tken_${'B'.repeat(43)}`;
 const REQUEST: EnrollmentRequest = {
   journalId: id('JournalId', 'journal-1'),
@@ -41,7 +44,7 @@ async function text(request: IncomingMessage): Promise<string> {
 }
 
 function client(timeoutMilliseconds = 2000): HttpEnrollmentClient {
-  return new HttpEnrollmentClient({ baseUrl, timeoutMilliseconds });
+  return new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl, timeoutMilliseconds });
 }
 
 test('the token is the bearer, the body is the contract request, and the enrollment comes back', async () => {
@@ -81,6 +84,6 @@ test('an answer that breaks the schema or holds invalid identifiers is not an en
 test('a timeout or a lost connection is unavailable', async () => {
   answer = { status: 201, body: ENROLLMENT, delayMilliseconds: 300 };
   assert.equal(failed(await client(50).enroll(TOKEN, REQUEST)).code, 'unavailable');
-  const unreachable = new HttpEnrollmentClient({ baseUrl: new URL('http://127.0.0.1:1/'), timeoutMilliseconds: 500 });
+  const unreachable = new HttpEnrollmentClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://127.0.0.1:1/'), timeoutMilliseconds: 500 });
   assert.equal(failed(await unreachable.enroll(TOKEN, REQUEST)).code, 'unavailable');
 });

@@ -35,6 +35,7 @@ export const ENROLLMENT: WorkerEnrollment = {
   ...BINDING,
   credentialGeneration: 1,
   credentials: { controlPlane: 'tkwk_test-secret', broker: '-----BEGIN NATS USER JWT-----\ntest\n' },
+  installationCa: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n',
 };
 
 // A fresh data root outside any checkout, resolved past symbolic links
