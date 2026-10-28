@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification, the evidence runs, `make verify`, and the fixes of review passes 1 and 2 are recorded below.
+Date: 2026-10-28. The author's verification, the evidence runs, `make verify`, the fixes of review passes 1 and 2, and review pass 3, which ended the review, are recorded below.
 
 ## Scope and source
 
@@ -107,6 +107,15 @@ Fixes:
 - **L-7** (docs): `design.md` decision 2 names `HeldSupervision` with its start and recovery holds. Records commit.
 - **L-8** (Linux paths not run): recorded under "Limitations"; no Linux host ran in this change. Records commit.
 
+### Pass 3 (reviewer A)
+
+- **Reviewer:** Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, confirmed in the output header.
+- **Invocation:** as in pass 1.
+- **Session:** `01a18218-6ab9-7f51-947a-b77e78096f84`.
+- **Reviewed revision:** `e8599d9b`; snapshot the same before and after the pass (`a351891f`).
+- **Findings:** Critical 0, High 0, Medium 0, Low 0. Pass 3 confirmed every pass 2 fix. It ended the review.
+- **Reviewer's limitation:** in its sandbox six process-guard unit tests of `test/g2-scenario-launch.test.ts` could not run (`spawnSync ps EPERM`), so it confirmed them by reading, not by running; the author ran them ("Fail-before").
+
 ## Limitations
 
 - The guard covers races c, g, and h; the other scenarios rely on the same composition.
@@ -116,7 +125,6 @@ Fixes:
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, confirming the pass 2 fixes only: governance "Conditional third pass" requires it, because the pass 2 fixes `afbd5542` and `0bef214b` change test code outside the records and documentation. It is recorded here, in `passes.jsonl`, and in `findings.jsonl`.
 - The archive commit, which links `docs/g3-plan.md` and `docs/worker-platforms.md` to the archived `acceptance.md`, with its checks.
 - Full `make verify` of the clean archive commit directly before the push, whose stamp the `pre-push` hook reuses, and the handoff to the coordinator.
 - Integration into dev by the coordinator (single pull request)
