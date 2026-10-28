@@ -31,7 +31,7 @@ A prepare SHALL build the clone in a staging entry and rename it into place, a r
 - **THEN** `handedOff` returns the attempt and Git work on it fails with reason `workspace-handed-off`
 
 ### Requirement: Per-run credential use
-The workspace SHALL use the source control contract's run credential passed to each remote operation, SHALL require `read-code` to prepare or read the remote head and `write-code` to push on the bound repository, failing with `forbidden` before any remote call, SHALL pass the secret to Git only as `http.extraHeader` in command-scope environment configuration, and SHALL never write it into the workspace, a file, a credential helper, an argument, or a log.
+The workspace SHALL use the run credential passed to each remote operation, SHALL require `read-code` to prepare or read the remote head and `write-code` to push on the bound repository, failing with `forbidden` before any remote call, SHALL pass the complete `Authorization` value that the SCM plugin forms to Git only as `http.extraHeader` in command-scope environment, and SHALL never put it or the secret into the workspace, a file, a credential helper, an argument, or a log.
 
 #### Scenario: Read-only credential push
 - **WHEN** a push uses a credential without `write-code`
@@ -47,10 +47,14 @@ The workspace SHALL use the source control contract's run credential passed to e
 
 #### Scenario: Secret in no argument
 - **WHEN** a workspace has been prepared, its remote head read, and pushed with run credentials
-- **THEN** no argument of any Git process holds a secret, and every Git process has `GIT_CONFIG_COUNT` in its environment
+- **THEN** no argument of any Git process holds a secret, an `Authorization` value, or its base64 part, and only the processes that reach the remote carry the header in their environment
+
+#### Scenario: GitHub header form
+- **WHEN** the GitHub plugin binds a run credential for the workspace
+- **THEN** its `authorization` is `Basic` followed by the base64 of `x-access-token:` and the secret, and the adapter uses it unchanged
 
 ### Requirement: Fast-forward task branch push
-A push SHALL name the remote task branch head the caller expects, SHALL fail with `conflict` and reason `remote-moved` when the remote head differs or `not-fast-forward` when the local head does not descend from it, SHALL update only the task branch, and SHALL never force: the branch SHALL never move to a commit that does not descend from the leased head, and the only push options SHALL be `--atomic --force-with-lease=refs/heads/<branch>:<expected>`.
+A push SHALL name the remote head the caller expects, SHALL check that the local head descends from it, failing with `conflict` and `not-fast-forward`, then push exactly `--atomic --force-with-lease=refs/heads/<branch>:<expected-sha>`, empty on a first push, the remote, and `HEAD:refs/heads/<branch>`, failing with `remote-moved` when the remote head differs, and SHALL never move the branch to a commit that does not descend from the leased head.
 
 #### Scenario: Remote moved
 - **WHEN** another party advanced the remote task branch after the caller last saw it
@@ -66,7 +70,7 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 
 #### Scenario: Leased push
 - **WHEN** a push succeeds
-- **THEN** its one push process has `--atomic` and `--force-with-lease=refs/heads/<branch>:<expected>`, empty on a first push, and no `--force`, bare lease, or `+` refspec
+- **THEN** its one push process's arguments from `push` on are exactly `--atomic`, `--force-with-lease=refs/heads/<branch>:<expected-sha>`, the binding's remote, and `HEAD:refs/heads/<branch>`, with nothing that forces or cancels an option
 
 ### Requirement: Head evidence snapshot
 `snapshot` SHALL return the workspace's current clean head, with all three parts, and Taskelith's own tar archive of content type `application/x-tar`, built from the head's tree and never by `git archive`, holding exactly its files with mode and bytes and its links with target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace, commit, or Git version, for storage under its SHA-256 digest with kind `code-head-snapshot`.
@@ -121,7 +125,29 @@ Before it starts the reclaim program, the worker SHALL record its containment `r
 - **WHEN** the containment that a hand-off record names is still populated at the bound
 - **THEN** the workspace stays handed off and is reported for reconciliation
 
+### Requirement: Git process identity
+Every Git process of the adapter, for every operation, and the deletion at cleanup SHALL run as the worker identity in the worker's home cgroup, started by the worker process, never as the execution identity and never in an execution's containment; only the reclaim program SHALL run as the execution identity, in its own containment, without Git, except where the identities are the same, as on macOS, where it SHALL run as the worker identity in a process group of its own, without Git.
+
+#### Scenario: Push process
+- **WHEN** the adapter pushes a task branch on Linux
+- **THEN** the Git process's `/proc/<pid>/cgroup` names the worker's home cgroup and its user is the worker identity
+
 ## ADDED Requirements
+
+### Requirement: Git process observation
+The fixture SHALL report each Git process at its start with its arguments, process identifier, environment with every value that holds a credential redacted, and the checkout's `.git/config`; the suite SHALL require the built values and exact settings of the contract section 7, the header only toward the remote, no planted setting at a process start, and SHALL never repeat a credential in a finding.
+
+#### Scenario: Inherited global configuration
+- **WHEN** the suite runs against an adapter whose Git processes inherit `GIT_CONFIG_GLOBAL=/attacker/config`
+- **THEN** the Git environment case reports a finding
+
+#### Scenario: Planted settings used, then removed
+- **WHEN** the suite runs against an adapter that starts Git with the planted `.git/config` and rewrites the file afterwards
+- **THEN** the planted settings case reports a finding
+
+#### Scenario: Finding about a leaked header
+- **WHEN** the suite reports an adapter that passes the `Authorization` value in an argument
+- **THEN** no finding contains that value, its base64 part, or the secret
 
 ### Requirement: Failed reclaim program
 A reclaim program that exits with a failure or is killed SHALL leave the workspace handed off, SHALL make `reclaim` fail with `precondition-failed` and reason `reclaim-failed`, also on a later call and after a restart, and SHALL be reported for reconciliation; the worker SHALL never run the program again for that hand-off.
@@ -171,14 +197,18 @@ A binding's remote URL SHALL be HTTPS without user information; `prepare` SHALL 
 - **THEN** the prepare fails with reason `insecure-remote`
 
 ### Requirement: Snapshot archive format
-The snapshot archive SHALL hold one ustar entry per file and link and no directory entry, in byte order of the UTF-8 paths, with mode `0644` or `0755` for files and `0777` for links, owner, group, and time `0`, empty user and group names, a pax header before an entry whose path, target, or size exceeds its ustar field, and two zero blocks at the end; a tree that holds a gitlink SHALL be refused with reason `gitlink-in-tree`.
+The snapshot archive SHALL hold one ustar entry per file and link and no directory entry, in byte order of the UTF-8 paths, with mode `0644` or `0755` for files and `0777` for links, owner, group, and time `0`, empty user and group names, pax records for what exceeds a ustar field, and two zero blocks at the end; a gitlink SHALL be refused with `gitlink-in-tree`, a path or link target that is not valid UTF-8 with `non-utf8-path`.
 
 #### Scenario: Entries in any order
 - **WHEN** the same tree's entries are archived in two orders
 - **THEN** both archives have the same bytes, and the system `tar` extracts every file, link, and long path
 
+#### Scenario: Path that is not UTF-8
+- **WHEN** a clean head whose tree holds a path with the byte `0xff` is snapshotted
+- **THEN** the snapshot fails with `precondition-failed` and reason `non-utf8-path`
+
 ### Requirement: Conformance of the adapter's Git use
-Through the fixture's hooks that observe Git processes and plant `.git` settings, the suite SHALL report an adapter that pushes over a moved remote, pushes a head that does not descend from the leased one, pushes without a lease on the expected head, forgets hand-offs across a restart, passes a secret in an argument, runs Git in the inherited environment, keeps settings the agent planted, snapshots a gitlink, or clones from a remote that is not HTTPS.
+The suite SHALL report an adapter that pushes over a moved remote, without ancestry, with a bare lease or a cancelling option, forgets hand-offs across a restart, passes the secret or `Authorization` value in an argument, inherits Git environment, keeps settings the agent planted or uses them and rewrites the file, snapshots a gitlink, or clones from a remote that is not HTTPS.
 
 #### Scenario: Defective lease
 - **WHEN** the suite runs against an adapter that pushes over a moved remote task branch
@@ -191,6 +221,10 @@ Through the fixture's hooks that observe Git processes and plant `.git` settings
 #### Scenario: Forgotten hand-off
 - **WHEN** the suite runs against an adapter whose `handedOff` forgets a hand-off across a restart
 - **THEN** the handed-off read case reports a finding
+
+#### Scenario: Cancelled lease
+- **WHEN** the suite runs against an adapter that adds `--no-force-with-lease` after the lease
+- **THEN** the remote-moved and not-fast-forward cases report a finding
 
 #### Scenario: Planted settings kept
 - **WHEN** the suite runs against an adapter that keeps the settings the agent planted in `.git/config`

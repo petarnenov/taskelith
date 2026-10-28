@@ -26,6 +26,7 @@
 
 - [x] 4.1 Run strict validation of this change, `make findings ARGS="validate"`, and `make verify`; record `verification.md`, with the hosted Linux acceptance run 40618190663
 - [ ] 4.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`
+- [x] 4.5 Fix the review pass 1 findings and apply the coordinator's ruling on the credential header, with tests
 - [ ] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
 - [ ] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm
 
