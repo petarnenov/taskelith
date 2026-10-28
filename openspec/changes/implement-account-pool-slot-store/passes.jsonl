@@ -1,0 +1,1 @@
+{"change": "implement-account-pool-slot-store", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a184be-e129-75c3-8737-5f152c20d86f", "counts": {"critical": 0, "high": 2, "medium": 2, "low": 0}}
