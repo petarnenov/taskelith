@@ -23,6 +23,10 @@ class FakeWorkspace implements Pick<WorkerWorkspace, 'handOffRecords' | 'handOff
   reclaimAnswer: Result<void> = ok(undefined);
   // Whether a failed hand-off still wrote its record.
   writesOnFailure = false;
+  // A reclaim of an attempt with a gate waits for it before it acts.
+  readonly gates = new Map<AttemptId, Promise<void>>();
+  // The worker dies right after this attempt's record is removed.
+  crashAfterRemovalOf: AttemptId | undefined;
 
   async handOffRecords(): Promise<readonly HandedOffWorkspace[]> {
     if (this.readFault !== undefined) throw this.readFault;
@@ -35,7 +39,9 @@ class FakeWorkspace implements Pick<WorkerWorkspace, 'handOffRecords' | 'handOff
   }
 
   async reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    await this.gates.get(attemptId);
     if (this.reclaimAnswer.ok) this.records.delete(attemptId);
+    if (attemptId === this.crashAfterRemovalOf) throw new Error('simulated crash');
     return this.reclaimAnswer;
   }
 }
@@ -173,4 +179,47 @@ test('the reclaim-failed line holds no path, no credential, and no checkout cont
   assert.equal(lines.length, 1);
   const text = JSON.stringify(lines);
   for (const leaked of [SECRET, CHECKOUT, '/', 'checkout line', 'notes.txt']) assert.equal(text.includes(leaked), false, leaked);
+});
+
+// A gate that a test opens when it lets a waiting reclaim go on.
+function gate(): { readonly passed: Promise<void>; open(): void } {
+  let open = () => {};
+  const passed = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { passed, open };
+}
+
+async function twoHandedOff(): Promise<Opened & { readonly workspace: FakeWorkspace }> {
+  const workspace = new FakeWorkspace();
+  const opened = await open(workspace);
+  value(await opened.slots.handOff(FIRST));
+  value(await opened.slots.handOff(SECOND));
+  return { ...opened, workspace };
+}
+
+test('two concurrent reclaims of different workspaces each declare the capacity', async () => {
+  const { slots, journal, workspace } = await twoHandedOff();
+  const [first, second] = [gate(), gate()];
+  workspace.gates.set(FIRST, first.passed).set(SECOND, second.passed);
+  const reclaims = [slots.reclaim(FIRST), slots.reclaim(SECOND)];
+  first.open();
+  value(await reclaims[0]!);
+  second.open();
+  value(await reclaims[1]!);
+  assert.deepEqual([[...slots.held], journal.declarations, journal.owed], [[], 2, false]);
+});
+
+test('a worker killed after the second of two concurrent removals still owes its declaration', async () => {
+  const { slots, journal, workspace } = await twoHandedOff();
+  const [first, second] = [gate(), gate()];
+  workspace.gates.set(FIRST, first.passed).set(SECOND, second.passed);
+  workspace.crashAfterRemovalOf = SECOND;
+  const reclaims = [slots.reclaim(FIRST), slots.reclaim(SECOND)];
+  first.open();
+  value(await reclaims[0]!);
+  second.open();
+  await assert.rejects(reclaims[1]!, /simulated crash/);
+  assert.deepEqual([journal.declarations, journal.owed], [1, true], 'the next start declares the owed capacity');
+  assert.deepEqual([...workspace.records.keys()], []);
 });

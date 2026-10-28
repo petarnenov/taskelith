@@ -22,6 +22,7 @@ export class WorkspaceSlots {
   readonly #options: WorkspaceSlotsOptions;
   readonly #held: Set<AttemptId>;
   readonly #recordedContainments: ReadonlySet<string>;
+  #reclaims: Promise<unknown> = Promise.resolve();
 
   private constructor(options: WorkspaceSlotsOptions, records: readonly HandedOffWorkspace[]) {
     this.#options = options;
@@ -58,9 +59,17 @@ export class WorkspaceSlots {
     return handedOff;
   }
 
+  // One reclaim at a time, so each owes its own declaration and none
+  // clears the debt of another still running.
+  reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    const reclaimed = this.#reclaims.then(() => this.#reclaimInTurn(attemptId));
+    this.#reclaims = reclaimed.catch(() => undefined);
+    return reclaimed;
+  }
+
   // Only a reclaim that removed the record frees the slot, and it never
   // reruns a failed program; the owed declaration outlives a fault.
-  async reclaim(attemptId: AttemptId): Promise<Result<void>> {
+  async #reclaimInTurn(attemptId: AttemptId): Promise<Result<void>> {
     if (this.#held.has(attemptId)) {
       const owed = this.#options.oweCapacityDeclaration();
       if (!owed.ok) return owed;
