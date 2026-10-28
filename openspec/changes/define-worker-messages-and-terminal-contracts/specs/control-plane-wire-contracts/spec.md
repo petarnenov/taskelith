@@ -48,7 +48,7 @@ The first client frame SHALL be `terminal.attach`; on a cookie-authenticated con
 
 #### Scenario: Cursor of an ended terminal
 - **WHEN** a client reattaches with `after` and the `terminalId` of a terminal that ended, and the attach opens a new terminal
-- **THEN** the new terminal's output follows from its earliest retained chunk
+- **THEN** `after` is ignored, whatever its value, and the new terminal's output follows from its earliest retained chunk
 
 ### Requirement: Terminal lifetime
 An attempt SHALL have at most one terminal and one attached client; a new attach SHALL close the previous one with `superseded`. Closing the client SHALL end neither the execution nor the terminal, which SHALL end only when its program exits, a client closes it, the idle timeout passes, the attempt or generation ends, the worker refuses it, or the relay is lost.

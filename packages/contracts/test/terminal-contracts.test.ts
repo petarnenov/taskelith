@@ -112,7 +112,14 @@ test('a reattach names the terminal its cursor belongs to', () => {
   assert.ok(frame('TerminalAttachFrame', { ...reattach, terminalId: 'terminal-1' }).ok);
   assert.ok(frame('TerminalAttachFrame', { type: 'terminal.attach', cols: 80, rows: 24, terminalId: 'terminal-1' }).ok);
   assert.ok(!frame('TerminalAttachFrame', reattach).ok);
-  assert.match((FRAMES.TerminalAttachFrame as { properties: { after: { description: string } } }).properties.after.description, /`invalid-frame`/);
+});
+
+test('a cursor of another terminal is ignored, and only the attached one is range-checked', () => {
+  const cursor = (FRAMES.TerminalAttachFrame as { properties: { after: { description: string } } }).properties.after.description;
+
+  assert.match(cursor, /not the one attached, `after` is ignored and output follows from the earliest retained chunk/);
+  assert.match(cursor, /when it is, an `after` beyond its last sequence closes the connection with `invalid-frame`/);
+  assert.doesNotMatch(cursor, /beyond the attached terminal's last sequence/);
 });
 
 test('an upgrade accepts a subprotocol list that offers its protocol', () => {

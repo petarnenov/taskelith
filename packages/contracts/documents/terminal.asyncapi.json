@@ -277,7 +277,7 @@
           },
           "after": {
             "$ref": "#/components/schemas/TerminalCursor",
-            "description": "On a reattach, the last sequence the client holds of the terminal named by `terminalId`; the retained output after it follows. When that terminal is not the one attached, output follows from the earliest retained chunk, and an `after` beyond the attached terminal's last sequence closes the connection with `invalid-frame`."
+            "description": "On a reattach, the last sequence the client holds of the terminal named by `terminalId`; the retained output after it follows. When that terminal is not the one attached, `after` is ignored and output follows from the earliest retained chunk; when it is, an `after` beyond its last sequence closes the connection with `invalid-frame`."
           }
         },
         "if": {
