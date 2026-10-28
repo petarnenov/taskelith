@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { failed, value } from '@taskelith/testing';
-import { GitRunner, scrubCredential, verifyGitClient, type VerifiedGitClient } from '@taskelith/git-workspace';
+import { GIT_TIME_LIMIT_MS, GitRunner, scrubCredential, verifyGitClient, type VerifiedGitClient } from '@taskelith/git-workspace';
 import {
   GIT_NEUTRAL_DIRECTORY,
   REDACTED_VALUE,
@@ -165,4 +165,54 @@ test('only the gate makes a verified client, also for the type checker', () => {
   // @ts-expect-error A client with a runner alone has not passed the gate.
   const unverified: VerifiedGitClient = { runner: new GitRunner(pin) };
   assert.equal(unverified.runner.pin, pin);
+});
+
+// A client that records its process and its background child, then
+// waits for that child, which outlives the time limit.
+async function stallingClient(): Promise<{ pin: GitClientPin; pids: string }> {
+  const path = join(scratch, 'stall');
+  const pids = join(scratch, 'stall-pids');
+  await writeFile(path, `#!/bin/sh\nsleep 600 &\necho "$$ $!" > ${pids}\nwait\n`);
+  await chmod(path, 0o755);
+  return { pin: { path, version: '' }, pids };
+}
+
+// Waits on the condition, never a fixed time, with wide slack.
+async function gone(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === 'ESRCH';
+    }
+    if (Date.now() > deadline) return false;
+    await new Promise((next) => setImmediate(next));
+  }
+}
+
+test('a process past its time limit is killed with its group, remote unavailable, local internal', async () => {
+  const { pin: stalling, pids } = await stallingClient();
+  // Far above the few milliseconds the shell needs to record its pids.
+  const runner = new GitRunner(stalling, 1_000);
+  for (const [credential, code] of [[undefined, 'internal'], [WRITE, 'unavailable']] as const) {
+    await rm(pids, { force: true });
+    const started = Date.now();
+    const failure = failed(await runner.run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential }));
+    assert.ok(Date.now() - started >= 1_000);
+    assert.equal(failure.code, code);
+    assert.match(failure.message, /longer than 1000 ms/);
+    const [leader, child] = (await readFile(pids, 'utf8')).trim().split(' ').map(Number);
+    assert.equal(await gone(-leader!), true, 'the process group survived');
+    assert.equal(await gone(child!), true, 'the background child survived');
+  }
+});
+
+test('the time limit is ten minutes by default and must be a positive whole number', () => {
+  assert.equal(GIT_TIME_LIMIT_MS, 600_000);
+  assert.equal(new GitRunner(pin).timeLimitMs, GIT_TIME_LIMIT_MS);
+  assert.equal(new GitRunner(pin).withTimeLimit(1_000).timeLimitMs, 1_000);
+  for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => new GitRunner(pin, invalid), RangeError);
+  }
 });

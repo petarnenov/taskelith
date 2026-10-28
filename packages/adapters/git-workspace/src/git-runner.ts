@@ -53,13 +53,21 @@ const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\
 // that environment names it; naming it as undefined leaves it out.
 const RUNTIME_ADDITIONS = { NODE_V8_COVERAGE: undefined };
 
+export const GIT_TIME_LIMIT_MS = 10 * 60 * 1000;
+
 // Starts the pinned client with the built environment only: nothing of the
 // worker's own environment reaches Git, and no credential is an argument.
 export class GitRunner {
   readonly pin: GitClientPin;
+  readonly timeLimitMs: number;
 
-  constructor(pin: GitClientPin) {
+  constructor(pin: GitClientPin, timeLimitMs = GIT_TIME_LIMIT_MS) {
     this.pin = pin;
+    this.timeLimitMs = timeLimitMs;
+  }
+
+  withTimeLimit(_timeLimitMs: number): GitRunner {
+    throw new Error('not implemented');
   }
 
   run(command: GitCommand): Promise<Result<GitOutput>> {

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
@@ -11,7 +11,7 @@ import {
   sha256IdentifierDigest,
   verifyGitClient,
   type CrashPointHook,
-  type LocalWorkspaceOperations,
+  type GitWorkspaceOperations,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
 import {
@@ -31,7 +31,7 @@ import {
   type WorkspaceProvider,
 } from '@taskelith/workspace';
 
-// A local bare repository served over dumb HTTP on 127.0.0.1, a recording
+// A local bare repository served over smart HTTP on 127.0.0.1, a recording
 // wrapper as the Git client pin, and native Git as an agent would run it.
 
 export const SYSTEM_GIT = '/usr/bin/git';
@@ -88,48 +88,130 @@ export async function nativeGit(cwd: string, args: readonly string[], options: {
 
 const nativeText = async (cwd: string, args: readonly string[]) => (await nativeGit(cwd, args)).toString('utf8').trim();
 
-// What a static file server gives Git: the dumb HTTP protocol, which a
-// clone and a fetch can use; it counts requests and keeps their headers.
-export class DumbHttpRemote {
-  requests = 0;
-  readonly authorizations: (string | undefined)[] = [];
+export interface ReceivedRequest {
+  readonly method: string;
+  readonly url: string;
+  readonly headers: IncomingHttpHeaders;
+}
+
+// What a request needs of the server's own credential check.
+type Grant = 'read' | 'write';
+export type GitService = 'git-upload-pack' | 'git-receive-pack';
+
+// Smart HTTP, a redirect of one request kind to another origin, no
+// answer, or an error that repeats the request's Authorization header.
+export type RemoteBehavior =
+  | { readonly kind: 'serve' }
+  | { readonly kind: 'redirect'; readonly origin: string; readonly service: GitService; readonly request: 'advertisement' | 'service' }
+  | { readonly kind: 'stall' }
+  | { readonly kind: 'echo-authorization' };
+
+const SERVE: RemoteBehavior = Object.freeze({ kind: 'serve' });
+const pktLine = (text: string) => `${(text.length + 4).toString(16).padStart(4, '0')}${text}`;
+
+// Git's smart HTTP protocol from `git http-backend` on 127.0.0.1, behind
+// its own credential check; it keeps every request it receives.
+export class SmartHttpRemote {
+  readonly received: ReceivedRequest[] = [];
+  behavior: RemoteBehavior = SERVE;
+  // Runs before the server answers a request, as another party could.
+  beforeAnswer: (request: ReceivedRequest) => Promise<void> = async () => {};
 
   private readonly root: string;
+  private readonly grants: ReadonlyMap<string, readonly Grant[]>;
   private readonly server: Server;
   readonly port: number;
 
-  private constructor(root: string, server: Server, port: number) {
+  private constructor(root: string, grants: ReadonlyMap<string, readonly Grant[]>, server: Server, port: number) {
     this.root = root;
+    this.grants = grants;
     this.server = server;
     this.port = port;
   }
 
-  static async start(root: string): Promise<DumbHttpRemote> {
-    const holder: { remote?: DumbHttpRemote } = {};
-    const server = createServer((request, response) => {
-      const remote = holder.remote!;
-      remote.requests += 1;
-      remote.authorizations.push(request.headers.authorization);
-      const path = resolve(remote.root, `.${decodeURIComponent(new URL(request.url ?? '/', 'http://127.0.0.1').pathname)}`);
-      if (!path.startsWith(`${remote.root}${sep}`)) return void response.writeHead(404).end();
-      readFile(path).then(
-        (content) => response.writeHead(200, { 'content-type': 'application/octet-stream' }).end(content),
-        () => response.writeHead(404).end(),
-      );
-    });
+  // `grants` maps an Authorization value to what it may do.
+  static async start(root: string, grants: ReadonlyMap<string, readonly Grant[]>): Promise<SmartHttpRemote> {
+    const holder: { remote?: SmartHttpRemote } = {};
+    const server = createServer((request, response) => void holder.remote!.answer(request, response));
     await new Promise<void>((listening) => server.listen(0, '127.0.0.1', listening));
     const address = server.address();
     if (address === null || typeof address === 'string') throw new Error('the remote has no port');
-    holder.remote = new DumbHttpRemote(root, server, address.port);
+    holder.remote = new SmartHttpRemote(root, grants, server, address.port);
     return holder.remote;
   }
 
+  get requests(): number {
+    return this.received.length;
+  }
+
+  get authorizations(): (string | undefined)[] {
+    return this.received.map(({ headers }) => headers.authorization);
+  }
+
+  get origin(): string {
+    return `http://127.0.0.1:${this.port}`;
+  }
+
   url(path: string): string {
-    return `http://127.0.0.1:${this.port}/${path}`;
+    return `${this.origin}/${path}`;
   }
 
   close(): Promise<void> {
+    this.server.closeAllConnections();
     return new Promise((closed) => this.server.close(() => closed()));
+  }
+
+  private async answer(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const url = request.url ?? '/';
+    const received = { method: request.method ?? '', url, headers: request.headers };
+    this.received.push(received);
+    await this.beforeAnswer(received);
+    const behavior = this.behavior;
+    const advertisement = url.includes('/info/refs');
+    if (behavior.kind === 'stall') return;
+    if (behavior.kind === 'redirect' && url.includes(behavior.service) && advertisement === (behavior.request === 'advertisement')) {
+      return void response.writeHead(302, { location: `${behavior.origin}${url}` }).end();
+    }
+    const grant: Grant = url.includes('git-receive-pack') ? 'write' : 'read';
+    if (!(this.grants.get(request.headers.authorization ?? '') ?? []).includes(grant)) {
+      return void response.writeHead(401, { 'www-authenticate': 'Basic realm="taskelith"' }).end();
+    }
+    if (behavior.kind === 'echo-authorization' && advertisement) {
+      const body = `${pktLine('# service=git-upload-pack\n')}0000${pktLine(`ERR ${request.headers.authorization}\n`)}`;
+      return void response.writeHead(200, { 'content-type': 'application/x-git-upload-pack-advertisement' }).end(body);
+    }
+    this.backend(request, response);
+  }
+
+  // `git http-backend` as CGI, with receive-pack enabled by REMOTE_USER.
+  private backend(request: IncomingMessage, response: ServerResponse): void {
+    const url = new URL(request.url ?? '/', this.origin);
+    const header = (name: string) => request.headers[name] as string | undefined;
+    const env: Record<string, string> = {
+      PATH: '/usr/bin:/bin', HOME: '/nonexistent', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_PROJECT_ROOT: this.root, GIT_HTTP_EXPORT_ALL: '1', REMOTE_USER: 'taskelith', REMOTE_ADDR: '127.0.0.1',
+      PATH_INFO: decodeURIComponent(url.pathname), QUERY_STRING: url.search.slice(1), REQUEST_METHOD: request.method ?? 'GET',
+      CONTENT_TYPE: header('content-type') ?? '',
+      ...(header('git-protocol') === undefined ? {} : { GIT_PROTOCOL: header('git-protocol')! }),
+      ...(header('content-encoding') === undefined ? {} : { HTTP_CONTENT_ENCODING: header('content-encoding')! }),
+    };
+    const child = spawn(SYSTEM_GIT, ['http-backend'], { env, stdio: ['pipe', 'pipe', 'ignore'] });
+    request.pipe(child.stdin);
+    const output: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => output.push(chunk));
+    child.on('close', () => {
+      const all = Buffer.concat(output);
+      const split = all.indexOf('\r\n\r\n');
+      const headers: Record<string, string> = {};
+      let status = 200;
+      for (const line of all.subarray(0, split).toString('latin1').split('\r\n')) {
+        const colon = line.indexOf(':');
+        const [name, value] = [line.slice(0, colon).trim(), line.slice(colon + 1).trim()];
+        if (name.toLowerCase() === 'status') status = Number.parseInt(value, 10);
+        else headers[name] = value;
+      }
+      response.writeHead(status, headers).end(all.subarray(split + 4));
+    });
   }
 }
 
@@ -218,26 +300,26 @@ export function credential(credentialId: string, repositories: string[], permiss
   return { credentialId, secret, authorization, repositories, permissions };
 }
 
-// The operations 16c and 16d add; a case that reaches one fails loudly.
-function later(operation: string, change: string) {
+// The operations 16d adds; a case that reaches one fails loudly.
+function later(operation: string) {
   return async (): Promise<never> => {
-    throw new Error(`${operation} is not implemented before sub-change ${change}`);
+    throw new Error(`${operation} is not implemented before sub-change 16d`);
   };
 }
 
-export function providerOf(local: LocalWorkspaceOperations): WorkspaceProvider {
+export function providerOf(operations: GitWorkspaceOperations): WorkspaceProvider {
   return {
-    prepare: (request) => local.prepare(request),
-    list: () => local.list(),
-    remove: (attemptId) => local.remove(attemptId),
-    sweep: () => local.sweep(),
-    inspect: (attemptId) => local.inspect(attemptId),
-    snapshot: (attemptId) => local.snapshot(attemptId),
-    readRemoteHead: later('readRemoteHead', '16c'),
-    push: later('push', '16c'),
-    handOff: later('handOff', '16d'),
-    reclaim: later('reclaim', '16d'),
-    handedOff: later('handedOff', '16d'),
+    prepare: (request) => operations.prepare(request),
+    list: () => operations.list(),
+    remove: (attemptId) => operations.remove(attemptId),
+    sweep: () => operations.sweep(),
+    inspect: (attemptId) => operations.inspect(attemptId),
+    snapshot: (attemptId) => operations.snapshot(attemptId),
+    readRemoteHead: (request) => operations.readRemoteHead(request),
+    push: (request) => operations.push(request),
+    handOff: later('handOff'),
+    reclaim: later('reclaim'),
+    handedOff: later('handedOff'),
   };
 }
 
@@ -286,16 +368,19 @@ function mustParse<T>(result: Result<T>): T {
 
 export interface GitFixtureOptions {
   readonly crashPoints?: CrashPointHook;
+  readonly gitTimeLimitMs?: number;
 }
 
 export interface GitFixture {
   readonly fixture: WorkspaceFixture;
-  readonly local: LocalWorkspaceOperations;
-  readonly remote: DumbHttpRemote;
+  readonly local: GitWorkspaceOperations;
+  readonly remote: SmartHttpRemote;
   readonly client: VerifiedGitClient;
   readonly scratch: string;
-  // A new set of local operations over the same data root.
+  // A new adapter over the same data root.
   reopen(crashPoints?: CrashPointHook): GitWorkspaces;
+  // A second origin that serves the same repositories, closed on dispose.
+  startOtherRemote(): Promise<SmartHttpRemote>;
   checkout(attemptId: AttemptId): string;
   // Publishes the workspace's head natively, as another party could.
   publish(attemptId: AttemptId, branch: string): Promise<void>;
@@ -312,7 +397,6 @@ async function seedRemote(scratch: string, bare: string): Promise<void> {
   await nativeGit(seed, ['add', '-A']);
   await nativeGit(seed, ['commit', '--quiet', '-m', 'base']);
   await nativeGit(seed, ['push', '--quiet', bare, `HEAD:refs/heads/${BASE_BRANCH}`]);
-  await nativeGit(bare, ['update-server-info']);
 }
 
 export async function createGitFixture(options: GitFixtureOptions = {}): Promise<GitFixture> {
@@ -329,16 +413,21 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   await seedRemote(scratch, bare);
   const { pin, logDirectory } = await recordingPin(scratch);
   const client = mustParse(await verifyGitClient(pin));
-  const remote = await DumbHttpRemote.start(served);
-  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) => new GitWorkspaces({ dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints });
-  const local = reopen(options.crashPoints);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
-  const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };
   const credentials = {
     read: credential('read', [repository], ['read-code']),
     write: credential('write', [repository], ['read-code', 'write-code']),
     foreign: credential('foreign', ['acme/other'], ['read-code', 'write-code', 'write-change-requests', 'write-statuses']),
   };
+  // The service's own check; the foreign credential names another one.
+  const grants = new Map<string, readonly Grant[]>([[credentials.read.authorization, ['read']], [credentials.write.authorization, ['read', 'write']]]);
+  const remote = await SmartHttpRemote.start(served, grants);
+  const others: SmartHttpRemote[] = [];
+  const { gitTimeLimitMs } = options;
+  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) =>
+    new GitWorkspaces({ dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs });
+  const local = reopen(options.crashPoints);
+  const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };
   const nameOf = (attemptId: AttemptId) => workspaceDirectoryName(attemptId, sha256IdentifierDigest);
   const checkout = (attemptId: AttemptId) => join(root, nameOf(attemptId), WORKSPACE_LAYOUT.checkout);
   const git = (attemptId: AttemptId, args: readonly string[]) => nativeGit(checkout(attemptId), args);
@@ -393,7 +482,6 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
       const tree = (await nativeGit(bare, ['write-tree'], { env })).toString('utf8').trim();
       const commit = (await nativeGit(bare, ['commit-tree', tree, '-p', parent, '-m', 'remote'])).toString('utf8').trim();
       await nativeGit(bare, ['update-ref', `refs/heads/${branch}`, commit]);
-      await nativeGit(bare, ['update-server-info']);
     },
     remoteCalls: async () => remote.requests,
     nativeHead: async (attemptId) => ({
@@ -449,13 +537,17 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
     client,
     scratch,
     reopen,
+    startOtherRemote: async () => {
+      const other = await SmartHttpRemote.start(served, grants);
+      others.push(other);
+      return other;
+    },
     checkout,
     publish: async (attemptId, branch) => {
       await git(attemptId, ['push', '--quiet', bare, `HEAD:refs/heads/${branch}`]);
-      await nativeGit(bare, ['update-server-info']);
     },
     dispose: async () => {
-      await remote.close();
+      await Promise.all([remote, ...others].map((server) => server.close()));
       await rm(scratch, { recursive: true, force: true });
     },
   };

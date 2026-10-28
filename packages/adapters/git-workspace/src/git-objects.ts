@@ -30,6 +30,10 @@ export function parseCommitTree(body: Uint8Array, format: ObjectFormat): Result<
   return tree === null ? unreadable('a commit without a tree') : ok(tree[1]!);
 }
 
+export function parseCommitParents(_body: Uint8Array, _format: ObjectFormat): Result<readonly string[]> {
+  throw new Error('not implemented');
+}
+
 // `<mode> <name>\0<raw object name>` per entry; names stay bytes for the
 // snapshot's checks, which come after its gitlink check.
 export function parseTreeObject(body: Uint8Array, format: ObjectFormat): Result<readonly TreeObjectEntry[]> {

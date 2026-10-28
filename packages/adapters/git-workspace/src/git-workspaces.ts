@@ -18,16 +18,20 @@ import {
   taskBranchName,
   workspaceDirectoryName,
   workspaceFailure,
+  type CodeHeadIdentity,
   type DirtyReason,
+  type GitObjectId,
   type GitTreeEntry,
   type HeadSnapshot,
   type IdentifierDigest,
   type PrepareWorkspace,
+  type PushTaskBranch,
+  type RemoteHeadRequest,
   type RemoteTransportPolicy,
   type Workspace,
   type WorkspaceCredential,
   type WorkspaceHeads,
-  type WorkspaceLifecycle,
+  type WorkspaceProvider,
   type WorkspaceStatus,
 } from '@taskelith/workspace';
 import { checkCheckoutSafety } from './checkout-safety.js';
@@ -50,11 +54,10 @@ export interface GitWorkspacesOptions {
   // `https-or-loopback-http` only where a test composes the adapter.
   readonly remoteTransport: RemoteTransportPolicy;
   readonly crashPoints?: CrashPointHook;
+  readonly gitTimeLimitMs?: number;
 }
 
-// The operations of sub-change 16b; the remote head, the push, and the
-// hand-off come with 16c and 16d.
-export type LocalWorkspaceOperations = Pick<WorkspaceLifecycle, 'prepare' | 'list' | 'remove' | 'sweep'> & WorkspaceHeads;
+export type GitWorkspaceOperations = Omit<WorkspaceProvider, 'handOff' | 'reclaim' | 'handedOff'>;
 
 export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
 
@@ -93,7 +96,7 @@ function attempt(call: Promise<unknown>, codes: readonly string[]): Promise<bool
 
 // The Git workspace adapter's local operations (contract sections 3, 6,
 // 9, and 10), with the pinned client that passed its gate.
-export class GitWorkspaces implements LocalWorkspaceOperations {
+export class GitWorkspaces implements GitWorkspaceOperations {
   readonly #root: string;
   readonly #git: GitRunner;
   readonly #transport: RemoteTransportPolicy;
@@ -102,10 +105,19 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
-    this.#git = options.client.runner;
+    const { runner } = options.client;
+    this.#git = options.gitTimeLimitMs === undefined ? runner : runner.withTimeLimit(options.gitTimeLimitMs);
     this.#transport = options.remoteTransport;
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#owner = process.getuid!();
+  }
+
+  readRemoteHead(_request: RemoteHeadRequest): Promise<Result<GitObjectId | null>> {
+    throw new Error('not implemented');
+  }
+
+  push(_request: PushTaskBranch): Promise<Result<CodeHeadIdentity>> {
+    throw new Error('not implemented');
   }
 
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
