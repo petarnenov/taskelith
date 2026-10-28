@@ -1,0 +1,5 @@
+# Review route fixtures
+
+`jev-systemone-response.json` was captured live on 2026-10-28 from the model `jev-1.14.0` at `POST https://api.typesafe.ai/v1/systemone`. It is the response body to the first request of the live offline evaluation of the OpenSpec change `route-reviewers-by-change-complexity` (`verification.md` "Live shadow evaluation"), which asked the two questions of `scripts/review-route-jev.ts` about the features of the archived change `record-review-findings`. The owner confirmed the TypeSafe account, the Master Customer Agreement with paid credits, and the data consent before the call (`design.md` "Decisions" 6).
+
+The body is kept byte for byte. It holds no credential, request ID, or account or organization identifier, so nothing was removed; the response headers were never stored. It follows the `SystemOneResponse`, `ChoiceAnswer`, and `ScoreAnswer` schemas of the TypeSafe AI OpenAPI document (`https://api.typesafe.ai/openapi.json`, unversioned page, OpenAPI `info.version` 0.2.0), with the same fields as the response that the tests used before, which was constructed from that document.
