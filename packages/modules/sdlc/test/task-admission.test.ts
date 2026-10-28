@@ -101,7 +101,9 @@ function pendingGate(stage: string, subject: readonly ArtifactRevision[]): Gate 
 
 function passedGate(stage: string, subject: readonly ArtifactRevision[]): Gate {
   const pending = pendingGate(stage, subject);
-  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject, recordedAt: OPENED_AT, reference: 'review' });
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject, recordedAt: OPENED_AT, reference: 'review',
+    gateId: pending.id, gateGeneration: pending.generation,
+  });
   assert.ok(evidence.ok);
   const result = recordGateEvidence(pending, pending.generation, evidence.value, OPENED_AT);
   assert.ok(result.ok);

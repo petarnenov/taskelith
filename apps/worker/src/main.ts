@@ -6,7 +6,7 @@ import { JsonLinesLogSink, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { Logger } from '@taskelith/observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
-import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { ProcessDaemonOverhead } from './daemon-overhead.js';
 import { linuxContainmentCheck } from './linux-containment-check.js';
 import { supervisionHost } from './execution-supervision.js';
@@ -29,8 +29,10 @@ function sleep(milliseconds: number, signal: AbortSignal): Promise<void> {
 
 export function productionDependencies(settings: WorkerSettings): WorkerDependencies {
   const logger = new Logger(new JsonLinesLogSink(process.stderr), SYSTEM_CLOCK);
+  const address = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
-    enrollment: new HttpEnrollmentClient({ baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS }),
+    installationCa: new HttpInstallationCaSource(address),
+    enrollment: (installationCa) => new HttpEnrollmentClient({ ...address, installationCa }),
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
@@ -52,7 +54,7 @@ function supervisorVersion(): string {
 function productionLaunching(settings: WorkerSettings, logger: Logger): LaunchingDependencies {
   const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
-    authority: (credential) => new HttpLaunchAuthorityClient({ ...endpoint, credential }),
+    authority: (credential, installationCa) => new HttpLaunchAuthorityClient({ ...endpoint, credential, installationCa }),
     host: (hostSettings, executions) => supervisionHost(hostSettings, executions, supervisorVersion()),
     sleep,
     draw: Math.random,

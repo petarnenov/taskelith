@@ -110,3 +110,10 @@ Because the AsyncAPI parser reserves the prefix `x-parser-` for its annotations,
 #### Scenario: Reserved prefix
 - **WHEN** the AsyncAPI document names an operation or a property `x-parser-user`
 - **THEN** the check fails and names the key
+
+### Requirement: Code head on the wire
+The SDLC AsyncAPI document SHALL define `CodeHeadIdentity` with a repository identifier and commit and tree names of 40 or 64 lowercase hexadecimal characters, rejecting other properties, and the gate and each of the three evidence kinds SHALL carry it as the optional property `codeHead`; each evidence kind SHALL carry the optional `gateId`, an identifier, and the optional `gateGeneration`, a generation.
+
+#### Scenario: Head-bound gate event
+- **WHEN** a head-bound gate decided by evidence at its code head is serialized as JSON in a decided event
+- **THEN** the event is valid, and the gate with an abbreviated commit name is not

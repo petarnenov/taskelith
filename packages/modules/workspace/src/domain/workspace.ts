@@ -71,6 +71,7 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'insecure-remote',
   'git-client-mismatch',
   'non-utf8-path',
+  'unsafe-tree-path',
 ] as const);
 
 export type WorkspaceFailureReason = (typeof WORKSPACE_FAILURE_REASONS)[number];
@@ -180,6 +181,22 @@ export function decodeGitPath(bytes: Uint8Array): Result<string> {
 // A string that UTF-8 can carry exactly: no lone surrogate.
 export function isUtf8Text(text: string): boolean {
   return !LONE_SURROGATE.test(text);
+}
+
+// Code points that HFS+ ignores in a name, as Git's `is_hfs_dotgit` does.
+const HFS_IGNORED = /[\u200C-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g;
+// `.git` or its NTFS short name, then dots, spaces, or a stream name.
+const NTFS_DOT_GIT = /^(?:\.git|git~1)[. ]*(?::.*)?$/i;
+
+// A name Git accepts in a path (`verify_path` with its HFS+ and NTFS
+// rules): not empty, `.`, `..`, or any spelling of `.git`.
+export function isSafeTreeName(name: string): boolean {
+  if (name === '' || name === '.' || name === '..' || name.includes('/') || name.includes('\0')) return false;
+  return !NTFS_DOT_GIT.test(name) && name.replace(HFS_IGNORED, '').toLowerCase() !== '.git';
+}
+
+export function unsafeTreePath(path: string): Result<never> {
+  return workspaceFailure('precondition-failed', 'unsafe-tree-path', `the tree path ${JSON.stringify(path)} is not one Git accepts`);
 }
 
 export function nonUtf8Path(): Result<never> {

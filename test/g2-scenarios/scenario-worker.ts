@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
@@ -8,12 +8,14 @@ import { ok, type Result } from '@taskelith/kernel';
 import { connectWorkerTransport, type TransportConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
-import { executionAccountOf, seededUuids, value, type SeededRandom } from '@taskelith/testing';
+import { certificateSha256, executionAccountOf, seededUuids, value, withTestBrokerCa, type SeededRandom } from '@taskelith/testing';
 import { linuxContainmentCheck, startWorker, type LaunchHost, type LaunchSettings, type RunningWorker, type WorkerDependencies, type WorkerSettings } from '@taskelith/worker';
-import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
-import { SCENARIO_LAUNCH, cgroupHost, workerContainmentParent } from './scenario-launch.ts';
+import {
+  SCENARIO_LAUNCH, SCENARIO_LAUNCH_HOST, UNWRAPPED_RECOVERY, workerContainmentParent, workerLaunchHost, type RecoveryWrap,
+} from './scenario-launch.ts';
 import { within } from './waiting.ts';
 
 // The worker's own timers (heartbeats, broker retries, lost contact) and
@@ -29,10 +31,11 @@ const runningWorkers = new Set<ScenarioWorker>();
 export const HELD_RUN = 'held';
 export type ScriptedRun = number | typeof HELD_RUN;
 
-// Where a worker finds its installation: the API, and the base directory
-// that holds the scenario's data roots.
+// Where a worker finds its installation: the API, the CA file whose
+// fingerprint it enrolls with, and the base of the scenario's data roots.
 export interface WorkerSite {
   readonly apiUrl: URL;
+  readonly installationCa: string;
   readonly base: string;
 }
 
@@ -52,6 +55,8 @@ export interface ScenarioWorkerOptions {
   readonly freeBytes?: () => number;
   // Awaited before each supervisor starts, after W4.
   readonly beforeSupervisorStart?: () => Promise<void>;
+  // Wraps each recovery of the worker's own supervisor; native launch only.
+  readonly aroundSupervisorRecover?: RecoveryWrap;
   // Offered slots; two unless a scenario says.
   readonly slots?: number;
   // Wraps the broker connection, for a test-side crash point.
@@ -59,7 +64,7 @@ export interface ScenarioWorkerOptions {
 }
 
 // The product's startWorker with scaled timers, seeded draws and IDs, and
-// the cgroup launch host under SCENARIO_LAUNCH, else the process-group one.
+// the worker's own launch host under a native launch, else the test one.
 export class ScenarioWorker {
   readonly logs = new InMemoryLogSink();
   readonly dataRoot: string;
@@ -124,11 +129,11 @@ export class ScenarioWorker {
     const { enrollmentToken, runMilliseconds } = this.#options;
     return {
       dataRoot: this.dataRoot, controlPlaneUrl: this.#site.apiUrl, natsUrl: this.#options.nats,
-      host: { platform: 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
+      host: { platform: SCENARIO_LAUNCH_HOST === 'macos-supervisor' ? 'darwin' : 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
       capacity: { slots: this.#options.slots ?? 2, cpuMillicores: 4_000, memoryMebibytes: 8_192, controls: [] },
       launch: this.#launch(runMilliseconds),
       ...(this.#containmentParent === undefined ? {} : { containmentParent: this.#containmentParent }),
-      ...(enrollmentToken === undefined ? {} : { enrollmentToken }),
+      ...(enrollmentToken === undefined ? {} : { enrollmentToken, installationCaSha256: certificateSha256(readFileSync(this.#site.installationCa, 'utf8')) }),
     };
   }
 
@@ -143,14 +148,24 @@ export class ScenarioWorker {
 
   #launchHost(settings: WorkerSettings, executions: string): Result<LaunchHost> {
     const beforeStart = this.#options.beforeSupervisorStart ?? (async () => undefined);
-    if (SCENARIO_LAUNCH !== undefined) return cgroupHost(settings, executions, beforeStart);
+    if (SCENARIO_LAUNCH_HOST !== 'process-group') {
+      const aroundRecover = this.#options.aroundSupervisorRecover ?? UNWRAPPED_RECOVERY;
+      return workerLaunchHost(settings, executions, { beforeStart, aroundRecover });
+    }
     return ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), beforeStart));
   }
 
-  // The worker's own Linux containment check under the cgroup supervisor;
-  // a passing stub on the process-group host, which has no containment.
+  // The worker's own admission check under a native launch, as apps/worker
+  // composes it; a passing stub on the process-group host.
   #admissionCheck(): WorkerAdmissionCheck {
-    return SCENARIO_LAUNCH === undefined ? stubAdmissionCheck() : linuxContainmentCheck(this.#settings());
+    return SCENARIO_LAUNCH_HOST === 'process-group' ? stubAdmissionCheck() : linuxContainmentCheck(this.#settings());
+  }
+
+  // The real probe on macOS; the Linux test volume may be tmpfs, which the
+  // real probe refuses.
+  #volumeProbe(): Pick<WorkerDependencies, 'probe'> {
+    if (SCENARIO_LAUNCH_HOST === 'macos-supervisor') return {};
+    return { probe: () => ok({ platform: 'linux' as const, magic: EXT4_MAGIC }) };
   }
 
   #dependencies(): WorkerDependencies {
@@ -163,15 +178,15 @@ export class ScenarioWorker {
     const freeBytes = this.#options.freeBytes ?? (() => 1024 * GIBIBYTE);
     const wrapTransport = this.#options.transport ?? ((transport: TransportConnection) => transport);
     return {
-      enrollment: new HttpEnrollmentClient(endpoint),
+      installationCa: new HttpInstallationCaSource(endpoint),
+      enrollment: (installationCa) => new HttpEnrollmentClient({ ...endpoint, installationCa }),
       connect: async (endpoint) => {
-        const connected = await connectWorkerTransport(endpoint);
+        const connected = await connectWorkerTransport(withTestBrokerCa(endpoint));
         return connected.ok ? ok(wrapTransport(connected.value)) : connected;
       },
       newJournalId: () => randomBytes(16).toString('hex'),
       clock: SYSTEM_CLOCK,
-      // The test volume may be tmpfs, which the real probe refuses.
-      probe: () => ok({ platform: 'linux' as const, magic: EXT4_MAGIC }),
+      ...this.#volumeProbe(),
       space: () => ok({ availableBytes: freeBytes(), totalBytes: 2048 * GIBIBYTE }),
       daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: idleUntil },
       pressurePollMilliseconds: LAUNCH_POLL_MILLISECONDS,
@@ -179,7 +194,7 @@ export class ScenarioWorker {
       admissionChecks: [this.#admissionCheck()],
       sleep: scaledSleep, draw, logger,
       launching: {
-        authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),
+        authority: (credential, installationCa) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential, installationCa })),
         host: (settings, executions) => this.#launchHost(settings, executions),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),

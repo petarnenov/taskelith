@@ -31,7 +31,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check \
-	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
+	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -149,6 +149,15 @@ verify-linux-g2-scenarios:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
 		-- $(or $(FILES),$(G2_SCENARIO_FILES))
+
+# Opt-in G2 races, stale generations, and partitions on macOS through the
+# worker's own macOS supervisor; FILES and PATTERN select.
+verify-macos-g2-scenarios:
+	@if [ "$$(uname -s)" != Darwin ]; then echo "make verify-macos-g2-scenarios: needs macOS" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
+		env TASKELITH_MACOS_SCENARIOS=1 node --experimental-strip-types --test \
+		$(if $(PATTERN),--test-name-pattern='$(PATTERN)') $(or $(FILES),$(G2_SCENARIO_FILES))
 
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.

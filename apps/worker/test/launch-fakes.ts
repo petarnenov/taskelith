@@ -34,7 +34,7 @@ const BINDING: JournalBinding = {
   installationId: id('InstallationId', 'installation1'), workerId: id('WorkerId', 'worker-1'), journalId: id('JournalId', 'journal-1'),
   recoveryEpoch: value(parseRecoveryEpoch(1)),
 };
-const ENROLLMENT: WorkerEnrollment = { ...BINDING, credentialGeneration: 1, credentials: { controlPlane: 'tkwk_test', broker: 'creds' } };
+const ENROLLMENT: WorkerEnrollment = { ...BINDING, credentialGeneration: 1, credentials: { controlPlane: 'tkwk_test', broker: 'creds' }, installationCa: 'installation CA' };
 
 // A real journal in a temporary data root.
 export function temporaryJournal(): { readonly root: WorkerRoot; readonly remove: () => void } {

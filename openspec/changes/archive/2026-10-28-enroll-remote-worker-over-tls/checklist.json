@@ -1,0 +1,100 @@
+{
+  "change": "enroll-remote-worker-over-tls",
+  "generatedAt": "2026-10-28T04:56:02.525Z",
+  "devCommit": "1c73e1a70d92fab0883f3972672dd56b1d01ae77",
+  "query": {
+    "capabilities": [
+      "installation-enrollment",
+      "worker-runtime",
+      "nats-transport",
+      "control-plane-api"
+    ],
+    "files": [],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 7
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "redaction",
+        "count": 5
+      },
+      {
+        "category": "docs",
+        "count": 4
+      },
+      {
+        "category": "spec-wording",
+        "count": 3
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 379,
+        "inChecklist": 307
+      },
+      "mediumOrWorse": {
+        "findings": 158,
+        "inChecklist": 135
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 71
+      },
+      {
+        "category": "docs",
+        "count": 49
+      },
+      {
+        "category": "spec-wording",
+        "count": 40
+      },
+      {
+        "category": "stale-citation",
+        "count": 29
+      },
+      {
+        "category": "contract-drift",
+        "count": 14
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 225,
+        "inChecklist": 223
+      },
+      "mediumOrWorse": {
+        "findings": 35,
+        "inChecklist": 35
+      }
+    }
+  }
+}

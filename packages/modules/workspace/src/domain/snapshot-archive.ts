@@ -1,5 +1,5 @@
 import { ok, type Result } from '@taskelith/kernel';
-import { isUtf8Text, nonUtf8Path, workspaceFailure, type GitTreeEntry, type TreeEntry } from './workspace.js';
+import { isSafeTreeName, isUtf8Text, nonUtf8Path, unsafeTreePath, workspaceFailure, type GitTreeEntry, type TreeEntry } from './workspace.js';
 
 // Taskelith's own tar of a tree (contract section 10): byte-identical for
 // equal trees, whatever Git version or workspace produced the entries.
@@ -12,17 +12,29 @@ const PAX_HEADER_NAME = 'PaxHeader';
 const utf8 = (text: string) => new TextEncoder().encode(text);
 
 // Files and links of a map, `__proto__` included, in UTF-8 byte order;
-// a gitlink, then text that is not UTF-8, is refused.
+// a gitlink, then text that is not UTF-8, then an unsafe path is refused.
 export function encodeHeadSnapshot(tree: ReadonlyMap<string, GitTreeEntry>): Result<Uint8Array> {
   const gitlink = [...tree].find(([, entry]) => entry.type === 'gitlink');
   if (gitlink !== undefined) return workspaceFailure('precondition-failed', 'gitlink-in-tree', `the tree holds a gitlink at ${gitlink[0]}`);
   const texts = [...tree].flatMap(([path, entry]) => (entry.type === 'link' ? [path, entry.target] : [path]));
   if (!texts.every(isUtf8Text)) return nonUtf8Path();
+  const unsafe = unsafePath([...tree.keys()]);
+  if (unsafe !== undefined) return unsafeTreePath(unsafe);
   const blocks = [...tree]
     .map(([path, entry]) => ({ path: utf8(path), entry: entry as TreeEntry }))
     .sort((left, right) => compareBytes(left.path, right.path))
     .flatMap(({ path, entry }) => entryBlocks(path, entry));
   return ok(concat([...blocks, new Uint8Array(2 * BLOCK)]));
+}
+
+// A path with a name Git refuses, or one below another entry, which a
+// tar would have to make both a file and a directory.
+function unsafePath(paths: readonly string[]): string | undefined {
+  const entries = new Set(paths);
+  return paths.find((path) => {
+    const names = path.split('/');
+    return !names.every(isSafeTreeName) || names.slice(1).some((_, at) => entries.has(names.slice(0, at + 1).join('/')));
+  });
 }
 
 function entryBlocks(path: Uint8Array, entry: TreeEntry): Uint8Array[] {

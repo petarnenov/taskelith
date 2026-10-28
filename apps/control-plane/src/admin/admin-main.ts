@@ -118,7 +118,7 @@ async function run(admin: Administration, command: Command, environment: Environ
     case 'issue-installation-certificates':
       return admin.issueInstallationCertificates();
     case 'issue-enrollment-token':
-      return mapped(await admin.issueEnrollmentToken(operator, constraints(command.values)), (enrollmentToken) => ({ enrollmentToken }));
+      return admin.issueEnrollmentToken(operator, constraints(command.values));
     case 'rotate-worker':
       return mapped(await admin.rotateWorker(operator, command.worker!), (rotated) => rotated.revocationsPublished
         ? rotated

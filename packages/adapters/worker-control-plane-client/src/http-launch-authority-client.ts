@@ -9,7 +9,7 @@ import {
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import { parseArtifactRevision, parseGeneration, parseOwnershipGeneration, type ArtifactRevision } from '@taskelith/sdlc';
-import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
+import { pinnedTarget, postJson, statusFailure, type ControlPlaneEndpoint, type HttpTarget } from './control-plane-http.js';
 import { sanitizeFailureText } from './failure-cause.js';
 
 export interface ControlPlaneClientSettings extends ControlPlaneEndpoint {
@@ -17,17 +17,19 @@ export interface ControlPlaneClientSettings extends ControlPlaneEndpoint {
   readonly credential: string;
 }
 
-// `authorizeLaunch` over HTTP with the built-in fetch. A 503, a timeout,
-// or a lost connection is `unavailable`: no decision was reached.
+// `authorizeLaunch` over pinned TLS. A 503, a timeout, or a lost
+// connection is `unavailable`: no decision was reached.
 export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
-  readonly #settings: ControlPlaneClientSettings;
+  readonly #target: HttpTarget;
+  readonly #credential: string;
 
   constructor(settings: ControlPlaneClientSettings) {
-    this.#settings = settings;
+    this.#target = pinnedTarget(settings);
+    this.#credential = settings.credential;
   }
 
   async authorize(request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
-    const answered = await postJson(this.#settings, 'launch-authorizations', this.#settings.credential, request);
+    const answered = await postJson(this.#target, 'launch-authorizations', this.#credential, request);
     if (!answered.ok) return answered;
     const { status, body } = answered.value;
     if (status !== 200) return err(statusFailure('authorizeLaunch', answered.value));

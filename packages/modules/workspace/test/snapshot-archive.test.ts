@@ -100,6 +100,26 @@ test('a path or link target that UTF-8 cannot carry is refused', () => {
   }
 });
 
+test('a path that Git refuses, or a file that is also a directory, is refused', () => {
+  const file = { type: 'file', mode: '100644', content: text('x') } as const;
+  const paths = ['', 'a//b', 'a/', './a', 'a/..', '.git/config', 'sub/.GIT', 'sub/.git. ', 'git~1/x', '.g\u200dit', '.git:stream'];
+  for (const path of paths) {
+    const archive = snapshot({ [path]: file });
+    assert.ok(!archive.ok, JSON.stringify(path));
+    assert.deepEqual(archive.error.details, { reason: 'unsafe-tree-path' });
+  }
+  const conflict = snapshot({ dir: file, 'dir/file': file });
+  assert.ok(!conflict.ok);
+  assert.deepEqual(conflict.error.details, { reason: 'unsafe-tree-path' });
+  assert.ok(snapshot({ '.github/git~2/.gitignore': file, 'a..b': file }).ok);
+});
+
+test('text that is not UTF-8 is refused before a path that Git refuses', () => {
+  const archive = snapshot({ '..': { type: 'file', mode: '100644', content: text('x') }, link: { type: 'link', target: 'lone\uDC00' } });
+  assert.ok(!archive.ok);
+  assert.deepEqual(archive.error.details, { reason: 'non-utf8-path' });
+});
+
 test('a gitlink is refused before text that is not UTF-8', () => {
   const archive = snapshot({ 'lone\uD800': { type: 'file', mode: '100644', content: text('x') }, module: { type: 'gitlink', commit: 'f'.repeat(40) } });
   assert.ok(!archive.ok);

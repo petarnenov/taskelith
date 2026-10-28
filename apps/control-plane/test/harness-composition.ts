@@ -18,6 +18,7 @@ import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import {
   admitExecutionAccount,
+  certificateSha256,
   CRASH_POINT_VARIABLE,
   crashEnvironment,
   integrationEndpoint,
@@ -411,7 +412,7 @@ export class ComposedWorker {
       ...(run.failsFirstPrepare === true ? { [FAIL_FIRST_PREPARE_VARIABLE]: '1' } : {}),
       [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation.base),
       TASKELITH_DATA_DIR: join(installation.base, 'worker'), TASKELITH_CONTROL_PLANE_URL: installation.apiUrl,
-      NODE_EXTRA_CA_CERTS: installation.installationCa,
+      TASKELITH_INSTALLATION_CA_SHA256: certificateSha256(readFileSync(installation.installationCa, 'utf8')),
       TASKELITH_NATS_URL: NATS.href, TASKELITH_ENROLLMENT_TOKEN: enrollmentToken, TASKELITH_WORKER_COMMAND: childCommand(installation),
       ...LINUX_LAUNCH,
     };

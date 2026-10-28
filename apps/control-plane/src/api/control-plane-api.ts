@@ -27,6 +27,8 @@ export interface ApiServices {
   readonly launches: {
     authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
   };
+  // The public installation CA certificate, read and checked at start.
+  readonly installationCa: string;
   readonly quarantine: {
     records(fromSequence?: number, limit?: number): Promise<Result<readonly QuarantineRecord[]>>;
     redrive(sequence: number): Promise<Result<string | null>>;
@@ -69,6 +71,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#services.evidence.read(first);
       case 'downloadEvidence':
         return this.#download(first);
+      case 'readInstallationCa':
+        return ok({ certificate: this.#services.installationCa });
       case 'enrollWorker':
         return this.#enroll(bearer, request.body as HttpSchemas['EnrollmentRequest']);
       case 'authorizeLaunch':

@@ -88,7 +88,9 @@ const RUN: RunContext = (() => {
 function passedSpecsGate(subject: ArtifactRevision): Gate {
   const pending = openGate({ id: 'specs-approval', stageId: 'specs', requiredEvidence: 'semantic-approval', subject: [subject] }, NOW);
   assert.ok(pending.ok);
-  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [subject], recordedAt: NOW, reference: 'review' });
+  const evidence = parseSemanticApproval({ approver: 'reviewer-1', verdict: 'approved', subject: [subject], recordedAt: NOW, reference: 'review',
+    gateId: pending.value.id, gateGeneration: pending.value.generation,
+  });
   assert.ok(evidence.ok);
   const result = recordGateEvidence(pending.value, pending.value.generation, evidence.value, NOW);
   assert.ok(result.ok);
