@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createPlainServer, type Server as PlainServer } from 'node:http';
 import { createServer, type Server } from 'node:https';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { after, before, test } from 'node:test';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import { authorityValidity, serverCertificateValidity, type IssuedCertificate } from '@taskelith/fleet';
@@ -192,3 +197,29 @@ for (const status of [307, 308]) {
     assert.deepEqual(plainSeen, [], 'the plain HTTP target got nothing');
   });
 }
+
+// A child process, as NODE_EXTRA_CA_CERTS is read only at start: an unpinned
+// fetch shows the foreign CA trusted, and the pinned enrollment refuses it.
+const EXTRA_CA_CHILD = `
+const { HttpEnrollmentClient } = await import('@taskelith/worker-control-plane-client');
+const [url, ca, token, request] = process.argv.slice(1);
+const unpinned = await fetch(url).then((answer) => answer.status, (error) => error.cause?.code ?? 'failed');
+const pinned = await new HttpEnrollmentClient({ baseUrl: new URL(url), timeoutMilliseconds: 2000, installationCa: ca }).enroll(token, JSON.parse(request));
+console.log(JSON.stringify({ unpinned, code: pinned.ok ? 'ok' : pinned.error.code, reason: pinned.ok ? undefined : pinned.error.details.reason }));
+`;
+
+test('NODE_EXTRA_CA_CERTS with a foreign CA does not widen the pin', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'taskelith-extra-ca-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const extra = join(directory, 'foreign-ca.pem');
+  writeFileSync(extra, foreign.certificatePem);
+  impostor.body = ENROLLMENT_ANSWER;
+  impostor.status = 201;
+  const before = impostor.seen.length;
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    '--input-type=module', '-e', EXTRA_CA_CHILD, impostorUrl.href, installation.certificatePem, TOKEN, JSON.stringify(ENROLLMENT_REQUEST),
+  ], { env: { ...process.env, NODE_EXTRA_CA_CERTS: extra }, cwd: process.cwd() });
+  impostor.status = 200;
+  assert.deepEqual(JSON.parse(stdout), { unpinned: 201, code: 'precondition-failed', reason: 'installation-ca-untrusted' });
+  assert.deepEqual(impostor.seen.slice(before).map((seen) => seen.authorization), [undefined], 'only the unpinned probe arrived');
+});

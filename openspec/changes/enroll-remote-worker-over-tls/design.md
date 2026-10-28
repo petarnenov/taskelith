@@ -21,7 +21,7 @@ Before this change, `HttpEnrollmentClient` posted the token with the global `fet
 - [G3 plan](/docs/g3-plan.md) row 26 and D11.
 - [Installation contract](/docs/contracts/installation-and-enrollment.md) sections 5, 7, and 10.
 - [26a design](/openspec/changes/archive/2026-10-28-issue-installation-certificates/design.md) decisions 3, 4, and 10.
-- Node.js 24 `tls.createSecureContext`, option `ca`, which replaces the default trusted CAs; the tests of this change show that `NODE_EXTRA_CA_CERTS` and `tls.setDefaultCACertificates` extend only those defaults.
+- Node.js 24 `tls.createSecureContext`, option `ca`, which replaces the default trusted CAs; the tests of this change show that `NODE_EXTRA_CA_CERTS` (in a child process of `pinned-tls.test.ts`, since Node reads it at start) and `tls.setDefaultCACertificates` extend only those defaults.
 
 ## Review checklist
 
