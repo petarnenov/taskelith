@@ -29,6 +29,7 @@ import { PostgresProducerCursors, PostgresWorkerReports } from './observation-re
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
+import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
 
@@ -68,6 +69,7 @@ export class PostgresTransaction {
   readonly unrecordedProcesses: PostgresUnrecordedProcesses;
   readonly reconciliation: PostgresReconciliationQueue;
   readonly workerAdmissions: PostgresWorkerAdmissions;
+  readonly sessionTimeline: PostgresSessionTimelineTransaction;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -107,6 +109,7 @@ export class PostgresTransaction {
     this.unrecordedProcesses = new PostgresUnrecordedProcesses(session);
     this.reconciliation = new PostgresReconciliationQueue(session);
     this.workerAdmissions = new PostgresWorkerAdmissions(session);
+    this.sessionTimeline = new PostgresSessionTimelineTransaction(session);
     this.outboxLookup = this.outbox;
   }
 

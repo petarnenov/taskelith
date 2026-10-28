@@ -4,11 +4,12 @@ G3 item 13 (`implement-session-timeline`, [G3 plan](/docs/g3-plan.md) row 13) tu
 
 ## What Changes
 
-The scope below is the design's proposal; the coordinator's answers to the questions of `design.md` settle it before any implementation code.
+This change is 13a of the split that the coordinator accepted (`design.md`, "Coordinator's answers", Q1).
 
-- Domain: the turn state `refused` and the operations `recordTurnAcceptanceUnknown` and `recordTurnRefused` of the session timeline contract sections 4.4 and 4.5, which the 9d obligations assign to item 13, and the hold of `nextDeliverableTurn` while an unknown turn's generation runs.
+- Domain: the turn state `refused` and the operations `recordTurnAcceptanceUnknown` and `recordTurnRefused` of the session timeline contract sections 4.4 and 4.5, which the 9d obligations assign to item 13, and the hold of `nextDeliverableTurn` while an unknown turn's generation runs. The wire `TurnState` stays as it is; `refused` reaches the wire in 13b.
 - Execution ports: a session timeline store with one `SERIALIZABLE` transaction per change, its in-memory adapter, and a shared conformance suite.
-- Application service in `@taskelith/execution`: session opening, attempt binding across a task's sessions, turn submission and response consumption with client idempotency keys checked by a keyed digest of the input, request recording committed before display, the host's reports applied through the domain, and reads.
+- Application service in `@taskelith/execution`: session opening, attempt binding across a task's sessions, turn submission and response consumption with client idempotency keys checked by an HMAC-SHA-256 digest of the unredacted input, session text redacted before it is recorded, request recording committed before display, the host's reports applied through the domain, and reads that show no output.
+- Digest key: `control-plane/session-input-digest.key`, created once with mode `0600`; the service refuses to start without it or with another size.
 - PostgreSQL adapter: the session timeline tables in their own numbered migration, an attempt unique across all sessions, the idempotency key tables, and the crash points `SessionTimelineCommit.before` and `.after`.
 - Tests: domain unit tests, the conformance suite on the in-memory store and on PostgreSQL 18.6, PostgreSQL-backed race and idempotency tests, and `SIGKILL` crash tests, each written first and run failing.
 
@@ -25,4 +26,4 @@ None.
 
 ## Impact
 
-Private workspace packages `@taskelith/execution` and `@taskelith/postgres`; commit type `chore`. No published package content, no new third-party dependency, no wire operation beyond what 9b and 9c define, no UI. The wire adapters and the worker messages are proposed as sub-changes 13b and 13c (`design.md`, "Size and split").
+Private workspace packages `@taskelith/execution`, `@taskelith/postgres`, `@taskelith/secrets`, `@taskelith/control-plane-store`, and `@taskelith/control-plane`; commit type `chore`. No published package content, no new third-party dependency, no wire operation beyond what 9b and 9c define, no UI. Follow-ups only, not part of this change: 13b, the HTTP operations of control-plane wire contracts section 9, output redaction across chunks, the native request source, and `refused` on the wire; 13c, the worker messages of 9d.

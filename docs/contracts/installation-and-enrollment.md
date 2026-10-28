@@ -46,6 +46,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 | `installation-ca.pem` | The authority's public certificate, which clients trust | At `init` and at each `issue-installation-certificates` |
 | `api-certificate.pem`, `api-key.pem` | The worker API's server certificate and private key | At `init` and replaced at each `issue-installation-certificates` |
 | `nats-certificate.pem`, `nats-key.pem` | The broker's server certificate and private key, which the operator installs for nats-server | At `init` and replaced at each `issue-installation-certificates` |
+| `session-input-digest.key` | `key`: the 32-byte HMAC-SHA-256 key of the session inputs' digests (control-plane wire contracts section 7), in base64; never logged, recorded, or quoted in a reason (G3 item 13a, coordinator answer Q4) | Once, through `SessionInputDigestKeyFile.create`; no command creates it before item 13b wires the service, and the service refuses to start without it or with another size |
 | `evidence/sha256/<first two hex digits>/<hex digest>` | Evidence content named by its SHA-256 digest (G2 item 19); its record is in PostgreSQL | Once per digest, at its first publication; a republication of the same content replaces a corrupt copy |
 
 ## 4. The operator credential

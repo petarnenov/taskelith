@@ -11,7 +11,9 @@ import {
   InMemoryTaskRepository,
   PRODUCER_CURSORS_CONFORMANCE,
   RECONCILIATION_QUEUE_CONFORMANCE,
+  SESSION_TIMELINE_STORE_CONFORMANCE,
   InMemoryReconciliationQueue,
+  InMemorySessionTimelineStore,
   InMemoryUnrecordedProcesses,
   TASK_REPOSITORY_CONFORMANCE,
 } from '@taskelith/execution';
@@ -35,3 +37,4 @@ runSuite('in-memory reconciliation queue', RECONCILIATION_QUEUE_CONFORMANCE, () 
   const processes = new InMemoryUnrecordedProcesses();
   return { tasks, processes, queue: new InMemoryReconciliationQueue(() => tasks.all(), processes) };
 });
+runSuite('in-memory session timeline', SESSION_TIMELINE_STORE_CONFORMANCE, () => new InMemorySessionTimelineStore());
