@@ -58,7 +58,7 @@ for (const [label, plant] of UNSAFE) {
 }
 
 const NOT_UTF8 = { skip: process.platform === 'darwin' ? 'APFS refuses names that are not UTF-8' : false };
-const named = (...parts: (string | number[])[]) => Buffer.concat(parts.map((part) => Buffer.from(part)));
+const named = (...parts: (string | Buffer | number[])[]) => Buffer.concat(parts.map((part) => (typeof part === 'string' ? Buffer.from(part) : Buffer.from(part))));
 
 test('directories whose names are not UTF-8 are walked by their bytes', NOT_UTF8, async () => {
   const directory = named(checkout, '/', [0x6e, 0xff]);
