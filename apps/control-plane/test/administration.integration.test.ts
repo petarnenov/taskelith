@@ -127,7 +127,9 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal(issued.output.installationCaSha256, createHash('sha256').update(caDer).digest('hex'));
   renameSync(installationCa, `${installationCa}.moved`);
   const withoutCa = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
+  const strangerWithoutCa = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: 'tkop_wrong' });
   renameSync(`${installationCa}.moved`, installationCa);
+  assert.equal((strangerWithoutCa.output.error as { code: string }).code, 'forbidden', 'authorization comes before the CA');
   const missing = withoutCa.output.error as { code: string; details: { path?: string } };
   assert.deepEqual([withoutCa.status, missing.code, withoutCa.output.enrollmentToken], [1, 'precondition-failed', undefined]);
   assert.equal(missing.details.path, installationCa);

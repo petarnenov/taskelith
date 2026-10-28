@@ -153,11 +153,13 @@ export class Administration {
   // The CA is read first, so a bundle without its fingerprint is never
   // issued and no token is spent on it.
   async issueEnrollmentToken(operatorSecret: string, constraints: HostConstraints): Promise<Result<EnrollmentBundle>> {
-    const installationCa = this.installationCa();
-    if (!installationCa.ok) return installationCa;
-    const installationCaSha256 = installationCaFingerprint(installationCa.value);
-    const token = await this.#asOperator(operatorSecret, (enrollment) => enrollment.issueToken(constraints));
-    return token.ok ? ok({ enrollmentToken: token.value, installationCaSha256 }) : token;
+    return this.#asOperator(operatorSecret, async (enrollment) => {
+      const installationCa = this.installationCa();
+      if (!installationCa.ok) return installationCa;
+      const token = await enrollment.issueToken(constraints);
+      if (!token.ok) return token;
+      return ok({ enrollmentToken: token.value, installationCaSha256: installationCaFingerprint(installationCa.value) });
+    });
   }
 
   rotateWorker(operatorSecret: string, workerId: string): Promise<Result<RotatedCredentials>> {

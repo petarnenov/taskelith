@@ -54,7 +54,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 ## 5. Enrollment
 
 - **Token.** `tken_` followed by 256 random bits, stored as its SHA-256. It is single-use, valid for the enrollment token TTL, and optionally bound to `platform`, `architecture`, and `hostname`.
-- **Bundle.** `issue-enrollment-token` prints the token with `installationCaSha256`, the SHA-256 of the DER of the installation CA certificate in 64 lowercase hexadecimal digits. It reads `installation-ca.pem` under the checks of section 3 before it issues the token, so a file that is missing or is not exactly one CA certificate fails with `precondition-failed`, names the file, and issues no token. The operator hands the worker both values (section 10).
+- **Bundle.** `issue-enrollment-token` prints the token with `installationCaSha256`, the SHA-256 of the DER of the installation CA certificate in 64 lowercase hexadecimal digits. It authorizes the operator first, so an unauthorized one gets `forbidden` whatever the file's state, then reads `installation-ca.pem` under the checks of section 3 before it issues the token, so a file that is missing or is not exactly one CA certificate fails with `precondition-failed`, names the file, and issues no token. The operator hands the worker both values (section 10).
 - **Checks, in order:**
   1. An unknown, used, or expired token is `forbidden` with reason `token-invalid` (401 of `enrollWorker`).
   2. A host that the constraints do not allow is `precondition-failed` with reason `host-mismatch` (422).
