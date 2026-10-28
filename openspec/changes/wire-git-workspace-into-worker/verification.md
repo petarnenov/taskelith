@@ -185,7 +185,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | `hand-off.test.ts` "a failure record renamed into place before its directory flush fails keeps the failure, so no reclaim runs the program again" | It guards behavior that `4531fcf7` already had, so it passed there; the fix of finding 3 corrects the texts. A mutant whose `#reclaim` ignores a recorded `reclaimFailed` failed it: `the program never runs again`, 2 launches where 1 was expected |
 
 - After the fixes: `node --experimental-strip-types --test` of `packages/adapters/git-workspace/test/*.test.ts` and `apps/worker/test/*.test.ts` gave tests 551, pass 551, fail 0; `make findings ARGS="validate"` valid; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, requirement bodies unchanged, the longest 489 characters ("Reclaim program containment"; "Killed reclaim containment" 482); an archive of the change in a scratch copy of `openspec/` validated every spec strictly (71 passed). `make verify` and `make verify-linux-git-workspace` are under "Checks".
-- Architect check of the unreviewed pass 3 fixes (`08a9347d`, `51daebe7`, `23caaad6`, `7845c3da`, governance "Architect check of unreviewed fixes"): pending, by the coordinator before the handoff.
+- Architect check (Niki, coordinator as solution architect, 2026-10-28): passed for 08a9347d, 51daebe7 and 7845c3da, and 23caaad6; the docs commit 23caaad6 carrying one test is accepted.
 
 ## Limitations
 
@@ -198,7 +198,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- The architect check of the unreviewed pass 3 fixes by the coordinator (governance "Architect check of unreviewed fixes"), before the handoff.
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
