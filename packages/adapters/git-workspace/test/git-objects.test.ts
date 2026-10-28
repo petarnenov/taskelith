@@ -8,6 +8,7 @@ import {
   indexMatchesTree,
   objectName,
   parseBatchObjects,
+  parseCommitParents,
   parseCommitTree,
   parseIndexEntries,
   parseTreeObject,
@@ -52,6 +53,16 @@ test('a commit names its tree on its first line', () => {
   assert.equal(value(parseCommitTree(bytes(`tree ${OID}\nparent ${OTHER}\n\nmessage\n`), 'sha1')), OID);
   for (const body of [`parent ${OID}\n`, `tree ${OID.slice(1)}\n`, `tree ${OID}`, `tree ${'a'.repeat(64)}\n`]) {
     assert.equal(failed(parseCommitTree(bytes(body), 'sha1')).code, 'internal', body);
+  }
+});
+
+test('a commit names its parents right after its tree', () => {
+  const third = 'c'.repeat(40);
+  assert.deepEqual(value(parseCommitParents(bytes(`tree ${OID}\nauthor a\n\nparent ${OTHER}\n`), 'sha1')), []);
+  assert.deepEqual(value(parseCommitParents(bytes(`tree ${OID}\nparent ${OTHER}\nparent ${third}\nauthor a\n`), 'sha1')), [OTHER, third]);
+  assert.deepEqual(value(parseCommitParents(bytes(`tree ${OID}\nauthor a\nparent ${OTHER}\n`), 'sha1')), []);
+  for (const body of [`parent ${OID}\n`, `tree ${OID}`, `tree ${'a'.repeat(64)}\n`]) {
+    assert.equal(failed(parseCommitParents(bytes(body), 'sha1')).code, 'internal', body);
   }
 });
 
