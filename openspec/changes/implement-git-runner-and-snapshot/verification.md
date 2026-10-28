@@ -93,7 +93,6 @@ Pass 1 ran read-only; its sandbox refused `npm run verify:comments` (`spawnSync 
 - The test remote speaks Git's dumb HTTP protocol from a static file server; the smart-HTTP server, the service's own credential check, and the remote operations are 16c's.
 - 15 conformance cases are skipped with their reason (16c: 9, 16d: 6); the adapter's own tests cover their checks of the local operations, not their checks of the push, the remote head, or the hand-off.
 - The clone runs with the worker's umask and primary group, not umask `0007` and the execution group (16d and 16e); Git's objects are not forced to disk (design, "Risks"); no Git process has a time limit.
-- An index may carry an untracked cache that `git status` trusts while directory stat data match; `core.untrackedCache=false` is not among the contract's command-scope settings, so a forged cache could hide an untracked file (design, "Risks"; reported as a follow-up).
 
 ## Remaining gates
 

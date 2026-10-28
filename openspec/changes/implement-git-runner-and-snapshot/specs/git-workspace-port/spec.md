@@ -78,6 +78,10 @@ After clearing every assume-unchanged and skip-worktree flag of the index, `insp
 - **WHEN** the agent sets `--assume-unchanged` or `--skip-worktree` on a tracked file and changes it
 - **THEN** `inspect` reports `modified`, and `snapshot` and `remove` fail with reason `workspace-dirty`
 
+#### Scenario: Forged untracked cache
+- **WHEN** the agent forges the index's untracked cache so that it lists a tracked name instead of an untracked file
+- **THEN** `inspect` reports `untracked`, and `remove` fails with reason `workspace-dirty`
+
 #### Scenario: Committed name that is not UTF-8
 - **WHEN** a workspace holds a committed file whose name, or whose directory's name, is not valid UTF-8 and nothing else changed
 - **THEN** `inspect` reports the workspace clean, and `snapshot` fails with reason `non-utf8-path`
