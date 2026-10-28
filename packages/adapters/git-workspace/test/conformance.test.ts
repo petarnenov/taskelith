@@ -17,15 +17,9 @@ for (const conformance of WORKSPACE_CONFORMANCE) {
   test(`the Git adapter: ${conformance.name}`, () => conforms(conformance));
 }
 
-// The cases that hand a workspace off, again with an execution account,
-// as the worker image composes the adapter (contract section 3).
-const HAND_OFF_CASES = WORKSPACE_CONFORMANCE.filter(({ name }) => /hand/i.test(name));
-
-test('the hand-off cases include both of a separate account', () => {
-  assert.equal(HAND_OFF_CASES.filter(({ name }) => name.endsWith('share a separate account')).length, 2);
-});
-
-for (const conformance of HAND_OFF_CASES) {
+// The whole suite again with an execution account, as the worker image
+// composes the adapter (contract section 3).
+for (const conformance of WORKSPACE_CONFORMANCE) {
   test(`the Git adapter with an execution account: ${conformance.name}`, () =>
     conforms(conformance, { reclaimHost: simulatedSeparateAccount() }));
 }
