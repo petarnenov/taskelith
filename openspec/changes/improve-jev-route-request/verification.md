@@ -27,7 +27,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`. `JEV_M
 
 - **Live answer shape.** The constructed fixture follows `NoulAnswer` of `https://api.typesafe.ai/openapi.json` (`info.version` 0.2.0, read 2026-10-28). The live route of `32c920a9` parsed as `answered`, so the live response had that shape; its body was not stored.
 - **Reference rates.** At `1234e540`, `referenceRates` counts 70 single-artifact reviewed changes, 49% with a third pass, and by band 13% of 23, 39% of 18, and 80% of 20 (computed offline with the module on the git environment; design.md D2). The experiment's reference was 32% over its 50 lines.
-- **Credential absence.** Counted with `grep -cF` on the variable's value, printing only counts: 0 in `route.json`, 0 in the route run's output (`/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/route-run.log`), 0 in the `make verify` log (`/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/verify-1.log`), 0 in the fail-before log, and no tracked file at `HEAD` contains it (`git grep -cF`).
+- **Credential absence.** Counted with `grep -cF` on the variable's value, printing only counts: 0 in `route.json`, 0 in the route run's output (`/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/route-run.log`), 0 in each `make verify` log (`/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/verify-1.log` and `verify-2.log` beside it), 0 in the fail-before log, and no tracked file at `HEAD` contains it (`git grep -cF`).
 - **Links.** The records link only inside the change directory or root-relative; `npm run verify:links` passes.
 
 ## Fail-before
@@ -38,14 +38,14 @@ The new tests' assertions on the request were run against the scripts of `1234e5
 
 - `node --experimental-strip-types --test test/review-route*.test.ts test/findings-route.test.ts` before the commit: 184 of 184 passed.
 - `npm run openspec -- validate improve-jev-route-request --strict`: `Change 'improve-jev-route-request' is valid`.
-- `make verify` on the clean tree of `32c920a9` passed on its first run, no rerun; the generated part below records it.
+- `make verify` on the clean tree of `32c920a9` passed on its first run, no rerun. After the coordinator decisions, `make verify` on the clean tree of `23d30381` passed on its first run, no rerun (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/04759add-0e0e-434a-a407-5bdae2048b83/scratchpad/verify-2.log`); the generated part below records it.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `398810d7785e82b9bb243691e88d1731c1da790a`; tests 3337, pass 3322, fail 0, skipped 15; all files 99.46% lines, 92.65% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `d130eb6ddb386fe041b4bb89edb60ed71f811aae`; tests 3337, pass 3322, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions.
 - `npm run openspec -- validate improve-jev-route-request --strict`: passed, `Change 'improve-jev-route-request' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 76 file(s); every pass summary file is valid: 56 file(s); every route file is valid: 12 file(s).`.
 - Spec diff against the merge base `1234e540009a` with `origin/dev`: no change under `openspec/specs`.
