@@ -41,14 +41,17 @@ After review pass 1, the tests of `2f1e02bf` were run the same way against `scri
 - `make verify-worker-image-reproducible` on the clean tree of `9ddabc46`, classic image store: passed in 3 min 45 s with `installation.sh: both builds gave the worker image config sha256:5af9f0da19e0819158465af48d16a312ed856cd17fdc4bf9eaddcdcfceaf5f21`, and both images were removed (`docker images` lists no `-reproducible-` tag afterwards).
 - `make verify` on the clean tree of `9ddabc46` passed on its first run, no rerun.
 - After the pass 1 fixes, `make verify-worker-image-reproducible` on the clean tree of `ec9d8e97`, classic image store: passed in 4 min 4 s with `installation.sh: both builds gave the worker image config sha256:be48a55bb977579d9ea493b4025d0bd3db652816f2f1cf9f9f369504be09f802`, read from the saved manifests, and both images were removed.
-- `make verify` on the clean tree of `ec9d8e97` passed on its first run, no rerun; the generated part below records it.
+- `make verify` on the clean tree of `ec9d8e97` passed on its first run, no rerun.
+- After the pass 2 fixes, `node --experimental-strip-types --test test/installation-script.test.ts`: 33 of 33 passed.
+- `make verify-worker-image-reproducible` on the clean tree of `1b87a408`, classic image store: passed in 2 min 12 s with `installation.sh: both builds gave the worker image config sha256:bb76a72a5ad6e6f4a404f1de449ba29f778f6ad08a5e3c529a2a7537e9557bd0`, and both images were removed.
+- `make verify` on the clean tree of `1b87a408` passed on its first run, no rerun; the generated part below records it.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `6ad71098f78426436402c874319201346015ec6d`; tests 3215, pass 3200, fail 0, skipped 15; all files 99.45% lines, 92.67% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `34a8ebc96de91da62a3d6970f50bd1013b7b056e`; tests 3215, pass 3200, fail 0, skipped 15; all files 99.45% lines, 92.68% branches, 99.07% functions.
 - `npm run openspec -- validate compare-worker-image-manifests --strict`: passed, `Change 'compare-worker-image-manifests' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 74 file(s); every pass summary file is valid: 54 file(s); every route file is valid: 10 file(s).`.
 - Spec diff against the merge base `a10ceaaf860c` with `origin/dev`: no change under `openspec/specs`.
@@ -57,6 +60,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a1831a-5209-7d10-8002-cb76a2a8363d` | 0 | 1 | 1 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `93e7c704-8c25-41df-b55e-72892f3311bd` | 0 | 0 | 1 | 5 |
 <!-- make record: end -->
 
 ## Limitations
