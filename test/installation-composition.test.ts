@@ -249,14 +249,15 @@ test('host ports are published on localhost only', () => {
   for (const port of ports) assert.equal(port.host_ip, '127.0.0.1');
 });
 
-test('the broker requires TLS and the worker trusts the installation CA read-only', () => {
+test('the broker requires TLS and the worker gets only the CA fingerprint', () => {
   const broker = readFileSync('infra/installation/nats-server.conf', 'utf8');
   assert.match(broker, /^tls \{[^}]*cert_file: "\/etc\/nats\/authority\/nats-certificate\.pem"[^}]*min_version: "1\.2"/m);
   assert.doesNotMatch(broker, /^\s*allow_non_tls/m);
-  const trust = services.worker.volumes?.find((mount) => mount.source === 'installation-trust');
-  assert.deepEqual([trust?.target, (trust as { read_only?: boolean } | undefined)?.read_only], ['/etc/taskelith/trust', true]);
-  const ca = '/etc/taskelith/trust/installation-ca.pem';
-  assert.deepEqual([services.worker.environment?.TASKELITH_NATS_CA, services.worker.environment?.NODE_EXTRA_CA_CERTS], [ca, ca]);
+  const environment = services.worker.environment ?? {};
+  assert.deepEqual([environment.TASKELITH_NATS_CA, environment.NODE_EXTRA_CA_CERTS], [undefined, undefined]);
+  assert.ok(Object.hasOwn(environment, 'TASKELITH_INSTALLATION_CA_SHA256'));
+  assert.deepEqual(services.worker.volumes?.map((mount) => mount.source), ['worker-data']);
+  assert.equal(Object.hasOwn(installation.volumes ?? {}, 'installation-trust'), false);
   assert.match(services.worker.environment?.TASKELITH_CONTROL_PLANE_URL ?? '', /^https:\/\//);
 });
 

@@ -23,7 +23,7 @@ export class CrashingWorker {
   // Resolves once the worker is enrolled and started.
   static async start(parameters: CrashingWorkerArguments): Promise<CrashingWorker> {
     const child = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', FIXTURE, JSON.stringify(parameters)], {
-      stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, NODE_EXTRA_CA_CERTS: parameters.installationCa },
+      stdio: ['ignore', 'pipe', 'inherit'],
     });
     const exited = once(child, 'exit').then(([, signal]) => signal as NodeJS.Signals | null);
     const lines = createInterface({ input: child.stdout! });

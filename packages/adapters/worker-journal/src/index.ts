@@ -38,6 +38,7 @@ export {
 } from './volume.js';
 export {
   credentialReferencesOf,
+  readInstallationCaPin,
   readWorkerCredentials,
   type WorkerCredentials,
   type WorkerEnrollment,

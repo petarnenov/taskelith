@@ -171,7 +171,7 @@ ADR 0005 decision 2, as amended by the owner on 2026-10-27, stops the pooling an
 
 ### 7.2 Transport
 
-Since G3 sub-change 26a the API and the broker use TLS from the installation CA ([installation and enrollment contract](installation-and-enrollment.md) section 7), but a worker trusts that CA only through its configuration until 26b pins it at enrollment, and the installation binds a private network only with 26d. A credential is therefore delivered only over the TLS of G3 item 26, or to a worker co-located with the control plane on its host. A remote worker receives no slot credential before item 26 completes that TLS.
+Since G3 sub-change 26a the API and the broker use TLS from the installation CA ([installation and enrollment contract](installation-and-enrollment.md) section 7), and since 26b a worker pins that CA at enrollment; the installation binds a private network only with 26d. A credential is therefore delivered only over the TLS of G3 item 26, or to a worker co-located with the control plane on its host. A remote worker receives no slot credential before item 26 completes that TLS.
 
 ### 7.3 The credential on the worker
 

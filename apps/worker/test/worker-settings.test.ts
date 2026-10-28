@@ -11,7 +11,9 @@ after(() => rmSync(directory, { recursive: true, force: true }));
 const FACTS: HostFacts = { platform: 'linux', architecture: 'x64', hostname: 'build-1', cpuMillicores: 8000, memoryMebibytes: 16_384 };
 const BASE = { TASKELITH_DATA_DIR: directory, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane:8443/', TASKELITH_NATS_URL: 'nats://broker:4222' };
 
-test('the settings default the capacity to the host less the daemon, without a token or CA', () => {
+const SHA256 = 'ab'.repeat(32);
+
+test('the settings default the capacity to the host less the daemon, without a token or fingerprint', () => {
   const settings = value(readWorkerSettings(BASE, FACTS));
   assert.equal(settings.dataRoot, directory);
   assert.equal(settings.controlPlaneUrl.href, 'https://control-plane:8443/');
@@ -19,20 +21,29 @@ test('the settings default the capacity to the host less the daemon, without a t
   assert.deepEqual(settings.host, { platform: 'linux', architecture: 'x64', hostname: 'build-1' });
   assert.deepEqual(settings.capacity, { slots: DEFAULT_SLOTS, cpuMillicores: 8000, memoryMebibytes: 16_384 - DAEMON_MEMORY_MEBIBYTES, controls: [] });
   assert.equal('enrollmentToken' in settings, false);
-  assert.equal('natsTls' in settings, false);
+  assert.equal('installationCaSha256' in settings, false);
   assert.equal(value(readWorkerSettings(BASE, { ...FACTS, memoryMebibytes: 100 })).capacity.memoryMebibytes, 1);
 });
 
-test('the token, the CA, and the capacity come from the environment', () => {
+test('the token, the fingerprint, and the capacity come from the environment; a broker CA is not read', () => {
   writeFileSync(join(directory, 'ca.pem'), 'PEM');
   const settings = value(readWorkerSettings({
-    ...BASE, TASKELITH_ENROLLMENT_TOKEN: 'tken_x', TASKELITH_NATS_CA: join(directory, 'ca.pem'),
+    ...BASE, TASKELITH_ENROLLMENT_TOKEN: 'tken_x', TASKELITH_INSTALLATION_CA_SHA256: SHA256, TASKELITH_NATS_CA: join(directory, 'ca.pem'),
     TASKELITH_WORKER_SLOTS: '4', TASKELITH_WORKER_CPU_MILLICORES: '2000', TASKELITH_WORKER_MEMORY_MEBIBYTES: '4096',
   }, FACTS));
   assert.equal(settings.enrollmentToken, 'tken_x');
-  assert.deepEqual(settings.natsTls, { ca: 'PEM' });
+  assert.equal(settings.installationCaSha256, SHA256);
+  assert.equal('natsTls' in settings, false);
   assert.deepEqual(settings.capacity, { slots: 4, cpuMillicores: 2000, memoryMebibytes: 4096, controls: [] });
   assert.equal('enrollmentToken' in value(readWorkerSettings({ ...BASE, TASKELITH_ENROLLMENT_TOKEN: '' }, FACTS)), false);
+});
+
+test('the fingerprint is taken as printed or with the colons and capitals of openssl', () => {
+  const openssl = SHA256.toUpperCase().match(/../g)!.join(':');
+  for (const printed of [SHA256, SHA256.toUpperCase(), openssl]) {
+    assert.equal(value(readWorkerSettings({ ...BASE, TASKELITH_INSTALLATION_CA_SHA256: printed }, FACTS)).installationCaSha256, SHA256, printed);
+  }
+  assert.equal('installationCaSha256' in value(readWorkerSettings({ ...BASE, TASKELITH_INSTALLATION_CA_SHA256: '' }, FACTS)), false);
 });
 
 test('a failure names the variable and never its value', () => {
@@ -41,7 +52,10 @@ test('a failure names the variable and never its value', () => {
     [{ TASKELITH_CONTROL_PLANE_URL: 'ftp://host/' }, 'TASKELITH_CONTROL_PLANE_URL'],
     [{ TASKELITH_NATS_URL: 'not a url' }, 'TASKELITH_NATS_URL'],
     [{ TASKELITH_NATS_URL: 'http://broker' }, 'TASKELITH_NATS_URL'],
-    [{ TASKELITH_NATS_CA: join(directory, 'missing.pem') }, 'TASKELITH_NATS_CA'],
+    [{ TASKELITH_CONTROL_PLANE_URL: 'http://control-plane:8443/' }, 'TASKELITH_CONTROL_PLANE_URL'],
+    [{ TASKELITH_INSTALLATION_CA_SHA256: 'ab'.repeat(31) }, 'TASKELITH_INSTALLATION_CA_SHA256'],
+    [{ TASKELITH_INSTALLATION_CA_SHA256: `${'ab:'.repeat(31)}a` }, 'TASKELITH_INSTALLATION_CA_SHA256'],
+    [{ TASKELITH_INSTALLATION_CA_SHA256: 'g'.repeat(64) }, 'TASKELITH_INSTALLATION_CA_SHA256'],
     [{ TASKELITH_WORKER_SLOTS: '0' }, 'TASKELITH_WORKER_SLOTS'],
     [{ TASKELITH_WORKER_CPU_MILLICORES: '1.5' }, 'TASKELITH_WORKER_CPU_MILLICORES'],
     [{ TASKELITH_WORKER_MEMORY_MEBIBYTES: '99999999999' }, 'TASKELITH_WORKER_MEMORY_MEBIBYTES'],
@@ -52,6 +66,8 @@ test('a failure names the variable and never its value', () => {
     for (const text of Object.values(change)) if (text !== undefined) assert.equal(failure.message.includes(text), false, failure.message);
   }
   assert.equal(failed(readWorkerSettings({ ...BASE, TASKELITH_DATA_DIR: 'relative' }, FACTS)).code, 'invalid');
+  const plain = failed(readWorkerSettings({ ...BASE, TASKELITH_CONTROL_PLANE_URL: 'http://control-plane:8443/' }, FACTS));
+  assert.deepEqual([plain.code, plain.message], ['invalid', 'TASKELITH_CONTROL_PLANE_URL must be a https: URL']);
 });
 
 test('only linux or darwin on x64 or arm64 hosts a worker', () => {

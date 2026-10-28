@@ -116,6 +116,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!identity.ok) return identity;
   const tls = listenerTls(admin.value, settings);
   if (!tls.ok) return tls;
+  const installationCa = admin.value.installationCa();
+  if (!installationCa.ok) return installationCa;
   const authority = admin.value.brokerAuthority();
   if (!authority.ok) return authority;
   const address = TransportAddress.of(identity.value.installationId);
@@ -152,6 +154,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     operator: admin.value.operator,
     enrollment: enrollment.value.service,
     launches,
+    installationCa: installationCa.value,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
   }), { logger });

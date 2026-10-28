@@ -6,24 +6,26 @@ import {
   type EvidenceRecord,
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
-import { postForm, statusFailure } from './control-plane-http.js';
+import { pinnedTarget, postForm, statusFailure, type HttpTarget } from './control-plane-http.js';
 import { sanitizeFailureText } from './failure-cause.js';
 import type { ControlPlaneClientSettings } from './http-launch-authority-client.js';
 
 // `publishEvidence` over HTTP: the record and its content as the two parts
 // of the multipart body. A 502, 503, or 504, or no answer, is `unavailable`.
 export class HttpEvidencePublisher implements EvidencePublisher {
-  readonly #settings: ControlPlaneClientSettings;
+  readonly #target: HttpTarget;
+  readonly #credential: string;
 
   constructor(settings: ControlPlaneClientSettings) {
-    this.#settings = settings;
+    this.#target = pinnedTarget(settings);
+    this.#credential = settings.credential;
   }
 
   async publish(publication: EvidencePublication, content: Uint8Array): Promise<Result<EvidenceRecord>> {
     const form = new FormData();
     form.append('record', new Blob([JSON.stringify(publication)], { type: 'application/json' }));
     form.append('content', new Blob([Uint8Array.from(content)], { type: 'application/octet-stream' }));
-    const answered = await postForm(this.#settings, 'evidence', this.#settings.credential, form);
+    const answered = await postForm(this.#target, 'evidence', this.#credential, form);
     if (!answered.ok) return answered;
     const { status, body } = answered.value;
     if (status !== 200 && status !== 201) return err(statusFailure('publishEvidence', answered.value));
