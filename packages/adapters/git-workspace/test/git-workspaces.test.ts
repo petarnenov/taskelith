@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdir, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, lstat, mkdir, readFile, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CrashPoints, failed, id, value } from '@taskelith/testing';
@@ -333,6 +334,33 @@ test('ignore and attribute rules in .git/info never hide untracked work', () => 
   assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, ['untracked']);
   assert.equal(failed(await local.remove(FIRST)).details.reason, 'workspace-dirty');
   await assert.rejects(lstat(info), { code: 'ENOENT' });
+}));
+
+// Renames a cached untracked name to a tracked one of the same length,
+// with the index checksum renewed, as an agent could.
+async function forgeUntrackedCache(index: string, untracked: string, tracked: string): Promise<void> {
+  const bytes = await readFile(index);
+  const at = bytes.lastIndexOf(Buffer.from(`${untracked}\0`));
+  assert.ok(at > 0, 'the untracked cache lists the file');
+  Buffer.from(tracked).copy(bytes, at);
+  createHash('sha1').update(bytes.subarray(0, -20)).digest().copy(bytes, bytes.length - 20);
+  await writeFile(index, bytes);
+}
+
+test('a forged untracked cache in the index never hides untracked work', () => withFixture(async (git) => {
+  const { fixture, local } = git;
+  value(await local.prepare(request(git)));
+  const checkout = git.checkout(FIRST);
+  const untracked = 'hidden.md';
+  await writeFile(join(checkout, untracked), 'unpublished\n');
+  const past = new Date(Date.now() - 60_000);
+  await utimes(checkout, past, past);
+  await native(git, ['update-index', '--untracked-cache']);
+  await native(git, ['-c', 'status.showUntrackedFiles=all', 'status', '--porcelain', '--untracked-files=all']);
+  await forgeUntrackedCache(join(checkout, '.git', 'index'), untracked, fixture.trackedPath);
+  assert.equal(await native(git, ['status', '--porcelain', '--untracked-files=all']), '', 'the forged cache hides the file from Git');
+  assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, ['untracked']);
+  assert.equal(failed(await local.remove(FIRST)).details.reason, 'workspace-dirty');
 }));
 
 // A file system fault such as a disk error, without its own crash point.

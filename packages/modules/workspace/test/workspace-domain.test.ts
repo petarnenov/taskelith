@@ -261,16 +261,16 @@ test('the built Git environment holds the contract settings, the header last', (
   assert.deepEqual(GIT_COMMAND_SCOPE_SETTINGS, [
     ['core.hooksPath', '/dev/null'], ['credential.helper', ''], ['diff.ignoreSubmodules', 'all'],
     ['status.submoduleSummary', 'false'], ['submodule.recurse', 'false'], ['fetch.recurseSubmodules', 'false'],
-    ['push.recurseSubmodules', 'no'],
+    ['push.recurseSubmodules', 'no'], ['core.untrackedCache', 'false'],
   ]);
   const local = gitConfigEnvironment();
-  assert.equal(local.GIT_CONFIG_COUNT, '7');
+  assert.equal(local.GIT_CONFIG_COUNT, '8');
   assert.equal(local.GIT_CONFIG_KEY_0, 'core.hooksPath');
   assert.equal(local.GIT_CONFIG_VALUE_1, '');
-  assert.equal(local.GIT_CONFIG_KEY_7, undefined);
+  assert.equal(local.GIT_CONFIG_KEY_8, undefined);
   const remote = gitConfigEnvironment('Basic dG9rZW4=');
-  assert.equal(remote.GIT_CONFIG_COUNT, '8');
-  assert.deepEqual([remote.GIT_CONFIG_KEY_7, remote.GIT_CONFIG_VALUE_7], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
+  assert.equal(remote.GIT_CONFIG_COUNT, '9');
+  assert.deepEqual([remote.GIT_CONFIG_KEY_8, remote.GIT_CONFIG_VALUE_8], ['http.extraHeader', 'Authorization: Basic dG9rZW4=']);
   assert.equal(remote.GIT_TERMINAL_PROMPT, '0');
 });
 
