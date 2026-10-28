@@ -26,7 +26,12 @@ export const TASK = value(parseIdentifier('TaskId', 'task-1')) as TaskId;
 export const HARNESS = value(parseIdentifier('HarnessPluginId', 'harness-a'));
 export const NATIVE = value(parseIdentifier('NativeSessionId', 'native-1'));
 export const ATTEMPT = value(parseIdentifier('AttemptId', 'attempt-1'));
+export const OTHER_ATTEMPT = value(parseIdentifier('AttemptId', 'attempt-2'));
 export const OWNERSHIP = value(parseOwnershipGeneration(1));
+export const OTHER_OWNERSHIP = value(parseOwnershipGeneration(2));
+// Two URLs whose passwords differ and redact to the same text.
+export const FIRST_URL = 'https://bot:first-pass@example.com/repo';
+export const OTHER_URL = 'https://bot:other-pass@example.com/repo';
 export const PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-1')) };
 export const OTHER_PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-2')) };
 const DIGEST_KEY = Buffer.alloc(32, 0x5a);

@@ -30,8 +30,8 @@ export interface SessionRecords {
   listByTask(taskId: TaskId): Promise<Result<readonly Session[]>>;
 }
 
-// A command's key within its session and scope, with the keyed digest of
-// its unredacted input and the identity of its first outcome.
+// A command's key, or a native request's ID, within its session and scope,
+// with the keyed digest of its unredacted input and its first outcome.
 export interface IdempotencyRecord {
   readonly scope: string;
   readonly key: IdempotencyKey;

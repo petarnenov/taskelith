@@ -1,4 +1,4 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { EvidenceReference } from '@taskelith/sdlc';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
@@ -172,21 +172,39 @@ export class SessionTimelineService {
     return this.#change(sessionId, (session) => recordTurnRefused(session, report));
   }
 
-  // Committed before any read lists the request (contract, section 5.1).
+  // Committed before any read lists the request (contract, section 5.1). A
+  // held key is compared by the digest of the unredacted recording.
   recordRequest(sessionId: SessionId, recording: RequestRecording): Promise<Result<SessionView>> {
-    const redacted = { ...recording, text: this.#redactor.redact(recording.text) };
-    return this.#change(sessionId, (session) => recordRequest(session, redacted));
+    if (!isTextWithin(recording.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
+      return Promise.resolve(err(failure('invalid', `session ${sessionId} got request text out of bounds`, { session: sessionId })));
+    }
+    const key = parseIdentifier('IdempotencyKey', recording.key.nativeRequestId);
+    if (!key.ok) return Promise.resolve(key);
+    const scope = requestScope(recording.key);
+    const digest = this.#digest.digest(requestInput(recording));
+    return this.#store.transaction(async (tx) => {
+      const stored = await storedSession(tx, sessionId);
+      if (!stored.ok) return stored;
+      const prior = await tx.idempotency.find(sessionId, scope, key.value);
+      if (!prior.ok) return prior;
+      if (prior.value !== undefined) return repeatedRequest(stored.value.session, prior.value, digest);
+      const redacted = { ...recording, text: this.#redactor.redact(recording.text) };
+      const recorded = recordRequest(stored.value.session, redacted);
+      if (!recorded.ok) return recorded;
+      const held = await tx.idempotency.record(sessionId, { scope, key: key.value, digest, outcome: recording.turnId });
+      return held.ok ? written(tx, stored.value, recorded) : held;
+    });
   }
 
   // A response's key is scoped to its request; a repeat with the same digest
-  // of answer and responder returns the answered request.
+  // of answer, responder, and attempt returns the answered request.
   consumeResponse(sessionId: SessionId, command: ResponseCommand): Promise<Result<NativeRequest>> {
-    const { request, answer, responder } = command.response;
+    const { request, answer } = command.response;
     if (!isAnswerWithinBounds(answer)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got an answer out of bounds`, { session: sessionId })));
     }
     const scope = responseScope(request);
-    const digest = this.#digest.digest(responseInput(answer, responder));
+    const digest = this.#digest.digest(responseInput(command.response));
     return this.#store.transaction(async (tx) => {
       const stored = await storedSession(tx, sessionId);
       if (!stored.ok) return stored;
@@ -210,6 +228,9 @@ export class SessionTimelineService {
 
   // Each chunk is redacted alone until item 13b holds a tail across chunks.
   appendOutput(sessionId: SessionId, output: OutputAppend): Promise<Result<SessionView>> {
+    if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
+      return Promise.resolve(err(failure('invalid', `session ${sessionId} got output text out of bounds`, { session: sessionId })));
+    }
     const redacted = { ...output, text: this.#redactor.redact(output.text) };
     return this.#change(sessionId, (session) => appendOutput(session, redacted));
   }
@@ -298,6 +319,12 @@ function repeatedTurn(session: Session, prior: IdempotencyRecord, digest: string
   return ok(Object.freeze({ session: viewOf(session), turn, effect: 'duplicate' as const }));
 }
 
+// A held request key with another digest fails as the domain's conflict.
+function repeatedRequest(session: Session, prior: IdempotencyRecord, digest: string): Result<SessionView> {
+  if (prior.digest === digest) return ok(viewOf(session));
+  return err(failure('conflict', `session ${session.id} holds another request under this key`, { session: session.id }));
+}
+
 function requestOf(session: Session, key: RequestKey): Result<NativeRequest> {
   const request = session.requests.find((candidate) => isSameRequestKey(candidate.key, key));
   if (request === undefined) return err(failure('internal', `session ${session.id} lost the request of a response key`));
@@ -317,6 +344,11 @@ function responseScope(key: RequestKey): string {
   return `response:${key.generation}:${key.nativeRequestId}`;
 }
 
+// A native request's key is its native request ID within its generation.
+function requestScope(key: RequestKey): string {
+  return `request:${key.generation}`;
+}
+
 // The digested inputs, in a fixed field order so equal inputs digest alike.
 function turnInput(command: TurnCommand): string {
   const { author } = command;
@@ -326,8 +358,13 @@ function turnInput(command: TurnCommand): string {
   return JSON.stringify(['turn', by, command.text]);
 }
 
-function responseInput(answer: Answer, responder: Responder): string {
-  return JSON.stringify(['response', answerFields(answer), responderFields(responder)]);
+function requestInput(recording: RequestRecording): string {
+  return JSON.stringify(['request', recording.kind, recording.turnId, recording.text]);
+}
+
+function responseInput(response: ResponseSubmission): string {
+  const { answer, responder, attemptId, ownershipGeneration } = response;
+  return JSON.stringify(['response', answerFields(answer), responderFields(responder), attemptId, ownershipGeneration]);
 }
 
 function responderFields(responder: Responder): readonly unknown[] {

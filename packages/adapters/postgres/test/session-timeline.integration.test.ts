@@ -6,10 +6,14 @@ import { failed, value } from '@taskelith/testing';
 import {
   ATTEMPT,
   Barrier,
+  FIRST_URL,
   HARNESS,
   NATIVE,
+  OTHER_ATTEMPT,
+  OTHER_OWNERSHIP,
   OTHER_PERSON,
   OTHER_SESSION,
+  OTHER_URL,
   OWNERSHIP,
   SESSION,
   TASK,
@@ -48,6 +52,21 @@ const service = postgresService(database);
 
 async function turnCount(): Promise<number> {
   return value(await service.readSession(SESSION)).turns.length;
+}
+
+async function sessionVersion(): Promise<number> {
+  const [row] = await query<{ version: number }>(url, 'SELECT version::int AS version FROM agent_sessions WHERE session_id = $1', [SESSION]);
+  return row!.version;
+}
+
+// Runs the work with a service over a new pool, as a restarted process.
+async function withNewPool(work: (restarted: SessionTimelineService) => Promise<void>): Promise<void> {
+  const restarted = new PostgresDatabase(url);
+  try {
+    await work(postgresService(restarted));
+  } finally {
+    await restarted.close();
+  }
 }
 
 test.describe('session timeline on PostgreSQL', { concurrency: false }, () => {
@@ -136,6 +155,52 @@ test.describe('session timeline on PostgreSQL', { concurrency: false }, () => {
       await restarted.close();
     }
     assert.equal(await turnCount(), 1);
+  });
+
+  test('two turn texts that redact alike under one key fail idempotency-key-reused after a new pool', async () => {
+    await runningSession(service);
+    value(await service.submitTurn(SESSION, turn('key-1', `fetch ${FIRST_URL}`)));
+    await withNewPool(async (restarted) => {
+      const reused = failed(await restarted.submitTurn(SESSION, turn('key-1', `fetch ${OTHER_URL}`)));
+      assert.deepEqual([reused.code, reused.details.reason], ['conflict', KEY_REUSED]);
+    });
+    assert.equal(await turnCount(), 1);
+  });
+
+  test('a native request key repeated after a new pool changes nothing for its text, and fails with conflict for a text that redacts alike', async () => {
+    const turnOne = await sessionWithOpenRequest(service);
+    const recording = { ...permissionRequest('request-2', 'turn-1'), turnId: turnOne, text: `fetch ${FIRST_URL}` };
+    value(await service.recordRequest(SESSION, recording));
+    const before = await sessionVersion();
+    await withNewPool(async (restarted) => {
+      value(await restarted.recordRequest(SESSION, recording));
+      const reused = failed(await restarted.recordRequest(SESSION, { ...recording, text: `fetch ${OTHER_URL}` }));
+      assert.deepEqual([reused.code, reused.details.reason], ['conflict', undefined]);
+    });
+    assert.equal(await sessionVersion(), before);
+  });
+
+  test('two concurrent recordings of one native request key with texts that redact alike record one, and the other fails with conflict', async () => {
+    const turnOne = await sessionWithOpenRequest(service);
+    const [left, right] = racingServices();
+    const recording = { ...permissionRequest('request-2', 'turn-1'), turnId: turnOne, text: `fetch ${FIRST_URL}` };
+    const results = await Promise.all([left.recordRequest(SESSION, recording), right.recordRequest(SESSION, { ...recording, text: `fetch ${OTHER_URL}` })]);
+    assert.deepEqual(results.map((result) => result.ok).sort(), [false, true]);
+    assert.equal(failed(results.find((result) => !result.ok)!).code, 'conflict');
+    assert.equal(value(await service.readSession(SESSION)).requests.length, 2);
+  });
+
+  test('a response key reused by another attempt or ownership generation fails idempotency-key-reused after a new pool', async () => {
+    await sessionWithOpenRequest(service);
+    const first = allow('answer-1');
+    value(await service.consumeResponse(SESSION, first));
+    await withNewPool(async (restarted) => {
+      for (const changed of [{ attemptId: OTHER_ATTEMPT }, { ownershipGeneration: OTHER_OWNERSHIP }]) {
+        const reused = failed(await restarted.consumeResponse(SESSION, { ...first, response: { ...first.response, ...changed } }));
+        assert.deepEqual([reused.code, reused.details.reason], ['conflict', KEY_REUSED]);
+      }
+      assert.equal(value(await restarted.consumeResponse(SESSION, first)).state, 'answered');
+    });
   });
 
   test('a response to a reused native request ID of an earlier generation fails as that request requires', async () => {

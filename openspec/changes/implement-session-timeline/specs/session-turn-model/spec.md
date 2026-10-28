@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Durable session timeline service
-The session timeline service SHALL apply every change of a session through the domain in one `SERIALIZABLE` transaction and SHALL return only after that transaction committed, so that no read shows a turn, request, or response that is not committed.
+The session timeline service SHALL apply every change of a session through the domain in one `SERIALIZABLE` transaction and SHALL return only after that transaction committed, so that no read shows a turn, request, or response that is not committed. It SHALL check request and output text against its bound before redaction, and a held native request key SHALL change nothing when the HMAC-SHA-256 digest of its unredacted kind, turn, and text is equal and SHALL fail with `conflict` otherwise.
 
 #### Scenario: Request committed before display
 - **WHEN** the host's report of a native request is applied and the process is killed at `SessionTimelineCommit.before`
 - **THEN** no read lists the request, and the repeated report records it once
+
+#### Scenario: Request texts that redact alike
+- **WHEN** a held native request key is recorded again after a restart with another text that redacts to the same text
+- **THEN** the recording fails with `conflict`, and the session is unchanged
 
 ### Requirement: Idempotent turn submission across restarts
 The service SHALL resolve a repeated turn key before the domain by an HMAC-SHA-256 digest of the author and the unredacted text: the same digest SHALL return the first turn as `duplicate`, and another digest SHALL fail with `conflict` `idempotency-key-reused`, also when both texts redact to the same text.
@@ -33,7 +37,7 @@ The service SHALL show a session without its output window and SHALL expose no o
 - **THEN** the store holds it redacted per chunk, and the service's answer carries no output
 
 ### Requirement: Response consumed once under concurrency
-Of concurrent responses to one request, the service SHALL commit at most one; a repeat with the same response key and digest SHALL return the answered request, and every other response SHALL fail as `consumeResponse` requires.
+Of concurrent responses to one request, the service SHALL commit at most one; a repeat with the same response key and the same digest of the answer, the responder, and the attempt with its ownership generation SHALL return the answered request, and every other response SHALL fail as `consumeResponse` requires.
 
 #### Scenario: Two concurrent answers on PostgreSQL
 - **WHEN** two transactions answer the same open request at once under two keys

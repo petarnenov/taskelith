@@ -3,6 +3,7 @@ import test from 'node:test';
 import { parseIdentifier } from '@taskelith/kernel';
 import {
   InMemorySessionTimelineStore,
+  MAX_HARNESS_TEXT_LENGTH,
   SessionTimelineService,
   type IdempotencyKey,
   type ResponseCommand,
@@ -11,7 +12,7 @@ import {
   type TurnCommand,
 } from '@taskelith/execution';
 import { failed, sequentialIds, value } from '@taskelith/testing';
-import { evidence } from './fixtures.ts';
+import { evidence, ownership } from './fixtures.ts';
 import {
   FIRST_ATTEMPT,
   HARNESS,
@@ -32,9 +33,11 @@ import {
 
 const OTHER_PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-2')) };
 
-// Redacts the word SECRET, and digests the input as it is, so that two
-// inputs that redact alike keep distinct digests.
-const redactor = { redact: (text: string) => text.replaceAll('SECRET', '[redacted]') };
+// Redacts each word that starts with SECRET, and digests the input as it is,
+// so that two inputs that redact alike keep distinct digests.
+const redactor = { redact: (text: string) => text.replaceAll(/SECRET\S*/g, '[redacted]') };
+// Longer than its bound, it redacts to a text within the bound.
+const OVERLONG_SECRET = `SECRET${'x'.repeat(MAX_HARNESS_TEXT_LENGTH)}`;
 const digest = { digest: (input: string) => `digest:${input}` };
 
 function timeline(store = new InMemorySessionTimelineStore()) {
@@ -143,6 +146,26 @@ test('a native request is recorded with redacted text, once, and listed as await
   assert.deepEqual(awaiting.map((request) => [request.key.nativeRequestId, request.text]), [['request-1', 'may I request-1'], ['request-2', 'read [redacted]']]);
 });
 
+test('a native request key repeated with a text that redacts alike fails with conflict and changes nothing', async () => {
+  const { service, store } = timeline();
+  await withOpenRequest(service);
+  value(await service.recordRequest(SESSION, { ...permissionRequest('request-2'), text: 'read SECRET-1' }));
+  const before = await stored(store);
+  value(await service.recordRequest(SESSION, { ...permissionRequest('request-2'), text: 'read SECRET-1' }));
+  const reused = failed(await service.recordRequest(SESSION, { ...permissionRequest('request-2'), text: 'read SECRET-2' }));
+  assert.deepEqual([reused.code, reused.details.reason], ['conflict', undefined]);
+  assert.deepEqual(await stored(store), before);
+});
+
+test('native request text longer than its bound before redaction fails with invalid and records nothing', async () => {
+  const { service, store } = timeline();
+  await withOpenRequest(service);
+  const before = await stored(store);
+  const overlong = failed(await service.recordRequest(SESSION, { ...permissionRequest('request-2'), text: OVERLONG_SECRET }));
+  assert.equal(overlong.code, 'invalid');
+  assert.deepEqual(await stored(store), before);
+});
+
 test('a response is consumed once, with its message redacted; its key repeated returns the answered request', async () => {
   const { service, store } = timeline();
   await withOpenRequest(service);
@@ -165,6 +188,16 @@ test('a response key reused with another answer or responder fails with conflict
   assert.deepEqual([reused.code, reused.details.reason], ['conflict', 'idempotency-key-reused']);
   const byOther = { ...allow(), responder: { kind: 'principal' as const, principalId: value(parseIdentifier('PrincipalId', 'person-2')) } };
   assert.equal(failed(await service.consumeResponse(SESSION, response('answer-1', byOther))).details.reason, 'idempotency-key-reused');
+});
+
+test('a response key reused by another attempt or ownership generation fails with conflict idempotency-key-reused', async () => {
+  const { service } = timeline();
+  await withOpenRequest(service);
+  value(await service.consumeResponse(SESSION, response('answer-1')));
+  const byAttempt = failed(await service.consumeResponse(SESSION, response('answer-1', { ...allow(), attemptId: SECOND_ATTEMPT })));
+  assert.deepEqual([byAttempt.code, byAttempt.details.reason], ['conflict', 'idempotency-key-reused']);
+  const byOwnership = failed(await service.consumeResponse(SESSION, response('answer-1', { ...allow(), ownershipGeneration: ownership(2) })));
+  assert.deepEqual([byOwnership.code, byOwnership.details.reason], ['conflict', 'idempotency-key-reused']);
 });
 
 test('a second response under another key fails with conflict, and the first stays', async () => {
@@ -264,4 +297,15 @@ test('a delivery report and a turn outcome are recorded through the service', as
   value(await service.recordTurnOutcome(SESSION, { turnId: turnId('turn-1'), generation: generation(1), outcome: 'completed' }));
   const view = value(await service.readSession(SESSION));
   assert.deepEqual([view.turns[0]?.state, view.requests[0]?.state === 'answered' && view.requests[0].response.delivery], ['ended', 'delivered']);
+});
+
+test('an output chunk longer than its bound before redaction fails with invalid and takes no position', async () => {
+  const { service, store } = timeline();
+  await withOpenRequest(service);
+  value(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'first' }));
+  const before = await stored(store);
+  const overlong = failed(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: OVERLONG_SECRET }));
+  assert.equal(overlong.code, 'invalid');
+  assert.deepEqual((await stored(store)).session.output, before.session.output);
+  assert.equal((await stored(store)).version, before.version);
 });
