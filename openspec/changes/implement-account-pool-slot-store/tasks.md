@@ -1,7 +1,7 @@
 ## 1. Change
 
 - [x] 1.1 Create the change, save the brief's `checklist.json`, and add the empty `findings.jsonl` and `passes.jsonl`
-- [ ] 1.2 Record the coordinator's answers to the open questions of the design
+- [x] 1.2 Record the coordinator's answers to the open questions of the design, merge `origin/dev` `62217e7a`, and apply the answers
 
 ## 2. Implementation and tests
 
@@ -11,13 +11,13 @@
 - [x] 2.4 `addAccountSlot` with the pair limit
 - [x] 2.5 The PostgreSQL migration, `PostgresAccountSlots`, and `PostgresSlotCredentials`
 - [x] 2.6 `AesGcmSlotCredentialCipher` and `openSlotCredentialKey`
-- [x] 2.7 The slot rejecting reasons in Scheduling, the board, and `control-plane.openapi.json` 0.4.0
+- [x] 2.7 The slot rejecting reasons in Scheduling, apart from `REJECTING_REASONS`, the board, and the wire
 - [x] 2.8 Tests: conformance on both adapters, selection, placement, add-slot, encryption at rest, redaction, PostgreSQL races, migration, neutrality, and their fail-before run
 
 ## 3. Records and checks
 
 - [x] 3.1 Write the proposal, the design, the spec delta, this task list, and the contract updates
-- [ ] 3.2 Route the change, run `make verify`, and write `verification.md`
+- [x] 3.2 Route the change, run `make verify`, and write `verification.md`; route again after the answers changed the diff
 
 ## 4. Review and archive
 

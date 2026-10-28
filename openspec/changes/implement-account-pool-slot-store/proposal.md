@@ -10,14 +10,13 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
   - `CapacityTransaction` gains `accountSlots`.
   - The domain of eligibility and least-loaded selection (`least-loaded-selection.ts`) and `selectSlotInTransaction`, which selects a `new-session` request and fails the other kinds with `invalid` until 12b.
   - `placeInTransaction` takes `slotRequest` instead of `providerCredentials`; the selection decides the credential step of `decidePlacement`, and a reservation of the selected slot records it and sets its `lastReservedAt` (section 4.7).
-  - `REJECTING_REASONS` includes `SLOT_REJECTING_REASONS` (section 4.5).
+  - `CapacityReason` includes the slot rejecting reasons, which stay apart from `REJECTING_REASONS`, and `isRejectingReason` checks that list (design, decision 9).
   - `addAccountSlot`: the admitted pair, the record, the credential store, and the add with the pair's slot limit in one transaction; an `Err` discards the stored version.
 - `@taskelith/postgres`: migration `1792932900000_account-pool.sql` (`account_slots`, `slot_credential_counters`, `slot_credentials`), `PostgresAccountSlots` as `PostgresTransaction.accountSlots`, and `PostgresSlotCredentials` over `PostgresSlotCredentialRecords` with an injected `SlotCredentialCipher`.
 - `@taskelith/secrets`: `AesGcmSlotCredentialCipher` (AES-256-GCM from `node:crypto`).
 - `@taskelith/control-plane-store`: `openSlotCredentialKey`, the key document `control-plane/slot-credential-key`.
-- `@taskelith/execution`: the board's `PLACEMENT_REJECTING_REASONS` mirror the two slot reasons, and `control-plane.openapi.json` goes to 0.4.0 with them in the `rejected` placement obstacle, declared in `packages/contracts/breaking-changes.json`.
 - `apps/control-plane`: the placement service passes no slot request (it passed `providerCredentials: []`); test fixtures gain `accountSlots`.
-- Documents: account pool contract sections 6.1 and 7.1 and a new section 11; capacity reservation contract section 13, "Provider credentials"; control-plane wire contracts version note; `docs/g3-plan.md` row 12 names the sub-changes.
+- Documents: account pool contract sections 6.1 and 7.1 and a new section 11; capacity reservation contract section 13, "Provider credentials"; `docs/g3-plan.md` row 12 names the sub-changes.
 
 ## Capabilities
 
@@ -29,4 +28,12 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
 
 ## Impact
 
-Private packages only; no new third-party dependency (`node:crypto` provides the cipher). `control-plane.openapi.json` changes in a way that `make contract-compatibility` reports as breaking (two added response enumeration values), so its version goes from 0.3.0 to 0.4.0 with a declaration. Out of scope: 12b (cooldown from plugin signals, affinity on resume, the selection after a limit), 12c (per-run delivery), item 18, any wire operation beyond 9a's, the slot commands other than adding, the sweep of contract section 8.1, the HTTP operations of the account slots, and the control plane's composition of the key and the credential store (design, open questions).
+Private packages only; no new third-party dependency (`node:crypto` provides the cipher). No wire document changes: `control-plane.openapi.json` stays at 0.3.0, and the board's rejecting reasons stay as they are. Out of scope: item 18 and any wire operation beyond 9a's.
+
+## Follow-ups
+
+The coordinator's answers (design) assign the rest of item 12:
+
+- 12b: cooldown from plugin signals, affinity on resume, and the selection after a limit, which replaces the refusal of `resumed-session` and `after-limit` requests.
+- 12c: the per-run delivery of the slot credential to the worker.
+- 12d `wire-account-pool-into-control-plane`: the other slot commands (update, revoke, reinstate, rotate, remove), the sweep of contract section 8.1, the HTTP operations of 9a's account slots, the slot rejecting reasons on the wire, the composition of the key and `PostgresSlotCredentials`, the registration of the admitted pairs, Claude Code's with a limit of 1 among them, and key rotation, which the coordinator may split into 12e if 12d grows past M-L.
