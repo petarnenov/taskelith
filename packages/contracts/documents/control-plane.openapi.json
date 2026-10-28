@@ -4700,7 +4700,7 @@
       "post": {
         "operationId": "respondToNativeRequest",
         "summary": "Respond to a permission or input request",
-        "description": "Requires `project-operator` or above on the project. The response is consumed once (session timeline contract section 5.2); delivery to the harness is never resent.",
+        "description": "Requires `project-operator` or above on the project. The response is consumed once (session timeline contract section 5.2) and resolves the request's inbox item in the same transaction; delivery to the harness is never resent.",
         "security": [
           {
             "browserSession": [],
@@ -4961,7 +4961,7 @@
       "get": {
         "operationId": "streamProjectEvents",
         "summary": "Stream the project's events after a cursor",
-        "description": "Requires `project-viewer` or above on the project, or `installation-owner`. Events of this project only, each published after the change it reports committed.",
+        "description": "Requires `project-viewer` or above on the project, or `installation-owner`. Events of this project only, each published after the change it reports committed. The stream ends when the principal's roles change, raised or lowered, with a `stream-ended` event.",
         "security": [
           {
             "browserSession": []
@@ -5001,7 +5001,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A `text/event-stream` of events in position order, each a frame with `id`, `event`, and one `data` line of JSON; comment lines keep the connection alive and carry no event.",
+            "description": "A `text/event-stream` of events in position order, each a frame with `id`, `event`, and one `data` line of JSON, except `resync` and `stream-ended`, whose frames have no `id`; comment lines keep the connection alive and carry no event.",
             "headers": {
               "Cache-Control": {
                 "description": "Always `no-store`, so that no cache keeps the stream.",
@@ -5378,7 +5378,7 @@
       "get": {
         "operationId": "streamInstallationEvents",
         "summary": "Stream the installation-scoped events after a cursor",
-        "description": "Requires `installation-owner`. Installation-scoped inbox events only, each published after the change it reports committed.",
+        "description": "Requires `installation-owner`. Installation-scoped inbox events only, each published after the change it reports committed. The stream ends when the principal's roles change, raised or lowered, with a `stream-ended` event.",
         "security": [
           {
             "browserSession": []
@@ -5409,7 +5409,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A `text/event-stream` of events in position order, each a frame with `id`, `event`, and one `data` line of JSON; comment lines keep the connection alive and carry no event.",
+            "description": "A `text/event-stream` of events in position order, each a frame with `id`, `event`, and one `data` line of JSON, except `resync` and `stream-ended`, whose frames have no `id`; comment lines keep the connection alive and carry no event.",
             "headers": {
               "Cache-Control": {
                 "description": "Always `no-store`, so that no cache keeps the stream.",
@@ -8136,7 +8136,7 @@
         "description": "`EXECUTION_EVIDENCE_KINDS`."
       },
       "InboxSubject": {
-        "description": "What an item waits on: a card, or a worker's process outside any project.",
+        "description": "What an item waits on: a card, or a worker's process outside any project. An item about a native request names it by `sessionId`, `sessionGeneration`, and `nativeRequestId` (`NativeRequestInboxSubject`).",
         "oneOf": [
           {
             "type": "object",
@@ -8175,6 +8175,12 @@
               "executionId": {
                 "$ref": "#/components/schemas/Identifier"
               },
+              "sessionId": {
+                "$ref": "#/components/schemas/AgentSessionId"
+              },
+              "sessionGeneration": {
+                "$ref": "#/components/schemas/AgentSessionGeneration"
+              },
               "nativeRequestId": {
                 "$ref": "#/components/schemas/NativeRequestId"
               }
@@ -8206,6 +8212,61 @@
             }
           }
         ]
+      },
+      "NativeRequestInboxSubject": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The card subject of a `permission-request`, `input-request`, or `delivery-acknowledgement` item: its native request is the request of `sessionId` whose key is `sessionGeneration` and `nativeRequestId`, because a later generation can reuse a native request ID (session timeline contract section 5.3).",
+        "required": [
+          "scope",
+          "projectId",
+          "runId",
+          "taskId",
+          "attemptId",
+          "attemptGeneration",
+          "sessionId",
+          "sessionGeneration",
+          "nativeRequestId"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "card"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "stageId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "gateId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "sessionGeneration": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "nativeRequestId": {
+            "$ref": "#/components/schemas/NativeRequestId"
+          }
+        }
       },
       "InboxAnswer": {
         "description": "An answer of the item's kind (product ports section 4.1).",
@@ -8240,9 +8301,7 @@
                 "const": "input-request"
               },
               "text": {
-                "type": "string",
-                "maxLength": 65536,
-                "description": "At most `MAX_INPUT_ANSWER_BYTES`, 65,536 bytes in UTF-8."
+                "$ref": "#/components/schemas/InputAnswerText"
               }
             }
           },
@@ -8343,6 +8402,11 @@
           }
         ]
       },
+      "InputAnswerText": {
+        "type": "string",
+        "maxLength": 65536,
+        "description": "The text of an input answer, at most `MAX_INPUT_ANSWER_BYTES`, 65,536 bytes in UTF-8, through the inbox or the session; a text within that bound is also within `MAX_HARNESS_TEXT_LENGTH`, which counts UTF-16 code units."
+      },
       "InboxItemStatus": {
         "description": "`open`; `resolved` with its resolver, time, and answer; or `closed` when its subject stopped waiting on a person without an answer.",
         "oneOf": [
@@ -8427,7 +8491,7 @@
                 "$ref": "#/components/schemas/Identifier"
               },
               "subject": {
-                "$ref": "#/components/schemas/InboxSubject"
+                "$ref": "#/components/schemas/NativeRequestInboxSubject"
               },
               "title": {
                 "$ref": "#/components/schemas/DisplayText"
@@ -8446,9 +8510,49 @@
                 "enum": [
                   "permission-request",
                   "input-request",
-                  "spec-approval",
                   "delivery-acknowledgement"
                 ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "itemId",
+              "sourceId",
+              "kind",
+              "subject",
+              "title",
+              "createdAt",
+              "answerableBy",
+              "status"
+            ],
+            "properties": {
+              "itemId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "sourceId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "subject": {
+                "$ref": "#/components/schemas/InboxSubject"
+              },
+              "title": {
+                "$ref": "#/components/schemas/DisplayText"
+              },
+              "createdAt": {
+                "$ref": "#/components/schemas/Instant"
+              },
+              "answerableBy": {
+                "$ref": "#/components/schemas/AnsweringRole"
+              },
+              "status": {
+                "$ref": "#/components/schemas/InboxItemStatus"
+              },
+              "kind": {
+                "type": "string",
+                "const": "spec-approval"
               }
             }
           },
@@ -9010,7 +9114,7 @@
                 "const": "input"
               },
               "text": {
-                "$ref": "#/components/schemas/HarnessText"
+                "$ref": "#/components/schemas/InputAnswerText"
               }
             }
           }
@@ -9678,7 +9782,7 @@
       "BoardChangedEvent": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The number of workers online for the project changed, also on a board with no cards; `workersOnline` as `readBoard` returns it at this event.",
+        "description": "The number of workers online changed, also on a board with no cards; `workersOnline` as `readBoard` returns it at this event.",
         "required": [
           "type",
           "position",
@@ -9735,7 +9839,7 @@
       "InboxItemChangedEvent": {
         "type": "object",
         "additionalProperties": false,
-        "description": "An inbox item opened, was resolved, or closed; the item as of this event.",
+        "description": "An inbox item opened, was resolved, or closed; the item as of this event. When the item counts toward a card, the same change also sends that card's `card-changed` event with its new `needsYou`.",
         "required": [
           "type",
           "position",
@@ -9877,7 +9981,7 @@
       "ResyncEvent": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The stream cannot resume after the cursor: it is below the stream's retention floor (`cursor-expired`), or beyond the head of the installation-wide sequence (`cursor-unknown`). The frame has no `id`, and the server ends the stream after it; the client reads its views again and reconnects after their positions.",
+        "description": "The stream cannot resume after the cursor: it is below the stream's retention floor (`cursor-expired`), or beyond the head of the installation-wide sequence (`cursor-unknown`). The frame has no `id`, and the server ends the stream after it; the client closes its `EventSource`, reads its views again, and opens a new stream after their positions.",
         "required": [
           "type",
           "reason"
@@ -9896,8 +10000,29 @@
           }
         }
       },
+      "StreamEndedEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The server ends the stream because the principal's roles changed (`role-changed`), raised or lowered. The frame has no `id`; the client reads its views again and reconnects with its `Last-Event-ID`, which the server authorizes anew.",
+        "required": [
+          "type",
+          "reason"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "stream-ended"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "role-changed"
+            ]
+          }
+        }
+      },
       "ProjectEvent": {
-        "description": "The `data` of one event of a project stream, as JSON; the frame's `event` field is its `type` and its `id` field its `position`.",
+        "description": "The `data` of one event of a project stream, as JSON; the frame's `event` field is its `type`, and its `id` field its `position`, except for `resync` and `stream-ended`, whose frames have no `id`.",
         "oneOf": [
           {
             "$ref": "#/components/schemas/BoardChangedEvent"
@@ -9922,17 +10047,23 @@
           },
           {
             "$ref": "#/components/schemas/ResyncEvent"
+          },
+          {
+            "$ref": "#/components/schemas/StreamEndedEvent"
           }
         ]
       },
       "InstallationEvent": {
-        "description": "The `data` of one event of the installation stream, as JSON; the frame's `event` field is its `type` and its `id` field its `position`.",
+        "description": "The `data` of one event of the installation stream, as JSON; the frame's `event` field is its `type`, and its `id` field its `position`, except for `resync` and `stream-ended`, whose frames have no `id`.",
         "oneOf": [
           {
             "$ref": "#/components/schemas/InboxItemChangedEvent"
           },
           {
             "$ref": "#/components/schemas/ResyncEvent"
+          },
+          {
+            "$ref": "#/components/schemas/StreamEndedEvent"
           }
         ]
       }

@@ -49,6 +49,7 @@ const PROJECT_READS = [
 const INSTALLATION_READS = ['readInstallationInbox', 'readInstallationInboxCounts', 'streamInstallationEvents'];
 const OPERATOR_COMMANDS = ['answerInboxItem', 'submitTurn', 'respondToNativeRequest'];
 const STREAMS = ['streamProjectEvents', 'streamInstallationEvents'];
+const UNPOSITIONED_EVENTS = ['ResyncEvent', 'StreamEndedEvent'];
 const TEXT = 'x';
 
 function enumOf(name: string): string[] {
@@ -83,7 +84,10 @@ const item: Schemas['InboxItem'] = {
   itemId: 'n1',
   sourceId: 'native-requests',
   kind: 'delivery-acknowledgement',
-  subject: { scope: 'card', projectId: 'p1', runId: 'r1', taskId: 't1', attemptId: 'a1', attemptGeneration: 2, nativeRequestId: 'req-1' },
+  subject: {
+    scope: 'card', projectId: 'p1', runId: 'r1', taskId: 't1', attemptId: 'a1', attemptGeneration: 2,
+    sessionId: 's1', sessionGeneration: 3, nativeRequestId: 'req-1',
+  },
   title: 'An answer may have run an action',
   createdAt: AT,
   answerableBy: 'project-operator',
@@ -141,7 +145,8 @@ test('the board and inbox enumerations are the product ports vocabularies', () =
 });
 
 test('the session enumerations and bounds are the session timeline vocabularies', () => {
-  const answer = SCHEMAS.InboxAnswer as { oneOf: { properties: Record<string, { maxLength?: number }> }[] };
+  const inputText = (name: string, kind: string) => (SCHEMAS[name] as { oneOf: { properties: Record<string, Json> }[] }).oneOf
+    .find(({ properties }) => properties.kind!.const === kind)!.properties.text;
 
   assert.deepEqual(enumOf('TurnState'), [...TURN_STATES]);
   assert.deepEqual(enumOf('TurnOutcome'), [...TURN_OUTCOMES]);
@@ -153,7 +158,9 @@ test('the session enumerations and bounds are the session timeline vocabularies'
   assert.deepEqual([...variantValues('Turn', 'state')].sort(), [...TURN_STATES, 'ended'].sort());
   assert.equal((SCHEMAS.TurnText as { maxLength: number }).maxLength, MAX_HARNESS_TEXT_LENGTH);
   assert.equal((SCHEMAS.HarnessText as { maxLength: number }).maxLength, MAX_HARNESS_TEXT_LENGTH);
-  assert.equal(answer.oneOf.find(({ properties }) => 'text' in properties)!.properties.text!.maxLength, MAX_INPUT_ANSWER_BYTES);
+  assert.equal((SCHEMAS.InputAnswerText as { maxLength: number }).maxLength, MAX_INPUT_ANSWER_BYTES);
+  assert.deepEqual(inputText('InboxAnswer', 'input-request'), { $ref: '#/components/schemas/InputAnswerText' });
+  assert.deepEqual(inputText('PersonAnswer', 'input'), { $ref: '#/components/schemas/InputAnswerText' });
 });
 
 test('a board and a task detail match the generated types and schemas', () => {
@@ -207,6 +214,20 @@ test('an inbox item carries only its own kind\'s details, and its answer is of i
   assert.ok(violations(checkHttpSchema('InboxAnswer', { kind: 'delivery-acknowledgement', decision: 'resend' })).length > 0);
   assert.ok(violations(checkHttpSchema('InboxAnswer', { kind: 'input-request', text: 'x'.repeat(MAX_INPUT_ANSWER_BYTES + 1) })).length > 0);
   assert.ok(checkHttpSchema('InboxCounts', { asOf: AT, position: '0', total: 0, byCard: [] }).ok);
+});
+
+test('an item about a native request names the request with its session and generation', () => {
+  const approval = { ...item, kind: 'spec-approval', subject: { scope: 'card', projectId: 'p1', runId: 'r1', gateId: 'g1' } };
+
+  for (const kind of ['permission-request', 'input-request', 'delivery-acknowledgement']) {
+    assert.ok(checkHttpSchema('InboxItem', { ...item, kind }).ok, kind);
+    for (const field of ['sessionId', 'sessionGeneration', 'nativeRequestId']) {
+      const subject = { ...item.subject, [field]: undefined };
+      assert.ok(violations(checkHttpSchema('InboxItem', { ...item, kind, subject })).length > 0, `${kind} ${field}`);
+    }
+  }
+  assert.ok(checkHttpSchema('InboxItem', approval).ok);
+  assert.ok(checkHttpSchema('InboxItem', { ...item, subject: { ...item.subject, sessionGeneration: 4 } }).ok);
 });
 
 test('a turn keeps its identity, and a failure exactly when it failed', () => {
@@ -286,18 +307,18 @@ test('each stream is an uncached text/event-stream of typed events resumed by La
     });
   }
   const events = (name: string) => ((SCHEMAS[name] as { oneOf: Json[] }).oneOf).map(schemaName);
-  assert.deepEqual(events('InstallationEvent'), ['InboxItemChangedEvent', 'ResyncEvent']);
+  assert.deepEqual(events('InstallationEvent'), ['InboxItemChangedEvent', 'ResyncEvent', 'StreamEndedEvent']);
   assert.ok(events('ProjectEvent').includes('ResyncEvent'));
 });
 
-test('every event names its type and position except the resync, which has no position', () => {
+test('every event names its type and position except those that end a stream', () => {
   const types = new Set<string>();
   for (const name of (SCHEMAS.ProjectEvent as { oneOf: Json[] }).oneOf.map(schemaName)) {
     const event = SCHEMAS[name] as { required: string[]; properties: { type: { const: string } } };
 
     assert.ok(!types.has(event.properties.type.const), name);
     types.add(event.properties.type.const);
-    assert.equal(event.required.includes('position'), name !== 'ResyncEvent', name);
+    assert.equal(event.required.includes('position'), !UNPOSITIONED_EVENTS.includes(name), name);
   }
   assert.ok(checkHttpSchema('ProjectEvent', { type: 'resync', reason: 'cursor-expired' }).ok);
   assert.ok(violations(checkHttpSchema('ProjectEvent', { type: 'resync', reason: 'cursor-expired', position: '3' })).length > 0);
@@ -317,23 +338,38 @@ test('a change of the workers online reaches the project stream, also for a boar
   assert.ok(violations(checkHttpSchema('InstallationEvent', { type: 'board-changed', position: '5', occurredAt: AT, projectId: 'p1', workersOnline: 1 })).length > 0);
 });
 
-test('a stream cursor is a boundary of the installation-wide sequence', () => {
-  const resync = (SCHEMAS.ResyncEvent as { description: string }).description;
+test('a stream cursor out of the retention or beyond the head resynchronizes', () => {
+  const reasons = (SCHEMAS.ResyncEvent as { properties: { reason: { enum: string[] } } }).properties.reason.enum;
 
-  assert.match(resync, /below the stream's retention floor \(`cursor-expired`\)/);
-  assert.match(resync, /beyond the head of the installation-wide sequence \(`cursor-unknown`\)/);
+  assert.deepEqual(reasons, ['cursor-expired', 'cursor-unknown']);
+  assert.ok(checkHttpSchema('EventPosition', '0').ok);
   for (const id of STREAMS) {
-    const after = (operation(id).parameters ?? []).find(({ name }) => name === 'after');
-    assert.match(after?.description ?? '', /a boundary in the installation-wide sequence, valid from the retention floor to its head/, id);
+    const cursors = (operation(id).parameters ?? []).filter(({ name }) => name !== 'projectId');
+    for (const { schema } of cursors) assert.deepEqual(schema, { $ref: '#/components/schemas/EventPosition' }, id);
   }
 });
 
-test('a repeated command is compared before redaction, ahead of the refusal of an answered one', () => {
-  for (const id of ['answerInboxItem', 'answerInstallationInboxItem', 'respondToNativeRequest']) {
-    assert.match(operation(id).responses['200']!.description, /compared before redaction, repeat/, id);
+test('a stream ends with its own event when the principal\'s roles change', () => {
+  const ended = { type: 'stream-ended', reason: 'role-changed' };
+  const events = (name: string) => ((SCHEMAS[name] as { oneOf: Json[] }).oneOf).map(schemaName);
+
+  for (const union of ['ProjectEvent', 'InstallationEvent'] as const) {
+    assert.ok(events(union).includes('StreamEndedEvent'), union);
+    assert.ok(checkHttpSchema(union, ended).ok, union);
+    assert.ok(violations(checkHttpSchema(union, { ...ended, position: '3' })).length > 0, union);
+    assert.ok(violations(checkHttpSchema(union, { ...ended, reason: 'cursor-expired' })).length > 0, union);
   }
-  assert.match(operation('respondToNativeRequest').responses['200']!.description, /checked before `already-answered`/);
-  assert.match(operation('submitTurn').responses['200']!.description, /the text before redaction/);
+  assert.deepEqual((SCHEMAS.StreamEndedEvent as { properties: { reason: { enum: string[] } } }).properties.reason.enum, ['role-changed']);
+});
+
+test('a repeated command answers its first outcome with the success status', () => {
+  const success = { answerInboxItem: 'InboxItem', answerInstallationInboxItem: 'InboxItem', respondToNativeRequest: 'NativeRequest' };
+  const effects = (SCHEMAS.TurnSubmitted as { properties: { effect: { enum: string[] } } }).properties.effect.enum;
+
+  for (const [id, name] of Object.entries(success)) assert.equal(schemaName(successSchema(id)), name, id);
+  assert.equal(schemaName(successSchema('submitTurn')), 'TurnSubmitted');
+  assert.equal(schemaName(successSchema('submitTurn', '201')), 'TurnSubmitted');
+  assert.deepEqual(effects, ['recorded', 'duplicate']);
 });
 
 test('commands that can repeat take an idempotency key and answer typed conflicts and refusals', () => {
@@ -355,10 +391,24 @@ test('the schemas that the worker messages reuse use only keywords that draft-07
     'IdempotencyKey', 'AgentSessionId', 'AgentSessionGeneration', 'TurnId', 'TurnText', 'TurnOutcome', 'HarnessFailure', 'NativeRequestId',
     'NativeRequestKey', 'NativeRequestKind', 'HarnessText', 'NativeAnswer', 'PermissionDecision', 'DelegationResultOutcome',
   ];
-  const onlyIn2020 = ['$defs', 'prefixItems', 'dependentRequired', 'dependentSchemas', 'unevaluatedProperties', 'unevaluatedItems', '$anchor'];
+  const onlyIn2020 = [
+    '$defs', 'prefixItems', 'dependentRequired', 'dependentSchemas', 'unevaluatedProperties', 'unevaluatedItems', '$anchor',
+    '$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', 'minContains', 'maxContains',
+  ];
 
   for (const name of shared) {
-    const text = JSON.stringify(reachable(SCHEMAS[name]));
+    const nodes = reachable(SCHEMAS[name]);
+    const text = JSON.stringify(nodes);
     for (const keyword of onlyIn2020) assert.ok(!text.includes(`"${keyword}"`), `${name}: ${keyword}`);
+    // Draft-07 ignores every keyword beside `$ref`, so only a description may.
+    for (const node of objectsIn(nodes).filter((candidate) => '$ref' in candidate)) {
+      assert.deepEqual(Object.keys(node).filter((key) => key !== '$ref' && key !== 'description'), [], `${name}: ${JSON.stringify(node)}`);
+    }
   }
 });
+
+function objectsIn(node: unknown): Json[] {
+  if (Array.isArray(node)) return node.flatMap(objectsIn);
+  if (node === null || typeof node !== 'object') return [];
+  return [node as Json, ...Object.values(node).flatMap(objectsIn)];
+}

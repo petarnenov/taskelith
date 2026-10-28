@@ -15,6 +15,8 @@ import type {
   IdempotencyKey,
   NativeRequestId,
   PrincipalId,
+  SessionGeneration,
+  SessionId,
   WorkerId,
 } from '../domain/identifiers.js';
 import type { JournalId, ObservationId } from '../domain/observation-sequence.js';
@@ -72,6 +74,9 @@ export interface CardSubject {
   readonly attemptId?: AttemptId;
   readonly attemptGeneration?: OwnershipGeneration;
   readonly executionId?: ExecutionId;
+  // With the generation and ID, the request; an ID alone can be reused.
+  readonly sessionId?: SessionId;
+  readonly sessionGeneration?: SessionGeneration;
   readonly nativeRequestId?: NativeRequestId;
 }
 

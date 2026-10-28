@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Operation roles
-Each operation SHALL require the role that `docs/contracts/control-plane-wire-contracts.md` section 3 names: `installation-owner` for project creation, members, workers, enrollment tokens, account slots, SCM integration changes, and the installation inbox and stream; `project-maintainer` for project changes, defaults, auto-merge, and the binding; `project-operator` or above for turns, responses, and inbox answers; and `project-viewer` or above, or `installation-owner`, for a project's reads.
+Each operation SHALL require its role in section 3 of `docs/contracts/control-plane-wire-contracts.md`: `installation-owner` for project creation, members, workers, enrollment tokens, account slots, SCM integration edits, and the installation inbox and stream; `project-maintainer` for project edits, defaults, auto-merge, and the binding; `project-operator` or above for turns, responses, and inbox answers; `project-viewer` or above, or `installation-owner`, for project reads.
 
 #### Scenario: Maintainer assigns a member
 - **WHEN** a `project-maintainer` without `installation-owner` assigns a role on its project
@@ -37,6 +37,10 @@ An identifier that the control plane mints for a project, principal, enrollment 
 #### Scenario: Answer repeated after a lost response
 - **WHEN** an operator repeats an answer with the same idempotency key after the first resolved the item
 - **THEN** the answer is 200 with the item as the first answer resolved it, and nothing else changes
+
+#### Scenario: Two items of one reused native request ID
+- **WHEN** two generations of one session record requests with the same native request ID and both open inbox items
+- **THEN** the items' subjects differ in `sessionGeneration`, and each matches one request of `listAgentSessionRequests`
 
 #### Scenario: Operator answers a maintainer item
 - **WHEN** a `project-operator` answers a `spec-approval` item
@@ -75,6 +79,10 @@ An identifier that the control plane mints for a project, principal, enrollment 
 - **WHEN** a response names the key of the response that answered the request but another decision
 - **THEN** the answer is 409 with reason `idempotency-key-reused`, and the first response stays
 
+#### Scenario: Session response resolves the inbox item
+- **WHEN** a person answers a permission request through `respondToNativeRequest`
+- **THEN** the request's inbox item is resolved in the same transaction, and `inbox-item-changed` reports it
+
 #### Scenario: Inbox answer and session response race
 - **WHEN** a person answers a permission request through the inbox while another responds to it in the session
 - **THEN** exactly one answer is consumed, and the other answers 409 with reason `already-answered`
@@ -82,6 +90,20 @@ An identifier that the control plane mints for a project, principal, enrollment 
 #### Scenario: Response for a replaced attempt
 - **WHEN** a response names an attempt or ownership generation other than the session's active bound one
 - **THEN** the answer is 422 with reason `attempt-not-current`, and the request stays open
+
+### Requirement: Inbox items about native requests
+A `permission-request`, `input-request`, or `delivery-acknowledgement` item SHALL name its native request by `sessionId`, `sessionGeneration`, and `nativeRequestId`, because a later generation can reuse a native request ID.
+
+#### Scenario: Request item without its generation
+- **WHEN** a `delivery-acknowledgement` item lacks `sessionGeneration`
+- **THEN** it does not match `InboxItem`, and the contract tests fail
+
+### Requirement: One bound for an input answer
+`answerInboxItem` and `respondToNativeRequest` SHALL bound an input answer alike, at `MAX_INPUT_ANSWER_BYTES`, 65,536 bytes in UTF-8, and SHALL answer 400 beyond it on either path.
+
+#### Scenario: Long Cyrillic answer
+- **WHEN** a person answers an input request with 40,000 Cyrillic letters, 80,000 bytes in UTF-8
+- **THEN** both `answerInboxItem` and `respondToNativeRequest` answer 400, and the request stays open
 
 ### Requirement: Output after a cursor on the wire
 `readAgentSessionOutput` SHALL return at most 100 retained entries after its cursor in position order with a `next` position while more remain, `cursor-expired` with the earliest retained position for a cursor older than the retained window, and 400 for a cursor after the last position.
@@ -91,11 +113,15 @@ An identifier that the control plane mints for a project, principal, enrollment 
 - **THEN** the answer is `cursor-expired` with the earliest retained position
 
 ### Requirement: Event streams
-`streamProjectEvents` and `streamInstallationEvents` SHALL answer `text/event-stream` with `Cache-Control: no-store`, each event a frame whose `id` is its position, whose `event` is its type, and whose `data` matches `ProjectEvent` or `InstallationEvent`; a project stream SHALL carry only its project's events, and the installation stream only installation-scoped inbox events.
+`streamProjectEvents` and `streamInstallationEvents` SHALL answer `text/event-stream` with `Cache-Control: no-store`, each event a frame whose `id` is its position, except `resync` and `stream-ended`, whose frames have none, whose `event` is its type, and whose `data` matches `ProjectEvent` or `InstallationEvent`; a project stream SHALL carry only its project's events, and the installation stream only installation-scoped inbox events.
 
 #### Scenario: First worker online for an empty board
-- **WHEN** the number of workers online for a project with no cards goes from zero to one
+- **WHEN** the number of workers online goes from zero to one while a project has no cards
 - **THEN** the project stream carries a `board-changed` event with `workersOnline` 1
+
+#### Scenario: Item opened for a card
+- **WHEN** an inbox item that counts toward a card opens
+- **THEN** the project stream carries its `inbox-item-changed` event and the card's `card-changed` event with the new `needsYou`
 
 #### Scenario: Another project's event
 - **WHEN** a turn of another project changes while a viewer streams its own project
@@ -129,17 +155,28 @@ An event position SHALL exist only after the change it reports has committed: po
 
 #### Scenario: Expired cursor falls back to snapshots
 - **WHEN** a client reconnects with a cursor older than the stream's retention
-- **THEN** it receives `resync` with `cursor-expired`, the stream ends, and the client reads its views and opens a new stream after the lowest of their positions
+- **THEN** it receives `resync` with `cursor-expired`, the stream ends, and the client closes its `EventSource`, reads its views, and opens a new stream after the lowest of their positions
 
 ### Requirement: Slow stream consumers
-Each stream SHALL have a bounded buffer and SHALL be ended rather than waited on when the buffer is full, so that a slow consumer never blocks a command or a cancellation; a stream SHALL also end when its login session ends or its principal loses the role.
+Each stream SHALL have a bounded buffer and SHALL be ended rather than waited on when the buffer is full, so that a slow consumer never blocks a command or a cancellation; a stream SHALL also end when its login session ends.
 
 #### Scenario: Slow consumer
 - **WHEN** a client stops reading its stream while commands keep committing
 - **THEN** its stream is ended when its buffer is full, the commands complete, and the client reconnects with `Last-Event-ID`
 
-### Requirement: Event payloads and agent text
-An event's data SHALL be the record, or for `board-changed` the field, that the corresponding read returns for the same state, and the control plane SHALL redact agent text with `@taskelith/secrets` before it records it, a generation's output as one text across its chunks, so that a read and an event carry the same redacted text.
+### Requirement: Stream end on a role change
+A stream SHALL end on any change of its principal's roles in its project, or of its `installation-owner` role, raised or lowered, with a `stream-ended` event of reason `role-changed` and no `id`; the client SHALL read its views again and resume from its durable cursor, and the reconnection SHALL be authorized anew, so that no stream outlives the roles it was authorized with.
+
+#### Scenario: Raised role
+- **WHEN** a `project-viewer` streaming its project is made `project-operator`
+- **THEN** its stream receives `stream-ended` with `role-changed` and ends, and the client reads the board again, now with `callerMayAct` true, and resumes with its `Last-Event-ID`
+
+#### Scenario: Role removed
+- **WHEN** the principal of a project stream loses every role on the project
+- **THEN** its stream receives `stream-ended` with `role-changed` and ends, and the reconnection is refused with 403
+
+### Requirement: Event payloads and session text
+An event's data SHALL be the record, or for `board-changed` the field, that the corresponding read returns for the same state, and the control plane SHALL redact session text with `@taskelith/secrets` before it records it, a generation's output as one text across its chunks, so that a read and an event carry the same redacted text.
 
 #### Scenario: Secret in agent output
 - **WHEN** a harness writes output that holds a credential of a known shape
@@ -150,7 +187,7 @@ An event's data SHALL be the record, or for `board-changed` the field, that the 
 - **THEN** neither the output read nor any `output-appended` event carries the credential or a part of it that could rebuild it
 
 ### Requirement: Idempotency before redaction
-A repeated turn, inbox answer, or native response SHALL be compared by its input before redaction: the control plane SHALL record, with the idempotency key, a keyed digest of the unredacted input in the transaction that records the outcome, and return the first outcome for the same digest and 409 `idempotency-key-reused` for another.
+A repeated turn, inbox answer, or native response SHALL be compared by its input before redaction: the control plane SHALL check the key, call the domain or source, and record a keyed digest of the unredacted input in one serializable transaction, the key unique in its scope and a conflict retrying the whole transaction, and return the first outcome for the same digest and 409 `idempotency-key-reused` for another.
 
 #### Scenario: Inputs that redact alike
 - **WHEN** a turn repeats an idempotency key with text that holds another credential of the same shape
@@ -159,6 +196,10 @@ A repeated turn, inbox answer, or native response SHALL be compared by its input
 #### Scenario: Identical retry of a redacted input
 - **WHEN** a turn repeats an idempotency key with the same text, which holds a credential
 - **THEN** the answer is 200 with `duplicate` and the first turn
+
+#### Scenario: Concurrent repeats with one key
+- **WHEN** two turns with one idempotency key and texts that redact alike are submitted concurrently
+- **THEN** exactly one is recorded, and the other, retried after its transaction conflicts, answers 409 `idempotency-key-reused`
 
 ### Requirement: Session schemas shared with the worker messages
 The session schemas that the worker messages of sub-change 9d reuse, `AgentSessionId`, `AgentSessionGeneration`, `TurnId`, `TurnText`, `TurnOutcome`, `HarnessFailure`, `NativeRequestId`, `NativeRequestKey`, `NativeRequestKind`, `HarnessText`, `NativeAnswer`, `PermissionDecision`, `DelegationResultOutcome`, and `IdempotencyKey`, SHALL use only keywords that JSON Schema draft-07 reads as 2020-12 does.
