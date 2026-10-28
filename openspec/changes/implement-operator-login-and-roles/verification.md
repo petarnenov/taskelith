@@ -10,7 +10,7 @@ Status: implemented and verified by the author; review pass 1 found 1 High and 7
 ## Revision
 
 - Base: `dev` `a3a0ac4c`.
-- Verified head: `f9327406` (tree `b4d81d88`), commits `823b92de` to `f9327406` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3` and the fixes of review pass 1, the coordinator's decision (c) on its finding 4 included.
+- Verified head: `e9b1c6c6` (tree `62f44a75`), commits `823b92de` to `e9b1c6c6` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3`, the fixes of review pass 1, the coordinator's decision (c) on its finding 4 included, and the fixes of review pass 2.
 
 ## Environment
 
@@ -41,6 +41,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 - `make verify` on `8cb12e14` (tree `901e05cd`), after the fixes of review pass 1: passed, profile full; tests 3260, pass 3245, fail 0, skipped 15; all files 99.47% lines, 92.64% branches, 99.06% functions. Changed files: `secret-input.js` and `request-log.js` 100% branches; `argon2id-password-hasher.js` 94.55%, `api-server.js` 93.41%, `session-service.js` 89.22%, `control-plane-api.js` 85.19% branches.
 - `make verify` on `f9327406` (tree `b4d81d88`), after the fix of pass 1 finding 4: passed, profile full; tests 3261, pass 3246, fail 0, skipped 15; all files 99.47% lines, 92.65% branches, 99.06% functions. Changed file: `password-policy.js` 100% lines, branches, and functions.
+- `make verify` on `e9b1c6c6` (tree `62f44a75`), after the fixes of review pass 2: the first run failed only in `test/installation-script.test.ts:452` ("a bound with a leading zero is read in base 10": "ended after 9.113s, before 10"), a timing test of the installation script that this change does not touch; the rerun on the same tree passed, profile full; tests 3268, pass 3253, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions. Changed files: `login-throttle.js` 100% branches, `access-repositories.js` 95.15%, `in-memory-access-store.js` 95.35%, `secret-input.js` 95.24%, `session-service.js` 90.00%, `control-plane-api.js` 85.19% branches.
 
 ## Merge of dev
 
@@ -59,7 +60,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b4d81d88a7dba7392d9adda0f6ce5d0ba937e380`; tests 3261, pass 3246, fail 0, skipped 15; all files 99.47% lines, 92.65% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `62f44a75be886ecb744a219f116169874a446d9c`; tests 3268, pass 3253, fail 0, skipped 15; all files 99.47% lines, 92.67% branches, 99.06% functions.
 - `npm run openspec -- validate implement-operator-login-and-roles --strict`: passed, `Change 'implement-operator-login-and-roles' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
 - Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
@@ -68,6 +69,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a182da-e6a9-7210-84a5-8ab41618a5cf` | 0 | 1 | 7 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `3c7a6540-e2db-421d-bb86-e6cbcdd8a95f` | 0 | 0 | 3 | 6 |
 <!-- make record: end -->
 
 ## Independent review
