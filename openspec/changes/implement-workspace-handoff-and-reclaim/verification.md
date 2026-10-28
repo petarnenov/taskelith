@@ -28,6 +28,14 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16d, developed by a briefed s
 - `e1a5d52a` `test: wait for the reclaim program's readiness and exit in the Linux tests and observe every output channel for secrets` (findings 1, 2, 3, 4, and 5 in the worker image).
 - `962c500d` `docs: record the reclaim program's containment after its readiness in the spec delta and contract` (finding 6).
 - `f33090db` the merge of `origin/dev` `a10ceaaf` (#397, `run-reviews-through-make`), with one conflict in the `Makefile` `.PHONY` list, resolved by keeping `review` and `verify-linux-git-workspace`. `route.json` is not routed again: worker step 4 routes before pass 1, and the `make review` route gate runs only before pass 1.
+- `5bad0cc4` and `13029b84`, the records of the pass 1 fixes and their `make verify`.
+- `aee9571d` `docs: record review pass 2 of implement-workspace-handoff-and-reclaim` (pass 2 of reviewer B on `13029b84`: Medium 4, Low 16).
+- `d7b724bb` `chore: give the rewritten repository configuration mode 0660 whatever the umask` (N11).
+- `055323b2` `chore: bound the reclaim program's readiness and run and serialize the operations of one workspace` (N1, N2, N6, N9, N10, N12, N13, N17, N20, with the contract section 3 step 7 amendments of the coordinator's decisions on N1 and N6).
+- `02391cea` `test: run the whole workspace conformance suite again with an execution account` (N3).
+- `70c665f5` `test: check the reclaim program's full identity, the worker capabilities, and the freed cgroup in the Linux tests` (N4, N5, N7, N8, N20).
+- `5bd54589` `chore: build the installation images and the worker image through one helper` (N19).
+- `eb3e3430` `docs: list make verify-linux-git-workspace and the modified reclaim requirements` (N14, N18).
 
 ## Environment
 
@@ -54,15 +62,25 @@ Review pass 1, each on its fix commit's tree with only `packages/adapters/git-wo
 - Finding 3: the test's own control, a program that normalizes without `go`, turns the account's `0600` file into `0660` in every run, so a program that ignored `go` would fail the test's mode check.
 - Findings 2, 4, 5, and 7 change no behavior; findings 2, 4, and 5 make the tests observe what the contract requires, and finding 7 was declined after the runs below.
 
+Review pass 2, each with only the named source restored, rebuilt, and then restored with `git status` showing only the fix:
+
+- N1, N2, N6, and N20 (abandoned program): with `packages/adapters/git-workspace/src` of `d7b724bb` and the new tests of `055323b2`, `node --experimental-strip-types --test packages/adapters/git-workspace/test/hand-off.test.ts` failed 4 tests: "a program that is not ready within its bound fails the reclaim as unavailable" timed out at its 20 s test timeout (the launch waited for `ready` forever), "a program still running at the run bound fails the reclaim and is left running" timed out at 30 s (the reclaim waited for the exit forever), "a hand-off that meets a running reclaim of its workspace waits until the reclaim is done" failed in 101 ms (the hand-off polled during the reclaim and left the checkout open without a record), and "a program that misses its window for go …" failed on `host.released` (`[]`, the empty containment was not freed). With the fix all 31 tests of the file pass.
+- N12: with only the root chain in `#handOff` bypassed (`await this.#recordHandOff(attemptId)` without `inChain`), three runs of the new test "two adapters of one process hand off two workspaces one at a time" and the conformance case "lets one of two concurrent hand-offs through where executions share a separate account" with an execution account each failed both, 3 of 3; the one-account case passed, as it allows both.
+- N4: with `process.setgroups!([])` removed from `reclaim-program.ts` and `npm run build`, `make verify-linux-git-workspace PATTERN='execution account|without go|surviving|capabilities'` gave tests 32, pass 28, fail 4: the three tests that read the program's identity failed with `groups: [10003]` where `[]` was expected (uids and gids were `10003` in all four fields), plus a file-level cleanup error of the aborted case; the capability test passed. The line was restored before any commit.
+- N11: with `repository-config.ts` of `HEAD` before `d7b724bb`, the new test under umask `0022` failed (`416 !== 432`, mode `0640` where `0660` was expected); with the fix both umask tests pass.
+- N3, N5, N7, N8, N13, and N17 add or tighten tests of behavior that already held; N9, N10, N14 to N16, and N18 are records and documentation; N19 keeps the script's behavior, which `test/installation-script.test.ts` (26 of 26) checks.
+
 ## After the change
 
 - Host, after `npm run build`: `node --experimental-strip-types --test packages/adapters/git-workspace/test/*.test.ts` gave tests 181, pass 181, fail 0, skipped 0, before the configuration-mode test was added; `make verify` below includes all of them.
 - Host, after `db767f8f`: `node --experimental-strip-types --test packages/adapters/git-workspace/test/*.test.ts` gave tests 185, pass 185, fail 0, skipped 0.
-- Worker image, first run: `bash scripts/linux-git-workspace.sh taskelith-worker:taskelith-665132492-installation-git-workspace` on the tree of `f056b039` gave tests 35, pass 35, fail 0 (the image pin, the 27 conformance cases with the real execution account, and the 7 tests of contract section 13).
+- Worker image, first run: `bash scripts/linux-git-workspace.sh taskelith-worker:taskelith-665132492-installation-git-workspace` on the tree of `f056b039` gave tests 35, pass 35, fail 0 (the image pin, the 26 conformance cases with the real execution account, and the 8 tests of contract section 13).
 - Worker image, after `db767f8f`: `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify-linux-git-workspace` built `taskelith-worker:taskelith-665132492-installation-git-workspace` (image `sha256:f9a4bacd6ddd`) with `installation.sh build-worker`, whose Git is `git version 2.43.0` of the package `1:2.43.0-1ubuntu7.4`, with Node.js v24.22.1, and gave tests 36, pass 36, fail 0, skipped 0: the 35 above and "a reclaim program without go in its window or with a dead worker empties its cgroup unchanged", which runs the fixed program as the execution account in its cgroup with a 500 ms window, and a launcher killed by `SIGKILL` before `go`. The suite stays opt-in, outside `make verify` (coordinator decision Q2).
 
 - Host, after the pass 1 fixes: `node --experimental-strip-types --test packages/adapters/git-workspace/test/*.test.ts` gave tests 189, pass 189, fail 0, skipped 0, three runs of `hand-off.test.ts` and `reclaim-program.test.ts` in a row 38 of 38 each; with `TMPDIR` unset (the default `/tmp`, whose `/tmp/.git` is empty) 189 of 189, and with `TMPDIR` inside a directory that `git init` made a repository with `core.hooksPath` set 189 of 189 (finding 7).
 - Worker image, after the merge `f33090db`: `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify-linux-git-workspace` built `taskelith-worker:taskelith-665132492-installation-git-workspace` (image `sha256:046ea37357f8`) and gave tests 37, pass 37, fail 0, skipped 0: the 36 above, with the surviving program now crashed by `SIGKILL`, the program without `go` rewritten (finding 3), and the redaction test widened (finding 5), plus "a Linux launch resolves only once its program is in its cgroup as the execution account".
+- Host, after the pass 2 fixes: `hand-off.test.ts` 31 of 31, `conformance.test.ts` 52 of 52 (26 cases twice), the two umask tests of `checkout-safety.test.ts`, and `test/installation-script.test.ts` 26 of 26.
+- Worker image, after the pass 2 fixes, on the source of `eb3e3430`: `make verify-linux-git-workspace` rebuilt `taskelith-worker:taskelith-665132492-installation-git-workspace` through the shared `build_stages` helper and gave tests 39, pass 39, fail 0, skipped 0: the 37 above, with the full identity checks, plus the capability test and the freed-cgroup test.
 
 ## Checks
 
@@ -94,20 +112,27 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a182da-55e4-7800-adb1-5c516c82d86f` | 0 | 1 | 6 | 1 |
 <!-- make record: end -->
 
+## Contract amendments
+
+- Coordinator decision on N1 (2026-10-28, confirmed): contract section 3, step 7, bounds the wait for `ready` by `RECLAIM_READY_BOUND_MS`, 60 s, after which the worker abandons the program and `reclaim` fails with `unavailable`, next to the 60 s `go` bound; spec scenario "Program not yet ready".
+- Coordinator decision on N6 (2026-10-28, confirmed, option (a)): contract section 3, step 7, records a program still running `RECLAIM_RUN_BOUND_MS`, 10 min, after `go` as failed without killing it, and leaves its cleanup to 16e; spec scenario "Program past its run bound". Both are in `055323b2`; nothing under `packages/contracts/` changes, so `breaking-changes.json` needs no declaration.
+
 ## Limitations
 
 - The Linux suite ran in the worker image with the repository's host-built `dist` mounted read-only, not with the image's own build.
 - The scan's exclusion of a recorded containment, the start check of `fs.protected_hardlinks`, the slot admission with `worker-slots-exhausted`, and the worker's umask and supplementary group are 16e's; the Linux tests set the umask and the group themselves.
 - The adapter has no logger; "no secret in a log" checks every result and failure message, the runner's scrubbed output, the worker's stdout and stderr, every Git process's argv, and every file under the data root. Git's raw output before the runner's redaction carries an echoed credential by design and is not checked.
 - The worker image covers the real `SIGKILL` crash only at `WS8`, with a surviving program; the 13 crash points run killed on the host with the process-group host.
-- A program that hangs before its readiness signal keeps `launch` waiting; `launch` has no bound of its own.
+- A program left running past `RECLAIM_RUN_BOUND_MS` keeps its workspace handed off and its slot held; 16d does not clean it up (coordinator decision N6).
+- The N2 interleaving test waits at most 1 s for the hand-off's poll before it lets the reclaim finish; on the fixed code no poll comes, and the bound decides nothing, but on a very loaded host the fail-before could miss the interleaving.
 - The host's adapter tests still put their data roots under `TMPDIR` (carried from 16c); the new Linux tests do not.
 
 ## Remaining gates
 
 - `make verify-worker-image-reproducible` compares index digests, which differ by the default provenance attestation on a Docker host with the containerd image store; fixing the check, for example with `--provenance=false` or by comparing the image manifest, is for the coordinator to assign.
 
-- Review pass 2 (reviewer B), and pass 3 if required.
+- Review pass 3 (reviewer A), required because the pass 2 fixes change code.
+- 16e: killing a program left running past `RECLAIM_RUN_BOUND_MS`, freeing its slot, and any retry (coordinator decision N6), and freeing the empty cgroup of a failed program.
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator.
 - 16e: the worker wiring and admission.
 - Integration into `dev` by the coordinator.
