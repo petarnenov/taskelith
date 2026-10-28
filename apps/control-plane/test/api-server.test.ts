@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import {
@@ -74,6 +75,20 @@ test('the installation CA is public: no bearer is needed, and one is ignored', a
   const body = await keyed.text();
   assert.equal(keyed.status, 500, 'an answer with key material is a defect, never sent');
   assert.doesNotMatch(body, /PRIVATE KEY/);
+});
+
+test('every status a route of the execution document answers is declared there', () => {
+  const document = JSON.parse(readFileSync(new URL('../../../packages/contracts/documents/execution.openapi.json', import.meta.url), 'utf8'));
+  const declared = new Map<string, string[]>();
+  for (const item of Object.values(document.paths) as Array<Record<string, { operationId: string; responses: object }>>) {
+    for (const operation of Object.values(item)) declared.set(operation.operationId, Object.keys(operation.responses));
+  }
+  const documented = ROUTES.filter((route) => declared.has(route.operationId));
+  assert.ok(documented.some((route) => route.operationId === 'readInstallationCa'));
+  for (const route of documented) {
+    const answered = [route.success, ...Object.values(route.statuses)].map(String);
+    assert.deepEqual(answered.filter((status) => !declared.get(route.operationId)!.includes(status)), [], route.operationId);
+  }
 });
 
 test('a credential store that is down is 503, not a refused credential', async () => {

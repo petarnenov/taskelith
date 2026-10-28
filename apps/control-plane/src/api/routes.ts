@@ -47,7 +47,8 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   },
   {
     operationId: 'readInstallationCa', method: 'GET', pattern: /^\/installation\/ca$/, security: 'none', response: 'InstallationCa', success: 200,
-    statuses: COMMON,
+    // As the document declares: a public read has no 400 or 401.
+    statuses: { unavailable: 503, internal: 500 },
   },
   {
     operationId: 'enrollWorker', method: 'POST', pattern: /^\/workers\/enrollments$/, security: 'enrollmentToken', body: 'EnrollmentRequest',
