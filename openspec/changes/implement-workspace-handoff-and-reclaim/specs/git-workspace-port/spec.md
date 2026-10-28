@@ -8,7 +8,7 @@ The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, 
 - **THEN** the cases of a separate account check that one workspace at a time is handed off
 
 ### Requirement: Git adapter hand-off and reclaim
-The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` with a hand-off record written durably before the checkout opens; it SHALL check for another handed-off workspace and write its own record as one step of a chain per workspace root, record the reclaim program's containment before the program may run, and prove a recorded containment empty by polling, never killing it, up to a bound of 30 seconds.
+The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` with a hand-off record written durably before the checkout opens; it SHALL check for another handed-off workspace and write its own record as one step of a chain per workspace root, record the reclaim program's containment once the program is ready and before `go`, and prove a recorded containment empty by polling, never killing it, up to a bound of 30 seconds.
 
 #### Scenario: Concurrent hand-offs
 - **WHEN** two workspaces of an adapter with an execution account are handed off concurrently
@@ -23,7 +23,7 @@ The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` 
 - **THEN** `reclaim` and `handOff` fail with `unavailable`, the workspace stays handed off, and no process of the containment is killed
 
 ### Requirement: Reclaim program of the worker image
-The reclaim program SHALL be a fixed module of the adapter that changes nothing until the worker writes `go` on its input and that reports only through its exit code; on Linux it SHALL enter its cgroup `reclaim-<name>` as root and switch to the execution account, without a supplementary group, before it reads `go`.
+The reclaim program SHALL be a fixed module of the adapter that changes nothing until the worker writes `go` on its input, that writes only its readiness signal on its output, and that reports its outcome through its exit code; on Linux it SHALL enter its cgroup `reclaim-<name>` as root and switch to the execution account, without a supplementary group, before it signals readiness.
 
 #### Scenario: Worker gone before the record
 - **WHEN** the worker crashes after it started the program and before it wrote `go`
@@ -46,6 +46,42 @@ The worker image SHALL install the package `git=1:2.43.0-1ubuntu7.4` and fail it
 
 
 ## MODIFIED Requirements
+
+### Requirement: Reclaim program containment
+The worker SHALL record the reclaim program's containment `reclaim-<name>` under its containment parent in the hand-off record after the program entered it and signalled readiness and before `go`; a program SHALL change nothing before `go` and exit unchanged when its worker dies or no `go` comes in 60 seconds. The scan SHALL skip a recorded containment, and the worker SHALL prove it empty by polling, without a kill, before it reclaims, runs Git, or hands off again.
+
+#### Scenario: Surviving reclaim program
+- **WHEN** the worker restarts while the reclaim program of its previous run still runs
+- **THEN** it does not reclaim again, run Git on the workspace, or hand it off until that program's process set is proven empty
+
+#### Scenario: Failed reclaim program
+- **WHEN** the reclaim program exits with a failure
+- **THEN** `reclaim` fails with `precondition-failed` and reason `reclaim-failed`, the workspace stays handed off, and the program does not run again
+
+#### Scenario: Reclaim containment at start
+- **WHEN** the worker restarts while a reclaim program runs in the containment that a hand-off record names
+- **THEN** it reports no unrecorded process for that containment and kills no process of it
+- **WHEN** the worker is killed after its reclaim program failed and before the failure is durable in the hand-off record, and `reclaim` is called after the restart
+- **THEN** the worker proves the containment empty and runs the program again, and a failure again is recorded and fails with reason `reclaim-failed`
+
+#### Scenario: Program past the bound
+- **WHEN** the containment that a hand-off record names is still populated at the bound
+- **THEN** the workspace stays handed off and is reported for reconciliation
+
+#### Scenario: Program not yet ready
+- **WHEN** the reclaim program has started but has not yet entered its containment and signalled readiness
+- **THEN** the worker has not recorded the containment and has not written `go`
+
+#### Scenario: Waiting program without its worker
+- **WHEN** a launched program's worker dies before `go`, or no `go` arrives within 60 seconds
+- **THEN** the program exits without changing the checkout and leaves its containment empty
+
+### Requirement: Reclaim program on one account
+Where the execution and worker identities are the same account, as on macOS, the reclaim program SHALL run as the worker identity, without a containment, in a process group of its own, which the hand-off record SHALL name after the program signals readiness and before `go`, and which the worker SHALL prove empty, as it does a containment, before it reclaims again, runs Git on the workspace, or hands it off.
+
+#### Scenario: Reclaim program on macOS
+- **WHEN** a macOS worker reclaims a workspace
+- **THEN** the reclaim program runs as the worker's account in its own process group, which the hand-off record names while it runs
 
 ### Requirement: Repository configuration rewrite
 Before its first Git call on a ready checkout, after the checks of its Git directory, an operation SHALL write `.git/config` anew as a file of mode `0660` that it creates exclusively without following a link and renames into place, holding only the repository format version and object format of the workspace record, and SHALL delete `.git/info`, so that no link there is written through and no planted setting or rule acts.
