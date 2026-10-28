@@ -6,25 +6,25 @@
 
 ## 2. Access module
 
-- [ ] 2.1 Domain: principals, roles and ranks, sessions, password policy, and requirements
-- [ ] 2.2 Ports with conformance suites and in-memory adapters: principals, project roles, sessions, password hasher, access audit, approvers
-- [ ] 2.3 Services: sessions, authorization, owner bootstrap, principal administration, role approvers
+- [x] 2.1 Domain: principals, roles and ranks, sessions, password policy, and requirements
+- [x] 2.2 Ports with conformance suites and in-memory adapters: principals, project roles, sessions, password hasher, access audit, approvers
+- [x] 2.3 Services: sessions, authorization, owner bootstrap, principal administration, role approvers
 
 ## 3. Adapters
 
-- [ ] 3.1 Argon2id hasher over `crypto.argon2` with the PHC codec and the start check
-- [ ] 3.2 PostgreSQL migration and repositories, run against the conformance suites
+- [x] 3.1 Argon2id hasher over `crypto.argon2` with the PHC codec and the start check
+- [x] 3.2 PostgreSQL migration and repositories, run against the conformance suites
 
 ## 4. Control plane
 
-- [ ] 4.1 Route alternatives and role requirements derived from the document; the session operations on the browser endpoint
-- [ ] 4.2 Authentication, CSRF, role, and body order; cookies and `no-store`; request log allowlist
-- [ ] 4.3 Per-project authorization of `readEvidence` and `downloadEvidence`
-- [ ] 4.4 Owner creation at `init` and start, administrative password and role commands, session purge loop
+- [x] 4.1 Route alternatives and role requirements derived from the document; the session operations on the browser endpoint
+- [x] 4.2 Authentication, CSRF, role, and body order; cookies and `no-store`; request log allowlist
+- [x] 4.3 Per-project authorization of `readEvidence` and `downloadEvidence`
+- [x] 4.4 Owner creation at `init` and start, administrative password and role commands, session purge loop
 
 ## 5. Tests
 
-- [ ] 5.1 Unit, conformance, HTTP, and redaction tests of the design's test plan, at least 75% lines, branches, and functions
+- [x] 5.1 Unit, conformance, HTTP, and redaction tests of the design's test plan, at least 75% lines, branches, and functions
 
 ## 6. Verification and review
 
