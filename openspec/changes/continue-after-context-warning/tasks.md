@@ -11,9 +11,9 @@
 
 ## 3. Verification
 
-- [ ] 3.1 `route.json` from `make findings ARGS="route --change continue-after-context-warning"`, committed unedited
-- [ ] 3.2 `npm run openspec -- validate continue-after-context-warning --strict` and `make verify`
-- [ ] 3.3 Record `verification.md`
+- [x] 3.1 `route.json` from `make findings ARGS="route --change continue-after-context-warning"`, committed unedited
+- [x] 3.2 `npm run openspec -- validate continue-after-context-warning --strict` and `make verify`
+- [x] 3.3 Record `verification.md`
 
 ## 4. Review and archive
 
