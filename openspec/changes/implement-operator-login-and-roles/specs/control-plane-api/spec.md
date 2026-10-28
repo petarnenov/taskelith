@@ -67,3 +67,28 @@ The request log SHALL hold only the method, the operation, its path and query pa
 #### Scenario: Secrets absent from output
 - **WHEN** a login fails, a CSRF check fails, and a body fails validation with a known password, session identifier, and CSRF token
 - **THEN** none of those values appears in the request log, the failure bodies, or the audit trail
+
+### Requirement: Login throttling without lockout
+`logIn` SHALL throttle by login name and by source address and never lock an account. After 5 failures of a key within 15 minutes, each further attempt of that key SHALL wait a constant delay, then be verified as usual. Attempts SHALL run one at a time per key, and an address with 4 attempts waiting SHALL get 503 `unavailable` at once. These limits are provisional.
+
+#### Scenario: Throttled, not locked
+- **WHEN** five wrong passwords for a login name are followed by the right one
+- **THEN** the right one logs in after the delay
+
+#### Scenario: Parallel guessing from one address
+- **WHEN** one source address sends six `logIn` requests at once
+- **THEN** their passwords are verified one at a time, and the two beyond four answer 503 `unavailable` at once
+
+### Requirement: Provisional session lifetimes
+By provisional configured defaults, an authenticated session SHALL end 8 hours after its last renewal or 24 hours after its login, whichever is first, and an anonymous session 15 minutes after its start. A request SHALL renew the idle expiry at most once a minute. Anonymous sessions beyond 10 000 SHALL be purged oldest first.
+
+#### Scenario: Idle and absolute expiry
+- **WHEN** an authenticated session gets no request for 8 hours, or is used until 24 hours after its login
+- **THEN** its cookie answers 401 `unauthenticated`
+
+### Requirement: Run resources deny unknown and foreign alike
+For a run or task resource found by its own identifier, a caller without the required role SHALL get the same `role-required` denial for an unknown identifier as for one of another project, before the request body is read. Only a caller that passes the check, such as an `installation-owner` on a read, SHALL learn that the resource does not exist.
+
+#### Scenario: Unknown and foreign run
+- **WHEN** a principal without a role on a run's project calls `submitTask` with an invalid body on that run and on an unknown run
+- **THEN** both answers are the same 403 `role-required` body

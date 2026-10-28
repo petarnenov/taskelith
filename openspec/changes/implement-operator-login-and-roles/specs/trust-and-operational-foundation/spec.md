@@ -55,3 +55,17 @@ Approvals SHALL be authorized through an approver port that takes the decision b
 #### Scenario: Maintainer approval
 - **WHEN** a `project-maintainer` asks to approve a gate whose decision body is `project-maintainer` on its project
 - **THEN** the approver port allows it, and refuses a `project-operator` with reason `role-required`
+
+### Requirement: A password change ends the principal's sessions
+Setting a principal's password SHALL end every session of that principal in the same transaction, so that no session authenticated with the earlier password stays usable, and a login verified against the earlier password SHALL fail.
+
+#### Scenario: Sessions after a password change
+- **WHEN** the password of a principal with two live sessions is set
+- **THEN** both sessions end in the write that stores the new hash
+
+### Requirement: Temporary G2 bridge
+Until G3 item 11 lands projects and memberships, an `installation-owner` SHALL also pass the project requirements of the G2 execution and SDLC operator operations, through one requirement kind of the `Access` module named as the bridge. This requirement is temporary; item 11 SHALL remove it.
+
+#### Scenario: Owner on a G2 operation
+- **WHEN** an `installation-owner` without a project role calls a G2 operation that requires `project-operator`
+- **THEN** the bridge passes it, while another principal without the role is denied with `role-required`
