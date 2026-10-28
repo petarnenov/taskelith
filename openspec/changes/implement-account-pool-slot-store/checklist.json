@@ -1,0 +1,105 @@
+{
+  "change": "implement-account-pool-slot-store",
+  "generatedAt": "2026-10-28T22:11:32.795Z",
+  "devCommit": "8b18c5406e9c9f43f57fd81e2508cb6a0b2f2696",
+  "query": {
+    "capabilities": [
+      "account-pool-port",
+      "harness-account-pools",
+      "capacity-reservation"
+    ],
+    "files": [
+      "packages/modules/scheduling/**",
+      "packages/adapters/postgres/**",
+      "packages/adapters/secrets/**",
+      "packages/adapters/control-plane-store/**",
+      "docs/contracts/account-pool.md"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 20
+      },
+      {
+        "category": "contract-drift",
+        "count": 19
+      },
+      {
+        "category": "redaction",
+        "count": 11
+      },
+      {
+        "category": "spec-wording",
+        "count": 9
+      },
+      {
+        "category": "naming",
+        "count": 8
+      },
+      {
+        "category": "concurrency-race",
+        "count": 4
+      },
+      {
+        "category": "error-handling",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 689,
+        "inChecklist": 576
+      },
+      "mediumOrWorse": {
+        "findings": 319,
+        "inChecklist": 276
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 109
+      },
+      {
+        "category": "spec-wording",
+        "count": 79
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 41
+      },
+      {
+        "category": "contract-drift",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 19
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 344,
+        "inChecklist": 338
+      },
+      "mediumOrWorse": {
+        "findings": 62,
+        "inChecklist": 60
+      }
+    }
+  }
+}
