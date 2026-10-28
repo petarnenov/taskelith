@@ -1,0 +1,64 @@
+{
+  "change": "define-control-plane-access-contracts",
+  "generatedAt": "2026-10-28T09:25:28.288Z",
+  "devCommit": "9196804b89c6a20806beee7fd73c22459c548241",
+  "headCommit": "b1719e0f875ec879821f6996c1bb98b675e78da3",
+  "features": {
+    "linesChanged": 5295,
+    "filesChanged": 8,
+    "capabilities": [
+      "control-plane-wire-contracts",
+      "sdlc-wire-contracts"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 0,
+      "thirdPassShare": null,
+      "mediumOrWorsePerChange": null
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "contracts"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "failed",
+    "reason": "missing-credential",
+    "latencyMs": 0
+  }
+}

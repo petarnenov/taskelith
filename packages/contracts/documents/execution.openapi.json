@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.5.0",
-    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
+    "version": "0.6.0",
+    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), launch authorization (G2 decision D12 (a)), delegation and its result, task results, evidence with its retirement, the reconciliation queue and re-admission, and the delivery of slot and per-run SCM credentials to a worker (G3 sub-change 9c). Worker operations use the per-worker credential. Operator operations use the installation bootstrap credential (G2 decision D10 (a)); since 9c the evidence, reconciliation, and re-admission operations also accept the browser session of the control-plane document."
   },
   "paths": {
     "/installation/ca": {
@@ -529,6 +529,9 @@
         "summary": "Read an evidence record",
         "security": [
           {
+            "browserSession": []
+          },
+          {
             "operatorToken": []
           }
         ],
@@ -565,17 +568,17 @@
             }
           },
           "401": {
-            "description": "The operator credential is invalid.",
+            "description": "No valid session cookie or operator credential was presented.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Failure"
+                  "$ref": "#/components/schemas/AuthenticationFailure"
                 }
               }
             }
           },
           "404": {
-            "description": "The evidence record does not exist.",
+            "description": "The evidence record does not exist, or the principal holds no role that reads it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -604,6 +607,114 @@
               }
             }
           }
+        },
+        "description": "A `project-viewer` or above on the record's project, or an `installation-owner`, reads it. Any other principal gets the 404 of an unknown record, so a record of another project is never disclosed."
+      },
+      "delete": {
+        "operationId": "retireEvidence",
+        "summary": "Retire an evidence record after its minimum retention",
+        "description": "A `project-maintainer` on the record's project removes the record once 365 days have passed since its publication (`publishedAt`), then its content once no record refers to the digest (G2 `implement-evidence-store` decision Q2). The record is read before the role, as for `readEvidence`: a principal that may not read it gets the 404 of an unknown record, and a reader below `project-maintainer` gets 403.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "evidenceId",
+            "in": "path",
+            "required": true,
+            "description": "The evidence record.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The record is retired. Its content is removed with it or, when that removal fails, later by the sweep of unreferenced digests; the record stays retired."
+          },
+          "400": {
+            "description": "The path is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal reads the record but is not a `project-maintainer` of its project, or a session request carried no valid CSRF token; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The evidence record does not exist, was already retired, or the principal holds no role that reads it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The minimum retention has not passed; the record is unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed before the record was removed; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is not available; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -612,6 +723,9 @@
         "operationId": "downloadEvidence",
         "summary": "Download the content of an evidence record",
         "security": [
+          {
+            "browserSession": []
+          },
           {
             "operatorToken": []
           }
@@ -650,17 +764,17 @@
             }
           },
           "401": {
-            "description": "The operator credential is invalid.",
+            "description": "No valid session cookie or operator credential was presented.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Failure"
+                  "$ref": "#/components/schemas/AuthenticationFailure"
                 }
               }
             }
           },
           "404": {
-            "description": "The evidence record does not exist.",
+            "description": "The evidence record does not exist, the principal holds no role that reads it, or the record was retired between the read of the record and the read of its content.",
             "content": {
               "application/json": {
                 "schema": {
@@ -670,7 +784,7 @@
             }
           },
           "500": {
-            "description": "The stored content is missing or does not match its digest, so it is not served.",
+            "description": "The content of a record that still exists is missing or does not match its digest, so it is not served.",
             "content": {
               "application/json": {
                 "schema": {
@@ -689,7 +803,8 @@
               }
             }
           }
-        }
+        },
+        "description": "A `project-viewer` or above on the record's project, or an `installation-owner`, reads it. Any other principal gets the 404 of an unknown record, so a record of another project is never disclosed."
       }
     },
     "/quarantine": {
@@ -863,6 +978,846 @@
           }
         }
       }
+    },
+    "/delegations/{delegationId}/result": {
+      "get": {
+        "operationId": "readDelegationResult",
+        "summary": "Read the result of a delegation",
+        "description": "The worker that holds the active attempt of the delegation's parent task, at the task's current ownership generation, reads it. Any other worker gets the 404 of an unknown delegation.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "delegationId",
+            "in": "path",
+            "required": true,
+            "description": "The delegation.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The delegation's result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The delegation does not exist, or the worker does not hold the active attempt of its parent task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store or the database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reconciliation/unknown-executions": {
+      "get": {
+        "operationId": "listUnknownExecutions",
+        "summary": "List the unknown executions of a project, one page at a time",
+        "description": "A `project-viewer` or above on the project, or an `installation-owner`, reads the reconciliation queue of the project.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "description": "The project.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "afterTaskId",
+            "in": "query",
+            "required": false,
+            "description": "The task of the position to read after. With `afterExecutionId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "afterExecutionId",
+            "in": "query",
+            "required": false,
+            "description": "The execution of the position to read after. With `afterTaskId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of unknown executions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownExecutionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal holds no role on the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The project does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reconciliation/unrecorded-processes": {
+      "get": {
+        "operationId": "listUnrecordedProcesses",
+        "summary": "List the unrecorded processes of the installation, one page at a time",
+        "description": "Only an `installation-owner` reads them, because they name no project.",
+        "security": [
+          {
+            "browserSession": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "afterWorkerId",
+            "in": "query",
+            "required": false,
+            "description": "The worker of the position to read after. With `afterObservationId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "afterObservationId",
+            "in": "query",
+            "required": false,
+            "description": "The observation of the position to read after. With `afterWorkerId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of unrecorded processes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnrecordedProcessPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal is not an installation owner.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/tasks/{taskId}/readmissions": {
+      "post": {
+        "operationId": "readmitTask",
+        "summary": "Re-admit a task at its next ownership generation",
+        "description": "A `project-operator` or above on the project named in the query re-admits a task of that project whose last attempt ended, through the writer of admissions (G2 `rebindAdmission`); the new admission is bound at the task's next ownership generation. The role is checked on the named project before the run or the task is read (control-plane wire contracts section 2). A repeat with the same `readmissionId` and input returns the first 201.",
+        "security": [
+          {
+            "browserSession": [],
+            "csrfToken": []
+          },
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "description": "The task.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "description": "The project of the run, on which the role is checked before the run or the task is read.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Readmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The task is re-admitted with its new admission, or a repeat of the same `readmissionId` and input returns the first answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSubmission"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path, the query, or the body is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session cookie or operator credential was presented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationFailure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal holds no role of `project-operator` or above on the named project, or a session request carried no valid CSRF token; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessDenial"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CsrfRejection"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The project, the run, or the task does not exist, or the run is not of the named project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The task's ownership generation is no longer the expected one, or the `readmissionId` was used with another input; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The task cannot be re-admitted now; nothing took effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadmissionRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/executions/{executionId}/slot-credentials/{slotId}": {
+      "get": {
+        "operationId": "fetchSlotCredential",
+        "summary": "Fetch the credential of a reserved slot for an execution",
+        "description": "Slot credential delivery of account pool contract sections 7 and 7.3, first and repeated: after its launch authorization, and again whenever it starts or adopts the execution, the worker that owns the execution fetches the credential of a slot that the reservation of the execution's attempt names. The control plane finds the execution by the `attemptId` of the query and the `executionId` of the path, because an execution identifier is unique only within its task. An `authorized` execution with no earlier delivery also needs its launch grant unexpired and not `revoked` (section 7); for any other execution the ownership checks of section 7.3 stand in. The first fetch returns the slot's current credential version; a later fetch re-delivers that version. `LaunchGrant` carries no credential. The response is never cached, and a log of the request never holds its body.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "description": "The execution, whose attempt holds the run's reservation.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "slotId",
+            "in": "path",
+            "required": true,
+            "description": "A slot that the reservation of the execution's attempt names.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "attemptId",
+            "in": "query",
+            "required": true,
+            "description": "The attempt the worker holds.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "ownershipGeneration",
+            "in": "query",
+            "required": true,
+            "description": "The ownership generation the worker holds the attempt at.",
+            "schema": {
+              "$ref": "#/components/schemas/Generation"
+            }
+          },
+          {
+            "name": "recoveryEpoch",
+            "in": "query",
+            "required": true,
+            "description": "The recovery epoch of the worker.",
+            "schema": {
+              "$ref": "#/components/schemas/RecoveryEpoch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The slot credential for the execution, at the first or a later fetch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotCredentialDelivery"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the credential.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or the query is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The delivery is refused, an unknown attempt or execution with `assignment-not-active`; nothing is revealed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotCredentialRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store or the database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/scm-credentials": {
+      "post": {
+        "operationId": "issueRunScmCredential",
+        "summary": "Obtain the current per-run SCM credential of a run",
+        "description": "The worker that holds an attempt of a task of the run obtains the run's current SCM credential version. The control plane issues the first one when the run has none, serialized per run, so that of concurrent first issues one issues and the others return its version; a repeat with no refresh between returns the same version, and one after a refresh the refreshed version. After the ownership checks of launch authorization contract section 9, every call re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScmCredentialRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run's current SCM credential version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmCredentialDelivery"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the credential.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or the body is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "No credential is issued or revealed, an unknown run with `assignment-not-active`; the control plane records the reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmCredentialRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store, the database, or the SCM service is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/scm-credentials/{credentialId}/versions/{version}": {
+      "get": {
+        "operationId": "fetchRunScmCredential",
+        "summary": "Fetch one version of a run's SCM credential",
+        "description": "The worker fetches the version that a refresh notice names (G3 sub-change 9d). A version is written once and never changes. After the ownership checks of launch authorization contract section 9, every fetch re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "description": "The credential.",
+            "schema": {
+              "$ref": "#/components/schemas/ExternalId"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "description": "The version.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "attemptId",
+            "in": "query",
+            "required": true,
+            "description": "The attempt the worker holds.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "ownershipGeneration",
+            "in": "query",
+            "required": true,
+            "description": "The ownership generation the worker holds the attempt at.",
+            "schema": {
+              "$ref": "#/components/schemas/Generation"
+            }
+          },
+          {
+            "name": "recoveryEpoch",
+            "in": "query",
+            "required": true,
+            "description": "The recovery epoch of the worker.",
+            "schema": {
+              "$ref": "#/components/schemas/RecoveryEpoch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "That version of the run's SCM credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmCredentialDelivery"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Always `no-store`, so that no cache keeps the credential.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or the query is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Once the ownership and remote checks pass, the run has no such credential or version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Nothing is revealed, an unknown run with `assignment-not-active`; the control plane records the reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScmCredentialRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store or the database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -881,6 +1836,18 @@
         "type": "http",
         "scheme": "bearer",
         "description": "The installation bootstrap credential."
+      },
+      "browserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-taskelith-session",
+        "description": "The server-side session identifier, 256 random bits, in a cookie set with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`. The `__Host-` prefix makes the browser refuse the cookie without `Secure` and `Path=/` or with `Domain`; `HttpOnly` and `SameSite=Strict` rest on the server alone. Never readable by scripts and never in a response body."
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "The CSRF token of the session that the cookie names, required with the cookie on every operation other than GET; compared in constant time."
       }
     },
     "schemas": {
@@ -2272,6 +3239,755 @@
             "maxLength": 16384,
             "pattern": "^-----BEGIN CERTIFICATE-----\\r?\\n(?:[A-Za-z0-9+/=]{1,76}\\r?\\n)+-----END CERTIFICATE-----\\r?\\n?$",
             "description": "One PEM certificate block and nothing else."
+          }
+        }
+      },
+      "AuthenticationFailure": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 401: `unauthenticated` when no valid session cookie or operator credential was presented, `login-failed` when a login name and password do not match, without saying which.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "unauthenticated",
+                  "login-failed"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AccessDenial": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 403: the authenticated principal lacks the role the operation requires.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "role-required"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CsrfRejection": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 403: a mutation authenticated by the session cookie carried no `X-CSRF-Token` header, or one that is not its session's token; nothing took effect.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "csrf-token-invalid"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ExternalId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "description": "An identifier that an external service issues, compared exactly and never parsed (source control contract section 2, rule 3)."
+      },
+      "RemoteUrl": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[^?#\\s]*)?$",
+        "description": "A bound remote URL: HTTPS with a host name and an optional port from 1 to 65535, without IPv6 literal, user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
+      },
+      "RetentionRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `retireEvidence`: the record's minimum retention of 365 days after its publication (`publishedAt`) has not passed; `details.retainedUntil` names the end of the retention.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason",
+              "retainedUntil"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "retention-not-elapsed"
+              },
+              "retainedUntil": {
+                "$ref": "#/components/schemas/Instant",
+                "description": "The end of the retention, 365 days after `publishedAt` (`retentionEndsAt`)."
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DelegationResultOutcome": {
+        "type": "string",
+        "enum": [
+          "completed",
+          "rejected",
+          "failed",
+          "cancelled"
+        ],
+        "description": "A delegated child's outcome in a delegation result (`DELEGATION_OUTCOMES`)."
+      },
+      "DelegationSummary": {
+        "type": "string",
+        "maxLength": 65536,
+        "description": "The summary of a delegated child task for its parent, at most `MAX_HARNESS_TEXT_LENGTH` characters; text of the child's run, redacted as that run's text is."
+      },
+      "DelegationResult": {
+        "description": "The result of a delegation: pending until the child task ends or the delegation is rejected, then its outcome and summary.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "attemptId",
+              "parentTaskId",
+              "childTaskId"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "pending"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "attemptId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The delegating attempt."
+              },
+              "parentTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "childTaskId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The child task that the delegation request named."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "attemptId",
+              "parentTaskId",
+              "childTaskId",
+              "outcome",
+              "summary",
+              "endedAt"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "ended"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "attemptId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The delegating attempt."
+              },
+              "parentTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "childTaskId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The child task that the delegation request named."
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/DelegationResultOutcome"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/DelegationSummary"
+              },
+              "endedAt": {
+                "$ref": "#/components/schemas/Instant"
+              }
+            }
+          }
+        ]
+      },
+      "ExecutionEvidenceKind": {
+        "type": "string",
+        "enum": [
+          "uncertain",
+          "termination-unproven",
+          "local-history-lost",
+          "cancellation-not-applied"
+        ],
+        "description": "`EXECUTION_EVIDENCE_KINDS`."
+      },
+      "UnknownExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An execution whose running is not known (G2 `isUnknownExecution`): it keeps its attempt's ownership and capacity until a terminal fact or an operator resolves it.",
+        "required": [
+          "projectId",
+          "runId",
+          "taskId",
+          "attemptId",
+          "ownershipGeneration",
+          "executionId",
+          "workerId",
+          "state",
+          "evidence"
+        ],
+        "properties": {
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "The task's ownership generation that the attempt holds."
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "authorized",
+              "started"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "observedAt"
+              ],
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/ExecutionEvidenceKind"
+                },
+                "observedAt": {
+                  "$ref": "#/components/schemas/Instant"
+                }
+              }
+            },
+            "description": "Every evidence entry of the execution, unbounded as `withEvidence` keeps it; at least one is of a kind other than `cancellation-not-applied` (`isUnknownExecution`).",
+            "contains": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "not": {
+                    "const": "cancellation-not-applied"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "UnknownExecutionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Unknown executions of a project in the order of `UnknownExecutionCursor`.",
+        "required": [
+          "executions"
+        ],
+        "properties": {
+          "executions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/UnknownExecution"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/UnknownExecutionCursor",
+            "description": "The position of the page's last item, whose fields the caller passes as `afterTaskId` and `afterExecutionId`; absent on the last page."
+          }
+        }
+      },
+      "UnknownExecutionCursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A position in the unknown executions of a project: an execution identifier is unique only within its task, so the order is by task identifier, then execution identifier, in code-unit order.",
+        "required": [
+          "taskId",
+          "executionId"
+        ],
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "UnrecordedProcess": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A populated containment that a worker reported without an execution record (`execution.unrecorded-process`); it names no project or task.",
+        "required": [
+          "workerId",
+          "journalId",
+          "observationId",
+          "containment",
+          "processCount",
+          "recordedAt"
+        ],
+        "properties": {
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "journalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "observationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "containment": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "processCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 256,
+            "description": "The processes the observation listed."
+          },
+          "recordedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "UnrecordedProcessPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Unrecorded processes in the order of `UnrecordedProcessCursor`.",
+        "required": [
+          "processes"
+        ],
+        "properties": {
+          "processes": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/UnrecordedProcess"
+            }
+          },
+          "next": {
+            "$ref": "#/components/schemas/UnrecordedProcessCursor",
+            "description": "The position of the page's last item, whose fields the caller passes as `afterWorkerId` and `afterObservationId`; absent on the last page."
+          }
+        }
+      },
+      "UnrecordedProcessCursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A position in the unrecorded processes: an observation identifier is unique only per worker (`unrecorded_processes` key), so the order is by worker identifier, then observation identifier, in code-unit order.",
+        "required": [
+          "workerId",
+          "observationId"
+        ],
+        "properties": {
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "observationId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "Readmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Re-admits a task at its next ownership generation; compare-and-set on the generation the caller read, and idempotent by `readmissionId` (product ports contract section 2, rule 7).",
+        "required": [
+          "readmissionId",
+          "expectedOwnershipGeneration"
+        ],
+        "properties": {
+          "readmissionId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The caller's idempotency key of this re-admission, scoped to the task."
+          },
+          "expectedOwnershipGeneration": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "The task's current ownership generation as the caller read it."
+          }
+        }
+      },
+      "ReadmissionRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `readmitTask`, checked in this order: an attempt of the task is still active, an unknown execution included; the task's current admission has not been dispatched, so placement still owns it; or SDLC admission refuses the new admission, for example because a prerequisite stage has not passed.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "attempt-active",
+                  "admission-not-dispatched",
+                  "admission-refused"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RevealedSlotCredential": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "description": "A slot credential revealed to the run that reserved the slot. Secret: only in the response of `fetchSlotCredential`, never cached, logged, journaled, or written to disk (account pool contract sections 7 and 7.3)."
+      },
+      "SlotCredentialDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The credential of a slot that the execution's reservation names, at the version the slot record names; the first and every later delivery to the same execution and slot carry the same version (account pool contract section 8.1).",
+        "required": [
+          "executionId",
+          "slotId",
+          "mechanismId",
+          "credentialVersion",
+          "credential"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "slotId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "mechanismId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The admitted delivery mechanism, such as `subscription-token`."
+          },
+          "credentialVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "credential": {
+            "$ref": "#/components/schemas/RevealedSlotCredential"
+          }
+        }
+      },
+      "SlotCredentialRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `fetchSlotCredential`, at the first fetch or a later one, checked in the order of account pool contract section 7.3: the ownership reasons of launch authorization contract section 9, with `assignment-not-active` also for an unknown attempt or execution, after the installation and worker checks; `execution-conflict` for an execution that is not the owning one, is terminal, or has a `revoked` grant, or that is `authorized` with no earlier delivery and an expired grant; `capacity-not-reserved` for a reservation that is released, held for another attempt, or does not name the slot; then the slot's ineligibility (`revoked`, `removed`); then `delivery-not-admitted`, which section 7.3 names `invalid`, for a mechanism without an admitted delivery for its harness. Nothing is revealed.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "quarantined",
+                  "stale-recovery-epoch",
+                  "worker-not-authorized",
+                  "assignment-not-active",
+                  "stale-ownership-generation",
+                  "attempt-not-launchable",
+                  "execution-conflict",
+                  "capacity-not-reserved",
+                  "revoked",
+                  "removed",
+                  "delivery-not-admitted"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ScmPermission": {
+        "type": "string",
+        "enum": [
+          "read-code",
+          "write-code",
+          "write-change-requests",
+          "write-statuses"
+        ],
+        "description": "A permission of a per-run SCM credential (`SCM_PERMISSIONS`, source control contract section 3)."
+      },
+      "ScmCredentialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The attempt the worker holds; the worker is the authenticated principal, never a field.",
+        "required": [
+          "attemptId",
+          "ownershipGeneration",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "RevealedScmSecret": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "description": "The secret of a per-run SCM credential. Secret: only in a credential delivery response, never cached, logged, or stored (source control contract section 3)."
+      },
+      "ScmAuthorization": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+        "description": "The complete `Authorization` header value that the SCM plugin forms from the secret (git workspace contract section 7). As secret as the secret itself."
+      },
+      "ScmCredentialDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One version of a run's SCM credential, with the remote URL it may be sent to. A version never changes once issued; a refresh issues the next version.",
+        "required": [
+          "runId",
+          "credentialId",
+          "version",
+          "repositories",
+          "permissions",
+          "expiresAt",
+          "remoteUrl",
+          "secret",
+          "authorization"
+        ],
+        "properties": {
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "credentialId": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Numbers the secrets issued for the credential: 1 at issue, one more at each refresh."
+          },
+          "repositories": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ExternalId"
+            },
+            "description": "The effective repositories."
+          },
+          "permissions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ScmPermission"
+            },
+            "description": "The effective permissions."
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "remoteUrl": {
+            "$ref": "#/components/schemas/RemoteUrl",
+            "description": "The bound remote URL that the issue re-checked; the worker sends the credential only to it."
+          },
+          "secret": {
+            "$ref": "#/components/schemas/RevealedScmSecret"
+          },
+          "authorization": {
+            "$ref": "#/components/schemas/ScmAuthorization"
+          }
+        }
+      },
+      "ScmCredentialRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `issueRunScmCredential` and `fetchRunScmCredential`, checked in this order: the ownership reasons of launch authorization contract section 9, with `assignment-not-active` also for an unknown run or an attempt not of a task of the run, after the installation and worker checks; the project has no repository binding; the bound remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the SCM integration's current allowed origin; then the version's secret has ended: for a fetch, the named version by a refresh, a revocation, or its expiry, and for an issue, the run's current version by a revocation or its expiry. Nothing is issued or revealed, and `message` and `details` name only the reason and identifiers, never a URL or a secret.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "quarantined",
+                  "stale-recovery-epoch",
+                  "worker-not-authorized",
+                  "assignment-not-active",
+                  "stale-ownership-generation",
+                  "attempt-not-launchable",
+                  "repository-unbound",
+                  "remote-not-https",
+                  "remote-userinfo",
+                  "remote-query",
+                  "remote-fragment",
+                  "remote-origin-mismatch",
+                  "credential-ended"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       }

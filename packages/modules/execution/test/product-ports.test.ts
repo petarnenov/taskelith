@@ -23,6 +23,7 @@ import {
   TASK_END_KINDS,
   WORK_TYPES,
   WORKER_REFUSAL_REASONS,
+  type NeedsYouAnswer,
 } from '@taskelith/execution';
 
 // The values the product ports contract fixes; a change here is a contract
@@ -112,7 +113,7 @@ const CONTRACT_VALUES = [
   [
     'NEEDS_YOU_KINDS',
     NEEDS_YOU_KINDS,
-    ['permission-request', 'input-request', 'spec-approval', 'escalation', 'reconciliation'],
+    ['permission-request', 'input-request', 'spec-approval', 'escalation', 'reconciliation', 'delivery-acknowledgement'],
   ],
   ['ESCALATION_REASONS', ESCALATION_REASONS, ['conflict-budget-spent', 'spec-reconciliation-failed', 'no-reviewer']],
   ['RECONCILIATION_REASONS', RECONCILIATION_REASONS, ['unknown-execution', 'unrecorded-process']],
@@ -146,4 +147,10 @@ test('the retry backoff reason is no placement reason', () => {
   assert.equal(RETRY_BACKOFF_REASON, 'retry-backoff');
   const placement: readonly string[] = [...PLACEMENT_WAITING_REASONS, ...PLACEMENT_REJECTING_REASONS];
   assert.ok(!placement.includes(RETRY_BACKOFF_REASON));
+});
+
+test('an uncertain delivery is acknowledged as an inbox item of its own kind', () => {
+  const acknowledgement: NeedsYouAnswer = { kind: 'delivery-acknowledgement', decision: 'acknowledge' };
+
+  assert.ok(NEEDS_YOU_KINDS.includes(acknowledgement.kind));
 });

@@ -15,27 +15,33 @@ import {
   cleanHead,
   encodeHeadSnapshot,
   parseCodeHeadIdentity,
+  parseGitObjectId,
   taskBranchName,
+  taskBranchPushArguments,
   workspaceDirectoryName,
   workspaceFailure,
+  type CodeHeadIdentity,
   type DirtyReason,
+  type GitObjectId,
   type GitTreeEntry,
   type HeadSnapshot,
   type IdentifierDigest,
   type PrepareWorkspace,
+  type PushTaskBranch,
+  type RemoteAccess,
+  type RemoteHeadRequest,
   type RemoteTransportPolicy,
   type Workspace,
   type WorkspaceCredential,
-  type WorkspaceHeads,
-  type WorkspaceLifecycle,
+  type WorkspaceProvider,
   type WorkspaceStatus,
 } from '@taskelith/workspace';
 import { checkCheckoutSafety } from './checkout-safety.js';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
-import { succeeded, type GitRunner } from './git-runner.js';
-import type { GitObjectType } from './git-objects.js';
+import { exceededTimeLimit, succeeded, type GitRunner, type GitTimer } from './git-runner.js';
+import { parseCommitParents, type GitObjectType } from './git-objects.js';
 import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
 import { isPresent } from './presence.js';
@@ -50,11 +56,15 @@ export interface GitWorkspacesOptions {
   // `https-or-loopback-http` only where a test composes the adapter.
   readonly remoteTransport: RemoteTransportPolicy;
   readonly crashPoints?: CrashPointHook;
+  // The time limit of every Git process; `GIT_TIME_LIMIT_MS` by default.
+  readonly gitTimeLimitMs?: number;
+  // Arms each time limit; `systemGitTimer` unless a test fires its own.
+  readonly gitTimer?: GitTimer;
 }
 
-// The operations of sub-change 16b; the remote head, the push, and the
-// hand-off come with 16c and 16d.
-export type LocalWorkspaceOperations = Pick<WorkspaceLifecycle, 'prepare' | 'list' | 'remove' | 'sweep'> & WorkspaceHeads;
+// The operations of sub-changes 16b and 16c; the hand-off and the
+// reclaim come with 16d.
+export type GitWorkspaceOperations = Omit<WorkspaceProvider, 'handOff' | 'reclaim' | 'handedOff'>;
 
 export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
 
@@ -63,9 +73,19 @@ export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHa
 const OPERATION_MARKERS = ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_LOG', 'rebase-merge', 'rebase-apply', 'sequencer'];
 const CLONE_REMOTE = 'origin';
 
+interface RecordedWorkspace {
+  readonly record: WorkspaceRecord;
+  readonly directory: string;
+}
+
 interface OpenedWorkspace {
   readonly record: WorkspaceRecord;
   readonly checkout: string;
+}
+
+// A task branch workspace whose credential the operation may use.
+interface BoundTaskBranch extends RecordedWorkspace {
+  readonly branch: string;
 }
 
 interface Start {
@@ -91,9 +111,24 @@ function attempt(call: Promise<unknown>, codes: readonly string[]): Promise<bool
   });
 }
 
-// The Git workspace adapter's local operations (contract sections 3, 6,
-// 9, and 10), with the pinned client that passed its gate.
-export class GitWorkspaces implements LocalWorkspaceOperations {
+function limitedRunner({ client, gitTimeLimitMs, gitTimer }: GitWorkspacesOptions): GitRunner {
+  const limited = gitTimeLimitMs === undefined ? client.runner : client.runner.withTimeLimit(gitTimeLimitMs);
+  return gitTimer === undefined ? limited : limited.withTimer(gitTimer);
+}
+
+// The object of the line whose ref is exactly `ref`, from the raw output
+// of `ls-remote`, which matches patterns by their tail; none is null.
+function parseRemoteHead(stdout: Uint8Array, ref: string): Result<GitObjectId | null> {
+  const lines = new TextDecoder().decode(stdout).split('\n').filter(Boolean).map((line) => line.split('\t'));
+  const head = lines.find(([, name]) => name === ref)?.[0];
+  const parsed = head === undefined ? ok(null) : parseGitObjectId(head);
+  const readable = parsed.ok && lines.every((fields) => fields.length === 2);
+  return readable ? parsed : err(failure('internal', 'the remote head read printed an unreadable line'));
+}
+
+// The Git workspace adapter (contract sections 3 and 6 to 10), with the
+// pinned client that passed its gate.
+export class GitWorkspaces implements GitWorkspaceOperations {
   readonly #root: string;
   readonly #git: GitRunner;
   readonly #transport: RemoteTransportPolicy;
@@ -102,7 +137,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
-    this.#git = options.client.runner;
+    this.#git = limitedRunner(options);
     this.#transport = options.remoteTransport;
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#owner = process.getuid!();
@@ -150,6 +185,19 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     return failingFileSystemAsUnavailable(() => this.#snapshot(attemptId));
   }
 
+  // Section 9: the workspace, the kind, and the credential; the remote
+  // head is read outside the checkout, so also while it is handed off.
+  readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>> {
+    return failingFileSystemAsUnavailable(async () => {
+      const bound = await this.#boundTaskBranch(request.attemptId, request.credential, 'read-code');
+      return bound.ok ? this.#remoteHead(bound.value, request.credential) : bound;
+    });
+  }
+
+  push(request: PushTaskBranch): Promise<Result<CodeHeadIdentity>> {
+    return failingFileSystemAsUnavailable(() => this.#push(request));
+  }
+
   // Section 9: repository, remote, credential, sources, tree, then an
   // existing workspace, which the rename into place detects atomically.
   async #prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
@@ -187,6 +235,88 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     this.#crashPoints.reach('WS3.after');
     await this.#deleteRemoving(removing);
     return ok(undefined);
+  }
+
+  // Section 8: the clean head is pushed only over the remote head that the
+  // caller expects and only when it descends from that head.
+  async #push(request: PushTaskBranch): Promise<Result<CodeHeadIdentity>> {
+    const { attemptId, credential, expectedRemoteHead } = request;
+    const bound = await this.#boundTaskBranch(attemptId, credential, 'write-code');
+    if (!bound.ok) return bound;
+    const opened = await this.#openedAt(bound.value, attemptId);
+    if (!opened.ok) return opened;
+    const examined = await this.#examine(opened.value);
+    if (!examined.ok) return examined;
+    const head = cleanHead(examined.value.status);
+    if (!head.ok) return head;
+    const remote = await this.#remoteHead(bound.value, credential);
+    if (!remote.ok) return remote;
+    if (remote.value !== expectedRemoteHead) return remoteMoved();
+    if (expectedRemoteHead !== null) {
+      const descends = await this.#descends(opened.value, head.value.commit, expectedRemoteHead);
+      if (!descends.ok) return descends;
+      if (!descends.value) return workspaceFailure('conflict', 'not-fast-forward', 'the head does not descend from the remote head');
+    }
+    const pushed = await this.#leasedPush(opened.value, bound.value, request, head.value.commit);
+    return pushed.ok ? head : pushed;
+  }
+
+  // Exactly the contract's arguments. After a failure, a remote at the
+  // head took the push; one that differs from the lease refused it.
+  async #leasedPush({ checkout }: OpenedWorkspace, bound: BoundTaskBranch, request: PushTaskBranch, commit: string): Promise<Result<void>> {
+    const args = taskBranchPushArguments(bound.branch, request.expectedRemoteHead, bound.record.binding.remote);
+    const pushed = await this.#git.runChecked({ args, cwd: checkout, credential: request.credential }, 'unavailable', 'the push');
+    if (pushed.ok) return ok(undefined);
+    // A stalled remote would stall the second read as well.
+    if (exceededTimeLimit(pushed.error)) return pushed;
+    const after = await this.#remoteHead(bound, request.credential);
+    if (!after.ok) return pushed;
+    if (after.value === commit) return ok(undefined);
+    return after.value === request.expectedRemoteHead ? pushed : remoteMoved();
+  }
+
+  // The task branch's head on the binding's remote, read in the neutral
+  // directory, never through a URL that the checkout configures.
+  async #remoteHead({ record, branch }: BoundTaskBranch, credential: WorkspaceCredential): Promise<Result<GitObjectId | null>> {
+    const ref = `refs/heads/${branch}`;
+    const args = ['ls-remote', record.binding.remote, ref];
+    const command = { args, cwd: GIT_NEUTRAL_DIRECTORY, credential };
+    return this.#git.runParsed(command, (stdout) => parseRemoteHead(stdout, ref), 'unavailable', 'the remote head read');
+  }
+
+  // Whether `expected` is an ancestor of `head`, from verified commits; a
+  // commit the clone does not hold is none.
+  async #descends(opened: OpenedWorkspace, head: string, expected: string): Promise<Result<boolean>> {
+    if (head === expected) return ok(true);
+    const held = await this.#holdsCommit(opened.checkout, expected);
+    if (!held.ok || !held.value) return held;
+    const seen = new Set([head]);
+    for (let generation = [head]; generation.length > 0;) {
+      const commits = await readVerified(this.#objectRead(opened.checkout), opened.record.objectFormat, 'commit', generation);
+      if (!commits.ok) return commits;
+      const parents: string[] = [];
+      for (const body of commits.value.values()) {
+        const named = parseCommitParents(body, opened.record.objectFormat);
+        if (!named.ok) return named;
+        parents.push(...named.value);
+      }
+      if (parents.includes(expected)) return ok(true);
+      generation = [...new Set(parents)].filter((parent) => !seen.has(parent));
+      generation.forEach((parent) => seen.add(parent));
+    }
+    return ok(false);
+  }
+
+  // `git cat-file --batch-check`: a missing object, or one of another
+  // type, is no commit of the clone.
+  async #holdsCommit(checkout: string, name: string): Promise<Result<boolean>> {
+    const input = new TextEncoder().encode(`${name}\n`);
+    const checked = succeeded(await this.#git.run({ args: ['cat-file', '--batch-check'], cwd: checkout, input }), 'internal', 'the object check');
+    if (!checked.ok) return checked;
+    const line = text(checked.value);
+    if (line === `${name} missing`) return ok(false);
+    const found = new RegExp(`^${name} (commit|tree|blob|tag) [0-9]+$`).exec(line);
+    return found === null ? err(failure('internal', 'the object check printed an unreadable line')) : ok(found[1] === 'commit');
   }
 
   async #snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>> {
@@ -244,7 +374,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
   async #clone(checkout: string, remote: string, credential: WorkspaceCredential): Promise<Result<void>> {
     this.#crashPoints.reach('WS1.before');
     const args = ['clone', '--no-checkout', '--quiet', '--origin', CLONE_REMOTE, '--', remote, checkout];
-    const cloned = succeeded(await this.#git.run({ args, cwd: GIT_NEUTRAL_DIRECTORY, credential }), 'unavailable', 'the clone');
+    const cloned = await this.#git.runChecked({ args, cwd: GIT_NEUTRAL_DIRECTORY, credential }, 'unavailable', 'the clone');
     if (!cloned.ok) return cloned;
     this.#crashPoints.reach('WS1.after');
     return ok(undefined);
@@ -317,14 +447,31 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     this.#crashPoints.reach('WS4.after');
   }
 
-  // Section 9 once per operation, before its first Git call: the
-  // workspace, the hand-off, the Git directory, then the rewrite.
-  async #opened(attemptId: AttemptId): Promise<Result<OpenedWorkspace>> {
+  async #recorded(attemptId: AttemptId): Promise<Result<RecordedWorkspace>> {
     const directory = join(this.#root, workspaceDirectoryName(attemptId, sha256IdentifierDigest));
     const read = await readWorkspaceRecord(join(directory, WORKSPACE_LAYOUT.metadata));
     if (!read.ok) return read;
-    const record = read.value;
-    if (record === undefined) return err(failure('not-found', `no workspace ${attemptId}`));
+    return read.value === undefined ? err(failure('not-found', `no workspace ${attemptId}`)) : ok({ record: read.value, directory });
+  }
+
+  // Section 9: the workspace, the kind, then the credential's scope.
+  async #boundTaskBranch(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<BoundTaskBranch>> {
+    const recorded = await this.#recorded(attemptId);
+    if (!recorded.ok) return recorded;
+    const { record } = recorded.value;
+    if (record.branch === null) return workspaceFailure('invalid', 'read-only-workspace', `workspace ${attemptId} has no task branch`);
+    const scope = checkCredentialScope(credential, record.binding.repository, access);
+    return scope.ok ? ok({ ...recorded.value, branch: record.branch }) : scope;
+  }
+
+  async #opened(attemptId: AttemptId): Promise<Result<OpenedWorkspace>> {
+    const recorded = await this.#recorded(attemptId);
+    return recorded.ok ? this.#openedAt(recorded.value, attemptId) : recorded;
+  }
+
+  // Section 9 once per operation, before its first Git call: the
+  // hand-off, the Git directory, then the rewrite.
+  async #openedAt({ record, directory }: RecordedWorkspace, attemptId: AttemptId): Promise<Result<OpenedWorkspace>> {
     if (await isPresent(join(directory, WORKSPACE_LAYOUT.handOffRecord))) {
       return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
     }
@@ -395,4 +542,8 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
       return output.ok ? parseBatchObjects(output.value, names, type) : output;
     };
   }
+}
+
+function remoteMoved(): Result<never> {
+  return workspaceFailure('conflict', 'remote-moved', 'the remote task branch moved');
 }

@@ -19,6 +19,7 @@ export const CONTRACT_DOCUMENTS: readonly ContractDocument[] = Object.freeze([
   { kind: 'asyncapi', path: 'packages/contracts/documents/sdlc.asyncapi.json' },
   { kind: 'openapi', path: 'packages/contracts/documents/execution.openapi.json' },
   { kind: 'asyncapi', path: 'packages/contracts/documents/execution.asyncapi.json' },
+  { kind: 'openapi', path: 'packages/contracts/documents/control-plane.openapi.json' },
 ]);
 
 const OUTPUT_DIR = 'packages/contracts/src/generated';
@@ -64,16 +65,32 @@ export function namedTypesSchema(title: string, definitions: Schemas): JSONSchem
 // One vocabulary across documents: a component name used by several documents
 // must name the same schema, so that each generated name has one type.
 export function mergeSchemas(sources: readonly SchemaSource[]): Schemas {
+  return mergeComponents('schema', sources.map(({ path, schemas }) => ({ path, components: schemas })));
+}
+
+// A security scheme name used by several documents must name the same
+// scheme, so that one name never means two credentials.
+export function mergeSecuritySchemes(sources: readonly OpenapiSource[]): Schemas {
+  const named = sources.map(({ path, document }) => ({ path, components: document.components.securitySchemes ?? {} }));
+  return mergeComponents('security scheme', named);
+}
+
+interface ComponentSource {
+  readonly path: string;
+  readonly components: Schemas;
+}
+
+function mergeComponents(kind: string, sources: readonly ComponentSource[]): Schemas {
   const merged: Schemas = {};
   const origins = new Map<string, string>();
-  for (const { path, schemas } of sources) {
-    for (const [name, schema] of Object.entries(schemas)) {
+  for (const { path, components } of sources) {
+    for (const [name, component] of Object.entries(components)) {
       const origin = origins.get(name);
-      if (origin !== undefined && JSON.stringify(merged[name]) !== JSON.stringify(schema)) {
-        throw new Error(`The schema ${name} of ${path} differs from the one of ${origin}`);
+      if (origin !== undefined && JSON.stringify(merged[name]) !== JSON.stringify(component)) {
+        throw new Error(`The ${kind} ${name} of ${path} differs from the one of ${origin}`);
       }
       origins.set(name, origin ?? path);
-      merged[name] = schema;
+      merged[name] = component;
     }
   }
   return merged;
@@ -107,7 +124,7 @@ export function mergeOpenapi(sources: readonly OpenapiSource[]): MergedOpenapi {
     paths,
     components: {
       schemas: mergeSchemas(sources.map(({ path, document }) => ({ path, schemas: document.components.schemas }))),
-      securitySchemes: Object.assign({}, ...sources.map(({ document }) => document.components.securitySchemes ?? {})),
+      securitySchemes: mergeSecuritySchemes(sources),
     },
   };
 }

@@ -2,7 +2,7 @@
 
 # Exported arguments get expanded, by make 4.4 already for the $(shell) calls
 # below, so these reach scripts under other names, as typed, without MAKEFLAGS.
-unexport BRANCH TITLE BODY RESUME CHANGE LOG PASS ROLE REVIEWER PROMPT
+unexport BRANCH TITLE BODY RESUME CHANGE LOG BASE PASS ROLE REVIEWER PROMPT
 
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
@@ -30,7 +30,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check review \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -106,10 +106,17 @@ services-up:
 services-down:
 	@bash scripts/services.sh down $(DEV_SERVICES)
 
-# Fails on an undeclared breaking contract change since the origin/dev merge
-# base; runs oasdiff as its digest-pinned container, so it needs Docker.
+# Fails on a breaking change since the origin/dev merge base that info.version
+# and packages/contracts/breaking-changes.json do not declare; needs Docker.
 contract-compatibility:
 	node --experimental-strip-types scripts/check-contract-compatibility.ts
+
+# Prints the breaking changes since the merge base, or BASE, in the format of
+# packages/contracts/breaking-changes.json; never writes it. Needs Docker.
+contract-breaking-changes: export TASKELITH_CONTRACT_BASE := $(value BASE)
+contract-breaking-changes:
+	@node --experimental-strip-types scripts/check-contract-compatibility.ts --print \
+		$${TASKELITH_CONTRACT_BASE:+--base "$$TASKELITH_CONTRACT_BASE"}
 
 # The test image of the Linux tests, with the Node.js of the Docker host's
 # architecture (x86_64 or aarch64).

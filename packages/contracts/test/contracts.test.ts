@@ -111,7 +111,7 @@ function eventMetadata(eventType: string) {
   return { eventId: 'event-1', eventType, schemaVersion: 1, occurredAt: AT, correlationId: 'correlation-1', producerId: 'control-plane-1', sequence: 1 };
 }
 
-const DOCUMENTS = ['sdlc.openapi.json', 'sdlc.asyncapi.json', 'execution.openapi.json', 'execution.asyncapi.json'];
+const DOCUMENTS = ['sdlc.openapi.json', 'sdlc.asyncapi.json', 'execution.openapi.json', 'execution.asyncapi.json', 'control-plane.openapi.json'];
 
 test('a schema name means the same schema in every document that defines it', () => {
   const documents = DOCUMENTS.map((name) => ({ name, schemas: document(name).components.schemas }));
@@ -125,7 +125,7 @@ test('a schema name means the same schema in every document that defines it', ()
     }
   }
 
-  assert.ok(['Admission', 'CommandMetadata', 'ExitStatus', 'Failure'].every((name) => checked.has(name)));
+  assert.ok(['Admission', 'CommandMetadata', 'ExitStatus', 'Failure', 'SelfCheckResult'].every((name) => checked.has(name)));
 });
 
 test('an admission record of the domain is a valid wire admission in both documents', () => {
