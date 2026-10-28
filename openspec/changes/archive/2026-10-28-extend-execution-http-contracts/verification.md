@@ -1,6 +1,6 @@
 # Verification: extend-execution-http-contracts
 
-Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A done without findings; not archived.
+Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A done without findings; archived on the branch under worker step 7.
 
 ## Scope and source
 
@@ -177,10 +177,22 @@ As the architect asked on 2026-10-28, after pass 2 the branch merged `origin/dev
 | `617926ca` with a probe entry for `execution.openapi.json` 0.6.0, removed afterwards | `make contract-compatibility` | Failed: `packages/contracts/breaking-changes.json lists for 0.6.0 a change not found over 0.5.0` |
 | `bfc8f9cd`, clean tree | `make verify` (log `eehc-verify-8.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `8861e309`, stamp written: tests 3172, pass 3119, fail 0, skipped 53; generated part below |
 
+## Archive
+
+Worker step 7, after `ae8fcd27` `docs: record the verification of review pass 3 of the execution HTTP contracts`: every task of `tasks.md` ticked, then `npm run openspec -- archive extend-execution-http-contracts --yes` (`+ 11, ~ 3, - 0`), which moved the change to `openspec/changes/archive/2026-10-28-extend-execution-http-contracts/`. A rehearsal in a scratch copy of `58db9a2a`, removed afterwards, archived the same totals and passed `validate --all --strict` first. The checked state is the tree of the archive commit, the working tree the checks below ran on; only this section and the status line were written after them.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 71 passed, 0 failed (71 items)` |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-28-extend-execution-http-contracts` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `a3a0ac4c` | Only this change's edits: `evidence-store` "Evidence reads" and "Evidence retention" modified with scenarios "Reader of another project" and "Retention end in the refusal"; `execution-wire-contracts` "Execution HTTP operations" modified and 11 requirements added; 2 files, 216 insertions, 3 deletions |
+| Moved change files | `findings.jsonl` (28 findings: 8 of pass 1, 20 of pass 2) and `passes.jsonl` (passes 1 to 3) present |
+| `make findings ARGS="validate"` | `Every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s).` |
+| `make verify` (log `eehc-verify-10.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, no stamp written: tests 3172, pass 3119, fail 0, skipped 53; all files 99.37% lines, 92.79% branches, 99.03% functions |
+
 ## Remaining gates
 
 - An authorization (semantic) narrowing such as that of the evidence reads cannot be declared in `packages/contracts/breaking-changes.json`, because the compatibility check of #393 sees only schema changes; the architect takes a follow-up to let semantic breaking changes be declared.
-- Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-ups
