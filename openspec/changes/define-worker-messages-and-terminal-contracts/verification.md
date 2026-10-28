@@ -1,6 +1,6 @@
 # Verification: define-worker-messages-and-terminal-contracts
 
-Status: developed and verified by the author; review pass 1 by reviewer A done and its findings fixed except one deferred to the architect; pass 2 pending.
+Status: developed and verified by the author; review pass 1 by reviewer A done and its seven findings fixed, finding 3 by the architect's answer of 2026-10-28; pass 2 pending.
 
 ## Scope and source
 
@@ -25,7 +25,9 @@ Status: developed and verified by the author; review pass 1 by reviewer A done a
 - `b7a90da5` `docs: record the verification of the session binding of the define worker messages and terminal contracts change` (this record), the head that review pass 1 reviewed.
 - `a03dee0c` `chore(contracts): fix the review pass 1 findings of the worker messages and terminal contracts` (Independent review, Pass 1). `route.json` stays as routed, because the review has started.
 - `837d51a5` `docs: record review pass 1 of the define worker messages and terminal contracts change` (findings, passes, this section, tasks); the fifth `make verify` run checked its tree, `e30d90c6e351eb006e592996e1d0b00b6e475d9a`.
-- The commit after it records that run.
+- `a4bbf41b` `docs: record the verification of review pass 1 of the define worker messages and terminal contracts change` records that run.
+- `3b6bb234` `chore(contracts): report a turn whose acceptance is unknown apart from a refused one` (the architect's answer of 2026-10-28 on pass 1 finding 3: `session.turn.acceptance-unknown`, the narrowed `port-refused`, `recordTurnAcceptanceUnknown` in the session timeline contract, tests, breaking-change declaration, contract pages, design, proposal, tasks, and spec deltas).
+- The commit after it records finding 3 as fixed (findings, this section); the sixth `make verify` run checks its tree, and the commit after that records the run.
 
 ## Environment
 
@@ -98,15 +100,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox read-only, session `01a182e0-3947-77e3-851c-7879eb0bfb88`, on `b7a90da5` (diff `10fc3bbe...b7a90da5`). The worktree snapshot (`git ls-files -co --exclude-standard | xargs sha256sum | sha256sum`) before and after the review was `c92a16a8ebfc5e55585bbb6702f2ebe9d6480f24f2e9ea45a2ad00bf9e92d487`, unchanged.
 - Invocation: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -o <report> - < <prompt-file>`, the Codex CLI (gpt-6.1-sol) row of the [agent task protocol](/docs/agent-task-protocol.md). Model confirmation: the Codex log header showed `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only`.
-- Result: Critical 0, High 3, Medium 4, Low 0, each claim checked against its source before the fix; six fixed in `a03dee0c`, one deferred to the architect, all recorded in `findings.jsonl` ([design](design.md) "Review pass 1 fixes").
+- Result: Critical 0, High 3, Medium 4, Low 0, each claim checked against its source before the fix; six fixed in `a03dee0c`, finding 3 deferred to the architect and then fixed in `3b6bb234` by the architect's answer, all recorded in `findings.jsonl` ([design](design.md) "Review pass 1 fixes" and "Architect answer on pass 1 finding 3").
   1. High, one attempt's adoption ended a credential the run's other attempts share (execution wire contracts section 8.7): a version ends only once every attempt of the run that held it adopted it or a later one or no longer holds its ownership, decided serialized per run (contract page section 6, "Run-wide end"; scenario "Second attempt still holds the previous version").
   2. High, no recovery epoch on the 11 new observations: each payload requires `recoveryEpoch`, and one of another epoch or received in quarantine is evidence only, as launch authorization section 7 states (contract page section 9; requirement "Session observation recovery epoch").
-  3. High, `port-refused` for every refusal of a turn delivery: confirmed, because the port's `conflict` for a seen turn ID proves acceptance (agent harness port section 6). Not fixed: it needs a timeline transition that no source defines, so it is deferred to the architect with the question below.
+  3. High, `port-refused` for every refusal of a turn delivery: confirmed, because the port's `conflict` for a seen turn ID proves acceptance (agent harness port section 6). It needed a timeline transition that no source defined, so it was deferred to the architect with the question below, and resolved by the architect's answer: `port-refused` only for a refusal that proves non-acceptance, `session.turn.acceptance-unknown` with `conflict`, `timeout`, or `crash`, and `recordTurnAcceptanceUnknown`, which makes the turn `outcome-unknown`, final and never resent (contract page section 3; session timeline section 4.4; requirements "Turn acceptance unknown report" and "Turn acceptance unknown").
   4. Medium, the classified operation dropped: `RequestRecordedPayload` carries an optional `ClassifiedOperation` for a permission request only, and a standing rule matches only a push to the task's branch (contract page section 9; requirement "Classified permission request").
   5. Medium, a host turn for an answered request: only `expired` and `unresolved` take one; a result for an `answered` request is a repeat (contract page section 5; scenario "Result for an answered request").
   6. Medium, no command for a rejected delegation: the command is due when the result becomes `ended`, a rejected delegation included (contract page sections 3 and 5; scenario "Rejected delegation").
   7. Medium, no typed terminal start failure: `TerminalRefusalReason` gains `terminal-start-failed` (contract page section 8; requirement "Terminal start failure").
 - Architect question (finding 3). When `submitTurn` answers `conflict` for the delivered turn ID, or a crash leaves its acceptance unknown, the turn is in fact delivered or may be, and the session timeline (section 4.2 and section 6) has no transition from `queued` for it, so it would block `nextDeliverableTurn`. Options: (a) the worker reports `session.turn.delivered` on `conflict` in the command's generation, and the turn becomes `outcome-unknown` when that generation ends, which blocks the session's later turns until then; (b) a new reason `acceptance-unknown` for `conflict`, a timeout, or a crash, and a new timeline operation, owned by the session timeline contract and item 13, that makes a `queued` turn `outcome-unknown`, final and never resent, as section 6 treats a delivered turn at a generation's end, so the next queued turn proceeds; (c) restrict `port-refused` to the refusals that prove non-acceptance now and leave `conflict` to items 13 and 18 as an obligation. Author's recommendation: (b), because the port asks the host to reconcile through the timeline and never resubmit, and `outcome-unknown` is the timeline's existing state for a turn whose outcome is lost.
+- Architect's answer (Niki, 2026-10-28, binding): option (b) amended. `session.turn.not-delivered` keeps `port-refused` only for refusals that prove non-delivery; a separate `session.turn.acceptance-unknown`, protocol version 2 only, carries `conflict`, `timeout`, or `crash` with the turn observations' identity fields; a session timeline operation moves a `queued` turn to `outcome-unknown`, final and never resent, and `nextDeliverableTurn` moves past it; item 13 implements the operation. Fixed in `3b6bb234` ([design](design.md) "Architect answer on pass 1 finding 3").
 - Fix checks, on the working tree of `a03dee0c`:
 
 | Command | Result |
@@ -120,11 +123,22 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
 | `make verify` on `837d51a5`, clean tree (log `wmt-verify-5.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `e30d90c6e351eb006e592996e1d0b00b6e475d9a`, stamp written; generated part above |
 
+- Finding 3 fix checks, on the working tree of `3b6bb234`:
+
+| Command | Result |
+| --- | --- |
+| Fail-before: `node --experimental-strip-types --test packages/contracts/test/worker-session-messages.test.ts` with only the test file changed on `a4bbf41b`, after `npm run build` (log `wmt-f3-fail-before.log`) | tests 18, pass 14, fail 4: `the execution messages are at version 0.8.0 with the session commands and observations on the worker channels`, `every session command and observation is valid at protocol version 2 and refused at version 1`, `every session observation names the recovery epoch that is checked before its effect`, `a turn the port may have accepted is reported apart from one it proved it never accepted` |
+| `npm run build`, then `node --experimental-strip-types --test packages/contracts/test/*.test.ts test/generate-contracts.test.ts` (log `wmt-f3-after.log`) | 131 tests, all passed |
+| `node --experimental-strip-types --test packages/adapters/nats/test/transport.test.ts` | 20 tests, all passed |
+| `make contract-breaking-changes`, then `make contract-compatibility` | 110 breaking changes for `execution.asyncapi.json` against `10fc3bbe6b7c`, the 106 and the additions of `turnAcceptanceUnknown`, `TurnAcceptanceUnknownObservation`, `TurnAcceptanceUnknownPayload`, and the operation entry, all additive, 0 for the others; after the 0.8.0 entry lists the 110, `Contract documents have no undeclared breaking change.` |
+| `npm run openspec -- validate --all --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | 72 passed, 0 failed; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
+| Body lengths of the changed and new requirements, in characters | Session command outcomes 472, Turn acceptance unknown report 433, Session observations 440, `session-turn-model` Turn acceptance unknown 418 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
+
 The fixes change contracts, not only records, and pass 1 found High findings, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
 ## Remaining gates
 
-- The architect's answer to the pass 1 question (finding 3) and its fix, which pass 2 or a later pass reviews.
-- Independent review pass 2, and pass 3 if governance "Conditional third pass" requires it.
+- Independent review pass 2, which also reviews the fix of finding 3, and pass 3 if governance "Conditional third pass" requires it.
 - Archive on the branch (worker step 7).
 - Integration into dev by the coordinator (single pull request).
