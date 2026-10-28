@@ -30,6 +30,8 @@ The `unexport` line moves to the top of the `Makefile`, before the first `$(shel
 
 `test/gnu-makes.ts` lists `make` and `gmake` when each runs and prints a distinct `GNU Make` version line, and the two "as typed" tests loop over that list. The iMac, whose `make` is 3.81, then also runs them under Homebrew's GNU Make 4.4 when it is installed, so this regression fails `make verify` there too; a host with only one GNU make runs them once. Each test asserts that the list is not empty, so a host without GNU make fails instead of passing vacuously.
 
+Only a host with GNU Make 4.4 or later, as `make` or `gmake`, catches this regression. CI runs on `ubuntu-latest`, Ubuntu 24.04, whose GNU Make 4.3 (`4.3-4.1build2`) does not export variables to `$(shell)`, like 3.81: a `$(shell true)` before `unexport CHANGE` with `CHANGE='demo $(shell touch /tmp/x)'` did not create `/tmp/x` in `ubuntu:24.04`, and did under GNU Make 4.4.1, whose NEWS lists the export to `$(shell)` as new in 4.4. CI therefore passes with or without the fix. A `make doctor` check for GNU Make 4.4 is a possible follow-up, out of scope here.
+
 ### D3: The intermittent integrate test
 
 Liki reported `make integrate passes its arguments to the script as typed` as intermittent. No source of nondeterminism was found: under GNU Make 4.4.1 the expansion happened in every run, on macOS with `gmake` and in the 25 Debian runs, whose environment carried a random extra variable each time to vary make's variable table. The test's inputs are fixed strings and a fresh temporary directory, and its `PATH` comes from the inherited environment, which no other test of the file mutates. The report is recorded as not reproduced; with the fix the test passes deterministically under both makes.

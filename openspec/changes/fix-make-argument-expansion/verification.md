@@ -61,6 +61,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - The fix was checked under GNU Make 3.81 and 4.4.1 only; the Linux check ran the shell repro, not the Node.js tests.
 - The other targets that `design.md` lists still expand their command-line variables under every GNU make.
+- Only hosts with GNU Make 4.4 or later as `make` or `gmake` catch this regression; CI's `ubuntu-latest` has GNU Make 4.3, which does not export to `$(shell)`, so CI passes either way ([design](design.md), D2). A `make doctor` check is a possible follow-up.
 
 ## Remaining gates
 
