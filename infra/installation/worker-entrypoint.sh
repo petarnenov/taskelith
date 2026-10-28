@@ -44,4 +44,5 @@ if [ -n "${TASKELITH_WORKER_COMMAND:-}" ] && [ -n "${TASKELITH_EXECUTION_GID:-}"
 fi
 
 # A child switches to the execution account, which clears its capabilities.
-exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs "${groups[@]}" -- "$@"
+# The guard keeps an empty list valid under set -u in bash 3.2 (macOS).
+exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs ${groups[@]+"${groups[@]}"} -- "$@"
