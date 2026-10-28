@@ -19,7 +19,7 @@ None.
 
 ### Modified Capabilities
 
-- `sdlc-wire-contracts`: "Breaking-change declarations", "Declared breaking changes listed", "Stale and historical declarations", and "Breaking-change listing" added, next to its "Breaking-change check" (design decision 1).
+- `sdlc-wire-contracts`: "Breaking-change declarations", "Declared breaking changes listed", "Stale and historical declarations", and "Breaking-change listing" added; "Breaking-change check" modified to point to "Declared breaking changes listed" (design decision 1).
 
 ## Impact
 

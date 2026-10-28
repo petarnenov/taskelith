@@ -8,7 +8,7 @@
 - **THEN** the check fails and names the entry and the problem
 
 ### Requirement: Declared breaking changes listed
-When the head `info.version` of a document present at the merge base declares a breaking change over its merge-base version and the check finds breaking changes, the check SHALL fail unless the file has an entry for that path and version whose changes equal the found ones as a set, and SHALL name each found change the entry lacks and each listed change not found.
+When the head `info.version` of a document present at the merge base declares a breaking change over its merge-base version, the check SHALL fail unless the found breaking changes equal, as a set, those of the file's entry for that path and version, and SHALL name each found change the entry lacks and each listed change not found. When the check finds none, no entry SHALL be required and each change an entry lists for that version SHALL count as stale.
 
 #### Scenario: Undeclared change under a minor bump
 - **WHEN** a document goes from 0.4.0 to 0.5.0 and removes a message that no entry for 0.5.0 lists
@@ -21,6 +21,10 @@ When the head `info.version` of a document present at the merge base declares a 
 #### Scenario: Matching entry
 - **WHEN** the entry lists exactly the found changes, in any order
 - **THEN** the check passes
+
+#### Scenario: Bump without found changes
+- **WHEN** a document goes from 0.4.0 to 0.5.0 and the check finds no breaking change
+- **THEN** the check passes without an entry for 0.5.0, and fails and names each change that such an entry lists
 
 ### Requirement: Stale and historical declarations
 An entry for a version above the merge-base version of its document SHALL fail as stale unless it is the head `info.version` and that version declares a breaking change. Entries for the merge-base version or lower SHALL be history and not compared, and so SHALL entries of a document absent at the merge base. When the head version declares no breaking change, "Breaking-change check" applies unchanged.
@@ -39,3 +43,24 @@ An entry for a version above the merge-base version of its document SHALL fail a
 #### Scenario: Listing a declaration
 - **WHEN** an author bumps a document's version and runs `make contract-breaking-changes`
 - **THEN** it prints the entry to copy into the file, with an empty reason to fill, and the file is unchanged
+
+## MODIFIED Requirements
+
+### Requirement: Breaking-change check
+`make verify` SHALL run `make contract-compatibility`, which compares each document with its version at the merge base of `HEAD` with `origin/dev`, fetching that branch when absent, and SHALL fail when a breaking change is not declared by `info.version` (a higher major version, or minor on 0.x) or not listed as "Declared breaking changes listed" requires. An `info.version` outside semantic versioning 2.0.0 SHALL fail, also for a document absent at the merge base, which otherwise passes.
+
+#### Scenario: Undeclared breaking change
+- **WHEN** an operation is removed while `info.version` goes from 0.1.0 to 0.1.1
+- **THEN** the check fails and names the change
+
+#### Scenario: Declared breaking change
+- **WHEN** the same change comes with `info.version` 0.2.0 and the entry for 0.2.0 lists it
+- **THEN** the check passes
+
+#### Scenario: New document
+- **WHEN** a document with a semantic `info.version` does not exist at the merge base
+- **THEN** the check passes for it
+
+#### Scenario: Malformed version
+- **WHEN** `info.version` is `0.2.0-` or `0.2.0-01`
+- **THEN** the check fails, also for a new document, and does not accept the version as declaring a breaking change
