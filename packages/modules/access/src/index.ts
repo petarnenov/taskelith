@@ -1,7 +1,7 @@
 export { InMemoryAccessStore } from './adapters/in-memory-access-store.js';
 export { InMemoryOperatorCredentials } from './adapters/in-memory-operator-credentials.js';
 export { AuthorizationService, authorizeIn } from './application/authorization-service.js';
-export { LOGIN_THROTTLE, LoginThrottle, type LoginThrottleDependencies, type LoginThrottleSettings } from './application/login-throttle.js';
+export { LOGIN_THROTTLE, LoginThrottle, throttleBusy, type LoginKeys, type LoginThrottleDependencies, type LoginThrottleSettings } from './application/login-throttle.js';
 export { OperatorAuthentication, type OperatorCredentialCheck } from './application/operator-authentication.js';
 export {
   OperatorCredentialService,

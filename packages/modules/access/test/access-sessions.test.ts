@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   InMemoryAccessStore,
-  LoginThrottle,
   SESSION_LIFETIME,
   SessionService,
   type LoginName,
@@ -107,19 +106,63 @@ test('failures beyond the limit slow further attempts without locking out the ri
   assert.equal(waits.length, 2, 'another address and name are not slowed');
 });
 
-test('the throttle forgets failures after its window and its oldest keys beyond its bound', async () => {
-  const clock = new ManualClock();
-  const waits: number[] = [];
-  const settings = { failures: 1, windowMilliseconds: 1_000, delayMilliseconds: 7, maxKeys: 2 };
-  const throttle = new LoginThrottle({ clock, sleep: async (milliseconds) => { waits.push(milliseconds); }, settings });
-  throttle.recordFailure(['a']);
-  await throttle.admit(['a']);
-  clock.advance(1_000);
-  await throttle.admit(['a']);
-  throttle.recordFailure(['b', 'c', 'd']);
-  await throttle.admit(['b']);
-  await throttle.admit(['d']);
-  assert.deepEqual(waits, [7, 7]);
+// A hasher whose verifications wait until the test lets the next one go.
+function steppedHasher(base: ReturnType<typeof recordingHasher>) {
+  const waiting: Array<() => void> = [];
+  let arrived: (() => void) | undefined;
+  let running = 0;
+  let mostRunning = 0;
+  const verify: typeof base.verify = async (password, stored) => {
+    running += 1;
+    mostRunning = Math.max(mostRunning, running);
+    await new Promise<void>((resolve) => {
+      waiting.push(resolve);
+      arrived?.();
+    });
+    running -= 1;
+    return base.verify(password, stored);
+  };
+  const releaseNext = async () => {
+    while (waiting.length === 0) await new Promise<void>((resolve) => { arrived = resolve; });
+    waiting.shift()!();
+  };
+  return { hasher: { ...base, verify }, releaseNext, mostRunning: () => mostRunning };
+}
+
+test('parallel attempts from one address run one at a time, and the excess answers 503 at once', { timeout: 60_000 }, async () => {
+  const base = await fixture();
+  const { hasher, releaseNext, mostRunning } = steppedHasher(base.hasher);
+  const { throttle } = recordingThrottle(base.clock);
+  const sessions = new SessionService({ store: base.store, hasher, secrets: plainSecrets, random: countingRandom(), clock: base.clock, throttle });
+  const { live } = await anonymous(sessions);
+  const attempts = ['alice', 'bob', 'carol', 'dave', 'erin', 'frank'].map((loginName) =>
+    sessions.logIn(live, { loginName, password: 'wrong password!!', sourceAddress: SOURCE }));
+  const excess = await Promise.all(attempts.slice(4));
+  assert.deepEqual(excess.map((answer) => failed(answer).code), ['unavailable', 'unavailable'], 'beyond four waiting');
+  for (let step = 0; step < 4; step++) await releaseNext();
+  const answers = await Promise.all(attempts.slice(0, 4));
+  assert.deepEqual(answers.map((answer) => failed(answer).details.reason), Array(4).fill('login-failed'));
+  assert.equal(mostRunning(), 1, 'one verification of the address at a time');
+});
+
+test('filling the throttle with other keys neither resets a target nor frees a new key', async () => {
+  const base = await fixture();
+  const settings = { failures: 1, windowMilliseconds: 1_000, delayMilliseconds: 7, maxKeys: 4, pendingPerSource: 4 };
+  const { throttle, waits } = recordingThrottle(base.clock, settings);
+  const sessions = new SessionService({ store: base.store, hasher: base.hasher, secrets: plainSecrets, random: countingRandom(), clock: base.clock, throttle });
+  const { live } = await anonymous(sessions);
+  const wrong = (loginName: string, sourceAddress: string) => sessions.logIn(live, { loginName, password: 'wrong password!!', sourceAddress });
+  failed(await wrong('alice', '192.0.2.1'));
+  failed(await wrong('xavier', '192.0.2.2'));
+  assert.deepEqual(waits, [], 'the table is full after two failures');
+  failed(await wrong('yolanda', '192.0.2.3'));
+  assert.deepEqual(waits, [7], 'a key that does not fit is delayed');
+  failed(await wrong('alice', '198.51.100.9'));
+  assert.deepEqual(waits, [7, 7], 'the target keeps its failures');
+  base.clock.advance(1_000);
+  failed(await wrong('walter', '192.0.2.4'));
+  failed(await wrong('alice', '198.51.100.11'));
+  assert.deepEqual(waits, [7, 7], 'expired keys make room');
 });
 
 test('an authenticated session renews its idle expiry at most once per interval and ends at its absolute expiry', async () => {

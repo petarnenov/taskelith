@@ -1,5 +1,6 @@
 import {
   LoginThrottle,
+  type LoginThrottleSettings,
   type PasswordHash,
   type PasswordHasher,
   type RandomValues,
@@ -66,8 +67,9 @@ export function recordingHasher(): PasswordHasher & { readonly verified: Array<P
 }
 
 // A throttle whose waits are recorded instead of slept.
-export function recordingThrottle(clock: ManualClock): { throttle: LoginThrottle; waits: number[] } {
+export function recordingThrottle(clock: ManualClock, settings?: LoginThrottleSettings): { throttle: LoginThrottle; waits: number[] } {
   const waits: number[] = [];
-  const throttle = new LoginThrottle({ clock, sleep: async (milliseconds) => { waits.push(milliseconds); } });
+  const sleep = async (milliseconds: number) => { waits.push(milliseconds); };
+  const throttle = new LoginThrottle({ clock, sleep, ...(settings === undefined ? {} : { settings }) });
   return { throttle, waits };
 }

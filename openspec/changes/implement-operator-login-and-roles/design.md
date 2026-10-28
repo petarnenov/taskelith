@@ -86,7 +86,7 @@ The bearer of `operatorToken` authenticates one principal (section 2, "Operator 
 
 The 9a document has no principal or password operation, and item 10 owns principal administration (wire contracts section 9). Decided (Q1, Q2): administrative commands of `apps/control-plane/src/admin/admin-main.ts`, which already read the operator credential from `TASKELITH_OPERATOR_TOKEN` for installation-owner commands:
 
-- `set-password --login-name NAME --actor WHO --reason WHY`: reads the new password from standard input without echo, applies the policy, sets the hash, ends the principal's sessions, and audits `access.password-set`.
+- `set-password --login-name NAME --actor WHO --reason WHY`: reads the new password from standard input; on a terminal without echo, with backspace and Ctrl-U editing, any other control key refused, and typed twice, both entries matching; it applies the policy, sets the hash, ends the principal's sessions, and audits `access.password-set`.
 - `create-principal --login-name NAME --actor WHO --reason WHY`: a principal with no role and no password, audited `access.principal-created`.
 - `assign-project-role` and `remove-project-role` through `PrincipalAdministration`, so that roles exist before item 11's member handlers; item 11 then routes `assignProjectMember` and `removeProjectMember` through the same service. Item 11 also adds the projects table, the foreign key from `project_roles`, the member handlers, and a `ProjectDirectory` port (Q3).
 
@@ -126,7 +126,7 @@ Repositories in `packages/adapters/postgres/src/access-repositories.ts`, exporte
 
 | Risk | Mitigation |
 | --- | --- |
-| Online password guessing | Throttled by login name and by source address (Q8): after 5 failures of a key within 15 minutes each further attempt of that key first waits a constant delay, then is verified as usual, so a correct password still logs in and there is no lockout; no new status; the limits are provisional settings; every failure is logged with the login name and source address, never the password. |
+| Online password guessing | Throttled by login name and by source address (Q8): after 5 failures of a key within 15 minutes each further attempt of that key first waits a constant delay, then is verified as usual, so a correct password still logs in and there is no lockout; attempts run one at a time per login name and per source address, a source address with 4 attempts waiting or running gets 503 `unavailable` at once, so one client holds at most one hash slot, and a full key table delays a new key instead of forgetting a key with recent failures; no new status; the limits are provisional settings; every failure is logged with the login name and source address, never the password. |
 | Login name enumeration by timing | An unknown login name verifies the password against a fixed dummy hash with the current parameters, so both paths cost one Argon2id computation. |
 | Session fixation | A login rotates the identifier and the CSRF token in one write (decision 4). |
 | Cross-site request forgery | `SameSite=Strict`, the `__Host-` prefix, and the CSRF header on every session-authenticated non-GET operation, compared in constant time; `logIn` itself needs it. |

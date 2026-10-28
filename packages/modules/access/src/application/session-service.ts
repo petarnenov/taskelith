@@ -1,7 +1,7 @@
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import { normalizePassword } from '../domain/password-policy.js';
-import { parseLoginName, type LoginName, type Principal } from '../domain/principal.js';
+import { parseLoginName, type LoginName, type PasswordHash, type Principal } from '../domain/principal.js';
 import { INSTALLATION_OWNER, type InstallationRole } from '../domain/roles.js';
 import {
   anonymousSession,
@@ -57,6 +57,11 @@ export interface SessionServiceDependencies {
   readonly clock: Clock;
   readonly throttle: LoginThrottle;
   readonly lifetime?: SessionLifetime;
+}
+
+interface VerifiedLogin {
+  readonly principal: Principal;
+  readonly rehash?: PasswordHash;
 }
 
 export const SESSION_PURGE_BATCH = 1_000;
@@ -117,21 +122,18 @@ export class SessionService {
   // rehash when the stored parameters are weaker than the current ones.
   async logIn(live: LiveSession, attempt: LoginAttempt): Promise<Result<SessionAnswer>> {
     const loginName = parseLoginName(attempt.loginName);
-    const keys = throttleKeys(loginName.ok ? loginName.value : attempt.loginName, attempt.sourceAddress);
-    await this.#deps.throttle.admit(keys);
-    const principal = loginName.ok ? await this.#loginPrincipal(loginName.value) : ok(undefined);
-    if (!principal.ok) return principal;
-    const password = normalizePassword(attempt.password);
-    const verified = await this.#deps.hasher.verify(password, principal.value?.passwordHash);
-    if (!verified.ok) return verified;
-    if (principal.value === undefined || !verified.value.matches) {
-      this.#deps.throttle.recordFailure(keys);
-      return err(loginFailed());
-    }
-    this.#deps.throttle.clear(keys[0]!);
-    const rehash = verified.value.rehashDue ? await this.#deps.hasher.hash(password) : undefined;
-    if (rehash !== undefined && !rehash.ok) return rehash;
-    return this.#rotate(live.session, principal.value, rehash?.value);
+    const keys = { loginName: loginName.ok ? loginName.value : attempt.loginName, sourceAddress: attempt.sourceAddress };
+    return this.#deps.throttle.attempt(keys, async () => {
+      const verified = await this.#verify(loginName.ok ? loginName.value : undefined, attempt.password);
+      if (!verified.ok) return verified;
+      if (verified.value === undefined) {
+        this.#deps.throttle.recordFailure(keys);
+        return err(loginFailed());
+      }
+      this.#deps.throttle.recordSuccess(keys);
+      const { principal, rehash } = verified.value;
+      return this.#rotate(live.session, principal, rehash);
+    });
   }
 
   // Ends only this session; a repeat is `unauthenticated`.
@@ -157,6 +159,20 @@ export class SessionService {
     const session = anonymousSession(this.#deps.secrets.hashOf(sessionId), this.#deps.random.sessionToken(), this.#deps.clock.now(), this.#lifetime);
     const added = await this.#deps.store.transaction((tx) => tx.sessions.add(session));
     return added.ok ? ok({ view: viewOf({ session, installationRoles: [] }), cookie: sessionId }) : added;
+  }
+
+  // The enabled principal whose password matches, with a new hash when the
+  // stored parameters are weaker; else undefined, at the same hash cost.
+  async #verify(loginName: LoginName | undefined, given: string): Promise<Result<VerifiedLogin | undefined>> {
+    const principal = loginName === undefined ? ok(undefined) : await this.#loginPrincipal(loginName);
+    if (!principal.ok) return principal;
+    const password = normalizePassword(given);
+    const verified = await this.#deps.hasher.verify(password, principal.value?.passwordHash);
+    if (!verified.ok) return verified;
+    if (principal.value === undefined || !verified.value.matches) return ok(undefined);
+    if (!verified.value.rehashDue) return ok({ principal: principal.value });
+    const rehash = await this.#deps.hasher.hash(password);
+    return rehash.ok ? ok({ principal: principal.value, rehash: rehash.value }) : rehash;
   }
 
   #loginPrincipal(loginName: LoginName): Promise<Result<Principal | undefined>> {
@@ -188,10 +204,6 @@ export class SessionService {
     if (rotated.ok) return ok({ view: viewOf(rotated.value), cookie: sessionId });
     return rotated.error.code === 'not-found' ? err(unauthenticated()) : rotated;
   }
-}
-
-function throttleKeys(loginName: string, sourceAddress: string): readonly string[] {
-  return [`login-name:${loginName}`, `source-address:${sourceAddress}`];
 }
 
 // A login holds only when, at its rotation, the session is still live and
