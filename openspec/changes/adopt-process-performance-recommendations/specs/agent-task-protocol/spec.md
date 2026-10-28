@@ -53,6 +53,14 @@ The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=
 - **WHEN** a resumed integration finds the branch's pull request open, or merged at the pushed commit
 - **THEN** it merges that pull request, or only cleans up, and opens no second one
 
+#### Scenario: Branch already in dev
+- **WHEN** a run or a resume finds the integration HEAD already in `origin/dev`, because an earlier attempt's pull request was merged with a merge commit
+- **THEN** it skips the merge, `make verify`, the push, and the pull request, only cleans up, and opens no second pull request
+
+#### Scenario: Interrupted verify
+- **WHEN** the command receives `INT`, `TERM`, or `HUP` while `make verify` runs
+- **THEN** it stops the whole `make verify` process group, waits until it is gone, prints `INTERRUPTED <branch>`, and exits with 128 plus the signal number
+
 #### Scenario: Main clone not ready
 - **WHEN** the main clone is not on a clean `dev` that `origin/dev` fast-forwards
 - **THEN** the command exits with status 8 before it changes anything on the remote
