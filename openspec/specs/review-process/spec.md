@@ -17,7 +17,7 @@ Each change without an owner-accepted review exception SHALL be independently re
 - **THEN** pass 2 is made by reviewer B, which checks that fix and reviews the whole change independently
 
 #### Scenario: Third pass
-- **WHEN** pass 2 by reviewer B reports a Medium finding and the author fixes it
+- **WHEN** pass 2 by reviewer B reports a Medium finding and the author's fix changes code
 - **THEN** pass 3 is made by reviewer A and confirms only the pass 2 fixes, without new scope
 
 #### Scenario: Low-only first pass
@@ -49,14 +49,14 @@ A change SHALL receive at most three review passes; findings of Critical, High, 
 
 #### Scenario: Low findings with higher findings
 - **WHEN** a pass reports Low findings together with a Medium finding
-- **THEN** all of them are fixed, and the next pass checks them or, after the third pass, they are recorded as unreviewed fixes
+- **THEN** all of them are fixed, and the next pass checks them or, when no further pass runs, they are recorded as unreviewed fixes
 
 ### Requirement: Preparation before the first pass
-Before the first pass, the author SHALL self-check the change against the review criteria and run the evidence check, and `verification.md` SHALL record both.
+Before the first pass, the author SHALL self-check the change against the review criteria and run the evidence check, and `verification.md` SHALL record both; its generated part SHALL pass `make record-check`.
 
 #### Scenario: First pass requested
 - **WHEN** the first review pass of a change is started
-- **THEN** `verification.md` already records the author's self-check and the evidence-check result
+- **THEN** `verification.md` already records the author's self-check and the evidence-check result, and `make record-check` passes
 
 ### Requirement: Unavailable reviewer
 A reviewer whose review attempt does not run to a report SHALL NOT be used for any change for 30 minutes from it; a pass that reports findings is not unavailability. The next reviewer in the rotation that is not paused, meets the change's review requirements, and may take the role by "Reviewer assignment" SHALL be proposed. A replacement SHALL differ in harness from the other unless "No reviewer of another harness" applies, and SHALL take the replaced role and its remaining passes.
@@ -420,3 +420,18 @@ The coordinator SHALL assign each new change the reviewers A and B that the gove
 #### Scenario: OpenCode reviewer for a code change
 - **WHEN** reviewer B of a change that is not documentation-only must be replaced and the next reviewer in the rotation is an OpenCode reviewer
 - **THEN** that reviewer is skipped
+
+### Requirement: Conditional third pass
+Pass 3 SHALL run only when the pass 2 fixes change a file other than a record or documentation file, that is `openspec/changes/**` except spec deltas, `docs/**` except `docs/contracts/**`, and root-level Markdown, or when pass 2 reported a Critical or High finding. Otherwise the review SHALL end after pass 2, and its fixes SHALL be recorded with the outcome `fixed-unreviewed`. The three-pass cap and the Low-only rule SHALL still apply.
+
+#### Scenario: Record-only fixes
+- **WHEN** pass 2 reports only Medium findings and their fixes change only the change's `verification.md` and `design.md`
+- **THEN** no pass 3 runs, and those findings are recorded as `fixed-unreviewed`
+
+#### Scenario: Code fix
+- **WHEN** a pass 2 fix changes a file under `scripts/`
+- **THEN** reviewer A confirms the pass 2 fixes in pass 3
+
+#### Scenario: High finding
+- **WHEN** pass 2 reports a High finding whose fix changes only documentation
+- **THEN** pass 3 runs

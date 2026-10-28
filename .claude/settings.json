@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types \"$CLAUDE_PROJECT_DIR/scripts/context-warning.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
