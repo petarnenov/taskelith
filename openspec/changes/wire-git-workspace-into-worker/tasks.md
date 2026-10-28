@@ -16,7 +16,7 @@
 
 ## 3. Records and checks
 
-- [ ] 3.1 Merge `origin/dev`, run `make verify`, route the change, and write `verification.md`
+- [x] 3.1 Merge `origin/dev`, run `make verify`, route the change, and write `verification.md`
 
 ## 4. Review and archive
 
