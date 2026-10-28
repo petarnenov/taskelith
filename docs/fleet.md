@@ -16,6 +16,7 @@ Status: the roster of named agent sessions that develop Taskelith and the rules 
 
 - **Names are addresses.** Sessions message each other by these names. When two sessions share a name, for example Pepi or Desi, message the one on the coordinator's machine.
 - **One coordinator.** Exactly one session is the coordinator at a time: the one the roster names.
+- **Sessions persist.** A worker keeps its session across tasks: the owner does not `/clear` it after each integration, and the coordinator briefs it right after the landing report (owner, 2026-10-27).
 - **Skills.** A session starts as the coordinator with `/taskelith-coordinator <Name>` and as a worker with `/taskelith-worker <Name>`. Both skills live in `.claude/skills/` and check the name against this roster.
 
 ## Session names

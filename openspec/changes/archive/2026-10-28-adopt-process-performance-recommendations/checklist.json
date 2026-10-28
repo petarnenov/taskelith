@@ -1,0 +1,101 @@
+{
+  "change": "adopt-process-performance-recommendations",
+  "generatedAt": "2026-10-27T21:27:05.913Z",
+  "devCommit": "10eeab69f9cacb5a81d14acc8da7ed5ae43fe920",
+  "query": {
+    "capabilities": [],
+    "files": [
+      "scripts/**",
+      "Makefile",
+      ".githooks/**",
+      "docs/agent-task-protocol.md",
+      "docs/governance.md"
+    ],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 11
+      },
+      {
+        "category": "error-handling",
+        "count": 7
+      },
+      {
+        "category": "redaction",
+        "count": 4
+      },
+      {
+        "category": "docs",
+        "count": 3
+      },
+      {
+        "category": "process",
+        "count": 3
+      },
+      {
+        "category": "naming",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 244,
+        "inChecklist": 180
+      },
+      "mediumOrWorse": {
+        "findings": 97,
+        "inChecklist": 76
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 53
+      },
+      {
+        "category": "docs",
+        "count": 42
+      },
+      {
+        "category": "spec-wording",
+        "count": 23
+      },
+      {
+        "category": "stale-citation",
+        "count": 21
+      },
+      {
+        "category": "process",
+        "count": 9
+      },
+      {
+        "category": "contract-drift",
+        "count": 8
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 161,
+        "inChecklist": 161
+      },
+      "mediumOrWorse": {
+        "findings": 27,
+        "inChecklist": 27
+      }
+    }
+  }
+}
