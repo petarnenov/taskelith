@@ -1,0 +1,107 @@
+{
+  "change": "extend-execution-http-contracts",
+  "generatedAt": "2026-10-28T11:24:09.039Z",
+  "devCommit": "ff7ab7a0622d556c0ce586305e0ae600bb256833",
+  "query": {
+    "capabilities": [
+      "execution-wire-contracts",
+      "control-plane-wire-contracts",
+      "harness-account-pools",
+      "account-pool-port",
+      "scm-port"
+    ],
+    "files": [
+      "packages/contracts/**",
+      "docs/contracts/execution-wire-contracts.md",
+      "docs/contracts/account-pool.md",
+      "docs/contracts/source-control.md",
+      "docs/decisions/0015*"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 25
+      },
+      {
+        "category": "docs",
+        "count": 25
+      },
+      {
+        "category": "redaction",
+        "count": 13
+      },
+      {
+        "category": "spec-wording",
+        "count": 9
+      },
+      {
+        "category": "concurrency-race",
+        "count": 4
+      },
+      {
+        "category": "error-handling",
+        "count": 4
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 4
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 497,
+        "inChecklist": 383
+      },
+      "mediumOrWorse": {
+        "findings": 218,
+        "inChecklist": 186
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 91
+      },
+      {
+        "category": "docs",
+        "count": 58
+      },
+      {
+        "category": "spec-wording",
+        "count": 53
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 276,
+        "inChecklist": 272
+      },
+      "mediumOrWorse": {
+        "findings": 47,
+        "inChecklist": 45
+      }
+    }
+  }
+}

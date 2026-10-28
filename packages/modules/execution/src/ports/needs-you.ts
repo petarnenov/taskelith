@@ -15,6 +15,8 @@ import type {
   IdempotencyKey,
   NativeRequestId,
   PrincipalId,
+  SessionGeneration,
+  SessionId,
   WorkerId,
 } from '../domain/identifiers.js';
 import type { JournalId, ObservationId } from '../domain/observation-sequence.js';
@@ -29,6 +31,7 @@ export const NEEDS_YOU_KINDS = Object.freeze([
   'spec-approval',
   'escalation',
   'reconciliation',
+  'delivery-acknowledgement',
 ] as const);
 
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
@@ -71,6 +74,9 @@ export interface CardSubject {
   readonly attemptId?: AttemptId;
   readonly attemptGeneration?: OwnershipGeneration;
   readonly executionId?: ExecutionId;
+  // With the generation and ID, the request; an ID alone can be reused.
+  readonly sessionId?: SessionId;
+  readonly sessionGeneration?: SessionGeneration;
   readonly nativeRequestId?: NativeRequestId;
 }
 
@@ -97,7 +103,9 @@ export type NeedsYouAnswer =
       readonly decision: 'resolve-execution' | 'acknowledge-process';
       readonly evidence: EvidenceReference;
       readonly reason: string;
-    };
+    }
+  // Records that a person saw an uncertain delivery; it resends nothing.
+  | { readonly kind: 'delivery-acknowledgement'; readonly decision: 'acknowledge' };
 
 export interface NeedsYouResolution {
   readonly resolvedBy: PrincipalId;
