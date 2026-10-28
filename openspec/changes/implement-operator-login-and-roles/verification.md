@@ -34,7 +34,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 ## Checks
 
-- `env -u JEV_MAF_LAB make findings ARGS="route --change implement-operator-login-and-roles"`: elevated (lines, files, security, contracts, size), rule version 1; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; shadow failed (`missing-credential`). The first `route.json`, on `d8a2a0e3`, was routed again on `ac79878f`, because the fix below changed the diff.
+- `env -u JEV_MAF_LAB make findings ARGS="route --change implement-operator-login-and-roles"`: elevated (lines, files, security, contracts, size), rule version 1; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; shadow failed (`missing-credential`). The first `route.json`, on `d8a2a0e3`, was routed again on `ac79878f`, because the fix below changed the diff. It was routed a third time on `14f968d8` against `dev` `7efc48d3`, with the same tier, triggers, and reviewers, because the diff changed since `ac79878f`: the fixes of the coordinator's R2 to R4 answers, the merges of `dev` `10fc3bbe` and `7efc48d3`, the reconciliation with 9b's board, inbox, agent session, and event stream operations, and the evidence session and 404 of D1 and D2.
 - The first `make verify`, on the first routed head, failed in `npm run build`: the `packages/adapters/postgres` `tsconfig.json` lacked the `../secrets` reference of its new development dependency. Fixed in the PostgreSQL commit.
 - `make verify` on `15bd48e7`: passed, profile full; tests 3205, pass 3190, fail 0, skipped 15; all files 99.41% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `principal-administration.js` 84.06%, `control-plane-api.js` 81.00%, `administration.js` 77.06% branches.
 
@@ -42,6 +42,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 - `a1f0d4af` merged `origin/dev` `10fc3bbe` (9b #394, 9c #395) without a textual conflict. `control-plane.openapi.json` 0.2.0 adds the board, inbox, agent session, and event stream operations; their rules follow wire contracts section 3 as 9b amended it, and `test/access-requirements.test.ts` lists them. The `answerableBy` check of `answerInboxItem` belongs to its handler (section 8).
 - `execution.openapi.json` 0.6.0 and execution wire contracts section 8.2 answer an evidence read by a principal without a role on the record's project with the 404 of an unknown record, where this change answered 403 (Q4), and section 9 there assigns item 10 the session on the evidence operations, the retirement entry, the 404 of a download whose record was retired meanwhile, and an orphan content sweep. The coordinator decided (D1, D2, [design](design.md) "Coordinator decisions"): `readEvidence` and `downloadEvidence` now accept the session and answer a missing and a foreign record the same 404, which `test/browser-session.test.ts` shows by session and by bearer; `test/access-requirements.test.ts` checks their schemes against the execution document. The rest is a remaining gate below.
+- `14f968d8` merged `origin/dev` `7efc48d3` (#396, `schedule-intent-and-council-gates`, documents and records only) without a conflict; the dependency inventory stayed current.
 
 ## Limitations
 

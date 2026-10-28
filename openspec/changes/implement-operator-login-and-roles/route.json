@@ -1,10 +1,10 @@
 {
   "change": "implement-operator-login-and-roles",
-  "generatedAt": "2026-10-28T13:38:41.999Z",
-  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
-  "headCommit": "ac79878f92d34a5e8a2cde947cf48ca45c67cee3",
+  "generatedAt": "2026-10-28T14:05:19.187Z",
+  "devCommit": "7efc48d330b49bbdaebc370e95f42d3c2bec211e",
+  "headCommit": "14f968d887ccb88c01bea0e8040dd873177cfc4b",
   "features": {
-    "linesChanged": 4087,
+    "linesChanged": 4281,
     "filesChanged": 68,
     "capabilities": [
       "control-plane-api",
