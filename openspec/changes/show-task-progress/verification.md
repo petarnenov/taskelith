@@ -100,7 +100,7 @@ The best-effort lock tests describe the new contract, not a defect of the old co
 For the coordinator's architect check (governance "Architect check of unreviewed fixes"):
 
 1. `c1e9789b` (chore): `scripts/task-progress-lock.ts`, rewritten as the best-effort lock (P3-1, P3-2, pass 1 finding 4, pass 2 M3); `scripts/task-progress-stages.ts` `parsePasses`, physical line numbers (P3-4); `test/task-progress-lock.test.ts`, rewritten for the best-effort contract and overlapping writers; `test/task-progress.test.ts`, the line number test.
-2. The record commit after it (docs): the spec delta ("Task progress view" without "one refresh at a time", the stage 5 scenario, "Fix committed before its pass record", and "Progress cache refresh" with its scenarios), `design.md` D1 and D4, `docs/agent-task-protocol.md` "Task progress", `proposal.md`, `tasks.md`, this record, `passes.jsonl`, and `findings.jsonl`.
+2. `cb5a22d7` (docs): the spec delta ("Task progress view" without "one refresh at a time", the stage 5 scenario, "Fix committed before its pass record", and "Progress cache refresh" with its scenarios), `design.md` D1 and D4, `docs/agent-task-protocol.md` "Task progress", `proposal.md`, `tasks.md`, this record, `passes.jsonl`, and `findings.jsonl`.
 3. Outside the repository: the status line script reads the same cache shape and needed no change in this round.
 
 ## Limitations
