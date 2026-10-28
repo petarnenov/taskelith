@@ -10,8 +10,9 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16c, developed by a briefed s
 - `5f6f2565` `test: add failing tests for the Git adapter's remote operations`: every new and changed test, with the new API as stubs that throw (`readRemoteHead`, `push`, `GitRunner.withTimeLimit`, `parseCommitParents`) and without `http.followRedirects=false`. The fail-before run below ran on this commit.
 - `6b2ce77b` `chore: implement the Git adapter's remote operations and Git time limit`.
 - `94deb819` `docs: record the implement-git-remote-operations change and amend contract section 7` (contract sections 7 and 13 and its header, proposal, design, spec delta, tasks, empty `findings.jsonl` and `passes.jsonl`, `checklist.json`).
-- `fcf5a2f4` `docs: route the implement-git-remote-operations change` (`route.json`, unedited). `make verify` below ran on this commit's clean tree.
-- The commit that adds this record changes no checked input other than this file and `tasks.md`.
+- `fcf5a2f4` `docs: route the implement-git-remote-operations change` (`route.json`, unedited).
+- `cbc8fd37` `docs: shorten the modified Git configuration scope requirement`, after the first `make verify` (Checks). The recorded `make verify` ran on this commit's clean tree.
+- The commit that completes this record changes no checked input other than this file.
 
 ## Environment
 
@@ -49,7 +50,27 @@ On `6b2ce77b`, after `npm run build`: `node --experimental-strip-types --test --
 | --- | --- | --- |
 | `npm run openspec -- validate implement-git-remote-operations --strict` | `94deb819` | "Change 'implement-git-remote-operations' is valid" |
 | `make findings ARGS="route --change implement-git-remote-operations"` | `94deb819` | "route: elevated (lines, contracts), rule version 1"; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; shadow agrees; recommendation only, committed unedited as `fcf5a2f4` |
-VERIFY_ROWS
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `fcf5a2f4` | Failed only at `npm run verify:archive`: after the archive in a scratch copy, the modified requirement "Git configuration scope" was longer than 500 characters; tests 3071, pass 3018, fail 0, skipped 53. Fixed in `cbc8fd37` |
+| `npm run openspec -- validate implement-git-remote-operations --strict` and `npm run verify:archive` | `cbc8fd37` | "Change 'implement-git-remote-operations' is valid"; "Every active OpenSpec change archives into strictly valid specs" |
+| `make findings ARGS="route --change implement-git-remote-operations"`, repeated after the fix | `cbc8fd37` | The same route and reviewers; only `generatedAt`, `headCommit`, `expectedPasses` (2.6 to 2.63), and `latencyMs` differed, so the committed `route.json` was kept unedited |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | `cbc8fd37`, tree `7f9bda42` | Passed, profile full, stamp written: tests 3071, suites 45, pass 3018, fail 0, cancelled 0, skipped 53; all files 99.33 % lines, 92.76 % branches, 99.00 % functions. `make record` of this run is under "Generated checks" |
+| Coverage of `packages/adapters/git-workspace/dist/**`, summed from `coverage/lcov.info` of that run | `cbc8fd37` | lines 1099 of 1105 (99.46 %), branches 549 of 598 (91.81 %), functions 153 of 155 (98.71 %) |
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `7f9bda428f9e92934dc9108c337e35bea0a6a640`; tests 3071, pass 3018, fail 0, skipped 53; all files 99.33% lines, 92.76% branches, 99.00% functions.
+- `npm run openspec -- validate implement-git-remote-operations --strict`: passed, `Change 'implement-git-remote-operations' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 65 file(s); every pass summary file is valid: 45 file(s); every route file is valid: 2 file(s).`.
+- Spec diff against the merge base `803c70575499` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
+
+## Review
+
+No review pass has run yet; `passes.jsonl` and `findings.jsonl` are empty.
 
 ## Limitations
 
