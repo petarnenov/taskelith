@@ -90,7 +90,7 @@ test('the request sends the pinned model and the one third pass question', () =>
     instructions: 'This software change will need a third review pass.',
     criteria: {
       true: 'Reviewer B in pass 2 will find a Critical or High issue, or the fixes after pass 2 will change code, tests, or contracts rather than only records and documentation.',
-      false: 'Pass 2 will find only Medium or Low issues whose fixes touch only records and documentation, so two passes suffice.',
+      false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
     },
   });
 });
@@ -161,6 +161,27 @@ for (const secret of SECRETS) {
     assert.ok(excerpt.includes(REDACTED), excerpt);
   });
 }
+
+function pemBlock(bodyLineLength: number, endLine = true): string {
+  const body = Array.from({ length: 4 }, (_, index) => `${'K'.repeat(bodyLineLength - 1)}${index}`);
+  const end = endLine ? ['-----END PRIVATE KEY-----'] : [];
+  return ['-----BEGIN PRIVATE KEY-----', ...body, ...end].join('\n');
+}
+
+test('a PEM block with short body lines is redacted whole', () => {
+  const excerpt = redactedExcerpt(`before\n${pemBlock(32)}\nafter`, 500);
+  assert.equal(excerpt, `before\n${REDACTED}\nafter`);
+});
+
+test('a PEM block with standard 64 character lines is redacted whole', () => {
+  const excerpt = redactedExcerpt(`before\n${pemBlock(64)}\nafter`, 500);
+  assert.equal(excerpt, `before\n${REDACTED}\nafter`);
+});
+
+test('a truncated PEM block is redacted to the end of the text', () => {
+  const excerpt = redactedExcerpt(`before\n${pemBlock(32, false)}\nKKKK`, 500);
+  assert.equal(excerpt, `before\n${REDACTED}`);
+});
 
 test('a secret across the clip limit is redacted, not cut short', () => {
   const secret = `ghp_${'g'.repeat(36)}`;

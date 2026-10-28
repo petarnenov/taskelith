@@ -101,7 +101,7 @@ const THIRD_PASS_QUESTION = {
   instructions: 'This software change will need a third review pass.',
   criteria: {
     true: 'Reviewer B in pass 2 will find a Critical or High issue, or the fixes after pass 2 will change code, tests, or contracts rather than only records and documentation.',
-    false: 'Pass 2 will find only Medium or Low issues whose fixes touch only records and documentation, so two passes suffice.',
+    false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
   },
 } as const;
 
@@ -130,7 +130,11 @@ function percent(share: number | null): string {
   return share === null ? 'unknown' : `${Math.round(share * 100)}%`;
 }
 
-const REDACTION_PATTERNS: readonly RegExp[] = [...SECRET_PATTERNS, /[A-Za-z0-9+/_-]{40,}/].map(
+// A whole PEM block, to its end line or, when that is missing, to the end
+// of the text, since its body lines may be shorter than the run pattern.
+const PEM_BLOCK = /-----BEGIN [A-Z ]*(?:PRIVATE KEY|NKEY SEED|USER JWT)-----[\s\S]*?(?:-----END [A-Z ]*-----|$)/;
+
+const REDACTION_PATTERNS: readonly RegExp[] = [PEM_BLOCK, ...SECRET_PATTERNS, /[A-Za-z0-9+/_-]{40,}/].map(
   ({ source, flags }) => new RegExp(source, `${flags}g`),
 );
 
