@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { inspect } from 'node:util';
 import type { RunResult } from '../scripts/findings-common.ts';
-import { passPlans, SKIPPED_SHADOW, type RouteFeatures, type ShadowDecision, type ShadowInput } from '../scripts/review-route.ts';
+import { passPlans, SKIPPED_SHADOW, type RouteFeatures, type ShadowDecision } from '../scripts/review-route.ts';
 import { commitInfos, GIT_EVALUATION_ENVIRONMENT } from '../scripts/review-route-environment.ts';
 import {
   archivedRecordsOf,
@@ -27,7 +27,7 @@ import { RouteRefusal } from '../scripts/review-route-features.ts';
 import { CREDENTIAL_VARIABLE } from '../scripts/review-route-jev.ts';
 import { RuleRouter } from '../scripts/review-route-rules.ts';
 import { commit, git } from './checklist-git-fixture.ts';
-import { FakeRouter, QUIET_FEATURES, QUIET_INPUT } from './review-route-fake.ts';
+import { FakeShadowRouter, QUIET_FEATURES, QUIET_INPUT } from './review-route-fake.ts';
 
 // The offline evaluation: its pure parts, the git adapter on a temporary
 // history, and the command with fake routers and no network.
@@ -121,16 +121,16 @@ test('the git adapter answers undefined outside a repository', () => {
 test('the retry router retries a rate limit or overload once after a delay', async () => {
   for (const reason of ['rate-limited', 'overloaded'] as const) {
     const delays: number[] = [];
-    const inner = new FakeRouter<ShadowDecision, ShadowInput>({ router: 'jev', status: 'failed', reason, httpStatus: 429, latencyMs: 1 });
+    const inner = new FakeShadowRouter({ router: 'jev', status: 'failed', reason, httpStatus: 429, latencyMs: 1 });
     const router = new RetryOnceRouter(inner, 250, async (delayMs) => delays.push(delayMs));
-    assert.equal((await router.route(QUIET_INPUT)).status, 'failed');
+    assert.equal((await router.route(() => QUIET_INPUT)).status, 'failed');
     assert.equal(inner.calls.length, 2);
     assert.deepEqual(delays, [250]);
   }
   for (const decision of [ANSWERED, { router: 'jev', status: 'failed', reason: 'timeout', latencyMs: 1 }] as ShadowDecision[]) {
-    const inner = new FakeRouter<ShadowDecision, ShadowInput>(decision);
+    const inner = new FakeShadowRouter(decision);
     const router = new RetryOnceRouter(inner, 250, () => assert.fail('no retry expected'));
-    assert.equal(await router.route(QUIET_INPUT), decision);
+    assert.equal(await router.route(() => QUIET_INPUT), decision);
     assert.equal(inner.calls.length, 1);
   }
 });
@@ -271,7 +271,7 @@ test('--rule-only --save writes valid lines and prints the figures', withHistory
 }));
 
 test('a consulted shadow is recorded per change and scored', withHistory(async (history) => {
-  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(ANSWERED);
+  const shadow = new FakeShadowRouter(ANSWERED);
   const run = await runInHistory(history, ['--at', history.twoMerge, '--json'], { shadow });
   assert.equal(run.exitCode, 0, run.stderr);
   assert.equal(shadow.calls.length, 2);
@@ -286,7 +286,7 @@ test('a consulted shadow is recorded per change and scored', withHistory(async (
 }));
 
 test('the shadow gets the reference of the archive as of each change', withHistory(async (history) => {
-  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(ANSWERED);
+  const shadow = new FakeShadowRouter(ANSWERED);
   const run = await runInHistory(history, ['--at', history.twoMerge], { shadow });
   assert.equal(run.exitCode, 0, run.stderr);
   const [one, two] = shadow.calls;
@@ -297,7 +297,7 @@ test('the shadow gets the reference of the archive as of each change', withHisto
 }));
 
 test('--rule-only never consults the shadow router', withHistory(async (history) => {
-  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(ANSWERED);
+  const shadow = new FakeShadowRouter(ANSWERED);
   const run = await runInHistory(history, ['--rule-only'], { shadow });
   assert.equal(run.exitCode, 0, run.stderr);
   assert.equal(shadow.calls.length, 0);
@@ -306,7 +306,7 @@ test('--rule-only never consults the shadow router', withHistory(async (history)
 
 test('a refused shadow stops the evaluation before more requests', withHistory(async (history) => {
   for (const httpStatus of [401, 402, 403]) {
-    const shadow = new FakeRouter<ShadowDecision, ShadowInput>({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus, latencyMs: 1 });
+    const shadow = new FakeShadowRouter({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus, latencyMs: 1 });
     const run = await runInHistory(history, ['--save', SAVE_CHANGE], { shadow });
     assert.equal(run.exitCode, 1);
     assert.equal(run.stderr, `route-evaluation: the shadow router was refused (HTTP ${httpStatus}); nothing written\n`);
@@ -316,7 +316,7 @@ test('a refused shadow stops the evaluation before more requests', withHistory(a
 }));
 
 test('another shadow failure is recorded and the evaluation goes on', withHistory(async (history) => {
-  const shadow = new FakeRouter<ShadowDecision, ShadowInput>({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus: 500, latencyMs: 1 });
+  const shadow = new FakeShadowRouter({ router: 'jev', status: 'failed', reason: 'http-error', httpStatus: 500, latencyMs: 1 });
   const run = await runInHistory(history, ['--save', SAVE_CHANGE], { shadow });
   assert.equal(run.exitCode, 0, run.stderr);
   assert.equal(shadow.calls.length, 2);
@@ -416,7 +416,7 @@ test('a pass 1 revision without a merge base with dev is refused', async () => {
 });
 
 test('a save target that is no active change is refused before routing', async () => {
-  const shadow = new FakeRouter<ShadowDecision, ShadowInput>(ANSWERED);
+  const shadow = new FakeShadowRouter(ANSWERED);
   const run = await runFake(['--save', 'no-such-change'], { shadow });
   assert.equal(run.exitCode, 1);
   assert.match(run.stderr, /no active change "no-such-change"/);

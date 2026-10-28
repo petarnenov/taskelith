@@ -12,6 +12,7 @@ import {
   type ShadowDecision,
   type ShadowFailure,
   type ShadowInput,
+  type ShadowInputSource,
 } from './review-route.ts';
 
 // The shadow router: TypeSafe AI's Jev model over HTTP. It decides
@@ -100,7 +101,7 @@ const THIRD_PASS_QUESTION = {
   type: 'noul',
   instructions: 'This software change will need a third review pass.',
   criteria: {
-    true: 'Reviewer B in pass 2 will find a Critical or High issue, or the fixes after pass 2 will change code, tests, or contracts rather than only records and documentation.',
+    true: 'Reviewer B in pass 2 will find a Critical or High issue, or a Medium issue whose fixes will change code, tests, or contracts rather than only records and documentation.',
     false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
   },
 } as const;
@@ -132,7 +133,7 @@ function percent(share: number | null): string {
 
 // A whole PEM block, to its end line or, when that is missing, to the end
 // of the text, since its body lines may be shorter than the run pattern.
-const PEM_BLOCK = /-----BEGIN [A-Z ]*(?:PRIVATE KEY|NKEY SEED|USER JWT)-----[\s\S]*?(?:-----END [A-Z ]*-----|$)/;
+const PEM_BLOCK = /-----BEGIN [A-Z ]*(?:PRIVATE KEY(?: BLOCK)?|NKEY SEED|USER JWT)-----[\s\S]*?(?:-----END [A-Z ]*-----|$)/;
 
 const REDACTION_PATTERNS: readonly RegExp[] = [PEM_BLOCK, ...SECRET_PATTERNS, /[A-Za-z0-9+/_-]{40,}/].map(
   ({ source, flags }) => new RegExp(source, `${flags}g`),
@@ -180,7 +181,7 @@ const STATUS_FAILURES: ReadonlyMap<number, ShadowFailure> = new Map([
   [529, 'overloaded'],
 ]);
 
-export class JevRouter implements ReviewRouter<ShadowDecision, ShadowInput> {
+export class JevRouter implements ReviewRouter<ShadowDecision, ShadowInputSource> {
   readonly #credential: Credential | undefined;
   readonly #endpoint: string;
   readonly #model: string;
@@ -197,8 +198,10 @@ export class JevRouter implements ReviewRouter<ShadowDecision, ShadowInput> {
     this.#clock = settings.clock ?? (() => performance.now());
   }
 
-  async route(input: ShadowInput): Promise<ShadowDecision> {
+  async route(source: ShadowInputSource): Promise<ShadowDecision> {
     if (this.#credential === undefined) return failed({ reason: 'missing-credential' }, 0);
+    const input = builtInput(source);
+    if (input === undefined) return failed({ reason: 'input-unavailable' }, 0);
     const started = this.#clock();
     const exchange = await this.#exchange(this.#credential, input).catch(() => ({ reason: 'invalid-response' as const }));
     const latencyMs = Math.max(0, Math.round(this.#clock() - started));
@@ -238,6 +241,16 @@ async function answerOf(response: Response): Promise<Exchange> {
   }
   const answer = parseJevAnswer(body);
   return answer === undefined ? { reason: 'invalid-response' } : { answer };
+}
+
+// Undefined when the archive or the proposal cannot be read, so that the
+// rule routes alone instead of the command failing.
+function builtInput(source: ShadowInputSource): ShadowInput | undefined {
+  try {
+    return source();
+  } catch {
+    return undefined;
+  }
 }
 
 function isTimeout(error: unknown): boolean {

@@ -13,7 +13,7 @@ import {
   type RouteFeatures,
   type RuleDecision,
   type ShadowDecision,
-  type ShadowInput,
+  type ShadowInputSource,
 } from './review-route.ts';
 import {
   formatOutcomeFigures,
@@ -79,7 +79,7 @@ export interface EvaluationDependencies {
   readonly environment: EvaluationEnvironment;
   readonly rule: ReviewRouter<RuleDecision>;
   // Undefined without a credential; then only --rule-only can run.
-  readonly shadow: ReviewRouter<ShadowDecision, ShadowInput> | undefined;
+  readonly shadow: ReviewRouter<ShadowDecision, ShadowInputSource> | undefined;
   readonly checkSchema: SchemaCheck;
 }
 
@@ -112,12 +112,12 @@ export interface ArchivedRecords extends ReviewRecords {
   readonly directory: string;
 }
 
-export class RetryOnceRouter implements ReviewRouter<ShadowDecision, ShadowInput> {
-  readonly #inner: ReviewRouter<ShadowDecision, ShadowInput>;
+export class RetryOnceRouter implements ReviewRouter<ShadowDecision, ShadowInputSource> {
+  readonly #inner: ReviewRouter<ShadowDecision, ShadowInputSource>;
   readonly #delayMs: number;
   readonly #sleep: (delayMs: number) => Promise<unknown>;
 
-  constructor(inner: ReviewRouter<ShadowDecision, ShadowInput>, delayMs: number, wait: (delayMs: number) => Promise<unknown>) {
+  constructor(inner: ReviewRouter<ShadowDecision, ShadowInputSource>, delayMs: number, wait: (delayMs: number) => Promise<unknown>) {
     this.#inner = inner;
     this.#delayMs = delayMs;
     this.#sleep = wait;
@@ -125,11 +125,11 @@ export class RetryOnceRouter implements ReviewRouter<ShadowDecision, ShadowInput
 
   // The adapter drops response headers, so a fixed delay stands in for
   // retry-after.
-  async route(input: ShadowInput): Promise<ShadowDecision> {
-    const first = await this.#inner.route(input);
+  async route(source: ShadowInputSource): Promise<ShadowDecision> {
+    const first = await this.#inner.route(source);
     if (!isRetryable(first)) return first;
     await this.#sleep(this.#delayMs);
-    return this.#inner.route(input);
+    return this.#inner.route(source);
   }
 }
 
@@ -235,7 +235,7 @@ async function evaluationLine(
     approximate,
     features,
     rule: await rule.route(features),
-    shadow: shadow === undefined ? SKIPPED_SHADOW : unlessRefused(await shadow.route(shadowInput())),
+    shadow: shadow === undefined ? SKIPPED_SHADOW : unlessRefused(await shadow.route(shadowInput)),
     outcome: reviewOutcome(subject.records),
   };
 }

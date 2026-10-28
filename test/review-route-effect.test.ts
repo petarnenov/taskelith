@@ -95,8 +95,7 @@ test('the rule figures split the outcomes by the rule tier', () => {
   assert.equal(figures.shadow.skipped, 3);
   assert.equal(figures.shadow.answered, 0);
   assert.deepEqual(figures.shadow.agreement, { changes: 0, agreeing: 0, share: null, kappa: null });
-  assert.equal(figures.shadow.brierScore, null);
-  assert.equal(figures.shadow.passesMeanAbsoluteError, null);
+  assert.deepEqual(figures.shadow.tierRequest, { changes: 0, brierScore: null, passesMeanAbsoluteError: null });
 });
 
 test('answered shadows give agreement, kappa, Brier score, and pass error', () => {
@@ -113,8 +112,7 @@ test('answered shadows give agreement, kappa, Brier score, and pass error', () =
   // Agreement 3 of 4; chance 0.5 * 0.25 + 0.5 * 0.75 = 0.5.
   assert.deepEqual(shadow.agreement, { changes: 4, agreeing: 3, share: 0.75, kappa: 0.5 });
   // (0.01 + 0.16 + 0.04 + 0.81) / 4 and (0 + 0 + 0 + 1.5) / 4.
-  assert.equal(shadow.brierScore, 0.255);
-  assert.equal(shadow.passesMeanAbsoluteError, 0.375);
+  assert.deepEqual(shadow.tierRequest, { changes: 4, brierScore: 0.255, passesMeanAbsoluteError: 0.375 });
   assert.equal(shadow.tiers.standard.changes, 3);
   assert.equal(shadow.tiers.elevated.thirdPassShare, 1);
 });
@@ -153,7 +151,7 @@ test('P(third) answers are scored apart from tier request answers', () => {
   assert.equal(shadow.answered, 4);
   // (0.04 + 0.09 + 0.25) / 3; the third pass outranks both others.
   assert.deepEqual(shadow.thirdPass, { changes: 3, brierScore: 0.127, auc: 1 });
-  assert.equal(shadow.brierScore, 0.01);
+  assert.deepEqual(shadow.tierRequest, { changes: 1, brierScore: 0.01, passesMeanAbsoluteError: 0 });
   assert.equal(shadow.tiers.elevated.changes, 3);
   const lines = formatRoutingFigures(figures);
   assert.equal(lines.at(-2), '  shadow: P(third) of 3 change(s), Brier score 0.13, AUC 1.00');

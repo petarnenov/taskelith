@@ -1,4 +1,4 @@
-import type { ReviewRouter, RouteFeatures, ShadowInput } from '../scripts/review-route.ts';
+import type { ReviewRouter, RouteFeatures, ShadowDecision, ShadowInput, ShadowInputSource } from '../scripts/review-route.ts';
 
 // Test doubles of the review route: a fixed-answer router and features.
 
@@ -12,6 +12,22 @@ export class FakeRouter<Decision, Input = RouteFeatures> implements ReviewRouter
 
   route(input: Input): Promise<Decision> {
     this.calls.push(input);
+    return Promise.resolve(this.#decision);
+  }
+}
+
+// A shadow router that builds each input it is given, as Jev does with a
+// credential, and records it.
+export class FakeShadowRouter implements ReviewRouter<ShadowDecision, ShadowInputSource> {
+  readonly calls: ShadowInput[] = [];
+  readonly #decision: ShadowDecision;
+
+  constructor(decision: ShadowDecision) {
+    this.#decision = decision;
+  }
+
+  route(source: ShadowInputSource): Promise<ShadowDecision> {
+    this.calls.push(source());
     return Promise.resolve(this.#decision);
   }
 }

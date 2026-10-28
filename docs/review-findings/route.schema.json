@@ -87,7 +87,7 @@
           "properties": {
             "router": { "$ref": "#/$defs/router" },
             "status": { "const": "failed" },
-            "reason": { "enum": ["missing-credential", "timeout", "network", "rate-limited", "overloaded", "http-error", "invalid-response"] },
+            "reason": { "enum": ["missing-credential", "input-unavailable", "timeout", "network", "rate-limited", "overloaded", "http-error", "invalid-response"] },
             "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
             "latencyMs": { "$ref": "#/$defs/latency" }
           }

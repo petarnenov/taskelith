@@ -64,7 +64,7 @@ function answerWith(change: (body: { model: unknown; answers: Record<string, Rec
 
 test('the response maps to an answered shadow decision', async () => {
   const sent: SentRequest[] = [];
-  const decision = await router(fakeFetch(respond(RECORDED_RESPONSE), sent)).route(QUIET_INPUT);
+  const decision = await router(fakeFetch(respond(RECORDED_RESPONSE), sent)).route(() => QUIET_INPUT);
   assert.deepEqual(decision, {
     router: 'jev',
     status: 'answered',
@@ -89,7 +89,7 @@ test('the request sends the pinned model and the one third pass question', () =>
     type: 'noul',
     instructions: 'This software change will need a third review pass.',
     criteria: {
-      true: 'Reviewer B in pass 2 will find a Critical or High issue, or the fixes after pass 2 will change code, tests, or contracts rather than only records and documentation.',
+      true: 'Reviewer B in pass 2 will find a Critical or High issue, or a Medium issue whose fixes will change code, tests, or contracts rather than only records and documentation.',
       false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
     },
   });
@@ -183,6 +183,19 @@ test('a truncated PEM block is redacted to the end of the text', () => {
   assert.equal(excerpt, `before\n${REDACTED}`);
 });
 
+test('a PGP private key block with a short last line is redacted whole', () => {
+  const block = [
+    '-----BEGIN PGP PRIVATE KEY BLOCK-----',
+    '',
+    'K'.repeat(64),
+    'KKKKshortTail',
+    '=AbCd',
+    '-----END PGP PRIVATE KEY BLOCK-----',
+  ].join('\n');
+  const excerpt = redactedExcerpt(`before\n${block}\nafter`, 500);
+  assert.equal(excerpt, `before\n${REDACTED}\nafter`);
+});
+
 test('a secret across the clip limit is redacted, not cut short', () => {
   const secret = `ghp_${'g'.repeat(36)}`;
   const excerpt = redactedExcerpt(`${'p'.repeat(10)} ${secret}`, 30);
@@ -197,13 +210,13 @@ test('the threshold maps P(third) to the shadow tier', async () => {
   assert.equal(tierAt(1, THIRD_PASS_THRESHOLD), 'elevated');
   assert.equal(tierAt(0, THIRD_PASS_THRESHOLD), 'standard');
   const low = answerWith(({ answers }) => { answers.third!.noul = 0.39; });
-  const decision = await router(fakeFetch(respond(low))).route(QUIET_INPUT);
+  const decision = await router(fakeFetch(respond(low))).route(() => QUIET_INPUT);
   assert.deepEqual(decision.status === 'answered' && [decision.tier, decision.passes], ['standard', passPlans('standard', QUIET_FEATURES)]);
 });
 
 test('the bearer header carries the credential and nothing else does', async () => {
   const sent: SentRequest[] = [];
-  await router(fakeFetch(respond(RECORDED_RESPONSE), sent)).route(QUIET_INPUT);
+  await router(fakeFetch(respond(RECORDED_RESPONSE), sent)).route(() => QUIET_INPUT);
   const headers = sent[0]!.init.headers as Record<string, string>;
   assert.equal(headers.Authorization, `Bearer ${SENTINEL}`);
   assert.equal(headers['Content-Type'], 'application/json');
@@ -213,7 +226,23 @@ test('the bearer header carries the credential and nothing else does', async () 
 test('a missing credential sends no request', async () => {
   const sent: SentRequest[] = [];
   const shadow = new JevRouter({ credential: undefined, fetch: fakeFetch(respond(RECORDED_RESPONSE), sent) });
-  assert.deepEqual(await shadow.route(QUIET_INPUT), { router: 'jev', status: 'failed', reason: 'missing-credential', latencyMs: 0 });
+  assert.deepEqual(await shadow.route(() => QUIET_INPUT), { router: 'jev', status: 'failed', reason: 'missing-credential', latencyMs: 0 });
+  assert.equal(sent.length, 0);
+});
+
+const unbuildable = () => {
+  throw new Error('cannot read the archive');
+};
+
+test('a missing credential never builds the input', async () => {
+  const shadow = new JevRouter({ credential: undefined });
+  assert.deepEqual(await shadow.route(unbuildable), { router: 'jev', status: 'failed', reason: 'missing-credential', latencyMs: 0 });
+});
+
+test('an input that cannot be built fails without a request', async () => {
+  const sent: SentRequest[] = [];
+  const decision = await router(fakeFetch(respond(RECORDED_RESPONSE), sent)).route(unbuildable);
+  assert.deepEqual(decision, { router: 'jev', status: 'failed', reason: 'input-unavailable', latencyMs: 0 });
   assert.equal(sent.length, 0);
 });
 
@@ -256,7 +285,7 @@ const FAILURES: readonly { name: string; answer: () => Promise<Response>; expect
 
 for (const { name, answer, expected } of FAILURES) {
   test(`${name} is a failed shadow decision without the credential`, async () => {
-    const decision = await router(fakeFetch(answer)).route(QUIET_INPUT);
+    const decision = await router(fakeFetch(answer)).route(() => QUIET_INPUT);
     assert.deepEqual(decision, { router: 'jev', status: 'failed', ...expected, latencyMs: 250 });
     assert.ok(!JSON.stringify(decision).includes(SENTINEL));
     assert.ok(!inspect(decision).includes(SENTINEL));
@@ -316,7 +345,7 @@ test('the recorded response served by a local server is answered over real fetch
     },
     async (endpoint) => {
       const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: LOCAL_EXCHANGE_TIMEOUT_MS });
-      const decision = await jev.route(inputWith({ linesChanged: 420 }));
+      const decision = await jev.route(() => inputWith({ linesChanged: 420 }));
       assert.equal(decision.status, 'answered');
     },
   );
@@ -339,7 +368,7 @@ test('a local server that never answers times out without a retry', async () => 
     () => undefined,
     async (endpoint) => {
       const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: 100, fetch: countingFetch(sent) });
-      const decision = await jev.route(QUIET_INPUT);
+      const decision = await jev.route(() => QUIET_INPUT);
       assert.equal(decision.status === 'failed' && decision.reason, 'timeout');
     },
   );
@@ -355,7 +384,7 @@ test('a reset connection is a network failure', async () => {
   try {
     const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/systemone`;
     const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: LOCAL_EXCHANGE_TIMEOUT_MS });
-    const decision = await jev.route(QUIET_INPUT);
+    const decision = await jev.route(() => QUIET_INPUT);
     assert.equal(decision.status === 'failed' && decision.reason, 'network');
   } finally {
     await new Promise((resolve) => server.close(resolve));

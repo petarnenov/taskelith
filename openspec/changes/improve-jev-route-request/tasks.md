@@ -5,7 +5,7 @@
 
 ## 2. Contract first
 
-- [x] 2.1 Spec delta of `review-process`: modify "Shadow routing", add "Shadow request content" and "Shadow third pass score"
+- [x] 2.1 Spec delta of `review-process`: modify "Shadow routing" and "Shadow router failure", add "Shadow request content" and "Shadow third pass score"
 - [x] 2.2 `docs/review-findings/route.schema.json`: the third pass answer beside the earlier answer shape
 - [x] 2.3 `docs/agent-task-protocol.md`: the route record and the routing part of the checklist effect
 
@@ -18,6 +18,7 @@
 - [x] 3.5 `THIRD_PASS_THRESHOLD` 0.4 maps P(third) to the shadow tier; `route.json` records both
 - [x] 3.6 Brier score and AUC of P(third) in the effect and the evaluation; the shadow tier checked in validation
 - [x] 3.7 Tests: request shape, leave-one-out rates, threshold, redaction, no `touches` (fails before), network stubbed
+- [x] 3.8 The shadow input built after the credential check; a build failure recorded as `input-unavailable`
 
 ## 4. Verification
 

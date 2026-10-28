@@ -12,6 +12,7 @@ import {
   type RuleDecision,
   type ShadowDecision,
   type ShadowInput,
+  type ShadowInputSource,
 } from './review-route.ts';
 import { GIT_ROUTE_ENVIRONMENT } from './review-route-environment.ts';
 import { changeDirectory, RouteRefusal, routeSubject, type RouteEnvironment, type RouteSubject } from './review-route-features.ts';
@@ -30,7 +31,7 @@ const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 export interface RouteDependencies {
   readonly environment: RouteEnvironment;
   readonly rule: ReviewRouter<RuleDecision>;
-  readonly shadow: ReviewRouter<ShadowDecision, ShadowInput>;
+  readonly shadow: ReviewRouter<ShadowDecision, ShadowInputSource>;
   readonly checkSchema: SchemaCheck;
   readonly now: () => Date;
 }
@@ -84,7 +85,7 @@ async function route(options: RouteOptions, root: string, dependencies: RouteDep
   refuseExistingRoute(root, options.change);
   const subject = routeSubject(root, options.change, dependencies.environment);
   const rule = await dependencies.rule.route(subject.features);
-  const shadow = options.consultShadow ? await dependencies.shadow.route(shadowInput(root, options.change, subject, dependencies)) : SKIPPED_SHADOW;
+  const shadow = options.consultShadow ? await dependencies.shadow.route(() => shadowInput(root, options.change, subject, dependencies)) : SKIPPED_SHADOW;
   const record: RouteRecord = { change: options.change, generatedAt: dependencies.now().toISOString(), ...subject, rule, shadow };
   const problems = routeRecordProblems(record, options.change, dependencies.checkSchema);
   if (problems.length > 0) throw new RouteRefusal(`the route record is invalid: ${problems.join('; ')}`);

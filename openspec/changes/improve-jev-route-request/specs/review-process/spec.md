@@ -15,10 +15,29 @@ The shadow router SHALL ask TypeSafe AI's Jev model one `noul` question, whether
 - **WHEN** the shadow router sends a request
 - **THEN** its `state` holds exactly the allowlisted keys and none of the rule's path flags
 
+### Requirement: Shadow router failure
+When the credential is missing, the input cannot be built, no response arrives in 2 seconds, the connection fails, the HTTP status is not 2xx, or the response is invalid, the rule SHALL route alone, the command SHALL exit 0, and `route.json` SHALL record one of `missing-credential`, `input-unavailable`, `timeout`, `network`, `rate-limited`, `overloaded`, `http-error`, or `invalid-response`, with the HTTP status where there is one. The shadow router SHALL NOT retry within the 2 seconds.
+
+#### Scenario: Timeout
+- **WHEN** the shadow endpoint does not answer within 2 seconds
+- **THEN** the request is aborted, `route.json` records `timeout`, and the rule's pass plans stand
+
+#### Scenario: Invalid answer
+- **WHEN** the endpoint answers 200 with a probability above 1
+- **THEN** `route.json` records `invalid-response` and no part of the body
+
+#### Scenario: Rate limit
+- **WHEN** the endpoint answers 429
+- **THEN** `route.json` records `rate-limited` with `httpStatus` 429
+
+#### Scenario: Unreadable archive
+- **WHEN** the credential is set and an archived `route.json` is not valid JSON
+- **THEN** no request is sent, `route.json` records `input-unavailable`, and the command exits 0
+
 ## ADDED Requirements
 
 ### Requirement: Shadow request content
-The request SHALL hold only the changed lines and files, capability identifiers, the external facts flag, the size, the capability history, a context that explains the fields, the review process, and the third pass share of the other archived reviewed changes, overall and by lines changed, and the proposal's Why and What Changes, redacted, then clipped at 1,200 and 1,500 characters, with its task and requirement counts. It SHALL send no other path, commit, diff, or finding text.
+The request SHALL hold only the changed lines and files, capabilities, the external facts flag, the size, the capability history, a context explaining the fields, the review process, and the third pass share of other archived reviewed changes, overall and by lines changed, and the proposal's Why and What Changes, redacted, then clipped at 1,200 and 1,500 characters, with its task and requirement counts. It SHALL send no other path, commit, change name, diff or source text, or finding text.
 
 #### Scenario: Routed change left out
 - **WHEN** the reference rates are computed for a change whose own review records are archived

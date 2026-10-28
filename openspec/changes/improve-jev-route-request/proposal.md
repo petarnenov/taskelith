@@ -10,6 +10,7 @@ The Jev shadow request of `make findings ARGS="route"` (`scripts/review-route-je
 - **No path flags.** The `touches` flags leave the request; the rule keeps using them, unchanged.
 - **Threshold.** The shadow tier is `elevated` when P(third) is 0.4 or more, else `standard` (`THIRD_PASS_THRESHOLD`). `route.json` records P(third), the threshold, the tier, and its pass plans; the schema keeps the earlier answer shape valid for archived records.
 - **Score.** `make findings ARGS="effect"` and the route evaluation report the Brier score and AUC of P(third) against the third passes that ran, apart from answers to the earlier questions; validation checks the shadow tier against P(third) and the threshold.
+- **Input failure.** The shadow input is built only after the credential check; a failure to build it is the shadow failure `input-unavailable`, and the rule decides alone.
 - Jev stays shadow-only: nothing routes on it, and routed effort stays unauthorized.
 
 ## Capabilities
@@ -20,7 +21,7 @@ None.
 
 ### Modified Capabilities
 
-- `review-process`: requirement "Shadow routing" modified; requirements "Shadow request content" and "Shadow third pass score" added.
+- `review-process`: requirements "Shadow routing" and "Shadow router failure" modified; requirements "Shadow request content" and "Shadow third pass score" added.
 
 ## Impact
 

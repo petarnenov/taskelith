@@ -55,6 +55,7 @@ export const SHADOW_ROUTER = 'jev';
 
 export const SHADOW_FAILURES = [
   'missing-credential',
+  'input-unavailable',
   'timeout',
   'network',
   'rate-limited',
@@ -144,6 +145,9 @@ export interface ShadowInput {
   readonly reference: ReferenceRates;
   readonly content: ChangeContent;
 }
+
+// Built only when the shadow router can use it.
+export type ShadowInputSource = () => ShadowInput;
 
 // The port. The rule adapter never fails; a shadow adapter resolves to a
 // failed decision instead of rejecting.
