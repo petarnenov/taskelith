@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { ok, type Result } from '@taskelith/kernel';
 import { linuxLaunchFromEnvironment, type LinuxLaunch } from '@taskelith/testing';
 import {
@@ -15,8 +15,8 @@ import {
 } from '@taskelith/worker';
 import type { LaunchRecord } from '@taskelith/worker-supervisor';
 
-// Set by make verify-linux-g2-scenarios: the scenario workers then launch
-// through the product's Linux cgroup supervisor.
+// Set by make verify-linux-g2-scenarios, whose runner requires it: the
+// scenario workers then launch through the Linux cgroup supervisor.
 export const SCENARIO_LAUNCH = linuxLaunchFromEnvironment();
 
 const CGROUP_ROOT = '/sys/fs/cgroup';
@@ -25,16 +25,21 @@ const CGROUP_ROOT = '/sys/fs/cgroup';
 // worker-supervisor); the process-group supervisor sends SIGTERM first.
 export const CANCEL_SIGNAL: NodeJS.Signals = SCENARIO_LAUNCH === undefined ? 'SIGTERM' : 'SIGKILL';
 
-// Under the cgroup supervisor each process runs in a containment below
-// the delegated parent; elsewhere there is nothing to check.
-export function assertContained(pids: readonly number[]): void {
+// Under the cgroup supervisor each process runs in a containment directly
+// below its worker's own parent; elsewhere there is nothing to check.
+export function assertContained(workerParent: string | undefined, pids: readonly number[]): void {
   if (SCENARIO_LAUNCH === undefined) return;
-  const parent = `${SCENARIO_LAUNCH.TASKELITH_CONTAINMENT_PARENT}/`;
+  assert.ok(workerParent !== undefined, 'the worker has its own containment parent');
   assert.ok(pids.length > 0, 'a scripted process to check');
   for (const pid of pids) {
     const cgroup = `${CGROUP_ROOT}${cgroupOf(pid)}`;
-    assert.ok(cgroup.startsWith(parent), `process ${pid} runs in ${cgroup}, not under ${parent}`);
+    assert.ok(isContainmentOf(workerParent, cgroup), `process ${pid} runs in ${cgroup}, not in a containment of ${workerParent}`);
   }
+}
+
+// One more path segment below the parent: a containment, not the parent.
+export function isContainmentOf(parent: string, cgroup: string): boolean {
+  return dirname(cgroup) === parent && basename(cgroup) !== '';
 }
 
 // The unified hierarchy's line of /proc/PID/cgroup: `0::/path`.

@@ -85,6 +85,11 @@ export class ScenarioWorker {
     return this.#options.name;
   }
 
+  // Set only under the Linux launch: this worker's own containment parent.
+  get containmentParent(): string | undefined {
+    return this.#containmentParent;
+  }
+
   get workerId(): string {
     return this.running.identity.workerId;
   }

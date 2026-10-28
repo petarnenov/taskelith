@@ -170,7 +170,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         const latest = () => journaledUnder(worker, cancelled.assignmentId).at(-1);
         const reached = afterStart ? () => latest()?.state === 'started' : () => latest()?.recordWritten === true;
         await waitFor(reached, 20_000, afterStart ? 'the start' : 'W4');
-        if (afterStart) assertContained(scriptedPids(worker));
+        if (afterStart) assertContained(worker.containmentParent, scriptedPids(worker));
         await cancelAssignment(installation, cancelled.assignmentId);
         const atCancel = latest()!;
         assert.equal(atCancel.recordWritten, true, 'the cancel lands after W4');
@@ -341,7 +341,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       try {
         await installation.submitTask('task-h');
         await waitFor(async () => (await startedExecutions(installation, 'task-h')) === 1, 20_000, 'the authorized start');
-        assertContained(scriptedPids(worker));
+        assertContained(worker.containmentParent, scriptedPids(worker));
         const forged = forgeStartUnderOwningGrant(worker, await installation.task('task-h'));
         await waitFor(async () => (await cancellationsTo(installation, worker)).length === 1, 20_000, 'the cancellation of the unauthorized start');
         assert.deepEqual((await cancellationsTo(installation, worker))[0]!.executionId, forged, 'it names only that execution');
