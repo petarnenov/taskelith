@@ -187,6 +187,18 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - After the fixes: `node --experimental-strip-types --test` of `packages/adapters/git-workspace/test/*.test.ts` and `apps/worker/test/*.test.ts` gave tests 551, pass 551, fail 0; `make findings ARGS="validate"` valid; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, requirement bodies unchanged, the longest 489 characters ("Reclaim program containment"; "Killed reclaim containment" 482); an archive of the change in a scratch copy of `openspec/` validated every spec strictly (71 passed). `make verify` and `make verify-linux-git-workspace` are under "Checks".
 - Architect check (Niki, coordinator as solution architect, 2026-10-28): passed for 08a9347d, 51daebe7 and 7845c3da, and 23caaad6; the docs commit 23caaad6 carrying one test is accepted.
 
+## Return and reconciliation
+
+The coordinator (Niki) returned the archived branch (archive commit `fde11070`): the full `make verify` of `make integrate` on the iMac (macOS, `/bin/bash` 3.2.57), merging `origin/dev` `8b18c540`, failed two tests of `test/worker-entrypoint.test.ts`, "a launching worker holds the execution group as its supplementary group" and "a data root that root already owns keeps its owners". Cause: `infra/installation/worker-entrypoint.sh` expanded the empty array `"${groups[@]}"` under `set -u`, which bash 3.2 rejects (`groups[@]: unbound variable`, exit status 1) and bash 5 accepts. Nothing was merged; `dev` stayed at `8b18c540`. Under worker step 10:
+
+1. `666525ea` reverted the archive commit `fde11070`, which restored the active change and the living specs.
+2. The base is `git merge-base fde11070 origin/dev`, `16667399`. The merge `64c681c6` of `origin/dev` `8b18c540` had no conflict, and no hook reported the dependency inventory stale.
+3. `git diff 16667399 8b18c540 -- openspec/specs` changes only `agent-task-protocol` and `integration-flow`, no file of `worker-runtime` or `git-workspace-port`, so the deltas needed no reconciliation and are unchanged.
+4. `81875115` `chore: keep empty option lists valid under set -u in bash 3.2`, unreviewed, pending the coordinator's architect check: the entrypoint's `setpriv` takes `${groups[@]+"${groups[@]}"}`, as the architect decided. A search of `infra/` and `scripts/` for `[@]}` found one more empty-array expansion under `set -u` in a script that host tests run: `scripts/installation.sh` `enrollment_token` expanded an empty `"${options[@]}"` when no platform, architecture, or hostname is set, now guarded the same way. The other expansions are of arrays that are never empty (`compose_files`, the `options` of `scripts/linux-crash-windows.sh`) or are guarded by a count (`built`, `running`, `platforms`).
+5. Fail-before, in the image `bash:3.2` (`GNU bash, version 3.2.57(1)-release`) with fakes for `id`, `stat`, `mount`, `chown`, and `setpriv` (script `repro-entrypoint.sh` in the session scratchpad): the entrypoint of `64c681c6` without a launch command printed `line 47: groups[@]: unbound variable` and exited 1; after the fix it ran `setpriv` without `--groups`, and with a launch command and group `10003` with `--groups 10003`. `installation.sh enrollment-token` with a fake `docker` and no option set printed `line 281: options[@]: unbound variable` and exited 1 before the fix, and ran `issue-enrollment-token` without options after it. No host test runs on bash 3.2 here; the iMac run above is the test-level fail-before.
+
+No reviewer pass ran on the return: the coordinator checks the unreviewed fix as solution architect before the archive.
+
 ## Limitations
 
 - A whole worker started through the worker image's entrypoint was not run: the entrypoint's group is tested with its fakes, the umask and the hard-link reader through the injected `WorkspaceHost`, and the real `/proc/sys/fs/protected_hardlinks` read is untested; the slot service's real hand-off and reclaim are tested only through the adapter's own suites.
@@ -201,4 +213,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
+- The architect check of the unreviewed return fix `81875115`, then the archive again.
 - Integration into dev by the coordinator (single pull request).
