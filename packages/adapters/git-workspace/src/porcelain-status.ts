@@ -1,5 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { afterFields, nulRecords } from './nul-records.js';
+import { nulRecords, splitFields } from './nul-records.js';
 
 export type StatusEntryKind = 'changed' | 'renamed' | 'unmerged' | 'untracked' | 'ignored';
 
@@ -18,13 +18,21 @@ export interface PorcelainStatus {
   readonly entries: readonly StatusEntry[];
 }
 
+const HASH = 0x23;
+const XY = /^[.MTADRCU]{2}$/;
+const SUBMODULE = /^(?:N\.\.\.|S[C.][M.][U.])$/;
+const MODE = /^[0-7]{6}$/;
+const OBJECT_NAME = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const SCORE = /^[RC][0-9]{1,3}$/;
+const INITIAL = '(initial)';
+
 // The fields before the path of each record type of porcelain v2.
-const PATH_FIELDS: Readonly<Record<string, [StatusEntryKind, number]>> = {
-  '1': ['changed', 8],
-  '2': ['renamed', 9],
-  u: ['unmerged', 10],
-  '?': ['untracked', 1],
-  '!': ['ignored', 1],
+const RECORD_FIELDS: Readonly<Record<string, readonly [StatusEntryKind, readonly RegExp[]]>> = {
+  '1': ['changed', [XY, SUBMODULE, MODE, MODE, MODE, OBJECT_NAME, OBJECT_NAME]],
+  '2': ['renamed', [XY, SUBMODULE, MODE, MODE, MODE, OBJECT_NAME, OBJECT_NAME, SCORE]],
+  u: ['unmerged', [XY, SUBMODULE, MODE, MODE, MODE, MODE, OBJECT_NAME, OBJECT_NAME, OBJECT_NAME]],
+  '?': ['untracked', []],
+  '!': ['ignored', []],
 };
 
 const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
@@ -33,34 +41,47 @@ const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
 export function parsePorcelainStatus(output: Uint8Array): Result<PorcelainStatus> {
   const records = nulRecords(output);
   if (records === null) return unreadable('an unterminated record');
-  let commit: string | null = null;
-  let branch: string | null = null;
+  const headers = new Map<string, Uint8Array>();
   const entries: StatusEntry[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index]!;
-    const type = latin1(record.subarray(0, 1));
-    if (type === '#') {
-      const header = parseHeader(record);
-      if (header === null) return unreadable('a header without a value');
-      if (header.key === 'branch.oid') commit = header.value === '(initial)' ? null : header.value;
-      if (header.key === 'branch.head') branch = header.value === '(detached)' ? null : new TextDecoder().decode(header.bytes);
+    if (record[0] === HASH) {
+      const header = splitFields(record, 2);
+      if (header?.fields[0] !== '#' || header.rest.length === 0) return unreadable('a header without a value');
+      headers.set(header.fields[1]!, header.rest);
       continue;
     }
-    const shape = PATH_FIELDS[type];
-    const path = shape === undefined ? null : afterFields(record, shape[1]);
-    if (shape === undefined || path === null) return unreadable(`a record of type "${type}"`);
-    // A rename's original path is the next record.
-    if (shape[0] === 'renamed' && ++index >= records.length) return unreadable('a rename without its original path');
-    entries.push({ kind: shape[0], path });
+    const entry = parseEntry(record);
+    if (entry === null) return unreadable(`the record "${latin1(record).slice(0, 60)}"`);
+    if (entry.kind === 'renamed') {
+      // A rename's original path is the next record.
+      index += 1;
+      if ((records[index]?.length ?? 0) === 0) return unreadable('a rename without its original path');
+    }
+    entries.push(entry);
   }
-  return ok({ commit, branch, entries });
+  return withBranch(headers, entries);
 }
 
-function parseHeader(record: Uint8Array): { key: string; value: string; bytes: Uint8Array } | null {
-  const key = afterFields(record, 1);
-  const bytes = afterFields(record, 2);
-  if (key === null || bytes === null) return null;
-  return { key: latin1(key.subarray(0, key.length - bytes.length - 1)), value: latin1(bytes), bytes };
+function parseEntry(record: Uint8Array): StatusEntry | null {
+  const shape = RECORD_FIELDS[latin1(record.subarray(0, 1))];
+  if (shape === undefined) return null;
+  const [kind, patterns] = shape;
+  const split = splitFields(record, patterns.length + 1);
+  if (split === null || split.rest.length === 0) return null;
+  const [type, ...fields] = split.fields;
+  const valid = type!.length === 1 && patterns.every((pattern, at) => pattern.test(fields[at]!));
+  return valid ? { kind, path: split.rest } : null;
+}
+
+function withBranch(headers: ReadonlyMap<string, Uint8Array>, entries: StatusEntry[]): Result<PorcelainStatus> {
+  const oid = headers.get('branch.oid');
+  const head = headers.get('branch.head');
+  if (oid === undefined || head === undefined) return unreadable('no branch.oid or branch.head header');
+  const commit = latin1(oid);
+  if (commit !== INITIAL && !OBJECT_NAME.test(commit)) return unreadable(`the commit "${commit.slice(0, 80)}"`);
+  const branch = latin1(head) === '(detached)' ? null : new TextDecoder().decode(head);
+  return ok({ commit: commit === INITIAL ? null : commit, branch, entries });
 }
 
 function unreadable(what: string): Result<never> {

@@ -11,6 +11,8 @@ export type ListedEntry =
 const TAB = 0x09;
 const NEWLINE = 0x0a;
 const OBJECT_NAME = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const MODE = /^[0-7]{6}$/;
+const BATCH_HEADER = /^([0-9a-f]{40}|[0-9a-f]{64}) blob (0|[1-9][0-9]*)$/;
 const REGULAR_FILE = 0o100000;
 const FILE_TYPE_MASK = 0o170000;
 const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
@@ -32,33 +34,33 @@ export function parseTreeListing(output: Uint8Array): Result<readonly ListedEntr
 function parseListedEntry(record: Uint8Array): ListedEntry | null {
   const tab = record.indexOf(TAB);
   if (tab === -1) return null;
-  const [mode, type, object, ...rest] = latin1(record.subarray(0, tab)).split(' ');
-  if (rest.length > 0 || object === undefined || !OBJECT_NAME.test(object)) return null;
+  const [mode = '', type, object = '', ...rest] = latin1(record.subarray(0, tab)).split(' ');
   const path = record.subarray(tab + 1);
+  if (rest.length > 0 || !MODE.test(mode) || !OBJECT_NAME.test(object) || path.length === 0) return null;
   if (mode === '160000' && type === 'commit') return { type: 'gitlink', object, path };
   if (type !== 'blob') return null;
   if (mode === '120000') return { type: 'blob', mode, object, path };
-  const bits = Number.parseInt(mode ?? '', 8);
+  const bits = Number.parseInt(mode, 8);
   if ((bits & FILE_TYPE_MASK) !== REGULAR_FILE) return null;
   return { type: 'blob', mode: (bits & 0o100) === 0 ? '100644' : '100755', object, path };
 }
 
-// `git cat-file --batch` output: a header `<object> <type> <size>`, then
-// exactly that many bytes and a newline, so content may hold any byte.
-export function parseBatchObjects(output: Uint8Array): Result<ReadonlyMap<string, Uint8Array>> {
+// `git cat-file --batch` output, the requested blobs in order: a header
+// `<object> blob <size>`, then that many bytes of any value and a newline.
+export function parseBatchObjects(output: Uint8Array, requested: readonly string[]): Result<ReadonlyMap<string, Uint8Array>> {
   const objects = new Map<string, Uint8Array>();
-  for (let offset = 0; offset < output.length;) {
+  let offset = 0;
+  for (const object of requested) {
     const newline = output.indexOf(NEWLINE, offset);
-    const [object, , size, ...rest] = latin1(output.subarray(offset, newline === -1 ? output.length : newline)).split(' ');
-    const length = Number(size);
-    const end = newline + 1 + length;
-    if (newline === -1 || rest.length > 0 || size === undefined || !Number.isSafeInteger(length) || output[end] !== NEWLINE) {
-      return unreadable('cat-file', `the object "${object ?? ''}"`);
+    const header = BATCH_HEADER.exec(latin1(output.subarray(offset, newline === -1 ? offset : newline)));
+    const end = newline + 1 + Number(header?.[2]);
+    if (header === null || header[1] !== object || !Number.isSafeInteger(end) || output[end] !== NEWLINE) {
+      return unreadable('cat-file', `no blob ${object}`);
     }
-    objects.set(object!, output.subarray(newline + 1, end));
+    objects.set(object, output.subarray(newline + 1, end));
     offset = end + 1;
   }
-  return ok(objects);
+  return offset === output.length ? ok(objects) : unreadable('cat-file', 'more than the requested objects');
 }
 
 // The tree as `encodeHeadSnapshot` takes it: a gitlink is refused first,

@@ -12,13 +12,22 @@ export function nulRecords(output: Uint8Array): Uint8Array[] | null {
   return start === output.length ? records : null;
 }
 
-// The bytes after the first `count` spaces; null when there are fewer.
-export function afterFields(record: Uint8Array, count: number): Uint8Array | null {
+export interface SplitRecord {
+  readonly fields: readonly string[];
+  // The bytes after the fields, such as a path that may hold spaces.
+  readonly rest: Uint8Array;
+}
+
+// The first `count` space-separated fields as latin1 text and the rest;
+// null when there are fewer.
+export function splitFields(record: Uint8Array, count: number): SplitRecord | null {
+  const fields: string[] = [];
   let start = 0;
   for (let field = 0; field < count; field += 1) {
     const space = record.indexOf(SPACE, start);
     if (space === -1) return null;
+    fields.push(Buffer.from(record.subarray(start, space)).toString('latin1'));
     start = space + 1;
   }
-  return record.subarray(start);
+  return { fields, rest: record.subarray(start) };
 }
