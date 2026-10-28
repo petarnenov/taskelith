@@ -427,6 +427,7 @@ export async function launchedByDeadWorker(args: readonly string[]): Promise<Rec
 export class CountingHost implements ReclaimHost {
   readonly launched: ReclaimContainment[] = [];
   readonly released: ReclaimContainment[] = [];
+  readonly killedRecorded: ReclaimContainment[] = [];
   readonly #inner: ReclaimHost;
 
   constructor(inner: ReclaimHost) {
@@ -451,6 +452,11 @@ export class CountingHost implements ReclaimHost {
     this.released.push(containment);
     return this.#inner.release(containment);
   }
+
+  killRecorded(containment: ReclaimContainment) {
+    this.killedRecorded.push(containment);
+    return this.#inner.killRecorded(containment);
+  }
 }
 
 // The one-account host that declares the worker's own account as the
@@ -461,6 +467,7 @@ export function simulatedSeparateAccount(host: ReclaimHost = new ProcessGroupRec
     launch: (checkout, containmentName) => host.launch(checkout, containmentName),
     populated: (containment) => host.populated(containment),
     release: (containment) => host.release(containment),
+    killRecorded: (containment) => host.killRecorded(containment),
   };
 }
 

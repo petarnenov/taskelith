@@ -6,7 +6,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
 import {
   isSpaceRefusal, launchRejection, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type ExecutionState,
-  type JournalBinding, type JournaledExecution, type LaunchRequest, type WorkerJournal,
+  type AttemptId, type JournalBinding, type JournaledExecution, type LaunchRequest, type WorkerJournal,
 } from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
@@ -64,11 +64,12 @@ afterEach(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-function newIntake(capacity: WorkerCapacity, selfCheckFailed = false): CommandIntake {
+function newIntake(capacity: WorkerCapacity, selfCheckFailed = false, handedOff?: () => ReadonlySet<AttemptId>): CommandIntake {
   let reports = 0;
   return new CommandIntake({
     journal: root.journal, capacity, pressure, selfCheckFailed, publish: broker.publish, observationSubject: SUBJECT,
     newReportId: () => `report-${(reports += 1)}`, now: () => T0, journalFault: () => root.journal.fault,
+    ...(handedOff === undefined ? {} : { handedOff }),
   });
 }
 
@@ -224,6 +225,38 @@ test('pressure that cannot be refreshed journals nothing, so the offer is not ac
   pressure.causes = err(failure('unavailable', 'the journal is stopped'));
   assert.equal(failed(await deliver(offer(1))).message, 'the journal is stopped');
   assert.deepEqual(await published(), []);
+});
+
+// The answer to each offer, in order; other observations are left out.
+async function offerOutcomes(): Promise<string[]> {
+  const answers = (await published()).filter((body) => String((body.metadata as { observationType: string }).observationType).startsWith('execution.assignment.'));
+  return answers.flatMap((body) => {
+    const { observationType } = body.metadata as { observationType: string };
+    if (observationType === 'execution.assignment.accepted') return ['accepted'];
+    return observationType === 'execution.assignment.refused' ? [(body.payload as { reason: string }).reason] : [];
+  });
+}
+
+test('a handed-off workspace holds its slot after its assignment ended, once per attempt, until its reclaim', async () => {
+  const handedOff = new Set<AttemptId>();
+  intake = newIntake(CAPACITY, false, () => handedOff);
+  value(await deliver(offer(1)));
+  handedOff.add(id('AttemptId', 'attempt-1'));
+  value(await deliver(offer(2)));
+  value(await deliver(end(1)));
+  value(await deliver(offer(3)));
+  handedOff.delete(id('AttemptId', 'attempt-1'));
+  value(await deliver(offer(4)));
+  assert.deepEqual(await offerOutcomes(), ['accepted', 'accepted', 'worker-slots-exhausted', 'accepted']);
+});
+
+test('a handed-off attempt that the journal no longer counts holds its slot only, not its CPU and memory', async () => {
+  intake = newIntake({ ...CAPACITY, memoryMebibytes: 5000 }, false, () => new Set([id('AttemptId', 'attempt-1') as AttemptId]));
+  value(await deliver(offer(1)));
+  value(await deliver(end(1)));
+  value(await deliver(offer(2, { memoryMebibytes: 4096 })));
+  value(await deliver(offer(3)));
+  assert.deepEqual(await offerOutcomes(), ['accepted', 'accepted', 'worker-slots-exhausted']);
 });
 
 test('an ended assignment frees its slot, and an end that arrives before its offer ends it', async () => {

@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { open, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { replaceFileAsync, syncPathAsync } from '@taskelith/data-root';
+import type { AttemptId } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 
 // Where a reclaim program runs: a cgroup under the containment parent, or
@@ -17,6 +18,12 @@ export interface HandOffRecord {
   readonly containment: ReclaimContainment | null;
   // The program failed or was killed; it never runs again by itself.
   readonly reclaimFailed: boolean;
+}
+
+// A handed-off workspace's attempt with its record.
+export interface HandedOffWorkspace {
+  readonly attemptId: AttemptId;
+  readonly record: HandOffRecord;
 }
 
 export const HANDED_OFF: HandOffRecord = Object.freeze({ containment: null, reclaimFailed: false });

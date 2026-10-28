@@ -72,6 +72,7 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'git-client-mismatch',
   'non-utf8-path',
   'unsafe-tree-path',
+  'hardlinks-unprotected',
 ] as const);
 
 export type WorkspaceFailureReason = (typeof WORKSPACE_FAILURE_REASONS)[number];

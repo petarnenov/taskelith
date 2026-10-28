@@ -193,7 +193,7 @@ test('long-running services run unprivileged; only the worker entrypoint starts 
   assert.deepEqual([...(worker.security_opt ?? [])].sort(), ['apparmor=unconfined', 'no-new-privileges=true', WORKER_SECCOMP]);
   assert.match(dockerfile, /^ENTRYPOINT \["bash", "\/opt\/taskelith\/infra\/installation\/worker-entrypoint\.sh"\]$/m);
   const entrypoint = readFileSync('infra/installation/worker-entrypoint.sh', 'utf8');
-  assert.match(entrypoint, /^exec setpriv --bounding-set=-all,\+setuid,\+setgid,\+kill --inh-caps=-all --no-new-privs -- "\$@"$/m);
+  assert.match(entrypoint, /^exec setpriv --bounding-set=-all,\+setuid,\+setgid,\+kill --inh-caps=-all --no-new-privs \$\{groups\[@\]\+"\$\{groups\[@\]\}"\} -- "\$@"$/m);
 });
 
 test('the worker image always names its containment parent and execution account', () => {

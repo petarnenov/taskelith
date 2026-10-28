@@ -287,6 +287,14 @@ export class SqliteWorkerJournal implements WorkerJournal {
     });
   }
 
+  // Forgets the last declaration, so that no capacity equals it.
+  oweCapacityDeclaration(): Result<void> {
+    return this.#connection.transact((database) => {
+      database.prepare('UPDATE journal_meta SET declared_capacity = NULL').run();
+      return ok(undefined);
+    });
+  }
+
   // A declaration is the sequence it takes, so it is unique in the journal.
   recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void> {
     return this.#connection.transact((database) => {

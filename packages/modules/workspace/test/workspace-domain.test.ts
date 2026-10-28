@@ -48,7 +48,7 @@ const CONTRACT_VALUES = [
     WORKSPACE_FAILURE_REASONS,
     ['head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
       'workspace-handed-off', 'other-workspace-handed-off', 'reclaim-failed', 'unsafe-checkout', 'gitlink-in-tree',
-      'insecure-remote', 'git-client-mismatch', 'non-utf8-path', 'unsafe-tree-path'],
+      'insecure-remote', 'git-client-mismatch', 'non-utf8-path', 'unsafe-tree-path', 'hardlinks-unprotected'],
   ],
 ] as const;
 

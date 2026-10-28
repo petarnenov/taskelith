@@ -56,3 +56,12 @@ export { ExecutionWatch, LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOpti
 export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
 export { checkComposition, hasFailedCheck, runSelfCheck } from './self-check.js';
 export { LINUX_PROBE, linuxContainmentCheck, type LinuxContainmentProbe } from './linux-containment-check.js';
+export {
+  CLONE_UMASK,
+  WORKSPACE_HOST,
+  composeWorkspace,
+  reclaimHostFor,
+  type WorkerWorkspace,
+  type WorkspaceHost,
+} from './workspace-composition.js';
+export { RECLAIM_FAILED_EVENT, WorkspaceSlots, type WorkspaceSlotsOptions } from './workspace-slots.js';

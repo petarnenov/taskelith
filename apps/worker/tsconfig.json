@@ -3,6 +3,7 @@
   "references": [
     { "path": "../../packages/adapters/certificates" },
     { "path": "../../packages/adapters/data-root" },
+    { "path": "../../packages/adapters/git-workspace" },
     { "path": "../../packages/adapters/nats" },
     { "path": "../../packages/adapters/node-observability" },
     { "path": "../../packages/adapters/secrets" },
@@ -16,6 +17,7 @@
     { "path": "../../packages/modules/observability" },
     { "path": "../../packages/modules/scheduling" },
     { "path": "../../packages/modules/sdlc" },
+    { "path": "../../packages/modules/workspace" },
     { "path": "../../packages/testing" }
   ]
 }

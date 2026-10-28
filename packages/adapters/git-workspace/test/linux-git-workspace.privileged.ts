@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { failed, id, value } from '@taskelith/testing';
-import type { Result } from '@taskelith/kernel';
+import { ok, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
@@ -20,6 +20,8 @@ import {
   parseHandOffRecord,
   sha256IdentifierDigest,
   verifyGitClient,
+  type LaunchedReclaim,
+  type ReclaimHost,
   type ReclaimProgram,
 } from '@taskelith/git-workspace';
 import {
@@ -175,6 +177,7 @@ async function holdFile(): Promise<string> {
   return hold;
 }
 
+const containmentExists = async (name: string) => (await readdir(CONTAINMENT_PARENT)).includes(name);
 const reasonOf = (result: Result<unknown>) => failed(result).details.reason;
 const recordOf = async (git: GitFixture, attemptId = FIRST) => parseHandOffRecord(await readFile(join(git.checkout(attemptId), '..', WORKSPACE_LAYOUT.handOffRecord), 'utf8'));
 
@@ -272,6 +275,8 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
     value(await git.local.prepare(request(git)));
     value(await git.local.handOff(FIRST));
     for (const provider of [git.local, git.reopen()]) assert.equal(reasonOf(await provider.reclaim(FIRST)), 'reclaim-failed');
+    const failedName = reclaimContainmentName(FIRST, sha256IdentifierDigest);
+    assert.equal(await containmentExists(failedName), false, 'the empty cgroup of the failed program is removed');
     assert.equal(failing.launched.length, 1);
     assert.equal((await recordOf(git))?.reclaimFailed, true);
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
@@ -290,7 +295,61 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
   }, { reclaimHost: linuxHost(testProgram('hold', hold)) });
 });
 
+test('a reclaim program past its run bound is killed and its cgroup removed, and the workspace stays handed off', async () => {
+  const hold = await holdFile();
+  const host = linuxHost(testProgram('hold', hold));
+  await withLinuxFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
+    assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(await containmentExists(name), false, 'the killed program is proven gone and its cgroup removed');
+    assert.deepEqual(await recordOf(git), { containment: { kind: 'cgroup', name }, reclaimFailed: true });
+    assert.equal(reasonOf(await git.reopen().reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(host.launched.length, 1, 'no retry');
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(hold, { force: true }));
+});
+
 const populatedNow = async (cgroupName: string) => (await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.events'), 'utf8')).includes('populated 1');
+
+// Its first kill after a failed program meets a file system fault and
+// kills nothing; the rest goes to the counting Linux host it wraps.
+function failingFirstKill(inner: CountingHost): ReclaimHost {
+  let faulted = false;
+  const kill = (launched: LaunchedReclaim) => {
+    if (faulted) return launched.kill();
+    faulted = true;
+    return Promise.reject(Object.assign(new Error('EIO: i/o error, write'), { code: 'EIO', syscall: 'write' }));
+  };
+  return {
+    executionAccount: inner.executionAccount,
+    launch: async (checkout, containmentName) => {
+      const launched = await inner.launch(checkout, containmentName);
+      return launched.ok ? ok({ ...launched.value, kill: () => kill(launched.value) }) : launched;
+    },
+    populated: (containment) => inner.populated(containment),
+    release: (containment) => inner.release(containment),
+    killRecorded: (containment) => inner.killRecorded(containment),
+  };
+}
+
+test('a later reclaim kills and removes the cgroup of a failed program whose kill was interrupted', async () => {
+  const hold = await holdFile();
+  const host = linuxHost(testProgram('hold', hold));
+  await withLinuxFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
+    assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(await populatedNow(name), true, 'the interrupted kill left the program running');
+    assert.equal(reasonOf(await git.reopen().reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(await containmentExists(name), false, 'the later reclaim killed the program and removed its cgroup');
+    assert.deepEqual([host.killedRecorded, host.launched.length], [[{ kind: 'cgroup', name }], 1]);
+    assert.deepEqual(await recordOf(git), { containment: { kind: 'cgroup', name }, reclaimFailed: true });
+  }, { reclaimHost: failingFirstKill(host), reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(hold, { force: true }));
+});
+
 
 // A checkout that the execution account made, without CAP_CHOWN, with a
 // file that normalization changes; `remove` deletes it as that account.
@@ -397,8 +456,6 @@ test('a Linux launch resolves only once its program is in its cgroup as the exec
   await held.release(launched.containment);
   await made.remove();
 });
-
-const containmentExists = async (name: string) => (await readdir(CONTAINMENT_PARENT)).includes(name);
 
 test('a launch that fails or is not ready within its bound frees its empty cgroup', { timeout: FIFO_TEST_BOUND_MS }, async () => {
   const ended = linuxHost({ executable: '/bin/sh', args: ['-c', 'exit 1', 'reclaim'] });

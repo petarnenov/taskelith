@@ -14,12 +14,16 @@ import {
   RECLAIM_GO_BOUND_MS,
   RECLAIM_PROGRAM_MAIN,
   RECLAIM_READY,
+  RECLAIM_READY_BOUND_MS,
   normalizeCheckout,
   parseReclaimArguments,
   receivedGo,
   runReclaimProgram,
   sharedMode,
+  type LaunchedReclaim,
+  type ReclaimHost,
   type ReclaimProgram,
+  type SendSignal,
 } from '@taskelith/git-workspace';
 import { launchedByDeadWorker } from './git-fixture.ts';
 
@@ -217,4 +221,49 @@ test('a launch fails as unavailable when the program ends before it is ready', a
     if (launched.ok) launched.value.abandon();
     assert.equal(failed(launched).code, 'unavailable', script);
   }
+});
+
+// Signals readiness, then exits once it reads `go` or its input ends.
+const WAITING_PROGRAM: ReclaimProgram = { executable: '/bin/sh', args: ['-c', 'echo ready; read go', 'reclaim'] };
+
+function recordingSignals(): { readonly sent: [number, NodeJS.Signals][]; readonly send: SendSignal } {
+  const sent: [number, NodeJS.Signals][] = [];
+  return { sent, send: (pid, signal) => void sent.push([pid, signal]) };
+}
+
+function groupOf({ containment }: LaunchedReclaim): number {
+  if (containment.kind !== 'process-group') throw new Error('expected a process group');
+  return containment.id;
+}
+
+// Runs `check` while the waiting program runs, then lets it exit.
+async function whileWaiting(host: ReclaimHost, check: (running: LaunchedReclaim) => Promise<void>): Promise<void> {
+  const running = value(await host.launch('/nonexistent', 'reclaim-x'));
+  try {
+    await check(running);
+  } finally {
+    await running.go();
+  }
+}
+
+test('a one-account kill signals the group of an unreaped program, never that of an exited one', async () => {
+  const signals = recordingSignals();
+  const host = new ProcessGroupReclaimHost(WAITING_PROGRAM, RECLAIM_READY_BOUND_MS, signals.send);
+  let exited: LaunchedReclaim | undefined;
+  await whileWaiting(host, async (running) => {
+    await running.kill();
+    assert.deepEqual(signals.sent, [[-groupOf(running), 'SIGKILL']]);
+    exited = running;
+  });
+  await exited!.kill();
+  assert.equal(signals.sent.length, 1, 'the group of an exited program is not signalled');
+});
+
+test('a one-account host never signals a recorded process group, also one still running', async () => {
+  const signals = recordingSignals();
+  const host: ReclaimHost = new ProcessGroupReclaimHost(WAITING_PROGRAM, RECLAIM_READY_BOUND_MS, signals.send);
+  await whileWaiting(host, async (running) => {
+    await host.killRecorded(running.containment);
+    assert.deepEqual(signals.sent, [], 'the recorded group is not signalled');
+  });
 });

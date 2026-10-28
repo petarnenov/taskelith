@@ -1,6 +1,6 @@
 # Execution wire contracts
 
-Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-plan.md) item 8), under independent review. It states the rules of the execution documents that their schemas cannot express. The documents are the source of the field definitions; this page never repeats a field list. G3 sub-change 9c (`extend-execution-http-contracts`) extends the OpenAPI document with the operations of section 8.
+Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-plan.md) item 8), under independent review. It states the rules of the execution documents that their schemas cannot express. The documents are the source of the field definitions; this page never repeats a field list. G3 sub-change 9c (`extend-execution-http-contracts`) extends the OpenAPI document with the operations of section 8. G3 sub-change 16e (`wire-git-workspace-into-worker`) adds the capacity declaration after a reclaim (section 5).
 
 ## 1. Documents
 
@@ -60,7 +60,7 @@ Each observation is an `ObservationMetadata` envelope with a fixed `observationT
 | Launch rejected | `execution.launch.rejected` | A non-retryable launch rejection (launch authorization section 9) |
 | Started, exited, not started, uncertain, termination unproven, unrecorded process | `execution.started`, `execution.exited`, `execution.not-started`, `execution.uncertain`, `execution.termination-unproven`, `execution.unrecorded-process` | The facts of supervisor identity section 11 |
 | Cancellation not applied | `execution.cancellation.not-applied` | An adopting supervisor on macOS (supervisor identity section 8) |
-| Capacity declared | `worker.capacity.declared` | At enrollment and whenever the slot count, CPU, memory, enforceable controls, or protocol window change; each of the slot count, CPU, and memory is at most `2147483647`, the largest PostgreSQL `integer` |
+| Capacity declared | `worker.capacity.declared` | At enrollment and whenever the slot count, CPU, memory, enforceable controls, or protocol window change, and again after a reclaim that removes a hand-off record, also unchanged ([Git workspace](git-workspace.md) section 3, step 6); each of the slot count, CPU, and memory is at most `2147483647`, the largest PostgreSQL `integer` |
 | Admission pressure changed | `worker.admission-pressure.changed` | The causes of admission pressure changed; an empty list clears it |
 | Self-check reported | `worker.self-check.reported` | Once per worker start, after the capacity declaration and the pressure report ([worker admission](worker-admission.md)) |
 

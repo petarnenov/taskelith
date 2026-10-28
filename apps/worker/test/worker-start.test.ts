@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/contracts';
-import type { JournalSnapshot } from '@taskelith/execution';
+import type { AttemptId, JournalSnapshot } from '@taskelith/execution';
+import type { HandedOffWorkspace } from '@taskelith/git-workspace';
 import {
   stubAdmissionCheck,
   type CredentialRenewalClient,
@@ -23,6 +24,7 @@ import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/na
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, id, value } from '@taskelith/testing';
 import {
+  composeWorkspace,
   launchFailureLine,
   serveUntilStopped,
   startWorker,
@@ -34,7 +36,10 @@ import {
   type ServiceProcess,
   type WorkerDependencies,
   type WorkerSettings,
+  type WorkerWorkspace,
+  type WorkspaceHost,
 } from '@taskelith/worker';
+import { workspaceFailure } from '@taskelith/workspace';
 import { ManualTimers, StatusStream } from './contact-fakes.ts';
 import { FakeAuthority, FakeClock, FakeDaemon, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
 import {
@@ -149,6 +154,7 @@ let timers: ManualTimers;
 let space: VolumeSpace;
 let daemon: FakeDaemon;
 let admissionChecks: WorkerAdmissionCheck[];
+let workspace: WorkerDependencies['workspace'];
 const running: RunningWorker[] = [];
 
 beforeEach(() => {
@@ -165,6 +171,7 @@ beforeEach(() => {
   space = AMPLE_SPACE;
   daemon = new FakeDaemon();
   admissionChecks = [stubAdmissionCheck()];
+  workspace = undefined;
 });
 
 afterEach(async () => {
@@ -176,7 +183,7 @@ function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     installationCa: enrollment, enrollment: enrollment.pinned, renewal: () => UNUSED_RENEWAL, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
     sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), daemon, pressurePollMilliseconds: 10,
-    admissionChecks, ...(launching === undefined ? {} : { launching }),
+    admissionChecks, ...(launching === undefined ? {} : { launching }), ...(workspace === undefined ? {} : { workspace }),
   };
 }
 
@@ -746,4 +753,163 @@ test('without launch dependencies, each inherited open execution is deferred', a
 test('without open executions, nothing is deferred', async () => {
   const { sink } = await startLogged(new RecordingLaunching());
   assert.deepEqual(sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred'), []);
+});
+
+// The Git workspace's records in memory, with the sweeps it was asked for.
+class FakeWorkspace implements WorkerWorkspace {
+  readonly records: HandedOffWorkspace[] = [];
+  sweeps = 0;
+  sweepFault: Error | undefined;
+  readFault: Error | undefined;
+  // A reclaim removes its record and then the worker dies.
+  crashesAfterReclaim = false;
+
+  async sweep(): Promise<void> {
+    this.sweeps += 1;
+    if (this.sweepFault !== undefined) throw this.sweepFault;
+  }
+
+  async handOffRecords(): Promise<readonly HandedOffWorkspace[]> {
+    if (this.readFault !== undefined) throw this.readFault;
+    return this.records;
+  }
+
+  async handOff(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+
+  async reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    this.records.splice(this.records.findIndex((record) => record.attemptId === attemptId), 1);
+    if (this.crashesAfterReclaim) throw new Error('simulated crash after the record removal');
+    return ok(undefined);
+  }
+}
+
+const HANDED_OFF_ATTEMPT = id('AttemptId', 'attempt-1') as AttemptId;
+const RECLAIM_CGROUP = 'reclaim-attempt_1-abc';
+
+function composing(fake: FakeWorkspace): void {
+  workspace = async () => ok(fake);
+}
+
+test('a workspace precondition that fails stops the start before enrollment and creates nothing', async () => {
+  for (const reason of ['hardlinks-unprotected', 'git-client-mismatch'] as const) {
+    workspace = async () => workspaceFailure('precondition-failed', reason, 'the workspace cannot be composed');
+    const refused = failed(await startWorker({ ...settings, launch: LAUNCH }, dependencies()));
+    assert.equal(refused.details.reason, reason);
+    assert.deepEqual([enrollment.reads, enrollment.calls, broker.endpoints], [0, [], []]);
+    assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  }
+});
+
+test('the start sweeps the workspaces, holds the recorded slots, and skips their containments in the scan', async () => {
+  const fake = new FakeWorkspace();
+  fake.records.push({ attemptId: HANDED_OFF_ATTEMPT, record: { containment: { kind: 'cgroup', name: RECLAIM_CGROUP }, reclaimFailed: false } });
+  composing(fake);
+  const launching = new RecordingLaunching();
+  const lost = '/sys/fs/cgroup/executions/lost-1';
+  launching.hostAnswer = ok({
+    clock: new FakeClock(), supervision: new FakeSupervisions().factory, records: async () => ok([]),
+    containments: () => ok([
+      { name: RECLAIM_CGROUP, containment: `/sys/fs/cgroup/executions/${RECLAIM_CGROUP}`, processes: [] },
+      { name: 'lost-1', containment: lost, processes: [] },
+    ]),
+  });
+  const worker = await start({ ...settings, launch: LAUNCH }, launching.dependencies);
+  assert.equal(fake.sweeps, 1);
+  assert.deepEqual([...worker.workspaceSlots!.held], [HANDED_OFF_ATTEMPT]);
+  const unrecorded = () => value(worker.root.journal.dueForPublication(T0)).flatMap(({ fact }) => (fact.kind === 'unrecorded-process' ? [fact.containment] : []));
+  await until(() => unrecorded().length > 0);
+  assert.deepEqual(unrecorded(), [lost]);
+});
+
+test('a reclaim through the worker\'s slots declares the unchanged capacity again', async () => {
+  const fake = new FakeWorkspace();
+  fake.records.push({ attemptId: HANDED_OFF_ATTEMPT, record: { containment: null, reclaimFailed: false } });
+  composing(fake);
+  const worker = await start({ ...settings, launch: LAUNCH });
+  const declarations = () => value(worker.root.journal.dueForPublication(T0)).filter(({ fact }) => fact.kind === 'capacity-declared').length;
+  assert.equal(declarations(), 1);
+  value(await worker.workspaceSlots!.reclaim(HANDED_OFF_ATTEMPT));
+  assert.deepEqual([declarations(), [...worker.workspaceSlots!.held]], [2, []]);
+});
+
+test('a capacity declaration that a reclaim owes is journaled by the next start after a crash', async () => {
+  const fake = new FakeWorkspace();
+  fake.records.push({ attemptId: HANDED_OFF_ATTEMPT, record: { containment: null, reclaimFailed: false } });
+  fake.crashesAfterReclaim = true;
+  composing(fake);
+  const crashed = value(await startWorker({ ...settings, launch: LAUNCH }, dependencies()));
+  await assert.rejects(crashed.workspaceSlots!.reclaim(HANDED_OFF_ATTEMPT), /simulated crash/);
+  await crashed.stop();
+  composing(new FakeWorkspace());
+  const restarted = await start({ ...settings, launch: LAUNCH });
+  const declarations = value(restarted.root.journal.dueForPublication(T0)).flatMap(({ fact }) => (fact.kind === 'capacity-declared' ? [fact.declaration] : []));
+  assert.equal(declarations.at(-1), 2);
+});
+
+const PRIVATE_PATH = '/private/checkout/customer-note';
+const privateFault = () => Object.assign(new Error(`EACCES: permission denied, open '${PRIVATE_PATH}'`), { code: 'EACCES', syscall: 'open' });
+
+function faultingWorkspace(fault: 'sweep' | 'read'): WorkerDependencies['workspace'] {
+  const fake = new FakeWorkspace();
+  if (fault === 'sweep') fake.sweepFault = privateFault();
+  else fake.readFault = privateFault();
+  return async () => ok(fake);
+}
+
+const UNREADABLE_HARDLINKS: WorkspaceHost = {
+  readProtectedHardlinks: () => {
+    throw privateFault();
+  },
+  setUmask: () => {},
+  verifyGitClient: async () => err(failure('internal', 'no Git client gate expected')),
+};
+
+test('the entry reports a workspace start failure with its fault code and never the path of the fault', async () => {
+  const environment = {
+    TASKELITH_DATA_DIR: settings.dataRoot, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane/', TASKELITH_NATS_URL: 'nats://broker:4222',
+    TASKELITH_ENROLLMENT_TOKEN: TOKEN, TASKELITH_INSTALLATION_CA_SHA256: INSTALLATION_CA.sha256,
+  };
+  const linux: WorkerSettings = { ...settings, containmentParent: '/sys/fs/cgroup/executions', launch: { ...LAUNCH, executionAccount: { uid: 10003, gid: 10003 } } };
+  const failures = {
+    'fs.protected_hardlinks cannot be read (EACCES)': async () => composeWorkspace(linux, UNREADABLE_HARDLINKS),
+    'the workspaces cannot be swept (EACCES)': faultingWorkspace('sweep'),
+    'the hand-off records cannot be read (EACCES)': faultingWorkspace('read'),
+  };
+  for (const [message, composed] of Object.entries(failures)) {
+    workspace = composed;
+    const lines: string[] = [];
+    assert.equal(await workerMain(environment, (line) => lines.push(line), () => dependencies()), undefined, message);
+    assert.equal(lines.length, 1, message);
+    assert.equal(lines[0]!.includes(PRIVATE_PATH), false, message);
+    assert.equal(JSON.parse(lines[0]!).error.message, message);
+  }
+});
+
+test('hand-off records or a sweep that fail fail the start and release the root', async () => {
+  for (const fault of ['read', 'sweep'] as const) {
+    const fake = new FakeWorkspace();
+    if (fault === 'read') fake.readFault = new Error('EIO: i/o error');
+    else fake.sweepFault = new Error('EIO: i/o error');
+    composing(fake);
+    assert.equal(failed(await startWorker({ ...settings, launch: LAUNCH }, dependencies())).code, 'unavailable', fault);
+  }
+  composing(new FakeWorkspace());
+  const worker = await start({ ...settings, launch: LAUNCH });
+  assert.deepEqual([...worker.workspaceSlots!.held], []);
+});
+
+test('a worker without a composed workspace has no workspace slots', async () => {
+  assert.equal((await start()).workspaceSlots, undefined);
+});
+
+test('a worker with an execution account opens the workspaces to its group', async () => {
+  const gid = process.getgid!();
+  const launch: LaunchSettings = { ...LAUNCH, executionAccount: { uid: 10003, gid } };
+  const worker = await start({ ...settings, launch });
+  for (const directory of [worker.root.paths.dataRoot, worker.root.paths.worker, worker.root.paths.workspaces]) {
+    const { mode, gid: group } = statSync(directory);
+    assert.deepEqual([mode & 0o777, group], [0o710, gid], directory);
+  }
 });
