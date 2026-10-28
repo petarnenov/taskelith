@@ -40,7 +40,7 @@ import { checkCheckoutSafety } from './checkout-safety.js';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
-import { succeeded, type GitRunner } from './git-runner.js';
+import { succeeded, type GitRunner, type GitTimer } from './git-runner.js';
 import { parseCommitParents, type GitObjectType } from './git-objects.js';
 import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
@@ -58,6 +58,8 @@ export interface GitWorkspacesOptions {
   readonly crashPoints?: CrashPointHook;
   // The time limit of every Git process; `GIT_TIME_LIMIT_MS` by default.
   readonly gitTimeLimitMs?: number;
+  // Arms each time limit; `systemGitTimer` unless a test fires its own.
+  readonly gitTimer?: GitTimer;
 }
 
 // The operations of sub-changes 16b and 16c; the hand-off and the
@@ -109,6 +111,21 @@ function attempt(call: Promise<unknown>, codes: readonly string[]): Promise<bool
   });
 }
 
+function limitedRunner({ client, gitTimeLimitMs, gitTimer }: GitWorkspacesOptions): GitRunner {
+  const limited = gitTimeLimitMs === undefined ? client.runner : client.runner.withTimeLimit(gitTimeLimitMs);
+  return gitTimer === undefined ? limited : limited.withTimer(gitTimer);
+}
+
+// The object of the line whose ref is exactly `ref`, from the raw output
+// of `ls-remote`, which matches patterns by their tail; none is null.
+function parseRemoteHead(stdout: Uint8Array, ref: string): Result<GitObjectId | null> {
+  const lines = new TextDecoder().decode(stdout).split('\n').filter(Boolean).map((line) => line.split('\t'));
+  const head = lines.find(([, name]) => name === ref)?.[0];
+  const parsed = head === undefined ? ok(null) : parseGitObjectId(head);
+  const readable = parsed.ok && lines.every((fields) => fields.length === 2);
+  return readable ? parsed : err(failure('internal', 'the remote head read printed an unreadable line'));
+}
+
 // The Git workspace adapter (contract sections 3 and 6 to 10), with the
 // pinned client that passed its gate.
 export class GitWorkspaces implements GitWorkspaceOperations {
@@ -120,8 +137,7 @@ export class GitWorkspaces implements GitWorkspaceOperations {
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
-    const { runner } = options.client;
-    this.#git = options.gitTimeLimitMs === undefined ? runner : runner.withTimeLimit(options.gitTimeLimitMs);
+    this.#git = limitedRunner(options);
     this.#transport = options.remoteTransport;
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#owner = process.getuid!();
@@ -260,13 +276,8 @@ export class GitWorkspaces implements GitWorkspaceOperations {
   async #remoteHead({ record, branch }: BoundTaskBranch, credential: WorkspaceCredential): Promise<Result<GitObjectId | null>> {
     const ref = `refs/heads/${branch}`;
     const args = ['ls-remote', record.binding.remote, ref];
-    const listed = succeeded(await this.#git.run({ args, cwd: GIT_NEUTRAL_DIRECTORY, credential }), 'unavailable', 'the remote head read');
-    if (!listed.ok) return listed;
-    const lines = new TextDecoder().decode(listed.value).split('\n').filter(Boolean).map((line) => line.split('\t'));
-    const head = lines.find(([, name]) => name === ref)?.[0];
-    const parsed = head === undefined ? ok(null) : parseGitObjectId(head);
-    const readable = parsed.ok && lines.every((fields) => fields.length === 2);
-    return readable ? parsed : err(failure('internal', 'the remote head read printed an unreadable line'));
+    const command = { args, cwd: GIT_NEUTRAL_DIRECTORY, credential };
+    return this.#git.runParsed(command, (stdout) => parseRemoteHead(stdout, ref), 'unavailable', 'the remote head read');
   }
 
   // Whether `expected` is an ancestor of `head`, from verified commits; a

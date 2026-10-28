@@ -14,7 +14,7 @@ export interface GitCommand {
 export interface GitOutput {
   // Null when a signal ended the process.
   readonly exitCode: number | null;
-  // Data that the adapter parses, scrubbed like standard error.
+  // Scrubbed like standard error; only `runParsed` reads it raw.
   readonly stdout: Uint8Array;
   // Scrubbed of every form of the command's credential.
   readonly stderr: string;
@@ -57,23 +57,62 @@ const RUNTIME_ADDITIONS = { NODE_V8_COVERAGE: undefined };
 // (contract section 7); `GitWorkspacesOptions` can set another bound.
 export const GIT_TIME_LIMIT_MS = 10 * 60 * 1000;
 
+// The longest delay `setTimeout` keeps; a longer one fires after 1 ms.
+export const MAX_GIT_TIME_LIMIT_MS = 2 ** 31 - 1;
+
+// Arms the time limit of one Git process and returns its disarm; a test
+// injects one it fires itself.
+export type GitTimer = (expire: () => void, timeLimitMs: number) => () => void;
+
+export const systemGitTimer: GitTimer = (expire, timeLimitMs) => {
+  const timer = setTimeout(expire, timeLimitMs);
+  return () => clearTimeout(timer);
+};
+
+// Parses the raw output of a process inside the runner, before scrubbing.
+export type GitOutputParser<T> = (stdout: Uint8Array) => Result<T>;
+
 // Starts the pinned client with the built environment only: nothing of the
 // worker's own environment reaches Git, and no credential is an argument.
 export class GitRunner {
   readonly pin: GitClientPin;
   readonly timeLimitMs: number;
+  readonly #timer: GitTimer;
 
-  constructor(pin: GitClientPin, timeLimitMs = GIT_TIME_LIMIT_MS) {
-    if (!Number.isSafeInteger(timeLimitMs) || timeLimitMs <= 0) throw new RangeError(`invalid Git time limit ${timeLimitMs}`);
+  constructor(pin: GitClientPin, timeLimitMs = GIT_TIME_LIMIT_MS, timer = systemGitTimer) {
+    if (!isTimeLimit(timeLimitMs)) throw new RangeError(`invalid Git time limit ${timeLimitMs}`);
     this.pin = pin;
     this.timeLimitMs = timeLimitMs;
+    this.#timer = timer;
   }
 
   withTimeLimit(timeLimitMs: number): GitRunner {
-    return new GitRunner(this.pin, timeLimitMs);
+    return new GitRunner(this.pin, timeLimitMs, this.#timer);
   }
 
-  run(command: GitCommand): Promise<Result<GitOutput>> {
+  withTimer(timer: GitTimer): GitRunner {
+    return new GitRunner(this.pin, this.timeLimitMs, timer);
+  }
+
+  async run(command: GitCommand): Promise<Result<GitOutput>> {
+    const output = await this.#spawn(command);
+    if (!output.ok) return output;
+    return ok({ ...output.value, stdout: scrubOutput(output.value.stdout, command.credential) });
+  }
+
+  // A short credential form can match part of the data, so the parser
+  // reads the raw output; its failure message is scrubbed.
+  async runParsed<T>(command: GitCommand, parse: GitOutputParser<T>, code: FailureCode, what: string): Promise<Result<T>> {
+    const stdout = succeeded(await this.#spawn(command), code, what);
+    if (!stdout.ok) return stdout;
+    const parsed = parse(stdout.value);
+    if (parsed.ok) return parsed;
+    return err(failure(parsed.error.code, scrubCredential(parsed.error.message, command.credential), parsed.error.details));
+  }
+
+  // The raw standard output; every message and standard error is scrubbed.
+  #spawn(command: GitCommand): Promise<Result<GitOutput>> {
+    const scrub = (text: string) => scrubCredential(text, command.credential);
     return new Promise((done) => {
       // A process group of its own, so the time limit kills Git's helpers.
       const child = spawn(this.pin.path, command.args, {
@@ -83,7 +122,7 @@ export class GitRunner {
         detached: true,
       });
       let timedOut = false;
-      const timer = setTimeout(() => {
+      const disarm = this.#timer(() => {
         timedOut = true;
         killGroup(child.pid);
       }, this.timeLimitMs);
@@ -92,14 +131,13 @@ export class GitRunner {
       child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
       child.on('error', (error) => {
-        clearTimeout(timer);
-        done(err(failure('unavailable', `cannot start ${this.pin.path}: ${scrubCredential(error.message, command.credential)}`)));
+        disarm();
+        done(err(failure('unavailable', scrub(`cannot start ${this.pin.path}: ${error.message}`))));
       });
       child.on('close', (exitCode) => {
-        clearTimeout(timer);
+        disarm();
         if (timedOut) return done(err(this.#timeLimitFailure(command)));
-        const text = scrubCredential(Buffer.concat(stderr).toString('utf8'), command.credential);
-        done(ok({ exitCode, stdout: scrubOutput(Buffer.concat(stdout), command.credential), stderr: text }));
+        done(ok({ exitCode, stdout: Buffer.concat(stdout), stderr: scrub(Buffer.concat(stderr).toString('utf8')) }));
       });
       // A Git that exits early closes its input; its exit code reports it.
       child.stdin.on('error', () => {});
@@ -111,9 +149,13 @@ export class GitRunner {
   // stalled remote is `unavailable` and a stalled local Git `internal`.
   #timeLimitFailure(command: GitCommand) {
     const code: FailureCode = command.credential === undefined ? 'internal' : 'unavailable';
-    return failure(code, `${this.pin.path} ran longer than ${this.timeLimitMs} ms and was killed`);
+    const message = `${this.pin.path} ran longer than ${this.timeLimitMs} ms and was killed`;
+    return failure(code, scrubCredential(message, command.credential));
   }
 }
+
+const isTimeLimit = (timeLimitMs: number) =>
+  Number.isSafeInteger(timeLimitMs) && timeLimitMs > 0 && timeLimitMs <= MAX_GIT_TIME_LIMIT_MS;
 
 function killGroup(pid: number | undefined): void {
   if (pid === undefined) return;

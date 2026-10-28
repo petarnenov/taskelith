@@ -16,18 +16,17 @@ import {
   type PrepareWorkspace,
   type WorkspaceCredential,
 } from '@taskelith/workspace';
-import { createGitFixture, nativeGit, type GitFixture, type GitService, type SmartHttpRemote } from './git-fixture.ts';
+import { ManualGitTimer, within, createGitFixture, nativeGit, type GitFixture, type GitService, type SmartHttpRemote } from './git-fixture.ts';
 
 const FIRST = id('AttemptId', 'attempt-1') as AttemptId;
 const SECOND = id('AttemptId', 'attempt-2') as AttemptId;
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const TASK = id('TaskId', 'task-1') as TaskId;
 const BRANCH = taskBranchName(TASK, sha256IdentifierDigest);
-// Far below the default, so a stalled remote fails in seconds, and far
-// above what the recording wrapper needs before Git starts.
+// The bound a stalled process is armed with; the test fires it itself.
 const SHORT_TIME_LIMIT_MS = 1_500;
-// Wide slack for a loaded host before a killed group is declared alive.
-const GROUP_GONE_WITHIN_MS = 30_000;
+// Wide slack for a loaded host; the awaited work takes milliseconds.
+const WITHIN_MS = 30_000;
 
 function request(git: GitFixture, overrides: Partial<PrepareWorkspace> = {}): PrepareWorkspace {
   const { binding, credentials } = git.fixture;
@@ -61,7 +60,7 @@ const handOffRecord = (git: GitFixture, attemptId: AttemptId) => join(dirname(gi
 // Waits on the condition, never a fixed time: the group's members exit
 // and are reaped on their own after the kill.
 async function groupGone(pgid: number): Promise<boolean> {
-  const deadline = Date.now() + GROUP_GONE_WITHIN_MS;
+  const deadline = Date.now() + WITHIN_MS;
   for (;;) {
     try {
       process.kill(-pgid, 0);
@@ -247,28 +246,49 @@ test('an error message that repeats the header is scrubbed of every credential f
   }
 }));
 
-// The stalled operation runs alone under the short bound, so no other Git
-// process of the test depends on it.
+// The stalled operation runs alone under a time limit that the test fires
+// once the remote received the request, so no host speed matters.
 for (const operation of ['readRemoteHead', 'prepare'] as const) {
   test(`a stalled remote fails ${operation} as unavailable at the time limit and kills its process group`, () => withFixture(async (git) => {
     const { fixture } = git;
     value(await git.local.prepare(request(git)));
-    const limited = new GitWorkspaces({ dataRoot: fixture.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http', gitTimeLimitMs: SHORT_TIME_LIMIT_MS });
+    const timer = new ManualGitTimer();
+    const options = { dataRoot: fixture.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http' as const };
+    const limited = new GitWorkspaces({ ...options, gitTimeLimitMs: SHORT_TIME_LIMIT_MS, gitTimer: timer.timer });
+    const reached = new Promise<void>((received) => (git.remote.beforeAnswer = async () => received()));
     git.remote.behavior = { kind: 'stall' };
     const recorded = (await fixture.gitProcesses()).length;
-    const requests = git.remote.requests;
-    const started = Date.now();
-    const result: Result<unknown> = operation === 'prepare'
-      ? await limited.prepare(request(git, { attemptId: SECOND }))
-      : await limited.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.read });
-    assert.ok(Date.now() - started >= SHORT_TIME_LIMIT_MS);
-    const failure = failed(result);
-    assert.equal(failure.code, 'unavailable');
-    assert.match(failure.message, new RegExp(`longer than ${SHORT_TIME_LIMIT_MS} ms`));
-    assert.ok(git.remote.requests > requests, 'the stalled request reached the remote');
-    const [stalled] = (await fixture.gitProcesses()).slice(recorded);
-    assert.ok(stalled?.argv.includes(operation === 'prepare' ? 'clone' : 'ls-remote'));
-    assert.equal(await groupGone(stalled!.pid), true, 'a process of the group survived');
-    assert.deepEqual([await git.local.list(), await fixture.leftovers()], [[FIRST], []]);
+    const running: Promise<Result<unknown>> = operation === 'prepare'
+      ? limited.prepare(request(git, { attemptId: SECOND }))
+      : limited.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.read });
+    try {
+      await within(reached, WITHIN_MS);
+      timer.expire();
+      const failure = failed(await within(running, WITHIN_MS));
+      assert.equal(failure.code, 'unavailable');
+      assert.equal(timer.limits.at(-1), SHORT_TIME_LIMIT_MS);
+      assert.match(failure.message, new RegExp(`longer than ${SHORT_TIME_LIMIT_MS} ms`));
+      const [stalled] = (await fixture.gitProcesses()).slice(recorded);
+      assert.ok(stalled?.argv.includes(operation === 'prepare' ? 'clone' : 'ls-remote'));
+      assert.equal(await groupGone(stalled!.pid), true, 'a process of the group survived');
+      assert.deepEqual([await git.local.list(), await fixture.leftovers()], [[FIRST], []]);
+    } finally {
+      timer.expire();
+      await running.catch(() => {});
+    }
   }));
 }
+
+test('a short read secret that matches the task branch ref still reads the remote head', async () => {
+  const git = await createGitFixture({ readSecret: 'task' });
+  try {
+    const read = git.fixture.credentials.read;
+    assert.equal(BRANCH.includes(read.secret), true);
+    value(await git.local.prepare(request(git)));
+    await committed(git, FIRST, 'change.txt');
+    const pushed = value(await push(git, null));
+    assert.equal(value(await git.local.readRemoteHead({ attemptId: FIRST, credential: read })), pushed.commit);
+  } finally {
+    await git.dispose();
+  }
+});

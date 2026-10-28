@@ -3,8 +3,17 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
+import { err, failure, ok } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
-import { GIT_TIME_LIMIT_MS, GitRunner, scrubCredential, verifyGitClient, type VerifiedGitClient } from '@taskelith/git-workspace';
+import {
+  GIT_TIME_LIMIT_MS,
+  GitRunner,
+  MAX_GIT_TIME_LIMIT_MS,
+  scrubCredential,
+  systemGitTimer,
+  verifyGitClient,
+  type VerifiedGitClient,
+} from '@taskelith/git-workspace';
 import {
   GIT_NEUTRAL_DIRECTORY,
   REDACTED_VALUE,
@@ -15,7 +24,7 @@ import {
   sensitiveValues,
   type GitClientPin,
 } from '@taskelith/workspace';
-import { credential, nativeGit, recordingPin, runProcess, systemGitVersion, SYSTEM_GIT } from './git-fixture.ts';
+import { ManualGitTimer, within, credential, nativeGit, recordingPin, runProcess, systemGitVersion, SYSTEM_GIT } from './git-fixture.ts';
 
 const WRITE = credential('write', ['acme/project'], ['read-code', 'write-code']);
 const SENSITIVE = sensitiveValues([WRITE]);
@@ -143,9 +152,14 @@ test('the runner feeds standard input and reports the exit code', async () => {
   assert.match(outside.stderr, /not a git repository/);
 });
 
-test('a client that cannot start is unavailable', async () => {
-  const failure = failed(await new GitRunner({ path: join(scratch, 'missing'), version: '' }).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY }));
+test('a client that cannot start is unavailable, its message scrubbed', async () => {
+  const missing = new GitRunner({ path: join(scratch, 'missing'), version: '' });
+  const failure = failed(await missing.run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY }));
   assert.equal(failure.code, 'unavailable');
+  const short = credential('short', ['acme/project'], ['read-code'], 'missing');
+  const scrubbed = failed(await missing.run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short }));
+  assert.match(scrubbed.message, new RegExp(`cannot start ${scratch}/${REDACTED_VALUE}`));
+  assert.equal(scrubbed.message.includes('missing'), false);
 });
 
 test('the Git client gate accepts only the pinned version string', async () => {
@@ -168,51 +182,148 @@ test('only the gate makes a verified client, also for the type checker', () => {
 });
 
 // A client that records its process and its background child, then
-// waits for that child, which outlives the time limit.
+// waits for that child, which outlives any time limit.
 async function stallingClient(): Promise<{ pin: GitClientPin; pids: string }> {
   const path = join(scratch, 'stall');
   const pids = join(scratch, 'stall-pids');
-  await writeFile(path, `#!/bin/sh\nsleep 600 &\necho "$$ $!" > ${pids}\nwait\n`);
+  await writeFile(path, `#!/bin/sh\nsleep 600 &\necho "$$ $!" > ${pids}.tmp\nmv ${pids}.tmp ${pids}\nwait\n`);
   await chmod(path, 0o755);
   return { pin: { path, version: '' }, pids };
 }
 
-// Waits on the condition, never a fixed time, with wide slack.
-async function gone(pid: number): Promise<boolean> {
-  const deadline = Date.now() + 30_000;
+// Wide slack for a loaded host; the awaited work takes milliseconds.
+const CONDITION_WITHIN_MS = 30_000;
+
+// Waits on the condition, never a fixed time.
+async function until(condition: () => Promise<boolean>): Promise<boolean> {
+  const deadline = Date.now() + CONDITION_WITHIN_MS;
   for (;;) {
-    try {
-      process.kill(pid, 0);
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === 'ESRCH';
-    }
+    if (await condition()) return true;
     if (Date.now() > deadline) return false;
     await new Promise((next) => setImmediate(next));
   }
 }
 
+const exists = (path: string) => lstat(path).then(() => true, () => false);
+
+function gone(pid: number): Promise<boolean> {
+  return until(async () => {
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === 'ESRCH';
+    }
+  });
+}
+
+function killLeftovers(pids: readonly number[]): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
 test('a process past its time limit is killed with its group, remote unavailable, local internal', async () => {
   const { pin: stalling, pids } = await stallingClient();
-  // Far above the few milliseconds the shell needs to record its pids.
-  const runner = new GitRunner(stalling, 1_000);
   for (const [credential, code] of [[undefined, 'internal'], [WRITE, 'unavailable']] as const) {
     await rm(pids, { force: true });
-    const started = Date.now();
-    const failure = failed(await runner.run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential }));
-    assert.ok(Date.now() - started >= 1_000);
-    assert.equal(failure.code, code);
-    assert.match(failure.message, /longer than 1000 ms/);
-    const [leader, child] = (await readFile(pids, 'utf8')).trim().split(' ').map(Number);
-    assert.equal(await gone(-leader!), true, 'the process group survived');
-    assert.equal(await gone(child!), true, 'the background child survived');
+    const timer = new ManualGitTimer();
+    const running = new GitRunner(stalling, 1_000, timer.timer).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential });
+    let recorded: number[] = [];
+    try {
+      await timer.armed();
+      assert.equal(await until(() => exists(pids)), true, 'the client never recorded its pids');
+      recorded = (await readFile(pids, 'utf8')).trim().split(' ').map(Number);
+      timer.expire();
+      const failure = failed(await within(running, CONDITION_WITHIN_MS));
+      assert.deepEqual(timer.limits, [1_000]);
+      assert.equal(failure.code, code);
+      assert.match(failure.message, /longer than 1000 ms/);
+      const [leader, child] = recorded;
+      assert.equal(await gone(-leader!), true, 'the process group survived');
+      assert.equal(await gone(child!), true, 'the background child survived');
+    } finally {
+      timer.expire();
+      killLeftovers(recorded.length > 0 ? [-recorded[0]!, recorded[1]!] : []);
+    }
   }
 });
 
-test('the time limit is ten minutes by default and must be a positive whole number', () => {
+test('the time limit message is scrubbed of a credential form in the client path', async () => {
+  const { pin: stalling, pids } = await stallingClient();
+  const short = credential('short', ['acme/project'], ['read-code'], 'stall');
+  const timer = new ManualGitTimer();
+  const running = new GitRunner(stalling, 1_000, timer.timer).run({ args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short });
+  try {
+    await timer.armed();
+    timer.expire();
+    const failure = failed(await within(running, CONDITION_WITHIN_MS));
+    assert.equal(failure.message, `${scratch}/${REDACTED_VALUE} ran longer than 1000 ms and was killed`);
+  } finally {
+    timer.expire();
+    if (await exists(pids)) killLeftovers([-Number((await readFile(pids, 'utf8')).split(' ')[0])]);
+  }
+});
+
+test('the system timer expires after its delay unless disarmed', async () => {
+  await new Promise<void>((expired) => systemGitTimer(expired, 1));
+  let fired = false;
+  const disarm = systemGitTimer(() => (fired = true), 1);
+  disarm();
+  await new Promise<void>((later) => systemGitTimer(later, 5));
+  assert.equal(fired, false);
+});
+
+test('the time limit is ten minutes by default and must fit the timer', () => {
   assert.equal(GIT_TIME_LIMIT_MS, 600_000);
+  assert.equal(MAX_GIT_TIME_LIMIT_MS, 2_147_483_647);
   assert.equal(new GitRunner(pin).timeLimitMs, GIT_TIME_LIMIT_MS);
   assert.equal(new GitRunner(pin).withTimeLimit(1_000).timeLimitMs, 1_000);
-  for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.throws(() => new GitRunner(pin, invalid), RangeError);
-  }
+  assert.equal(new GitRunner(pin).withTimeLimit(MAX_GIT_TIME_LIMIT_MS).timeLimitMs, MAX_GIT_TIME_LIMIT_MS);
+  const invalid = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, MAX_GIT_TIME_LIMIT_MS + 1, Number.MAX_SAFE_INTEGER];
+  for (const limit of invalid) assert.throws(() => new GitRunner(pin, limit), RangeError);
+});
+
+test('a time limit set later keeps the injected timer', async () => {
+  const timer = new ManualGitTimer();
+  const runner = new GitRunner(pin).withTimer(timer.timer).withTimeLimit(2_000);
+  value(await runner.run({ args: ['--version'], cwd: GIT_NEUTRAL_DIRECTORY }));
+  assert.deepEqual(timer.limits, [2_000]);
+});
+
+// A client that prints a ref listing; a short secret matches in both.
+async function listingClient(listing: string): Promise<GitClientPin> {
+  const path = join(scratch, 'listing');
+  await writeFile(path, `#!/bin/sh\nprintf '%s' '${listing}'\n`);
+  await chmod(path, 0o755);
+  return { path, version: '' };
+}
+
+test('a parser reads the raw output, so a short secret cannot corrupt the data', async () => {
+  const object = 'a'.repeat(8) + 'task' + 'b'.repeat(28);
+  const ref = 'refs/heads/taskelith/x';
+  const runner = new GitRunner(await listingClient(`${object}\t${ref}\n`));
+  const short = credential('short', ['acme/project'], ['read-code'], 'task');
+  const parse = (stdout: Uint8Array) => ok(new TextDecoder().decode(stdout));
+  const command = { args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short };
+  assert.equal(value(await runner.runParsed(command, parse, 'unavailable', 'the listing')), `${object}\t${ref}\n`);
+  const scrubbed = new TextDecoder().decode(value(await runner.run(command)).stdout);
+  assert.equal(scrubbed.includes('task'), false, 'run still scrubs the output');
+});
+
+test('a parser failure is scrubbed, and a failed process is not parsed', async () => {
+  const short = credential('short', ['acme/project'], ['read-code'], 'task');
+  const command = { args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short };
+  const listing = new GitRunner(await listingClient('task\n'));
+  const refuse = (stdout: Uint8Array) => err(failure('internal', `cannot read ${new TextDecoder().decode(stdout).trim()}`, { kept: 'yes' }));
+  const refused = failed(await listing.runParsed(command, refuse, 'unavailable', 'the listing'));
+  assert.deepEqual([refused.code, refused.message, refused.details], ['internal', `cannot read ${REDACTED_VALUE}`, { kept: 'yes' }]);
+  let parsed = false;
+  const outside = new GitRunner(pin).runParsed({ args: ['rev-parse', '--git-dir'], cwd: GIT_NEUTRAL_DIRECTORY }, () => ok((parsed = true)), 'internal', 'the lookup');
+  assert.equal(failed(await outside).code, 'internal');
+  assert.equal(parsed, false);
 });

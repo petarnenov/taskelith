@@ -11,6 +11,7 @@ import {
   sha256IdentifierDigest,
   verifyGitClient,
   type CrashPointHook,
+  type GitTimer,
   type GitWorkspaceOperations,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
@@ -293,9 +294,49 @@ function observed(process: RawProcess, credentials: readonly WorkspaceCredential
   return { ...process, environment };
 }
 
+// Rejects when the work outlives the bound, so a hang fails the test.
+export async function within<T>(work: Promise<T>, boundMs: number): Promise<T> {
+  let watchdog: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    watchdog = setTimeout(() => reject(new Error(`not done within ${boundMs} ms`)), boundMs);
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+// A Git timer that a test fires itself once its process is ready, so no
+// test depends on how fast a loaded host starts a process.
+export class ManualGitTimer {
+  readonly limits: number[] = [];
+  readonly #armed = new Set<() => void>();
+  #onArm: () => void = () => {};
+
+  readonly timer: GitTimer = (expire, timeLimitMs) => {
+    this.limits.push(timeLimitMs);
+    this.#armed.add(expire);
+    this.#onArm();
+    return () => this.#armed.delete(expire);
+  };
+
+  // Resolves once a time limit is armed, at once if one already is.
+  armed(): Promise<void> {
+    return this.#armed.size > 0 ? Promise.resolve() : new Promise((resolve) => (this.#onArm = resolve));
+  }
+
+  // Expires every armed time limit.
+  expire(): void {
+    for (const expire of [...this.#armed]) {
+      this.#armed.delete(expire);
+      expire();
+    }
+  }
+}
+
 // The GitHub plugin's form of the Authorization value (contract section 7).
-export function credential(credentialId: string, repositories: string[], permissions: string[]): WorkspaceCredential {
-  const secret = `secret-of-${credentialId}`;
+export function credential(credentialId: string, repositories: string[], permissions: string[], secret = `secret-of-${credentialId}`): WorkspaceCredential {
   const authorization = `Basic ${Buffer.from(`x-access-token:${secret}`).toString('base64')}`;
   return { credentialId, secret, authorization, repositories, permissions };
 }
@@ -369,6 +410,8 @@ function mustParse<T>(result: Result<T>): T {
 export interface GitFixtureOptions {
   readonly crashPoints?: CrashPointHook;
   readonly gitTimeLimitMs?: number;
+  // The read credential's secret, such as a short one.
+  readonly readSecret?: string;
 }
 
 export interface GitFixture {
@@ -415,7 +458,7 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   const client = mustParse(await verifyGitClient(pin));
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
   const credentials = {
-    read: credential('read', [repository], ['read-code']),
+    read: credential('read', [repository], ['read-code'], options.readSecret),
     write: credential('write', [repository], ['read-code', 'write-code']),
     foreign: credential('foreign', ['acme/other'], ['read-code', 'write-code', 'write-change-requests', 'write-statuses']),
   };
