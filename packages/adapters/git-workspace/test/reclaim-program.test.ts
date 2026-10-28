@@ -21,6 +21,7 @@ import {
   runReclaimProgram,
   sharedMode,
   type LaunchedReclaim,
+  type ReclaimHost,
   type ReclaimProgram,
   type SendSignal,
 } from '@taskelith/git-workspace';
@@ -236,8 +237,8 @@ function groupOf({ containment }: LaunchedReclaim): number {
 }
 
 // Runs `check` while the waiting program runs, then lets it exit.
-async function whileWaiting(host: ProcessGroupReclaimHost, check: (running: LaunchedReclaim) => Promise<void>): Promise<void> {
-  const running = value(await host.launch('/nonexistent'));
+async function whileWaiting(host: ReclaimHost, check: (running: LaunchedReclaim) => Promise<void>): Promise<void> {
+  const running = value(await host.launch('/nonexistent', 'reclaim-x'));
   try {
     await check(running);
   } finally {
@@ -260,7 +261,7 @@ test('a one-account kill signals the group of an unreaped program, never that of
 
 test('a one-account host never signals a recorded process group, also one still running', async () => {
   const signals = recordingSignals();
-  const host = new ProcessGroupReclaimHost(WAITING_PROGRAM, RECLAIM_READY_BOUND_MS, signals.send);
+  const host: ReclaimHost = new ProcessGroupReclaimHost(WAITING_PROGRAM, RECLAIM_READY_BOUND_MS, signals.send);
   await whileWaiting(host, async (running) => {
     await host.killRecorded(running.containment);
     assert.deepEqual(signals.sent, [], 'the recorded group is not signalled');
