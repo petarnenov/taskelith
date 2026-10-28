@@ -7,7 +7,7 @@ Record of the change through review pass 1 and its fix; later passes are pending
 - **Source:** the coordinator's brief (Niki, 2026-10-28) for G3 item 17 (`docs/g3-plan.md`, row 17). Size M.
 - **Base revision:** `a899d5d2` (`origin/dev`, merge of pull request #382).
 - **Merge of dev:** `origin/dev` `f3a53f17` (merge of pull request #383, `adopt-process-performance-recommendations`) merged into the branch with merge commit `1206034c`, without conflicts. After review pass 1, `origin/dev` `9196804b` (pull requests #384, `fix-make-argument-expansion`; #385, `route-reviewers-by-change-complexity`, governance policy version 7; #386, `define-session-turn-model`) merged with merge commit `08677e80`, without conflicts.
-- **Revision verified:** `56a63b3b`: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`).
+- **Revision verified:** `56a63b3b` before review pass 1: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`). After the merge of dev `9196804b` and the pass 1 fix (`ef9b0d27`): `e1fca2ec`, tree `ea31edaa` ("Checks and results").
 - **Scope:** head-bound SDLC gates and gate evidence; the code head owned by the SDLC module and refined by the workspace module (design decision 1); staleness for a new code head; no restored approval after an artifact edit; rejection of evidence from another head; the SDLC AsyncAPI document 0.4.0; a head-bound gate in the gate repository suite; the Git workspace contract sections 5 and 14.
 - **Out of scope:** the review and verification stages (item 21), auto-merge (item 23), the SCM plugin (item 20), the UI, and the evidence record's `codeRevision` and the merge queue's `CodeHead` (design decision 1 (i), chosen by the coordinator: the follow-up change `align-code-head-names`).
 
@@ -39,6 +39,10 @@ Author checks, run on `56a63b3b` and its working tree:
 - `make contract-compatibility`: the SDLC AsyncAPI document has 132 breaking changes against `a899d5d2`, declared by 0.4.0; the other documents have none; it passed. The author ran it before noticing that it starts the `oasdiff` image with `docker run --network none` for the two OpenAPI documents, outside the brief's rule of no Docker command; it is part of `make verify` and runs again there. The coordinator (Niki, 2026-10-28) accepted that container.
 - `make verify` after the merge of dev, on `5657fbc6` (tree `b91b0e27`), ended 08:42 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2658, pass 2651, fail 0, cancelled 0, skipped 7; coverage 99.36% lines, 92.52% branches, 99.06% functions. `make test` took the Docker slot itself; the head-bound gate of the gate repository suite passed against PostgreSQL in it (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log, and `make record-check` passed.
 
+- `make findings ARGS="route --change bind-evidence-to-code-head"` on `ef9b0d27`, committed unedited as `route.json` in `19fdd475`. The route record arrived with governance policy version 7 in the merge of dev `08677e80`, after review pass 1, so it ran before the `make verify` of the pass 1 fixes instead of before pass 1. Output: `route: elevated (lines, capabilities, contracts), rule version 1`; pass 1, reviewer A: `codex gpt-6.1-sol#high`; pass 2, reviewer B: `claude claude-opus-5-5#xhigh`; shadow `jev-1.14.0` elevated (0.98), agreeing with the rule. It is a recommendation only.
+- `make verify` after the pass 1 fix, on `19fdd475` (tree `b47faba3`): passed, profile full; tests 2903, pass 2896, fail 0, skipped 7. Its `make contract-compatibility` reported 219 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0, which made design decision 7's count stale; `e1fca2ec` updated it, and `make verify` ran again.
+- `make verify` on `e1fca2ec` (tree `ea31edaa`), ended 11:38 local, 2026-10-28: passed, profile full, stamp written; 45 suites, tests 2903, pass 2896, fail 0, cancelled 0, skipped 7; coverage 99.37% lines, 92.66% branches, 99.08% functions; 219 breaking changes of the SDLC AsyncAPI document against `9196804b`, declared by 0.4.0; the head-bound gate of the gate repository suite passed against PostgreSQL (`PostgreSQL gates: gates read back as stored and are listed by their run`). `make record` wrote "Generated checks" from its log.
+
 ## Fails before the change
 
 - With `packages/modules/sdlc/src` and `packages/modules/workspace/src` of `a899d5d2` restored and built, `code-head-binding.test.ts` fails to load: `The requested module '@taskelith/sdlc' does not provide an export named 'isGateOutdatedByCodeHead'` (0 pass, 1 fail). The sources were restored afterwards.
@@ -49,11 +53,15 @@ Author checks, run on `56a63b3b` and its working tree:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b91b0e270ce8e2653ac42229088a008f3d59a912`; tests 2658, pass 2651, fail 0, skipped 7; all files 99.36% lines, 92.52% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `ea31edaa2df9af7cd2e97e227a42010b7d5804e6`; tests 2903, pass 2896, fail 0, skipped 7; all files 99.37% lines, 92.66% branches, 99.08% functions.
 - `npm run openspec -- validate bind-evidence-to-code-head --strict`: passed, `Change 'bind-evidence-to-code-head' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s).`.
-- Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
+- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18144-6e30-7fd3-b8e6-1788fa5b1766` | 0 | 1 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -74,7 +82,7 @@ Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: assig
 
 Not yet reviewed; reviewer B checks them in pass 2.
 
-- **H1 fix** (`FIX_COMMIT`, design decision 8): the three evidence kinds take an optional `gateGeneration`, the generation of the pending gate they were recorded for, and `recordGateEvidence` rejects evidence for a head-bound gate whose `gateGeneration` is not the gate's generation, or is missing, with `precondition-failed` (`accepts only evidence recorded for its current generation`). A gate turns pending only when opened or reopened, at a new generation, so a superseded approval names an earlier generation. The SDLC AsyncAPI document 0.4.0 adds `gateGeneration` to the three evidence kinds; the spec deltas `sdlc-gates` "Evidence bound to the code head" (402 characters, new scenario "Evidence for another generation") and "Approval not restored by an artifact edit" (306, new scenario "Reopened at the approved head") and `sdlc-wire-contracts` "Code head on the wire" (365), the Git workspace contract section 14, the gate repository suite, and the contracts test change with it. Files: `packages/modules/sdlc/src/domain/gate.ts`, `gate-evidence.ts`, `src/ports/repository-conformance.ts`, `test/code-head-binding.test.ts`, `packages/contracts/documents/sdlc.asyncapi.json`, `packages/contracts/test/contracts.test.ts`, `docs/contracts/git-workspace.md`, and this change's proposal, design, tasks, and spec deltas.
+- **H1 fix** (`ef9b0d27`, design decision 8): the three evidence kinds take an optional `gateGeneration`, the generation of the pending gate they were recorded for, and `recordGateEvidence` rejects evidence for a head-bound gate whose `gateGeneration` is not the gate's generation, or is missing, with `precondition-failed` (`accepts only evidence recorded for its current generation`). A gate turns pending only when opened or reopened, at a new generation, so a superseded approval names an earlier generation. The SDLC AsyncAPI document 0.4.0 adds `gateGeneration` to the three evidence kinds; the spec deltas `sdlc-gates` "Evidence bound to the code head" (402 characters, new scenario "Evidence for another generation") and "Approval not restored by an artifact edit" (306, new scenario "Reopened at the approved head") and `sdlc-wire-contracts` "Code head on the wire" (365), the Git workspace contract section 14, the gate repository suite, and the contracts test change with it. Files: `packages/modules/sdlc/src/domain/gate.ts`, `gate-evidence.ts`, `src/ports/repository-conformance.ts`, `test/code-head-binding.test.ts`, `packages/contracts/documents/sdlc.asyncapi.json`, `packages/contracts/test/contracts.test.ts`, `docs/contracts/git-workspace.md`, and this change's proposal, design, tasks, and spec deltas.
 - **Tests.** In `packages/modules/sdlc/test/code-head-binding.test.ts`: `a superseded approval does not pass a gate reopened at its head after an artifact edit` and `a superseded approval does not pass a gate reopened at its head after another head` (scenario "Reopened at the approved head"; the second also covers a return to the approved head after an approval at the other head), and `a head-bound gate needs evidence recorded for its current generation` (scenario "Evidence for another generation").
 - **Fails before the fix.** With the test file of the fix on `767cf592` (the sources before the fix), after `npm run build`, `node --experimental-strip-types --test packages/modules/sdlc/test/code-head-binding.test.ts`: tests 10, pass 7, fail 3, the three new tests, each because recording the superseded or unbound approval succeeded (`actual: true`, `expected: false` on `result.ok`). After the fix: tests 10, pass 10.
 - **Author checks after the fix,** on its working tree: `npm run build`, `npm run check:boundaries`, `npm run verify:comments`, `npm run verify:links`: passed; `npm run openspec -- validate bind-evidence-to-code-head --strict`: valid; `node --experimental-strip-types --test 'packages/modules/*/test/*.test.ts' packages/contracts/test/*.test.ts`: tests 875, pass 874, fail 0, skipped 1; coverage of `packages/modules/sdlc/dist/domain/*.js` over the SDLC tests: `code-head.js`, `gate-evidence.js`, and `gate.js` 100% lines, branches, and functions.
@@ -87,7 +95,7 @@ Not yet reviewed; reviewer B checks them in pass 2.
 
 ## Remaining gates
 
-- `make record-check` before pass 1, and `make verify` again after each round of review fixes.
-- Review passes 1 and 2 (and 3 if needed) with their records.
+- `make verify` again after each round of review fixes.
+- Review pass 2 by reviewer B, which also checks the unreviewed pass 1 fix, and pass 3 if governance "Conditional third pass" requires it, with their records.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
