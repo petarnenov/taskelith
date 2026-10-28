@@ -76,10 +76,10 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7fe69d18a4c422f9bad30b74e1165287d0575ead`; tests 3123, pass 3061, fail 0, skipped 62; all files 99.38% lines, 92.79% branches, 98.99% functions.
+- `make verify`: passed, profile full, tree `8861e309250e6dd1fe4650a7434299119cb134a2`; tests 3172, pass 3119, fail 0, skipped 53; all files 99.37% lines, 92.78% branches, 99.03% functions.
 - `npm run openspec -- validate extend-execution-http-contracts --strict`: passed, `Change 'extend-execution-http-contracts' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).`.
-- Spec diff against the merge base `ff7ab7a0622d` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s).`.
+- Spec diff against the merge base `a3a0ac4cea7c` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -166,6 +166,7 @@ As the architect asked on 2026-10-28, after pass 2 the branch merged `origin/dev
 | `617926ca` | `make contract-breaking-changes` | `0 breaking change(s) against a3a0ac4cea7c.` for each of the five documents; printed `{"declarations": []}` |
 | `617926ca` | `make contract-compatibility` | `0 breaking change(s)` for every document; `Contract documents have no undeclared breaking change.` |
 | `617926ca` with a probe entry for `execution.openapi.json` 0.6.0, removed afterwards | `make contract-compatibility` | Failed: `packages/contracts/breaking-changes.json lists for 0.6.0 a change not found over 0.5.0` |
+| `bfc8f9cd`, clean tree | `make verify` (log `eehc-verify-8.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `8861e309`, stamp written: tests 3172, pass 3119, fail 0, skipped 53; generated part below |
 
 ## Remaining gates
 
