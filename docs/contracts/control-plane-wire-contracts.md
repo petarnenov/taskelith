@@ -31,7 +31,7 @@ The control plane serves the document on the browser endpoint over HTTPS, same-o
 | 401 | `AuthenticationFailure` | `login-failed` | A login name and password that do not match; the answer does not say which is wrong |
 | 401 | `WebhookRejection` | `signature-invalid` | Only the webhook receiver: an unknown integration or a missing or failed signature (section 5) |
 | 403 | `CsrfRejection` | `csrf-token-invalid` | A session-authenticated mutation without the header or with another session's token; nothing took effect |
-| 403 | `AccessDenial` | `role-required` | The principal lacks the role of section 3 |
+| 403 | `AccessDenial` | `role-required` | The principal lacks the role of section 3; `details.requiredRole` names that role, such as `project-operator` or `installation-owner`, so the SPA can show the role it needs |
 
 A mutation's 403 response is one of `AccessDenial` and `CsrfRejection`, which differ by their reason. The other statuses follow the kernel codes as in the execution document: 400 `invalid`, 404 `not-found`, 409 `conflict`, 422 `precondition-failed`, 500 `internal`, and 503 `unavailable`.
 
