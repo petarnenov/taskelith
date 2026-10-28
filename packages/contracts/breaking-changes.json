@@ -3,7 +3,7 @@
     {
       "path": "packages/contracts/documents/execution.asyncapi.json",
       "version": "0.8.0",
-      "reason": "G3 sub-change 9d (define-worker-messages-and-terminal-contracts): the session commands, the notice of a refreshed per-run SCM credential, the session observations, and the adoption confirmation of execution protocol version 2, and the agent session binding that an offer carries from protocol version 2 (architect, 2026-10-28), which the asyncapi diff lists as unclassified additions; listed against 10fc3bbe.",
+      "reason": "G3 sub-change 9d (define-worker-messages-and-terminal-contracts): the session commands, the notice of a refreshed per-run SCM credential, the session observations, and the adoption confirmation of execution protocol version 2, and the agent session binding that an offer carries from protocol version 2 (architect, 2026-10-28), and the classified operation of a permission request (review pass 1), which the asyncapi diff lists as unclassified additions; listed against 10fc3bbe.",
       "breakingChanges": [
         "add /channels/workerCommands/messages/assignmentOffer/payload/properties/payload/else",
         "add /channels/workerCommands/messages/assignmentOffer/payload/properties/payload/if",
@@ -39,6 +39,7 @@
         "add /components/schemas/AssignmentOfferPayload/properties/session",
         "add /components/schemas/AssignmentOfferPayload/then",
         "add /components/schemas/AssignmentSessionBinding",
+        "add /components/schemas/ClassifiedOperation",
         "add /components/schemas/DelegationResult",
         "add /components/schemas/DelegationResultDeliveryCommand",
         "add /components/schemas/DelegationResultDeliveryPayload",

@@ -2423,6 +2423,29 @@
         ],
         "description": "A native request's kind (`HarnessRequestKind`)."
       },
+      "ClassifiedOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The plugin's classification of a permission request's native action into a harness-neutral operation (agent harness port contract section 7.2): G3 defines `push` with the full branch ref it pushes to. An unclassified request has none and matches no standing rule.",
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "push"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^refs/heads/[^\\x00-\\x20\\x7f~^:?*\\[\\\\]+$",
+            "description": "The full branch ref, `refs/heads/` and a branch name."
+          }
+        }
+      },
       "HarnessText": {
         "type": "string",
         "maxLength": 65536,
@@ -3154,7 +3177,8 @@
         "required": [
           "sessionId",
           "generation",
-          "nativeSessionId"
+          "nativeSessionId",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3166,6 +3190,9 @@
           "nativeSessionId": {
             "$ref": "#/components/schemas/Identifier",
             "description": "The opaque native session ID; a resume keeps it."
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3218,7 +3245,8 @@
         "required": [
           "sessionId",
           "generation",
-          "cause"
+          "cause",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3233,6 +3261,9 @@
               "session-ended",
               "lost"
             ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3285,7 +3316,8 @@
         "required": [
           "sessionId",
           "turnId",
-          "generation"
+          "generation",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3296,6 +3328,9 @@
           },
           "generation": {
             "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3349,7 +3384,8 @@
           "sessionId",
           "turnId",
           "generation",
-          "reason"
+          "reason",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3367,6 +3403,9 @@
               "generation-not-running",
               "port-refused"
             ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3422,7 +3461,8 @@
               "sessionId",
               "turnId",
               "generation",
-              "outcome"
+              "outcome",
+              "recoveryEpoch"
             ],
             "properties": {
               "sessionId": {
@@ -3442,6 +3482,9 @@
                   "turn-limit-reached",
                   "account-limit-reached"
                 ]
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
               }
             }
           },
@@ -3453,7 +3496,8 @@
               "turnId",
               "generation",
               "outcome",
-              "failure"
+              "failure",
+              "recoveryEpoch"
             ],
             "properties": {
               "sessionId": {
@@ -3471,6 +3515,9 @@
               },
               "failure": {
                 "$ref": "#/components/schemas/HarnessFailure"
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
               }
             }
           }
@@ -3527,7 +3574,8 @@
           "request",
           "kind",
           "turnId",
-          "text"
+          "text",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3544,6 +3592,34 @@
           },
           "text": {
             "$ref": "#/components/schemas/HarnessText"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ClassifiedOperation"
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "operation"
+          ],
+          "properties": {
+            "operation": {
+              "$ref": "#/components/schemas/ClassifiedOperation"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "permission-request"
+            }
           }
         }
       },
@@ -3596,7 +3672,8 @@
         "required": [
           "sessionId",
           "request",
-          "report"
+          "report",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3612,6 +3689,9 @@
               "refused",
               "delivery-uncertain"
             ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3666,7 +3746,8 @@
           "turnId",
           "generation",
           "chunk",
-          "text"
+          "text",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3685,6 +3766,9 @@
           },
           "text": {
             "$ref": "#/components/schemas/HarnessText"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3736,7 +3820,8 @@
         "additionalProperties": false,
         "required": [
           "sessionId",
-          "generation"
+          "generation",
+          "recoveryEpoch"
         ],
         "properties": {
           "sessionId": {
@@ -3747,6 +3832,9 @@
           },
           "resetsAt": {
             "$ref": "#/components/schemas/Instant"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -3799,7 +3887,8 @@
         "required": [
           "runId",
           "credentialId",
-          "version"
+          "version",
+          "recoveryEpoch"
         ],
         "properties": {
           "runId": {
@@ -3812,13 +3901,16 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
       "ScmCredentialAdoptedObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The worker fetched the named version and passes it to every later workspace operation of the attempt; the previous secret may end.",
+        "description": "The worker fetched the named version and passes it to every later workspace operation of the attempt. The previous version ends only once every attempt of the run that held it adopted this version or a later one, or no longer holds its ownership.",
         "required": [
           "metadata",
           "payload"
@@ -3865,7 +3957,8 @@
           "runId",
           "credentialId",
           "version",
-          "reason"
+          "reason",
+          "recoveryEpoch"
         ],
         "properties": {
           "runId": {
@@ -3886,6 +3979,9 @@
               "superseded",
               "attempt-not-held"
             ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },

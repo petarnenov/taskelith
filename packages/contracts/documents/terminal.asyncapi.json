@@ -227,9 +227,10 @@
           "attempt-not-held",
           "execution-not-running",
           "generation-not-running",
-          "terminal-not-offered"
+          "terminal-not-offered",
+          "terminal-start-failed"
         ],
-        "description": "Why the worker refused to open a terminal: it does not hold the attempt at that ownership generation, the execution is not its running, owning execution, the session generation is not running, or the harness or platform offers no terminal (agent harness port contract section 8)."
+        "description": "Why the worker refused to open a terminal: it does not hold the attempt at that ownership generation, the execution is not its running, owning execution, the session generation is not running, the harness or platform offers no terminal, or, after these checks passed, the terminal did not start because `terminalProgram` failed with `internal` or `unavailable` or the pseudo-terminal could not be started (agent harness port contract sections 8 and 9.3)."
       },
       "TerminalCloseReason": {
         "type": "string",

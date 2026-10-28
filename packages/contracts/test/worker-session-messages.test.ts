@@ -9,7 +9,7 @@ import {
   supportsProtocolVersion,
   type SchemaViolations,
 } from '@taskelith/contracts';
-import { DELIVERY_STATES, HARNESS_FAILURES, TURN_OUTCOMES } from '@taskelith/execution';
+import { CLASSIFIED_OPERATION_KINDS, DELIVERY_STATES, HARNESS_FAILURES, TURN_OUTCOMES } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 
 type Json = Record<string, unknown>;
@@ -85,6 +85,8 @@ const ENDED = {
   outcome: 'completed', summary: 'The child added the parser.', endedAt: AT,
 };
 const NOTICE = { runId: 'run-1', credentialId: 'credential-1', version: 3 };
+const EPOCH = { recoveryEpoch: 1 };
+const ADOPTION = { ...NOTICE, ...EPOCH };
 const BINDING = { sessionId: 'session-1', harness: 'claude-code', model: 'claude-opus-5-5', effort: 'high' };
 const RESUME = { nativeSessionId: 'native-session-1', generation: 3 };
 const OFFER = {
@@ -100,17 +102,17 @@ const COMMAND_EXAMPLES: Record<string, object> = {
   'execution.scm-credential.refreshed': NOTICE,
 };
 const OBSERVATION_EXAMPLES: Record<string, object> = {
-  'session.generation.started': { sessionId: 'session-1', generation: 1, nativeSessionId: 'native-session-1' },
-  'session.generation.ended': { sessionId: 'session-1', generation: 1, cause: 'session-ended' },
-  'session.turn.delivered': { sessionId: 'session-1', turnId: 't1', generation: 2 },
-  'session.turn.not-delivered': { sessionId: 'session-1', turnId: 't1', generation: 2, reason: 'generation-not-running' },
-  'session.turn.ended': { sessionId: 'session-1', turnId: 't1', generation: 2, outcome: 'completed' },
-  'session.request.recorded': { sessionId: 'session-1', request: REQUEST, kind: 'permission-request', turnId: 't1', text: 'Allow git push?' },
-  'session.response.delivery-reported': { sessionId: 'session-1', request: REQUEST, report: 'delivered' },
-  'session.output.appended': { sessionId: 'session-1', turnId: 't1', generation: 2, chunk: 1, text: 'All tests pass.' },
-  'session.limit.signaled': { sessionId: 'session-1', generation: 2, resetsAt: AT },
-  'execution.scm-credential.adopted': NOTICE,
-  'execution.scm-credential.not-adopted': { ...NOTICE, reason: 'superseded' },
+  'session.generation.started': { sessionId: 'session-1', generation: 1, nativeSessionId: 'native-session-1', ...EPOCH },
+  'session.generation.ended': { sessionId: 'session-1', generation: 1, cause: 'session-ended', ...EPOCH },
+  'session.turn.delivered': { sessionId: 'session-1', turnId: 't1', generation: 2, ...EPOCH },
+  'session.turn.not-delivered': { sessionId: 'session-1', turnId: 't1', generation: 2, reason: 'generation-not-running', ...EPOCH },
+  'session.turn.ended': { sessionId: 'session-1', turnId: 't1', generation: 2, outcome: 'completed', ...EPOCH },
+  'session.request.recorded': { sessionId: 'session-1', request: REQUEST, kind: 'permission-request', turnId: 't1', text: 'Allow git push?', ...EPOCH },
+  'session.response.delivery-reported': { sessionId: 'session-1', request: REQUEST, report: 'delivered', ...EPOCH },
+  'session.output.appended': { sessionId: 'session-1', turnId: 't1', generation: 2, chunk: 1, text: 'All tests pass.', ...EPOCH },
+  'session.limit.signaled': { sessionId: 'session-1', generation: 2, resetsAt: AT, ...EPOCH },
+  'execution.scm-credential.adopted': ADOPTION,
+  'execution.scm-credential.not-adopted': { ...ADOPTION, reason: 'superseded' },
 };
 
 function reachableNames(node: unknown, seen = new Set<string>()): Set<string> {
@@ -162,6 +164,15 @@ test('every session command and observation is valid at protocol version 2 and r
     assert.ok(violations(check(schema, observation(type, OBSERVATION_EXAMPLES[type]!, 1))).some((text) => text.includes('/metadata/protocolVersion')), type);
     const { attemptId: _attemptId, ...unattributed } = observation(type, OBSERVATION_EXAMPLES[type]!).metadata;
     assert.ok(violations(check(schema, { ...observation(type, OBSERVATION_EXAMPLES[type]!), metadata: unattributed })).some((text) => text.includes('attemptId')), type);
+  }
+});
+
+test('every session observation names the recovery epoch that is checked before its effect', () => {
+  for (const [type, schema] of Object.entries(SESSION_OBSERVATIONS)) {
+    const { recoveryEpoch: _recoveryEpoch, ...unepoched } = OBSERVATION_EXAMPLES[type] as Json;
+
+    assert.ok(violations(check(schema, observation(type, unepoched))).some((text) => text.includes('recoveryEpoch')), type);
+    assert.ok(!check(schema, observation(type, { ...unepoched, recoveryEpoch: 0 })).ok, type);
   }
 });
 
@@ -260,14 +271,36 @@ test('the worker confirms the adoption of a refreshed version, or says why it ke
   const adopted = (payload: object) => checkMessageSchema('ScmCredentialAdoptedObservation', observation('execution.scm-credential.adopted', payload));
   const notAdopted = SCHEMAS.ScmCredentialNotAdoptedPayload as Json;
 
-  assert.ok(adopted(NOTICE).ok);
-  assert.ok(violations(adopted({ ...NOTICE, secret: 'scm secret' })).some((text) => text.includes('"secret"')));
+  assert.ok(adopted(ADOPTION).ok);
+  assert.ok(violations(adopted({ ...ADOPTION, secret: 'scm secret' })).some((text) => text.includes('"secret"')));
   assert.deepEqual(enumAt(notAdopted, 'properties', 'reason'), ['fetch-refused', 'superseded', 'attempt-not-held']);
+});
+
+test('one attempt\'s adoption never ends a version that another attempt of the run still holds', () => {
+  const description = (SCHEMAS.ScmCredentialAdoptedObservation as { description: string }).description;
+
+  assert.match(description, /every attempt of the run that held it/);
+  assert.doesNotMatch(description, /the previous secret may end\.$/);
+});
+
+test('a permission request carries the plugin\'s classification of its operation, and no other request does', () => {
+  const recorded = (payload: object) => checkMessageSchema('RequestRecordedObservation',
+    observation('session.request.recorded', { ...OBSERVATION_EXAMPLES['session.request.recorded']!, ...payload }));
+  const push = { kind: 'push', ref: 'refs/heads/taskelith/task-1' };
+
+  assert.ok(recorded({}).ok);
+  assert.ok(recorded({ operation: push }).ok);
+  assert.ok(!recorded({ kind: 'input-request', operation: push }).ok);
+  assert.ok(!recorded({ operation: { kind: 'push', ref: 'main' } }).ok);
+  assert.ok(!recorded({ operation: { kind: 'push', ref: 'refs/heads/a b' } }).ok);
+  assert.ok(!recorded({ operation: { kind: 'merge', ref: push.ref } }).ok);
+  assert.ok(!recorded({ operation: { ...push, remote: 'origin' } }).ok);
+  assert.deepEqual(enumAt(SCHEMAS.ClassifiedOperation!, 'properties', 'kind'), [...CLASSIFIED_OPERATION_KINDS]);
 });
 
 test('a turn ends with one outcome of the port, with a failure exactly when it failed', () => {
   const ended = (payload: object) => checkMessageSchema('TurnEndedObservation', observation('session.turn.ended', payload));
-  const base = { sessionId: 'session-1', turnId: 't1', generation: 2 };
+  const base = { sessionId: 'session-1', turnId: 't1', generation: 2, ...EPOCH };
   const variants = (SCHEMAS.TurnEndedPayload as { oneOf: Json[] }).oneOf;
 
   assert.deepEqual(variants.flatMap((variant) => enumAt(variant, 'properties', 'outcome')).sort(), [...TURN_OUTCOMES].sort());

@@ -95,11 +95,19 @@ A response delivery SHALL name its responder with the timeline's `Responder`, a 
 - **THEN** validation fails
 
 ### Requirement: Delegation result response command
-When a delegated child ends, the control plane SHALL return its result to the parent's open delegation request with `session.delegation-result.deliver`, carrying the ended `DelegationResult` of `readDelegationResult` unchanged. A result for a request that is no longer open SHALL go to the resumed session as a host turn instead.
+When a delegation result becomes `ended`, a rejected delegation included, the control plane SHALL return it to the parent's open delegation request with `session.delegation-result.deliver`, carrying the ended `DelegationResult` of `readDelegationResult` unchanged. A result for an `expired` or `unresolved` request SHALL go to the resumed session as a host turn instead; one for an `answered` request SHALL be a repeat that sends nothing.
 
 #### Scenario: Pending result
 - **WHEN** a delegation result delivery carries a `pending` result
 - **THEN** validation fails
+
+#### Scenario: Rejected delegation
+- **WHEN** `requestDelegation` rejects a delegation and its open request awaits the result
+- **THEN** the control plane writes `session.delegation-result.deliver` with the `ended` result of outcome `rejected`
+
+#### Scenario: Result for an answered request
+- **WHEN** a delegation result arrives for a request that is `answered` with delivery `delivery-uncertain`
+- **THEN** the control plane writes no command and no host turn
 
 #### Scenario: Result schema shared with the read
 - **WHEN** the execution messages and `execution.openapi.json` both define `DelegationResult`
@@ -113,11 +121,15 @@ A refreshed per-run SCM credential SHALL reach the worker only as `execution.scm
 - **THEN** validation fails and names the field
 
 ### Requirement: SCM credential adoption confirmation
-After fetching a notified version, the worker SHALL pass it to every later workspace operation of the attempt and report `execution.scm-credential.adopted`; item 21 SHALL end the previous secret only after it. A worker that keeps its current version SHALL report `execution.scm-credential.not-adopted` with `fetch-refused`, `superseded`, or `attempt-not-held`.
+After fetching a notified version, the worker SHALL pass it to every later workspace operation of the attempt and report `execution.scm-credential.adopted`. Item 21 SHALL end a version only once every attempt of the run that held it adopted it or a later one or no longer holds its ownership, decided serialized per run. A worker that keeps its current version SHALL report `execution.scm-credential.not-adopted` with `fetch-refused`, `superseded`, or `attempt-not-held`.
 
 #### Scenario: Refused fetch
 - **WHEN** the fetch of a notified version is refused
 - **THEN** the worker keeps its current version and reports `execution.scm-credential.not-adopted` with `fetch-refused`
+
+#### Scenario: Second attempt still holds the previous version
+- **WHEN** two active attempts of a run hold its previous version and only one reports `execution.scm-credential.adopted`
+- **THEN** item 21 keeps the previous version
 
 ### Requirement: Session observations
 The observation channel SHALL carry, about an attempt, the generation start and end, turn delivered, not delivered, and ended, request recorded, response delivery reported, output appended, and limit signaled. Each SHALL have an `observationId` derived from its source, and the control plane SHALL apply each through its session timeline function. A turn's end SHALL carry a failure exactly when its outcome is `failed`.
@@ -130,6 +142,28 @@ The observation channel SHALL carry, about an attempt, the generation start and 
 - **WHEN** `session.response.delivery-reported` reports `pending`
 - **THEN** validation fails
 
+### Requirement: Session observation recovery epoch
+Each session observation and each adoption or non-adoption SHALL carry `recoveryEpoch`. Before its effect, the control plane SHALL keep one whose epoch differs from the current epoch, or that arrives in restore quarantine, as evidence for quarantine reconciliation only, changing no timeline, inbox, output, or credential state and ending no secret, as launch authorization section 7 states for the other execution observations.
+
+#### Scenario: Observation without its epoch
+- **WHEN** `session.turn.delivered` omits `recoveryEpoch`
+- **THEN** validation fails and names the field
+
+#### Scenario: Observation from before a restore
+- **WHEN** `session.request.recorded` arrives with an epoch older than the current one
+- **THEN** the control plane keeps it as evidence and records no request
+
+### Requirement: Classified permission request
+`session.request.recorded` SHALL carry the port's optional classified `operation`, a `push` with its full branch ref, only for a permission request. The control plane SHALL match a `push-to-task-branch` standing rule only for a `push` to the task's branch, checked in the use transaction; an unclassified request SHALL match no rule.
+
+#### Scenario: Operation on an input request
+- **WHEN** an input request's `session.request.recorded` carries `operation`
+- **THEN** validation fails
+
+#### Scenario: Push to another branch
+- **WHEN** a permission request is classified as a `push` to a ref other than the task's branch
+- **THEN** no standing rule answers it
+
 ### Requirement: Worker relay connection
 `openWorkerRelay` SHALL upgrade `GET /workers/relay` to the worker's one outbound WebSocket with the worker credential and the subprotocol `taskelith.relay.v1`, answering 422 `protocol-not-supported` below protocol version 2. It SHALL carry only the relay frames of `terminal.asyncapi.json`, multiplexed by `terminalId`, never a command, an observation, or a credential.
 
@@ -140,6 +174,13 @@ The observation channel SHALL carry, about an attempt, the generation start and 
 #### Scenario: Refused terminal open
 - **WHEN** the worker receives `relay.terminal.open` for an attempt it does not hold at that ownership generation
 - **THEN** it answers `relay.terminal.refused` with `attempt-not-held` and opens nothing
+
+### Requirement: Terminal start failure
+When its checks pass but `terminalProgram` fails with `internal` or `unavailable`, or the pseudo-terminal does not start, the worker SHALL answer `relay.terminal.refused` with `terminal-start-failed`, naming no error text. The control plane SHALL then end the client's terminal with reason `refused` and that refusal, and close the connection with `terminal-ended`.
+
+#### Scenario: Harness cannot describe the terminal
+- **WHEN** `terminalProgram` fails with `unavailable` after the open's checks passed
+- **THEN** the worker answers `relay.terminal.refused` with `terminal-start-failed`
 
 ### Requirement: Terminal frames document
 `@taskelith/contracts` SHALL hold `documents/terminal.asyncapi.json` (AsyncAPI 3.0.0) with the browser terminal and worker relay frames, generated with the other documents. Its channels SHALL have no address and name the HTTP operation that upgrades them, so that no path is defined in two documents.

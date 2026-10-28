@@ -123,7 +123,10 @@ test('a terminal ends with its reason, and with the worker\'s refusal exactly wh
   assert.ok(ended({ reason: 'refused', refusal: 'terminal-not-offered' }).ok);
   assert.ok(!ended({ reason: 'refused' }).ok);
   assert.ok(!ended({ reason: 'program-exited', refusal: 'terminal-not-offered' }).ok);
-  assert.deepEqual(enumOf(FRAMES.TerminalRefusalReason!), ['attempt-not-held', 'execution-not-running', 'generation-not-running', 'terminal-not-offered']);
+  assert.deepEqual(enumOf(FRAMES.TerminalRefusalReason!), [
+    'attempt-not-held', 'execution-not-running', 'generation-not-running', 'terminal-not-offered', 'terminal-start-failed',
+  ]);
+  assert.ok(ended({ reason: 'refused', refusal: 'terminal-start-failed' }).ok);
   assert.deepEqual(enumOf(FRAMES.TerminalCloseReason!), [
     'invalid-frame', 'unauthenticated', 'csrf-token-invalid', 'role-changed', 'attach-timeout', 'superseded', 'terminal-ended', 'rate-limited', 'relay-unavailable',
   ]);
@@ -139,6 +142,7 @@ test('relay frames name their terminal, and an open names the attempt, execution
   assert.ok(frame('RelayControlFrame', open).ok);
   assert.ok(violations(frame('RelayOpenFrame', unbound)).some((text) => text.includes('executionId')));
   assert.ok(frame('RelayWorkerFrame', { type: 'relay.terminal.refused', terminalId: 'm1', reason: 'attempt-not-held' }).ok);
+  assert.ok(frame('RelayWorkerFrame', { type: 'relay.terminal.refused', terminalId: 'm1', reason: 'terminal-start-failed' }).ok);
   assert.ok(frame('RelayWorkerFrame', { type: 'relay.terminal.output', terminalId: 'm1', sequence: 4, data: 'ok' }).ok);
   assert.ok(!frame('RelayWorkerFrame', { type: 'relay.terminal.output', sequence: 4, data: 'ok' }).ok);
   const relayEnds = enumOf((FRAMES.RelayEndedFrame!.properties as Json).reason as Json);
