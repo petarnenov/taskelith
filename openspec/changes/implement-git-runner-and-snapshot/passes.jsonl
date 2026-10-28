@@ -1,0 +1,1 @@
+{"change": "implement-git-runner-and-snapshot", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18102-c0f5-7983-95e3-33e834d7e67a", "counts": {"critical": 0, "high": 3, "medium": 6, "low": 2}}
