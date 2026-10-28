@@ -59,7 +59,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   3. A worker whose protocol window shares no version with the server's is `precondition-failed` with reason `protocol-not-supported` (422).
   4. A journal that is already enrolled is `conflict` with reason `journal-enrolled` (409).
 - **Atomicity.** One transaction uses the token and adds the worker, so concurrent redemptions have one winner. Expiry is checked at the moment of use, after the token's row lock (`clock_timestamp()`), so a use that waited past the expiry fails with `token-invalid`.
-- **Placement.** The new `workers` row is enrolled, not revoked, not draining, and not reachable until its first contact (item 21), with the declared capacity.
+- **Placement.** The new `workers` row is enrolled, not revoked, not draining, not reachable until its first contact (item 21), and awaits its self-check until its first report ([worker admission](worker-admission.md)), with the declared capacity.
 - **Response.** `credentialGeneration` 1, the installation's `recoveryEpoch`, the server's protocol window, and the two credentials of section 6.
 
 ## 6. Credentials

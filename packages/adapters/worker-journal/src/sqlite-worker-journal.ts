@@ -22,6 +22,7 @@ import type {
   OperationId,
   OutboxBacklog,
   OutboxEntry,
+  SelfCheckResult,
   Sequence,
   WorkerJournal,
 } from '@taskelith/execution';
@@ -291,6 +292,15 @@ export class SqliteWorkerJournal implements WorkerJournal {
     return this.#connection.transact((database) => {
       const declaration = storedInteger<number>(metaRow(database), 'next_sequence');
       this.#append(database, { kind: 'admission-pressure-changed', declaration, causes: [...causes] });
+      return ok(undefined);
+    });
+  }
+
+  // Like a pressure change, a report takes its sequence as its declaration.
+  recordSelfCheck(results: readonly SelfCheckResult[]): Result<void> {
+    return this.#connection.transact((database) => {
+      const declaration = storedInteger<number>(metaRow(database), 'next_sequence');
+      this.#append(database, { kind: 'self-check-reported', declaration, results: results.map((result) => ({ ...result })) });
       return ok(undefined);
     });
   }

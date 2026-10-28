@@ -163,7 +163,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   // A grant before the revocation, which the administration must invalidate.
   const store = new PostgresDatabase(database);
   after(() => store.close());
-  await sql(database, 'UPDATE workers SET reachable = true');
+  await sql(database, "UPDATE workers SET reachable = true, worker_admission = 'admitted'");
   await createLaunchRun(store);
   const { taskId, request } = await placedTask(store, 'task-1', enrolled.workerId);
   const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 2 }, request));

@@ -69,7 +69,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
   'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'broker_revocations',
-  'launch_rejections', 'unrecorded_processes', 'placement_rotation', 'placement_outcomes',
+  'launch_rejections', 'unrecorded_processes', 'placement_rotation', 'placement_outcomes', 'worker_self_check_results',
 ];
 const WORKER = 'worker-a';
 const JOURNAL = 'journal-a';
@@ -110,6 +110,7 @@ async function enroll(workerId = WORKER, journalId = JOURNAL): Promise<void> {
     const added = await tx.fleet.addToken(fleetToken(`token-${workerId}`));
     return added.ok ? tx.fleet.enroll(`token-${workerId}` as never, worker) : added;
   }));
+  await sql("UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = $1", [workerId]);
 }
 
 interface Sent {

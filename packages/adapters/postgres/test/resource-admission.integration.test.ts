@@ -46,7 +46,7 @@ const REQUESTED = value(parseResourceRequest({ cpuMillicores: 1000, memoryMebiby
 function worker(workerId: WorkerId, overrides: Partial<WorkerPlacementRecord> = {}): WorkerPlacementRecord {
   return {
     workerId, enrolled: true, revoked: false, draining: false, reachable: true, slots: 2, cpuMillicores: 3500,
-    memoryMebibytes: 7680, controls: ['memory-limit' as const], protocolVersion: 1, ...overrides,
+    memoryMebibytes: 7680, controls: ['memory-limit' as const], protocolVersion: 1, admitted: true, ...overrides,
   };
 }
 

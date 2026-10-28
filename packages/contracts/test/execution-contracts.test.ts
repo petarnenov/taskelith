@@ -345,6 +345,24 @@ test('capacity and admission pressure are declared as observations', () => {
   assert.ok(checkMessageSchema('AdmissionPressureChangedObservation', observation('worker.admission-pressure.changed', { causes: [] })).ok);
 });
 
+test('a self-check report holds one bounded result per check, each by its outcome', () => {
+  const passed = { checkId: 'linux-containment', outcome: 'passed', details: [] };
+  const failed = { checkId: 'linux-containment', outcome: 'failed', details: ['cgroup v2 is not mounted'] };
+  const skipped = { checkId: 'linux-containment', outcome: 'not-applicable', details: ['no-launch-command'] };
+
+  assert.ok(checkMessageSchema('SelfCheckReportedObservation', observation('worker.self-check.reported', { results: [passed] })).ok);
+  assert.ok(checkMessageSchema('SelfCheckReportedPayload', { results: [failed] }).ok);
+  assert.ok(checkMessageSchema('SelfCheckReportedPayload', { results: [{ ...skipped, details: ['platform-not-covered'] }] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckReportedPayload', { results: [] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckReportedPayload', { results: Array.from({ length: 9 }, () => passed) }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckResult', { ...passed, details: ['a problem'] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckResult', { ...failed, details: [] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckResult', { ...skipped, details: ['the operator said so'] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckResult', { ...skipped, details: ['no-launch-command', 'platform-not-covered'] }).ok);
+  assert.ok(!checkMessageSchema('SelfCheckResult', { ...passed, checkId: 'Linux Containment' }).ok);
+  assert.ok(checkMessageSchema('AssignmentRefusedPayload', { commandId: 'command-1', assignmentId: 'assignment-1', reason: 'worker-self-check-failed', retryable: false }).ok);
+});
+
 test('enrollment presents the journal, host, protocol window, and capacity', () => {
   const request = {
     journalId: 'journal-1',

@@ -1,4 +1,5 @@
 export { InMemoryFleetRegistry, InMemoryInstallationRecord } from './adapters/in-memory-fleet.js';
+export { InMemoryWorkerAdmissions, type InMemoryWorkerAdmissionsOptions } from './adapters/in-memory-worker-admissions.js';
 export {
   EnrollmentService,
   type Enrollment,
@@ -72,3 +73,24 @@ export type {
   ServerCertificateRequest,
   ServerHost,
 } from './ports/certificate-issuer.js';
+export {
+  LINUX_CONTAINMENT_CHECK_ID,
+  LINUX_CONTAINMENT_SCOPE,
+  REQUIRED_SELF_CHECKS,
+  WORKER_ADMISSION_STATES,
+  decideWorkerAdmission,
+  notApplicableReason,
+  type SelfCheckScope,
+  type StartFacts,
+  type WorkerAdmissionDecision,
+  type WorkerAdmissionState,
+} from './domain/worker-admission.js';
+export type { SelfCheckRun, WorkerAdmissionCheck } from './ports/worker-admission-check.js';
+export { WORKER_ADMISSION_CONFORMANCE, stubAdmissionCheck, type WorkerAdmissionFixture } from './ports/worker-admission-conformance.js';
+export type {
+  AdmissionRecording,
+  WorkerAdmissionEntry,
+  WorkerAdmissionSnapshot,
+  WorkerAdmissions,
+  WorkerAdmissionView,
+} from './ports/worker-admissions.js';

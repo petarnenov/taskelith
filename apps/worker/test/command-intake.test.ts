@@ -64,10 +64,10 @@ afterEach(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-function newIntake(capacity: WorkerCapacity): CommandIntake {
+function newIntake(capacity: WorkerCapacity, selfCheckFailed = false): CommandIntake {
   let reports = 0;
   return new CommandIntake({
-    journal: root.journal, capacity, pressure, publish: broker.publish, observationSubject: SUBJECT,
+    journal: root.journal, capacity, pressure, selfCheckFailed, publish: broker.publish, observationSubject: SUBJECT,
     newReportId: () => `report-${(reports += 1)}`, now: () => T0, journalFault: () => root.journal.fault,
   });
 }
@@ -207,6 +207,19 @@ test('a limit the offer can never meet is refused before admission pressure is a
   assert.equal(pressure.refreshes, 0);
 });
 
+test('after a failed self-check every offer is refused, before any limit or pressure, and none is journaled to launch', async () => {
+  intake = newIntake(CAPACITY, true);
+  pressure.causes = ok(['disk-floor']);
+  value(await deliver(offer(1)));
+  value(await deliver(offer(2, { cpuMillicores: 2001 })));
+  const bodies = await published();
+  for (const body of bodies) assertSchema('AssignmentRefusedObservation', body);
+  assert.deepEqual(payloads(bodies).map((payload) => (payload as { reason: string; retryable: boolean })).map(({ reason, retryable }) => [reason, retryable]),
+    [['worker-self-check-failed', false], ['worker-self-check-failed', false]]);
+  assert.deepEqual(value(root.journal.snapshot()).intents, []);
+  assert.equal(pressure.refreshes, 0);
+});
+
 test('pressure that cannot be refreshed journals nothing, so the offer is not acknowledged', async () => {
   pressure.causes = err(failure('unavailable', 'the journal is stopped'));
   assert.equal(failed(await deliver(offer(1))).message, 'the journal is stopped');
@@ -275,7 +288,7 @@ test('a W1 refused for lack of space is not acknowledged, and the redelivered co
     },
   });
   intake = new CommandIntake({
-    journal: full, capacity: CAPACITY, pressure, publish: broker.publish, observationSubject: SUBJECT, newReportId: () => 'report-1', now: () => T0,
+    journal: full, capacity: CAPACITY, pressure, selfCheckFailed: false, publish: broker.publish, observationSubject: SUBJECT, newReportId: () => 'report-1', now: () => T0,
     journalFault: () => root.journal.fault,
   });
   assert.equal(isSpaceRefusal(failed(await deliver(offer(1)))), true);
@@ -498,7 +511,8 @@ const slotEvidence: readonly (readonly [string, Partial<JournaledExecution>, boo
 for (const [evidence, execution, holds] of slotEvidence) {
   test(`an ended assignment ${holds ? 'keeps' : 'frees'} its slot for ${evidence}`, async () => {
     intake = new CommandIntake({
-      journal: journalShowing(execution), capacity: { ...CAPACITY, slots: 1 }, pressure, publish: broker.publish, observationSubject: SUBJECT,
+      journal: journalShowing(execution), capacity: { ...CAPACITY, slots: 1 }, pressure, selfCheckFailed: false, publish: broker.publish,
+      observationSubject: SUBJECT,
       newReportId: () => 'report-1', now: () => T0, journalFault: () => root.journal.fault,
     });
     value(await deliver(offer(1)));

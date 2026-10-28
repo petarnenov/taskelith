@@ -32,6 +32,8 @@ export interface CommandIntakeOptions {
   readonly journal: WorkerJournal;
   readonly capacity: WorkerCapacity;
   readonly pressure: AdmissionCheck;
+  // This start's self-check failed: every new offer is refused.
+  readonly selfCheckFailed: boolean;
   readonly publish: (publication: Publication) => Promise<Result<PublishOutcome>>;
   readonly observationSubject: string;
   readonly newReportId: () => string;
@@ -109,9 +111,10 @@ export class CommandIntake {
     return ok({ ...source, outcome: 'rejected', kind: offer.metadata.commandType, rejection });
   }
 
-  // The limits an offer can never meet here come before admission pressure,
-  // which is retryable; undefined admits the offer.
+  // A failed self-check and the limits an offer can never meet here come
+  // before admission pressure, which is retryable; undefined admits it.
   #refusal(intent: LaunchIntent): Result<AssignmentRefusal | undefined> {
+    if (this.#options.selfCheckFailed) return ok({ reason: 'worker-self-check-failed' });
     const journal = this.#options.journal.snapshot();
     if (!journal.ok) return journal;
     const reason = refusalOf(intent.requested, journal.value, this.#options.capacity);

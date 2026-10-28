@@ -53,11 +53,11 @@ const PRINCIPAL: WorkerPrincipal = { workerId: WORKER.workerId, generation: 1 };
 beforeEach(async () => {
   await sql(url, `TRUNCATE workflow_runs, gates, admissions, tasks, assignments, outbox, inbox, task_lineage, capacity_charges,
     delegations, capacity_quotas, workers, installation, enrollment_tokens, broker_revocations, launch_authorizations,
-    launch_rejections, current_revisions, producer_cursors`);
+    launch_rejections, current_revisions, producer_cursors, worker_self_check_results`);
   await sql(url, 'INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   value(await fleet.addToken(fleetToken('token-1')));
   value(await fleet.enroll(fleetToken('token-1').hash, WORKER));
-  await sql(url, 'UPDATE workers SET reachable = true');
+  await sql(url, "UPDATE workers SET reachable = true, worker_admission = 'admitted'");
   await createLaunchRun(database);
 });
 
@@ -97,6 +97,7 @@ test('a launch is granted once, recorded with its values, and its replay never e
   const other = fleetWorker('worker-2', 'journal-2');
   value(await fleet.addToken(fleetToken('token-2')));
   value(await fleet.enroll(fleetToken('token-2').hash, other));
+  await sql(url, "UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = $1", [other.workerId]);
   const stranger = { workerId: other.workerId, generation: 1 };
   assert.equal(kindOf(await authority.authorize(stranger, request)), 'rejected:assignment-not-active', "another enrolled worker's replay gets nothing");
   assert.equal(grantOf(await authority.authorize(PRINCIPAL, request)).launchAuthId, grant.launchAuthId, "and changes nothing of A's");
@@ -348,7 +349,7 @@ test('concurrent requests of one operation leave one grant, and a racing revocat
     const racer = fleetWorker(`racer-${round}`, `racer-journal-${round}`);
     value(await fleet.addToken(fleetToken(`racer-token-${round}`)));
     value(await fleet.enroll(fleetToken(`racer-token-${round}`).hash, racer));
-    await sql(url, 'UPDATE workers SET reachable = true WHERE worker_id = $1', [racer.workerId]);
+    await sql(url, "UPDATE workers SET reachable = true, worker_admission = 'admitted' WHERE worker_id = $1", [racer.workerId]);
     const { request: raced } = await placed(`race-${round}`, racer.workerId);
     // A later start each round lets the revocation land on either side.
     const delayed = new Promise((resolve) => setTimeout(resolve, (round - 1) * 15));

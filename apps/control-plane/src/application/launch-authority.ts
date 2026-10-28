@@ -68,7 +68,7 @@ export class LaunchAuthority {
   }
 
   async #decide(tx: ControlPlaneTransaction, request: LaunchRequest, checked: Checked): Promise<Result<LaunchOutcome>> {
-    const precondition = checkLaunchPreconditions(request, checked);
+    const precondition = checkLaunchPreconditions(request, checked) ?? await checkWorkerAdmission(tx, request);
     if (precondition !== undefined) return recordRejection(tx, request, precondition);
     const assignment = await optional(tx.assignments.get(request.assignmentId));
     if (!assignment.ok) return assignment;
@@ -164,6 +164,13 @@ async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPri
   const { revokedAt, credentials, journalId } = worker.value;
   if (revokedAt !== undefined || credentials.current.generation !== principal.generation) return ok(false);
   return ok(!(await isRetiredJournal(tx, { workerId: principal.workerId, journalId })));
+}
+
+// Worker admission contract section 7: only an admitted worker gets a new
+// grant; a replay of a recorded grant is never gated on it.
+async function checkWorkerAdmission(tx: ControlPlaneTransaction, request: LaunchRequest): Promise<LaunchRejection | undefined> {
+  if ((await tx.workers.get(request.workerId))?.admitted === true) return undefined;
+  return launchRejection('worker-not-authorized', `worker ${request.workerId} is not admitted by its self-check`);
 }
 
 // A stored run without its workflow reaches no decision; the worker retries

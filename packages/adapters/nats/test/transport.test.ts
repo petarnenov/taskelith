@@ -159,6 +159,18 @@ test('an observation subject message passes its schema; an inventory part is ide
   assert.match(rejection(readObservationSubjectMessage(bytes(invalid))), /^violates CapacityDeclaredObservation: /);
 });
 
+test('a self-check report with a malformed reason is refused at the wire; a repeated check passes to the decision', () => {
+  const report = (results: unknown[]) => {
+    const { metadata } = capacityDeclared('observation-9');
+    return { metadata: { ...metadata, observationType: 'worker.self-check.reported' }, payload: { results } };
+  };
+  const passed = { checkId: 'linux-containment', outcome: 'passed', details: [] };
+  const malformed = { checkId: 'linux-containment', outcome: 'not-applicable', details: ['the operator said so'] };
+  assert.match(rejection(readObservationSubjectMessage(bytes(report([malformed])))), /^violates SelfCheckReportedObservation: /);
+  const repeated = readObservationSubjectMessage(bytes(report([passed, passed])));
+  assert.deepEqual(repeated.ok && [repeated.value.type, repeated.value.identity], ['worker.self-check.reported', 'observation-9']);
+});
+
 test('the schema tables cover every message of the execution channels', () => {
   const document = JSON.parse(readFileSync(new URL('../../../contracts/documents/execution.asyncapi.json', import.meta.url), 'utf8'));
   const schemaOf = (channel: string) =>
