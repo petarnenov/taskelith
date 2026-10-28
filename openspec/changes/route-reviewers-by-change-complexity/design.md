@@ -250,7 +250,7 @@ make findings ARGS="route --change <change> [--json] [--no-shadow]"
 - Writes `openspec/changes/<change>/route.json` and prints a summary: the tier with its triggers, the two pass plans, and the shadow line, for example `shadow: jev-1.14.0 elevated (0.81), would assign codex gpt-6.1-sol#high, claude claude-opus-5-5#xhigh; agrees with the rule` or `shadow: failed (missing-credential); the rule decided alone`.
 - `--json` prints the record instead of the summary; it still writes it.
 - `--no-shadow` skips the Jev call and records `shadow.status` `skipped`, for tests and for hosts without network.
-- The worker runs it after `make verify` passes and before review pass 1, once the implementation is committed: the diff features exist only then, while `checklist --save` runs at plan time. Both are pre-review records of the change.
+- The worker runs it once the implementation is committed, before the `make verify` run that `make record` records for review pass 1 ("Phase 3 reconciliation"): the diff features exist only then, while `checklist --save` runs at plan time. Both are pre-review records of the change.
 
 ## Effect extension
 
@@ -351,6 +351,13 @@ The coordinator decided the open questions of phase 1 on 2026-10-28; the numbers
 ## Phase 2 scope
 
 Phase 2 implements the port, the rule and Jev routers, the fake, the feature derivation and its git adapter, the `route.json` writer and validation, and the composition root with the credential, each tested; the modules are not yet dispatched by `scripts/findings.ts`. Its second step adds the routing figures (`scripts/review-route-effect.ts`), the offline evaluation (`scripts/review-route-evaluation.ts`, its git adapter in `scripts/review-route-environment.ts`, and `route-evaluation.schema.json`), and the rule-only run over the archive. The feature derivation of one revision, `featuresAt`, is shared by `route` and the evaluation. The `effect` per-change rows and the dispatch of `route` and `route-evaluation` wait for phase 3.
+
+## Phase 3 reconciliation
+
+The merge of `dev` at `f3a53f17` (#383, `adopt-process-performance-recommendations`) brought governance version 6 and the generated verification record. Both deltas add requirements only, and `dev` added no requirement of the same name, so no delta rebases on `dev`'s text. Two of them change to fit version 6:
+
+- Order of `route` and `make verify` ("Review route in the task flow"). `make record-check` fails when the tree differs from the verified one outside the change's `verification.md`, `tasks.md`, `findings.jsonl`, and `passes.jsonl`, so a `route.json` committed after the recorded `make verify` would fail it. The worker therefore routes once the implementation is committed and before the `make verify` run that `make record` records for pass 1. This keeps the reason of "Decisions" 2, diff features of the committed implementation, but no longer requires a passing `make verify` before `route`. If that `make verify` fails and its fixes change the diff, the worker deletes `route.json`, routes again, and records why in `verification.md`. The alternative, adding `route.json` to the files that `make record-check` ignores, changes the generated record's requirement and is left to the coordinator.
+- Conditional third pass ("Route effect"). Pass 3 now runs only when the pass 2 fixes change more than records and documentation, or pass 2 reported a Critical or High finding. A review that ended after pass 2 counts two passes and no third pass; the effect and the evaluation already take the highest recorded pass. The rule still plans passes 1 and 2 only; a pass 3 that runs keeps pass 1's reviewer and effort.
 
 ## Open questions
 

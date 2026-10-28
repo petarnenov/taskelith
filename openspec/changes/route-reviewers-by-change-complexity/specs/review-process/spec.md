@@ -79,7 +79,7 @@ The shadow router's credential SHALL be read only from the environment variable 
 - **THEN** validation does not report it
 
 ### Requirement: Route effect
-`make findings ARGS="effect [--json]"` SHALL report, per archived change with `route.json`, the rule and shadow tiers, the reviewers that ran passes 1 and 2, the passes needed, and the findings by pass and severity, and in aggregate the agreement of the two tiers and, per router, the third pass share per tier. Changes whose shadow failed or was skipped SHALL be excluded from the shadow figures.
+`make findings ARGS="effect [--json]"` SHALL report, per archived change with `route.json`, the rule and shadow tiers, the reviewers that ran passes 1 and 2, the passes needed, and the findings by pass and severity, and in aggregate the agreement of the two tiers and, per router, the third pass share per tier. Changes whose shadow failed or was skipped SHALL be excluded from the shadow figures. A review ended after pass 2 by the conditional third pass SHALL count two passes.
 
 #### Scenario: Third pass share per tier
 - **WHEN** two archived changes routed `elevated` needed 3 and 2 passes
@@ -88,6 +88,10 @@ The shadow router's credential SHALL be read only from the environment variable 
 #### Scenario: Failed shadow
 - **WHEN** an archived change's `route.json` records `timeout`
 - **THEN** the change counts in the rule figures and not in the shadow figures
+
+#### Scenario: No third pass after record-only fixes
+- **WHEN** an archived change's pass 2 fixes were recorded as `fixed-unreviewed` and no pass 3 ran
+- **THEN** the effect counts two passes needed and no third pass for it
 
 ### Requirement: Archive routing evaluation
 `make findings ARGS="route-evaluation --save <change>"` SHALL route each archived single-artifact change with review records by both routers using only information from before its review: the diff of its first reviewed revision, or its merged diff marked approximate, and the capability history of changes merged before its base. It SHALL write one line per change with the outcome, SHALL report changes without `passes.jsonl` apart as lower bounds, and `--rule-only` SHALL skip the shadow router.
