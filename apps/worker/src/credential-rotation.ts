@@ -94,11 +94,11 @@ export class CredentialRotation {
     this.#wakeUp();
   };
 
-  // Only the generation after the confirmed one is stored; the pending
-  // file is durable before the consumer acknowledges the notice.
+  // Only the generation after the current one is stored, durably before the
+  // ack; an unconfirmed adoption is finished first, then it is renewed.
   readonly requested = (notice: RotationNotice): Result<void> => {
     const next = this.generation + 1;
-    if (notice.credentialGeneration !== next || this.#identity.previous !== undefined) {
+    if (notice.credentialGeneration !== next) {
       this.#logger.info('worker.credentials.notice-ignored', { credentialGeneration: notice.credentialGeneration, current: this.generation });
       return ok(undefined);
     }
@@ -173,7 +173,7 @@ export class CredentialRotation {
     this.#identity = finished.value;
     this.#previous = undefined;
     this.#logger.info('worker.credentials.confirmed', { credentialGeneration: this.generation });
-    return 'idle';
+    return 'continue';
   }
 
   // No answer is retried; a refusal ends the round until the next notice

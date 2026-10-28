@@ -214,13 +214,32 @@ test('a refused renewal ends the round with a log line; no answer is retried aft
   assert.equal(sleeps[0], 5000, 'the first launch retry delay at no jitter');
 });
 
-test('a notice for another generation, or while an adoption is unconfirmed, stores nothing', async () => {
+test('a notice for another generation stores nothing', async () => {
   const { rotation } = started();
   assert.deepEqual(rotation.requested({ credentialGeneration: 3 }), ok(undefined));
   assert.deepEqual(rotation.requested({ credentialGeneration: 1 }), ok(undefined));
   assert.equal(value(readPendingGeneration(root.paths, 3)), undefined);
   assert.equal(value(readPendingGeneration(root.paths, 2)), undefined);
   assert.equal(sink.records.filter(({ event }) => event === 'worker.credentials.notice-ignored').length, 2);
+});
+
+test('a next notice while a confirmation answer was lost is stored, then renewed after that confirmation', async () => {
+  renewal.confirmAnswers = [err(failure('unavailable', 'the confirmation answer was lost'))];
+  const { rotation } = started();
+  value(rotation.requested({ credentialGeneration: 2 }));
+  const bearer2 = value(readPendingGeneration(root.paths, 2))!.controlPlane;
+  await renewal.renewed(1);
+  rotation.linked(2);
+  await renewal.confirmed(1);
+  await waitUntil(() => sleeps.length === 1);
+
+  assert.deepEqual(rotation.requested({ credentialGeneration: 3 }), ok(undefined));
+  assert.notEqual(value(readPendingGeneration(root.paths, 3)), undefined, 'durable before the acknowledgement');
+  await renewal.renewed(2);
+  assert.deepEqual(renewal.confirmations.map(({ generation }) => generation), [2, 2], 'generation 2 is confirmed first');
+  assert.equal(renewal.renewals[1]!.bearer, bearer2);
+  assert.equal(renewal.renewals[1]!.material.generation, 3);
+  await waitUntil(() => value(readIdentity(root.paths.identity)).credentialGeneration === 3);
 });
 
 test('a link that stays on the predecessor after the re-dial is retried after the delay', async () => {
