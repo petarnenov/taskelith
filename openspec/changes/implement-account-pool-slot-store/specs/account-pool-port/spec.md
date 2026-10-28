@@ -7,6 +7,10 @@
 - **WHEN** the `AccountSlots` conformance suite runs against `PostgresAccountSlots` inside one transaction
 - **THEN** every case passes, concurrent replaces at one revision included
 
+#### Scenario: Stored invariants
+- **WHEN** a row of `account_slots` names no allowed project or one project twice
+- **THEN** the database rejects it
+
 ### Requirement: Slot count of a harness
 `AccountSlots.countNotRemoved` SHALL return the number of a harness's slots in every project that are not removed, revoked slots included, for the slot limit of the harness's admitted pair.
 
@@ -26,22 +30,30 @@
 - **THEN** `reveal` fails with `internal` and the failure holds no credential text
 
 ### Requirement: Add-slot command with a pair limit
-`addAccountSlot` SHALL reject with `invalid`, before it stores anything, a slot without an admitted pair or with an invalid record, SHALL then store the credential and, in one SERIALIZABLE capacity transaction, check the pair's slot limit with `countNotRemoved` and add the record that names the stored version, and SHALL discard that version when the transaction returns an `Err`.
+`addAccountSlot` SHALL reject with `invalid`, before it stores anything, a slot without an admitted pair or with an invalid record, SHALL then store the credential and, in one SERIALIZABLE capacity transaction, check the pair's slot limit with `countNotRemoved` and add the record that names the stored version, and SHALL discard that version when the transaction returns an `Err`, except an `unavailable` one whose commit outcome is unknown.
 
 #### Scenario: Concurrent adds for the last slot
 - **WHEN** two add-slot commands for a pair that allows one slot run concurrently on PostgreSQL
 - **THEN** one slot is added, the other command fails with `invalid`, and only the added slot keeps a credential
+
+#### Scenario: Commit outcome unknown
+- **WHEN** the add-slot transaction commits but its reply is lost, so it returns `unavailable` with the outcome `unknown`
+- **THEN** the stored version is kept for the slot that names it
 
 #### Scenario: Refused add
 - **WHEN** an add-slot command fails
 - **THEN** its failure names identifiers and limits and holds no credential text
 
 ### Requirement: New-session selection in the placement transaction
-`placeInTransaction` SHALL take the attempt's slot request instead of provider credentials, SHALL select a `new-session` request's slot by eligibility, the least-loaded rule, and its policy at the credential step, SHALL record the selected slot and its reservation time with the reservation, and SHALL fail a `resumed-session` or `after-limit` request with `invalid` until sub-change 12b.
+`placeInTransaction` SHALL take the attempt's slot request instead of provider credentials, SHALL fail with `invalid` a request for a project other than the task's, SHALL select a `new-session` request's slot by eligibility, the least-loaded rule, and its policy at the credential step, SHALL record the selected slot and its reservation time with the reservation, and SHALL fail a `resumed-session` or `after-limit` request with `invalid` until sub-change 12b.
 
 #### Scenario: Race for the last unit of a slot
 - **WHEN** two placements on PostgreSQL race for the last unit of a slot whose concurrency limit is 1
 - **THEN** one is placed and the other waits with `provider-concurrency-exhausted`
+
+#### Scenario: Request for another project
+- **WHEN** a placement's slot request names a project other than the project of the task's lineage
+- **THEN** the placement fails with `invalid`, and no reservation, worker command, or slot write is made
 
 #### Scenario: Resumed session before 12b
 - **WHEN** a placement names a `resumed-session` request
