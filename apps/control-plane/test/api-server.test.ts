@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import {
@@ -65,7 +66,9 @@ test('the installation CA is public: no bearer is needed, and one is ignored', a
   assert.deepEqual([bare.status, await bare.json()], [200, { certificate: CERTIFICATE }]);
   assert.equal((await call('GET', '/installation/ca', { authorization: 'Bearer tkop_wrong' })).status, 200);
   assert.deepEqual(value(await api.handle('readInstallationCa', { parameters: [] } as unknown as ApiRequest, '')), { certificate: CERTIFICATE });
-  api = new ControlPlaneApi({ installationCa: `${CERTIFICATE}-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n` } as never);
+  const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const key = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+  api = new ControlPlaneApi({ installationCa: `${CERTIFICATE}${key}` } as never);
   answers = { readInstallationCa: async () => api.handle('readInstallationCa', { parameters: [] } as unknown as ApiRequest, '') } as never;
   const keyed = await fetch(`${base}/installation/ca`);
   const body = await keyed.text();
