@@ -44,7 +44,8 @@ On a detached worktree of `027a18fa` with the new and changed test files of `be2
 | Check | Revision | Result |
 | --- | --- | --- |
 | `make verify` | `a95a28e9`, tree `04bd8ba7` | Passed, profile full, stamp written: tests 3603, suites 46, pass 3594, fail 0, cancelled 0, skipped 9; all files 99.43 % lines, 92.72 % branches, 98.94 % functions. `git fetch origin` before the run showed `origin/dev` at `62217e7a` (#409), which was not merged, since the brief asked only for `027a18fa` |
-| `make verify` | `6f62b985`, tree `f1b1b3ce` | Passed, profile full, stamp written, after the merge of `62217e7a` and the coordinator's answers: tests 3646, suites 46, pass 3637, fail 0, cancelled 0, skipped 9; all files 99.42 % lines, 92.75 % branches, 98.83 % functions. `make record` of this run is under "Generated checks" |
+| `make verify` | `6f62b985`, tree `f1b1b3ce` | Passed, profile full, stamp written, after the merge of `62217e7a` and the coordinator's answers: tests 3646, suites 46, pass 3637, fail 0, cancelled 0, skipped 9; all files 99.42 % lines, 92.75 % branches, 98.83 % functions |
+| `make verify` | `b9642b05`, tree `f265c3ba` | Passed, profile full, stamp written, after the pass 1 fixes: tests 3648, suites 46, pass 3639, fail 0, cancelled 0, skipped 9; all files 99.42 % lines, 92.75 % branches, 98.83 % functions. `make record` of this run is under "Generated checks" |
 | `make findings ARGS="route --change implement-account-pool-slot-store"` | `6a8f0261` | "route: elevated (lines, files, security, contracts, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` agrees (P(third) 0.78); recommendation only, committed unedited as `436f3ef2`. The brief names the reviewers at effort medium |
 | `make findings ARGS="route --change implement-account-pool-slot-store"`, again | `88da0451` | Routed again before pass 1, as worker step 4 requires when fixes change the diff: the merge of `62217e7a` moved the merge base, and `931ee2fe` changed the tree outside the change's directory, so the first `route.json` (`devCommit` `027a18fa`, `headCommit` `6a8f0261`) was made for another tree, which the route gate of `make review` refuses. The stale `route.json` was deleted and the change routed again; committed unedited as `d9efb19b`. Result: "route: elevated (lines, files, security, contracts, size), rule version 2", features 1804 lines and 37 files (before: 1824 and 43); the same reviewer plan; shadow `jev-1.14.0` agrees (P(third) 0.79) |
 
@@ -53,11 +54,15 @@ On a detached worktree of `027a18fa` with the new and changed test files of `be2
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f1b1b3cef5cb9bbc7e1a6f8af67be5bfedfa9bdb`; tests 3646, pass 3637, fail 0, skipped 9; all files 99.42% lines, 92.75% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `f265c3ba7179c0cf5641fc355d24cf7be9ad1842`; tests 3648, pass 3639, fail 0, skipped 9; all files 99.42% lines, 92.75% branches, 98.83% functions.
 - `npm run openspec -- validate implement-account-pool-slot-store --strict`: passed, `Change 'implement-account-pool-slot-store' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).`.
 - Spec diff against the merge base `62217e7a1f56` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a184be-e129-75c3-8737-5f152c20d86f` | 0 | 2 | 2 | 0 |
 <!-- make record: end -->
 
 ## Independent review
