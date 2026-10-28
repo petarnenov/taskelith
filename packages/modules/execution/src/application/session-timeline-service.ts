@@ -1,5 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { EvidenceReference } from '@taskelith/sdlc';
+import { truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
 import { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from '../domain/session-attempts.js';
@@ -45,6 +46,7 @@ import {
   recordTurnRefused,
   submitTurn,
 } from '../domain/session-turns.js';
+import { MAX_INPUT_ANSWER_BYTES } from '../ports/needs-you.js';
 import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
 import type {
   HeldKey,
@@ -146,7 +148,7 @@ export class SessionTimelineService {
       const prior = await tx.idempotency.find(sessionId, TURN_SCOPE, command.key);
       if (!prior.ok) return prior;
       if (prior.value !== undefined) return repeatedTurn(stored.value.session, prior.value, digest);
-      const text = this.#redactor.redact(command.text);
+      const text = this.#redacted(command.text);
       const submitted = submitTurn(stored.value.session, { turnId: this.#turnIds.next(), key: command.key, author: command.author, text });
       if (!submitted.ok) return submitted;
       const key = { scope: TURN_SCOPE, key: command.key, digest, outcome: submitted.value.turn.id };
@@ -188,7 +190,7 @@ export class SessionTimelineService {
       const prior = await tx.idempotency.find(sessionId, scope, key);
       if (!prior.ok) return prior;
       if (prior.value !== undefined) return repeatedRequest(stored.value.session, prior.value, digest);
-      const redacted = { ...recording, text: this.#redactor.redact(recording.text) };
+      const redacted = { ...recording, text: this.#redacted(recording.text) };
       const recorded = recordRequest(stored.value.session, redacted);
       if (!recorded.ok) return recorded;
       const held = await tx.idempotency.record(sessionId, { scope, key, digest, outcome: recording.turnId });
@@ -200,7 +202,7 @@ export class SessionTimelineService {
   // of answer, responder, and attempt returns the answered request.
   consumeResponse(sessionId: SessionId, command: ResponseCommand): Promise<Result<NativeRequest>> {
     const { request, answer } = command.response;
-    if (!isAnswerWithinBounds(answer)) {
+    if (!isAnswerWithinServiceBounds(answer)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got an answer out of bounds`, { session: sessionId })));
     }
     const scope = responseScope(request);
@@ -231,7 +233,7 @@ export class SessionTimelineService {
     if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got output text out of bounds`, { session: sessionId })));
     }
-    const redacted = { ...output, text: this.#redactor.redact(output.text) };
+    const redacted = { ...output, text: this.#redacted(output.text) };
     return this.#change(sessionId, (session) => appendOutput(session, redacted));
   }
 
@@ -283,15 +285,20 @@ export class SessionTimelineService {
     });
   }
 
+  // Redaction may lengthen a text past its bound, so only its tail is cut,
+  // and no redacted secret can reappear (design decision 6).
+  #redacted(text: string): string {
+    return truncatedToLength(this.#redactor.redact(text), MAX_HARNESS_TEXT_LENGTH);
+  }
+
   #redactedAnswer(answer: Answer): Answer {
-    const redact = (text: string) => this.#redactor.redact(text);
     switch (answer.kind) {
       case 'permission':
-        return answer.message === undefined ? answer : { ...answer, message: redact(answer.message) };
+        return answer.message === undefined ? answer : { ...answer, message: this.#redacted(answer.message) };
       case 'input':
-        return { ...answer, text: redact(answer.text) };
+        return { ...answer, text: truncatedToUtf8Bytes(this.#redactor.redact(answer.text), MAX_INPUT_ANSWER_BYTES) };
       case 'delegation-result':
-        return { ...answer, summary: redact(answer.summary) };
+        return { ...answer, summary: this.#redacted(answer.summary) };
     }
   }
 }
@@ -338,6 +345,12 @@ function keyReused(sessionId: SessionId, key: HeldKey): Result<never> {
 function viewOf(session: Session): SessionView {
   const { output: _output, ...view } = session;
   return Object.freeze(view);
+}
+
+// An input answer is also bounded in UTF-8 bytes (MAX_INPUT_ANSWER_BYTES).
+function isAnswerWithinServiceBounds(answer: Answer): boolean {
+  if (!isAnswerWithinBounds(answer)) return false;
+  return answer.kind !== 'input' || utf8Length(answer.text) <= MAX_INPUT_ANSWER_BYTES;
 }
 
 function responseScope(key: RequestKey): string {

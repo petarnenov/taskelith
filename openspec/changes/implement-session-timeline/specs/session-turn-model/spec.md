@@ -18,6 +18,13 @@ The service SHALL check the text of a turn, of an answer, of a native request, a
 - **WHEN** the host reports a native request whose text exceeds `MAX_HARNESS_TEXT_LENGTH` only by a secret that redaction would shorten
 - **THEN** the report fails with `invalid`, and no read lists the request
 
+### Requirement: Redacted text cut to its bound
+After redaction, the service SHALL cut only the tail of a text that redaction lengthened past its bound, on a whole character: an input answer to `MAX_INPUT_ANSWER_BYTES` UTF-8 bytes, which it SHALL also check before redaction, and every other text to `MAX_HARNESS_TEXT_LENGTH`, never inside a surrogate pair, so that a text within its bound is never refused.
+
+#### Scenario: Turn text that redaction lengthens
+- **WHEN** a turn's text within its bound redacts to a text past the bound, with a surrogate pair at the cut
+- **THEN** the turn is recorded with the redacted text cut before that pair
+
 ### Requirement: Idempotent turn submission across restarts
 The service SHALL resolve a repeated turn key before the domain by an HMAC-SHA-256 digest of the author and the unredacted text: the same digest SHALL return the first turn as `duplicate`, and another digest SHALL fail with `conflict` `idempotency-key-reused`, also when both texts redact to the same text.
 

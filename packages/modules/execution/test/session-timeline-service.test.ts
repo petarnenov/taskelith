@@ -4,7 +4,9 @@ import { parseIdentifier } from '@taskelith/kernel';
 import {
   InMemorySessionTimelineStore,
   MAX_HARNESS_TEXT_LENGTH,
+  MAX_INPUT_ANSWER_BYTES,
   SessionTimelineService,
+  type HarnessRequestKind,
   type IdempotencyKey,
   type ResponseCommand,
   type SessionId,
@@ -39,6 +41,9 @@ const redactor = { redact: (text: string) => text.replaceAll(/SECRET\S*/g, '[red
 // Longer than its bound, it redacts to a text within the bound.
 const OVERLONG_SECRET = `SECRET${'x'.repeat(MAX_HARNESS_TEXT_LENGTH)}`;
 const digest = { digest: (input: string) => `digest:${input}` };
+// Within its bound, it redacts past the bound, as each SECRET grows by 4.
+const LENGTHENED = 'SECRET '.repeat(Math.floor(MAX_HARNESS_TEXT_LENGTH / 7));
+const LENGTHENED_REDACTED = redactor.redact(LENGTHENED);
 
 function timeline(store = new InMemorySessionTimelineStore()) {
   const service = new SessionTimelineService({ store, digest, redactor, turnIds: sequentialIds('TurnId', 'turn') });
@@ -55,12 +60,12 @@ async function running(service: SessionTimelineService, id: SessionId = SESSION)
   value(await service.startGeneration(id, { generation: generation(1), nativeSessionId: NATIVE }));
 }
 
-// Generation 1 runs `turn-1` with the open permission request `request-1`.
-async function withOpenRequest(service: SessionTimelineService): Promise<void> {
+// Generation 1 runs `turn-1` with the open request `request-1` of the kind.
+async function withOpenRequest(service: SessionTimelineService, kind: HarnessRequestKind = 'permission-request'): Promise<void> {
   await running(service);
   value(await service.submitTurn(SESSION, turn('key-1')));
   value(await service.deliverTurn(SESSION, { turnId: turnId('turn-1'), generation: generation(1) }));
-  value(await service.recordRequest(SESSION, permissionRequest('request-1')));
+  value(await service.recordRequest(SESSION, { ...permissionRequest('request-1'), kind }));
 }
 
 async function stored(store: InMemorySessionTimelineStore, id: SessionId = SESSION) {
@@ -308,4 +313,53 @@ test('an output chunk longer than its bound before redaction fails with invalid 
   assert.equal(overlong.code, 'invalid');
   assert.deepEqual((await stored(store)).session.output, before.session.output);
   assert.equal((await stored(store)).version, before.version);
+});
+
+test('turn text that redaction lengthens past its bound is recorded with its tail cut to the bound', async () => {
+  const { service } = timeline();
+  await running(service);
+  const submitted = value(await service.submitTurn(SESSION, turn('key-1', LENGTHENED)));
+  assert.equal(submitted.turn.text, LENGTHENED_REDACTED.slice(0, MAX_HARNESS_TEXT_LENGTH));
+});
+
+test('a cut on a surrogate pair keeps the whole character out, so the text ends one unit short', async () => {
+  const { service } = timeline();
+  await running(service);
+  const emojis = '\u{1F600}'.repeat((MAX_HARNESS_TEXT_LENGTH - 8) / 2);
+  const submitted = value(await service.submitTurn(SESSION, turn('key-1', `SECRET ${emojis}`)));
+  assert.equal(submitted.turn.text, `[redacted] ${emojis}`.slice(0, MAX_HARNESS_TEXT_LENGTH - 1));
+});
+
+test('native request text that redaction lengthens past its bound is recorded with its tail cut', async () => {
+  const { service } = timeline();
+  await withOpenRequest(service);
+  value(await service.recordRequest(SESSION, { ...permissionRequest('request-2'), text: LENGTHENED }));
+  const awaiting = value(await service.requestsAwaitingAnswer(SESSION));
+  assert.equal(awaiting[1]?.text, LENGTHENED_REDACTED.slice(0, MAX_HARNESS_TEXT_LENGTH));
+});
+
+test('an input answer that redaction lengthens past its byte bound is cut on a whole UTF-8 character', async () => {
+  const { service } = timeline();
+  await withOpenRequest(service, 'input-request');
+  const accents = '\u00e9'.repeat((MAX_INPUT_ANSWER_BYTES - 8) / 2);
+  const input = { ...allow(), answer: { kind: 'input' as const, text: `SECRET ${accents}` } };
+  const answered = value(await service.consumeResponse(SESSION, response('answer-1', input)));
+  const text = answered.state === 'answered' && answered.response.answer.kind === 'input' ? answered.response.answer.text : '';
+  assert.equal(text, `[redacted] ${accents}`.slice(0, (MAX_INPUT_ANSWER_BYTES - 12) / 2 + 11));
+  assert.equal(Buffer.byteLength(text), MAX_INPUT_ANSWER_BYTES - 1);
+});
+
+test('an input answer longer than its byte bound before redaction fails with invalid', async () => {
+  const { service } = timeline();
+  await withOpenRequest(service, 'input-request');
+  const input = { ...allow(), answer: { kind: 'input' as const, text: '\u00e9'.repeat(MAX_INPUT_ANSWER_BYTES / 2 + 1) } };
+  assert.equal(failed(await service.consumeResponse(SESSION, response('answer-1', input))).code, 'invalid');
+});
+
+test('an output chunk that redaction lengthens past its bound is appended with its tail cut', async () => {
+  const { service, store } = timeline();
+  await withOpenRequest(service);
+  value(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: LENGTHENED }));
+  const texts = (await stored(store)).session.output.entries.map((entry) => entry.text);
+  assert.deepEqual(texts, [LENGTHENED_REDACTED.slice(0, MAX_HARNESS_TEXT_LENGTH)]);
 });
