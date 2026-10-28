@@ -30,8 +30,12 @@ export function parseCommitTree(body: Uint8Array, format: ObjectFormat): Result<
   return tree === null ? unreadable('a commit without a tree') : ok(tree[1]!);
 }
 
-export function parseCommitParents(_body: Uint8Array, _format: ObjectFormat): Result<readonly string[]> {
-  throw new Error('not implemented');
+// The parents that a commit names right after its tree, in their order.
+export function parseCommitParents(body: Uint8Array, format: ObjectFormat): Result<readonly string[]> {
+  const name = `[0-9a-f]{${2 * NAME_BYTES[format]}}`;
+  const lines = new RegExp(`^tree ${name}\n((?:parent ${name}\n)*)`).exec(latin1(body));
+  if (lines === null) return unreadable('a commit without a tree');
+  return ok(lines[1]!.split('\n').filter(Boolean).map((line) => line.slice('parent '.length)));
 }
 
 // `<mode> <name>\0<raw object name>` per entry; names stay bytes for the

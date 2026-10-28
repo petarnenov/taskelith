@@ -53,6 +53,8 @@ const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\
 // that environment names it; naming it as undefined leaves it out.
 const RUNTIME_ADDITIONS = { NODE_V8_COVERAGE: undefined };
 
+// A Git process that runs longer is killed with its whole process group
+// (contract section 7); `GitWorkspacesOptions` can set another bound.
 export const GIT_TIME_LIMIT_MS = 10 * 60 * 1000;
 
 // Starts the pinned client with the built environment only: nothing of the
@@ -62,27 +64,40 @@ export class GitRunner {
   readonly timeLimitMs: number;
 
   constructor(pin: GitClientPin, timeLimitMs = GIT_TIME_LIMIT_MS) {
+    if (!Number.isSafeInteger(timeLimitMs) || timeLimitMs <= 0) throw new RangeError(`invalid Git time limit ${timeLimitMs}`);
     this.pin = pin;
     this.timeLimitMs = timeLimitMs;
   }
 
-  withTimeLimit(_timeLimitMs: number): GitRunner {
-    throw new Error('not implemented');
+  withTimeLimit(timeLimitMs: number): GitRunner {
+    return new GitRunner(this.pin, timeLimitMs);
   }
 
   run(command: GitCommand): Promise<Result<GitOutput>> {
     return new Promise((done) => {
+      // A process group of its own, so the time limit kills Git's helpers.
       const child = spawn(this.pin.path, command.args, {
         cwd: command.cwd,
         env: { ...gitConfigEnvironment(command.credential?.authorization), ...RUNTIME_ADDITIONS },
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
       });
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        killGroup(child.pid);
+      }, this.timeLimitMs);
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
-      child.on('error', (error) => done(err(failure('unavailable', `cannot start ${this.pin.path}: ${scrubCredential(error.message, command.credential)}`))));
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        done(err(failure('unavailable', `cannot start ${this.pin.path}: ${scrubCredential(error.message, command.credential)}`)));
+      });
       child.on('close', (exitCode) => {
+        clearTimeout(timer);
+        if (timedOut) return done(err(this.#timeLimitFailure(command)));
         const text = scrubCredential(Buffer.concat(stderr).toString('utf8'), command.credential);
         done(ok({ exitCode, stdout: scrubOutput(Buffer.concat(stdout), command.credential), stderr: text }));
       });
@@ -90,6 +105,22 @@ export class GitRunner {
       child.stdin.on('error', () => {});
       child.stdin.end(command.input ?? new Uint8Array());
     });
+  }
+
+  // Only a process that reaches the remote carries a credential, so a
+  // stalled remote is `unavailable` and a stalled local Git `internal`.
+  #timeLimitFailure(command: GitCommand) {
+    const code: FailureCode = command.credential === undefined ? 'internal' : 'unavailable';
+    return failure(code, `${this.pin.path} ran longer than ${this.timeLimitMs} ms and was killed`);
+  }
+}
+
+function killGroup(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
 }
 
