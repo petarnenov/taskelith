@@ -209,7 +209,7 @@ const PASS_LINE = {
   session: 'c3aae8d2',
 };
 
-function passSchemaErrors(line: unknown): unknown[] {
+function passSchemaErrors(line: unknown): readonly string[] {
   const read = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as object;
   return ajvSchemaCheck(read(PASS_SCHEMA_PATH), [read(SCHEMA_PATH)])(line);
 }
