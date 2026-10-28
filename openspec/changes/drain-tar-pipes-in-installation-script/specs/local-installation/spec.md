@@ -16,5 +16,5 @@
 - **THEN** `make verify` fails
 
 #### Scenario: Tar reader stops before the end of its stream
-- **WHEN** the tar that unpacks a build context or reads a saved image's `manifest.json` exits before its writer has written the whole stream
-- **THEN** the check drains the rest of the stream, its writer gets no SIGPIPE, and the check reports on the images instead of failing with status 141
+- **WHEN** the tar that unpacks a build context or reads a saved image's `manifest.json` exits successfully before its writer has written the whole stream
+- **THEN** the check drains the rest of the stream, its writer gets no SIGPIPE, and the check reports on the images instead of failing with status 141; a failing tar or writer still fails the check
