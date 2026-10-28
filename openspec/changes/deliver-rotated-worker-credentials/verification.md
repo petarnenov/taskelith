@@ -69,7 +69,7 @@ The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol` with effort `medium
 
 ### Pass 1
 
-- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, effort `medium`, session `01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f`, as the coordinator relayed the result.
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, effort `medium`, session `01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f`, run by this worker session with `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt file>`; the log's header confirms `model: gpt-6.1-sol`, `sandbox: read-only`, and `reasoning effort: medium`.
 - **Reviewed range:** `7efc48d3...c64ed5e4`.
 - **Snapshot:** identical before and after the pass, `39a57c703190bb094d060e3b555cd634f028f3d527d984b3a5ed5698a36d3255`.
 - **Counts:** Critical 0, High 2, Medium 3, Low 0, as in `passes.jsonl`; each finding is a line of `findings.jsonl`, all `fixed`.
@@ -90,7 +90,7 @@ Each finding was checked against the code before its fix and is real. Each fail-
 
 ### Pass 2
 
-- **Reviewer:** B, Claude Code `claude-opus-5-5`, effort `high`, session `b988b3f4-7dc5-41bb-831b-8a3deb380f2e`, as the coordinator relayed the result. The brief forbade writes, so the reviewer ran no tests itself.
+- **Reviewer:** B, Claude Code `claude-opus-5-5`, effort `high`, session `b988b3f4-7dc5-41bb-831b-8a3deb380f2e`, run by this worker session with `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null`; the result line's `modelUsage` names `claude-opus-5-5`. The brief forbade writes, so the reviewer ran no tests itself.
 - **Reviewed range:** `7efc48d3...2070e8b8`.
 - **Snapshot:** identical before and after the pass, `2f737961caf82f99ba8bc32fc3f9ebbbb1e0d7bf367827e19374cc8bac53c46e`.
 - **Counts:** Critical 0, High 0, Medium 1, Low 10, as in `passes.jsonl`; each finding is a line of `findings.jsonl`, all `fixed`.
