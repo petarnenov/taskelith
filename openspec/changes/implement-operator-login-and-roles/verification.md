@@ -10,7 +10,7 @@ Status: implemented and verified by the author; independent review pending.
 ## Revision
 
 - Base: `dev` `a3a0ac4c`.
-- Verified head: `15bd48e7` (tree `a8aad919`), commits `823b92de` to `15bd48e7` on the branch.
+- Verified head: `416f4325` (tree `2aeaf0d0`), commits `823b92de` to `416f4325` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3`.
 
 ## Environment
 
@@ -37,6 +37,7 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 - `env -u JEV_MAF_LAB make findings ARGS="route --change implement-operator-login-and-roles"`: elevated (lines, files, security, contracts, size), rule version 1; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; shadow failed (`missing-credential`). The first `route.json`, on `d8a2a0e3`, was routed again on `ac79878f`, because the fix below changed the diff. It was routed a third time on `14f968d8` against `dev` `7efc48d3`, with the same tier, triggers, and reviewers, because the diff changed since `ac79878f`: the fixes of the coordinator's R2 to R4 answers, the merges of `dev` `10fc3bbe` and `7efc48d3`, the reconciliation with 9b's board, inbox, agent session, and event stream operations, and the evidence session and 404 of D1 and D2.
 - The first `make verify`, on the first routed head, failed in `npm run build`: the `packages/adapters/postgres` `tsconfig.json` lacked the `../secrets` reference of its new development dependency. Fixed in the PostgreSQL commit.
 - `make verify` on `15bd48e7`: passed, profile full; tests 3205, pass 3190, fail 0, skipped 15; all files 99.41% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `principal-administration.js` 84.06%, `control-plane-api.js` 81.00%, `administration.js` 77.06% branches.
+- `make verify` on `416f4325` (tree `2aeaf0d0`), after D1, D2, and the merge of `dev` `7efc48d3`: passed, profile full; tests 3250, pass 3235, fail 0, skipped 15; all files 99.47% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `control-plane-api.js` 84.47%, `principal-administration.js` 84.06%, `administration.js` 76.99% branches.
 
 ## Merge of dev
 
@@ -55,10 +56,10 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a8aad919696150b929aab308d1d627e2b192240d`; tests 3205, pass 3190, fail 0, skipped 15; all files 99.41% lines, 92.63% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `2aeaf0d0b49aae6e38bdf1c18bc96f81809eed1e`; tests 3250, pass 3235, fail 0, skipped 15; all files 99.47% lines, 92.63% branches, 99.08% functions.
 - `npm run openspec -- validate implement-operator-login-and-roles --strict`: passed, `Change 'implement-operator-login-and-roles' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s).`.
-- Spec diff against the merge base `a3a0ac4cea7c` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
+- Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 

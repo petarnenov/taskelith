@@ -29,7 +29,7 @@
 
 ## 6. Verification and review
 
-- [ ] 6.1 Route the change, run `make verify`, and record `verification.md` with `make record` and `make record-check`
+- [x] 6.1 Route the change, run `make verify`, and record `verification.md` with `make record` and `make record-check`
 - [ ] 6.2 Review pass 1 by reviewer A, including conformance to the proof of concept's sign-in flow
 - [ ] 6.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
 - [ ] 6.4 Review pass 3 by reviewer A, if governance "Conditional third pass" requires it
