@@ -4,10 +4,10 @@
 
 ## What Changes
 
-- **Script.** `check-reproducible` of `scripts/installation.sh` compares what reproducibility means: the platform image's config digest, read from each build's BuildKit metadata file (`docker build --metadata-file`), and its ordered layer digests (`RootFS.Layers` of `docker image inspect`). On a mismatch it names each layer index whose digests differ and both config digests when they differ. A metadata file without a config digest, or a failed read of the layers, fails the check.
+- **Script.** `check-reproducible` of `scripts/installation.sh` compares what reproducibility means: the platform image's config digest, read from the `manifest.json` of the saved image (`docker image save`), and its ordered layer digests (`RootFS.Layers` of `docker image inspect`). On a mismatch it names each layer index whose digests differ and both config digests when they differ. A failed save, a saved manifest without exactly one config blob, or a failed read of the layers fails the check.
 - **Spec.** The `local-installation` requirement "Opt-in reproducibility check" names the config and layer comparison instead of image IDs, and gains the scenario "Differing image index only".
 - **Docs.** `docs/local-installation.md` describes the comparison.
-- **Tests.** Script tests with a stub `docker`: a pass when only the image IDs differ, as the index digests of the containerd store do (fails before the change), a differing layer, differing configs over the same layers, a missing layer, a missing config digest, and a failed read of the layers.
+- **Tests.** Script tests with a stub `docker`: a pass when only the image IDs differ, as the index digests of the containerd store do (fails before the change), a differing layer, differing configs over the same layers, a missing layer, a failed save, a saved manifest without exactly one config blob, and a failed read of the layers.
 
 Provenance attestations stay enabled (the owner's and the architect's decision). No new tool or dependency; no contract, schema, or published package changes.
 

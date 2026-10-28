@@ -94,7 +94,7 @@ build() (
 # Removes the check's images; a failed removal fails a check that passed.
 finish_reproducible() {
   local status="$1" image built=()
-  rm -rf "$context" "$metadata"
+  rm -rf "$context"
   for image in "$first" "$second"; do
     if docker image inspect "$image" >/dev/null 2>&1; then built+=("$image"); fi
   done
@@ -105,16 +105,30 @@ finish_reproducible() {
   exit "$status"
 }
 
-# The platform image's config digest from a build's BuildKit metadata file;
-# on the containerd store the image ID is the digest of its index instead.
-config_digest() {
-  local digest
-  digest="$(sed -n 's/.*"containerimage\.config\.digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' "$1")"
-  if [ -z "$digest" ]; then
-    echo "installation.sh: the build metadata $1 names no image config digest" >&2
+# The manifest.json of a saved image; it names the platform image's config.
+saved_manifest() {
+  if ! docker image save "$1" | tar -xOf - manifest.json; then
+    echo "installation.sh: the manifest.json of the saved image $1 cannot be read" >&2
     return 1
   fi
-  echo "$digest"
+}
+
+# The platform image's config digest, the name of its blob in a saved image;
+# on the containerd store the image ID is the digest of its index instead.
+config_digest() {
+  local manifest config configs=()
+  manifest="$(saved_manifest "$1")" || return
+  while read -r config; do configs+=("$config"); done \
+    < <(grep -o '"Config": *"[^"]*"' <<< "$manifest" | sed 's/.*"\([^"]*\)"$/\1/')
+  if [ "${#configs[@]}" -ne 1 ]; then
+    echo "installation.sh: the saved image $1 names ${#configs[@]} image configs, not one" >&2
+    return 1
+  fi
+  if ! [[ "${configs[0]}" =~ ^blobs/sha256/([0-9a-f]{64})$ ]]; then
+    echo "installation.sh: the saved image $1 names no image config blob: ${configs[0]}" >&2
+    return 1
+  fi
+  echo "sha256:${BASH_REMATCH[1]}"
 }
 
 # The ordered layer digests of an image, separated by spaces.
@@ -141,8 +155,8 @@ report_layers() {
 # names each part that differs, and fails when one does.
 compare_builds() {
   local first_config second_config first_layers second_layers status=0
-  first_config="$(config_digest "$metadata/first.json")" || return
-  second_config="$(config_digest "$metadata/second.json")" || return
+  first_config="$(config_digest "$first")" || return
+  second_config="$(config_digest "$second")" || return
   first_layers="$(image_layers "$first")" || return
   second_layers="$(image_layers "$second")" || return
   report_layers "$first_layers" "$second_layers" || status=1
@@ -159,18 +173,16 @@ compare_builds() {
 # Builds the worker image twice from fresh contexts of one revision, without
 # the build cache, and passes only when both builds give one platform image.
 check_reproducible() (
-  local revision epoch first="$worker_image-first" second="$worker_image-second" context="" metadata="" build
+  local revision epoch first="$worker_image-first" second="$worker_image-second" context="" build
   require_pins verify-worker-image-reproducible
   trap 'finish_reproducible $?' EXIT
   revision="$(source_revision)" || exit
   epoch="$(commit_time "$revision")" || exit
-  metadata="$(mktemp -d)"
   for build in first second; do
     rm -rf "$context"
     context="$(mktemp -d)"
     unpack_context "$revision" "$context"
-    build_image "$context" "$epoch" worker "$worker_image-$build" --no-cache \
-      --metadata-file "$metadata/$build.json"
+    build_image "$context" "$epoch" worker "$worker_image-$build" --no-cache
   done
   compare_builds
 )

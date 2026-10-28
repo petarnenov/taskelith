@@ -166,13 +166,13 @@ test('the containment check fails when the probe fails for another reason than a
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
 
-// Models a build of the tag ending in -first or -second: its metadata
-// file, layers, and image ID; FAKE_ statuses fail steps, see the tests.
+// Models builds tagged -first and -second, as BuildKit, which names no config
+// in the metadata of an index; FAKE_ statuses fail steps, see the tests.
 const buildDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case "$*" in
-  *-first|*"-first "*) config=$FAKE_FIRST_CONFIG layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
-  *-second|*"-second "*) config=$FAKE_SECOND_CONFIG layers=$FAKE_SECOND_LAYERS id=$FAKE_SECOND_ID ;;
+  *-first|*"-first "*) config=$FAKE_FIRST_CONFIG manifest=$FAKE_FIRST_MANIFEST layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
+  *-second|*"-second "*) config=$FAKE_SECOND_CONFIG manifest=$FAKE_SECOND_MANIFEST layers=$FAKE_SECOND_LAYERS id=$FAKE_SECOND_ID ;;
 esac
 case "$*" in
   "build "*)
@@ -181,10 +181,19 @@ case "$*" in
       commit --quiet --allow-empty --message moved ;; esac
     previous=
     for argument; do
-      [ "$previous" != --metadata-file ] || printf '{"containerimage.config.digest": "%s"}\\n' "$config" > "$argument"
+      if [ "$previous" = --metadata-file ]; then
+        if [ "$id" = "$config" ]; then key=containerimage.config.digest; else key=containerimage.digest; fi
+        printf '{"%s": "%s"}\\n' "$key" "$id" > "$argument"
+      fi
       previous=$argument
     done
     exit "\${FAKE_BUILD_STATUS:-0}" ;;
+  "image save "*)
+    saved=$(mktemp -d)
+    printf '%s' "$manifest" > "$saved/manifest.json"
+    tar -cf - -C "$saved" manifest.json
+    rm -rf "$saved"
+    exit "\${FAKE_SAVE_STATUS:-0}" ;;
   "image inspect --format {{.Id}} "*) echo "$id" ;;
   "image inspect --format {{range .RootFS.Layers}}"*) echo "$layers"; exit "\${FAKE_LAYERS_STATUS:-0}" ;;
   "image rm "*) exit "\${FAKE_REMOVE_STATUS:-0}" ;;
@@ -251,19 +260,36 @@ function runInFixture(script: string, args: readonly string[], environment: Reco
 
 interface WorkerBuild {
   readonly config: string;
+  // The saved image's manifest.json; by default it names the config.
+  readonly manifest?: string;
   readonly layers: string;
   // The image ID, which the containerd store makes the index digest.
   readonly id: string;
 }
 
-const WORKER_BUILD: WorkerBuild = { config: 'sha256:c0f1', layers: 'sha256:base sha256:app ', id: 'sha256:c0f1' };
+function digest(prefix: string): string {
+  return `sha256:${prefix.padEnd(64, '0')}`;
+}
+
+const CONFIG = digest('c0f1');
+const OTHER_CONFIG = digest('c0f2');
+
+function savedManifest(...configs: readonly string[]): string {
+  const entries = configs.map((config) => ({
+    Config: config.replace('sha256:', 'blobs/sha256/'), RepoTags: [], Layers: ['blobs/sha256/base', 'blobs/sha256/app'],
+  }));
+  return JSON.stringify(entries);
+}
+
+const WORKER_BUILD: WorkerBuild = { config: CONFIG, layers: 'sha256:base sha256:app ', id: CONFIG };
 
 function checkReproducible(
   first: Partial<WorkerBuild> = {}, second: Partial<WorkerBuild> = {}, environment: Record<string, string> = {},
 ): BuildOutcome {
   const builds = { FIRST: { ...WORKER_BUILD, ...first }, SECOND: { ...WORKER_BUILD, ...second } };
   const fakes = Object.entries(builds).flatMap(([name, build]) => [
-    [`FAKE_${name}_CONFIG`, build.config], [`FAKE_${name}_LAYERS`, build.layers], [`FAKE_${name}_ID`, build.id],
+    [`FAKE_${name}_CONFIG`, build.config], [`FAKE_${name}_MANIFEST`, build.manifest ?? savedManifest(build.config)],
+    [`FAKE_${name}_LAYERS`, build.layers], [`FAKE_${name}_ID`, build.id],
   ]);
   return runInFixture('installation.sh', ['check-reproducible', 'installation-script-test'], {
     ...Object.fromEntries(fakes), ...environment,
@@ -297,34 +323,41 @@ test('the reproducibility check builds the worker twice without the cache and pa
   const [first, second, ...others] = builds(outcome.calls);
   assert.equal(others.length, 0);
   for (const [call, tag] of [[first, 'first'], [second, 'second']] as const) {
-    assert.match(call ?? '', /^build --no-cache --metadata-file \S+ .* --target worker --tag taskelith-worker:installation-script-test-/);
+    assert.match(call ?? '', /^build --no-cache --file \S+ --target worker --tag taskelith-worker:installation-script-test-/);
     assert.ok(call?.includes(`-${tag} `), call);
     assert.ok(call?.includes(COMMIT_EPOCH_ARGUMENT), call);
   }
-  assert.match(outcome.stdout, /both builds gave the worker image config sha256:c0f1/);
+  assert.match(outcome.stdout, new RegExp(`both builds gave the worker image config ${CONFIG}`));
   assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
 });
 
-test('the reproducibility check passes when only the image IDs differ, as the index digests of the containerd store', () => {
-  const outcome = checkReproducible({ id: 'sha256:036dad823c49' }, { id: 'sha256:abc511323824' });
+test('the reproducibility check passes on one platform image in two indexes with their own attestations', () => {
+  const outcome = checkReproducible({ id: digest('036dad823c49') }, { id: digest('abc511323824') });
   assert.equal(outcome.status, 0, outcome.stderr);
-  assert.match(outcome.stdout, /both builds gave the worker image config sha256:c0f1/);
+  assert.match(outcome.stdout, new RegExp(`both builds gave the worker image config ${CONFIG}`));
 });
 
 test('the reproducibility check fails and names the differing layer and both image configs', () => {
-  const outcome = checkReproducible({}, { config: 'sha256:c0f2', layers: 'sha256:base sha256:other ' });
+  const outcome = checkReproducible({}, { config: OTHER_CONFIG, layers: 'sha256:base sha256:other ' });
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /layer 1 differs: sha256:app and sha256:other/);
   assert.doesNotMatch(outcome.stderr, /layer 0/);
-  assert.match(outcome.stderr, /the image configs differ: sha256:c0f1 and sha256:c0f2/);
+  assert.match(outcome.stderr, new RegExp(`the image configs differ: ${CONFIG} and ${OTHER_CONFIG}`));
   assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
 });
 
 test('the reproducibility check fails on differing image configs over the same layers', () => {
-  const outcome = checkReproducible({}, { config: 'sha256:c0f2' });
+  const outcome = checkReproducible({}, { config: OTHER_CONFIG });
   assert.equal(outcome.status, 1);
-  assert.match(outcome.stderr, /the image configs differ: sha256:c0f1 and sha256:c0f2/);
+  assert.match(outcome.stderr, new RegExp(`the image configs differ: ${CONFIG} and ${OTHER_CONFIG}`));
   assert.doesNotMatch(outcome.stderr, /layer/);
+});
+
+test('the reproducibility check fails on a differing layer of two indexes with their own attestations', () => {
+  const outcome = checkReproducible({ id: digest('036dad823c49') }, { id: digest('abc511323824'), layers: 'sha256:other sha256:app ' });
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /layer 0 differs: sha256:base and sha256:other/);
+  assert.doesNotMatch(outcome.stderr, /configs differ/);
 });
 
 test('the reproducibility check names a layer that only one build has', () => {
@@ -333,11 +366,25 @@ test('the reproducibility check names a layer that only one build has', () => {
   assert.match(outcome.stderr, /layer 1 differs: sha256:app and none/);
 });
 
-test('the reproducibility check fails when a build names no image config digest', () => {
-  const outcome = checkReproducible({}, { config: '' });
+test('the reproducibility check fails when the saved image cannot be read', () => {
+  const outcome = checkReproducible({}, {}, { FAKE_SAVE_STATUS: '6' });
   assert.equal(outcome.status, 1);
-  assert.match(outcome.stderr, /second\.json names no image config digest/);
+  assert.match(outcome.stderr, /the manifest\.json of the saved image \S+-first cannot be read/);
   assert.doesNotMatch(outcome.stdout, /both builds gave/);
+});
+
+test('the reproducibility check fails unless the saved image names one image config blob', () => {
+  const manifests: ReadonlyArray<readonly [string, RegExp]> = [
+    [savedManifest(CONFIG, OTHER_CONFIG), /\S+-second names 2 image configs, not one/],
+    ['[{"RepoTags":[]}]', /\S+-second names 0 image configs, not one/],
+    [JSON.stringify([{ Config: `${CONFIG.slice(7)}.json` }]), /\S+-second names no image config blob: c0f1\S*\.json/],
+  ];
+  for (const [manifest, message] of manifests) {
+    const outcome = checkReproducible({}, { manifest });
+    assert.equal(outcome.status, 1, manifest);
+    assert.match(outcome.stderr, message);
+    assert.doesNotMatch(outcome.stdout, /both builds gave/);
+  }
 });
 
 test('the reproducibility check fails when the layers of an image cannot be read', () => {

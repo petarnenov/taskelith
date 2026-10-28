@@ -12,7 +12,7 @@
 
 - [x] 3.1 Test that fails before the change: only the image IDs differ, as on the containerd store
 - [x] 3.2 `scripts/installation.sh`: compare the config digests and the ordered layer digests, and name what differs
-- [x] 3.3 Tests of a differing layer, differing configs, a missing layer, a missing config digest, and a failed layer read
+- [x] 3.3 Tests of a differing layer, differing configs, a missing layer, a failed save, a saved manifest without one config blob, and a failed layer read
 
 ## 4. Verification
 
