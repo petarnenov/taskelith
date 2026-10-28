@@ -136,7 +136,7 @@ This contract's redaction rule, named **no secret on the worker wire**:
 
 ## 12. Obligations on other items
 
-- **Item 13:** the session commands of section 3 written in the transactions that make them due, their `commandId` stored and reused, the observations of section 9 applied through the timeline, and the control plane's protocol window raised to 1 to 2.
+- **Item 13:** the session messages in the NATS adapter's schema tables (`COMMAND_SCHEMAS` and `OBSERVATION_SCHEMAS`), whose test covers only the protocol version 1 messages until then, the session commands of section 3 written in the transactions that make them due, their `commandId` stored and reused, the observations of section 9 applied through the timeline, and the control plane's protocol window raised to 1 to 2.
 - **Item 18:** the host side of sections 3 to 6 and 9 on the worker, the redaction of section 10 before a text leaves the host, and the worker's protocol window raised to 1 to 2.
 - **Item 21:** the notice of section 6 on each refresh, and the end of the previous secret only after the adoption confirmation.
 - **Item 38:** the delegation result command of section 5 when a child ends.
