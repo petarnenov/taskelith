@@ -12,11 +12,24 @@ export interface ExecutionAccountIds {
   readonly gid: number;
 }
 
-// The Linux launch settings when all are set; none on any other host.
+// Set by the privileged Linux runner: a run without the Linux launch then
+// fails instead of falling back to the process-group launch host.
+export const REQUIRE_LINUX_LAUNCH_VARIABLE = 'TASKELITH_REQUIRE_LINUX_LAUNCH';
+
+// The Linux launch settings when all are set on Linux, none when none are
+// set; a partial launch, or none where the runner requires one, throws.
 export function linuxLaunchFromEnvironment(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): LinuxLaunch | undefined {
-  if (platform !== 'linux') return undefined;
-  const entries = LINUX_LAUNCH_VARIABLES.map((variable) => [variable, env[variable] ?? ''] as const);
-  return entries.every(([, setting]) => setting !== '') ? Object.freeze(Object.fromEntries(entries) as LinuxLaunch) : undefined;
+  const missing = LINUX_LAUNCH_VARIABLES.filter((variable) => (env[variable] ?? '') === '');
+  if (platform === 'linux' && missing.length === 0) {
+    return Object.freeze(Object.fromEntries(LINUX_LAUNCH_VARIABLES.map((variable) => [variable, env[variable]!])) as LinuxLaunch);
+  }
+  if (env[REQUIRE_LINUX_LAUNCH_VARIABLE] === '1') {
+    throw new Error(`${REQUIRE_LINUX_LAUNCH_VARIABLE} is set, but the Linux launch is not on ${platform}: missing ${missing.join(', ') || 'none'}`);
+  }
+  if (platform === 'linux' && missing.length < LINUX_LAUNCH_VARIABLES.length) {
+    throw new Error(`a partial Linux launch: ${missing.join(', ')} not set`);
+  }
+  return undefined;
 }
 
 export function executionAccountOf(launch: LinuxLaunch): ExecutionAccountIds {

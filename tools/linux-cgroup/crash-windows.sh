@@ -10,7 +10,7 @@ crash_windows=apps/control-plane/test/crash-windows.integration.test.ts
 test_arguments() {
   local files=()
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
-    echo "$1"
+    printf '%s\n' "$1"
     shift
   done
   if [ "$#" -gt 0 ]; then shift; files=("$@"); fi
@@ -24,6 +24,8 @@ main() {
   TASKELITH_CONTAINMENT_PARENT="$cgroup/executions"
   TASKELITH_EXECUTION_UID="$(id -u taskelith-exec)"
   TASKELITH_EXECUTION_GID="$(id -g taskelith-exec)"
+  # The harnesses fail without the launch rather than fall back silently.
+  export TASKELITH_REQUIRE_LINUX_LAUNCH=1
   export TASKELITH_CONTAINMENT_PARENT TASKELITH_EXECUTION_UID TASKELITH_EXECUTION_GID
   cd /repo
   local arguments

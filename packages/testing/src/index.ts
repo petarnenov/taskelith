@@ -18,6 +18,7 @@ export { requestFailure } from './request-failure.js';
 export { SERVICES_REMEDY, integrationEndpoint, integrationSecret } from './integration-endpoint.js';
 export {
   LINUX_LAUNCH_VARIABLES,
+  REQUIRE_LINUX_LAUNCH_VARIABLE,
   admitExecutionAccount,
   executionAccountOf,
   linuxLaunchFromEnvironment,

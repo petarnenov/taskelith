@@ -65,6 +65,10 @@ test('files after the separator replace the crash windows, whatever the pattern 
   assert.deepEqual(testArguments('--test-name-pattern', 'a', '--', RACES, CRASH_WINDOWS), ['--test-name-pattern', 'a', RACES, CRASH_WINDOWS]);
 });
 
+test('option values that echo would read as its own flags pass through', () => {
+  assert.deepEqual(testArguments('--test-name-pattern', '-e', '-n', '-E'), ['--test-name-pattern', '-e', '-n', '-E', CRASH_WINDOWS]);
+});
+
 test('no arguments, or a separator without files, run the crash windows', () => {
   assert.deepEqual(testArguments(), [CRASH_WINDOWS]);
   assert.deepEqual(testArguments('--'), [CRASH_WINDOWS]);
