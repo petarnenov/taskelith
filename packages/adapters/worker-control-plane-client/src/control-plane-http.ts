@@ -81,7 +81,9 @@ async function send(target: HttpTarget, path: string, exchange: Exchange): Promi
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {
     // The request may have reached a decision, which a retry replays.
-    return err(failure('unavailable', 'the control plane did not answer', describeFailureCause(error)));
+    const refusal = certificateRefusal(error);
+    const details = { ...describeFailureCause(error), ...(refusal === undefined ? {} : { certificateRefusal: refusal }) };
+    return err(failure('unavailable', 'the control plane did not answer', details));
   }
 }
 
@@ -94,8 +96,28 @@ const CERTIFICATE_REFUSALS: ReadonlySet<string> = new Set([
 ]);
 
 export function isCertificateRefusal(refused: Failure): boolean {
-  const code = refused.details.causeCode;
-  return refused.code === 'unavailable' && code !== undefined && CERTIFICATE_REFUSALS.has(code);
+  return refused.code === 'unavailable' && refused.details.certificateRefusal !== undefined;
+}
+
+// Read from the raw cause chain, as the described cause drops long codes;
+// only a code of the fixed list is kept, so no thrown text passes.
+function certificateRefusal(thrown: unknown): string | undefined {
+  try {
+    return refusalInChain(thrown);
+  } catch {
+    // A getter or proxy of the thrown value threw; it is no refusal.
+    return undefined;
+  }
+}
+
+function refusalInChain(thrown: unknown): string | undefined {
+  let link = thrown;
+  for (let depth = 0; depth < 16 && typeof link === 'object' && link !== null; depth += 1) {
+    const { code, cause } = link as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string' && CERTIFICATE_REFUSALS.has(code)) return code;
+    link = cause;
+  }
+  return undefined;
 }
 
 // A 503, or a proxy's timeout or bad gateway, reached no decision, so the
