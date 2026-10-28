@@ -179,7 +179,7 @@ Checks on the working tree of `6fb69a1e`:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | Codex, `gpt-6.1-sol`, session `01a18059-178f-78d2-8df7-e369e3562b7a` | `d750d2c2` | 0 | 0 | 8 | 3 | section Review pass 1 fixes |
 | 2 | B | Claude, `claude-opus-5-5`, session `9194f7e1-f99c-4a4a-8347-2f14a5ec51cc` | `e267cf7a` | 0 | 1 | 6 | 12 | section Review pass 2 fixes |
-| 3 | A | Codex, session `01a1807d-24ac-77d3-8e0d-f00a51321d72` | `0f56cb52` | 0 | 0 | 2 | 1 | section Unreviewed fixes after pass 3 |
+| 3 | A | Codex `gpt-6.1-sol` (medium), session `01a1807d-24ac-77d3-8e0d-f00a51321d72` | `0f56cb52` | 0 | 0 | 2 | 1 | section Unreviewed fixes after pass 3 |
 
 The size grew from S-M to M through the fixes of passes 1 and 2: a module of Git process checks, the neutral working directory, the environment allowlist, and twenty-one defective variants.
 
