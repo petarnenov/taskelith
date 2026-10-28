@@ -184,6 +184,10 @@ for (const { name, body } of INVALID_BODIES) {
   });
 }
 
+// Far above a local exchange, so a loaded host cannot turn it into a
+// timeout (docs/agent-task-protocol.md "Test authoring").
+const LOCAL_EXCHANGE_TIMEOUT_MS = 30_000;
+
 async function withServer(handle: (request: IncomingMessage, body: string) => string | undefined, check: (url: string) => Promise<void>): Promise<void> {
   const server: Server = createServer((request, response) => {
     let body = '';
@@ -210,7 +214,8 @@ test('the recorded response served by a local server is answered over real fetch
       return RECORDED_RESPONSE;
     },
     async (endpoint) => {
-      const decision = await new JevRouter({ credential: CREDENTIAL, endpoint }).route(featuresWith({ linesChanged: 420 }));
+      const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: LOCAL_EXCHANGE_TIMEOUT_MS });
+      const decision = await jev.route(featuresWith({ linesChanged: 420 }));
       assert.equal(decision.status, 'answered');
     },
   );
@@ -218,19 +223,26 @@ test('the recorded response served by a local server is answered over real fetch
   assert.equal((JSON.parse(received.body!) as { state: { linesChanged: number } }).state.linesChanged, 420);
 });
 
+// Attempts are counted as they leave the client, so a client timeout
+// before the server reads the request cannot hide one.
+function countingFetch(sent: string[]): typeof fetch {
+  return ((url: string, init: RequestInit) => {
+    sent.push(url);
+    return fetch(url, init);
+  }) as typeof fetch;
+}
+
 test('a local server that never answers times out without a retry', async () => {
-  let requests = 0;
+  const sent: string[] = [];
   await withServer(
-    () => {
-      requests += 1;
-      return undefined;
-    },
+    () => undefined,
     async (endpoint) => {
-      const decision = await new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: 100 }).route(QUIET_FEATURES);
+      const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: 100, fetch: countingFetch(sent) });
+      const decision = await jev.route(QUIET_FEATURES);
       assert.equal(decision.status === 'failed' && decision.reason, 'timeout');
     },
   );
-  assert.equal(requests, 1);
+  assert.equal(sent.length, 1);
 });
 
 // The server keeps its port bound and resets every connection, so no
@@ -241,7 +253,8 @@ test('a reset connection is a network failure', async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
     const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/systemone`;
-    const decision = await new JevRouter({ credential: CREDENTIAL, endpoint }).route(QUIET_FEATURES);
+    const jev = new JevRouter({ credential: CREDENTIAL, endpoint, timeoutMs: LOCAL_EXCHANGE_TIMEOUT_MS });
+    const decision = await jev.route(QUIET_FEATURES);
     assert.equal(decision.status === 'failed' && decision.reason, 'network');
   } finally {
     await new Promise((resolve) => server.close(resolve));
