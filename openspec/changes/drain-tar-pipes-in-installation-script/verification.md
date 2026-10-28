@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification is recorded below; `make verify` and the review passes follow.
+Date: 2026-10-28. The author's verification, `make verify`, and review pass 1 are recorded below.
 
 ## Scope and source
 
@@ -36,6 +36,18 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 The reviewers follow the owner's review sequence of 2026-10-28, relayed by coordinator Niki and not yet recorded in `docs/governance.md`: pass 1 Codex `gpt-6-astra#medium`, pass 2 Claude Code `claude-opus-5-5`, pass 3 Codex `gpt-6.1-sol#medium`, stopping at the first pass with only Low findings or none. The owner ordered pass 2 at effort medium, but `make review` authorizes `claude-opus-5-5` only at `high`, so pass 2 runs at `high` (Niki, 2026-10-28). `route.json` (standard, no trigger) recommends `gpt-6.1-sol` as reviewer A; its defaults predate the owner's sequence, so `gpt-6-astra` stays reviewer A of pass 1 (Niki, 2026-10-28).
 
+## Review
+
+### Pass 1 (reviewer A)
+
+- **Reviewer:** Codex CLI, `gpt-6-astra`, reasoning effort medium, read-only sandbox, confirmed in the output header.
+- **Invocation:** `make review` with the key `codex gpt-6-astra#medium` (`codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`), prompt outside the worktree.
+- **Session:** `01a183c1-6e45-7fe2-8a95-1004b07050ad`.
+- **Reviewed revision:** `a69ddb48`.
+- **Snapshot:** the same before and after the pass.
+- **Findings:** Critical 0, High 0, Medium 0, Low 1. The reviewer reproduced status 141 without the drain and 0 with it under the local bsdtar, a failing pipeline on a missing archive member, and checked the fakes with `sh -n`; GNU tar was reviewed statically. The Low finding, a scenario that also covered a failing tar, was fixed in `75017d96`.
+- **Outcome:** pass 1 had only a Low finding, so under the owner's sequence the review stops and the fix goes unreviewed; coordinator Niki checks it before integration. Passes 2 and 3 did not run.
+
 ## Remaining gates
 
-- Review passes 1 and 2, then the archive.
+- Niki's check of the unreviewed Low fix, then the integration.
