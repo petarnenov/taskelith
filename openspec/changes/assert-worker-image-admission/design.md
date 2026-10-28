@@ -10,7 +10,7 @@ The coordinator's brief (Niki, 2026-10-28) assigns the follow-up that the worker
 
 ## Goals / Non-Goals
 
-**Goals:** the bring-up check waits, bounded, until the worker is `admitted` with `linux-containment` `passed`, after the enrollment and again after the restart; it distinguishes a failed self-check, a refused read, and a timeout, all with a non-zero status, and prints the failed check IDs with redacted details only.
+**Goals:** the bring-up check waits, bounded, until the worker is `admitted` with `linux-containment` `passed`, after the enrollment and again after the restart; it distinguishes a failed self-check, a read failure other than `unavailable`, and a timeout, all with a non-zero status, and prints the failed check IDs with redacted details only.
 
 **Non-goals:** an HTTP operation for the view (item 9); the workers screen (item 33); a negative Docker case (D5); changes to the self-check, the worker admission states, or placement.
 
@@ -30,7 +30,7 @@ The worker redacts each detail before it journals it (worker admission contract 
 
 ### D4: The wait and its outcomes
 
-`await_worker_admission AFTER` (`scripts/installation.sh:344`) polls `worker-admission` and pipes each output into `scripts/installation-admission.ts linux-containment AFTER`, which decides:
+`await_worker_admission AFTER` (`scripts/installation.sh:366`) polls `worker-admission` and pipes each output into `scripts/installation-admission.ts linux-containment AFTER`, which decides:
 
 | Output | Verdict | Exit | Loop |
 | --- | --- | --- | --- |
@@ -42,7 +42,7 @@ The worker redacts each detail before it journals it (worker admission contract 
 | Any other read failure, such as `forbidden` | refused | 1 | stop, fail |
 | Not JSON, no workers view, not exactly one worker, or an unknown state | refused | 1 | stop, fail |
 
-- **Bound.** `ADMISSION_SECONDS` defaults to 300 seconds per wait, minutes for the loaded 2020 Intel iMac, where a 2 second bound broke before; `TASKELITH_ADMISSION_SECONDS` sets another, and a value that is not whole seconds is a usage error (status 2) before any read. The value is read in base 10, so `08` is 8 seconds and `010` is 10 (review pass 1, L1). Each read runs in the background (`bounded_admission_read`) and is killed when it is still running at the deadline, because neither `docker compose run` nor the administrative entry's database connection has a timeout of its own; no read starts after the deadline, and an admission read at or after it counts as a timeout (review pass 1, M1). The background read replaces its subshell with `docker` (`exec`), so the kill reaches the client; macOS has no GNU `timeout`. Reads are 5 seconds apart (`ADMISSION_POLL_SECONDS`). A worker still waiting at the bound fails with status 3 and `the worker was not admitted within <bound>s`; a refusal fails with status 1 and `the worker admission check failed`. Both print the last read's diagnostics first.
+- **Bound.** `ADMISSION_SECONDS` defaults to 300 seconds per wait, minutes for the loaded 2020 Intel iMac, where a 2 second bound broke before; `TASKELITH_ADMISSION_SECONDS` sets another, and a value that is not a positive whole number of seconds, `0` included, is a usage error (status 2) before any read (review pass 2, L2). The value is read in base 10, so `08` is 8 seconds and `010` is 10 (review pass 1, L1). Each read runs in the background (`bounded_admission_read`) and is killed when it is still running at the deadline, because neither `docker compose run` nor the administrative entry's database connection has a timeout of its own; no read starts after the deadline, and an admission decided at or after it counts as a timeout, also when its read ended in time (review pass 1, M1; review pass 2, L1). The background read replaces its subshell with `docker` (`exec`), so the kill reaches the client; macOS has no GNU `timeout`. Reads are 5 seconds apart (`ADMISSION_POLL_SECONDS`). The wait is a subshell function, so its temporary files are removed by its own `EXIT` trap on every exit (review pass 2, L2). Status 3 is `ADMISSION_WAITING`, the shell name of the helper's `WAITING` (review pass 2, L6). A worker still waiting at the bound fails with status 3 and `the worker was not admitted within <bound>s`; a refusal fails with status 1 and `the worker admission check failed`. Both print the last read's diagnostics first.
 - **Restart.** The first wait, after `enroll`, returns the view's `asOf`; the second, after `stop`, `start`, and `check_running`, passes it as `AFTER`, so the admission of the first start cannot satisfy it. Both `asOf` and `reportedAt` are database times, so no host clock is compared.
 - **Why a helper.** JSON parsing and the verdict live in a TypeScript module with unit tests, as `scripts/installation-tls-probe.ts` does for 26a; the shell keeps only the loop. `node` is already required on the host by the 26a re-issue probe.
 - **Command.** `installation.sh check-admission PROJECT` runs one wait on a running project, like `check-containment`; it exists for the tests and for manual use.
@@ -60,7 +60,7 @@ A Docker case in which the containment check fails, the worker ends `self-check-
 Fail-before tests, which fail at dev `1c73e1a7` because the command, helper, or override does not exist:
 
 - `test/installation-admission.test.ts`: each verdict row of D4, the `AFTER` rule, and the printed failed check IDs and details.
-- `test/installation-script.test.ts`: with a fake `docker`, the wait polls until admitted and prints `asOf`; a failed self-check fails after one read and names the check; a timeout fails with status 3 and starts no read after the bound; a hung read is killed at the bound; an admission returned only after the bound is a timeout; `08` and `010` are read in base 10; a refused read fails after one read; a malformed bound is a usage error before any read; the operator secret appears nowhere.
+- `test/installation-script.test.ts`: with a fake `docker`, the wait polls until admitted and prints `asOf`; a failed self-check fails after one read and names the check; a timeout fails with status 3 and starts no read after the bound; a hung read is killed at the bound, also one that would return an admission after it; an admission read in time but decided after the bound, through a slowed `node`, is a timeout; `08` and `010` are read in base 10; a refused read fails after one read; a malformed bound and `0` are usage errors before any read; no temporary file is left; the operator secret appears nowhere.
 - `apps/control-plane/test/admin-worker-admission.test.ts`: the printed view redacts a secret-shaped detail and keeps everything else; the usage names the command.
 - `apps/control-plane/test/administration.integration.test.ts` (PostgreSQL and NATS through `make test`): a wrong credential is `forbidden`; the operator credential prints the enrolled worker as `awaiting-self-check` with no results; an extra argument is a usage error.
 - `test/installation-composition.test.ts` (`docker compose config`, no daemon): the verify override changes only the worker's `TASKELITH_WORKER_COMMAND`.
@@ -99,4 +99,4 @@ Record quality (archived findings under openspec/changes/), most frequent findin
 Dev commit: 1c73e1a70d92fab0883f3972672dd56b1d01ae77.
 ```
 
-How the design answers it: error handling distinguishes a refused read, a failed self-check, and a timeout, each non-zero (D4); the view, the contracts, and the spec deltas say the same (D1, D2); the guide, the installation contract section 4, and the worker admission contract section 8 change with the code; each scenario has a fail-before test (D6); details are redacted at the print boundary and the operator secret is never printed (D2); the scenarios name observable outcomes.
+How the design answers it: error handling distinguishes a read failure other than `unavailable`, a failed self-check, and a timeout, each non-zero (D4); the view, the contracts, and the spec deltas say the same (D1, D2); the guide, the installation contract section 4, and the worker admission contract section 8 change with the code; each scenario has a fail-before test (D6); details are redacted at the print boundary and the operator secret is never printed (D2); the scenarios name observable outcomes.

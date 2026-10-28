@@ -18,6 +18,7 @@
 ## 4. Records and gates
 
 - [x] 4.1 `npm run openspec -- validate assert-worker-image-admission --strict` and the checks without Docker
-- [x] 4.2 `make verify` (coordinator's Docker slot)
-- [x] 4.3 `make verify-installation` (coordinator's Docker slot)
-- [ ] 4.4 Review passes and their records
+- [x] 4.2 `make verify` (coordinator's Docker slot), done on `431d1ddf`
+- [x] 4.3 `make verify-installation` (coordinator's Docker slot), done on `431d1ddf`
+- [x] 4.4 Review passes and their records
+- [ ] 4.5 Final `make verify` and `make verify-installation` on the fixes of review pass 2 (coordinator's Docker slot)

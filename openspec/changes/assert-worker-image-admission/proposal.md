@@ -4,7 +4,7 @@ The worker self-check admission change (G3 item 27, [archived verification](/ope
 
 ## What Changes
 
-- **Admission wait in the bring-up check.** `scripts/installation.sh verify` waits, bounded, after the enrollment and again after the restart until the one worker is `admitted` with `linux-containment` `passed`; the second wait counts only a report consumed after the first wait's view time. It fails at once on `self-check-failed`, printing the failed check IDs with their redacted details, on a refused read, and on an admission without a passed containment check; a worker not admitted within `TASKELITH_ADMISSION_SECONDS` (default 300) fails as a timeout.
+- **Admission wait in the bring-up check.** `scripts/installation.sh verify` waits, bounded, after the enrollment and again after the restart until the one worker is `admitted` with `linux-containment` `passed`; the second wait counts only a report consumed after the first wait's view time. It fails at once on `self-check-failed`, printing the failed check IDs with their redacted details, on a read failure other than `unavailable`, and on an admission without a passed containment check; an `unavailable` read or one with no output is read again, and a worker not admitted within `TASKELITH_ADMISSION_SECONDS` (positive whole seconds, default 300) fails as a timeout.
 - **Launch command for the check.** A test-only Compose override, `infra/installation/verify/compose.yaml`, gives the worker a launch command, as the smoke override does, so that the containment check runs instead of being `not-applicable` with `no-launch-command`.
 - **Workers view in the administrative entry.** A new administrative command, `worker-admission`, prints `WorkerAdmissionView.workers()` as JSON after it verifies the operator credential, with every stored detail redacted again. No HTTP operation exists for the view yet (G3 item 9), and the gate runs on the host, so the administrative entry is the way to read it.
 - **Decision helper.** `scripts/installation-admission.ts` decides on the command's output (admitted, waiting, or refused) and is unit-tested; the shell loop is tested with a fake `docker`.
@@ -18,7 +18,7 @@ None.
 
 ### Modified Capabilities
 
-- `local-installation`: "Opt-in bring-up check" modified; "Bounded admission wait of the bring-up check" added.
+- `local-installation`: "Opt-in bring-up check" modified; "Bounded admission wait of the bring-up check" and "Outcomes of the admission wait" added.
 - `installation-enrollment`: "Workers view in the administrative entry" added.
 
 ## Impact

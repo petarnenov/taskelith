@@ -14,11 +14,7 @@
 ## ADDED Requirements
 
 ### Requirement: Bounded admission wait of the bring-up check
-Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail at once on `self-check-failed`, printing each failed check ID with its redacted details, on a refused read, and on an admission without a passed `linux-containment` check. It SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS` seconds in base 10, by default 300, and SHALL kill a read still running then.
-
-#### Scenario: Failed self-check
-- **WHEN** the workers view shows the worker `self-check-failed` with a failed `linux-containment` result
-- **THEN** the check fails without another read and prints `linux-containment` with its details
+Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, a positive whole number of seconds read in base 10, by default 300, killing a read still running then. Any other value SHALL be a usage error before any read.
 
 #### Scenario: Admission timeout
 - **WHEN** the worker is still `awaiting-self-check` when the bound ends
@@ -27,6 +23,25 @@ Each admission wait of `make verify-installation` SHALL read the workers view th
 #### Scenario: Hung read
 - **WHEN** a read of the workers view is still running when the bound ends
 - **THEN** the read is killed and the check fails as a timeout
+
+#### Scenario: Bound of zero
+- **WHEN** `TASKELITH_ADMISSION_SECONDS` is `0`
+- **THEN** the check fails as a usage error without reading the workers view
+
+### Requirement: Outcomes of the admission wait
+An admission wait SHALL read again, until its bound, after an `unavailable` read or a read with no output. It SHALL fail at once on `self-check-failed`, printing each failed check ID with its redacted details, on any other read failure, and on an admission without a passed `linux-containment` check.
+
+#### Scenario: Unavailable read
+- **WHEN** a read of the workers view fails with `unavailable` before the bound
+- **THEN** the wait reads the view again
+
+#### Scenario: Other read failure
+- **WHEN** a read of the workers view fails with `forbidden`
+- **THEN** the check fails without another read
+
+#### Scenario: Failed self-check
+- **WHEN** the workers view shows the worker `self-check-failed` with a failed `linux-containment` result
+- **THEN** the check fails without another read and prints `linux-containment` with its details
 
 #### Scenario: Containment check not run
 - **WHEN** the worker is `admitted` with `linux-containment` `not-applicable`
