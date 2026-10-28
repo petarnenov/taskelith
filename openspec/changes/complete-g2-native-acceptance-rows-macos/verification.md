@@ -50,18 +50,23 @@ macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64 (2020 Intel iMac), APFS boot data vo
 
 ## Checks
 
-`make verify` ran on the clean committed tree of `eda99b81` (tree `c52a8832`), the records commit after the review pass 1 fixes, with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2659, 2652 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.50%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows it, and it changes only this file.
+`make verify` ran on the clean committed tree of `ea4911c1` (tree `8bbbbe4d`), the records commit after the review pass 2 fixes, with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2662, 2655 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.49%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows `ea4911c1`, and it changes only this file.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `c52a88323b64fd13abf753d3544e7fbcdecc090d`; tests 2659, pass 2652, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `8bbbbe4dde8315c31eb1e5e2bfd98843677cfd18`; tests 2662, pass 2655, fail 0, skipped 7; all files 99.36% lines, 92.49% branches, 99.06% functions.
 - `npm run openspec -- validate complete-g2-native-acceptance-rows-macos --strict`: passed, `Change 'complete-g2-native-acceptance-rows-macos' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
 - Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a181b7-647f-7d90-abe6-9892355ab6ca` | 0 | 0 | 2 | 2 |
+| 2 | B | `claude claude-opus-5-5#high` | `d58a9021-a9a3-40ca-8b5d-d7e096f085bb` | 0 | 0 | 2 | 8 |
 <!-- make record: end -->
 
 ## Review
@@ -98,7 +103,7 @@ Fixes:
 - **L-3** (prefix match on the data root): `supervisorProcesses` matches the data root followed by a slash, with a unit test of a shared prefix. Commit `0bef214b`.
 - **L-4** (the guard's unit tests could leak or hang): each process family is tracked once spawned, its start races the parent's exit, and the suite is bounded at 30 s. Commit `0bef214b`.
 - **L-5** (NUL-separated `/proc` command lines): `procCommandLine` reads them with spaces, with a unit test. Commit `0bef214b`.
-- **L-6** (stale generated checks): `make record` regenerated the part below from the `make verify` log of the pass 2 fixes, and "Checks" names the commits after it. Records commits.
+- **L-6** (stale generated checks): `make record` regenerated the generated part above from the `make verify` log of the pass 2 fixes, and "Checks" names the commits after it. Records commits.
 - **L-7** (docs): `design.md` decision 2 names `HeldSupervision` with its start and recovery holds. Records commit.
 - **L-8** (Linux paths not run): recorded under "Limitations"; no Linux host ran in this change. Records commit.
 
