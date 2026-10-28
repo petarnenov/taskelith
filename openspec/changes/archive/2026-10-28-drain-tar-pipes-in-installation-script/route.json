@@ -1,0 +1,87 @@
+{
+  "change": "drain-tar-pipes-in-installation-script",
+  "generatedAt": "2026-10-28T18:21:03.714Z",
+  "devCommit": "7442b1bbd4f1fa13ac796841c51110f7afcd836d",
+  "headCommit": "8ddcdc33e9dc5cd6450cc69dd636f75dc48ffdcc",
+  "features": {
+    "linesChanged": 31,
+    "filesChanged": 2,
+    "capabilities": [
+      "local-installation"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "S",
+    "capabilityHistory": {
+      "changes": 5,
+      "thirdPassShare": 0.8,
+      "mediumOrWorsePerChange": 4.8
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "standard",
+    "triggers": [],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "standard",
+    "confidence": 0.84,
+    "probabilities": {
+      "standard": 0.92,
+      "elevated": 0.08
+    },
+    "expectedPasses": 2.16,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 284
+  }
+}

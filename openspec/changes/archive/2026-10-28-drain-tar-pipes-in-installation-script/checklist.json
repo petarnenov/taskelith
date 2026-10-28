@@ -1,0 +1,100 @@
+{
+  "change": "drain-tar-pipes-in-installation-script",
+  "generatedAt": "2026-10-28T18:09:59.547Z",
+  "devCommit": "7442b1bbd4f1fa13ac796841c51110f7afcd836d",
+  "query": {
+    "capabilities": [
+      "local-installation"
+    ],
+    "files": [
+      "scripts/installation.sh",
+      "test/installation-script.test.ts"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 8
+      },
+      {
+        "category": "docs",
+        "count": 6
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 5
+      },
+      {
+        "category": "spec-wording",
+        "count": 4
+      },
+      {
+        "category": "contract-drift",
+        "count": 2
+      },
+      {
+        "category": "naming",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 610,
+        "inChecklist": 494
+      },
+      "mediumOrWorse": {
+        "findings": 276,
+        "inChecklist": 204
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 101
+      },
+      {
+        "category": "spec-wording",
+        "count": 71
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 36
+      },
+      {
+        "category": "contract-drift",
+        "count": 18
+      },
+      {
+        "category": "process",
+        "count": 18
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 316,
+        "inChecklist": 311
+      },
+      "mediumOrWorse": {
+        "findings": 57,
+        "inChecklist": 55
+      }
+    }
+  }
+}

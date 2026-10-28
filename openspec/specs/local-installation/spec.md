@@ -133,6 +133,10 @@ The worker's seccomp profile SHALL be derived from a tracked, byte-for-byte copy
 - **WHEN** a `RUN` of a stage the worker image is built or copies from does not end with the clamp
 - **THEN** `make verify` fails
 
+#### Scenario: Tar reader stops before the end of its stream
+- **WHEN** the tar that unpacks a build context or reads a saved image's `manifest.json` exits successfully before its writer has written the whole stream
+- **THEN** the check drains the rest of the stream, its writer gets no SIGPIPE, and the check reports on the images instead of failing with status 141; a failing tar or writer still fails the check
+
 ### Requirement: TLS of the local installation
 The composition's NATS SHALL refuse plain clients, the control plane SHALL publish the worker API and the browser endpoint over HTTPS on localhost, both on the installation's API certificate, and the Linux worker SHALL pin the CA it checked against its token's fingerprint. `make installation-certificates` SHALL issue the server certificates again, install the broker's files, and restart the running broker and control plane. PostgreSQL SHALL stay plain on the Compose network, unpublished.
 
