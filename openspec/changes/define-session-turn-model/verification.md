@@ -97,18 +97,19 @@ The five M3 failures: "a host turn needs a delegation request that can no longer
 | Started on `4b942d6b`; `bdb8b706`, a record-only commit, landed during the run | `make verify` | Passed, exit status 0: `tests 2634`, `suites 45`, `pass 2587`, `fail 0`, `skipped 47`; coverage over all files 99.33% lines, 92.74% branches, 99.00% functions; `harness-values.js` and `identifiers.js` 100, 100, 100 and the session files as in the row above; boundary checks passed; `Totals: 70 passed, 0 failed (70 items)`; every checked link conforms; every active change archives into strictly valid specs; every comment within the rule; every findings file valid (58 files, 38 pass summary files, before the pass 2 lines were added); packed file allowlist and installed CLI verification passed |
 | Working tree of the pass 2 record | `npm run openspec -- validate define-session-turn-model --strict`; `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments`; `make findings ARGS="validate"` | Change 'define-session-turn-model' is valid; every checked link conforms; every active change archives into strictly valid specs; every comment within the rule; every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s) |
 | `052eb181`, tree `10340418`, after the first merge of `dev` | `make verify` | Passed, exit status 0, profile full: `tests 2754`, `pass 2707`, `fail 0`, `skipped 47`; coverage over all files 99.33% lines, 92.74% branches, 99.00% functions; superseded by the second merge |
-| After the second merge of `dev` | `make verify` (log `dstm-verify-merged.log` in the session scratchpad) | Generated part below |
-| Same, with this record | `make record CHANGE=define-session-turn-model LOG=<log>`; `make record-check CHANGE=define-session-turn-model`; `make findings ARGS="validate"` | Generated part written; `the generated part matches the tree`; every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s) |
+| `18e3058a`, tree `98e50516`, after the second merge of `dev` | `make verify`, first run | Failed only in `make test`: `tests 2910`, `pass 2862`, `fail 1`; the failure, "e. a crash between W1 and the ack of a cancellation is applied once after redelivery" (`test/g2-cancellation-races.test.ts:226`), hit its 30 s bound on the loaded host (load average about 5) and is outside this change |
+| Same | `make verify`, second run (log `dstm-verify-merged.log` in the session scratchpad) | Passed, exit status 0; generated part below |
+| Same, with this record | `make record CHANGE=define-session-turn-model LOG=<log>`; `make record-check CHANGE=define-session-turn-model`; `make findings ARGS="validate"` | Generated part written; `the generated part matches the tree`; every findings file is valid: 62 file(s); every pass summary file is valid: 42 file(s); every route file is valid: 1 file(s) |
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `10340418de3b1fa4321c2afd8d411cc720be110b`; tests 2754, pass 2707, fail 0, skipped 47; all files 99.33% lines, 92.74% branches, 99.00% functions.
+- `make verify`: passed, profile full, tree `98e50516af33d407af5416161625967b02fd9a60`; tests 2910, pass 2863, fail 0, skipped 47; all files 99.33% lines, 92.76% branches, 99.00% functions.
 - `npm run openspec -- validate define-session-turn-model --strict`: passed, `Change 'define-session-turn-model' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
-- Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 62 file(s); every pass summary file is valid: 42 file(s); every route file is valid: 1 file(s).`.
+- Spec diff against the merge base `3de597beb772` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
