@@ -31,7 +31,7 @@ The worker SHALL read its data root, HTTPS control-plane URL, broker URL, enroll
 - **THEN** the settings fail with `invalid`, naming the variable
 
 ### Requirement: Outbound connections only
-A worker SHALL open no listening socket; every connection it makes SHALL be outbound.
+A worker SHALL open no listening socket; every connection it makes SHALL be outbound. Workers SHALL keep the bearer secret and the broker user JWT over TLS that authenticates the server only.
 
 #### Scenario: Running worker
 - **WHEN** a worker has started
@@ -39,7 +39,7 @@ A worker SHALL open no listening socket; every connection it makes SHALL be outb
 
 #### Scenario: Enrollment over TLS
 - **WHEN** a worker enrolls over pinned TLS and starts
-- **THEN** the process holds no more listening TCP, pipe, or UDP handles than before the worker started
+- **THEN** the worker creates no listening TCP, pipe, or UDP handle, referenced or not
 
 ## ADDED Requirements
 
@@ -55,11 +55,19 @@ Before it sends the token, an enrolling worker SHALL read the CA through `readIn
 - **THEN** the start fails with `unavailable`, and no request carries the token
 
 ### Requirement: Pinned installation CA
-An enrolled worker SHALL keep the checked CA as `worker/installation-ca.pem` and SHALL trust only it for every HTTPS call to the control plane and for its broker TLS, never the system trust store or `NODE_EXTRA_CA_CERTS`. A root without the file SHALL fail the start with reason `corrupt` before any request or connection. Workers SHALL keep the bearer secret and the broker user JWT over TLS that authenticates the server only.
+An enrolled worker SHALL keep the checked CA as `worker/installation-ca.pem` and SHALL trust only it for every HTTPS call to the control plane and for its broker TLS, never the system trust store or `NODE_EXTRA_CA_CERTS`; it SHALL verify the server whatever `NODE_TLS_REJECT_UNAUTHORIZED` says and SHALL follow no redirect. A root without the file SHALL fail the start with reason `corrupt` before any request or connection.
 
 #### Scenario: System-trusted foreign certificate
 - **WHEN** the control plane's address presents a certificate of another CA that the process's default trust includes
 - **THEN** the call fails before its request is sent, and no token or bearer reaches that server
+
+#### Scenario: Verification turned off by the environment
+- **WHEN** `NODE_TLS_REJECT_UNAUTHORIZED` is `0` and the control plane's address or the broker presents a certificate of another CA
+- **THEN** the call or connection fails, and no token, bearer, or broker credential reaches that server
+
+#### Scenario: Redirect
+- **WHEN** the control plane answers a call or the CA read with a redirect, such as 307 or 308 to a plain `http:` URL
+- **THEN** the call fails, its target gets no request, and no enrollment succeeds
 
 #### Scenario: Broker trust
 - **WHEN** an enrolled worker connects to the broker
