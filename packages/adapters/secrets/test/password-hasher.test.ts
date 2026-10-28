@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { argon2 } from 'node:crypto';
+import { argon2, createHash } from 'node:crypto';
 import type { PasswordHash } from '@taskelith/access';
 import {
   ARGON2_MISSING,
@@ -87,6 +87,38 @@ test('a hash of weaker parameters, salt, or tag is due a rehash, only when it ma
   assert.deepEqual(value(await weak.verify('pw-of-short-salt', shortSalt)), { matches: true, rehashDue: true });
   const parallel = formatPhc({ ...parsed, parameters: { memoryKib: 64, passes: 1, parallelism: 2 } }) as PasswordHash;
   assert.equal(value(await value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 4 } })).verify('x', parallel)).matches, false);
+});
+
+// A clock that only the fake argon2id and the waits move: a computation
+// costs its memory times its passes, in milliseconds.
+function costedHasher(parameters: { memoryKib: number; passes: number; parallelism: number }) {
+  const clock = { now: 0 };
+  const argon2: Argon2Function = (_algorithm, input, callback) => {
+    clock.now += input.memory * input.passes;
+    const tag = createHash('sha256').update(String(input.message)).update(input.nonce as Buffer).update(String(input.memory)).digest();
+    setImmediate(() => callback(null, tag.subarray(0, input.tagLength)));
+  };
+  const timing = { now: () => clock.now, wait: async (milliseconds: number) => { clock.now += milliseconds; } };
+  return { hasher: value(Argon2idPasswordHasher.create({ argon2, parameters, timing })), clock };
+}
+
+test('an unknown name and a wrong password cost the same, for a current and a legacy hash', async () => {
+  const legacy = costedHasher({ memoryKib: 32, passes: 1, parallelism: 1 }).hasher;
+  const { hasher, clock } = costedHasher({ memoryKib: 64, passes: 2, parallelism: 1 });
+  const current = value(await hasher.hash('a long enough passphrase'));
+  const old = value(await legacy.hash('a long enough passphrase'));
+  const cost = async (stored: PasswordHash | undefined, password = 'a wrong passphrase here') => {
+    const started = clock.now;
+    const verified = value(await hasher.verify(password, stored));
+    return [verified.matches, clock.now - started];
+  };
+  const costs = [await cost(old), await cost(undefined), await cost(current)];
+  assert.deepEqual(costs, [[false, 128], [false, 128], [false, 128]]);
+  assert.deepEqual(await cost(old, 'a long enough passphrase'), [true, 32], 'a match is not padded');
+  const fresh = costedHasher({ memoryKib: 64, passes: 2, parallelism: 1 });
+  const before = fresh.clock.now;
+  value(await fresh.hasher.verify('a wrong passphrase here', old));
+  assert.equal(fresh.clock.now - before, 160, 'without a measured cost, a legacy failure also computes one');
 });
 
 test('the start check fails closed without crypto.argon2', () => {

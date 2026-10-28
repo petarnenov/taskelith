@@ -11,6 +11,7 @@ export {
   TAG_BYTES,
   type Argon2Function,
   type Argon2idHasherOptions,
+  type HashTiming,
 } from './argon2id-password-hasher.js';
 export { HashSlots } from './hash-slots.js';
 export { NodeSecrets, RandomIdentifiers } from './node-secrets.js';

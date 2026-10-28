@@ -1,4 +1,6 @@
 import crypto, { randomBytes, timingSafeEqual, type Argon2Parameters } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
+import { setTimeout as wait } from 'node:timers/promises';
 import type { PasswordHash, PasswordHasher, PasswordVerification } from '@taskelith/access';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { HashSlots } from './hash-slots.js';
@@ -46,7 +48,16 @@ export interface Argon2idHasherOptions {
   readonly parameters?: Argon2idParameters;
   readonly concurrent?: number;
   readonly queued?: number;
+  readonly timing?: HashTiming;
 }
+
+// Monotonic milliseconds and a wait; tests replace both.
+export interface HashTiming {
+  now(): number;
+  wait(milliseconds: number): Promise<void>;
+}
+
+const SYSTEM_TIMING: HashTiming = { now: () => performance.now(), wait: (milliseconds) => wait(milliseconds) };
 
 // Unknown login names verify against this, so they cost one computation.
 const DUMMY_SALT = Buffer.alloc(SALT_BYTES);
@@ -55,11 +66,15 @@ export class Argon2idPasswordHasher implements PasswordHasher {
   readonly #argon2: Argon2Function;
   readonly #parameters: Argon2idParameters;
   readonly #slots: HashSlots;
+  readonly #timing: HashTiming;
+  // How long the last computation at the current parameters took.
+  #currentCost: number | undefined;
 
   private constructor(argon2: Argon2Function, options: Argon2idHasherOptions) {
     this.#argon2 = argon2;
     this.#parameters = options.parameters ?? ARGON2ID_PARAMETERS;
     this.#slots = new HashSlots(options.concurrent ?? MAX_CONCURRENT_HASHES, options.queued ?? MAX_QUEUED_HASHES);
+    this.#timing = options.timing ?? SYSTEM_TIMING;
   }
 
   static create(options: Argon2idHasherOptions = {}): Result<Argon2idPasswordHasher> {
@@ -73,7 +88,19 @@ export class Argon2idPasswordHasher implements PasswordHasher {
     return tag.ok ? ok(formatPhc({ parameters: this.#parameters, salt, tag: tag.value }) as PasswordHash) : tag;
   }
 
+  // A failure takes at least what one at the current parameters takes, so
+  // an unknown name and a legacy hash cost what a current hash does.
   async verify(password: string, stored: PasswordHash | undefined): Promise<Result<PasswordVerification>> {
+    const started = this.#timing.now();
+    const verification = await this.#verify(password, stored);
+    if (verification.ok && !verification.value.matches) {
+      const padded = await this.#padToCurrentCost(password, started);
+      if (!padded.ok) return padded;
+    }
+    return verification;
+  }
+
+  async #verify(password: string, stored: PasswordHash | undefined): Promise<Result<PasswordVerification>> {
     if (stored === undefined) {
       const dummy = await this.#tag(password, this.#parameters, DUMMY_SALT, TAG_BYTES);
       return dummy.ok ? ok({ matches: false, rehashDue: false }) : dummy;
@@ -87,6 +114,16 @@ export class Argon2idPasswordHasher implements PasswordHasher {
     return ok({ matches, rehashDue: matches && this.#weaker(parameters, salt.length, tag.length) });
   }
 
+  async #padToCurrentCost(password: string, started: number): Promise<Result<void>> {
+    if (this.#currentCost === undefined) {
+      const measured = await this.#tag(password, this.#parameters, DUMMY_SALT, TAG_BYTES);
+      return measured.ok ? ok(undefined) : measured;
+    }
+    const remaining = started + this.#currentCost - this.#timing.now();
+    if (remaining > 0) await this.#timing.wait(remaining);
+    return ok(undefined);
+  }
+
   #weaker(parameters: Argon2idParameters, saltBytes: number, tagBytes: number): boolean {
     const current = this.#parameters;
     return parameters.memoryKib < current.memoryKib || parameters.passes < current.passes
@@ -94,9 +131,18 @@ export class Argon2idPasswordHasher implements PasswordHasher {
   }
 
   #tag(password: string, parameters: Argon2idParameters, salt: Buffer, tagLength: number): Promise<Result<Buffer>> {
-    return this.#slots.run(() => argon2idTag(this.#argon2, {
-      message: Buffer.from(password, 'utf8'), nonce: salt, tagLength,
-      memory: parameters.memoryKib, passes: parameters.passes, parallelism: parameters.parallelism,
-    }));
+    return this.#slots.run(async () => {
+      const started = this.#timing.now();
+      const tag = await argon2idTag(this.#argon2, {
+        message: Buffer.from(password, 'utf8'), nonce: salt, tagLength,
+        memory: parameters.memoryKib, passes: parameters.passes, parallelism: parameters.parallelism,
+      });
+      if (tag.ok && sameParameters(parameters, this.#parameters)) this.#currentCost = this.#timing.now() - started;
+      return tag;
+    });
   }
+}
+
+function sameParameters(one: Argon2idParameters, other: Argon2idParameters): boolean {
+  return one.memoryKib === other.memoryKib && one.passes === other.passes && one.parallelism === other.parallelism;
 }
