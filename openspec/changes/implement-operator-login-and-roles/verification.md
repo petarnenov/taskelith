@@ -10,7 +10,7 @@ Status: implemented and verified by the author; review pass 1 found 1 High and 7
 ## Revision
 
 - Base: `dev` `a3a0ac4c`.
-- Verified head: `416f4325` (tree `2aeaf0d0`), commits `823b92de` to `416f4325` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3`.
+- Verified head: `8cb12e14` (tree `901e05cd`), commits `823b92de` to `8cb12e14` on the branch, with the merges of `dev` `10fc3bbe` and `7efc48d3` and the fixes of review pass 1.
 
 ## Environment
 
@@ -39,6 +39,8 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 - `make verify` on `15bd48e7`: passed, profile full; tests 3205, pass 3190, fail 0, skipped 15; all files 99.41% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `principal-administration.js` 84.06%, `control-plane-api.js` 81.00%, `administration.js` 77.06% branches.
 - `make verify` on `416f4325` (tree `2aeaf0d0`), after D1, D2, and the merge of `dev` `7efc48d3`: passed, profile full; tests 3250, pass 3235, fail 0, skipped 15; all files 99.47% lines, 92.63% branches, 99.08% functions. New files: `phc.js` and `csrf.js` 100% branches; `session-service.js` 91.01%, `control-plane-api.js` 84.47%, `principal-administration.js` 84.06%, `administration.js` 76.99% branches.
 
+- `make verify` on `8cb12e14` (tree `901e05cd`), after the fixes of review pass 1: passed, profile full; tests 3260, pass 3245, fail 0, skipped 15; all files 99.47% lines, 92.64% branches, 99.06% functions. Changed files: `secret-input.js` and `request-log.js` 100% branches; `argon2id-password-hasher.js` 94.55%, `api-server.js` 93.41%, `session-service.js` 89.22%, `control-plane-api.js` 85.19% branches.
+
 ## Merge of dev
 
 - `a1f0d4af` merged `origin/dev` `10fc3bbe` (9b #394, 9c #395) without a textual conflict. `control-plane.openapi.json` 0.2.0 adds the board, inbox, agent session, and event stream operations; their rules follow wire contracts section 3 as 9b amended it, and `test/access-requirements.test.ts` lists them. The `answerableBy` check of `answerInboxItem` belongs to its handler (section 8).
@@ -56,11 +58,15 @@ ADR 0004: hexagonal ports in `@taskelith/access` with in-memory and PostgreSQL a
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `2aeaf0d0b49aae6e38bdf1c18bc96f81809eed1e`; tests 3250, pass 3235, fail 0, skipped 15; all files 99.47% lines, 92.63% branches, 99.08% functions.
+- `make verify`: passed, profile full, tree `901e05cd748ac19f83cfc23fde3960a5ee04c00c`; tests 3260, pass 3245, fail 0, skipped 15; all files 99.47% lines, 92.64% branches, 99.06% functions.
 - `npm run openspec -- validate implement-operator-login-and-roles --strict`: passed, `Change 'implement-operator-login-and-roles' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
 - Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a182da-e6a9-7210-84a5-8ab41618a5cf` | 0 | 1 | 7 | 0 |
 <!-- make record: end -->
 
 ## Independent review
