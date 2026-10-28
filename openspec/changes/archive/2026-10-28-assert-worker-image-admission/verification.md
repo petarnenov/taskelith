@@ -116,6 +116,17 @@ These fixes were not reviewed; `findings.jsonl` marks them `fixed-unreviewed`.
 - **Timing margins:** the first run of the targeted tests after the fixes had 1 failure in 41; it could not be reproduced in three further runs. The bounds of 1 second in the timeout test and 2 seconds in the late-decision test leave little slack, because `SECONDS` counts whole seconds and every read is checked once a second. They were widened to 3 and 4 seconds, and the next two runs passed 41 of 41.
 - **Checks after the fixes,** on `305844e4` without Docker, with this record: `make findings ARGS="validate"`, `npm run openspec -- validate assert-worker-image-admission --strict`, `npm run verify:comments`, `npm run verify:links`, `npm run check:boundaries`, and `node --experimental-strip-types --test test/installation-admission.test.ts test/installation-script.test.ts apps/control-plane/test/admin-worker-admission.test.ts test/installation-tls-probe.test.ts` (41 tests). Results: findings 58 files and pass summaries 38 files valid; the change valid; comments and links conform; boundaries passed; 41 of 41 tests pass. The reviewer named L6 a clean-code finding; the vocabulary has no such category, so it is recorded as `naming`.
 
+## Archive
+
+Worker step 7, run by the author on the tree of the archive commit (`docs: archive the assert-worker-image-admission change`, on top of `72086efe`), which is the working tree the checks ran on:
+
+- `npm run openspec -- archive assert-worker-image-admission --yes`: archived as `2026-10-28-assert-worker-image-admission`; `local-installation` 2 added and 1 modified, `installation-enrollment` 1 added.
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line, `change/2026-10-28-assert-worker-image-admission`, passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's edits, in `installation-enrollment` ("Workers view in the administrative entry") and `local-installation` ("Opt-in bring-up check" modified, "Bounded admission wait of the bring-up check" and "Outcomes of the admission wait" added); 55 insertions, 2 deletions.
+- The moved change has `findings.jsonl` (9 findings), `passes.jsonl` (2 passes), and `checklist.json`; `make findings ARGS="validate"`: 58 findings files and 38 pass summary files valid.
+- `make verify` (in the coordinator's Docker slot, with its leave): passed; 2549 tests, 2542 pass, 0 fail, 7 skipped; coverage of all files 99.36% lines, 92.50% branches, 99.06% functions; no undeclared breaking contract change against `1c73e1a7`.
+
 ## Limitations
 
 - The end-to-end admission of the real Linux worker image is shown by the Docker gate on `431d1ddf`, `42e189c3`, and `ecfe6222`.
@@ -126,5 +137,4 @@ These fixes were not reviewed; `findings.jsonl` marks them `fixed-unreviewed`.
 
 ## Remaining gates
 
-- Archive (worker step 7).
 - Integration into dev by the coordinator (single pull request)
