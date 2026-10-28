@@ -1,6 +1,6 @@
 # Verification: define-control-plane-access-contracts
 
-Status: developed and verified by the author; review passes 1 and 2 done; every pass 2 finding fixed, H1 under the architect's decision of 2026-10-28; pass 3 by reviewer A required.
+Status: developed and verified by the author; review complete: passes 1 (reviewer A) and 2 (reviewer B) fixed, H1 under the architect's decision of 2026-10-28, pass 3 (reviewer A) confirmed them with one Low finding, fixed without another review; three passes, the cap reached; archived on the branch under worker step 7.
 
 ## Scope and source
 
@@ -71,7 +71,18 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 | Same, document of `8db45e03` with the new tests | Same | Fail-before: 4 of 24 failed, `a bound remote is an HTTPS URL without user information, query, or fragment`, `bindRepository refuses a remote outside the integration origin with a typed 422`, `only an installation owner sets the allowed origin of an SCM integration, returned normalized`, and `an SCM integration returns the names of its secrets, never their values` |
 | Same | Spec delta requirement body lengths, in characters | Remote origin of a binding 369, Remote origin at credential issue 305, SCM integration setup 364; the others unchanged. A single requirement for both rules was refused by strict validation at 504 characters, so they are two |
 | H1 records | `make findings ARGS="validate"` | Every findings file is valid |
-| H1 record commit, clean tree | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` (log `cpac-verify-5.log` in the session scratchpad) | Passed, stamp written; generated part below |
+| H1 record commit, clean tree | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` (log `cpac-verify-5.log` in the session scratchpad) | Passed, stamp written; superseded by the pass 3 run |
+| Pass 3 fix, after `npm run build` | `node --experimental-strip-types --test packages/contracts/test/control-plane-contracts.test.ts` | 24 tests, all passed |
+| Same, document of `8907027a` with the new tests | Same | Fail-before: 2 of 24 failed, `a bound remote is an HTTPS URL without user information, query, or fragment` and `only an installation owner sets the allowed origin of an SCM integration, returned normalized` |
+| Pass 3 records | `make findings ARGS="validate"` | Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s) |
+| `2c6c0da9`, clean tree | `make verify` (log `cpac-verify-7.log` in the session scratchpad) | Passed, profile full, tree `47ce870d`, stamp written: tests 2936, pass 2889, fail 0, skipped 47; all files 99.36% lines, 92.76% branches, 99.00% functions; superseded by the archive run |
+| Same, with this record | `make record CHANGE=define-control-plane-access-contracts LOG=<log>`; `make record-check CHANGE=define-control-plane-access-contracts` | Generated part written; `the generated part matches the tree` |
+| Tree of the archive commit | `npm run openspec -- archive define-control-plane-access-contracts --yes` | Applied `+ 15` requirements to `openspec/specs/control-plane-wire-contracts/spec.md` and `~ 1` to `openspec/specs/sdlc-wire-contracts/spec.md`; archived as `2026-10-28-define-control-plane-access-contracts` |
+| Same | `npm run openspec -- validate --all --strict --no-interactive` | `Totals: 71 passed, 0 failed (71 items)` |
+| Same | `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-28-define-control-plane-access-contracts` |
+| Same | `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `9196804b`), new files included | Only the new `openspec/specs/control-plane-wire-contracts/spec.md`, 131 insertions, and `openspec/specs/sdlc-wire-contracts/spec.md`, 5 insertions and 1 deletion |
+| Same | Moved change's files; `make findings ARGS="validate"` | `findings.jsonl` 26 lines, `passes.jsonl` 3 lines, `checklist.json` present; every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s) |
+| Same | `make verify`; `make record CHANGE=define-control-plane-access-contracts LOG=<log>`; `make record-check CHANGE=define-control-plane-access-contracts` | The generated part below names the verified tree of the archive commit; `make record-check` matched it |
 
 ## Limitations
 
@@ -85,10 +96,10 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `47ce870dd8b24a740fdac8323c100bc0b63e93c3`; tests 2936, pass 2889, fail 0, skipped 47; all files 99.36% lines, 92.76% branches, 99.00% functions.
-- `npm run openspec -- validate define-control-plane-access-contracts --strict`: passed, `Change 'define-control-plane-access-contracts' is valid`.
+- `make verify`: passed, profile full, tree `4bc9ba7c97a8ce0e41a7adfd85d3042e8dacbe42`; tests 2936, pass 2889, fail 0, skipped 47; all files 99.36% lines, 92.74% branches, 99.00% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 71 passed, 0 failed (71 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
-- Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `9196804b89c6` with `origin/dev`: `.../specs/control-plane-wire-contracts/spec.md | 131 +++++++++++++++++++++`, `openspec/specs/sdlc-wire-contracts/spec.md | 6 +-`, `2 files changed, 136 insertions(+), 1 deletion(-)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -130,7 +141,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- The archive (task 5.1).
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-ups

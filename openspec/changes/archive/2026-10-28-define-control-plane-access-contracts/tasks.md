@@ -17,10 +17,10 @@
 ## 4. Verification and review
 
 - [x] 4.1 Route the change, run `make verify`, and record `verification.md` with `make record` and `make record-check`
-- [ ] 4.2 Review pass 1 by reviewer A
-- [ ] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
-- [ ] 4.4 Review pass 3 by reviewer A, if governance "Conditional third pass" requires it
+- [x] 4.2 Review pass 1 by reviewer A
+- [x] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
+- [x] 4.4 Review pass 3 by reviewer A, if governance "Conditional third pass" requires it
 
 ## 5. Archive
 
-- [ ] 5.1 Archive the change in the last commit of the branch and record the archive checks
+- [x] 5.1 Archive the change in the last commit of the branch and record the archive checks
