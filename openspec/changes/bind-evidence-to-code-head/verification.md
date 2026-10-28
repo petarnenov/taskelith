@@ -1,6 +1,6 @@
 # Verification
 
-Record of the change through review pass 1 and its fix; later passes are pending (Remaining gates).
+Record of the change through review pass 2 and its fixes; later passes are pending (Remaining gates).
 
 ## Scope and source
 
@@ -86,6 +86,20 @@ Not yet reviewed; reviewer B checks them in pass 2.
 - **Tests.** In `packages/modules/sdlc/test/code-head-binding.test.ts`: `a superseded approval does not pass a gate reopened at its head after an artifact edit` and `a superseded approval does not pass a gate reopened at its head after another head` (scenario "Reopened at the approved head"; the second also covers a return to the approved head after an approval at the other head), and `a head-bound gate needs evidence recorded for its current generation` (scenario "Evidence for another generation").
 - **Fails before the fix.** With the test file of the fix on `767cf592` (the sources before the fix), after `npm run build`, `node --experimental-strip-types --test packages/modules/sdlc/test/code-head-binding.test.ts`: tests 10, pass 7, fail 3, the three new tests, each because recording the superseded or unbound approval succeeded (`actual: true`, `expected: false` on `result.ok`). After the fix: tests 10, pass 10.
 - **Author checks after the fix,** on its working tree: `npm run build`, `npm run check:boundaries`, `npm run verify:comments`, `npm run verify:links`: passed; `npm run openspec -- validate bind-evidence-to-code-head --strict`: valid; `node --experimental-strip-types --test 'packages/modules/*/test/*.test.ts' packages/contracts/test/*.test.ts`: tests 875, pass 874, fail 0, skipped 1; coverage of `packages/modules/sdlc/dist/domain/*.js` over the SDLC tests: `code-head.js`, `gate-evidence.js`, and `gate.js` 100% lines, branches, and functions.
+
+### Review pass 2
+
+- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, session `c3aae8d2-0f3a-49f9-a676-1d81016d7b40`; run by the coordinator.
+- **Revision reviewed:** `ca72039c`, which includes the pass 1 fix `ef9b0d27`.
+- **Invocation:** `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, as in the protocol's "Reviewer invocations".
+- **Model confirmation:** `claude-opus-5-5` in the `modelUsage` and the session ID in the last `"type":"result"` line of the log.
+- **Snapshot:** before and after the pass identical; the reviewer changed no file.
+- **Result:** Critical 0, High 0, Medium 3, Low 7, as in `passes.jsonl` line 2 and `findings.jsonl` lines 2 to 11. File lines are those of `ca72039c`. The reviewer found the pass 1 fix correct for a single gate.
+- **M1, contract-drift** (`openspec/specs/sdlc-gates/spec.md:26`): the living "Gate transitions" scenario "Reopening a gate" lets any failed, stale, or blocked gate reopen with a subject, while `reopenGate` now refuses a head-bound gate; the delta only adds requirements, so both would hold after archive.
+- **M2, contract-drift** (`packages/modules/sdlc/src/domain/gate.ts:202`): evidence names no gate, and every gate opens at generation 1, so an approval for gate X at a head passes a new gate Y with the same kind, subject, and head, and one approval passes two parallel gates.
+- **M3, scope** (`gate.ts:202`): exempting gates without a code head from the generation binding extended the coordinator's decision about the head; for such a gate an artifact edit, `markGateStale`, a revert, and `reopenGate` with the old subject still let the old approval pass.
+- **Low:** L1 (`gate-evidence.ts:150`), `parseEvidenceFacts` does not validate `gateGeneration` or `codeHead.repository`; L2 (`sdlc.asyncapi.json:896`, `:987`), `GateReopened` says a head-bound gate reopens only for a new code head; L3 (delta `sdlc-gates/spec.md:41`), "Edit reverted" does not name the reopened generation; L4 (`docs/contracts/git-workspace.md:247`, `:235`), the naming follow-up is called a recommendation and not named, and the item 17 pending entry is unchanged; L5 (`verification.md:21`), character counts from before the pass 1 fix; L6 (`code-head-binding.test.ts:104`), a `markGateStale` call refused only by the state machine; L7 (`code-head-binding.test.ts:181`), the transition check before the head binding is untested.
+- **Resolutions:** see "Pass 2 fixes".
 
 ## Limitations
 
