@@ -501,6 +501,9 @@ test('the account pool migration checks slot values and its down migration remov
     VALUES ('slot-1', 'h', 'm', 1, '${projects}', 4, '${state}', 'healthy', ${usage}, 1)`);
   await assert.rejects(insert('paused', '{p}', 'NULL, NULL'), /account_slots_state_check/);
   await assert.rejects(insert('active', '{}', 'NULL, NULL'), /account_slots_allowed_projects_check/);
+  for (const projects of ['{p,p}', '{p,NULL}', '{{p},{q}}']) {
+    await assert.rejects(insert('active', projects, 'NULL, NULL'), /account_slots_allowed_projects_check/, projects);
+  }
   await assert.rejects(insert('active', '{p}', '1.5, now()'), /account_slots_usage_fraction_check/);
   await assert.rejects(insert('active', '{p}', '0.5, NULL'), /account_slots_check/);
   await insert('active', '{p}', '0.5, now()');
@@ -509,4 +512,5 @@ test('the account pool migration checks slot values and its down migration remov
   const tables = await query(url, `SELECT 1 FROM information_schema.tables WHERE table_name IN
     ('account_slots', 'slot_credential_counters', 'slot_credentials')`);
   assert.deepEqual(tables, []);
+  assert.deepEqual(await query(url, "SELECT 1 FROM pg_proc WHERE proname = 'account_slot_distinct_projects'"), []);
 });

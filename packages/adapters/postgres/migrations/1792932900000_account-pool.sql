@@ -1,5 +1,11 @@
 -- Up Migration
 
+-- True for a one-dimensional array without NULL or a repeated element.
+CREATE FUNCTION account_slot_distinct_projects(projects text[]) RETURNS boolean
+  LANGUAGE sql IMMUTABLE
+  AS $$ SELECT array_ndims(projects) = 1 AND
+    (SELECT count(DISTINCT project) FROM unnest(projects) AS project) = cardinality(projects) $$;
+
 -- Account slots of G3 item 12 (account pool contract section 3.1); a
 -- removed slot stays as a tombstone.
 CREATE TABLE account_slots (
@@ -7,7 +13,8 @@ CREATE TABLE account_slots (
   harness_id text NOT NULL,
   mechanism_id text NOT NULL,
   credential_version integer NOT NULL CHECK (credential_version > 0),
-  allowed_projects text[] NOT NULL CHECK (cardinality(allowed_projects) > 0),
+  allowed_projects text[] NOT NULL
+    CHECK (cardinality(allowed_projects) > 0 AND account_slot_distinct_projects(allowed_projects)),
   concurrency_limit integer NOT NULL CHECK (concurrency_limit > 0),
   state text NOT NULL CHECK (state IN ('active', 'revoked', 'removed')),
   health text NOT NULL CHECK (health IN ('healthy', 'unhealthy')),
@@ -45,3 +52,4 @@ CREATE TABLE slot_credentials (
 DROP TABLE slot_credentials;
 DROP TABLE slot_credential_counters;
 DROP TABLE account_slots;
+DROP FUNCTION account_slot_distinct_projects(text[]);
