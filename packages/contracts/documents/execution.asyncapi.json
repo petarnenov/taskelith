@@ -3,7 +3,7 @@
   "info": {
     "title": "Taskelith execution messages",
     "version": "0.9.0",
-    "description": "X Since protocol version 2 (G3 sub-change 9d) the command channel also carries the session commands and the notice of a refreshed per-run SCM credential, and the observation channel the session observations and the adoption confirmation; a message never carries a secret."
+    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation, an inventory request, a credential rotation notice, and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support. Since protocol version 2 (G3 sub-change 9d) the command channel also carries the session commands and the notice of a refreshed per-run SCM credential, and the observation channel the session observations and the adoption confirmation; a message never carries a secret."
   },
   "defaultContentType": "application/json",
   "channels": {
