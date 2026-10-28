@@ -21,14 +21,14 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm; Zaki's host `hpz600` r
 ## Author self-check
 
 - **Scope.** No worker step, review rule, or `scripts/integrate.sh` changes. The hosts file, cache, and lock live in `~/.config/taskelith/`, never in the repository. No command prints environment values; no token is read.
-- **Tests.** `test/task-progress.test.ts` builds fixture repositories with fixed commit times and checks every stage 1 to 11, the Low-only stop, the SSH fallback against a real shell, the remote script path and its failures, an unreachable host, an invalid hosts file, the atomic cache and its age, and the stacked rows; `test/task-progress-lock.test.ts` checks the owner-checked lock, also with eight concurrent processes on a free lock and on a dead owner's lock. After the pass 2 fixes the two files pass 37 of 37. Scripts sit outside the coverage scope of `npm test`, which measures `dist/**`.
+- **Tests.** `test/task-progress.test.ts` builds fixture repositories with fixed commit times and checks every stage 1 to 11, the Low-only stop, the SSH fallback against a real shell, the remote script path and its failures, an unreachable host, an invalid hosts file, the atomic cache and its age, and the stacked rows; `test/task-progress-lock.test.ts` checks the best-effort lock (a live young lock kept, a dead or old one taken over, release only with the token) and four overlapping cache writers whose reader only ever sees a whole report. After the pass 3 fixes the two files pass 37 of 37. Scripts sit outside the coverage scope of `npm test`, which measures `dist/**`.
 - **Real run.** `make progress` on the iMac showed the local worktrees and Zaki's `wire-git-workspace-into-worker` over SSH through the fallback reader, since Zaki's clone has no `scripts/task-progress.ts` yet.
 - **Status line.** Backed up to `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/statusline-context.py.pre-progress.bak`, then tested with a sample status line input: one stacked row per task under the context line in about 40 ms, "stale" at a 200 s old cache, a detached refresh that rewrote the cache within seconds and released the lock, and no segment outside a `taskelith` directory.
 - New comments are at most two lines of at most 80 characters; commit types are `chore` and `docs`, without attribution.
 
 ## Checks
 
-- `node --experimental-strip-types --test test/task-progress.test.ts test/task-progress-lock.test.ts`: 21 of 21 before review, 31 of 31 after the pass 1 fixes, 37 of 37 after the pass 2 fixes, three runs in a row.
+- `node --experimental-strip-types --test test/task-progress.test.ts test/task-progress-lock.test.ts`: 21 of 21 before review, 31 of 31 after the pass 1 fixes, 37 of 37 after the pass 2 fixes and again after the pass 3 fixes, three runs in a row each.
 - `npm run openspec -- validate show-task-progress --strict`: `Change 'show-task-progress' is valid`.
 - `make verify` on the clean tree of `6670b70f` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress2.log`). An earlier run on `8cbf2f17` was stopped before it finished, to take the owner's requirement. After the pass 1 fixes, `make verify` on the clean tree of `b3d19168` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress3.log`). After the pass 2 fixes, `make verify` on the clean tree of `439110b8` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress4.log`); the generated checks below record that run.
 
@@ -82,12 +82,33 @@ Reviewer B: Claude Code, `claude claude-opus-5-5#medium`, the brief's reviewer o
 
 Fail-before: the new and changed tests run against the scripts of `a029cdc0`, with the two new exported constants shimmed in the test copies (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/progress-fail-before-p2.log`): 37 tests, 7 failed, the tests of M1, M2 (two), L1, the takeover file, L5, and L6. The eight-process test on a dead owner's lock passed against the old scripts in six runs: it guards the invariant but did not reproduce M3's narrow window. With `8093986a` both files pass 37 of 37, three runs in a row.
 
+### Pass 3
+
+Reviewer A: Codex CLI, `codex gpt-6.1-sol#medium`, the brief's reviewer of pass 3, on `c81f5aad`, run by the coordinator with `make review`, session `01a1844c-ec4a-7601-8780-cd726a3d7e1e`; the worktree snapshot was unchanged by the pass. Counts: Critical 0, High 0, Medium 2, Low 2, recorded in `passes.jsonl` and `findings.jsonl`. It confirmed the pass 2 fixes M1, M2, L1, L5, and L6 by their tests and L3 and L4 in the records, now `fixed`. Pass 3 is the last pass (cap 3), so its fixes are `fixed-unreviewed` for the coordinator's architect check.
+
+1. **P3-1, Medium, concurrency-race.** `scripts/task-progress-lock.ts:73`: a takeover could remove a lock just created by the fast path, and stale takeover-file recovery could delete a new takeover file.
+2. **P3-2, Medium, concurrency-race.** `scripts/task-progress-lock.ts:99`: release checked the token and unlinked in two steps.
+
+   Both resolved by the architect decision (Niki, 2026-10-28): mutual exclusion is no safety property, because the cache is written whole by a rename. In `c1e9789b` the lock is best-effort de-duplication: an exclusive create with pid, token, and time; a lock whose owner has exited or that is older than 30 minutes is unlinked and created once more, otherwise the refresh is skipped; release unlinks only while the token matches, with no atomicity claim; the takeover file is gone. The spec delta, design D4, and the protocol section say a rare overlap runs two refreshes. Pass 1 finding 4 and pass 2 M3 point to this resolution. Tests: a live young lock is kept; a dead owner's lock is taken over; an old lock, readable or not, is taken over; release with another token leaves the lock; four overlapping cache writers never show a reader a partial cache.
+3. **P3-3, Low, contract-drift.** `design.md` D1 and the stage 5 scenario predated M2. Fixed in this record round: D1 states the M2 rule, the stage 5 scenario requires no named fix commit, and the scenario "Fix committed before its pass record" is added.
+4. **P3-4, Low, error-handling.** `scripts/task-progress-stages.ts:208`: blank lines shifted the reported line numbers. Fixed in `c1e9789b`: physical numbers. Fail-before: the new test against the scripts of `c81f5aad` reported line 2 instead of 4 (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/progress-fail-before-p3.log`).
+
+The best-effort lock tests describe the new contract, not a defect of the old code, so they have no fail-before run.
+
+### Fixes no later pass reviews
+
+For the coordinator's architect check (governance "Architect check of unreviewed fixes"):
+
+1. `c1e9789b` (chore): `scripts/task-progress-lock.ts`, rewritten as the best-effort lock (P3-1, P3-2, pass 1 finding 4, pass 2 M3); `scripts/task-progress-stages.ts` `parsePasses`, physical line numbers (P3-4); `test/task-progress-lock.test.ts`, rewritten for the best-effort contract and overlapping writers; `test/task-progress.test.ts`, the line number test.
+2. The record commit after it (docs): the spec delta ("Task progress view" without "one refresh at a time", the stage 5 scenario, "Fix committed before its pass record", and "Progress cache refresh" with its scenarios), `design.md` D1 and D4, `docs/agent-task-protocol.md` "Task progress", `proposal.md`, `tasks.md`, this record, `passes.jsonl`, and `findings.jsonl`.
+3. Outside the repository: the status line script reads the same cache shape and needed no change in this round.
+
 ## Limitations
 
 - The status line script, `/Users/petarnenov/geowealth/be/.ai/scripts/statusline-context.py`, is outside this repository and not reviewed with it.
 
 ## Remaining gates
 
-- Review pass 3 of the fixes of passes 1 and 2.
+- The coordinator's architect check of the fixes after pass 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request).

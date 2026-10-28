@@ -17,7 +17,7 @@ reads them together, so the coordinator asks each worker for its state.
   commands are read over SSH. An unreachable host is reported, never fatal.
 - `make progress` prints the detailed view; `make progress-refresh` writes
   it atomically to `~/.config/taskelith/progress.json` with a timestamp,
-  one refresh at a time under a lock file.
+  with a best-effort lock that de-duplicates refreshes.
 - `docs/agent-task-protocol.md` gets a short "Task progress" section.
 - Outside the repository, the coordinator's status line shows one bar per
   active task from the cache and starts a detached refresh when the cache

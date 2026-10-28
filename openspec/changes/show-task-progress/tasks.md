@@ -13,7 +13,7 @@
 - [x] 3.2 `scripts/task-progress-hosts.ts`: the local and SSH readers, the remote script, and the hosts file
 - [x] 3.3 `scripts/task-progress.ts`: the view, the cache, and the commands; `scripts/task-progress-lock.ts`: the owner-checked lock
 - [x] 3.4 `Makefile`: `make progress` and `make progress-refresh`
-- [x] 3.5 `test/task-progress.test.ts` and `test/task-progress-lock.test.ts`: every stage from fixture repositories, the Low-only stop, the SSH fallback, an unreachable host, the cache, and the lock with concurrent processes
+- [x] 3.5 `test/task-progress.test.ts` and `test/task-progress-lock.test.ts`: every stage from fixture repositories, the Low-only stop, the SSH fallback, an unreachable host, the cache, the best-effort lock, and overlapping cache writers
 - [x] 3.6 Status line outside the repository, backed up first and tested with a sample input
 
 ## 4. Documentation

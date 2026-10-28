@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Task progress view
-`make progress` SHALL derive the stage of every task worktree, from 1 brief to 11 landed, on this host and on the SSH hosts of a hosts file outside the repository, only from records the protocol already creates, and report an unreachable host without failing. `make progress-refresh` SHALL write that view atomically to a cache with its timestamp, one refresh at a time. No worker step SHALL be added for it.
+`make progress` SHALL derive the stage of every task worktree, from 1 brief to 11 landed, on this host and on the SSH hosts of a hosts file outside the repository, only from records the protocol already creates, and report an unreachable host without failing. `make progress-refresh` SHALL write that view atomically to a cache with its timestamp. No worker step SHALL be added for it.
 
 #### Scenario: Task after its first review pass
-- **WHEN** a task worktree's `passes.jsonl` holds one line and no later commit exists
+- **WHEN** a task worktree's `passes.jsonl` holds one line, its findings name no fix commit, and no later commit exists outside `openspec/changes/`
 - **THEN** `make progress` shows the task at stage 5, review 1, with the time of the commit that added the line
+
+#### Scenario: Fix committed before its pass record
+- **WHEN** a finding of the last pass names a fix commit that precedes the commit adding the pass line
+- **THEN** `make progress` shows the task at stage 8, fixes, with the time of that fix commit
 
 #### Scenario: Unreachable host
 - **WHEN** a host of the hosts file cannot be reached over SSH
@@ -27,7 +31,7 @@
 - **THEN** the task's row names the line, and the line counts as no review pass
 
 ### Requirement: Progress cache refresh
-`make progress-refresh ARGS="--if-older-than 60"` SHALL rewrite a cache that is missing, invalid in shape, stamped more than 60 seconds ahead, or older than 60 seconds, and SHALL leave a younger valid cache alone. A refresh SHALL hold a lock naming its process and token, SHALL NOT take over the lock of a live process younger than 30 minutes, SHALL serialize takeovers, and SHALL release only its own lock.
+`make progress-refresh ARGS="--if-older-than 60"` SHALL rewrite a cache that is missing, invalid in shape, stamped more than 60 seconds ahead, or older than 60 seconds, and SHALL leave a younger valid cache alone. A refresh SHALL skip while a lock of a live process younger than 30 minutes exists, take over a dead or older one, and unlink the lock only while it holds its token. The lock is best-effort: a rare overlap runs two refreshes, and the atomic write keeps the cache whole.
 
 #### Scenario: Fresh cache
 - **WHEN** a valid cache is 45 seconds old
@@ -37,10 +41,14 @@
 - **WHEN** the cache is missing or not a valid progress report
 - **THEN** `make progress-refresh ARGS="--if-older-than 60"` rewrites it
 
-#### Scenario: Refresh slower than the lock timeout
-- **WHEN** a refresh still runs after 300 seconds and another refresh starts
-- **THEN** the second leaves the lock and the cache to the first, which later removes only its own lock
+#### Scenario: Live refresh
+- **WHEN** a refresh starts while the lock names a live process and is younger than 30 minutes
+- **THEN** it leaves the lock and the cache alone and exits with status 0
 
 #### Scenario: Dead owner
-- **WHEN** several refreshes start at once while the lock names a process that has exited
-- **THEN** exactly one of them takes the lock over
+- **WHEN** a refresh starts while the lock names a process that has exited
+- **THEN** it removes the lock, creates its own, and refreshes
+
+#### Scenario: Overlapping refreshes
+- **WHEN** two refreshes write the cache at the same time
+- **THEN** every reader sees a whole report, from whichever refresh wrote last

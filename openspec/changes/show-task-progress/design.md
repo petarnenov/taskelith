@@ -20,7 +20,7 @@ time it was reached where a commit or record gives one.
 | 3 verify | a stamp of the clean HEAD tree and its merge base in the stamp directory of `scripts/verify-stamp.ts` | the stamp's `verifiedAt` |
 | 4 route | `route.json` in the change | its first commit, else its file time |
 | 5 to 7 review 1 to 3 | lines of `passes.jsonl` | the first commit holding that many lines |
-| 8 fixes | a non-merge commit after the commit of the last pass line, the archive commit excluded | first such commit |
+| 8 fixes | a non-merge commit after the commit of the last pass line outside `openspec/changes/`, or a commit that a finding of the last pass names, also one before the pass line | the earliest such commit |
 | 9 archived | the last commit touches the archived change directory | that commit |
 | 10 handed off | the branch in `~/.config/taskelith/integration-queue.json` | none |
 | 11 landed | HEAD in `origin/dev` with the change archived | the oldest first-parent commit of `origin/dev` that contains HEAD |
@@ -63,17 +63,15 @@ local file and applies to every host's tasks.
 ### D4 Cache and lock
 
 `make progress-refresh` writes `progress.json` through a temporary file
-and a rename, with `generatedAt` and `generatedAtEpoch`. A lock file
-hard-linked whole from a draft, naming the owner's pid and a random
-token, admits one refresh (`scripts/task-progress-lock.ts`). It is taken
-over only when its owner's process has exited, when it is older than 30
-minutes (a reused pid), or, without a readable owner, after 300 seconds. A
-takeover holds the exclusive file `progress.lock.takeover`, rereads the
-owner under it, and only then replaces the lock, so two contenders never
-both replace one abandoned lock; a takeover file older than 60 seconds was
-left by a dead takeover and is removed. The owner releases the lock only
-while it still holds its token. Only an owner older than 30 minutes can
-lose its lock while it runs. `ARGS="--if-older-than 60"`
+and a rename, with `generatedAt` and `generatedAtEpoch`, so every reader
+sees a whole report. The lock (`scripts/task-progress-lock.ts`) only
+de-duplicates refreshes, best-effort (architect decision, Niki,
+2026-10-28, after pass 3): it is created exclusively with the owner's
+pid, a random token, and its time; a lock whose owner has exited or that
+is older than 30 minutes is unlinked and created once more, otherwise the
+refresh is skipped; release unlinks it only while it holds the token.
+Mutual exclusion is no safety property here: a rare overlap runs two
+refreshes, and the last whole write wins. `ARGS="--if-older-than 60"`
 skips a cache younger than 60 seconds, so a refresh that the status line
 started just after another one finished does no work.
 
