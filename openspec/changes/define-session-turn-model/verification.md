@@ -12,12 +12,13 @@ Status: phase 2 developed; review complete: passes 1 (reviewer A) and 2 (reviewe
 
 ## Revision
 
-- Base: `dev` `1c73e1a7`.
+- Base: `dev` `1c73e1a7`; after pass 3, `052eb181` merged `origin/dev` `f6696995`, the new merge base.
 - Phase 1 commit: `a6acbc51` `docs: design the session turn model`.
 - Phase 2 commits: `d16b3828` `docs: record the delegate decisions of the session turn model`; `a0fbf051` `docs: add the session timeline contract`; `c88e1ada` `test: add the failing session timeline tests`; `7041ebe2` `chore: implement the session timeline domain`; `a72e133d` `chore: define the shared harness values in the execution domain`; and the commit that adds this record.
 - Review pass 1 fixes: `e076bed5` `test: build the session generations inside each test`; `f9d91d1b` `chore: record no entry for empty session output`; `87a5c2af` `chore: make the host the responder of delegation results`; `ff0e2ef5` `test: cover the bounds of every session answer text`; `ba741f9e` `docs: separate recording a session request from persisting it`; and the commit that records the pass.
 - Review pass 2 fixes: `d8ea0a17` `test: cover requests of queued and ended turns and tidy the session tests`; `4f1594dd` `chore: bind no attempt to a stopped session`; `752cab87` `chore: let a standing rule give only a permission answer`; `33983762` `chore: compare the author of a retried session turn`; `93f2b51e` `chore: let the host deliver a delegation outcome as a session turn`; `1563c646` `docs: state the responder of an answer as its own requirement`; `93d8dfa9` `docs: state the failure codes of a generation start`; `dac55234` `chore: freeze only the new session output entry on append`; `4b942d6b` `chore: import the harness request kind at the top of the port data`; `bdb8b706` `docs: correct the identifiers coverage record of the session turn model`; and the commit that records the pass.
-- Review pass 3: the commit that records the pass; no fix.
+- Review pass 3: `5d19de54` `docs: record review pass 3 of the session turn model`; no fix.
+- Merge of `dev`: `052eb181` merged `origin/dev` `f6696995` with no conflict. `git diff 1c73e1a7 origin/dev --stat` over this change's inputs (`docs/contracts/agent-harness-port.md`, `docs/contracts/capacity-reservation.md`, `docs/contracts/product-ports.md`, `packages/modules/execution`, `openspec/specs/execution-model`, `docs/operational-targets.md`, `docs/g3-plan.md`) is empty, and `openspec/specs/session-turn-model` does not exist on `dev`, so the merge invalidates no evidence and needs no review.
 
 ## Way of working
 
@@ -32,6 +33,7 @@ Native Ubuntu Linux x86_64 host; Node.js v24.22.0.
 - Contract, spec delta, and design checked against each other and against the code (task 2.2): operation names, the order of checks, and the failure codes of the contract's section 2 table match the functions in `packages/modules/execution/src/domain/session-*.ts`; every spec scenario has a test in `packages/modules/execution/test/session-*.test.ts`.
 - Neutrality (task 3.4): `grep -n -i -E "claude|codex|opencode|anthropic|openai|gpt|gemini|kimi|antigravity|agy|sonnet|opus" src/domain/session-*.ts test/session-*.ts` in `packages/modules/execution` found nothing (exit status 1).
 - The first `make verify` on `7041ebe2` failed in `npm run check:boundaries`: seven R03 violations, because the session files imported types and `MAX_HARNESS_TEXT_LENGTH` from `ports/agent-harness.ts`, `ports/agent-harness-data.ts`, and `ports/standing-approval-rules.ts`, and a domain file may import no port. `a72e133d` moves `TURN_OUTCOMES`, `HARNESS_FAILURES`, `PERMISSION_DECISIONS`, `DELEGATION_OUTCOMES`, `MAX_HARNESS_TEXT_LENGTH`, their types, and `HarnessRequestKind` unchanged into `domain/harness-values.ts`, and `StandingRuleId` into `domain/identifiers.ts`; the port files re-export them, so the module's exports are unchanged ([design](design.md) decision 4).
+- Evidence check: not recorded before pass 1, and recorded here after pass 3. The change's records, its spec delta, and `docs/contracts/session-timeline.md` have no external link (`grep` for `http` found nothing), and every repository link conforms and resolves, as `npm run verify:links` reported in every `make verify` of the checks below, pass 1 onward.
 - Unchanged and not edited, as the brief requires: `docs/g3-plan.md` and `docs/contracts/agent-harness-port.md`.
 
 ## Fail-before
@@ -93,6 +95,26 @@ The five M3 failures: "a host turn needs a delegation request that can no longer
 | Same | `node --experimental-strip-types --test --test-reporter=tap packages/modules/execution/test/*.test.ts` (after `npm run build`) | `tests 255`, `pass 255`, `fail 0` |
 | Started on `4b942d6b`; `bdb8b706`, a record-only commit, landed during the run | `make verify` | Passed, exit status 0: `tests 2634`, `suites 45`, `pass 2587`, `fail 0`, `skipped 47`; coverage over all files 99.33% lines, 92.74% branches, 99.00% functions; `harness-values.js` and `identifiers.js` 100, 100, 100 and the session files as in the row above; boundary checks passed; `Totals: 70 passed, 0 failed (70 items)`; every checked link conforms; every active change archives into strictly valid specs; every comment within the rule; every findings file valid (58 files, 38 pass summary files, before the pass 2 lines were added); packed file allowlist and installed CLI verification passed |
 | Working tree of the pass 2 record | `npm run openspec -- validate define-session-turn-model --strict`; `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments`; `make findings ARGS="validate"` | Change 'define-session-turn-model' is valid; every checked link conforms; every active change archives into strictly valid specs; every comment within the rule; every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s) |
+| `052eb181`, tree `10340418`, after the merge of `dev` | `make verify` (log `dstm-verify-merged.log` in the session scratchpad) | Passed, exit status 0, profile full, stamp written; generated part below |
+| Same, with this record | `make record CHANGE=define-session-turn-model LOG=<log>`; `make record-check CHANGE=define-session-turn-model`; `make findings ARGS="validate"` | Generated part written; `the generated part matches the tree`; every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s) |
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `10340418de3b1fa4321c2afd8d411cc720be110b`; tests 2754, pass 2707, fail 0, skipped 47; all files 99.33% lines, 92.74% branches, 99.00% functions.
+- `npm run openspec -- validate define-session-turn-model --strict`: passed, `Change 'define-session-turn-model' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
+- Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a1810d-68db-72f2-bb07-f7912fe9652f` | 0 | 0 | 3 | 2 |
+| 2 | B | `claude claude-opus-5-5#high` | `3bad015b-b840-418b-aeb4-1944bbc559ff` | 0 | 0 | 3 | 7 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1818b-d77c-73d0-a4cb-bc5a1061d753` | 0 | 0 | 0 | 0 |
+<!-- make record: end -->
 
 ## Independent review
 
