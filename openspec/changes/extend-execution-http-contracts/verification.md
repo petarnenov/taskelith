@@ -21,7 +21,10 @@ Status: developed and verified by the author; review passes 1 and 2 done and the
 - `9bd16222` `chore: fix review pass 1 findings of the execution HTTP contracts` (document, contract page sections 8.2, 8.4, 8.6, and 8.7, design decisions 5, 7, and 10, the spec delta, and five tests).
 - The commit `docs: record review pass 1 of the execution HTTP contracts` adds `passes.jsonl`, `findings.jsonl`, and the pass 1 section; the `make verify` run of pass 1's fixes checks its tree, and the commit after it records that run. The earlier `make verify` runs below checked older trees and stay as history.
 - `a872b982` `chore: fix review pass 2 findings of the execution HTTP contracts` (document, contract page sections 8.1, 8.2, 8.5, 8.6, 8.7, and 9, account pool sections 7, 7.3, 8, and 8.1, design decisions 4, 5, 7, 8, 9, and 10, the proposal, the `execution-wire-contracts` delta, the new `evidence-store` delta, and the tests).
-- The commit `docs: record review pass 2 of the execution HTTP contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record fixes of findings 17 to 20; the `make verify` run of pass 2's fixes checks its tree, and the commit after it records that run.
+- The commit `docs: record review pass 2 of the execution HTTP contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record fixes of findings 17 to 20; `make verify` on `98859f2b` (log `eehc-verify-6.log`) checked its tree, and `9040fd6e` `docs: record the verification of review pass 2 fixes of the execution HTTP contracts` records that run.
+- `617926ca` merges `origin/dev` at `a3a0ac4c` (`declare-contract-breaking-changes`, #393, and the other changes since `ff7ab7a0`), without conflicts.
+- `fa36b9e1` `chore: record that the evidence read narrowing has no computed breaking change` (design decision 2, contract page section 8.2).
+- The commit `docs: record the merge of dev and the breaking-change check of the execution HTTP contracts` updates this record; the `make verify` run below (log `eehc-verify-8.log`) checks its tree, and the commit after it records that run.
 
 ## Environment
 
@@ -32,7 +35,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 - **Scope.** `execution.openapi.json` from 0.5.0 to 0.6.0. Changed: `readEvidence` and `downloadEvidence` (browser session or operator bearer, `AuthenticationFailure` on 401, 404 for a principal without a role on the record's project). Added: `retireEvidence`, `readDelegationResult`, `listUnknownExecutions`, `listUnrecordedProcesses`, `readmitTask`, `fetchSlotCredential`, `issueRunScmCredential`, and `fetchRunScmCredential`; the schemes `browserSession` and `csrfToken`; and the schemas `AuthenticationFailure`, `AccessDenial`, `CsrfRejection`, `ExternalId`, `RemoteUrl` (copied unchanged from the control-plane document), `RetentionRefusal`, `DelegationResultOutcome`, `DelegationSummary`, `DelegationResult`, `ExecutionEvidenceKind`, `UnknownExecution`, `UnknownExecutionPage`, `UnknownExecutionCursor`, `UnrecordedProcess`, `UnrecordedProcessPage`, `UnrecordedProcessCursor`, `Readmission`, `ReadmissionRefusal`, `RevealedSlotCredential`, `SlotCredentialDelivery`, `SlotCredentialRefusal`, `ScmPermission`, `ScmCredentialRequest`, `RevealedScmSecret`, `ScmAuthorization`, `ScmCredentialDelivery`, and `ScmCredentialRefusal`. No other document changed.
 - **Architect decisions before pass 1.** `fetchSlotCredential` is the first slot credential delivery and every re-delivery, scoped to the reservation of the execution's attempt and the slot, with no credential in `LaunchGrant`; the requirement "Slot credential delivery" gained the scenarios "First fetch after the launch authorization", "Later fetch re-delivers the version", and "Slot outside the reservation", and "Per-project evidence reads" the scenario "Reader without a role"; a test checks that only `fetchSlotCredential` delivers a slot credential and that `LaunchGrant` reaches none.
 - **Version.** The brief named 0.4.0 to 0.5.0; `dev` already carries 0.5.0 from `bf25c6d5` (G3 sub-change 26b), so the change takes 0.6.0 (design decision 2).
-- **Breaking change.** With the document left at 0.5.0, `make contract-compatibility` reported `packages/contracts/documents/execution.openapi.json: 0 breaking change(s) against ff7ab7a0622d.`: oasdiff compares schemas, not authorization. The narrowing of the evidence reads is still declared by the minor version and stated in the contract page section 8.2. At `ff7ab7a0` there is no `packages/contracts/breaking-changes.json`; when the coming `declare-contract-breaking-changes` change lands in `dev` before the handoff, the branch merges `dev` and adds the entry with `make contract-breaking-changes`.
+- **Breaking change.** With the document left at 0.5.0, `make contract-compatibility` reported `packages/contracts/documents/execution.openapi.json: 0 breaking change(s) against ff7ab7a0622d.`: oasdiff compares schemas, not authorization. The narrowing of the evidence reads is still declared by the minor version and stated in the contract page section 8.2. At `ff7ab7a0` there was no `packages/contracts/breaking-changes.json`. After the merge of `dev` at `a3a0ac4c`, which carries `declare-contract-breaking-changes`, `make contract-breaking-changes` printed `0 breaking change(s) against a3a0ac4cea7c.` for every document and `{"declarations": []}`, so the file gets no entry; a probe entry for `execution.openapi.json` 0.6.0 naming the narrowing made `make contract-compatibility` fail with `lists for 0.6.0 a change not found over 0.5.0`, and was removed (design decision 2).
 - **Shared vocabulary.** A test compares the reused schemes and schemas with the control-plane document; the generator, which refuses one name with two definitions, generated the bundle (`node --experimental-strip-types scripts/generate-contracts.ts`).
 - **Domain vocabularies.** `DelegationResultOutcome`, `ExecutionEvidenceKind`, and `ScmPermission` equal `DELEGATION_OUTCOMES`, `EXECUTION_EVIDENCE_KINDS`, and `SCM_PERMISSIONS`; the first six reasons of both credential refusals, `quarantined` to `attempt-not-launchable`, are the first six of `LAUNCH_REJECTION_REASONS` in their order (a deep equality since pass 2); the remote reasons of `ScmCredentialRefusal` equal those of `BindingRefusal` without `merge-method-undeclared`, in its order.
 - **Fail-before.** With the `ff7ab7a0` document and the new tests, `the execution document is OpenAPI 3.1.0 at version 0.6.0 with the 9c operations` fails with `actual: '0.5.0'`.
@@ -63,7 +66,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 ## Limitations
 
 - Contract only: no handler enforces the roles, the 404 for a principal of another project, the credential checks and their order, the remote re-check, or the refusal records; items 10, 12, 21, 38, and 44 must, and their tests must check them.
-- The breaking narrowing of the evidence reads is invisible to `make contract-compatibility` (design decision 2); only the minor version and the contract page declare it.
+- The breaking narrowing of the evidence reads is invisible to `make contract-compatibility` and `make contract-breaking-changes` (design decision 2); only the minor version and the contract page declare it, and `packages/contracts/breaking-changes.json` cannot list it.
 - The first slot credential delivery is `fetchSlotCredential` after the launch authorization (design decision 9); item 12 implements it and defines no other wire form.
 - The shadow answer of `route.json` is missing, failure code `missing-credential`, because the session environment that routed the change predated the shadow router's key; `route.json` stays as it is and the change is not routed again (architect decision, 2026-10-28).
 - The route record recommends reviewer A at `high` and reviewer B at `xhigh`. Under governance "Routed effort" these elevated efforts apply only after a later governance change that the owner approves; the coordinator assigns the reviewers and efforts.
@@ -154,10 +157,19 @@ The fixes change contracts, not only records, and pass 1 found a High finding, s
 
 The pass 2 fixes change the document, contracts, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
+## Merge of dev and the breaking-change check
+
+As the architect asked on 2026-10-28, after pass 2 the branch merged `origin/dev` at `a3a0ac4c` (no rebase) in `617926ca`, with no conflict, and checked the breaking-change declaration that `declare-contract-breaking-changes` added. The gate of design decision 2 is met: the check computes no breaking change for the narrowing, so the file has no entry.
+
+| State | Command | Result |
+| --- | --- | --- |
+| `617926ca` | `make contract-breaking-changes` | `0 breaking change(s) against a3a0ac4cea7c.` for each of the five documents; printed `{"declarations": []}` |
+| `617926ca` | `make contract-compatibility` | `0 breaking change(s)` for every document; `Contract documents have no undeclared breaking change.` |
+| `617926ca` with a probe entry for `execution.openapi.json` 0.6.0, removed afterwards | `make contract-compatibility` | Failed: `packages/contracts/breaking-changes.json lists for 0.6.0 a change not found over 0.5.0` |
+
 ## Remaining gates
 
 - Review pass 3 by reviewer A, which governance "Conditional third pass" requires, with its fixes and records.
-- The breaking-change entry of design decision 2: if `declare-contract-breaking-changes` lands in `dev` before the handoff, merge `dev`, add the narrowing of the evidence reads with `make contract-breaking-changes`, and record the check.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
