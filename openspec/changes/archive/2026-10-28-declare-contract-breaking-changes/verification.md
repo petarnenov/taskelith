@@ -71,16 +71,17 @@ Author checks on `34d99f3a` and its working tree, without Docker:
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `cc0b3ef3bfd1f236425695f4c918d6a1e6461685`; tests 3134, pass 3119, fail 0, skipped 15; all files 99.40% lines, 92.68% branches, 99.07% functions.
-- `npm run openspec -- validate declare-contract-breaking-changes --strict`: passed, `Change 'declare-contract-breaking-changes' is valid`.
+- `make verify`: passed, profile full, tree `fc5a4c2c278e4130c9e40208550b52f287469a86`; tests 3134, pass 3119, fail 0, skipped 15; all files 99.40% lines, 92.67% branches, 99.07% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 71 passed, 0 failed (71 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 69 file(s); every pass summary file is valid: 49 file(s); every route file is valid: 5 file(s).`.
-- Spec diff against the merge base `964f0b570013` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `964f0b570013` with `origin/dev`: `openspec/specs/sdlc-wire-contracts/spec.md | 52 ++++++++++++++++++++++++++++--`, `1 file changed, 50 insertions(+), 2 deletions(-)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18236-3ca3-7db2-9678-9e40b1ea808a` | 0 | 0 | 1 | 2 |
 | 2 | B | `claude claude-opus-5-5#high` | `9007bc81-c413-4a77-8d1e-b78c8a4fcc62` | 0 | 0 | 0 | 7 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18279-341f-7f43-bb98-15c42049b8dd` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -163,7 +164,17 @@ Worker step 10 asks reviewer A to review the resolved diff and the reconciliatio
 - **Snapshot:** before and after the pass identical.
 - **Result:** Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl` line 3; no findings lines. The reviewer ran its own checks: the 26 tests of `test/check-contract-compatibility.test.ts` (26 pass) and the comment rule (pass).
 
+### Archive checks
+
+Worker step 7, on the tree of the archive commit `docs: archive the declare contract breaking changes change`, the working tree the checks ran on (tree `fc5a4c2c` before this record was written into it):
+
+- `npm run openspec -- archive declare-contract-breaking-changes --yes`: `sdlc-wire-contracts` + 4 added, ~ 1 modified ("Breaking-change check"); archived as `2026-10-28-declare-contract-breaking-changes`.
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-28-declare-contract-breaking-changes`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `964f0b57`): only this change's intended edits, `sdlc-wire-contracts/spec.md` 52 lines, 50 insertions and 2 deletions, the text of "Breaking-change check" and the WHEN of its scenario "Declared breaking change"; dev's "Generated types" text is untouched.
+- Moved change's files: `findings.jsonl` 10 lines, `passes.jsonl` 3 lines, `checklist.json` and `route.json` present; `make findings ARGS="validate"`: every findings file is valid: 69 file(s); every pass summary file is valid: 49 file(s); every route file is valid: 5 file(s). `npm run verify:links`: passed.
+- `make verify` on tree `fc5a4c2c`: passed, profile full; tests 3134, pass 3119, fail 0, skipped 15; coverage 99.40% lines, 92.67% branches, 99.07% functions; 0 breaking changes of each document against the merge base `964f0b57`. `make record CHANGE=declare-contract-breaking-changes LOG=<log>` wrote "Generated checks" from its log, and `make record-check` matched it. The archive commit differs from that tree only in this record.
+
 ## Remaining gates
 
-- Archive again.
 - Integration into dev by the coordinator (single pull request).
