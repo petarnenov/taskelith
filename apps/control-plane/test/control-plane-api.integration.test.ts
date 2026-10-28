@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,7 +39,9 @@ import { ok, parseInstant } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { authorityValidity, serverCertificateValidity } from '@taskelith/fleet';
-import { failed, integrationEndpoint, integrationSecret, integrationSecretPath, trustCertificateAuthority, value } from '@taskelith/testing';
+import {
+  failed, integrationEndpoint, integrationSecret, integrationSecretPath, trustCertificateAuthority, value, withTestBrokerCa,
+} from '@taskelith/testing';
 import { productionDependencies, workerMain } from '@taskelith/worker';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
@@ -207,6 +209,14 @@ describe('TLS listeners', () => {
     await assert.rejects(presented(running.api.port, operatorAuthority.certificatePem));
   });
 
+  test('the installation CA is served without a credential and matches the bundle', async () => {
+    const answer = await call('GET', '/installation/ca');
+    assert.deepEqual([answer.status, answer.body], [200, { certificate: installationCa }]);
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const der = new X509Certificate(installationCa).raw;
+    assert.equal(issued.installationCaSha256, createHash('sha256').update(der).digest('hex'));
+  });
+
   test('the browser endpoint presents the operator certificate', async () => {
     assert.notEqual(running.browser.port, running.api.port);
     const certificate = await presented(running.browser.port, operatorAuthority.certificatePem);
@@ -369,6 +379,12 @@ describe('publication fence', () => {
   });
 });
 
+// The worker pins the installation CA; the test broker's CA is another.
+function testBrokerDependencies(settings: Parameters<typeof productionDependencies>[0]) {
+  const production = productionDependencies(settings);
+  return { ...production, connect: (endpoint: Parameters<typeof production.connect>[0]) => production.connect(withTestBrokerCa(endpoint)) };
+}
+
 async function enrolledWorker(journalId: string): Promise<{ bearer: string; workerId: WorkerId }> {
   const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
   const enrolled = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: {
@@ -477,13 +493,14 @@ describe('enrollment and quarantine', () => {
     };
     // The test volume may be tmpfs, which the real probe refuses.
     const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
-      ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
+      ...testBrokerDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
     });
     const lines: string[] = [];
     // Contact proves that the worker connected with its broker credential.
     const lastContact = async (workerId: string) => (await sql<{ last_contact_at: Date | null }>(database,
       'SELECT last_contact_at FROM workers WHERE worker_id = $1', [workerId]))[0]?.last_contact_at?.getTime() ?? 0;
-    const first = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string }, (line) => lines.push(line), dependencies);
+    const bundle = { TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string, TASKELITH_INSTALLATION_CA_SHA256: issued.installationCaSha256 as string };
+    const first = await workerMain({ ...environment, ...bundle }, (line) => lines.push(line), dependencies);
     assert.ok(first, lines.join('\n'));
     await waitFor(async () => (await lastContact(first.identity.workerId)) > 0);
     const [row] = await sql<{ journal_id: string }>(database, 'SELECT journal_id FROM workers WHERE worker_id = $1', [first.identity.workerId]);
@@ -501,11 +518,11 @@ describe('enrollment and quarantine', () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const environment = {
       TASKELITH_DATA_DIR: join(base, 'intake-root'), TASKELITH_CONTROL_PLANE_URL: `https://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
-      TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string,
+      TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string, TASKELITH_INSTALLATION_CA_SHA256: issued.installationCaSha256 as string,
     };
     const limits = { ...TRANSPORT_LIMITS, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 };
     const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
-      ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }), limits,
+      ...testBrokerDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }), limits,
       // A host disk below the floor, or a busy test process, would refuse
       // the offers.
       space: () => ok({ availableBytes: 2 ** 40, totalBytes: 2 ** 41 }),
