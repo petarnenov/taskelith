@@ -219,3 +219,16 @@ The size grew from S-M to M through the fixes of passes 1 and 2: a module of Git
 - 16e: a `worker-runtime` spec change for the single-slot rule, which this change states in `git-workspace-port` only (review pass 2, Low 9).
 - 16e: the worker settings' refusal with `TASKELITH_WORKER_SLOTS` above `1`, the held slot counted through `handedOff`, the execution group wiring, `fs.protected_hardlinks`, `reclaim-failed` handling, the tool manifest, and the macOS composition with the reclaim program in its own process group.
 - Item 38: the delegated-child half of the "One handed-off workspace" test.
+
+## Archive checks
+
+Run on the archived tree, on dev `b099b995` (no newer dev commits at archive time), on 2026-10-28:
+
+- `npm run openspec -- archive align-git-workspace-adapter-contract --yes`: archived as `2026-10-28-align-git-workspace-adapter-contract`; `git-workspace-port` updated (8 added, 8 modified).
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: 218 passed, 13 failed; the 13 are archived changes of 2026-10-24 to 2026-10-26 that this change does not touch, and this change passes.
+- `git diff b099b995 -- openspec/specs`: only `openspec/specs/git-workspace-port/spec.md`, the requirements of the delta.
+- `make findings ARGS="validate"`: 57 findings files and 37 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; 2548 tests, 2501 passed, 0 failed, 47 skipped; coverage 99.32% lines, 92.61% branches, 98.98% functions.
+
+Remaining gate: integration into `dev` by the coordinator. Item 16 continues with 16b to 16e; the macOS native conformance gate stays pending on the owner's Mac.
