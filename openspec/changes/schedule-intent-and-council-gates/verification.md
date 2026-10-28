@@ -31,7 +31,20 @@ Author checks on the working tree before the first commit:
 
 ## Route and make verify
 
-To be completed after the route.
+- `make findings ARGS="route --change schedule-intent-and-council-gates"` on `f36f7e74`, committed unedited as `route.json` in `445b30a4`: `standard (no trigger), rule version 1`; pass 1, reviewer A: `codex gpt-6.1-sol#medium`; pass 2, reviewer B: `claude claude-opus-5-5#high`; shadow `jev-1.14.0` standard (0.88), agrees with the rule; recommendation only.
+- `make verify` on `445b30a4` (tree `018b2687`), docs-only profile: the first run failed in `npm run verify:package` because `dist/cli.js` was missing, since the profile skips `make test`, which builds, and this fresh worktree had no build. After `npm run build`, which changes no tracked file, the second run passed, exit 0; totals below.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile docs-only, tree `018b2687635b4c0aa39213f146a104c669dc67c4`; no test totals in the log; no coverage totals.
+- `npm run openspec -- validate schedule-intent-and-council-gates --strict`: passed, `Change 'schedule-intent-and-council-gates' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 70 file(s); every pass summary file is valid: 50 file(s); every route file is valid: 6 file(s).`.
+- Spec diff against the merge base `a3a0ac4cea7c` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
 
 ## Remaining gates
 
