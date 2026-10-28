@@ -28,8 +28,9 @@
 - [x] 4.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`
 - [x] 4.5 Fix the review pass 1 findings and apply the coordinator's ruling on the credential header, with tests
 - [x] 4.6 Fix the review pass 2 findings, with tests
-- [ ] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
-- [ ] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm
+- [x] 4.7 Fix the review pass 3 findings without a fourth pass, by the owner's delegate's ruling
+- [x] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
+- [x] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm
 
 ## 5. Archive
 

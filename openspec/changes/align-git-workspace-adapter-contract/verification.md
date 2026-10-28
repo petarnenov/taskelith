@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16a, size S-M, assigned by the coordinator and developed in a briefed subagent. The owner's delegate's decisions of 2026-10-28, numbered 1 to 12 in the brief, are applied as design D1 to D12. Scope: the contract, the `git-workspace-port` spec, the port, the fixture, the conformance suite, and the test double; no Git code, which follows in 16b to 16e. Review pass 1 (reviewer A) and pass 2 (reviewer B) ran; their fixes are recorded below, and the passes in `passes.jsonl` and `findings.jsonl`.
+G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16a, assigned as size S-M and grown to M through the review fixes, assigned by the coordinator and developed in a briefed subagent. The owner's delegate's decisions of 2026-10-28, numbered 1 to 12 in the brief, are applied as design D1 to D12. Scope: the contract, the `git-workspace-port` spec, the port, the fixture, the conformance suite, and the test double; no Git code, which follows in 16b to 16e. Review passes 1 to 3 ran (section Independent review); their fixes are recorded below, and the passes in `passes.jsonl` and `findings.jsonl`.
 
 ## Revision
 
@@ -173,9 +173,41 @@ Checks on the working tree of `6fb69a1e`:
 - Workspace package: tests 126, pass 126.
 - `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; tests 2546, pass 2499, fail 0, skipped 47; all files 99.32% lines, 92.59% branches, 98.98% functions; `git-process-checks.js` 100/90.00/100, `workspace-conformance.js` 99.65/88.51/100, `snapshot-archive.js` 100/95.65/100; comment length rule passed.
 
+## Independent review
+
+| Pass | Role | Reviewer | Reviewed head | Critical | High | Medium | Low | Fixes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | Codex, `gpt-6.1-sol`, session `01a18059-178f-78d2-8df7-e369e3562b7a` | `d750d2c2` | 0 | 0 | 8 | 3 | section Review pass 1 fixes |
+| 2 | B | Claude, `claude-opus-5-5`, session `9194f7e1-f99c-4a4a-8347-2f14a5ec51cc` | `e267cf7a` | 0 | 1 | 6 | 12 | section Review pass 2 fixes |
+| 3 | A | Codex, session `01a1807d-24ac-77d3-8e0d-f00a51321d72` | `0f56cb52` | 0 | 0 | 2 | 1 | section Unreviewed fixes after pass 3 |
+
+The size grew from S-M to M through the fixes of passes 1 and 2: a module of Git process checks, the neutral working directory, the environment allowlist, and twenty-one defective variants.
+
+## Unreviewed fixes after pass 3
+
+- **Decision:** the review pass cap was reached ([review process](/docs/governance.md#independent-review-process)), and a Medium left after pass 3 needs the owner. The owner's away delegate chose option (a) on 2026-10-28, in away run `20261028T031337Z-claude-12008`: fix all three findings without a fourth review pass, as 26a (`issue-installation-certificates`) and item 27 (`implement-worker-self-check-admission`) did. M1, M2, and L1 are `fixed-unreviewed` in `findings.jsonl`.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| P3-M1 | Medium | The spec's "Failed reclaim program" still forbade any rerun and required `reclaim-failed` after any restart, while contract section 3 accepts a rerun after a crash before the failure is recorded | Unreviewed fix: the requirement forbids a rerun only once the failure is durable in the hand-off record and allows one more run after a crash before that write (461 characters); scenario "Reclaim after a recorded failure and a restart" replaces "Reclaim after a failed program and a restart", and "Crash before the failure is recorded" is new. The suite and the double do not model `reclaim-failed`, so neither changed | `756d7ba7` |
+| P3-M2 | Medium | The suite accepted only the static pins' path as `argv[0]`, though the contract lets a test inject another pin, such as a wrapper | Unreviewed fix: the fixture names its `gitClient` pin; the Git process check compares `argv[0]` with that pin's path; the double takes the pin; the contract's sections 7 and 12 say so | `b3991433`, `756d7ba7` |
+| P3-L1 | Low | This record still listed pass 2 as pending | Unreviewed fix: this section, the Independent review table, and tasks 4.3, 4.4, and 4.7 ticked | this record |
+
+**Before the fix, M1.** The old requirement said "SHALL make `reclaim` fail with `precondition-failed` and reason `reclaim-failed`, also on a later call and after a restart, ... the worker SHALL never run the program again for that hand-off", and its scenario "**WHEN** the worker restarts after its reclaim program failed and `reclaim` is called again **THEN** it fails with reason `reclaim-failed` without starting the program". The new scenario "**WHEN** the worker is killed after its reclaim program failed and before the failure is durable in the hand-off record, and `reclaim` is called after the restart **THEN** the worker proves the containment empty and runs the program again" contradicts both: the program failed, the worker restarted, and the program runs again.
+
+**Before the fix, M2.** The new test `a provider composed with another Git client pin passes the suite through that path` (`test/workspace-conformance.test.ts`, pin path `/opt/taskelith/test/git-wrapper`) was run with `git-process-checks.ts` of `04e2e527`, after `npm run build`: `node --experimental-strip-types --test --test-name-pattern="pin" test/workspace-conformance.test.ts` failed it with "Git process 1000 (ls-remote): not started through the pinned client's path", and the same for the clone, status, and ls-tree processes. With the fix, it passes; `the Git process case reports a process that does not start through the composed pin` checks the other direction.
+
+**After the fixes**, on the working tree of `756d7ba7`:
+
+- `npm run openspec -- validate align-git-workspace-adapter-contract --strict`: valid.
+- Archive in a scratch copy: `git worktree add --detach` of `756d7ba7` in the scratchpad, `npm run openspec -- archive align-git-workspace-adapter-contract --yes`: "+ 8 added, ~ 8 modified", archived as `2026-10-28-align-git-workspace-adapter-contract`; then `npm run openspec -- validate --all --strict`: "Totals: 69 passed, 0 failed (69 items)"; the copy was removed.
+- `make findings ARGS="validate"`: 57 findings files and 37 pass summary files valid.
+- Workspace package: tests 128, pass 128.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; tests 2548, pass 2501, fail 0, skipped 47; all files 99.32% lines, 92.61% branches, 98.98% functions; `git-process-checks.js` 100/91.67/100, `workspace-conformance.js` 99.65/88.51/100; comment length rule passed.
+
 ## Remaining gates
 
-- Review passes 2 and 3 (tasks 4.3 and 4.4) and the archive (task 5.1).
+- The archive (task 5.1).
 - The suite natively on macOS against the Git adapter: pending, after 16b (contract section 13).
 
 ## Follow-ups for 16b to 16e
