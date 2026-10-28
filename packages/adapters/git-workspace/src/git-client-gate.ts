@@ -6,6 +6,8 @@ import { GitRunner } from './git-runner.js';
 // the adapter takes only such a client (contract section 7).
 export class VerifiedGitClient {
   readonly runner: GitRunner;
+  // A private field makes the type nominal: no other object is one.
+  readonly #verified = true;
 
   private constructor(runner: GitRunner) {
     this.runner = runner;

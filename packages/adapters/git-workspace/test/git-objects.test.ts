@@ -14,6 +14,7 @@ import {
   snapshotTree,
   type ListedEntry,
 } from '@taskelith/git-workspace';
+import { encodeHeadSnapshot } from '@taskelith/workspace';
 import { nativeGit } from './git-fixture.ts';
 
 const OID = 'a'.repeat(40);
@@ -86,7 +87,8 @@ test('the snapshot tree refuses names that Git refuses in a path, and duplicates
   }
   const duplicate = failed(snapshotTree([entry(['dir', 'file']), entry(['dir', 'file'])], objects));
   assert.equal(duplicate.details.reason, 'unsafe-tree-path');
-  const fileAndDirectory = failed(snapshotTree([entry(['dir']), entry(['dir', 'file'])], objects));
+  // A file that is also a directory is the archive's own refusal.
+  const fileAndDirectory = failed(encodeHeadSnapshot(value(snapshotTree([entry(['dir']), entry(['dir', 'file'])], objects))));
   assert.equal(fileAndDirectory.details.reason, 'unsafe-tree-path');
   value(snapshotTree([entry(['.github', 'git~2', '.gitignore', 'a..b'])], objects));
 });

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { syncPathAsync } from '@taskelith/data-root';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -35,10 +35,12 @@ import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
 import { succeeded, type GitRunner } from './git-runner.js';
-import { parseIndexFlags } from './index-flags.js';
+import type { GitObjectType } from './git-objects.js';
+import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
+import { isPresent } from './presence.js';
 import { resetRepositoryFiles, type ObjectFormat } from './repository-config.js';
-import { parseBatchObjects, parseTreeListing, snapshotTree, type ListedEntry } from './tree-listing.js';
+import { parseBatchObjects, readHeadTree, readVerified, snapshotTree, type ListedEntry, type ObjectRead } from './tree-listing.js';
 import { readWorkspaceRecord, writeWorkspaceRecord, type WorkspaceRecord } from './workspace-record.js';
 
 export interface GitWorkspacesOptions {
@@ -60,7 +62,6 @@ export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHa
 // revert, or bisect.
 const OPERATION_MARKERS = ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_LOG', 'rebase-merge', 'rebase-apply', 'sequencer'];
 const CLONE_REMOTE = 'origin';
-const NUL = Uint8Array.of(0);
 
 interface OpenedWorkspace {
   readonly record: WorkspaceRecord;
@@ -74,7 +75,11 @@ interface Start {
 
 type PreparedWorkspace = Omit<Workspace, 'workingDirectory'>;
 
-const exists = (path: string) => lstat(path).then(() => true, () => false);
+interface Examined {
+  readonly status: WorkspaceStatus;
+  readonly entries: readonly ListedEntry[];
+}
+
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes).trim();
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
@@ -135,7 +140,9 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
   inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
     return failingFileSystemAsUnavailable(async () => {
       const opened = await this.#opened(attemptId);
-      return opened.ok ? this.#status(opened.value) : opened;
+      if (!opened.ok) return opened;
+      const examined = await this.#examine(opened.value);
+      return examined.ok ? ok(examined.value.status) : examined;
     });
   }
 
@@ -153,22 +160,24 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (!(await attempt(mkdir(staging, { mode: WORKSPACE_MODES.attempt }), ['EEXIST']))) {
       return err(failure('conflict', `workspace ${request.attemptId} is being prepared`));
     }
-    const built = await failingFileSystemAsUnavailable(() => this.#build(staging, request));
-    if (!built.ok) {
-      await rm(staging, { recursive: true, force: true });
-      return built;
-    }
-    const placed = await this.#placeStaging(staging, join(this.#root, name), request.attemptId);
-    if (!placed.ok) return placed;
-    return ok({ ...built.value, workingDirectory: join(this.#root, name, WORKSPACE_LAYOUT.checkout) });
+    // A failure leaves no staging entry; one after the rename into place
+    // leaves the ready workspace, which `list` reports (contract section 3).
+    const prepared = await failingFileSystemAsUnavailable(async () => {
+      const built = await this.#build(staging, request);
+      if (!built.ok) return built;
+      const placed = await this.#placeStaging(staging, join(this.#root, name), request.attemptId);
+      return placed.ok ? ok({ ...built.value, workingDirectory: join(this.#root, name, WORKSPACE_LAYOUT.checkout) }) : placed;
+    });
+    if (!prepared.ok) await rm(staging, { recursive: true, force: true });
+    return prepared;
   }
 
   async #remove(attemptId: AttemptId): Promise<Result<void>> {
     const opened = await this.#opened(attemptId);
     if (!opened.ok) return opened.error.code === 'not-found' ? ok(undefined) : opened;
-    const status = await this.#status(opened.value);
-    if (!status.ok) return status;
-    const clean = cleanHead(status.value);
+    const examined = await this.#examine(opened.value);
+    if (!examined.ok) return examined;
+    const clean = cleanHead(examined.value.status);
     if (!clean.ok) return clean;
     const name = workspaceDirectoryName(attemptId, sha256IdentifierDigest);
     const removing = join(this.#root, `${WORKSPACE_LAYOUT.removingPrefix}${name}`);
@@ -183,11 +192,11 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
   async #snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>> {
     const opened = await this.#opened(attemptId);
     if (!opened.ok) return opened;
-    const status = await this.#status(opened.value);
-    if (!status.ok) return status;
-    const head = cleanHead(status.value);
+    const examined = await this.#examine(opened.value);
+    if (!examined.ok) return examined;
+    const head = cleanHead(examined.value.status);
     if (!head.ok) return head;
-    const tree = await this.#headTree(opened.value.checkout, head.value.commit);
+    const tree = await this.#snapshotTree(opened.value, examined.value.entries);
     if (!tree.ok) return tree;
     const content = encodeHeadSnapshot(tree.value);
     if (!content.ok) return content;
@@ -316,7 +325,7 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (!read.ok) return read;
     const record = read.value;
     if (record === undefined) return err(failure('not-found', `no workspace ${attemptId}`));
-    if (await exists(join(directory, WORKSPACE_LAYOUT.handOffRecord))) {
+    if (await isPresent(join(directory, WORKSPACE_LAYOUT.handOffRecord))) {
       return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
     }
     const checkout = join(directory, WORKSPACE_LAYOUT.checkout);
@@ -326,9 +335,11 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     return ok({ record, checkout });
   }
 
-  async #status({ record, checkout }: OpenedWorkspace): Promise<Result<WorkspaceStatus>> {
-    const cleared = await this.#clearIndexFlags(checkout);
-    if (!cleared.ok) return cleared;
+  // The status of a workspace and the verified entries of its head tree.
+  async #examine(opened: OpenedWorkspace): Promise<Result<Examined>> {
+    const { record, checkout } = opened;
+    const index = await this.#rebuildIndex(checkout);
+    if (!index.ok) return index;
     const args = ['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all', '--ignore-submodules=all'];
     const output = succeeded(await this.#git.run({ args, cwd: checkout }), 'internal', 'the status');
     if (!output.ok) return output;
@@ -336,57 +347,52 @@ export class GitWorkspaces implements LocalWorkspaceOperations {
     if (!status.ok) return status;
     const { commit, branch } = status.value;
     if (commit === null) return err(failure('internal', 'the workspace has no head commit'));
-    const tree = await this.#treeOf(checkout, commit);
+    const tree = await readHeadTree(this.#objectRead(checkout), record.objectFormat, commit);
     if (!tree.ok) return tree;
-    const head = parseCodeHeadIdentity({ repository: record.binding.repository, commit, tree: tree.value });
+    const head = parseCodeHeadIdentity({ repository: record.binding.repository, commit, tree: tree.value.tree });
     if (!head.ok) return head;
-    return ok({ head: head.value, branch, dirtyReasons: await this.#dirtyReasons(record, checkout, status.value) });
+    const matches = indexMatchesTree(index.value, tree.value.entries);
+    const dirtyReasons = await this.#dirtyReasons(record, checkout, status.value, matches);
+    return ok({ status: { head: head.value, branch, dirtyReasons }, entries: tree.value.entries });
   }
 
-  // An assume-unchanged or skip-worktree flag makes status skip a tracked
-  // file, so a change to it would look clean (contract section 6).
-  async #clearIndexFlags(checkout: string): Promise<Result<void>> {
-    const listed = succeeded(await this.#git.run({ args: ['ls-files', '-v', '-z'], cwd: checkout }), 'internal', 'the index listing');
+  // Writes every index entry anew, without its stat data, flags, or cache
+  // tree, any of which the agent can forge to hide a change (section 6).
+  async #rebuildIndex(checkout: string): Promise<Result<readonly IndexEntry[]>> {
+    const listed = succeeded(await this.#git.run({ args: ['ls-files', '--stage', '-z'], cwd: checkout }), 'internal', 'the index listing');
     if (!listed.ok) return listed;
-    const flags = parseIndexFlags(listed.value);
-    if (!flags.ok) return flags;
-    for (const [option, paths] of [['--no-assume-unchanged', flags.value.assumeUnchanged], ['--no-skip-worktree', flags.value.skipWorktree]] as const) {
-      if (paths.length === 0) continue;
-      const input = Buffer.concat(paths.flatMap((path) => [path, NUL]));
-      const args = ['update-index', '-z', option, '--stdin'];
-      const cleared = succeeded(await this.#git.run({ args, cwd: checkout, input }), 'internal', 'the index update');
-      if (!cleared.ok) return cleared;
-    }
-    return ok(undefined);
+    const entries = parseIndexEntries(listed.value);
+    if (!entries.ok || entries.value.length === 0) return entries;
+    const input = indexInfo(entries.value);
+    const rebuilt = succeeded(await this.#git.run({ args: ['update-index', '-z', '--index-info'], cwd: checkout, input }), 'internal', 'the index rebuild');
+    return rebuilt.ok ? entries : rebuilt;
   }
 
-  async #dirtyReasons(record: WorkspaceRecord, checkout: string, status: PorcelainStatus): Promise<DirtyReason[]> {
+  async #dirtyReasons(record: WorkspaceRecord, checkout: string, status: PorcelainStatus, indexMatches: boolean): Promise<DirtyReason[]> {
     const kinds = new Set(status.entries.map(({ kind }) => kind));
-    const markers = await Promise.all(OPERATION_MARKERS.map((marker) => exists(join(checkout, '.git', marker))));
+    const markers = await Promise.all(OPERATION_MARKERS.map((marker) => isPresent(join(checkout, '.git', marker))));
     const reasons = new Set<DirtyReason>();
-    if (kinds.has('changed') || kinds.has('renamed')) reasons.add('modified');
+    if (kinds.has('changed') || kinds.has('renamed') || !indexMatches) reasons.add('modified');
     if (kinds.has('untracked')) reasons.add('untracked');
     if (kinds.has('unmerged') || markers.includes(true)) reasons.add('operation-in-progress');
     if (record.kind === 'task-branch' && status.branch !== record.branch) reasons.add('off-branch');
     return DIRTY_REASONS.filter((reason) => reasons.has(reason));
   }
 
-  // The head's tree from Git's objects (decision Q1 b), never `git archive`.
-  async #headTree(checkout: string, commit: string): Promise<Result<ReadonlyMap<string, GitTreeEntry>>> {
-    const args = ['ls-tree', '-r', '-z', '--full-tree', commit];
-    const listing = succeeded(await this.#git.run({ args, cwd: checkout }), 'internal', 'the tree listing');
-    if (!listing.ok) return listing;
-    const entries = parseTreeListing(listing.value);
-    if (!entries.ok) return entries;
-    const objects = await this.#blobs(checkout, entries.value);
-    return objects.ok ? snapshotTree(entries.value, objects.value) : objects;
+  // The snapshot's tree from verified blobs (decision Q1 b), never from
+  // `git archive`.
+  async #snapshotTree({ record, checkout }: OpenedWorkspace, entries: readonly ListedEntry[]): Promise<Result<ReadonlyMap<string, GitTreeEntry>>> {
+    const names = [...new Set(entries.flatMap((entry) => (entry.type === 'blob' ? [entry.object] : [])))];
+    const blobs = await readVerified(this.#objectRead(checkout), record.objectFormat, 'blob', names);
+    return blobs.ok ? snapshotTree(entries, blobs.value) : blobs;
   }
 
-  async #blobs(checkout: string, entries: readonly ListedEntry[]): Promise<Result<ReadonlyMap<string, Uint8Array>>> {
-    const names = [...new Set(entries.flatMap((entry) => (entry.type === 'blob' ? [entry.object] : [])))];
-    if (names.length === 0) return ok(new Map());
-    const input = new TextEncoder().encode(`${names.join('\n')}\n`);
-    const output = succeeded(await this.#git.run({ args: ['cat-file', '--batch'], cwd: checkout, input }), 'internal', 'the object read');
-    return output.ok ? parseBatchObjects(output.value, names) : output;
+  #objectRead(checkout: string): ObjectRead {
+    return async (type: GitObjectType, names: readonly string[]) => {
+      if (names.length === 0) return ok(new Map());
+      const input = new TextEncoder().encode(`${names.join('\n')}\n`);
+      const output = succeeded(await this.#git.run({ args: ['cat-file', '--batch'], cwd: checkout, input }), 'internal', 'the object read');
+      return output.ok ? parseBatchObjects(output.value, names, type) : output;
+    };
   }
 }

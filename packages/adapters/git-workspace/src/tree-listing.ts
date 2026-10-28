@@ -1,93 +1,113 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { decodeGitPath, workspaceFailure, type GitTreeEntry } from '@taskelith/workspace';
-import { nulRecords } from './nul-records.js';
+import { decodeGitPath, isSafeTreeName, unsafeTreePath, workspaceFailure, type GitTreeEntry } from '@taskelith/workspace';
+import { objectName, parseCommitTree, parseTreeObject, type GitObjectType } from './git-objects.js';
+import type { ObjectFormat } from './repository-config.js';
 
-// An entry of `git ls-tree -r -z --full-tree`; the path stays bytes until
-// the snapshot decodes it, after the gitlink check (contract section 9).
+// An entry of the head's tree with its path as the names of the trees
+// that lead to it; names stay bytes until the snapshot decodes them.
 export type ListedEntry =
-  | { readonly type: 'blob'; readonly mode: '100644' | '100755' | '120000'; readonly object: string; readonly path: Uint8Array }
-  | { readonly type: 'gitlink'; readonly object: string; readonly path: Uint8Array };
+  | { readonly type: 'blob'; readonly mode: '100644' | '100755' | '120000'; readonly object: string; readonly path: readonly Uint8Array[] }
+  | { readonly type: 'gitlink'; readonly object: string; readonly path: readonly Uint8Array[] };
 
-const TAB = 0x09;
+// Reads objects of one type by name, as `git cat-file --batch` gives them.
+export type ObjectRead = (type: GitObjectType, names: readonly string[]) => Promise<Result<ReadonlyMap<string, Uint8Array>>>;
+
 const NEWLINE = 0x0a;
-const OBJECT_NAME = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const MODE = /^[0-7]{6}$/;
-const BATCH_HEADER = /^([0-9a-f]{40}|[0-9a-f]{64}) blob (0|[1-9][0-9]*)$/;
-const REGULAR_FILE = 0o100000;
-const FILE_TYPE_MASK = 0o170000;
 const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
 
-export function parseTreeListing(output: Uint8Array): Result<readonly ListedEntry[]> {
-  const records = nulRecords(output);
-  if (records === null) return unreadable('ls-tree', 'an unterminated entry');
-  const entries: ListedEntry[] = [];
-  for (const record of records) {
-    const entry = parseListedEntry(record);
-    if (entry === null) return unreadable('ls-tree', `the entry "${latin1(record).slice(0, 60)}"`);
-    entries.push(entry);
-  }
-  return ok(entries);
-}
-
-// Modes as Git canonicalizes them: a regular file is 100755 when its owner
-// may execute it, else 100644.
-function parseListedEntry(record: Uint8Array): ListedEntry | null {
-  const tab = record.indexOf(TAB);
-  if (tab === -1) return null;
-  const [mode = '', type, object = '', ...rest] = latin1(record.subarray(0, tab)).split(' ');
-  const path = record.subarray(tab + 1);
-  if (rest.length > 0 || !MODE.test(mode) || !OBJECT_NAME.test(object) || path.length === 0) return null;
-  if (mode === '160000' && type === 'commit') return { type: 'gitlink', object, path };
-  if (type !== 'blob') return null;
-  if (mode === '120000') return { type: 'blob', mode, object, path };
-  const bits = Number.parseInt(mode, 8);
-  if ((bits & FILE_TYPE_MASK) !== REGULAR_FILE) return null;
-  return { type: 'blob', mode: (bits & 0o100) === 0 ? '100644' : '100755', object, path };
-}
-
-// `git cat-file --batch` output, the requested blobs in order: a header
-// `<object> blob <size>`, then that many bytes of any value and a newline.
-export function parseBatchObjects(output: Uint8Array, requested: readonly string[]): Result<ReadonlyMap<string, Uint8Array>> {
+// `git cat-file --batch` output, the requested objects in order: a header
+// `<object> <type> <size>`, then that many bytes of any value and a newline.
+export function parseBatchObjects(output: Uint8Array, requested: readonly string[], type: GitObjectType): Result<ReadonlyMap<string, Uint8Array>> {
+  const header = new RegExp(`^([0-9a-f]{40}|[0-9a-f]{64}) ${type} (0|[1-9][0-9]*)$`);
   const objects = new Map<string, Uint8Array>();
   let offset = 0;
   for (const object of requested) {
     const newline = output.indexOf(NEWLINE, offset);
-    const header = BATCH_HEADER.exec(latin1(output.subarray(offset, newline === -1 ? offset : newline)));
-    const end = newline + 1 + Number(header?.[2]);
-    if (header === null || header[1] !== object || !Number.isSafeInteger(end) || output[end] !== NEWLINE) {
-      return unreadable('cat-file', `no blob ${object}`);
+    const fields = header.exec(latin1(output.subarray(offset, newline === -1 ? offset : newline)));
+    const end = newline + 1 + Number(fields?.[2]);
+    if (fields === null || fields[1] !== object || !Number.isSafeInteger(end) || output[end] !== NEWLINE) {
+      return unreadable(`no ${type} ${object}`);
     }
     objects.set(object, output.subarray(newline + 1, end));
     offset = end + 1;
   }
-  return offset === output.length ? ok(objects) : unreadable('cat-file', 'more than the requested objects');
+  return offset === output.length ? ok(objects) : unreadable('more than the requested objects');
+}
+
+// The objects as `read` gives them, each checked against its name, so a
+// forged pack, loose object, or index of objects is refused.
+export async function readVerified(read: ObjectRead, format: ObjectFormat, type: GitObjectType, names: readonly string[]): Promise<Result<ReadonlyMap<string, Uint8Array>>> {
+  const objects = await read(type, names);
+  if (!objects.ok) return objects;
+  const forged = [...objects.value].find(([name, body]) => objectName(format, type, body) !== name);
+  return forged === undefined ? objects : err(failure('internal', `the ${type} ${forged[0]} does not hash to its name`));
+}
+
+// The head commit's tree, read level by level from verified objects.
+export async function readHeadTree(read: ObjectRead, format: ObjectFormat, commit: string): Promise<Result<{ tree: string; entries: ListedEntry[] }>> {
+  const commits = await readVerified(read, format, 'commit', [commit]);
+  if (!commits.ok) return commits;
+  const tree = parseCommitTree(commits.value.get(commit)!, format);
+  if (!tree.ok) return tree;
+  const entries: ListedEntry[] = [];
+  for (let level = [{ object: tree.value, path: [] as Uint8Array[] }]; level.length > 0;) {
+    const trees = await readVerified(read, format, 'tree', [...new Set(level.map(({ object }) => object))]);
+    if (!trees.ok) return trees;
+    const next: typeof level = [];
+    for (const { object, path } of level) {
+      const parsed = parseTreeObject(trees.value.get(object)!, format);
+      if (!parsed.ok) return parsed;
+      for (const entry of parsed.value) {
+        const at = [...path, entry.name];
+        if (entry.kind === 'tree') next.push({ object: entry.object, path: at });
+        else entries.push(entry.kind === 'gitlink' ? { type: 'gitlink', object: entry.object, path: at } : { type: 'blob', mode: entry.mode, object: entry.object, path: at });
+      }
+    }
+    level = next;
+  }
+  return ok({ tree: tree.value, entries });
+}
+
+interface DecodedEntry {
+  readonly names: readonly string[];
+  readonly entry: GitTreeEntry;
 }
 
 // The tree as `encodeHeadSnapshot` takes it: a gitlink is refused first,
-// then a path or link target that is not UTF-8.
+// then text that is not UTF-8, then a name Git refuses or a duplicate.
 export function snapshotTree(entries: readonly ListedEntry[], objects: ReadonlyMap<string, Uint8Array>): Result<ReadonlyMap<string, GitTreeEntry>> {
   if (entries.some((entry) => entry.type === 'gitlink')) {
     return workspaceFailure('precondition-failed', 'gitlink-in-tree', 'the tree holds a gitlink');
   }
-  const tree = new Map<string, GitTreeEntry>();
+  const decoded: DecodedEntry[] = [];
   for (const entry of entries) {
-    const path = decodeGitPath(entry.path);
-    if (!path.ok) return path;
-    const content = objects.get(entry.object);
-    if (content === undefined || entry.type !== 'blob') return unreadable('cat-file', `no object ${entry.object}`);
-    const decoded = decodeEntry(entry.mode, content);
-    if (!decoded.ok) return decoded;
-    tree.set(path.value, decoded.value);
+    const one = decodeListed(entry, objects);
+    if (!one.ok) return one;
+    decoded.push(one.value);
+  }
+  const tree = new Map<string, GitTreeEntry>();
+  for (const { names, entry } of decoded) {
+    const path = names.join('/');
+    if (!names.every(isSafeTreeName) || tree.has(path)) return unsafeTreePath(path);
+    tree.set(path, entry);
   }
   return ok(tree);
 }
 
-function decodeEntry(mode: '100644' | '100755' | '120000', content: Uint8Array): Result<GitTreeEntry> {
-  if (mode !== '120000') return ok({ type: 'file', mode, content: new Uint8Array(content) });
+function decodeListed(entry: ListedEntry, objects: ReadonlyMap<string, Uint8Array>): Result<DecodedEntry> {
+  const names: string[] = [];
+  for (const name of entry.path) {
+    const decoded = decodeGitPath(name);
+    if (!decoded.ok) return decoded;
+    names.push(decoded.value);
+  }
+  const content = objects.get(entry.object);
+  if (content === undefined || entry.type !== 'blob') return unreadable(`no blob ${entry.object}`);
+  if (entry.mode !== '120000') return ok({ names, entry: { type: 'file', mode: entry.mode, content: new Uint8Array(content) } });
   const target = decodeGitPath(content);
-  return target.ok ? ok({ type: 'link', target: target.value }) : target;
+  return target.ok ? ok({ names, entry: { type: 'link', target: target.value } }) : target;
 }
 
-function unreadable(command: string, what: string): Result<never> {
-  return err(failure('internal', `git ${command} printed ${what}`));
+function unreadable(what: string): Result<never> {
+  return err(failure('internal', `git cat-file printed ${what}`));
 }

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { failed, value } from '@taskelith/testing';
-import { parseBatchObjects, parseIndexFlags, parsePorcelainStatus, parseTreeListing, snapshotTree, type ListedEntry } from '@taskelith/git-workspace';
+import { parseBatchObjects, parsePorcelainStatus, snapshotTree, type ListedEntry } from '@taskelith/git-workspace';
 import { nativeGit } from './git-fixture.ts';
 
 const OID = 'a'.repeat(40);
@@ -84,34 +84,12 @@ test('the status parser reads what Git itself prints', async () => {
   }
 });
 
-test('the tree listing keeps paths as bytes and Git modes as Git canonicalizes them', () => {
-  const output = bytes(
-    `100644 blob ${OID}\tplain\x00100755 blob ${OID}\trun.sh\x00100664 blob ${OID}\tgroup\x00`,
-    `120000 blob ${OTHER}\tlink\x00160000 commit ${OTHER}\tvendor/module\x00100644 blob ${OID}\t`, NON_UTF8, '\x00',
-  );
-  const entries = value(parseTreeListing(output));
-  assert.deepEqual(entries.map((entry) => [entry.type, entry.type === 'blob' ? entry.mode : '', entry.object, text(entry.path)]), [
-    ['blob', '100644', OID, 'plain'], ['blob', '100755', OID, 'run.sh'], ['blob', '100644', OID, 'group'],
-    ['blob', '120000', OTHER, 'link'], ['gitlink', '', OTHER, 'vendor/module'], ['blob', '100644', OID, text(Buffer.from(NON_UTF8))],
-  ]);
-  assert.deepEqual(value(parseTreeListing(new Uint8Array())), []);
-});
-
-test('the tree listing refuses entries it cannot read', () => {
-  for (const output of [
-    `100644 blob ${OID} plain\x00`, `040000 tree ${OID}\tdirectory\x00`, `100644 blob short\tpath\x00`, `100644 blob ${OID}\tunterminated`,
-    `100644garbage blob ${OID}\tpath\x00`, `10644 blob ${OID}\tpath\x00`, `100644 blob ${OID}\t\x00`, `160000 commit ${OID}\t\x00`,
-  ]) {
-    assert.equal(failed(parseTreeListing(bytes(output))).code, 'internal', output);
-  }
-});
-
 test('the batch reader takes each requested object by its size, whatever bytes it holds', () => {
-  const objects = value(parseBatchObjects(bytes(`${OID} blob 4\n`, [0, 10, 255, 10], `\n${OTHER} blob 0\n\n`), [OID, OTHER]));
+  const objects = value(parseBatchObjects(bytes(`${OID} blob 4\n`, [0, 10, 255, 10], `\n${OTHER} blob 0\n\n`), [OID, OTHER], 'blob'));
   assert.deepEqual([...objects.keys()], [OID, OTHER]);
   assert.deepEqual([...objects.get(OID)!], [0, 10, 255, 10]);
   assert.equal(objects.get(OTHER)!.length, 0);
-  assert.equal(value(parseBatchObjects(new Uint8Array(), [])).size, 0);
+  assert.equal(value(parseBatchObjects(new Uint8Array(), [], 'blob')).size, 0);
 });
 
 test('the batch reader refuses output that is not exactly the requested blobs', () => {
@@ -123,11 +101,11 @@ test('the batch reader refuses output that is not exactly the requested blobs', 
     [`${OID} blob 1\nx\n`, []],
   ];
   for (const [output, requested] of refused) {
-    assert.equal(failed(parseBatchObjects(bytes(output), requested)).code, 'internal', output);
+    assert.equal(failed(parseBatchObjects(bytes(output), requested, 'blob')).code, 'internal', output);
   }
 });
 
-const blob = (path: string | number[], object = OID, mode: '100644' | '100755' | '120000' = '100644'): ListedEntry => ({ type: 'blob', mode, object, path: bytes(path) });
+const blob = (path: string | number[], object = OID, mode: '100644' | '100755' | '120000' = '100644'): ListedEntry => ({ type: 'blob', mode, object, path: [bytes(path)] });
 
 test('the snapshot tree holds files with modes and links with targets', () => {
   const objects = new Map([[OID, bytes('content')], [OTHER, bytes('plain')]]);
@@ -141,7 +119,7 @@ test('the snapshot tree holds files with modes and links with targets', () => {
 
 test('the snapshot tree refuses a gitlink before text that is not UTF-8', () => {
   const objects = new Map([[OID, bytes('content')], [OTHER, Buffer.from(NON_UTF8)]]);
-  const gitlink: ListedEntry = { type: 'gitlink', object: OID, path: bytes('vendor') };
+  const gitlink: ListedEntry = { type: 'gitlink', object: OID, path: [bytes('vendor')] };
   const refusals: [ListedEntry[], string][] = [
     [[blob(NON_UTF8), gitlink], 'gitlink-in-tree'],
     [[blob(NON_UTF8)], 'non-utf8-path'],
@@ -152,12 +130,4 @@ test('the snapshot tree refuses a gitlink before text that is not UTF-8', () => 
     assert.deepEqual([failure.code, failure.details.reason], ['precondition-failed', reason]);
   }
   assert.equal(failed(snapshotTree([blob('plain', 'c'.repeat(40))], objects)).code, 'internal');
-});
-
-test('the index flag reader finds assume-unchanged and skip-worktree paths', () => {
-  const flags = value(parseIndexFlags(bytes('H plain\x00h assumed\x00S skipped\x00s both\x00')));
-  assert.deepEqual([flags.assumeUnchanged.map(text), flags.skipWorktree.map(text)], [['assumed', 'both'], ['skipped', 'both']]);
-  for (const output of ['H plain', 'H\x00', 'Hplain\x00', '1 plain\x00', '? \x00']) {
-    assert.equal(failed(parseIndexFlags(bytes(output))).code, 'internal', output);
-  }
 });
