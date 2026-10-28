@@ -3,6 +3,8 @@ import { chmod, lstat, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { ok } from '@taskelith/kernel';
 import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
@@ -96,7 +98,7 @@ test('the reclaim program gives the group what the agent wrote and replaces hard
   assert.equal(await readFile(closed, 'utf8'), 'closed\n');
 }));
 
-test('the containment is recorded before the program starts and the record goes last', () => withFixture(async (git) => {
+test('the containment is recorded once the program is ready, before go, and the record goes last', () => withFixture(async (git) => {
   const crashPoints = new CrashPoints();
   value(await git.local.prepare(request(git)));
   const local = git.reopen(crashPoints);
@@ -108,21 +110,33 @@ test('the containment is recorded before the program starts and the record goes 
   ]);
 }, { reclaimHost: simulatedSeparateAccount() }));
 
-// Whether the workspace is still handed off after a crash at each point.
-const HAND_OFF_CRASHES: readonly [GitWorkspaceCrashPoint, boolean][] = [
-  ['WS5.before', false], ['WS5.after', true], ['WS6.before', true], ['WS6.after', true],
-];
+const HANDED_OFF_CRASHES: readonly GitWorkspaceCrashPoint[] = ['WS5.after', 'WS6.before', 'WS6.after'];
 const RECLAIM_CRASHES: readonly GitWorkspaceCrashPoint[] = [
   'WS7.before', 'WS7.after', 'WS8.before', 'WS8', 'WS8.after', 'WS9.before', 'WS9.after', 'WS10.before',
 ];
 const SEPARATE_ACCOUNT = { kind: 'separate-account' } as const;
 
-for (const [point, handedOff] of HAND_OFF_CRASHES) {
-  test(`a worker killed at ${point} of a hand-off leaves ${handedOff ? 'a handed-off' : 'a reclaimed'} workspace`, () => withFixture(async (git) => {
+test('a worker killed at WS5.before of a hand-off leaves a reclaimed workspace', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  await killedWorker(git, { operation: 'handOff', attemptId: FIRST, point: 'WS5.before', host: SEPARATE_ACCOUNT });
+  const restarted = git.reopen();
+  assert.deepEqual(await restarted.handedOff(), []);
+  value(await restarted.inspect(FIRST));
+  value(await restarted.handOff(FIRST));
+  assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
+}, { reclaimHost: simulatedSeparateAccount() }));
+
+for (const point of HANDED_OFF_CRASHES) {
+  test(`a worker killed at ${point} of a hand-off leaves a handed-off workspace that the next reclaim reclaims`, () => withFixture(async (git) => {
     value(await git.local.prepare(request(git)));
     await killedWorker(git, { operation: 'handOff', attemptId: FIRST, point, host: SEPARATE_ACCOUNT });
     const restarted = git.reopen();
-    assert.deepEqual(await restarted.handedOff(), handedOff ? [FIRST] : []);
+    assert.deepEqual(await restarted.handedOff(), [FIRST]);
+    assert.equal(failed(await restarted.inspect(FIRST)).details.reason, 'workspace-handed-off');
+    value(await restarted.reclaim(FIRST));
+    assert.deepEqual(await restarted.handedOff(), []);
+    assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutReclaimed);
+    value(await restarted.inspect(FIRST));
     value(await restarted.handOff(FIRST));
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
   }, { reclaimHost: simulatedSeparateAccount() }));
@@ -261,21 +275,25 @@ function lateGoHost(): ReclaimHost {
   };
 }
 
-test('a program that misses its window for go fails the reclaim as unavailable and a retry reclaims', () => withFixture(async (git) => {
-  value(await git.local.prepare(request(git)));
-  value(await git.local.handOff(FIRST));
-  await writeFile(join(git.checkout(FIRST), 'agent-file'), 'text');
-  await chmod(join(git.checkout(FIRST), 'agent-file'), 0o600);
-  const missed = failed(await git.local.reclaim(FIRST));
-  assert.equal(missed.code, 'unavailable');
-  assert.equal(missed.details.reason, undefined);
-  assert.equal((await readRecord(git))?.reclaimFailed, false);
-  assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o600, 'the program changed nothing');
-  assert.deepEqual(await git.local.handedOff(), [FIRST]);
-  value(await git.local.reclaim(FIRST));
-  assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o660);
-  assert.deepEqual(await git.local.handedOff(), []);
-}, { reclaimHost: lateGoHost() }));
+test('a program that misses its window for go fails the reclaim as unavailable and a retry reclaims', () => {
+  const host = new CountingHost(lateGoHost());
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    await writeFile(join(git.checkout(FIRST), 'agent-file'), 'text');
+    await chmod(join(git.checkout(FIRST), 'agent-file'), 0o600);
+    const missed = failed(await git.local.reclaim(FIRST));
+    assert.equal(missed.code, 'unavailable');
+    assert.equal(missed.details.reason, undefined);
+    assert.equal((await readRecord(git))?.reclaimFailed, false);
+    assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o600, 'the program changed nothing');
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    assert.deepEqual(host.released, host.launched, 'the empty containment is freed');
+    value(await git.local.reclaim(FIRST));
+    assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o660);
+    assert.deepEqual(await git.local.handedOff(), []);
+  }, { reclaimHost: host });
+});
 
 test('a launch that fails leaves the workspace handed off with its record', () => {
   const missing: ReclaimHost = simulatedSeparateAccount(new ProcessGroupReclaimHost({ executable: '/nonexistent/program', args: [] }));
@@ -287,6 +305,119 @@ test('a launch that fails leaves the workspace handed off with its record', () =
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
   }, { reclaimHost: missing });
 });
+
+// Never signals readiness; it waits on its input, which abandon closes.
+const SILENT_PROGRAM = { executable: '/bin/sh', args: ['-c', 'read go', 'reclaim'] };
+
+test('a program that is not ready within its bound fails the reclaim as unavailable', { timeout: 20_000 }, () => {
+  const host = new CountingHost(simulatedSeparateAccount(new ProcessGroupReclaimHost(SILENT_PROGRAM, SHORT_BOUND_MS)));
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const late = failed(await git.local.reclaim(FIRST));
+    assert.equal(late.code, 'unavailable');
+    assert.equal(late.details.reason, undefined);
+    assert.match(late.message, /not ready within its bound/);
+    assert.deepEqual(await readRecord(git), { containment: null, reclaimFailed: false });
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    assert.equal(host.launched.length, 0);
+  }, { reclaimHost: host });
+});
+
+test('a program still running at the run bound fails the reclaim and is left running', { timeout: 30_000 }, async () => {
+  const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
+  const hold = join(holdDirectory, 'hold');
+  await writeFile(hold, '');
+  const host = holdingHost(hold);
+  await withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    assert.equal(failed(await git.local.reclaim(FIRST)).details.reason, 'reclaim-failed');
+    const containment = host.launched[0]!;
+    assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
+    assert.equal(await host.populated(containment), true, 'the program is never killed');
+    assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
+    assert.equal(host.launched.length, 1);
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
+    await rm(hold);
+    assert.equal(await waitUntilEmpty(host, containment), true);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+interface Signal {
+  readonly promise: Promise<void>;
+  resolve(): void;
+}
+
+function signal(): Signal {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+// Its program exits at once, and the release of its containment waits for
+// the test; a poll during that release waits until the reclaim is done.
+class GatedReleaseHost implements ReclaimHost {
+  readonly executionAccount = { uid: process.getuid!(), gid: process.getgid!() };
+  readonly releasing = signal();
+  readonly polledDuringRelease = signal();
+  reclaimed: Promise<unknown> = Promise.resolve();
+  readonly #gate = signal();
+  #inRelease = false;
+
+  async launch() {
+    const launched: LaunchedReclaim = { containment: { kind: 'process-group', id: 424242 }, go: async () => 'succeeded', abandon: () => {} };
+    return ok(launched);
+  }
+
+  async populated(): Promise<boolean> {
+    if (!this.#inRelease) return false;
+    this.polledDuringRelease.resolve();
+    await this.reclaimed;
+    return false;
+  }
+
+  async release(): Promise<void> {
+    this.#inRelease = true;
+    this.releasing.resolve();
+    await this.#gate.promise;
+    this.#inRelease = false;
+  }
+
+  openRelease(): void {
+    this.#gate.resolve();
+  }
+}
+
+test('a hand-off that meets a running reclaim of its workspace waits until the reclaim is done', { timeout: 20_000 }, () => {
+  const host = new GatedReleaseHost();
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const reclaiming = git.local.reclaim(FIRST);
+    host.reclaimed = reclaiming;
+    await host.releasing.promise;
+    const handing = git.local.handOff(FIRST);
+    // Unserialized, the hand-off polls the containment now; serialized it
+    // does nothing, which only a bound can show.
+    await Promise.race([host.polledDuringRelease.promise, delay(1_000)]);
+    host.openRelease();
+    value(await reclaiming);
+    value(await handing);
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
+  }, { reclaimHost: host });
+});
+
+test('two adapters of one process hand off two workspaces one at a time', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.prepare(request(git, SECOND)));
+  const results = await Promise.all([git.local.handOff(FIRST), git.reopen().handOff(SECOND)]);
+  assert.equal(results.filter((result) => result.ok).length, 1);
+  assert.equal(failed(results.find((result) => !result.ok)!).details.reason, 'other-workspace-handed-off');
+  assert.equal((await git.local.handedOff()).length, 1);
+}, { reclaimHost: simulatedSeparateAccount() }));
 
 test('a hand-off record that cannot be read fails the operations without guessing', () => withFixture(async (git) => {
   value(await git.local.prepare(request(git)));

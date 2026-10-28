@@ -1,18 +1,22 @@
 ## ADDED Requirements
 
 ### Requirement: Conformance run of the Git adapter
-The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, with a local bare repository served over Git's smart HTTP protocol on `127.0.0.1` behind the server's own credential check and a recording wrapper as its pinned client, skipping none, and SHALL run the cases that hand a workspace off again with an execution account declared.
+The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, with a local bare repository served over Git's smart HTTP protocol on `127.0.0.1` behind the server's own credential check and a recording wrapper as its pinned client, skipping none, and SHALL run the whole suite again with an execution account declared.
 
 #### Scenario: Hand-off cases with an execution account
 - **WHEN** the adapter declares an execution account
 - **THEN** the cases of a separate account check that one workspace at a time is handed off
 
 ### Requirement: Git adapter hand-off and reclaim
-The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` with a hand-off record written durably before the checkout opens; it SHALL check for another handed-off workspace and write its own record as one step of a chain per workspace root, record the reclaim program's containment once the program is ready and before `go`, and prove a recorded containment empty by polling, never killing it, up to a bound of 30 seconds.
+The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` with a hand-off record written durably before the checkout opens, SHALL run `handOff`, `reclaim`, and `remove` of one workspace one at a time, SHALL check for another hand-off and write its own record as one step per workspace root, record the reclaim program's containment once the program is ready and before `go`, and prove a recorded containment empty by polling, never killing it, up to a bound of 30 seconds.
 
 #### Scenario: Concurrent hand-offs
 - **WHEN** two workspaces of an adapter with an execution account are handed off concurrently
 - **THEN** exactly one hand-off succeeds and the other fails with reason `other-workspace-handed-off`
+
+#### Scenario: Hand-off during a reclaim
+- **WHEN** a workspace is handed off while its reclaim runs
+- **THEN** the hand-off starts after the reclaim ends and leaves the hand-off record and the open checkout together
 
 #### Scenario: Crash at a hand-off or reclaim point
 - **WHEN** the worker crashes at a point from `WS5.after` to `WS10.before` and restarts
@@ -48,7 +52,7 @@ The worker image SHALL install the package `git=1:2.43.0-1ubuntu7.4` and fail it
 ## MODIFIED Requirements
 
 ### Requirement: Reclaim program containment
-The worker SHALL record the reclaim program's containment `reclaim-<name>` under its containment parent in the hand-off record after the program entered it and signalled readiness and before `go`; a program SHALL change nothing before `go` and exit unchanged when its worker dies or no `go` comes in 60 seconds. The scan SHALL skip a recorded containment, and the worker SHALL prove it empty by polling, without a kill, before it reclaims, runs Git, or hands off again.
+Unless the identities are the same, the worker SHALL record the reclaim program's containment `reclaim-<name>` under its containment parent in the hand-off record after the program entered it and signalled readiness and before `go`. The scan SHALL skip it, and the worker SHALL prove it empty by polling, without a kill, before it reclaims, runs Git, or hands off again, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
 
 #### Scenario: Surviving reclaim program
 - **WHEN** the worker restarts while the reclaim program of its previous run still runs
@@ -58,9 +62,15 @@ The worker SHALL record the reclaim program's containment `reclaim-<name>` under
 - **WHEN** the reclaim program exits with a failure
 - **THEN** `reclaim` fails with `precondition-failed` and reason `reclaim-failed`, the workspace stays handed off, and the program does not run again
 
+#### Scenario: Program past its run bound
+- **WHEN** the reclaim program still runs 10 minutes after `go` (`RECLAIM_RUN_BOUND_MS`)
+- **THEN** `reclaim` fails with reason `reclaim-failed`, the record keeps the failure, and the program is not killed, so its populated containment keeps the workspace handed off
+
 #### Scenario: Reclaim containment at start
 - **WHEN** the worker restarts while a reclaim program runs in the containment that a hand-off record names
 - **THEN** it reports no unrecorded process for that containment and kills no process of it
+
+#### Scenario: Crash before the failure is recorded
 - **WHEN** the worker is killed after its reclaim program failed and before the failure is durable in the hand-off record, and `reclaim` is called after the restart
 - **THEN** the worker proves the containment empty and runs the program again, and a failure again is recorded and fails with reason `reclaim-failed`
 
@@ -70,7 +80,7 @@ The worker SHALL record the reclaim program's containment `reclaim-<name>` under
 
 #### Scenario: Program not yet ready
 - **WHEN** the reclaim program has started but has not yet entered its containment and signalled readiness
-- **THEN** the worker has not recorded the containment and has not written `go`
+- **THEN** the worker has not recorded the containment and has not written `go`, and if the program is not ready within 60 seconds (`RECLAIM_READY_BOUND_MS`), the worker abandons it and `reclaim` fails with `unavailable`
 
 #### Scenario: Waiting program without its worker
 - **WHEN** a launched program's worker dies before `go`, or no `go` arrives within 60 seconds

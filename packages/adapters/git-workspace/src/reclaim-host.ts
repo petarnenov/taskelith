@@ -50,19 +50,22 @@ interface StartedProgram {
   abandon(): void;
 }
 
+// How long `launch` waits for the ready signal (contract section 3).
+export const RECLAIM_READY_BOUND_MS = 60_000;
+
 // In a process group of its own; started once it signals that it is
 // ready, so a spawned program never counts before it is contained.
-function startProgram(program: ReclaimProgram, args: readonly string[]): Promise<Result<StartedProgram>> {
+function startProgram(program: ReclaimProgram, args: readonly string[], readyBoundMs: number): Promise<Result<StartedProgram>> {
   return new Promise((started) => {
     const child = spawn(program.executable, [...program.args, ...args], { env: PROGRAM_ENVIRONMENT, stdio: ['pipe', 'pipe', 'ignore'], detached: true });
     const exited = new Promise<ReclaimOutcome>((done) => child.once('close', (code) => done(outcomeOf(code))));
     const abandon = () => void child.stdin.end();
     child.stdin.on('error', () => {});
     child.once('error', (error) => started(err(failure('unavailable', `cannot start the reclaim program: ${error.message}`))));
-    void signalledReady(child.stdout).then((ready) => {
-      if (!ready) {
+    void readiness(child.stdout, readyBoundMs).then((state) => {
+      if (state !== 'ready') {
         abandon();
-        return started(err(failure('unavailable', 'the reclaim program ended before it was ready')));
+        return started(err(failure('unavailable', NOT_READY[state])));
       }
       started(ok({
         pid: child.pid!,
@@ -76,18 +79,31 @@ function startProgram(program: ReclaimProgram, args: readonly string[]): Promise
   });
 }
 
-// True once the output starts with the ready signal, false if it ends
-// first; the rest of the output is drained.
-function signalledReady(output: NodeJS.ReadableStream): Promise<boolean> {
+type Readiness = 'ready' | 'ended' | 'late';
+
+const NOT_READY = {
+  ended: 'the reclaim program ended before it was ready',
+  late: 'the reclaim program was not ready within its bound',
+} as const;
+
+// `ready` once the output starts with the ready signal, `ended` if it
+// ends first, `late` at the bound; the rest of the output is drained.
+function readiness(output: NodeJS.ReadableStream, boundMs: number): Promise<Readiness> {
   return new Promise((resolve) => {
     let received = '';
+    const settle = (state: Readiness) => {
+      clearTimeout(bound);
+      resolve(state);
+    };
+    const bound = setTimeout(() => settle('late'), boundMs);
+    const signalled = () => (received.startsWith(RECLAIM_READY) ? 'ready' : 'ended');
     output.setEncoding('utf8');
     output.on('data', (chunk: string) => {
       received += chunk;
-      if (received.length >= RECLAIM_READY.length) resolve(received.startsWith(RECLAIM_READY));
+      if (received.length >= RECLAIM_READY.length) settle(signalled());
     });
-    output.once('end', () => resolve(received.startsWith(RECLAIM_READY)));
-    output.once('error', () => resolve(false));
+    output.once('end', () => settle(signalled()));
+    output.once('error', () => settle('ended'));
   });
 }
 
@@ -101,6 +117,8 @@ export interface LinuxReclaimHostOptions {
   readonly containmentParent: string;
   readonly executionAccount: ExecutionAccount;
   readonly program?: ReclaimProgram;
+  // `RECLAIM_READY_BOUND_MS` unless a test sets a shorter one.
+  readonly readyBoundMs?: number;
 }
 
 // The program enters `<parent>/reclaim-<name>` as root and then runs as
@@ -109,11 +127,13 @@ export class LinuxReclaimHost implements ReclaimHost {
   readonly executionAccount: ExecutionAccount;
   readonly #parent: string;
   readonly #program: ReclaimProgram;
+  readonly #readyBoundMs: number;
 
   constructor(options: LinuxReclaimHostOptions) {
     this.executionAccount = options.executionAccount;
     this.#parent = options.containmentParent;
     this.#program = options.program ?? FIXED_RECLAIM_PROGRAM;
+    this.#readyBoundMs = options.readyBoundMs ?? RECLAIM_READY_BOUND_MS;
   }
 
   async launch(checkout: string, containmentName: string): Promise<Result<LaunchedReclaim>> {
@@ -123,8 +143,10 @@ export class LinuxReclaimHost implements ReclaimHost {
     });
     const { uid, gid } = this.executionAccount;
     const args = ['--checkout', checkout, '--cgroup', cgroup, '--uid', String(uid), '--gid', String(gid)];
-    const started = await startProgram(this.#program, args);
-    return started.ok ? ok({ ...started.value, containment: { kind: 'cgroup', name: containmentName } }) : started;
+    const started = await startProgram(this.#program, args, this.#readyBoundMs);
+    if (started.ok) return ok({ ...started.value, containment: { kind: 'cgroup', name: containmentName } });
+    await removeIfEmpty(cgroup);
+    return started;
   }
 
   // A cgroup that is gone holds no process.
@@ -146,6 +168,14 @@ export class LinuxReclaimHost implements ReclaimHost {
   }
 }
 
+// The kernel refuses to remove a populated cgroup (`EBUSY`), so only an
+// empty one goes; a program still in it keeps it for the next proof.
+async function removeIfEmpty(cgroup: string): Promise<void> {
+  await rmdir(cgroup).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT' && error.code !== 'EBUSY') throw error;
+  });
+}
+
 function cgroupName(containment: ReclaimContainment): string {
   if (containment.kind !== 'cgroup') throw new Error('a Linux reclaim containment is a cgroup');
   return containment.name;
@@ -156,13 +186,15 @@ function cgroupName(containment: ReclaimContainment): string {
 export class ProcessGroupReclaimHost implements ReclaimHost {
   readonly executionAccount = null;
   readonly #program: ReclaimProgram;
+  readonly #readyBoundMs: number;
 
-  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM) {
+  constructor(program: ReclaimProgram = FIXED_RECLAIM_PROGRAM, readyBoundMs = RECLAIM_READY_BOUND_MS) {
     this.#program = program;
+    this.#readyBoundMs = readyBoundMs;
   }
 
   async launch(checkout: string): Promise<Result<LaunchedReclaim>> {
-    const started = await startProgram(this.#program, ['--checkout', checkout]);
+    const started = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
     return started.ok ? ok({ ...started.value, containment: { kind: 'process-group', id: started.value.pid } }) : started;
   }
 

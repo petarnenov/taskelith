@@ -17,6 +17,7 @@ export {
   GitWorkspaces,
   RECLAIM_PROOF_BOUND_MS,
   RECLAIM_PROOF_INTERVAL_MS,
+  RECLAIM_RUN_BOUND_MS,
   sha256IdentifierDigest,
   type GitWorkspacesOptions,
 } from './git-workspaces.js';
@@ -33,6 +34,7 @@ export {
   FIXED_RECLAIM_PROGRAM,
   LinuxReclaimHost,
   ProcessGroupReclaimHost,
+  RECLAIM_READY_BOUND_MS,
   type LaunchedReclaim,
   type LinuxReclaimHostOptions,
   type ReclaimHost,

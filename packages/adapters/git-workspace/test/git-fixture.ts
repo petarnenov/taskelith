@@ -422,9 +422,10 @@ export async function launchedByDeadWorker(args: readonly string[]): Promise<Rec
   return JSON.parse(printed) as ReclaimContainment;
 }
 
-// Counts the programs another host starts and keeps their containments.
+// Keeps the containments of the programs another host starts and frees.
 export class CountingHost implements ReclaimHost {
   readonly launched: ReclaimContainment[] = [];
+  readonly released: ReclaimContainment[] = [];
   readonly #inner: ReclaimHost;
 
   constructor(inner: ReclaimHost) {
@@ -446,6 +447,7 @@ export class CountingHost implements ReclaimHost {
   }
 
   release(containment: ReclaimContainment) {
+    this.released.push(containment);
     return this.#inner.release(containment);
   }
 }
@@ -512,6 +514,7 @@ export interface GitFixtureOptions {
   // The one-account process group host unless a test passes another.
   readonly reclaimHost?: ReclaimHost;
   readonly reclaimProofBoundMs?: number;
+  readonly reclaimRunBoundMs?: number;
   // The directory the scratch directory goes into; `tmpdir()` by default.
   readonly scratchParent?: string;
   // Gives the data root, `worker/`, and the workspace root this group and
@@ -582,9 +585,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   const grants = new Map<string, readonly Grant[]>([[credentials.read.authorization, ['read']], [credentials.write.authorization, ['read', 'write']]]);
   const remote = await SmartHttpRemote.start(served, grants);
   const others: SmartHttpRemote[] = [];
-  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimHost = new ProcessGroupReclaimHost() } = options;
+  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimRunBoundMs, reclaimHost = new ProcessGroupReclaimHost() } = options;
   const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) => new GitWorkspaces({
-    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs,
+    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs, reclaimRunBoundMs,
   });
   const local = reopen(options.crashPoints);
   const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };

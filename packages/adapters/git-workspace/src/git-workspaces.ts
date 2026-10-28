@@ -50,7 +50,7 @@ import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.j
 import { isPresent } from './presence.js';
 import { resetRepositoryFiles, type ObjectFormat } from './repository-config.js';
 import { parseBatchObjects, readHeadTree, readVerified, snapshotTree, type ListedEntry, type ObjectRead } from './tree-listing.js';
-import type { LaunchedReclaim, ReclaimHost } from './reclaim-host.js';
+import type { LaunchedReclaim, ReclaimHost, ReclaimOutcome } from './reclaim-host.js';
 import { readWorkspaceRecord, writeWorkspaceRecord, type WorkspaceRecord } from './workspace-record.js';
 
 export interface GitWorkspacesOptions {
@@ -69,12 +69,16 @@ export interface GitWorkspacesOptions {
   // How long a recorded containment may stay populated before an operation
   // gives up; `RECLAIM_PROOF_BOUND_MS` by default.
   readonly reclaimProofBoundMs?: number;
+  // How long a program may run after `go`; `RECLAIM_RUN_BOUND_MS` by default.
+  readonly reclaimRunBoundMs?: number;
 }
 
 // The bound of the proof that a recorded containment is empty, and the
 // interval at which it is polled (contract section 3).
 export const RECLAIM_PROOF_BOUND_MS = 30_000;
 export const RECLAIM_PROOF_INTERVAL_MS = 200;
+// After it the program counts as failed and is left running (section 3).
+export const RECLAIM_RUN_BOUND_MS = 600_000;
 
 export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
 
@@ -146,6 +150,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   readonly #owner: number;
   readonly #reclaimHost: ReclaimHost;
   readonly #proofBoundMs: number;
+  readonly #runBoundMs: number;
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
@@ -155,6 +160,7 @@ export class GitWorkspaces implements WorkspaceProvider {
     this.#owner = process.getuid!();
     this.#reclaimHost = options.reclaimHost;
     this.#proofBoundMs = options.reclaimProofBoundMs ?? RECLAIM_PROOF_BOUND_MS;
+    this.#runBoundMs = options.reclaimRunBoundMs ?? RECLAIM_RUN_BOUND_MS;
   }
 
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
@@ -174,7 +180,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   }
 
   remove(attemptId: AttemptId): Promise<Result<void>> {
-    return failingFileSystemAsUnavailable(() => this.#remove(attemptId));
+    return this.#inWorkspaceChain(attemptId, () => this.#remove(attemptId));
   }
 
   // Deletes every staging and removing entry; a link is removed as a link.
@@ -213,11 +219,18 @@ export class GitWorkspaces implements WorkspaceProvider {
   }
 
   handOff(attemptId: AttemptId): Promise<Result<void>> {
-    return failingFileSystemAsUnavailable(() => this.#handOff(attemptId));
+    return this.#inWorkspaceChain(attemptId, () => this.#handOff(attemptId));
   }
 
   reclaim(attemptId: AttemptId): Promise<Result<void>> {
-    return failingFileSystemAsUnavailable(() => this.#reclaim(attemptId));
+    return this.#inWorkspaceChain(attemptId, () => this.#reclaim(attemptId));
+  }
+
+  // Hand-off, reclaim, and removal of one workspace run one at a time; the
+  // root chain inside them is taken last, so no two chains wait in a cycle.
+  #inWorkspaceChain(attemptId: AttemptId, work: () => Promise<Result<void>>): Promise<Result<void>> {
+    const directory = join(this.#root, workspaceDirectoryName(attemptId, sha256IdentifierDigest));
+    return inChain(directory, () => failingFileSystemAsUnavailable(work));
   }
 
   // Listed attempts whose hand-off record exists, read from the records,
@@ -233,7 +246,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   async #handOff(attemptId: AttemptId): Promise<Result<void>> {
     const recorded = await this.#recorded(attemptId);
     if (!recorded.ok) return recorded;
-    const marked = await inHandOffChain(this.#root, () => this.#recordHandOff(attemptId));
+    const marked = await inChain(this.#root, () => this.#recordHandOff(attemptId));
     if (!marked.ok) return marked;
     if (this.#reclaimHost.executionAccount === null) return ok(undefined);
     this.#crashPoints.reach('WS6.before');
@@ -282,7 +295,6 @@ export class GitWorkspaces implements WorkspaceProvider {
     if (!launched.ok) return launched;
     const ran = await this.#runRecorded(path, launched.value);
     if (!ran.ok) return ran;
-    await this.#reclaimHost.release(launched.value.containment);
     if (this.#reclaimHost.executionAccount !== null) {
       this.#crashPoints.reach('WS9.before');
       await chmod(checkout, WORKSPACE_MODES.checkoutReclaimed);
@@ -295,8 +307,8 @@ export class GitWorkspaces implements WorkspaceProvider {
     return ok(undefined);
   }
 
-  // Records the containment of the ready program before `go`, lets it run,
-  // and records a failure, after which it never runs again by itself.
+  // Records the ready program's containment before `go`, lets it run, and
+  // records a failure or an overrun, after which no program runs again.
   async #runRecorded(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
     const { containment } = launched;
     try {
@@ -314,12 +326,22 @@ export class GitWorkspaces implements WorkspaceProvider {
     }
     const exited = launched.go();
     this.#crashPoints.reach('WS8');
-    const outcome = await exited;
+    const outcome = await withinBound(exited, this.#runBoundMs);
     this.#crashPoints.reach('WS8.after');
-    if (outcome === 'succeeded') return this.#provenEmpty({ containment, reclaimFailed: false });
-    if (outcome === 'abandoned') return goTooLate();
+    if (outcome === 'succeeded') return this.#released(containment);
+    if (outcome === 'abandoned') {
+      const released = await this.#released(containment);
+      return released.ok ? goTooLate() : released;
+    }
     const failed = await writeHandOffRecord(path, { containment, reclaimFailed: true });
     return failed.ok ? reclaimFailed() : failed;
+  }
+
+  // Frees the containment of an exited program once it is proven empty.
+  async #released(containment: ReclaimContainment): Promise<Result<void>> {
+    const proven = await this.#provenEmpty({ containment, reclaimFailed: false });
+    if (proven.ok) await this.#reclaimHost.release(containment);
+    return proven;
   }
 
   // Polls the recorded containment, never killing it, until it is empty;
@@ -692,18 +714,29 @@ export class GitWorkspaces implements WorkspaceProvider {
   }
 }
 
-// One chain of hand-offs per workspace root, so that a hand-off checks
-// for another and records its own before the next one checks.
-const handOffChains = new Map<string, Promise<unknown>>();
+// One chain per path of the process: per workspace root, so a hand-off
+// checks for another and records its own at once, and per workspace.
+const chains = new Map<string, Promise<unknown>>();
 
-function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
-  const run = (handOffChains.get(root) ?? Promise.resolve()).then(work, work);
+function inChain<T>(path: string, work: () => Promise<T>): Promise<T> {
+  const run = (chains.get(path) ?? Promise.resolve()).then(work, work);
   const release = () => {
-    if (handOffChains.get(root) === run) handOffChains.delete(root);
+    if (chains.get(path) === run) chains.delete(path);
   };
-  handOffChains.set(root, run);
+  chains.set(path, run);
   void run.then(release, release);
   return run;
+}
+
+// The program's outcome, or `overran` once `boundMs` passes without one.
+async function withinBound(exited: Promise<ReclaimOutcome>, boundMs: number): Promise<ReclaimOutcome | 'overran'> {
+  const bound = new AbortController();
+  const overran = delay(boundMs, 'overran' as const, { signal: bound.signal }).catch(() => 'overran' as const);
+  try {
+    return await Promise.race([exited, overran]);
+  } finally {
+    bound.abort();
+  }
 }
 
 function reclaimFailed(): Result<never> {
