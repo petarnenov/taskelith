@@ -49,12 +49,12 @@ The workspace SHALL use the run credential passed to each remote operation, SHAL
 - **WHEN** a workspace has been prepared, its remote head read, and pushed with run credentials
 - **THEN** no argument of any Git process holds a secret, an `Authorization` value, or its base64 part, and only the processes that reach the remote carry the header in their environment
 
-#### Scenario: GitHub header form
-- **WHEN** the GitHub plugin binds a run credential for the workspace
-- **THEN** its `authorization` is `Basic` followed by the base64 of `x-access-token:` and the secret, and the adapter uses it unchanged
+#### Scenario: Supplied header value
+- **WHEN** a push uses a credential whose `authorization` is `Basic` followed by a base64 value
+- **THEN** the push process's header is exactly `Authorization:` and that value, unchanged
 
 ### Requirement: Fast-forward task branch push
-A push SHALL name the remote head the caller expects, SHALL check that the local head descends from it, failing with `conflict` and `not-fast-forward`, then push exactly `--atomic --force-with-lease=refs/heads/<branch>:<expected-sha>`, empty on a first push, the remote, and `HEAD:refs/heads/<branch>`, failing with `remote-moved` when the remote head differs, and SHALL never move the branch to a commit that does not descend from the leased head.
+A push SHALL name the remote head the caller expects, SHALL check that the local head descends from it, failing with `conflict` and `not-fast-forward`, then push exactly `--atomic --force-with-lease=refs/heads/<branch>:<expected-sha>`, empty on a first push, the remote, and `HEAD:refs/heads/<branch>`, failing with `remote-moved` when the remote head differs, SHALL never move the branch to a commit that does not descend from the leased head, and SHALL update only the task branch.
 
 #### Scenario: Remote moved
 - **WHEN** another party advanced the remote task branch after the caller last saw it
@@ -107,7 +107,7 @@ On every platform the worker's `handed-off` record in the attempt directory SHAL
 - **THEN** `handedOff` returns that attempt only, and after its reclaim returns none
 
 ### Requirement: Reclaim program containment
-Before it starts the reclaim program, the worker SHALL record its containment `reclaim-<name>`, under its containment parent, in the hand-off record, its scan for unrecorded processes SHALL skip it, and after a restart or an interrupted reclaim it SHALL poll, without a kill, until it is empty before it reclaims again, runs Git on the workspace, or hands it off, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
+Before starting the reclaim program, the worker SHALL record its containment `reclaim-<name>`, under its containment parent, in the hand-off record, unless the identities are the same, its scan for unrecorded processes SHALL skip it, and after a restart or an interrupted reclaim it SHALL poll, without a kill, until it is empty before it reclaims again, runs Git on the workspace, or hands it off, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
 
 #### Scenario: Surviving reclaim program
 - **WHEN** the worker restarts while the reclaim program of its previous run still runs
@@ -135,7 +135,7 @@ Every Git process of the adapter, for every operation, and the deletion at clean
 ## ADDED Requirements
 
 ### Requirement: Git process observation
-The fixture SHALL report each Git process at its start with its arguments, process identifier, environment with every value that holds a credential redacted, and the checkout's `.git/config`; the suite SHALL require the built values and exact settings of the contract section 7, the header only toward the remote, no planted setting at a process start, and SHALL never repeat a credential in a finding.
+The fixture SHALL report each Git process at its start with its arguments, process identifier, working directory, environment with a credential's header as its marker and other credential forms redacted, and the found repository's config; the suite SHALL require the exact built environment of the contract section 7, the operation's own header only toward the remote, `/` for a process that needs no checkout, no planted setting at a start, and no credential in a finding.
 
 #### Scenario: Inherited global configuration
 - **WHEN** the suite runs against an adapter whose Git processes inherit `GIT_CONFIG_GLOBAL=/attacker/config`
@@ -144,6 +144,14 @@ The fixture SHALL report each Git process at its start with its arguments, proce
 #### Scenario: Planted settings used, then removed
 - **WHEN** the suite runs against an adapter that starts Git with the planted `.git/config` and rewrites the file afterwards
 - **THEN** the planted settings case reports a finding
+
+#### Scenario: Remote head read during a hand-off
+- **WHEN** the agent planted `url.<base>.insteadOf` and `http.proxy` during a hand-off and `readRemoteHead` is called
+- **THEN** every Git process it starts begins in `/` and finds no planted setting
+
+#### Scenario: Inherited user environment
+- **WHEN** the suite runs against an adapter whose Git processes inherit `XDG_CONFIG_HOME`, `https_proxy`, or `SSH_ASKPASS`
+- **THEN** the Git environment case reports a finding
 
 #### Scenario: Finding about a leaked header
 - **WHEN** the suite reports an adapter that passes the `Authorization` value in an argument
@@ -175,7 +183,7 @@ A Linux worker whose executions share a separate account SHALL refuse to start w
 - **THEN** it refuses to start with an error that names `TASKELITH_WORKER_SLOTS` and `taskelith-exec`
 
 ### Requirement: Pinned Git client
-The adapter SHALL run Git only through the explicit path of the worker's tool manifest and SHALL accept it only when `git --version` prints exactly the pinned string, `git version 2.43.0` of the package `git=1:2.43.0-1ubuntu7.4` on Linux and `git version 2.50.1 (Apple Git-155)` of Apple's `/usr/bin/git` on macOS, refusing otherwise with `precondition-failed` and reason `git-client-mismatch`; the pin SHALL be injectable for tests.
+The adapter SHALL run Git only through the explicit path of the worker's tool manifest and SHALL accept it only when `git --version` prints exactly the pinned string, `git version 2.43.0` on Linux, whose package `git=1:2.43.0-1ubuntu7.4` the image build checks, and `git version 2.50.1 (Apple Git-155)` of Apple's `/usr/bin/git` on macOS, refusing otherwise with `precondition-failed` and reason `git-client-mismatch`; the pin SHALL be injectable for tests.
 
 #### Scenario: Other Git version
 - **WHEN** the client at the manifest's path prints `git version 2.56.0`
@@ -183,7 +191,7 @@ The adapter SHALL run Git only through the explicit path of the worker's tool ma
 
 #### Scenario: Git first in the path
 - **WHEN** another `git` comes first in `PATH`
-- **THEN** the adapter still runs the client at the manifest's path
+- **THEN** the adapter still runs the client at the manifest's path, which every observed Git process shows as its first argument
 
 ### Requirement: HTTPS remotes
 A binding's remote URL SHALL be HTTPS without user information; `prepare` SHALL refuse any other remote with `invalid` and reason `insecure-remote` before its credential check and any remote call, and plain HTTP SHALL be accepted only to `127.0.0.1` where a test composes the adapter to allow it.
@@ -191,6 +199,10 @@ A binding's remote URL SHALL be HTTPS without user information; `prepare` SHALL 
 #### Scenario: Remote with a user
 - **WHEN** a workspace is prepared with a binding whose remote is `https://agent@scm.example/acme/project.git`
 - **THEN** the prepare fails with `invalid` and reason `insecure-remote` and the service sees no remote call
+
+#### Scenario: Insecure remote with a foreign credential
+- **WHEN** a workspace is prepared with a plain HTTP remote and a credential for another repository
+- **THEN** the prepare fails with reason `insecure-remote`, not `forbidden`, and the service sees no remote call
 
 #### Scenario: Loopback HTTP in production
 - **WHEN** the worker's composition prepares a workspace with the remote `http://127.0.0.1:8080/acme/project.git`
@@ -203,12 +215,16 @@ The snapshot archive SHALL hold one ustar entry per file and link and no directo
 - **WHEN** the same tree's entries are archived in two orders
 - **THEN** both archives have the same bytes, and the system `tar` extracts every file, link, and long path
 
+#### Scenario: File named __proto__
+- **WHEN** a clean head whose tree holds a file named `__proto__` is snapshotted
+- **THEN** the snapshot holds that file, and its bytes are `encodeHeadSnapshot` of the tree it decodes to
+
 #### Scenario: Path that is not UTF-8
 - **WHEN** a clean head whose tree holds a path with the byte `0xff` is snapshotted
 - **THEN** the snapshot fails with `precondition-failed` and reason `non-utf8-path`
 
 ### Requirement: Conformance of the adapter's Git use
-The suite SHALL report an adapter that pushes over a moved remote, without ancestry, with a bare lease or a cancelling option, forgets hand-offs across a restart, passes the secret or `Authorization` value in an argument, inherits Git environment, keeps settings the agent planted or uses them and rewrites the file, snapshots a gitlink, or clones from a remote that is not HTTPS.
+The suite SHALL report an adapter that pushes over a moved remote, without ancestry, with a bare lease or a cancelling option, forgets hand-offs across a restart, passes the secret or `Authorization` value in an argument, sends the secret as the header, inherits Git or user environment, reads the remote head inside a repository, keeps settings the agent planted or uses them and rewrites the file, snapshots a gitlink, or calls a remote that is not HTTPS.
 
 #### Scenario: Defective lease
 - **WHEN** the suite runs against an adapter that pushes over a moved remote task branch
