@@ -5,6 +5,9 @@ import { join } from 'node:path';
 
 export type ObjectFormat = 'sha1' | 'sha256';
 
+// The group gets the owner's bits in a checkout (contract section 2).
+const CONFIG_MODE = 0o660;
+
 // Only the repository format and object format of the clone (section 7);
 // no setting that an agent wrote survives.
 export function repositoryConfigText(format: ObjectFormat): string {
@@ -13,12 +16,12 @@ export function repositoryConfigText(format: ObjectFormat): string {
 }
 
 // A new file, created exclusively without following a link, renamed over
-// `.git/config`, so no link the agent left there is written through.
+// `.git/config`; the group may read it, as the harness's Git must.
 export async function writeRepositoryConfig(checkout: string, format: ObjectFormat): Promise<void> {
   const gitDirectory = join(checkout, '.git');
   const temporary = join(gitDirectory, `config.taskelith-${randomBytes(8).toString('hex')}`);
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW;
-  const handle = await open(temporary, flags, 0o600);
+  const handle = await open(temporary, flags, CONFIG_MODE);
   try {
     await handle.writeFile(repositoryConfigText(format));
   } finally {

@@ -15,7 +15,7 @@ import {
   type ReclaimHost,
 } from '@taskelith/git-workspace';
 import { WORKSPACE_LAYOUT, WORKSPACE_MODES, type PrepareWorkspace } from '@taskelith/workspace';
-import { createGitFixture, simulatedSeparateAccount, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
+import { CountingHost, createGitFixture, simulatedSeparateAccount, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
 
 const FIRST = id('AttemptId', 'attempt-1') as AttemptId;
 const SECOND = id('AttemptId', 'attempt-2') as AttemptId;
@@ -34,35 +34,6 @@ async function withFixture(run: (git: GitFixture) => Promise<void>, options: Git
     await run(git);
   } finally {
     await git.dispose();
-  }
-}
-
-// A host that counts the programs it starts and remembers their
-// containments, around another host.
-class CountingHost implements ReclaimHost {
-  readonly launched: ReclaimContainment[] = [];
-  readonly #inner: ReclaimHost;
-
-  constructor(inner: ReclaimHost) {
-    this.#inner = inner;
-  }
-
-  get executionAccount() {
-    return this.#inner.executionAccount;
-  }
-
-  async launch(checkout: string, containmentName: string) {
-    const launched = await this.#inner.launch(checkout, containmentName);
-    if (launched.ok) this.launched.push(launched.value.containment);
-    return launched;
-  }
-
-  populated(containment: ReclaimContainment) {
-    return this.#inner.populated(containment);
-  }
-
-  release(containment: ReclaimContainment) {
-    return this.#inner.release(containment);
   }
 }
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
@@ -121,4 +121,14 @@ test('the rewrite replaces planted settings and never writes through a link', as
   assert.equal(await readFile(join(scratch, 'record'), 'utf8'), 'control record\n');
   assert.equal(await readFile(config, 'utf8'), repositoryConfigText('sha1'));
   assert.deepEqual((await readdir(join(checkout, '.git'))).filter((entry) => entry.startsWith('config')), ['config']);
+});
+
+test('the rewritten configuration is readable by the execution group, as the harness needs', async () => {
+  const previous = process.umask(0o007);
+  try {
+    await writeRepositoryConfig(checkout, 'sha1');
+  } finally {
+    process.umask(previous);
+  }
+  assert.equal((await lstat(join(checkout, '.git', 'config'))).mode & 0o777, 0o660);
 });

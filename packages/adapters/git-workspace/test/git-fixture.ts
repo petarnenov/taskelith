@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, chown, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -13,6 +13,7 @@ import {
   verifyGitClient,
   type CrashPointHook,
   type GitTimer,
+  type ReclaimContainment,
   type ReclaimHost,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
@@ -241,6 +242,10 @@ sub put { my ($name, $text) = @_; open(my $out, '>', "$record.tmp/$name") or die
 put('argv', join("\\0", $0, @ARGV));
 put('env', join("\\0", map { "$_=$ENV{$_}" } sort keys %ENV));
 put('cwd', $cwd);
+for my $file ('cgroup', 'status') {
+  next unless -r "/proc/$$/$file";
+  local $/; open(my $in, '<', "/proc/$$/$file") or die; put($file, <$in>); close $in;
+}
 if (defined $config && -f $config) { local $/; open(my $in, '<', $config) or die; binmode $in; put('config', <$in>); close $in; }
 rename "$record.tmp", $record or die;
 exec { '${SYSTEM_GIT}' } '${SYSTEM_GIT}', @ARGV;
@@ -268,6 +273,24 @@ interface RawProcess {
   readonly cwd: string;
   readonly environment: Record<string, string>;
   readonly repositoryConfig: string | null;
+}
+
+// Where a Git process ran, from its /proc entries at its start (Linux).
+export interface GitProcessPlacement {
+  readonly argv: readonly string[];
+  readonly pid: number;
+  // `/proc/<pid>/cgroup` and the real user of `/proc/<pid>/status`.
+  readonly cgroup: string | null;
+  readonly uid: number | null;
+}
+
+async function recordedPlacements(logDirectory: string): Promise<GitProcessPlacement[]> {
+  const records = (await readdir(logDirectory)).filter((name) => !name.endsWith('.tmp')).sort();
+  return Promise.all(records.map(async (name) => {
+    const read = (file: string) => readFile(join(logDirectory, name, file), 'utf8').catch(() => null);
+    const uid = /^Uid:\s+(\d+)/m.exec((await read('status')) ?? '')?.[1];
+    return { argv: (await read('argv'))!.split('\0'), pid: Number(name.split('-').at(-1)), cgroup: await read('cgroup'), uid: uid === undefined ? null : Number(uid) };
+  }));
 }
 
 async function recordedProcesses(logDirectory: string): Promise<RawProcess[]> {
@@ -345,6 +368,34 @@ export function credential(credentialId: string, repositories: string[], permiss
   return { credentialId, secret, authorization, repositories, permissions };
 }
 
+// Counts the programs another host starts and keeps their containments.
+export class CountingHost implements ReclaimHost {
+  readonly launched: ReclaimContainment[] = [];
+  readonly #inner: ReclaimHost;
+
+  constructor(inner: ReclaimHost) {
+    this.#inner = inner;
+  }
+
+  get executionAccount() {
+    return this.#inner.executionAccount;
+  }
+
+  async launch(checkout: string, containmentName: string) {
+    const launched = await this.#inner.launch(checkout, containmentName);
+    if (launched.ok) this.launched.push(launched.value.containment);
+    return launched;
+  }
+
+  populated(containment: ReclaimContainment) {
+    return this.#inner.populated(containment);
+  }
+
+  release(containment: ReclaimContainment) {
+    return this.#inner.release(containment);
+  }
+}
+
 // The one-account host that declares the worker's own account as the
 // execution account, so a test without root meets a separate account.
 export function simulatedSeparateAccount(host: ReclaimHost = new ProcessGroupReclaimHost()): ReclaimHost {
@@ -409,11 +460,17 @@ export interface GitFixtureOptions {
   readonly reclaimProofBoundMs?: number;
   // The directory the scratch directory goes into; `tmpdir()` by default.
   readonly scratchParent?: string;
+  // Gives the data root, `worker/`, and the workspace root this group and
+  // the traverse-only mode of contract section 2, as enrollment does.
+  readonly executionGroup?: number;
 }
 
 export interface GitFixture {
   readonly fixture: WorkspaceFixture;
   readonly local: GitWorkspaces;
+  readonly dataRoot: string;
+  // Every Git process the adapter started so far, with its placement.
+  gitPlacements(): Promise<readonly GitProcessPlacement[]>;
   readonly remote: SmartHttpRemote;
   readonly client: VerifiedGitClient;
   readonly scratch: string;
@@ -425,6 +482,11 @@ export interface GitFixture {
   // Publishes the workspace's head natively, as another party could.
   publish(attemptId: AttemptId, branch: string): Promise<void>;
   dispose(): Promise<void>;
+}
+
+async function traverseOnly(directory: string, group: number): Promise<void> {
+  await chown(directory, -1, group);
+  await chmod(directory, 0o710);
 }
 
 async function seedRemote(scratch: string, bare: string): Promise<void> {
@@ -448,6 +510,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   }
   const root = join(dataRoot, WORKSPACE_LAYOUT.root);
   await mkdir(root, { recursive: true });
+  if (options.executionGroup !== undefined) {
+    for (const directory of [scratch, dataRoot, join(dataRoot, 'worker'), root]) await traverseOnly(directory, options.executionGroup);
+  }
   const served = join(scratch, 'served');
   const bare = join(served, 'acme', 'project.git');
   await seedRemote(scratch, bare);
@@ -573,6 +638,8 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   return {
     fixture,
     local,
+    dataRoot,
+    gitPlacements: () => recordedPlacements(logDirectory),
     remote,
     client,
     scratch,
