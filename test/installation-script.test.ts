@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 
 const script = resolve('scripts/installation.sh');
@@ -343,6 +343,12 @@ esac
 exit 0
 `;
 
+// Delays the decision of every node run by FAKE_NODE_DELAY seconds.
+const delayedNode = `#!/bin/sh
+sleep "\${FAKE_NODE_DELAY:-0}"
+exec "$REAL_NODE" "$@"
+`;
+
 const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
 const VIEW_TIME = '2026-10-28T10:00:05.000Z';
 
@@ -354,8 +360,12 @@ function admissionView(admission: string, outcome?: string, details: readonly st
 function checkAdmission(views: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-'));
   try {
-    writeFileSync(join(root, 'docker'), admissionDocker);
-    chmodSync(join(root, 'docker'), 0o755);
+    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode]]) {
+      writeFileSync(join(root, name), source);
+      chmodSync(join(root, name), 0o755);
+    }
+    const temporary = join(root, 'tmp');
+    mkdirSync(temporary);
     const directory = join(root, 'views');
     mkdirSync(directory);
     writeFileSync(join(directory, 'count'), '0');
@@ -366,12 +376,13 @@ function checkAdmission(views: readonly string[], environment: Record<string, st
     const run = spawnSync('bash', [script, 'check-admission', 'installation-script-test'], {
       encoding: 'utf8',
       env: {
-        PATH: [root, dirname(process.execPath), '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls, FAKE_VIEWS: directory,
-        TASKELITH_OPERATOR_TOKEN: OPERATOR_TOKEN, ...environment,
+        PATH: [root, '/usr/bin', '/bin'].join(':'), REAL_NODE: process.execPath, TMPDIR: temporary,
+        FAKE_DOCKER_CALLS: calls, FAKE_VIEWS: directory, TASKELITH_OPERATOR_TOKEN: OPERATOR_TOKEN, ...environment,
       },
     });
     const recorded = readFileSync(calls, 'utf8').trim().split('\n');
     assert.ok(!`${run.stdout}${run.stderr}${recorded.join('\n')}`.includes(OPERATOR_TOKEN), 'the operator secret is never printed');
+    assert.deepEqual(readdirSync(temporary), [], 'no temporary file is left');
     return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -398,11 +409,11 @@ test('a failed self-check fails the admission check at once and names the failed
 });
 
 test('a worker still awaiting its self-check at the deadline fails the admission check as a timeout', () => {
-  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '1' });
+  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '3' });
   assert.equal(outcome.status, 3);
   assert.equal(admissionReads(outcome).length, 1, 'no read starts after the bound');
   assert.match(outcome.stderr, /the worker is awaiting-self-check/);
-  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+  assert.match(outcome.stderr, /the worker was not admitted within 3s/);
 });
 
 function timed(run: () => BuildOutcome): { outcome: BuildOutcome; seconds: number } {
@@ -421,11 +432,21 @@ test('a read that hangs is killed at the bound and fails the admission check as 
   assert.match(outcome.stderr, /the worker was not admitted within 2s/);
 });
 
-test('an admission that a read returns only after the bound is a timeout', () => {
+test('a read that would return an admission only after the bound is killed', () => {
   const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '1', FAKE_DELAY: '3' });
   assert.equal(outcome.status, 3);
   assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
   assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+});
+
+test('an admission read in time but decided after the bound is a timeout', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '4', FAKE_NODE_DELAY: '6' });
+  assert.equal(outcome.status, 3);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.doesNotMatch(outcome.stderr, /did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 4s/);
 });
 
 test('a bound with a leading zero is read in base 10', () => {
@@ -446,9 +467,11 @@ test('a refused read of the workers view fails the admission check at once', () 
   assert.match(outcome.stderr, /could not be read: forbidden: the operator credential is not valid/);
 });
 
-test('a deadline that is not whole seconds is a usage error before any read', () => {
-  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '5m' });
-  assert.equal(outcome.status, 2);
-  assert.equal(admissionReads(outcome).length, 0);
-  assert.match(outcome.stderr, /TASKELITH_ADMISSION_SECONDS must be whole seconds/);
+test('a bound that is not positive whole seconds is a usage error before any read', () => {
+  for (const bound of ['5m', '0', '00']) {
+    const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: bound });
+    assert.equal(outcome.status, 2, JSON.stringify(bound));
+    assert.equal(admissionReads(outcome).length, 0, JSON.stringify(bound));
+    assert.match(outcome.stderr, /TASKELITH_ADMISSION_SECONDS must be positive whole seconds/, JSON.stringify(bound));
+  }
 });

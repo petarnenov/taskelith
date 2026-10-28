@@ -30,6 +30,8 @@ CONTACT_SECONDS=90
 # Minutes, for a loaded host: a start, its self-check, and its report.
 ADMISSION_SECONDS="${TASKELITH_ADMISSION_SECONDS:-300}"
 ADMISSION_POLL_SECONDS=5
+# WAITING of scripts/installation-admission.ts; the wait's timeout status.
+ADMISSION_WAITING=3
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -361,29 +363,31 @@ bounded_admission_read() {
 
 # Polls the workers view until the one worker is admitted with a passed
 # linux-containment check reported after AFTER; prints the view's asOf.
-await_worker_admission() {
-  local bound deadline status=3 files
-  case "$ADMISSION_SECONDS" in
-    ''|*[!0-9]*) echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be whole seconds" >&2; return 2 ;;
-  esac
+await_worker_admission() (
+  local bound deadline status="$ADMISSION_WAITING" files
+  if ! [[ "$ADMISSION_SECONDS" =~ ^[0-9]+$ ]] || [ "$((10#$ADMISSION_SECONDS))" -eq 0 ]; then
+    echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be positive whole seconds" >&2
+    exit 2
+  fi
   bound=$((10#$ADMISSION_SECONDS))
   deadline=$((SECONDS + bound))
   files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
+  trap 'rm -rf "$files"' EXIT
+  : > "$files/log"
   while [ "$SECONDS" -lt "$deadline" ]; do
     : > "$files/log"
     if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
     status=0
     node --experimental-strip-types "$repository/scripts/installation-admission.ts" linux-containment "$1" \
       < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?
-    if [ "$status" -ne 3 ]; then break; fi
+    if [ "$status" -ne "$ADMISSION_WAITING" ]; then break; fi
     sleep "$ADMISSION_POLL_SECONDS"
   done
-  # An admission read when the bound has passed is a timeout too.
-  if [ "$status" -eq 0 ] && [ "$SECONDS" -ge "$deadline" ]; then status=3; fi
+  # An admission decided when the bound has passed is a timeout too.
+  if [ "$status" -eq 0 ] && [ "$SECONDS" -ge "$deadline" ]; then status="$ADMISSION_WAITING"; fi
   report_admission "$status" "$files" "$bound"
-  rm -rf "$files"
-  return "$status"
-}
+  exit "$status"
+)
 
 # Prints the asOf of an admission, or the last read's diagnostics and why
 # the wait failed.
@@ -394,7 +398,7 @@ report_admission() {
     return
   fi
   cat "$files/log" >&2
-  if [ "$status" -eq 3 ]; then
+  if [ "$status" -eq "$ADMISSION_WAITING" ]; then
     echo "installation.sh: the worker was not admitted within ${bound}s" >&2
   else
     echo "installation.sh: the worker admission check failed" >&2
