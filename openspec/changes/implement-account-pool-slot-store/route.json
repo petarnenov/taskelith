@@ -1,11 +1,11 @@
 {
   "change": "implement-account-pool-slot-store",
-  "generatedAt": "2026-10-28T22:38:32.610Z",
-  "devCommit": "027a18fa94df64b80148203ea586873fca9a92be",
-  "headCommit": "6a8f0261051cf2a148288e781d2511b8eabd75ae",
+  "generatedAt": "2026-10-28T22:52:39.797Z",
+  "devCommit": "62217e7a1f56056bba460181160562a860a238aa",
+  "headCommit": "88da0451d83c33bb4eab00f57246c1813b23c16c",
   "features": {
-    "linesChanged": 1824,
-    "filesChanged": 43,
+    "linesChanged": 1804,
+    "filesChanged": 37,
     "capabilities": [
       "account-pool-port"
     ],
@@ -71,7 +71,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.78,
+    "thirdPassProbability": 0.79,
     "threshold": 0.4,
     "passes": [
       {
@@ -102,6 +102,6 @@
         }
       }
     ],
-    "latencyMs": 292
+    "latencyMs": 258
   }
 }
