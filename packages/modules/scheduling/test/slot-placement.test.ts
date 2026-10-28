@@ -202,19 +202,24 @@ test('an attempt without a slot request reserves no provider credential', async 
   assert.deepEqual(placed.assignment.reservation.providerCredentials, []);
 });
 
-test('a resumed-session or after-limit request is not selected before sub-change 12b', async () => {
-  const { tx, task } = await fixture([2]);
-  const pinned = { harnessId: HARNESS, slotId: id('ProviderCredentialId', 'slot-1') };
-  const requests: SlotRequest[] = [
-    { projectId: PROJECT, kind: 'resumed-session', pinned },
-    { projectId: PROJECT, kind: 'after-limit', limited: pinned, alternatives: [] },
-    { projectId: PROJECT, kind: 'after-limit', limited: pinned, alternatives: [HARNESS] },
-  ];
-  for (const slotRequest of requests) {
+const PINNED = { harnessId: HARNESS, slotId: id('ProviderCredentialId', 'slot-1') };
+
+const NOT_SELECTED_BEFORE_12B: readonly (readonly [string, SlotRequest])[] = [
+  ['resumed-session', { projectId: PROJECT, kind: 'resumed-session', pinned: PINNED }],
+  ['after-limit', { projectId: PROJECT, kind: 'after-limit', limited: PINNED, alternatives: [] }],
+];
+
+for (const [kind, slotRequest] of NOT_SELECTED_BEFORE_12B) {
+  test(`a ${kind} request fails the placement with invalid before sub-change 12b`, async () => {
+    const { tx, task, slots } = await fixture([2]);
+    value(await slots.add(slotRecord('slot-1')));
     const placed = await placeInTransaction(tx, request(task, 'worker-1', slotRequest));
-    assert.equal(!placed.ok && placed.error.code, 'invalid');
-  }
-});
+    assert.ok(!placed.ok);
+    assert.equal(placed.error.code, 'invalid');
+    assert.deepEqual(placed.error.details, { kind });
+    assert.equal(value(await slots.get(PINNED.slotId)).revision, 1);
+  });
+}
 
 // Runs each transaction at once on one shared state, as one writer would.
 function serialStore(tx: CapacityTransaction): CapacityStore {

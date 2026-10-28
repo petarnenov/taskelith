@@ -86,8 +86,6 @@ const CONTRACT_VALUES = [
       'delegation-chain-exceeds-quota',
       'delegation-budget-exhausted',
       'retry-budget-exhausted',
-      'no-eligible-slot',
-      'session-slot-withdrawn',
     ],
   ],
   [

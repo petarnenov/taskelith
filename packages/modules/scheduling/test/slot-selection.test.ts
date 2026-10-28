@@ -14,6 +14,7 @@ import {
   lacksFleetCapacity,
   leastLoaded,
   parseSlotCredentialVersion,
+  reasonOutcome,
   selectNewSessionSlot,
   slotIneligibility,
   triesNextCandidate,
@@ -110,10 +111,11 @@ test('without an eligible slot the policy waits with the earliest cooldown end o
   assert.deepEqual(select([], 'reject'), { outcome: 'rejected', reason: 'no-eligible-slot' });
 });
 
-test('the slot reasons are rejecting reasons, and a slot wait is no worker or fleet reason', () => {
+test('the slot reasons reject but stay out of REJECTING_REASONS, and a slot wait is no worker or fleet reason', () => {
   for (const reason of SLOT_REJECTING_REASONS) {
-    assert.ok((REJECTING_REASONS as readonly string[]).includes(reason));
-    assert.equal(isRejectingReason(reason), true);
+    assert.equal(reasonOutcome(reason), 'rejected');
+    assert.ok(!(REJECTING_REASONS as readonly string[]).includes(reason), reason);
+    assert.equal(isRejectingReason(reason), false);
   }
   assert.equal(triesNextCandidate('provider-concurrency-exhausted'), false);
   assert.equal(lacksFleetCapacity('provider-concurrency-exhausted'), false);

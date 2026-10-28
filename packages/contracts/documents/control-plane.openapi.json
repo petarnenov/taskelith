@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith control-plane API",
-    "version": "0.4.0",
+    "version": "0.3.0",
     "description": "Login and sessions, projects with their members, defaults, auto-merge setting, and repository binding, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver (G3 item 9a); the board, task detail, and inbox views, inbox answers, agent sessions with their turns, native requests, responses, and output, and the server-sent event streams (G3 item 9b). A browser authenticates with the session cookie and sends the CSRF token on every mutation; the CLI and the owner use the operator credential. No response carries a stored secret; only issuing or rotating an enrollment token reveals its secret, once. The terminal WebSocket upgrade (G3 item 9d), whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
@@ -7849,9 +7849,7 @@
                   "delegation-depth-exceeded",
                   "delegation-chain-exceeds-quota",
                   "delegation-budget-exhausted",
-                  "retry-budget-exhausted",
-                  "no-eligible-slot",
-                  "session-slot-withdrawn"
+                  "retry-budget-exhausted"
                 ]
               }
             }

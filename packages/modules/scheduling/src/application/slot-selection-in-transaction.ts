@@ -9,7 +9,7 @@ export async function selectSlotInTransaction(tx: CapacityTransaction, request: 
   const parsed = parseSlotRequest(request);
   if (!parsed.ok) return parsed;
   const slotRequest = parsed.value;
-  // G3 sub-change 12b selects for the other kinds (design question Q1).
+  // G3 sub-change 12b selects for the other kinds (design decision 8).
   if (slotRequest.kind !== 'new-session') {
     return err(failure('invalid', `a ${slotRequest.kind} slot request is not supported yet`, { kind: slotRequest.kind }));
   }
