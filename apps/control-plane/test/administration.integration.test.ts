@@ -182,8 +182,9 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal((rotated.output as { credentialGeneration: number }).credentialGeneration, 2);
   assert.deepEqual((await admin(rotation, { TASKELITH_OPERATOR_TOKEN: operatorSecret })).output, rotated.output, 'an open request');
   assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'N stays valid');
-  const notices = await rows(database, "SELECT subject FROM outbox WHERE event_type = 'worker.credentials.rotation-requested'");
-  assert.deepEqual(notices, [{ subject: `workers.${enrolled.workerId}.commands` }, { subject: `workers.${enrolled.workerId}.commands` }]);
+  const notices = await rows(database, "SELECT message::jsonb->>'subject' AS subject FROM outbox WHERE event_type = 'worker.credentials.rotation-requested'");
+  const subject = `workers.${enrolled.workerId}.commands`;
+  assert.deepEqual(notices, [{ subject }, { subject }], 'each request sends the notice');
   const audited = await rows(database, "SELECT subject, kind, actor, reason, generation FROM audit_events WHERE kind LIKE 'worker-credential.%'");
   assert.deepEqual(audited, [{ subject: enrolled.workerId, kind: 'worker-credential.rotation-requested', actor: 'ops', reason: 'scheduled', generation: 2 }]);
 
