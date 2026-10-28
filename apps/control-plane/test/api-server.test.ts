@@ -406,7 +406,8 @@ test('a refused renewal is logged with its worker, generation, code, and reason,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never,
     quarantine: undefined as never, delegations: undefined as never, launches: undefined as never,
     enrollment: { renew: async () => err(failures.shift()!) } as never,
-  }, new Logger(renewalSink, { now: () => '2026-10-25T09:00:00.000Z' as never }));
+    logger: new Logger(renewalSink, { now: () => '2026-10-25T09:00:00.000Z' as never }),
+  } as never);
   const body = { credentialGeneration: 2, brokerUserPublicKey: `U${'K'.repeat(55)}`, controlPlaneSecretSha256: 'a'.repeat(64) };
   const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
   const codes = [];
