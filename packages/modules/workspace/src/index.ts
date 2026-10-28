@@ -8,8 +8,20 @@ export {
   type RepositoryId,
 } from './domain/code-head.js';
 export {
+  GIT_BUILT_ENVIRONMENT,
+  GIT_CLIENT_PINS,
+  GIT_COMMAND_SCOPE_SETTINGS,
+  GIT_CREDENTIAL_SETTING,
+  GIT_NEUTRAL_DIRECTORY,
+  checkGitClient,
+  gitConfigEnvironment,
+  type GitClientPin,
+} from './domain/git-client.js';
+export { HEAD_SNAPSHOT_CONTENT_TYPE, encodeHeadSnapshot } from './domain/snapshot-archive.js';
+export {
   DIRTY_REASONS,
   HEAD_SNAPSHOT_EVIDENCE_KIND,
+  RECLAIM_CONTAINMENT_PREFIX,
   TASK_BRANCH_PREFIX,
   WORKSPACE_FAILURE_REASONS,
   WORKSPACE_KINDS,
@@ -17,15 +29,23 @@ export {
   WORKSPACE_MODES,
   WORKSPACE_NAME_RULES,
   checkCredentialScope,
+  checkRemoteTransport,
   cleanHead,
+  decodeGitPath,
+  isUtf8Text,
+  reclaimContainmentName,
   taskBranchName,
+  taskBranchPushArguments,
   workspaceDirectoryName,
   workspaceFailure,
   type DirtyReason,
+  type GitTreeEntry,
   type HeadSnapshot,
   type IdentifierDigest,
   type RemoteAccess,
+  type RemoteTransportPolicy,
   type RepositoryBinding,
+  type TreeEntry,
   type Workspace,
   type WorkspaceCredential,
   type WorkspaceFailureReason,
@@ -33,8 +53,9 @@ export {
   type WorkspaceStatus,
   type WorkspaceTarget,
 } from './domain/workspace.js';
+export { holdsSensitive, sensitiveValues } from './ports/git-process-checks.js';
 export { WORKSPACE_CONFORMANCE } from './ports/workspace-conformance.js';
-export type { FixtureCredentials, TreeEntry, WorkspaceFixture } from './ports/workspace-fixture.js';
+export { REDACTED_VALUE, redactedHeader, type FixtureCredentials, type GitProcessObservation, type WorkspaceFixture } from './ports/workspace-fixture.js';
 export type {
   PrepareWorkspace,
   PushTaskBranch,

@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { chmod, link, lstat, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -7,19 +9,33 @@ import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kerne
 import type { AttemptId } from '@taskelith/execution';
 import {
   DIRTY_REASONS,
+  GIT_CLIENT_PINS,
+  GIT_NEUTRAL_DIRECTORY,
+  HEAD_SNAPSHOT_CONTENT_TYPE,
+  REDACTED_VALUE,
   TASK_BRANCH_PREFIX,
   WORKSPACE_LAYOUT,
   WORKSPACE_MODES,
   checkCredentialScope,
+  checkRemoteTransport,
   cleanHead,
+  encodeHeadSnapshot,
+  gitConfigEnvironment,
+  holdsSensitive,
   parseCodeHeadIdentity,
   parseGitObjectId,
+  redactedHeader,
+  sensitiveValues,
   taskBranchName,
+  taskBranchPushArguments,
   workspaceDirectoryName,
   workspaceFailure,
   type CodeHeadIdentity,
   type DirtyReason,
+  type GitClientPin,
   type GitObjectId,
+  type GitProcessObservation,
+  type GitTreeEntry,
   type HeadSnapshot,
   type IdentifierDigest,
   type PrepareWorkspace,
@@ -40,21 +56,21 @@ import {
 // A test-only provider: real directories under a temporary data root and
 // a fake Git service whose objects are content-addressed trees.
 
-type Tree = Readonly<Record<string, TreeEntry>>;
+type Tree = Readonly<Record<string, GitTreeEntry>>;
 
 // An entry as JSON can hold it: file bytes in base64, so nothing is lost.
 type StoredEntry =
   | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: string }
-  | { readonly type: 'link'; readonly target: string };
+  | Exclude<GitTreeEntry, { readonly type: 'file' }>;
 
 type StoredTree = Readonly<Record<string, StoredEntry>>;
 
-function store(entry: TreeEntry): StoredEntry {
-  return entry.type === 'link' ? entry : { ...entry, content: Buffer.from(entry.content).toString('base64') };
+function store(entry: GitTreeEntry): StoredEntry {
+  return entry.type === 'file' ? { ...entry, content: Buffer.from(entry.content).toString('base64') } : entry;
 }
 
-function load(entry: StoredEntry): TreeEntry {
-  return entry.type === 'link' ? entry : { ...entry, content: new Uint8Array(Buffer.from(entry.content, 'base64')) };
+function load(entry: StoredEntry): GitTreeEntry {
+  return entry.type === 'file' ? { ...entry, content: new Uint8Array(Buffer.from(entry.content, 'base64')) } : entry;
 }
 
 const storeTree = (tree: Tree): StoredTree => Object.fromEntries(Object.entries(tree).map(([path, entry]) => [path, store(entry)]));
@@ -75,6 +91,8 @@ const textFile = (text: string) => file(bytes(text));
 export class FakeGitService {
   readonly commits = new Map<string, Commit>();
   readonly branches = new Map<string, string>();
+  // The Git processes an adapter would have started, as the fixture sees them.
+  readonly processes: GitProcessObservation[] = [];
   calls = 0;
   #sequence = 0;
 
@@ -116,6 +134,13 @@ interface LocalState {
   readonly index: StoredTree;
 }
 
+// A task branch workspace's branch, remote, and checkout.
+interface TaskBranch {
+  readonly branch: string;
+  readonly remote: string;
+  readonly checkout: string;
+}
+
 // The worker's record beside the checkout, closed to the execution.
 interface Metadata {
   readonly attemptId: AttemptId;
@@ -141,8 +166,34 @@ function identifierDigest(defects: DoubleDefects): IdentifierDigest {
 }
 
 const STATE_FILE = join('.git', 'state.json');
+const GIT_CONFIG_FILE = join('.git', 'config');
+const FIRST_PROCESS_ID = 1000;
+const execFileAsync = promisify(execFile);
+// A submodule commit that the fake service never holds.
+const UNKNOWN_SUBMODULE_COMMIT = 'f'.repeat(40);
 const OPERATION_FILE = join('.git', 'operation');
-const SNAPSHOT_TYPE = 'application/json';
+// What the double writes as `.git/config` before each Git call.
+const REPOSITORY_CONFIG = '[core]\n\trepositoryformatversion = 0\n';
+// What a worker's environment could hand down, which the adapter drops.
+const INHERITED_ENVIRONMENT = { SUDO_UID: '10003', GIT_CONFIG_PARAMETERS: "'core.pager=planted'", GIT_TRACE: '1' };
+const INHERITED_USER_ENVIRONMENT = { XDG_CONFIG_HOME: '/home/worker/.config', https_proxy: 'http://proxy.example:3128', SSH_ASKPASS: '/usr/bin/ask' };
+
+// The checkout a call works in; a call without one starts in the neutral
+// directory.
+interface GitCall {
+  readonly credential?: WorkspaceCredential;
+  readonly checkout?: string;
+}
+
+// An inherited setting appended to the built ones, as a careless adapter
+// that extends the environment it was given would leave it.
+function withInheritedPair(environment: Record<string, string>): Record<string, string> {
+  const index = Number(environment.GIT_CONFIG_COUNT);
+  return {
+    ...environment, GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: 'core.sshCommand', [`GIT_CONFIG_VALUE_${index}`]: '/attacker/ssh',
+  };
+}
 
 export interface DoubleDefects {
   readonly storesSecret?: boolean;
@@ -169,6 +220,27 @@ export interface DoubleDefects {
   readonly followsGitLinks?: boolean;
   readonly handsOffBeyondOne?: boolean;
   readonly racesHandOff?: boolean;
+  readonly ignoresLease?: boolean;
+  readonly ignoresAncestry?: boolean;
+  readonly pushesWithBareLease?: boolean;
+  readonly forgetsHandOffsOnRestart?: boolean;
+  readonly passesSecretInArguments?: boolean;
+  readonly passesHeaderInArguments?: boolean;
+  readonly inheritsEnvironment?: boolean;
+  readonly inheritsGlobalConfig?: boolean;
+  readonly inheritsConfigPairs?: boolean;
+  readonly keepsPlantedSettings?: boolean;
+  readonly rewritesConfigAfterGit?: boolean;
+  readonly cancelsAtomic?: boolean;
+  readonly cancelsLease?: boolean;
+  readonly snapshotsGitlink?: boolean;
+  readonly acceptsInsecureRemote?: boolean;
+  readonly refusesEveryPrepare?: boolean;
+  readonly readsRemoteInCheckout?: boolean;
+  readonly inheritsUserEnvironment?: boolean;
+  readonly sendsSecretAsHeader?: boolean;
+  readonly callsRemoteBeforeTransport?: boolean;
+  readonly runsGitFromPath?: boolean;
 }
 
 // One chain of hand-offs per workspace root, so that a hand-off checks
@@ -223,17 +295,22 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   readonly repository: RepositoryId;
   readonly digest: IdentifierDigest;
   readonly defects: DoubleDefects;
+  readonly gitClient: GitClientPin;
   private readonly racingChecks = new CheckBarrier();
+  // The defective hand-off state that lives only as long as the provider.
+  private readonly handedOffInMemory = new Set<AttemptId>();
 
-  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}) {
+  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}, gitClient: GitClientPin = GIT_CLIENT_PINS.linux) {
     this.root = join(dataRoot, WORKSPACE_LAYOUT.root);
     this.service = service;
     this.repository = repository;
     this.digest = digest;
     this.defects = defects;
+    this.gitClient = gitClient;
   }
 
   async prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
+    if (this.defects.refusesEveryPrepare) return err(failure('unavailable', 'the remote cannot be reached'));
     if (this.defects.rejectsUnsafeNames && ![request.attemptId, request.taskId].every((text) => PRE_DERIVATION_NAME.test(text))) {
       return err(failure('invalid', 'the identifier is not a safe name'));
     }
@@ -243,10 +320,14 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
+    const transport = checkRemoteTransport(request.binding.remote, 'https-only');
+    // The defect clones from the remote before it refuses the URL.
+    if (!transport.ok && this.defects.callsRemoteBeforeTransport) await this.runGit(['ls-remote', request.binding.remote], { credential: request.credential });
+    if (!transport.ok && !this.defects.acceptsInsecureRemote) return transport;
     if (this.defects.callsRemoteBeforeScopeInPrepare) this.service.calls += 1;
     const scope = this.scope(request.credential, request.binding.repository, 'read-code');
     if (!scope.ok) return scope;
-    this.service.calls += 1;
+    await this.runGit(['ls-remote', request.binding.remote], { credential: request.credential });
     const commit = this.startCommit(request, taskBranch);
     if (commit === undefined) return err(failure('not-found', 'the base branch or the head is unknown'));
     if (target.kind === 'at-head' && this.service.commits.get(commit)?.tree !== target.head.tree && !this.defects.acceptsMismatchedTree) {
@@ -263,6 +344,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     await chmod(staging, WORKSPACE_MODES.attempt);
     const metadata: Metadata = { attemptId: request.attemptId, kind: target.kind, expectedBranch: branch, remote };
     await writeFile(join(staging, WORKSPACE_LAYOUT.metadata), JSON.stringify(metadata), { mode: WORKSPACE_MODES.metadata });
+    await this.runGit(['clone', '--no-checkout', remote, join(staging, WORKSPACE_LAYOUT.checkout)], { credential: request.credential });
     await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), { branch, commit, index });
     await rename(staging, final);
     return ok({
@@ -296,6 +378,17 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return ok(undefined);
   }
 
+  async handedOff(): Promise<readonly AttemptId[]> {
+    const listed = await this.list();
+    if (this.defects.forgetsHandOffsOnRestart) return listed.filter((attemptId) => this.handedOffInMemory.has(attemptId));
+    const records = await Promise.all(listed.map((attemptId) => exists(this.handOffRecordOf(attemptId))));
+    return listed.filter((_, index) => records[index]);
+  }
+
+  private handOffRecordOf(attemptId: AttemptId): string {
+    return join(this.root, this.directoryName(attemptId), WORKSPACE_LAYOUT.handOffRecord);
+  }
+
   async sweep(): Promise<void> {
     for (const entry of await readdir(this.root)) {
       if (!entry.startsWith(WORKSPACE_LAYOUT.stagingPrefix) && !entry.startsWith(WORKSPACE_LAYOUT.removingPrefix)) continue;
@@ -309,7 +402,9 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (this.defects.racesHandOff) return this.racingHandOff(attemptId);
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
-    return inHandOffChain(this.root, () => this.handOffAlone(attemptId, checkout.value));
+    const handedOff = await inHandOffChain(this.root, () => this.handOffAlone(attemptId, checkout.value));
+    if (handedOff.ok) this.handedOffInMemory.add(attemptId);
+    return handedOff;
   }
 
   private async handOffAlone(attemptId: AttemptId, checkout: string): Promise<Result<void>> {
@@ -337,7 +432,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   // The double models a worker whose executions share a separate account.
   private async handedOffElsewhere(attemptId: AttemptId): Promise<boolean> {
     const others = (await this.list()).filter((other) => other !== attemptId);
-    const records = others.map((other) => exists(join(this.root, this.directoryName(other), WORKSPACE_LAYOUT.handOffRecord)));
+    const records = others.map((other) => exists(this.handOffRecordOf(other)));
     return (await Promise.all(records)).includes(true);
   }
 
@@ -349,6 +444,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     await normalize(checkout.value, !this.defects.keepsOutsideLinks);
     await chmod(checkout.value, WORKSPACE_MODES.checkoutReclaimed);
     await rm(handOffRecord(checkout.value));
+    this.handedOffInMemory.delete(attemptId);
     return ok(undefined);
   }
 
@@ -362,6 +458,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (await this.unsafeGitDirectory(checkout.value)) {
       return workspaceFailure('precondition-failed', 'unsafe-checkout', `the Git directory of ${attemptId} is not safe`);
     }
+    if (!this.defects.keepsPlantedSettings && !this.defects.rewritesConfigAfterGit) await writeRepositoryConfig(checkout.value);
     return checkout;
   }
 
@@ -380,11 +477,14 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!checkout.ok) return checkout;
     const state = await readState(checkout.value);
     const { expectedBranch } = await readMetadata(checkout.value);
+    await this.runGit(['status', '--porcelain=v2', '--ignore-submodules=all'], { checkout: checkout.value });
     const committed = this.service.entries(state.commit);
     const working = await workingTree(checkout.value);
     const ignored = ignoredPaths(committed);
     const reasons = new Set<DirtyReason>();
-    for (const [path, entry] of Object.entries(committed)) if (!sameEntry(working[path], entry)) reasons.add('modified');
+    for (const [path, entry] of Object.entries(committed)) {
+      if (!(await holdsEntry(checkout.value, working, path, entry))) reasons.add('modified');
+    }
     if (!this.defects.ignoresIndex && !sameTree(loadTree(state.index), committed)) reasons.add('modified');
     const untracked = Object.keys(working).some((path) => !(path in committed) && !ignored.has(path));
     if (untracked && !this.defects.ignoresUntracked) reasons.add('untracked');
@@ -399,17 +499,28 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!current.ok) return current;
     const head = cleanHead(current.value);
     if (!head.ok) return head;
-    let entries = this.service.entries(head.value.commit);
+    const checkout = join(this.root, this.directoryName(attemptId), WORKSPACE_LAYOUT.checkout);
+    await this.runGit(['ls-tree', '-r', '-z', '--full-tree', head.value.commit], { checkout });
+    const content = encodeHeadSnapshot(this.snapshotEntries(head.value.commit));
+    if (!content.ok) return content;
+    const reported = this.defects.snapshotsStaleTree ? this.staleHead(head.value) : head.value;
+    return ok({ head: reported, contentType: HEAD_SNAPSHOT_CONTENT_TYPE, content: content.value });
+  }
+
+  // The commit's entries, as each snapshot defect alters them.
+  private snapshotEntries(commit: string): Map<string, GitTreeEntry> {
+    let entries = Object.entries(this.service.entries(commit));
+    if (this.defects.snapshotsGitlink) entries = entries.filter(([, entry]) => entry.type !== 'gitlink');
     if (this.defects.snapshotsWithoutMetadata) {
-      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, entry.type === 'file' ? file(entry.content) : textFile(entry.target)]));
+      const plain = (entry: GitTreeEntry) => (entry.type === 'file' ? file(entry.content) : entry.type === 'link' ? textFile(entry.target) : entry);
+      entries = entries.map(([path, entry]) => [path, plain(entry)]);
     }
     if (this.defects.corruptsBinary) {
-      const lossy = (entry: TreeEntry) => (entry.type === 'file' ? { ...entry, content: bytes(new TextDecoder().decode(entry.content)) } : entry);
-      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, lossy(entry)]));
+      const lossy = (entry: GitTreeEntry) => (entry.type === 'file' ? { ...entry, content: bytes(new TextDecoder().decode(entry.content)) } : entry);
+      entries = entries.map(([path, entry]) => [path, lossy(entry)]);
     }
-    if (this.defects.snapshotsCommit) entries = { ...entries, COMMIT: textFile(head.value.commit) };
-    const content = new TextEncoder().encode(canonical(entries));
-    return ok({ head: this.defects.snapshotsStaleTree ? this.staleHead(head.value) : head.value, contentType: SNAPSHOT_TYPE, content });
+    if (this.defects.snapshotsCommit) entries = [...entries, ['COMMIT', textFile(commit)]];
+    return new Map(entries);
   }
 
   // The head with its parent's tree, as a cache that missed a commit would.
@@ -422,7 +533,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   async readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>> {
     const opened = await this.taskBranchOf(request.attemptId, request.credential, 'read-code');
     if (!opened.ok) return opened;
-    this.service.calls += 1;
+    await this.lsRemote(opened.value, request.credential);
     const remote = this.service.branches.get(opened.value.branch);
     return remote === undefined ? ok(null) : parseGitObjectId(remote);
   }
@@ -434,14 +545,64 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!current.ok) return current;
     const head = cleanHead(current.value);
     if (!head.ok) return head;
-    this.service.calls += 1;
-    const remote = this.service.branches.get(opened.value.branch) ?? null;
-    if (remote !== request.expectedRemoteHead) return workspaceFailure('conflict', 'remote-moved', 'the remote task branch moved');
-    if (remote !== null && !this.service.descends(head.value.commit, remote)) {
+    const { branch, remote: url, checkout } = opened.value;
+    await this.lsRemote(opened.value, request.credential);
+    const remote = this.service.branches.get(branch) ?? null;
+    if (remote !== request.expectedRemoteHead && !this.defects.ignoresLease) {
+      return workspaceFailure('conflict', 'remote-moved', 'the remote task branch moved');
+    }
+    // Without the lease, the check trusts the caller's view of the remote.
+    const base = this.defects.ignoresLease ? request.expectedRemoteHead : remote;
+    if (base !== null && !this.service.descends(head.value.commit, base) && !this.defects.ignoresAncestry) {
       return workspaceFailure('conflict', 'not-fast-forward', 'the push is not a fast-forward');
     }
-    this.service.branches.set(opened.value.branch, head.value.commit);
+    await this.runGit(this.pushArguments(branch, request.expectedRemoteHead, url), { credential: request.credential, checkout });
+    this.service.branches.set(branch, head.value.commit);
     return head;
+  }
+
+  // The contract's arguments, or what each push defect passes instead.
+  private pushArguments(branch: string, expected: string | null, remote: string): readonly string[] {
+    const contract = taskBranchPushArguments(branch, expected, remote);
+    const [command, atomic, lease, ...target] = contract;
+    if (this.defects.pushesWithBareLease) return [command!, atomic!, '--force-with-lease', ...target];
+    const cancelling = [...(this.defects.cancelsAtomic ? ['--no-atomic'] : []), ...(this.defects.cancelsLease ? ['--no-force-with-lease'] : [])];
+    return [command!, atomic!, lease!, ...cancelling, ...target];
+  }
+
+  private async lsRemote({ branch, remote, checkout }: TaskBranch, credential: WorkspaceCredential): Promise<void> {
+    const inCheckout = this.defects.readsRemoteInCheckout ? { checkout } : {};
+    await this.runGit(['ls-remote', remote, `refs/heads/${branch}`], { credential, ...inCheckout });
+  }
+
+  // Records the Git process a real adapter would start, with the checkout's
+  // configuration as it finds it; the header goes into its environment.
+  private async runGit(args: readonly string[], { credential, checkout }: GitCall): Promise<void> {
+    if (credential !== undefined) this.service.calls += 1;
+    const repositoryConfig = checkout === undefined ? null : await readFile(join(checkout, GIT_CONFIG_FILE), 'utf8').catch(() => null);
+    const pid = this.service.processes.length + FIRST_PROCESS_ID;
+    const client = this.defects.runsGitFromPath ? 'git' : this.gitClient.path;
+    const argv = [client, ...this.credentialArguments(credential), ...args];
+    const cwd = checkout ?? GIT_NEUTRAL_DIRECTORY;
+    this.service.processes.push({ argv, pid, cwd, environment: this.gitEnvironment(credential), repositoryConfig });
+    if (checkout !== undefined && this.defects.rewritesConfigAfterGit) await writeRepositoryConfig(checkout);
+  }
+
+  private credentialArguments(credential: WorkspaceCredential | undefined): string[] {
+    if (credential === undefined) return [];
+    if (this.defects.passesSecretInArguments) return ['-c', `http.extraHeader=${credential.secret}`];
+    if (this.defects.passesHeaderInArguments) return ['-c', `http.extraHeader=Authorization: ${credential.authorization}`];
+    return [];
+  }
+
+  private gitEnvironment(credential: WorkspaceCredential | undefined): Record<string, string> {
+    const authorization = this.defects.sendsSecretAsHeader ? credential?.secret : credential?.authorization;
+    const built = gitConfigEnvironment(authorization);
+    if (this.defects.inheritsEnvironment) return { ...INHERITED_ENVIRONMENT, ...built };
+    if (this.defects.inheritsUserEnvironment) return { ...INHERITED_USER_ENVIRONMENT, ...built };
+    if (this.defects.inheritsGlobalConfig) return { ...built, GIT_CONFIG_GLOBAL: '/attacker/config' };
+    if (this.defects.inheritsConfigPairs) return withInheritedPair(built);
+    return built;
   }
 
   directoryName(attemptId: AttemptId): string {
@@ -459,13 +620,13 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${attemptId}`));
   }
 
-  private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<{ branch: string }>> {
+  private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<TaskBranch>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
-    const { expectedBranch } = await readMetadata(checkout.value);
+    const { expectedBranch, remote } = await readMetadata(checkout.value);
     if (expectedBranch === null) return workspaceFailure('invalid', 'read-only-workspace', 'an at-head workspace has no task branch');
     const scope = this.scope(credential, this.repository, access);
-    return scope.ok ? ok({ branch: expectedBranch }) : scope;
+    return scope.ok ? ok({ branch: expectedBranch, remote, checkout: checkout.value }) : scope;
   }
 
   private scope(credential: WorkspaceCredential, repository: RepositoryId, access: RemoteAccess): Result<void> {
@@ -491,6 +652,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     await mkdir(directory, { mode: WORKSPACE_MODES.checkoutReclaimed });
     await chmod(directory, WORKSPACE_MODES.checkoutReclaimed);
     await mkdir(join(directory, '.git'));
+    await writeRepositoryConfig(directory);
     for (const [path, entry] of Object.entries(this.service.entries(state.commit))) await writeEntry(join(directory, path), entry);
     await writeState(directory, state);
   }
@@ -505,8 +667,15 @@ async function exists(path: string): Promise<boolean> {
   return lstat(path).then(() => true, () => false);
 }
 
-function sameEntry(left: TreeEntry | undefined, right: TreeEntry): boolean {
-  return left !== undefined && JSON.stringify(store(left)) === JSON.stringify(store(right));
+// A gitlink's working tree entry is a directory, as Git leaves it.
+async function holdsEntry(checkout: string, working: Tree, path: string, entry: GitTreeEntry): Promise<boolean> {
+  if (entry.type === 'gitlink') return (await lstat(join(checkout, path)).catch(() => undefined))?.isDirectory() === true;
+  const held = working[path];
+  return held !== undefined && JSON.stringify(store(held)) === JSON.stringify(store(entry));
+}
+
+async function writeRepositoryConfig(checkout: string): Promise<void> {
+  await writeFile(join(checkout, GIT_CONFIG_FILE), REPOSITORY_CONFIG);
 }
 
 function sameTree(left: Tree, right: Tree): boolean {
@@ -518,7 +687,8 @@ function ignoredPaths(tree: Tree): Set<string> {
   return new Set(rules?.type === 'file' ? new TextDecoder().decode(rules.content).split('\n').filter(Boolean) : []);
 }
 
-async function writeEntry(path: string, entry: TreeEntry): Promise<void> {
+async function writeEntry(path: string, entry: GitTreeEntry): Promise<void> {
+  if (entry.type === 'gitlink') return void (await mkdir(path, { recursive: true }));
   if (entry.type === 'link') return symlink(entry.target, path);
   await writeFile(path, entry.content);
   await chmod(path, entry.mode === '100755' ? 0o755 : 0o644);
@@ -620,7 +790,7 @@ async function writeState(checkout: string, state: LocalState): Promise<void> {
 
 // The working tree outside `.git`; a link is read, never followed.
 async function workingTree(checkout: string, prefix = ''): Promise<Record<string, TreeEntry>> {
-  const tree: Record<string, TreeEntry> = {};
+  const tree: Record<string, TreeEntry> = Object.create(null);
   for (const entry of await readdir(join(checkout, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
     const full = join(checkout, path);
@@ -649,10 +819,49 @@ async function recordText(path: string): Promise<string> {
   return (await lstat(path)).isDirectory() ? allText(path) : `${path}\n${await readFile(path, 'utf8')}`;
 }
 
+// Reads the files and links of a ustar archive with pax path records, into
+// an object without a prototype, so that any path is an own entry.
+export function decodeTar(archive: Uint8Array): Record<string, TreeEntry> {
+  const tree: Record<string, TreeEntry> = Object.create(null);
+  const text = (from: number, length: number) => new TextDecoder().decode(archive.subarray(from, from + length)).replace(/\0.*$/s, '');
+  let pax: Record<string, string> = {};
+  for (let offset = 0; offset + 512 <= archive.length && archive[offset] !== 0;) {
+    const size = Number.parseInt(text(offset + 124, 12), 8);
+    const type = text(offset + 156, 1);
+    const data = archive.subarray(offset + 512, offset + 512 + size);
+    if (type === 'x') pax = paxRecords(data);
+    else {
+      const path = pax.path ?? text(offset, 100);
+      const executable = (Number.parseInt(text(offset + 100, 8), 8) & 0o111) !== 0;
+      tree[path] = type === '2'
+        ? { type: 'link', target: pax.linkpath ?? text(offset + 157, 100) }
+        : { type: 'file', mode: executable ? '100755' : '100644', content: new Uint8Array(data) };
+      pax = {};
+    }
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  return tree;
+}
+
+// Each record is `<length> <key>=<value>\n`, its length in bytes, so a
+// value may hold a newline.
+function paxRecords(records: Uint8Array): Record<string, string> {
+  const decoded: Record<string, string> = Object.create(null);
+  for (let offset = 0; offset < records.length;) {
+    const space = records.indexOf(0x20, offset);
+    const length = Number(new TextDecoder().decode(records.subarray(offset, space)));
+    const record = new TextDecoder().decode(records.subarray(space + 1, offset + length - 1));
+    const equals = record.indexOf('=');
+    decoded[record.slice(0, equals)] = record.slice(equals + 1);
+    offset += length;
+  }
+  return decoded;
+}
+
 const BASE_BRANCH = 'main';
 const TRACKED = 'README.md';
 const IGNORED = 'build.log';
-const BASE_TREE: Tree = { [TRACKED]: textFile('base\n'), '.gitignore': textFile(`${IGNORED}\n`) };
+const BASE_TREE: Readonly<Record<string, TreeEntry>> = { [TRACKED]: textFile('base\n'), '.gitignore': textFile(`${IGNORED}\n`) };
 
 // Every record kind of the worker journal contract section 2.
 const CONTROL_RECORDS: Readonly<Record<string, string>> = {
@@ -665,12 +874,25 @@ const CONTROL_RECORDS: Readonly<Record<string, string>> = {
   'worker/logs/stream.log': 'log',
 };
 
+// The GitHub plugin's form of the Authorization value (contract section 7).
 function credential(credentialId: string, repositories: string[], permissions: string[]): WorkspaceCredential {
-  return { credentialId, secret: `secret-of-${credentialId}`, repositories, permissions };
+  const secret = `secret-of-${credentialId}`;
+  const authorization = `Basic ${Buffer.from(`x-access-token:${secret}`).toString('base64')}`;
+  return { credentialId, secret, authorization, repositories, permissions };
+}
+
+// What a fixture shows: a credential's exact header as its marker, and
+// every other environment value with a credential form redacted.
+function observed(process: GitProcessObservation, credentials: readonly WorkspaceCredential[]): GitProcessObservation {
+  const sensitive = sensitiveValues(credentials);
+  const headers = new Map(credentials.map(({ credentialId, authorization }) => [`Authorization: ${authorization}`, redactedHeader(credentialId)]));
+  const redact = (value: string) => headers.get(value) ?? (holdsSensitive(value, sensitive) ? REDACTED_VALUE : value);
+  const environment = Object.fromEntries(Object.entries(process.environment).map(([key, value]) => [key, redact(value)]));
+  return { ...process, environment };
 }
 
 // A fresh data root with control records, a service, and the fixture.
-export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
+export async function createFixture(defects: DoubleDefects = {}, gitClient: GitClientPin = GIT_CLIENT_PINS.linux): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
   const dataRoot = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-workspace-')));
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
@@ -680,7 +902,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   const service = new FakeGitService(BASE_BRANCH, BASE_TREE);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
   const digest = identifierDigest(defects);
-  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects);
+  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects, gitClient);
   const provider = make();
   const binding: RepositoryBinding = { repository, remote: 'https://scm.example/acme/project.git', baseBranch: BASE_BRANCH };
   const checkout = async (attemptId: AttemptId) => mustParse(await provider.checkoutOf(attemptId));
@@ -693,20 +915,22 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     await rm(target, { force: true });
     await writeEntry(target, entry);
   };
+  const credentials = {
+    read: credential('read', [repository], ['read-code']),
+    write: credential('write', [repository], ['read-code', 'write-code']),
+    foreign: credential('foreign', ['acme/other'], ['read-code', 'write-code', 'write-change-requests', 'write-statuses']),
+  };
   const fixture: WorkspaceFixture = {
     provider,
     dataRoot,
     identifierDigest: digest,
     binding,
-    credentials: {
-      read: credential('read', [repository], ['read-code']),
-      write: credential('write', [repository], ['read-code', 'write-code']),
-      foreign: credential('foreign', ['acme/other'], ['read-code', 'write-code', 'write-change-requests', 'write-statuses']),
-    },
+    credentials,
     baseTree: BASE_TREE,
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
     separateExecutionIdentity: true,
+    gitClient,
     reopen: make,
     writeFile: (attemptId, path, text) => write(attemptId, path, textFile(text)),
     writeBytes: (attemptId, path, content) => write(attemptId, path, file(content)),
@@ -751,6 +975,19 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       service.branches.set(branch, service.commit(entries, parent));
     },
     remoteCalls: async () => service.calls,
+    commitGitlink: async (attemptId, path) => {
+      const directory = await checkout(attemptId);
+      const state = await readState(directory);
+      const entries = { ...service.entries(state.commit), [path]: { type: 'gitlink', commit: UNKNOWN_SUBMODULE_COMMIT } } as const;
+      await mkdir(join(directory, path), { recursive: true });
+      const commit = service.commit(entries, state.commit);
+      await update(attemptId, (current) => ({ ...current, commit, index: storeTree(entries) }));
+    },
+    gitProcesses: async () => service.processes.map((process) => observed(process, Object.values(credentials))),
+    plantGitSetting: async (attemptId, key, setting) => {
+      await execFileAsync('git', ['config', '--file', join(await checkout(attemptId), GIT_CONFIG_FILE), '--add', key, setting]);
+    },
+    gitConfig: async (attemptId) => readFile(join(await checkout(attemptId), GIT_CONFIG_FILE), 'utf8').catch(() => ''),
     nativeHead: async (attemptId) => {
       const { commit } = await readState(await checkout(attemptId));
       return { commit, tree: service.commits.get(commit)?.tree ?? '' };
@@ -761,10 +998,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       const records = (await readdir(worker)).filter((entry) => entry !== 'workspaces').map((entry) => recordText(join(worker, entry)));
       return (await Promise.all(records)).join('\n');
     },
-    readSnapshot: async (content) => {
-      const stored = JSON.parse(new TextDecoder().decode(content)) as [string, StoredEntry][];
-      return Object.fromEntries(stored.map(([path, entry]) => [path, load(entry)]));
-    },
+    readSnapshot: async (content) => decodeTar(content),
     interruptPrepare: async (attemptId) => {
       const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${provider.directoryName(attemptId)}`, WORKSPACE_LAYOUT.checkout);
       await mkdir(staging, { recursive: true });
