@@ -108,6 +108,44 @@ verify_stamp() {
   node --experimental-strip-types "$scripts/verify-stamp.ts" "$@"
 }
 
+# The time of a reused stamp, from the message of a passing stamp check.
+stamp_time() {
+  sed -n 's/^pre-push: tree [0-9a-f]* passed make verify (full) at \([^;]*\);.*/\1/p' <<<"$1"
+}
+
+INTEGRATION_JSON='
+const [tree, verify, profile, seconds, change, branch, started] = process.argv.slice(1);
+const record = { tree, verify, profile, verifySeconds: Number(seconds), change, branch, started };
+console.log(JSON.stringify(record));
+'
+
+# The integration line of the merged tree $1.
+format_integration_line() {
+  local line="Integration: tree $1; verify $verify_outcome; profile $TASKELITH_VERIFY_PROFILE"
+  echo "$line; verify seconds $verify_seconds; change $change; branch $branch; started $started"
+}
+
+# Prints the integration line and appends it as JSON to the shared log; a
+# failed append only warns, so it never fails the integration.
+record_integration() {
+  local tree="$1"
+  echo "$integration_line"
+  if ! node -e "$INTEGRATION_JSON" "$tree" "$verify_outcome" "$TASKELITH_VERIFY_PROFILE" \
+    "$verify_seconds" "$change" "$branch" "$started" 2>/dev/null >>"$integrations"; then
+    echo "integrate.sh: warning: could not append the integration line to $integrations" >&2
+  fi
+}
+
+# Appends the integration line to the body of the open pull request $1,
+# after the coordinator's text and the lines of earlier attempts.
+append_integration_line() {
+  local current
+  current="$(gh pr view "$1" --json body --jq .body)"
+  gh pr edit "$1" --body "$current
+
+$integration_line" >/dev/null
+}
+
 # The main clone is updated after the merge, so it must be on a clean dev
 # that origin/dev fast-forwards before anything changes on the remote.
 check_main_clone() {
@@ -169,9 +207,11 @@ land() {
 }
 
 wait_while_paused
+started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
 worktree="$(dirname "$main")/taskelith-worktrees/itg-$branch"
 log="$state/integrate-$(printf '%s' "$branch" | tr '/' '_')-verify.log"
+integrations="$state/integrations.jsonl"
 mkdir -p "$state"
 
 git -C "$main" fetch -q origin
@@ -187,10 +227,13 @@ fi
 cd "$worktree"
 
 # The branch must end with its own archived change (protocol step 7).
-if [ -d "openspec/changes/$branch" ] || ! compgen -G "openspec/changes/archive/*-$branch" >/dev/null; then
+archived="openspec/changes/archive/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$branch"
+if [ -d "openspec/changes/$branch" ] || ! compgen -G "$archived" >/dev/null; then
   echo "NOT ARCHIVED $branch"
   exit 5
 fi
+change="$(compgen -G "$archived" | tail -1)"
+change="${change##*/}"
 
 # An earlier attempt whose pull request merged left HEAD in origin/dev; a
 # new merge commit there would open a second pull request.
@@ -225,9 +268,12 @@ fi
 
 # Integration always needs a full stamp of the merged tree (decision D5).
 export TASKELITH_VERIFY_PROFILE=full
-if verify_stamp check full >/dev/null; then
+verify_started=$SECONDS
+if stamp="$(verify_stamp check full)"; then
+  verify_outcome="reused stamp of $(stamp_time "$stamp")"
   echo "integrate.sh: reusing the full make verify stamp of the merged tree"
 else
+  verify_outcome=ran
   verify_status=0
   run_verify >"$log" 2>&1 || verify_status=$?
   if [ "$interrupted" = true ]; then
@@ -246,6 +292,10 @@ else
     exit 4
   fi
 fi
+verify_seconds=$((SECONDS - verify_started))
+merged_tree="$(git rev-parse 'HEAD^{tree}')"
+integration_line="$(format_integration_line "$merged_tree")"
+record_integration "$merged_tree"
 
 git push -q origin "HEAD:$branch"
 pull_request="$(existing_pull_request)"
@@ -256,10 +306,13 @@ case "$pr_state" in
     ;;
   open)
     echo "integrate.sh: continuing with the open pull request $url"
+    append_integration_line "$url"
     gh pr merge "$url" --merge
     ;;
   *)
-    url="$(gh pr create --base dev --head "$branch" --title "$title" --body "$body")"
+    url="$(gh pr create --base dev --head "$branch" --title "$title" --body "$body
+
+$integration_line")"
     gh pr merge "$url" --merge
     ;;
 esac
