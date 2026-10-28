@@ -1,7 +1,7 @@
 # ADR 0013: Intents, campaigns, and proposal graphs
 
 Date: 2026-10-25
-Status: Decided by the owner on 2026-10-25 in the project conversation. Recorded; no campaign model, blueprint artifact, dispatcher, or branch handling exists yet. Implementation is not authorized: it starts only when the owner authorizes it, and the decisions then become work items of that gate's plan under "Delivery and authorization". The forward-compatibility obligations apply to G3 and G4 designs now.
+Status: Decided by the owner on 2026-10-25 in the project conversation. Recorded; no campaign model, blueprint artifact, dispatcher, or branch handling exists yet. Implementation is not authorized: it starts only when the owner authorizes it, and the decisions then become work items of that gate's plan under "Delivery and authorization". The forward-compatibility obligations apply to G3 and G4 designs now. [ADR 0016](0016-delivery-gates-for-intents-and-council.md) fixes the delivery gate of decisions 1 to 8 as G9 and of decision 9 as G10 (2026-10-28).
 
 ## Context
 
