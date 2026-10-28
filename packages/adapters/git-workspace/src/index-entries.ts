@@ -41,9 +41,10 @@ export function indexMatchesTree(index: readonly IndexEntry[], tree: readonly Li
   const key = (mode: string, object: string, path: string) => `${mode} ${object} ${path}`;
   const staged = index.filter(({ stage }) => stage === 0).map(({ mode, object, path }) => key(mode, object, latin1(path)));
   const committed = tree
+    .filter((entry) => entry.type !== 'tree')
     .map((entry) => ({ entry, path: latin1(Buffer.concat(entry.path.flatMap((name, at) => (at === 0 ? [name] : [Buffer.from('/'), name])))) }))
     .filter(({ path }) => !conflicted.has(path))
-    .map(({ entry, path }) => key(entry.type === 'gitlink' ? '160000' : entry.mode, entry.object, path));
+    .map(({ entry, path }) => key(entry.type === 'blob' ? entry.mode : '160000', entry.object, path));
   return staged.length === committed.length && staged.sort().join('\0') === committed.sort().join('\0');
 }
 
