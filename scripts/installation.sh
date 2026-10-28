@@ -154,7 +154,7 @@ report_layers() {
 # Compares the builds' platform images by config digest and ordered layers,
 # names each part that differs, and fails when one does.
 compare_builds() {
-  local first_config second_config first_layers second_layers status=0
+  local first="$1" second="$2" first_config second_config first_layers second_layers status=0
   first_config="$(config_digest "$first")" || return
   second_config="$(config_digest "$second")" || return
   first_layers="$(image_layers "$first")" || return
@@ -173,18 +173,18 @@ compare_builds() {
 # Builds the worker image twice from fresh contexts of one revision, without
 # the build cache, and passes only when both builds give one platform image.
 check_reproducible() (
-  local revision epoch first="$worker_image-first" second="$worker_image-second" context="" build
+  local revision epoch first="$worker_image-first" second="$worker_image-second" context="" image
   require_pins verify-worker-image-reproducible
   trap 'finish_reproducible $?' EXIT
   revision="$(source_revision)" || exit
   epoch="$(commit_time "$revision")" || exit
-  for build in first second; do
+  for image in "$first" "$second"; do
     rm -rf "$context"
     context="$(mktemp -d)"
     unpack_context "$revision" "$context"
-    build_image "$context" "$epoch" worker "$worker_image-$build" --no-cache
+    build_image "$context" "$epoch" worker "$image" --no-cache
   done
-  compare_builds
+  compare_builds "$first" "$second"
 )
 
 # Prints the init result once: it holds the operator secret (contract 4).

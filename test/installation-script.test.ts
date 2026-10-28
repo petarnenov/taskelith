@@ -166,27 +166,19 @@ test('the containment check fails when the probe fails for another reason than a
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
 
-// Models builds tagged -first and -second, as BuildKit, which names no config
-// in the metadata of an index; FAKE_ statuses fail steps, see the tests.
+// Models builds tagged -first and -second: a saved manifest.json, layers, and
+// an image ID the check ignores; FAKE_ statuses fail steps.
 const buildDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case "$*" in
-  *-first|*"-first "*) config=$FAKE_FIRST_CONFIG manifest=$FAKE_FIRST_MANIFEST layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
-  *-second|*"-second "*) config=$FAKE_SECOND_CONFIG manifest=$FAKE_SECOND_MANIFEST layers=$FAKE_SECOND_LAYERS id=$FAKE_SECOND_ID ;;
+  *-first|*"-first "*) manifest=$FAKE_FIRST_MANIFEST layers=$FAKE_FIRST_LAYERS id=$FAKE_FIRST_ID ;;
+  *-second|*"-second "*) manifest=$FAKE_SECOND_MANIFEST layers=$FAKE_SECOND_LAYERS id=$FAKE_SECOND_ID ;;
 esac
 case "$*" in
   "build "*)
     case "$*" in *"-first "*) [ -z "$FAKE_MOVE_HEAD" ] || GIT_COMMITTER_DATE='@1800000000 +0000' \\
       git -C "$FAKE_MOVE_HEAD" -c user.name=test -c user.email=test@example.invalid \\
       commit --quiet --allow-empty --message moved ;; esac
-    previous=
-    for argument; do
-      if [ "$previous" = --metadata-file ]; then
-        if [ "$id" = "$config" ]; then key=containerimage.config.digest; else key=containerimage.digest; fi
-        printf '{"%s": "%s"}\\n' "$key" "$id" > "$argument"
-      fi
-      previous=$argument
-    done
     exit "\${FAKE_BUILD_STATUS:-0}" ;;
   "image save "*)
     saved=$(mktemp -d)
@@ -288,7 +280,7 @@ function checkReproducible(
 ): BuildOutcome {
   const builds = { FIRST: { ...WORKER_BUILD, ...first }, SECOND: { ...WORKER_BUILD, ...second } };
   const fakes = Object.entries(builds).flatMap(([name, build]) => [
-    [`FAKE_${name}_CONFIG`, build.config], [`FAKE_${name}_MANIFEST`, build.manifest ?? savedManifest(build.config)],
+    [`FAKE_${name}_MANIFEST`, build.manifest ?? savedManifest(build.config)],
     [`FAKE_${name}_LAYERS`, build.layers], [`FAKE_${name}_ID`, build.id],
   ]);
   return runInFixture('installation.sh', ['check-reproducible', 'installation-script-test'], {
