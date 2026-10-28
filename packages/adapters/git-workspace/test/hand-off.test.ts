@@ -446,6 +446,30 @@ test('a failure record whose rename throws still kills, proves empty, and frees 
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });
 
+test('a failure record renamed into place before its directory flush fails keeps the failure, so no reclaim runs the program again', () => {
+  const host = failingHost();
+  return withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const attempt = join(git.checkout(FIRST), '..');
+    const mode = await modeOf(attempt);
+    // Without read permission the directory cannot be opened for its flush.
+    const unflushable = git.reopen({
+      reach: (point) => {
+        if (point === 'WS8.after') chmodSync(attempt, 0o300);
+      },
+    });
+    const reclaimed = await unflushable.reclaim(FIRST).finally(() => chmod(attempt, mode));
+    assert.equal(failed(reclaimed).code, 'unavailable');
+    const containment = host.launched[0]!;
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
+    assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
+    assert.equal(failed(await git.local.reclaim(FIRST)).details.reason, 'reclaim-failed');
+    assert.equal(host.launched.length, 1, 'the program never runs again');
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+  }, { reclaimHost: host });
+});
+
 test('on one account a later reclaim of a failed program signals no recorded process group', () => {
   const signals: [number, NodeJS.Signals][] = [];
   const recording = new ProcessGroupReclaimHost(FAILING_PROGRAM, RECLAIM_READY_BOUND_MS, (pid, signal) => void signals.push([pid, signal]));

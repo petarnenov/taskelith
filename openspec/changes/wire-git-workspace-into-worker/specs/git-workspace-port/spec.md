@@ -16,8 +16,12 @@ After a reclaim program that overran `RECLAIM_RUN_BOUND_MS` or failed after `go`
 - **THEN** `reclaim` fails with reason `reclaim-failed`, and a later `reclaim`, also after a restart, on Linux kills what the recorded cgroup still holds, on one account only proves the recorded process group empty and never signals it, and frees the containment without running the program again
 
 #### Scenario: Failure record not written
-- **WHEN** the durable write of an overrunning program's failure meets a fault
+- **WHEN** the durable write of an overrunning program's failure meets a fault, also a thrown one, before the record is renamed into place
 - **THEN** the program's containment is still killed, proven empty, and freed, `reclaim` fails with `unavailable`, and the record names the containment without the failure, so a later `reclaim` runs the program once more
+
+#### Scenario: Failure record not flushed
+- **WHEN** a failed program's failure record is renamed into place and the flush of its directory then fails
+- **THEN** the containment is still killed, proven empty, and freed, `reclaim` fails with `unavailable`, and a later `reclaim` reads the failure, fails with `reclaim-failed`, and does not run the program again
 
 ### Requirement: Handed-off workspace refusal in the adapter
 An adapter composed with a separate execution account SHALL hold at most one handed-off workspace per worker: `handOff` SHALL refuse while another workspace is handed off with `precondition-failed` and reason `other-workspace-handed-off`, checking and recording atomically per worker. The worker's slot rules are the worker runtime's (`worker-runtime`, "Slot held by a handed-off workspace").
