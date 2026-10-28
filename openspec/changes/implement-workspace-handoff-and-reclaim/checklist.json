@@ -1,0 +1,103 @@
+{
+  "change": "implement-workspace-handoff-and-reclaim",
+  "generatedAt": "2026-10-28T13:16:37.055Z",
+  "devCommit": "964f0b57001311d38afeb096dba64134197938f6",
+  "query": {
+    "capabilities": [
+      "git-workspace-port",
+      "scm-port"
+    ],
+    "files": [
+      "packages/adapters/git-workspace/**",
+      "packages/modules/workspace/**",
+      "docs/contracts/git-workspace.md",
+      "infra/installation/Dockerfile"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 32
+      },
+      {
+        "category": "error-handling",
+        "count": 22
+      },
+      {
+        "category": "redaction",
+        "count": 16
+      },
+      {
+        "category": "spec-wording",
+        "count": 16
+      },
+      {
+        "category": "docs",
+        "count": 11
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      },
+      {
+        "category": "concurrency-race",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 506,
+        "inChecklist": 418
+      },
+      "mediumOrWorse": {
+        "findings": 224,
+        "inChecklist": 199
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 92
+      },
+      {
+        "category": "docs",
+        "count": 58
+      },
+      {
+        "category": "spec-wording",
+        "count": 54
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 278,
+        "inChecklist": 274
+      },
+      "mediumOrWorse": {
+        "findings": 48,
+        "inChecklist": 46
+      }
+    }
+  }
+}
