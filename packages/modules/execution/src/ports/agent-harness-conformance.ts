@@ -8,7 +8,7 @@ import {
   type HarnessRequestKind,
   type ParsedAgentHarnessCapabilities,
 } from './agent-harness-data.js';
-import { DELEGATION_OUTCOMES, SUBSCRIPTION_MECHANISMS } from './agent-harness.js';
+import { DELEGATION_OUTCOMES, RUNNING_TURN_DETAIL, SUBSCRIPTION_MECHANISMS } from './agent-harness.js';
 import type {
   AgentHarness,
   AgentHarnessOperation,
@@ -67,7 +67,9 @@ export interface AgentHarnessConformanceReport {
   readonly findings: readonly AgentHarnessConformanceFinding[];
 }
 
-type Outcome = { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly code: FailureCode };
+type Outcome =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly code: FailureCode; readonly details: Readonly<Record<string, string>> };
 
 type TurnEnded = Extract<HarnessEvent, { kind: 'turn-ended' }>;
 
@@ -172,7 +174,12 @@ async function interruption(probe: Probe): Promise<void> {
   if (session === undefined) return;
   probe.expect('interrupt with no turn', await probe.call('interrupt', { ...session, turnId: 'turn-1' }), 'precondition-failed');
   if (!probe.succeeded('submit', await probe.submit(session, 'turn-1', probe.prompts.longRunning))) return;
-  probe.expect('second turn while one runs', await probe.submit(session, 'turn-2', probe.prompts.recall), 'precondition-failed');
+  const second = await probe.submit(session, 'turn-2', probe.prompts.recall);
+  probe.expect('second turn while one runs', second, 'precondition-failed');
+  probe.expectRunningTurn('second turn while one runs', second, 'turn-1');
+  const again = await probe.submit(session, 'turn-1', probe.prompts.recall);
+  probe.expect('running turn submitted again', again, 'conflict');
+  probe.expectRunningTurn('running turn submitted again', again, 'turn-1');
   probe.succeeded('interrupt', await probe.call('interrupt', { ...session, turnId: 'turn-1' }));
   await probe.turnEnd('turn-1', 'interrupted');
   probe.expect('interrupt an ended turn', await probe.call('interrupt', { ...session, turnId: 'turn-1' }), 'precondition-failed');
@@ -614,7 +621,10 @@ class Probe {
     if (raw === TIMED_OUT) return undefined;
     const parsed = parseOperationResult(operation, raw);
     if (!parsed.ok) return (this.report('result', `${operation}: ${parsed.error.message}`), undefined);
-    if (!parsed.value.ok) return { ok: false, code: parsed.value.error.code };
+    if (!parsed.value.ok) {
+      const { code, details } = parsed.value.error;
+      return { ok: false, code, details };
+    }
     if (operation === 'startSession' || operation === 'resumeSession') {
       this.#context.issued.add((parsed.value.value as { nativeSessionId: string }).nativeSessionId);
     }
@@ -630,6 +640,12 @@ class Probe {
     if (outcome === undefined) return;
     if (outcome.ok) this.report(check, `${label}: expected ${code}, got success`);
     else if (outcome.code !== code) this.report(check, `${label}: expected ${code}, got ${outcome.code}`);
+  }
+
+  expectRunningTurn(label: string, outcome: Outcome | undefined, turnId: string): void {
+    if (outcome === undefined || outcome.ok) return;
+    const named = outcome.details[RUNNING_TURN_DETAIL];
+    if (named !== turnId) this.report('outcome', `${label}: expected the running turn ${turnId}, got ${named ?? 'none'}`);
   }
 
   report(check: AgentHarnessConformanceCheck, message: string): void {

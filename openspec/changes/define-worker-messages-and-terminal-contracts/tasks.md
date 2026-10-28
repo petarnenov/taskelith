@@ -12,6 +12,7 @@
 - [x] 2.6 Write the `execution-wire-contracts`, `control-plane-wire-contracts`, and `scm-port` spec deltas
 - [x] 2.7 Add the agent session binding to the protocol version 2 assignment offer, as the architect decided on 2026-10-28, with its tests, contract page, spec delta, and breaking-change declaration
 - [x] 2.8 Apply the architect's answer of 2026-10-28 to review pass 1 finding 3: `session.turn.acceptance-unknown`, the narrowed `port-refused`, and the timeline operation `recordTurnAcceptanceUnknown`, with tests, contract pages, spec deltas, and breaking-change declaration
+- [x] 2.9 Fix the review pass 2 findings, H1 by the architect's amendment of 2026-10-28: the generation stopped on unknown acceptance, the running turn named by the agent harness port, the refused observations, the reattach cursor, the subprotocol list, and the wording fixes, with tests, contract pages, and spec deltas
 
 ## 3. Tests
 

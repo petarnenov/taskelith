@@ -5574,17 +5574,18 @@
             "name": "Sec-WebSocket-Protocol",
             "in": "header",
             "required": true,
-            "description": "The frame protocol of this connection.",
+            "description": "The subprotocols the client offers, a comma-separated list that must include `taskelith.terminal.v1`; the 101 answer selects it.",
             "schema": {
               "type": "string",
-              "const": "taskelith.terminal.v1"
+              "maxLength": 1024,
+              "pattern": "(^|,)[ \\t]*taskelith\\.terminal\\.v1[ \\t]*(,|$)"
             }
           },
           {
             "name": "Origin",
             "in": "header",
             "required": false,
-            "description": "The page's origin, which a browser always sends; a session-authenticated upgrade from another origin than the installation's is refused with 403 `csrf-token-invalid`.",
+            "description": "The page's origin, which a browser always sends; a session-authenticated upgrade without it, or from another origin than the installation's, is refused with 403 `csrf-token-invalid`.",
             "schema": {
               "type": "string",
               "maxLength": 2048

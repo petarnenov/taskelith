@@ -1864,10 +1864,11 @@
             "name": "Sec-WebSocket-Protocol",
             "in": "header",
             "required": true,
-            "description": "The frame protocol of this connection.",
+            "description": "The subprotocols the client offers, a comma-separated list that must include `taskelith.relay.v1`; the 101 answer selects it.",
             "schema": {
               "type": "string",
-              "const": "taskelith.relay.v1"
+              "maxLength": 1024,
+              "pattern": "(^|,)[ \\t]*taskelith\\.relay\\.v1[ \\t]*(,|$)"
             }
           }
         ],
@@ -1946,7 +1947,7 @@
             }
           },
           "503": {
-            "description": "A store the operation needs is unavailable, or the worker's relay connection is not open; retry later.",
+            "description": "A store the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {

@@ -3343,7 +3343,7 @@
       "TurnDeliveredObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The port accepted the turn in the named generation.",
+        "description": "The port accepted the turn in the named generation, or answered its repeated submission with `conflict` or `precondition-failed` naming it as the running turn.",
         "required": [
           "metadata",
           "payload"
@@ -3418,7 +3418,7 @@
       "TurnNotDeliveredObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The host did not deliver the turn: its generation no longer runs, or the port refused it in a way that proves it did not accept the turn. The turn stays queued.",
+        "description": "The host did not deliver the turn: its generation no longer runs, or the plugin returned a refusal that proves it did not accept the turn. The turn stays queued.",
         "required": [
           "metadata",
           "payload"
@@ -3484,7 +3484,8 @@
               "conflict",
               "timeout",
               "crash"
-            ]
+            ],
+            "description": "`conflict`: `submitTurn` answered `conflict` without naming the turn as the running one; `timeout`: it did not answer in time; `crash`: the plugin failed with `internal`, threw, or returned a result that the host's parser rejected, or a restart found the command journaled without its outcome."
           },
           "recoveryEpoch": {
             "$ref": "#/components/schemas/RecoveryEpoch"
@@ -3494,7 +3495,7 @@
       "TurnAcceptanceUnknownObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The host cannot tell whether the port accepted the turn: the port answered conflict for its turn ID, the submission timed out, or the host or plugin failed before it recorded the answer. The turn becomes outcome-unknown, is final, and is never resent.",
+        "description": "The host cannot tell whether the port accepted the turn: the port answered conflict for its turn ID without naming it as the running turn, the submission timed out, or the host or plugin failed before it recorded the answer. The host stops the generation when it still runs. The turn becomes outcome-unknown, is final, and is never resent; no later turn is delivered in that generation.",
         "required": [
           "metadata",
           "payload"

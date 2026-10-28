@@ -99,12 +99,31 @@ test('a client attaches first, with the session\'s CSRF token when the cookie au
   const attach = { type: 'terminal.attach', csrfToken: CSRF, cols: 120, rows: 40 };
 
   assert.ok(frame('TerminalAttachFrame', attach).ok);
-  assert.ok(frame('TerminalAttachFrame', { type: 'terminal.attach', cols: 80, rows: 24, after: 17 }).ok);
   assert.ok(!frame('TerminalAttachFrame', { ...attach, csrfToken: 'short' }).ok);
   assert.ok(!frame('TerminalAttachFrame', { ...attach, cols: 0 }).ok);
   assert.ok(frame('TerminalClientFrame', attach).ok);
   assert.ok(frame('TerminalClientFrame', { type: 'terminal.close' }).ok);
   assert.match((FRAMES.TerminalAttachFrame as { description: string }).description, /first and only first client frame/);
+});
+
+test('a reattach names the terminal its cursor belongs to', () => {
+  const reattach = { type: 'terminal.attach', cols: 80, rows: 24, after: 17 };
+
+  assert.ok(frame('TerminalAttachFrame', { ...reattach, terminalId: 'terminal-1' }).ok);
+  assert.ok(frame('TerminalAttachFrame', { type: 'terminal.attach', cols: 80, rows: 24, terminalId: 'terminal-1' }).ok);
+  assert.ok(!frame('TerminalAttachFrame', reattach).ok);
+  assert.match((FRAMES.TerminalAttachFrame as { properties: { after: { description: string } } }).properties.after.description, /`invalid-frame`/);
+});
+
+test('an upgrade accepts a subprotocol list that offers its protocol', () => {
+  const upgrades = [[operation('openTerminal'), 'taskelith.terminal.v1'], [relay(), 'taskelith.relay.v1']] as const;
+
+  for (const [upgrade, protocol] of upgrades) {
+    const header = (upgrade.parameters ?? []).find(({ name }) => name === 'Sec-WebSocket-Protocol');
+    const offers = new RegExp((header?.schema as { pattern: string }).pattern);
+    for (const offered of [protocol, `chat, ${protocol}`, `${protocol},chat`]) assert.match(offered, offers);
+    for (const offered of ['chat', `${protocol}x`, `x${protocol}`, `chat ${protocol}`]) assert.doesNotMatch(offered, offers);
+  }
 });
 
 test('terminal input and output are bounded per frame', () => {

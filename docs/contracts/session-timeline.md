@@ -78,7 +78,7 @@ A new turn is `queued` at the next position of the session, from 1 without gaps.
 
 ### 4.2 Queued, serialized delivery
 
-All turns are mutable in G3, because no harness declares concurrent turns (agent harness port contract section 6). A turn submitted while another runs is queued and delivered when the running turn ends, one at a time in position order, so the port's rejection of a second turn never fires for a queued turn. `nextDeliverableTurn(session)` returns the earliest queued turn when the session is not stopped, a generation runs, and no turn is `delivered`; otherwise nothing.
+All turns are mutable in G3, because no harness declares concurrent turns (agent harness port contract section 6). A turn submitted while another runs is queued and delivered when the running turn ends, one at a time in position order, so the port's rejection of a second turn never fires for a queued turn. `nextDeliverableTurn(session)` returns the earliest queued turn when the session is not stopped, a generation runs, no turn is `delivered`, and no turn of the running generation became `outcome-unknown` through section 4.4; otherwise nothing.
 
 `deliverTurn(session, delivery)` records that the host submitted the turn in the named generation, after the port accepted it. An unknown turn fails with `not-found`. A turn that is not `queued`, a stopped session, a generation that is not running, another `delivered` turn, or a turn other than the earliest queued one fails with `precondition-failed`. The turn becomes `delivered` in that generation.
 
@@ -109,7 +109,7 @@ The architect added this operation on 2026-10-28 (G3 item 9d, `define-worker-mes
 3. A turn that is `delivered` or `ended` fails with `conflict`.
 4. A turn other than the earliest `queued` one fails with `precondition-failed`.
 
-The turn becomes `outcome-unknown` in that generation, the state that section 6 gives a delivered turn whose outcome is lost: final, never resent, and never delivered again, so `nextDeliverableTurn` moves past it to the next queued turn. A later outcome for it fails as section 4.3 states, and its output as section 7 states. The generation need not run and a stopped session takes it, because a report can follow a crash.
+The turn becomes `outcome-unknown` in that generation, the state that section 6 gives a delivered turn whose outcome is lost: final, never resent, and never delivered again, so `nextDeliverableTurn` moves past it to the next queued turn, but only in a later generation: the turn may still run in the harness, so while the generation it was sent for runs, nothing is deliverable (section 4.2), and the host stops that generation ([worker messages and terminal contract](worker-messages-and-terminal.md) section 3). A later outcome for it fails as section 4.3 states, its requests as section 5.1, and its output as section 7. The generation need not run and a stopped session takes it, because a report can follow a crash; then the next queued turn waits only for the next generation (architect's amendment, 2026-10-28).
 
 ## 5. Native requests and responses
 
@@ -200,7 +200,7 @@ This item adds, through `make`, unit tests of the domain in `packages/modules/ex
 
 The items that build on it add:
 
-- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, the reconciliation of section 6 applied at a restart, and `recordTurnAcceptanceUnknown` of section 4.4 in the domain and the service, with the crash points of each path.
+- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, the reconciliation of section 6 applied at a restart, and `recordTurnAcceptanceUnknown` of section 4.4 in the domain and the service, with `nextDeliverableTurn` returning nothing while the turn's generation runs, with the crash points of each path.
 - Item 18: the host tests that the agent harness port contract section 11 lists, through this timeline.
 - Item 14: a reader whose cursor expired falls back to a durable snapshot.
 

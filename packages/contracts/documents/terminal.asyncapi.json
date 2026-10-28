@@ -206,7 +206,7 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 65536,
-        "description": "One chunk of terminal output, at most 65,536 characters, redacted on the worker before it leaves the host (account pool contract section 7.4). Never logged or recorded."
+        "description": "One chunk of terminal output, at most 65,536 characters, decoded by the worker from the pseudo-terminal's bytes as streaming UTF-8 with each invalid sequence replaced by U+FFFD, and redacted on the worker before it leaves the host (account pool contract section 7.4). Never logged or recorded."
       },
       "TerminalEndReason": {
         "type": "string",
@@ -271,9 +271,35 @@
           "rows": {
             "$ref": "#/components/schemas/TerminalRows"
           },
+          "terminalId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "On a reattach, the terminal whose output the client holds; required with `after`."
+          },
           "after": {
             "$ref": "#/components/schemas/TerminalCursor",
-            "description": "On a reattach, the last sequence the client holds; the retained output after it follows."
+            "description": "On a reattach, the last sequence the client holds of the terminal named by `terminalId`; the retained output after it follows. When that terminal is not the one attached, output follows from the earliest retained chunk, and an `after` beyond the attached terminal's last sequence closes the connection with `invalid-frame`."
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "after"
+          ],
+          "properties": {
+            "after": {
+              "$ref": "#/components/schemas/TerminalCursor"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "required": [
+            "terminalId"
+          ],
+          "properties": {
+            "terminalId": {
+              "$ref": "#/components/schemas/Identifier"
+            }
           }
         }
       },

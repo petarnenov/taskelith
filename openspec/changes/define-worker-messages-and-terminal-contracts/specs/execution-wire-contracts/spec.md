@@ -13,7 +13,7 @@ The AsyncAPI document SHALL define a command channel, an observation channel, an
 
 #### Scenario: Session messages on the worker channels
 - **WHEN** the channels of `execution.asyncapi.json` 0.8.0 are read
-- **THEN** the command channel lists the three session commands and the notice, and the observation channel the eleven session and adoption observations
+- **THEN** the command channel lists the three session commands and the notice, and the observation channel the twelve session and adoption observations
 
 ### Requirement: Protocol version
 Every execution command, observation, and report SHALL carry a positive integer protocol version. `VersionedCommand` SHALL accept every command whose metadata is valid and whose payload names a version. The package SHALL export `EXECUTION_PROTOCOL_VERSION`, `SESSION_PROTOCOL_VERSION`, `SUPPORTED_PROTOCOL_VERSIONS`, `supportsProtocolVersion`, and `commonProtocolVersion`.
@@ -93,6 +93,31 @@ When the host cannot tell whether the port accepted a turn, it SHALL report `ses
 #### Scenario: Conflict reported as a refusal
 - **WHEN** `session.turn.not-delivered` carries the reason `conflict`
 - **THEN** validation fails
+
+### Requirement: Running turn named on a repeated submission
+When `submitTurn` fails with `conflict` or `precondition-failed` naming the submitted turn as `runningTurnId`, the harness accepted it, and the host SHALL report `session.turn.delivered`. A `conflict` that names no running turn or another one SHALL be reported as `session.turn.acceptance-unknown` with `conflict`.
+
+#### Scenario: Own turn still running
+- **WHEN** a resent turn delivery's `submitTurn` answers `conflict` with `runningTurnId` equal to its turn ID
+- **THEN** the host reports `session.turn.delivered`, and the turn's requests and output are recorded
+
+### Requirement: Generation stopped on unknown acceptance
+When the host reports `session.turn.acceptance-unknown` while the turn's generation still runs, it SHALL first stop that generation with `closeSession`. No later turn SHALL be delivered in that generation, so no turn is delivered while an earlier turn of the same generation may still run.
+
+#### Scenario: One turn at a time
+- **WHEN** `submitTurn` times out while the turn's generation runs
+- **THEN** the host closes the generation before it reports `session.turn.acceptance-unknown` with `timeout`, and the next queued turn is delivered only in the next generation
+
+#### Scenario: Crash after the generation ended
+- **WHEN** a restarted host finds a turn delivery journaled without its outcome and the generation already ended
+- **THEN** it reports `session.turn.acceptance-unknown` with `crash` at once, and closes nothing
+
+### Requirement: Observations the timeline refuses
+A session observation that the timeline refuses other than as a repeat, such as the outcome, a request, or the output of an `outcome-unknown` turn, SHALL be applied without effect: confirmed, recorded in the inbox and the cursor, and logged as evidence, so it never holds the producer's sequence.
+
+#### Scenario: Output of a turn whose acceptance is unknown
+- **WHEN** `session.output.appended` arrives for a turn that is `outcome-unknown`
+- **THEN** it is confirmed and logged as evidence, the timeline is unchanged, and the next observation is applied
 
 ### Requirement: Responses from an approver
 A response delivery SHALL name its responder with the timeline's `Responder`, a principal or a standing rule and never the host, and a standing rule SHALL give only a permission answer. It SHALL carry no `delegation-result` answer. The worker SHALL pass the answer to the port and decide none itself.

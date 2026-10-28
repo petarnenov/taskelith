@@ -18,11 +18,15 @@ Each operation SHALL require the role of control-plane wire contracts section 3:
 ## ADDED Requirements
 
 ### Requirement: Terminal WebSocket upgrade
-`openTerminal` SHALL upgrade `GET /projects/{projectId}/agent-sessions/{sessionId}/terminal` to a WebSocket with the subprotocol `taskelith.terminal.v1`, taking the session cookie or the operator bearer. It SHALL authenticate, refuse a cookie upgrade from another origin with 403 `csrf-token-invalid`, and check the role before it reads the session; it SHALL answer 400 to an invalid parameter or handshake header.
+`openTerminal` SHALL upgrade `GET /projects/{projectId}/agent-sessions/{sessionId}/terminal` to a WebSocket with the subprotocol `taskelith.terminal.v1`, taking the session cookie or the operator bearer. It SHALL authenticate, refuse a cookie upgrade without an origin or from another origin with 403 `csrf-token-invalid`, and check the role before it reads the session; it SHALL answer 400 to an invalid parameter or handshake header.
 
 #### Scenario: Cross-origin upgrade
 - **WHEN** a cookie-authenticated upgrade carries an `Origin` other than the installation's
 - **THEN** the answer is 403 with reason `csrf-token-invalid` and no terminal is opened
+
+#### Scenario: Offered subprotocol list
+- **WHEN** an upgrade offers `Sec-WebSocket-Protocol: chat, taskelith.terminal.v1`
+- **THEN** the header is valid, and the 101 answer selects `taskelith.terminal.v1`
 
 #### Scenario: Unknown session without the role
 - **WHEN** a principal without a role on the project opens the terminal of an unknown session
@@ -36,21 +40,25 @@ After the role check, `openTerminal` SHALL answer 404 for a session not of the p
 - **THEN** the answer is 422 with reason `attempt-not-current`
 
 ### Requirement: Terminal attach and CSRF token
-The first client frame SHALL be `terminal.attach`; on a cookie-authenticated connection it SHALL carry the session's CSRF token, compared in constant time, and nothing SHALL be relayed before it. A missing or wrong token, or another first frame, SHALL close the connection with `csrf-token-invalid` or `invalid-frame`.
+The first client frame SHALL be `terminal.attach`; on a cookie-authenticated connection it SHALL carry the session's CSRF token, compared in constant time, and nothing SHALL be relayed before it. A missing or wrong token, or another first frame, SHALL close the connection with `csrf-token-invalid` or `invalid-frame`. An `after` SHALL name its `terminalId` and apply only to that terminal.
 
 #### Scenario: Attach without the token
 - **WHEN** a cookie-authenticated connection sends `terminal.attach` without a CSRF token
 - **THEN** the control plane closes it with code 4402 and reason `csrf-token-invalid`, and relays nothing
+
+#### Scenario: Cursor of an ended terminal
+- **WHEN** a client reattaches with `after` and the `terminalId` of a terminal that ended, and the attach opens a new terminal
+- **THEN** the new terminal's output follows from its earliest retained chunk
 
 ### Requirement: Terminal lifetime
 An attempt SHALL have at most one terminal and one attached client; a new attach SHALL close the previous one with `superseded`. Closing the client SHALL end neither the execution nor the terminal, which SHALL end only when its program exits, a client closes it, the idle timeout passes, the attempt or generation ends, the worker refuses it, or the relay is lost.
 
 #### Scenario: Browser closed
 - **WHEN** the attached browser closes its connection
-- **THEN** the attempt's execution and the terminal's program go on, and a later attach with `after` receives the retained output after that sequence
+- **THEN** the attempt's execution and the terminal's program go on, and a later attach with the terminal's `terminalId` and `after` receives the retained output after that sequence
 
 ### Requirement: Terminal connection end
-A terminal connection SHALL close with `unauthenticated` when its login session ends and with `role-changed` on any change of its principal's roles in the project, and each close SHALL use the code and reason of the terminal contract's table. A `terminal.ended` frame SHALL carry the worker's refusal reason exactly when its reason is `refused`.
+A terminal connection SHALL close with `unauthenticated` when its login session ends or its operator bearer is revoked, and with `role-changed` on any change of its principal's roles in the project, and each close SHALL use the code and reason of the terminal contract's table. A `terminal.ended` frame SHALL carry the worker's refusal reason exactly when its reason is `refused`.
 
 #### Scenario: Role lowered while attached
 - **WHEN** the attached principal's project role changes
