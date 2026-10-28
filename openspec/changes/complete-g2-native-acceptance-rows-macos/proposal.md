@@ -5,7 +5,7 @@ G3 item 43 (`docs/g3-plan.md`) carries the G2 native acceptance rows that ADR 00
 ## What Changes
 
 - Under `TASKELITH_MACOS_SCENARIOS=1` on macOS the scenario workers (`ScenarioWorker`, and through it the crash-before-ack fixture) launch through the worker's own launch host, `supervisionHost`, which composes the macOS supervisor there, with the worker's own admission check and volume probe. The variable set off macOS fails the scenario files; without it `make verify` on macOS still skips them.
-- A guard checks that the scripted process of race h, and of race c when its cancel lands after the start, is a child of a launch supervisor of its own worker. The leftover process listing reads `ps` on macOS, which has no `/proc`.
+- A guard checks that the scripted process of race h, race g, and race c when its cancel lands after the start, is a child of a launch supervisor of its own worker. The leftover process listing reads `ps` on macOS, which has no `/proc`.
 - Race g runs through the macOS supervisor: it kills the launching supervisor, lets the worker adopt, cancels, and checks the not-applied evidence, the child that keeps running, and the `uncertain` execution left for reconciliation; it stays skipped on every other launch host.
 - The new opt-in target `make verify-macos-g2-scenarios` runs the three 24c files that way against its own services; the macOS entry of `make native-acceptance` gains the proofs `acceptance-cancellation-races` and `acceptance-partition` through it.
 - Evidence: two seeded `make native-acceptance ENTRIES=macos` runs on this host, recorded in `results.jsonl` and `acceptance.md`.

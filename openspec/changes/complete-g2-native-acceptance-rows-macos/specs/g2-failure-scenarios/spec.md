@@ -5,7 +5,7 @@ When `TASKELITH_MACOS_SCENARIOS` is `1` on macOS, as `make verify-macos-g2-scena
 
 #### Scenario: macOS runner
 - **WHEN** `make verify-macos-g2-scenarios` runs the cancellation races
-- **THEN** the scripted process of race h, and of race c when its cancel lands after the start, is a child of a launch supervisor of its own worker, and a check fails the scenario otherwise
+- **THEN** the scripted process of race h, race g, and race c when its cancel lands after the start, is a child of a launch supervisor of its own worker, and a check fails the scenario otherwise
 
 #### Scenario: Variable off macOS
 - **WHEN** `TASKELITH_MACOS_SCENARIOS` is `1` on another platform
