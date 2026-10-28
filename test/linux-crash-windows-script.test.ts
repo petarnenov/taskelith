@@ -34,3 +34,10 @@ test('a run outside native acceptance passes no acceptance context', () => {
   const options = dockerOptions({ TASKELITH_ACCEPTANCE: '' });
   assert.doesNotMatch(options, /TASKELITH_ACCEPTANCE/);
 });
+
+test('the partition scenarios reach Toxiproxy and the proxied services', () => {
+  const options = dockerOptions({});
+  for (const variable of ['TASKELITH_TOXIPROXY_URL', 'TASKELITH_POSTGRES_PROXY_URL', 'TASKELITH_NATS_PROXY_URL']) {
+    assert.match(options, new RegExp(`^--env\\n${variable}$`, 'm'));
+  }
+});

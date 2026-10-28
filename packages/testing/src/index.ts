@@ -16,6 +16,15 @@ export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-
 export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';
 export { requestFailure } from './request-failure.js';
 export { SERVICES_REMEDY, integrationEndpoint, integrationSecret } from './integration-endpoint.js';
+export {
+  LINUX_LAUNCH_VARIABLES,
+  admitExecutionAccount,
+  executionAccountOf,
+  linuxLaunchFromEnvironment,
+  type ExecutionAccountIds,
+  type LinuxLaunch,
+  type LinuxLaunchVariable,
+} from './linux-launch.js';
 export { acquireProcessLock, lockPort, type ReleaseLock } from './process-lock.js';
 export { failed, id, value } from './results.js';
 export {

@@ -8,6 +8,7 @@ import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
 import { processesNaming } from './g2-scenarios/leftover-processes.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
+import { CANCEL_SIGNAL, assertContained } from './g2-scenarios/scenario-launch.ts';
 import { SCENARIO_LIMITS, type ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import {
   assertExitedOnce,
@@ -60,14 +61,14 @@ async function assertNeverLaunched(installation: ScenarioInstallation, worker: S
 }
 
 // The attempt ended cancelled; a started process (held by c, e, f) ended
-// by the cancel's SIGTERM, and no scripted process of the worker remains.
+// by the cancel's signal, and no scripted process of the worker remains.
 async function assertCancelled(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string): Promise<string> {
   await installation.ended(taskId);
   const outcome = (await installation.task(taskId)).attempts[0]!.outcome!;
   assert.equal(outcome.cancelled, true, `the attempt ended cancelled: ${JSON.stringify(outcome)}`);
-  if (outcome.kind === 'exited') assert.deepEqual(outcome.status, { kind: 'signal', signal: 'SIGTERM' });
+  if (outcome.kind === 'exited') assert.deepEqual(outcome.status, { kind: 'signal', signal: CANCEL_SIGNAL });
   await waitFor(() => scriptedProcesses(worker).length === 0, 10_000, 'no scripted process remains');
-  return outcome.kind === 'exited' ? 'exited by SIGTERM' : outcome.kind;
+  return outcome.kind === 'exited' ? `exited by ${CANCEL_SIGNAL}` : outcome.kind;
 }
 
 describe('cancellation races', SCENARIO_HOST, () => {
@@ -161,6 +162,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         const latest = () => journaledUnder(worker, cancelled.assignmentId).at(-1);
         const reached = afterStart ? () => latest()?.state === 'started' : () => latest()?.recordWritten === true;
         await waitFor(reached, 20_000, afterStart ? 'the start' : 'W4');
+        if (afterStart) assertContained(scriptedPids(worker));
         await cancelAssignment(installation, cancelled.assignmentId);
         const atCancel = latest()!;
         assert.equal(atCancel.recordWritten, true, 'the cancel lands after W4');
@@ -331,6 +333,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       try {
         await installation.submitTask('task-h');
         await waitFor(async () => (await startedExecutions(installation, 'task-h')) === 1, 20_000, 'the authorized start');
+        assertContained(scriptedPids(worker));
         const forged = forgeStartUnderOwningGrant(worker, await installation.task('task-h'));
         await waitFor(async () => (await cancellationsTo(installation, worker)).length === 1, 20_000, 'the cancellation of the unauthorized start');
         assert.deepEqual((await cancellationsTo(installation, worker))[0]!.executionId, forged, 'it names only that execution');
@@ -388,4 +391,8 @@ function pressureChanges(worker: ScenarioWorker): string[] {
 
 function scriptedProcesses(worker: ScenarioWorker) {
   return processesNaming(worker.dataRoot).filter(({ commandLine }) => commandLine.includes('setTimeout'));
+}
+
+function scriptedPids(worker: ScenarioWorker): number[] {
+  return scriptedProcesses(worker).map(({ pid }) => pid);
 }

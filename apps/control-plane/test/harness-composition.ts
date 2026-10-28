@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmodSync, chownSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -16,7 +16,7 @@ import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, uncoveredEnvironment, value } from '@taskelith/testing';
+import { admitExecutionAccount, CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, linuxLaunchFromEnvironment, ScenarioProcess, SEED_VARIABLE, uncoveredEnvironment, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
 import { CRASH_TRACE_VARIABLE, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
 
@@ -55,18 +55,9 @@ const BINDING = {
 };
 const LIMITS = { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, ackWaitMilliseconds: 3_000, retryInitialMilliseconds: 100, retryMaxMilliseconds: 500, idlePollMilliseconds: 50 };
 
-// What a Linux worker needs to launch (apps/worker settings): the delegated
-// cgroup and the execution account; make verify-linux-crash-windows sets it.
-const LINUX_LAUNCH_VARIABLES = ['TASKELITH_CONTAINMENT_PARENT', 'TASKELITH_EXECUTION_UID', 'TASKELITH_EXECUTION_GID'] as const;
-
-// The Linux launch settings when all are set; none on any other host.
-export const LINUX_LAUNCH = linuxLaunch(process.env);
-
-function linuxLaunch(env: NodeJS.ProcessEnv): Readonly<Record<string, string>> | undefined {
-  if (process.platform !== 'linux') return undefined;
-  const entries = LINUX_LAUNCH_VARIABLES.map((variable) => [variable, env[variable] ?? ''] as const);
-  return entries.every(([, setting]) => setting !== '') ? Object.freeze(Object.fromEntries(entries)) : undefined;
-}
+// The Linux launch settings when all are set; none on any other host. make
+// verify-linux-crash-windows sets them.
+export const LINUX_LAUNCH = linuxLaunchFromEnvironment();
 
 // The worker's structured logs that show its first pass and its contact.
 const READY_EVENTS = ['worker.reconciliation.planned', 'worker.contact.online'];
@@ -226,7 +217,7 @@ export class HarnessInstallation {
     database.pathname = `/${databaseName}`;
     const base = mkdtempSync(join(tmpdir(), 'taskelith-crash-'));
     releases.add(() => rmSync(base, { recursive: true, force: true }));
-    if (LINUX_LAUNCH !== undefined) admitExecutionAccount(base, LINUX_LAUNCH);
+    if (LINUX_LAUNCH !== undefined) admitExecutionAccount(base, LINUX_LAUNCH, [spawnsFile(base), orderTrace(base)]);
     const dataRoot = join(base, 'control-plane');
     const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), { signal });
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
@@ -469,16 +460,6 @@ export function establishedOrder(installation: HarnessInstallation): string[] {
 
 function spawnsFile(base: string): string {
   return join(base, 'spawns');
-}
-
-// On Linux the scripted child runs as the execution account: it looks for
-// the release in the base and appends to the spawns and the order trace.
-function admitExecutionAccount(base: string, launch: Readonly<Record<string, string>>): void {
-  chmodSync(base, 0o711);
-  for (const file of [spawnsFile(base), orderTrace(base)]) {
-    writeFileSync(file, '');
-    chownSync(file, Number(launch.TASKELITH_EXECUTION_UID), Number(launch.TASKELITH_EXECUTION_GID));
-  }
 }
 
 function releaseFile(installation: HarnessInstallation): string {
