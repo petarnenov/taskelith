@@ -24,6 +24,8 @@ Status: developed and verified by the author; review passes 1 and 2 done; every 
 - `286cef63` `docs: record review pass 2 of the control-plane access contracts` and `8db45e03` `docs: record the checks of the pass 2 fixes of the control-plane access contracts` (this record, `findings.jsonl`, and `passes.jsonl`).
 - H1 fix: `83063102` `chore: confine the bound remote URL to the allowed origin of its SCM integration` (document and contract tests) and `1ca30695` `docs: tie the bound remote URL to the allowed origin of its SCM integration` (spec delta, contract page, design).
 - The commit that records the H1 fix changes only this record and `findings.jsonl`; the `make verify` run of the H1 fix checked its tree, as the generated part below names it.
+- `576fa571` `docs: name sub-change 26c for the revoked-token refusal` and `8907027a` `docs: record the checks of the 26c wording of the control-plane access contracts`, the head that review pass 3 reviewed.
+- Pass 3 fix: `e3bd836a` `chore: bound the port and host of control-plane origins` (document, contract tests, design decision 21, contract page section 4.1).
 
 ## Environment
 
@@ -121,11 +123,12 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Route after pass 2: `route.json` is kept. The fixes change 231 lines (198 added, 33 removed) in five files the change already touched, with no new file, capability, or touched area, so the triggers (`lines`, `contracts`) and the tier `elevated` stay.
 - Correction after pass 2: the M2 fix first placed the redemption obligation on G3 plan row 33, the workers and pools screens, which builds no redemption. The architect moved it to item 26, sub-change 26c (26b landed before 9a defined revocation) on 2026-10-28; design decision 12, page section 9, and the M2 line of `findings.jsonl` now name it. The plan row 33 itself never carried it, so `docs/g3-plan.md` is unchanged.
 - Route after the H1 fix: `route.json` is kept. The fix changes 173 lines (156 added, 17 removed) in five files the change already touched, with no new file, capability, or touched area, so the triggers (`lines`, `contracts`) and the tier `elevated` stay.
-- Pass 3: required by governance "Conditional third pass", because pass 2 reported a High finding and its fixes change the document and its tests. Reviewer A, Codex `gpt-6.1-sol` at `medium`, confirms the pass 2 fixes.
+- Pass 3, reviewer A: required by governance "Conditional third pass", because pass 2 reported a High finding and its fixes change the document and its tests. Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, session `01a1821c-85ed-7cd3-b861-f080b504b255`, invoked on 2026-10-28 on the reviewed head `8907027a` with the pass 1 invocation. The SHA-256 snapshot, starting `d8def4fa`, was the same before and after the pass, so the reviewer changed nothing. It confirmed all 16 pass 2 fixes, H1 included, and both remote-origin cases: a binding outside the origin is refused with 422 `remote-origin-mismatch`, and no credential is issued after the origin changed. 0 critical, 0 high, 0 medium, 1 low, fixed ([findings](findings.jsonl), [passes](passes.jsonl)):
+  - F1, contract-drift: `AllowedOrigin` and `NormalizedOrigin` accepted `https://scm.example:99999`, `https://[.]:443`, and `https://[12345::]:443`, against design decision 21. Both patterns and `RemoteUrl`, which shared the flaw, now take a host name, not an IPv6 literal, and a port from 1 to 65535; decision 21 and page section 4.1 say so, and the tests refuse these values and port 0 in each schema.
+  - Low-only pass, fixed without another review (governance "Independent review process").
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, Codex `gpt-6.1-sol` at `medium`, required by governance "Conditional third pass".
 - The archive (task 5.1).
 - Integration into dev by the coordinator (single pull request).
 
