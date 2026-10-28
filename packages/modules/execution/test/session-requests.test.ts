@@ -38,6 +38,7 @@ import {
 
 const RULE = value(parseIdentifier('StandingRuleId', 'rule-1'));
 const HOST: Responder = { kind: 'host' };
+const LONGEST_TEXT = 'x'.repeat(MAX_HARNESS_TEXT_LENGTH);
 
 function answered(): Session {
   return value(consumeResponse(sessionWithOpenRequest(), allow()));
@@ -141,13 +142,31 @@ test('an answer of the wrong kind fails with invalid', () => {
   assert.equal(answer.requests[1]?.state, 'answered');
 });
 
-test('an answer text or delegation ID outside its bound fails with invalid', () => {
-  const session = sessionWithOpenRequest();
-  const long = 'x'.repeat(MAX_HARNESS_TEXT_LENGTH + 1);
-  const message: ResponseSubmission = { ...allow(), answer: { kind: 'permission', decision: 'deny', message: long } };
-  assert.equal(failed(consumeResponse(session, message)).code, 'invalid');
-  const delegation = { kind: 'delegation-result' as const, delegationId: '', outcome: 'completed' as const, summary: 'ok' };
-  assert.equal(failed(consumeResponse(session, { ...allow(), answer: delegation })).code, 'invalid');
+test('a permission message is at most 65,536 characters', () => {
+  const deny = (message: string): ResponseSubmission => ({ ...allow(), answer: { kind: 'permission', decision: 'deny', message } });
+  assert.equal(failed(consumeResponse(sessionWithOpenRequest(), deny(LONGEST_TEXT + 'x'))).code, 'invalid');
+  assert.ok(value(consumeResponse(sessionWithOpenRequest(), deny(LONGEST_TEXT))));
+});
+
+test('an input answer text is at most 65,536 characters', () => {
+  const session = request(sessionWithRunningTurn(), inputRequest('request-2'));
+  const input = (text: string): ResponseSubmission => ({ ...allow('request-2'), answer: { kind: 'input', text } });
+  assert.equal(failed(consumeResponse(session, input(LONGEST_TEXT + 'x'))).code, 'invalid');
+  assert.ok(value(consumeResponse(session, input(LONGEST_TEXT))));
+});
+
+test('a delegation summary is at most 65,536 characters', () => {
+  const session = sessionWithDelegation();
+  assert.equal(failed(consumeResponse(session, delegationResult('child-1', LONGEST_TEXT + 'x'))).code, 'invalid');
+  assert.ok(value(consumeResponse(session, delegationResult('child-1', LONGEST_TEXT))));
+});
+
+test('a delegation ID is 1 to 128 characters', () => {
+  const session = sessionWithDelegation();
+  assert.equal(failed(consumeResponse(session, delegationResult(''))).code, 'invalid');
+  assert.equal(failed(consumeResponse(session, delegationResult('d'.repeat(129)))).code, 'invalid');
+  assert.ok(value(consumeResponse(session, delegationResult('d'))));
+  assert.ok(value(consumeResponse(session, delegationResult('d'.repeat(128)))));
 });
 
 test('a delegation request takes a delegation result from the host', () => {
