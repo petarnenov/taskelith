@@ -1,6 +1,6 @@
 # Verification: define-session-turn-model
 
-Status: phase 2 developed; review complete: passes 1 (reviewer A) and 2 (reviewer B) fixed, pass 3 (reviewer A) confirmed with no finding; three passes, the cap reached.
+Status: phase 2 developed; review complete: passes 1 (reviewer A) and 2 (reviewer B) fixed, pass 3 (reviewer A) confirmed with no finding; three passes, the cap reached; archived on the branch under worker step 7.
 
 ## Scope and source
 
@@ -100,16 +100,22 @@ The five M3 failures: "a host turn needs a delegation request that can no longer
 | `18e3058a`, tree `98e50516`, after the second merge of `dev` | `make verify`, first run | Failed only in `make test`: `tests 2910`, `pass 2862`, `fail 1`; the failure, "e. a crash between W1 and the ack of a cancellation is applied once after redelivery" (`test/g2-cancellation-races.test.ts:226`), hit its 30 s bound on the loaded host (load average about 5) and is outside this change |
 | Same | `make verify`, second run (log `dstm-verify-merged.log` in the session scratchpad) | Passed, exit status 0; generated part below |
 | Same, with this record | `make record CHANGE=define-session-turn-model LOG=<log>`; `make record-check CHANGE=define-session-turn-model`; `make findings ARGS="validate"` | Generated part written; `the generated part matches the tree`; every findings file is valid: 62 file(s); every pass summary file is valid: 42 file(s); every route file is valid: 1 file(s) |
+| Tree of the archive commit | `npm run openspec -- archive define-session-turn-model --yes` | Applied `+ 16` requirements to `openspec/specs/session-turn-model/spec.md`; archived as `2026-10-28-define-session-turn-model` |
+| Same | `npm run openspec -- validate --all --strict --no-interactive` | `Totals: 70 passed, 0 failed (70 items)` |
+| Same | `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-28-define-session-turn-model` |
+| Same | `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `3de597be`) | Only the new `openspec/specs/session-turn-model/spec.md`, 230 insertions |
+| Same | Moved change's files; `make findings ARGS="validate"` | `findings.jsonl` 15 lines, `passes.jsonl` 3 lines, `checklist.json` present; every findings file is valid: 62 file(s); every pass summary file is valid: 42 file(s); every route file is valid: 1 file(s) |
+| Same | `make verify`; `make record CHANGE=define-session-turn-model LOG=<log>`; `make record-check CHANGE=define-session-turn-model` | The generated part above names the verified tree of the archive commit; `make record-check` matched it |
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `98e50516af33d407af5416161625967b02fd9a60`; tests 2910, pass 2863, fail 0, skipped 47; all files 99.33% lines, 92.76% branches, 99.00% functions.
-- `npm run openspec -- validate define-session-turn-model --strict`: passed, `Change 'define-session-turn-model' is valid`.
+- `make verify`: passed, profile full, tree `c88eaf876fc39919a60b2bcb5bff569857ed9382`; tests 2910, pass 2863, fail 0, skipped 47; all files 99.33% lines, 92.77% branches, 99.03% functions.
+- `npm run openspec -- validate --all --strict --no-interactive`: passed, `Totals: 70 passed, 0 failed (70 items)`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 62 file(s); every pass summary file is valid: 42 file(s); every route file is valid: 1 file(s).`.
-- Spec diff against the merge base `3de597beb772` with `origin/dev`: no change under `openspec/specs`.
+- Spec diff against the merge base `3de597beb772` with `origin/dev`: `openspec/specs/session-turn-model/spec.md | 230 ++++++++++++++++++++++++++++++`, `1 file changed, 230 insertions(+)`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
