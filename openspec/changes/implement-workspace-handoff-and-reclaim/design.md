@@ -73,6 +73,14 @@ Reviewer B, Claude Code `claude-opus-5-5` at high in plan mode, reviewed `13029b
 17. **N19, fixed in `5bd54589`.** `build` and `build_worker` call one helper, `build_stages`; the installation script tests pass unchanged.
 18. **N20, fixed in `055323b2` and `70c665f5`.** A Linux launch that fails, also at the readiness bound, removes its cgroup if the kernel finds it empty (`rmdir` refuses a populated one with `EBUSY`); an `abandoned` program's containment is proven empty and freed. The cgroup of a program that failed after `go`, or overran its run bound, stays: 16e's reconciliation frees it, because only that policy decides when its workspace is released.
 
+## Review pass 3 resolutions (2026-10-28)
+
+Reviewer A, Codex `gpt-6.1-sol` at medium, reviewed `8e05da54` against `13029b84`, confirmed 17 pass 2 fixes and found N2, N8, and N20 partly fixed (Low 3); the records are in `findings.jsonl`, the fail-before evidence in `verification.md`. A Low-only pass is fixed without another review.
+
+1. **P1, Low, fixed in `ae465618`.** The per-path chains are an `OperationChains` object, shared by every adapter of the process by default (`PROCESS_OPERATION_CHAINS`) and injectable through `operationChains`. The N2 test observes it and lets the reclaim finish once the hand-off is queued behind it, or fails once the hand-off polls during the release; no fixed delay decides the outcome.
+2. **P2, Low, fixed in `ae465618`.** The Linux suite reads and writes its FIFOs in a shell that a 20 s bound kills, so a missing peer fails the test and leaves nothing blocked in the test process; a test reads a FIFO without a writer at a 600 ms bound and finds no reader left.
+3. **P3, Low, fixed in `ae465618`.** A failed Linux launch removes its cgroup if empty at once and again once its program has exited, so a program that entered its cgroup and was abandoned before `ready` frees it; the launch does not wait for that exit. A fault of the later removal leaves the cgroup to 16e's reconciliation.
+
 ## 16e handoff notes
 
 - A program left running past `RECLAIM_RUN_BOUND_MS` keeps its workspace handed off and its slot held; killing it, freeing the slot, and any retry are 16e's reconciliation policy (coordinator decision N6).
