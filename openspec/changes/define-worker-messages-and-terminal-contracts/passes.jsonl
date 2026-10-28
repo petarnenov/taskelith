@@ -1,0 +1,1 @@
+{"change": "define-worker-messages-and-terminal-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a182e0-3947-77e3-851c-7879eb0bfb88", "counts": {"critical": 0, "high": 3, "medium": 4, "low": 0}}
