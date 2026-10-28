@@ -87,7 +87,7 @@ Fails before the fixes, each run before its fix was written: findings 1 and 2, t
 | --- | --- | --- | --- | --- |
 | M1 | Medium | Three contracts still called the API and NATS plain | Execution wire, account pool, and source control contracts state the TLS of 26a and what 26b and 26d add; a grep for other plain claims found only the G3 plan's "G2 as built" list, which is historical | `6770d360` |
 | M2 | Medium | The served certificate probe ran once, right after `compose restart` | Retried until `CONTACT_SECONDS` (90 s); with the restart removed, `make verify-installation` still failed: both servers presented the old certificates until "not served within 90s" | `61ab5f15` |
-| M3 | Medium | The changed G2 scenario code was not run | Deferred to a Linux host; see Checks, Limitations, and Remaining gates | none |
+| M3 | Medium | The changed G2 scenario code was not run | Deferred, then run on Liki's native Ubuntu x86_64 host (Linux verification below); `fixed-unreviewed` in `findings.jsonl`, as no review pass checked it | none |
 | L1 | Low | The qualification named a macOS x86_64 host | It names macOS 26.6.2 arm64 (Apple M3) | `6770d360` |
 | L2 | Low | The issuer signed with an expired authority or one ending before the server certificate | Refused with `precondition-failed`, naming rollover as G6; conformance case, delta scenario "Authority near its end", contract section 7 | `3af3e8e5`, `6770d360` |
 | L3 | Low | A bad browser key was reported under `TASKELITH_BROWSER_TLS_CERT` | The failure names the file at fault, `TASKELITH_BROWSER_TLS_KEY` for the key | `c0afe2cc` |
@@ -125,17 +125,71 @@ Fails before the fixes, each run before its fix was written: L2, the new conform
 
 **Fails before and passes after.** The new test "a broker that refuses a plain client only for its login fails the probe" uses a stand-in with `allow_non_tls` and authorization that refuses the plain login with `Authorization Violation`. On `9c97bf65` it failed: `reissueProblems` returned no problem instead of "NATS does not refuse a plain client as requiring TLS". On `af0e67d1` it passes, with the positive cases: the TLS stand-in that closes on the failed handshake and one that sends the TLS required error pass the probe; `PONG`, `+OK`, `Authorization Violation` after a `tls_required` INFO, a missing or false `tls_required`, a malformed INFO, a close before INFO, and a refused connection fail it.
 
+## Linux verification (Liki, native Ubuntu x86_64)
+
+Run by Liki and reported through the coordinator, on revision `6a0d8687fcce3de96e272a0ec2e9faa1890e7199` in a detached worktree whose `origin` matched it. The later `9a030d5b` changed only this record. Host: Linux `GEO-PetarPetrov` 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC, x86_64. Counts are tests, pass, fail, skipped, cancelled, todo.
+
+- `make setup`: exit 0.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`, full: exit 0; 2404, 2357, 0, 47, 0, 0; 45 suites. The skips: 29 composed worker crash window tests (run by `make verify-linux-crash-windows` below), 15 macOS-only tests, 1 process reaper `ps` test (Linux scans `/proc`), 1 case-insensitive volume test, and race g (not applicable on Linux).
+- G2 suites with PostgreSQL, NATS over TLS, and Toxiproxy reachable on the host network: `TMPDIR=… NODE_PIN=$(cat .nvmrc) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-maki-g2-verify node --experimental-strip-types --test --test-reporter=spec test/g2-*.test.ts`: exit 0; 24, 23, 0, 1, 0, 0, the skip race g. The changed `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/crashing-worker.ts`, and `test/g2-cancellation-races.test.ts` ran and passed.
+- `make verify-linux-crash-windows`: exit 0; 29, 29, 0, 0, 0, 0.
+- `make verify-linux-cgroup`: exit 0; 17, 17, 0, 0, 0, 0.
+- `make scenario-native-worker-lifecycle`: exit 2, "TASKELITH_CONTAINMENT_PARENT must be an absolute path". `start_native_worker` of `scripts/installation-scenarios.sh` sets neither `TASKELITH_CONTAINMENT_PARENT` nor `TASKELITH_EXECUTION_UID` and `TASKELITH_EXECUTION_GID`, which a Linux worker needs. It fails before any TLS or enrollment step, and `native-acceptance.sh` runs the scenario on macOS only, so the failure predates 26a and tests nothing of it. By the coordinator's ruling it is a limitation and a follow-up below, not a gate of 26a.
+
+This run closes M3.
+
+## First archive
+
+The first archive commit `84cde2af` was checked on its own tree, the working tree after `npm run openspec -- archive issue-installation-certificates --yes`, on macOS arm64:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line, `change/2026-10-28-issue-installation-certificates`, passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's edits, in `control-plane-api` (TLS listeners added), `execution-observability` (Logs without secrets modified), `installation-enrollment` (TLS plumbing renamed to Installation certificate authority and modified, Secret scrubbing modified, Installation server certificates added), `local-installation` (TLS of the local installation added), and `nats-transport` (Installation broker TLS added).
+- The moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid.
+- `make verify`: exit 0; 2386 tests, 2383 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.30%, functions 99.04%.
+
+## Merge reconciliation (return from integration)
+
+- **Return reason.** The coordinator returned the branch under [worker step 10](/docs/agent-task-protocol.md#worker-steps). Merging `origin/dev` `a520c067` (#378, item 27 `implement-worker-self-check-admission`) conflicted in `packages/modules/fleet/src/index.ts`, `openspec/specs/installation-enrollment/spec.md`, and `docs/contracts/execution-wire-contracts.md`.
+- **Commits.** The revert `27e2d473` restored the active change and the living specs from before `84cde2af`. The merge `354158b2` merged `origin/dev` `a520c067`. Base: `git merge-base 84cde2af origin/dev` = `3f23516a2e4ef8724f38e5c9c67267225f40ff16`. This record keeps the Linux verification and the M3 outcome of `84cde2af`, which the revert had undone.
+- **Resolutions.**
+  - `openspec/specs/installation-enrollment/spec.md` did not conflict after the revert. The merge took dev's four new requirements unchanged, and `git diff origin/dev 354158b2 -- openspec/specs` is empty.
+  - `packages/modules/fleet/src/index.ts` keeps both export sets. First come this change's `installation-certificates` and `certificate-issuer` exports, then item 27's `worker-admission` domain exports and its three port modules.
+  - `docs/contracts/execution-wire-contracts.md`: the `execution.asyncapi.json` row is dev's, at version 0.7.0 (item 27). The `execution.openapi.json` row is this change's HTTPS text; dev had not changed it since the base.
+- **Reconciled deltas.** `git diff 3f23516a origin/dev -- openspec/specs` shows that, of this change's five capabilities, dev changed only `installation-enrollment`. It only adds four requirements: "Worker admission on the self-check", "Report results checked by the control plane", "Running executions survive a failed self-check", and "New grants only for admitted workers". Dev changed none of the requirements this change renames or modifies ("TLS plumbing", "Secret scrubbing", "Logs without secrets"), so no delta was rewritten. The ADDED names of this change do not collide with item 27's.
+- **Semantic check.** Item 27's self-check and admission reach the broker through the existing `settings.natsTls` in `apps/worker/src/worker-start.ts`. Its tests use `https://` control plane URLs or fakes, and its control plane integration tests run on this change's HTTPS fixtures. Nothing uses plain HTTP or plain NATS against the installation, and no fix was needed.
+- **Checks on the merge `354158b2`** (macOS arm64):
+  - `npm run openspec -- validate issue-installation-certificates --strict`: valid.
+  - `make verify`: exit 0; 2452 tests, 2449 pass, 0 fail; the coverage gate passed; the dependency inventory is current; every active change archives into strictly valid specs; contract compatibility is clean.
+  - `make verify-installation`: exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed".
+- **Linux.** Liki's run at `6a0d8687` (above) predates this merge. It stays valid for the TLS parts, which the merge left unchanged.
+- **Review.** Reviewer A reviewed the resolved diff and this reconciliation as artifact `merge-reconciliation`, pass 1, in `passes.jsonl`, so the pass does not count against the change's three passes.
+  - Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run by Maki from the worktree.
+  - Confirmation: model `gpt-6.1-sol`, sandbox `read-only`, reasoning effort `medium`, session `01a17fdf-0c15-7332-93b0-486f16537c04`.
+  - Revision reviewed: `354158b2`.
+  - Snapshot: `2e0ce9ff4cc0ec81b65deae5aa0d18140e537690fb654f7cd26533b9f1833f9a` before and after, unchanged.
+  - Result: Critical 0, High 0, Medium 0, Low 0; no findings.
+  - The reviewer confirmed that both export sets are kept without duplicates, with AsyncAPI 0.7.0 from dev and this change's HTTPS text. It confirmed that the living specs equal `a520c067`, that dev changed no MODIFIED or RENAMED requirement, and that the ADDED names do not collide. It found no semantic conflict. It also ran the strict validation and `verify:comments`.
+
+## Archive
+
+Checked on the tree of this archive commit, the working tree after `npm run openspec -- archive issue-installation-certificates --yes` on top of the merge `354158b2`, on macOS arm64:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line, `change/2026-10-28-issue-installation-certificates`, passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's edits, the same as at `84cde2af`. They are in `control-plane-api` (TLS listeners added), `execution-observability` (Logs without secrets modified), `installation-enrollment` (TLS plumbing renamed to Installation certificate authority and modified, Secret scrubbing modified, Installation server certificates added), `local-installation` (TLS of the local installation added), and `nats-transport` (Installation broker TLS added). Item 27's four admission requirements in `installation-enrollment` are intact.
+- The moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"`: 55 findings files and 35 pass summary files valid.
+- `make verify`: exit 0; 2452 tests, 2449 pass, 0 fail, 3 skipped; coverage lines 99.36%, branches 92.32%, functions 99.04%.
+
 ## Limitations
 
 - The design's Risks and limitations apply: installations initialized before this change fail closed without an authority; `NODE_EXTRA_CA_CERTS` adds the CA to the system roots until 26b pins it; the composition's browser endpoint serves the installation certificate; `issue-installation-certificates` writes no audit row.
 - The composition still serves the browser endpoint on the API certificate (finding 9), as decided for 26d.
-- The checks ran on macOS arm64 only. Not run with their changed code (M3): `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, and `test/g2-cancellation-races.test.ts` (Linux only, `SCENARIO_HOST`); `scripts/installation-scenarios.sh` with `trust_installation_ca` and `TASKELITH_NATS_CA` past the native worker's enrollment and broker contact (stopped at the worker's disk floor, with 2.6 GiB free on this host; no disk was freed for it), and the G2 failure scenarios on the composition; the Linux suites of `make verify-linux-cgroup` and `make verify-linux-crash-windows`.
+- The changed G2 scenario code, the Linux suites, and the full `make verify` ran on Liki's native Ubuntu x86_64 host (above). The native worker scenario was not run past the disk floor on macOS: with `trust_installation_ca` and `TASKELITH_NATS_CA`, the native worker enrolled over HTTPS and reached NATS over TLS, then stopped at the worker's disk floor, with 2.6 GiB free on this host; no disk was freed for it. On Linux the scenario stops earlier, as above.
 
 ## Remaining gates
 
 - Owner review of the away delegate's decision on the pass 3 Medium (fixed without review, no pass 4).
 - Owner review of decisions 1, 2, 3, and 5 of the away run.
-- Archive under worker step 7.
-- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-cgroup`, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition. The coordinator, Niki, decided M3: the full `make verify` and these G2 Linux suites run on a native Ubuntu x86_64 host (Liki) before integration; their results are recorded later.
-- On a host with free disk above the worker's floor: `make scenario-native-worker-lifecycle`.
+- Follow-up, not a gate of 26a: the native Linux worker scenario lacks the containment and execution environment (`TASKELITH_CONTAINMENT_PARENT`, `TASKELITH_EXECUTION_UID`, `TASKELITH_EXECUTION_GID`).
 - Integration into dev by the coordinator (single pull request).
