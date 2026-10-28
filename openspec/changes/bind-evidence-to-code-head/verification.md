@@ -1,6 +1,6 @@
 # Verification
 
-Record of the change through review pass 2 and its fixes; later passes are pending (Remaining gates).
+Record of the change through review pass 3, the last pass; the review found no open findings (Remaining gates).
 
 ## Scope and source
 
@@ -64,11 +64,12 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18144-6e30-7fd3-b8e6-1788fa5b1766` | 0 | 1 | 0 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `c3aae8d2-0f3a-49f9-a676-1d81016d7b40` | 0 | 0 | 3 | 7 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a181fd-23d2-7ab0-bb97-773ed00e5953` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
 
-Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: assigned by the coordinator.
+Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: Claude Code (`claude-opus-5-5`).
 
 ### Review pass 1
 
@@ -82,7 +83,7 @@ Reviewer A, passes 1 and 3: Codex CLI (`gpt-6.1-sol`); reviewer B, pass 2: assig
 
 ### Pass 1 fixes
 
-Not yet reviewed; reviewer B checks them in pass 2.
+Reviewed by reviewer B in pass 2, which found the fix correct for a single gate.
 
 - **H1 fix** (`ef9b0d27`, design decision 8): the three evidence kinds take an optional `gateGeneration`, the generation of the pending gate they were recorded for, and `recordGateEvidence` rejects evidence for a head-bound gate whose `gateGeneration` is not the gate's generation, or is missing, with `precondition-failed` (`accepts only evidence recorded for its current generation`). A gate turns pending only when opened or reopened, at a new generation, so a superseded approval names an earlier generation. The SDLC AsyncAPI document 0.4.0 adds `gateGeneration` to the three evidence kinds; the spec deltas `sdlc-gates` "Evidence bound to the code head" (402 characters, new scenario "Evidence for another generation") and "Approval not restored by an artifact edit" (306, new scenario "Reopened at the approved head") and `sdlc-wire-contracts` "Code head on the wire" (365), the Git workspace contract section 14, the gate repository suite, and the contracts test change with it. Files: `packages/modules/sdlc/src/domain/gate.ts`, `gate-evidence.ts`, `src/ports/repository-conformance.ts`, `test/code-head-binding.test.ts`, `packages/contracts/documents/sdlc.asyncapi.json`, `packages/contracts/test/contracts.test.ts`, `docs/contracts/git-workspace.md`, and this change's proposal, design, tasks, and spec deltas.
 - **Tests.** In `packages/modules/sdlc/test/code-head-binding.test.ts`: `a superseded approval does not pass a gate reopened at its head after an artifact edit` and `a superseded approval does not pass a gate reopened at its head after another head` (scenario "Reopened at the approved head"; the second also covers a return to the approved head after an approval at the other head), and `a head-bound gate needs evidence recorded for its current generation` (scenario "Evidence for another generation").
@@ -105,7 +106,7 @@ Not yet reviewed; reviewer B checks them in pass 2.
 
 ### Pass 2 fixes
 
-Not yet reviewed; reviewer A checks them in pass 3 if governance "Conditional third pass" requires it.
+Reviewed by reviewer A in pass 3, which found them fixed ("Review pass 3").
 
 - **M2 and M3 fix** (`82783edd`, design decision 8 with the coordinator's decisions after pass 2): the three evidence kinds take an optional `gateId` as well as `gateGeneration`, and `recordGateEvidence` accepts evidence for any gate, with or without a code head, only when `gateId` equals the gate's id (`accepts only evidence recorded for it`) and `gateGeneration` its generation (`accepts only evidence recorded for its current generation`), after the kind, subject, and head checks, otherwise `precondition-failed`. A gate without a code head still accepts evidence at any head or none (design decision 6). The SDLC AsyncAPI document 0.4.0 adds `gateId` (an `Identifier`) to the three evidence schemas. The SDLC and execution repository conformance suites and every test that records evidence name the gate and its generation. Files: `packages/modules/sdlc/src/domain/gate.ts`, `gate-evidence.ts`, `src/ports/repository-conformance.ts`, the SDLC tests `code-head-binding`, `gate-evidence`, `gate`, `stage-progress`, `task-admission`, and `task-admission-service`, `packages/modules/execution/src/ports/repository-conformance.ts`, `packages/modules/execution/test/fixtures.ts`, `packages/contracts/documents/sdlc.asyncapi.json`, and `packages/contracts/test/contracts.test.ts`.
 - **L1 fix** (`82783edd`): `parseEvidenceFacts` validates `codeHead.repository` as a `RepositoryId`, `gateId` as a `GateId`, and `gateGeneration` with `parseGeneration`, and fails with `invalid` and the field `codeHead`, `gateId`, or `gateGeneration`.
@@ -149,6 +150,17 @@ No group is unintended. The 16 `edit` changes are text only; the 290 `add` chang
 
 **Version rule.** `scripts/check-contract-compatibility.ts` compares each document with its text at the merge base of `HEAD` and `origin/dev` (lines 9-10); `declaresBreakingChange` declares breaking changes by a higher major version or, while the major version is 0, a higher minor version (lines 35-43); `compatibilityProblems` reports breaking changes only when the version does not declare them (lines 50-54); ADR 0004 principle 6 (contract-first OpenAPI and AsyncAPI). The SDLC document is 0.3.0 on dev `9196804b` and 0.4.0 on this branch; this change introduced 0.4.0, so the one minor bump declares every breaking change against the base, and the check passes.
 
+### Review pass 3
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, session `01a181fd-23d2-7ab0-bb97-773ed00e5953`; run by the coordinator.
+- **Revision reviewed:** `0f43c846`, which includes the pass 2 fixes `82783edd` and `0fb9d3cf` and their records.
+- **Invocation:** `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, as in the protocol's "Reviewer invocations".
+- **Model confirmation:** model, reasoning effort `medium`, read-only sandbox, and session ID in the output header, as the coordinator reported them.
+- **Snapshot:** before and after the pass identical, as the coordinator reported it.
+- **Result:** Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl` line 3; no `findings.jsonl` line.
+- **Checks by the reviewer:** M1 to M3 and L1 to L7 fixed, each with its regression test; the breakdown of the SDLC AsyncAPI breaking changes recomputed with `asyncapiContractChanges`: the 20 groups match "Breaking changes of the SDLC AsyncAPI document", 306 = 290 `add` + 16 `edit`, no unintended group, the cited lines of `scripts/check-contract-compatibility.ts` and ADR 0004 principle 6 correct, and the version 0.3.0 -> 0.4.0; 50 targeted tests run, 50 pass; `npm run verify:comments` passes.
+- **Review end:** three passes done, the cap of governance "Conditional third pass"; no open findings.
+
 ## Limitations
 
 - No service marks a run's gates stale when its head moves; item 21 does.
@@ -157,7 +169,5 @@ No group is unintended. The 16 `edit` changes are text only; the 290 `add` chang
 
 ## Remaining gates
 
-- `make verify` again after each round of review fixes.
-- Review pass 3 by reviewer A of the unreviewed pass 2 fixes, which change code as well as records, as governance "Conditional third pass" requires, with its record.
-- Archive of the change.
+- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)

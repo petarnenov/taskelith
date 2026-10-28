@@ -17,7 +17,7 @@
 - [x] 3.2 `make verify`, `make record`, and `make record-check`
 - [x] 3.3 Review pass 1 record and the fix of its finding H1: head-bound evidence names the gate generation it was recorded for (design decision 8)
 - [x] 3.4 Review pass 2 record and the fixes of its findings M1 to M3 and L1 to L7: evidence names its gate and generation for every gate (design decision 8), the modified "Gate transitions" requirement, and the breakdown of the wire breaking changes
-- [ ] 3.5 Review pass 3 if governance "Conditional third pass" requires it, and its record
+- [x] 3.5 Review pass 3 by reviewer A of the pass 2 fixes and its record: no findings, review ended
 
 ## Follow-ups
 
