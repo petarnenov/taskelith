@@ -69,17 +69,23 @@ export const TURN_STATES = Object.freeze(['queued', 'delivered', 'ended', 'outco
 
 export type TurnState = (typeof TURN_STATES)[number];
 
+// A person writes a turn; the host writes only a delegation's outcome turn
+// for a parent request that can no longer be answered (contract, 4.1).
+export type TurnAuthor =
+  | { readonly kind: 'principal'; readonly principalId: PrincipalId }
+  | { readonly kind: 'host'; readonly delegationRequest: RequestKey };
+
 export interface TurnSubmission {
   readonly turnId: TurnId;
   readonly key: IdempotencyKey;
-  readonly author: PrincipalId;
+  readonly author: TurnAuthor;
   readonly text: string;
 }
 
 export interface TurnIdentity {
   readonly id: TurnId;
   readonly key: IdempotencyKey;
-  readonly author: PrincipalId;
+  readonly author: TurnAuthor;
   readonly text: string;
   readonly position: number;
 }
@@ -247,6 +253,10 @@ export function isRunningIn(turn: Turn, generation: SessionGeneration): boolean 
 // Whether the turn is delivered in the session's running generation.
 export function isLiveTurn(session: Session, turn: Turn, generation: SessionGeneration): boolean {
   return runningGeneration(session)?.generation === generation && isRunningIn(turn, generation);
+}
+
+export function isSameRequestKey(left: RequestKey, right: RequestKey): boolean {
+  return left.generation === right.generation && left.nativeRequestId === right.nativeRequestId;
 }
 
 export function withChanges(session: Session, changes: Partial<Session>): Session {

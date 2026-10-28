@@ -16,12 +16,12 @@ import {
 import { failed, value } from '@taskelith/testing';
 import { ownership } from './fixtures.ts';
 import {
-  AUTHOR,
   CHILD_TASK,
   FIRST_ATTEMPT,
   HARNESS,
   NATIVE,
   OTHER_SESSION,
+  PERSON,
   SECOND_ATTEMPT,
   SESSION,
   TASK,
@@ -157,7 +157,7 @@ test('ending the bound attempt ends and reconciles its running generation', () =
 test('the same change applied twice gives equal results and leaves its input unchanged', () => {
   const session = runningSession();
   const before = structuredClone(session);
-  const submission = { turnId: turnId('turn-1'), key: turnKey('key-1'), author: AUTHOR, text: 'hello' };
+  const submission = { turnId: turnId('turn-1'), key: turnKey('key-1'), author: PERSON, text: 'hello' };
   assert.deepEqual(submitTurn(session, submission), submitTurn(session, submission));
   assert.deepEqual(endBoundAttempt(session, FIRST_ATTEMPT), endBoundAttempt(session, FIRST_ATTEMPT));
   assert.deepEqual(session, before);

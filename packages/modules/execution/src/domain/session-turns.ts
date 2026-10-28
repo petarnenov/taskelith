@@ -3,7 +3,9 @@ import { MAX_HARNESS_TEXT_LENGTH } from './harness-values.js';
 import type { SessionGeneration } from './identifiers.js';
 import {
   appended,
+  frozenCopy,
   isRunningIn,
+  isSameRequestKey,
   isStopped,
   isTextWithin,
   replaced,
@@ -13,6 +15,7 @@ import {
   type Session,
   type SessionLimit,
   type Turn,
+  type TurnAuthor,
   type TurnDelivery,
   type TurnEnd,
   type TurnSubmission,
@@ -32,8 +35,10 @@ export function submitTurn(session: Session, submission: TurnSubmission): Result
   }
   if (findTurn(session, submission).turn !== undefined) return sessionFailure('conflict', session, `holds turn ${submission.turnId}`);
   if (isStopped(session)) return sessionFailure('precondition-failed', session, 'is stopped');
+  const accepted = acceptedAuthor(session, submission.author);
+  if (!accepted.ok) return accepted;
   const { turnId: id, key, author, text } = submission;
-  const turn: Turn = Object.freeze({ id, key, author, text, position: session.turns.length + 1, state: 'queued' });
+  const turn: Turn = frozenCopy({ id, key, author, text, position: session.turns.length + 1, state: 'queued' });
   return ok(Object.freeze({ session: withChanges(session, { turns: appended(session.turns, turn) }), turn, effect: 'recorded' }));
 }
 
@@ -79,9 +84,27 @@ export function reconcileTurns(turns: readonly Turn[], generation: SessionGenera
   )));
 }
 
+// The host writes only the outcome turn of a delegation request that no
+// response can reach (agent harness port, 7.4; contract, section 4.1).
+function acceptedAuthor(session: Session, author: TurnAuthor): Result<TurnAuthor> {
+  if (author.kind === 'principal') return ok(author);
+  const request = session.requests.find((candidate) => isSameRequestKey(candidate.key, author.delegationRequest));
+  if (request === undefined) return sessionFailure('not-found', session, 'has no such delegation request');
+  if (request.kind !== 'delegation-request') return sessionFailure('invalid', session, `takes no host turn for a ${request.kind}`);
+  if (request.state !== 'expired' && request.state !== 'unresolved') {
+    return sessionFailure('precondition-failed', session, `holds the delegation request as ${request.state}`);
+  }
+  return ok(author);
+}
+
 // Product ports contract, section 2 rule 7: a retry repeats the input.
 function isRetryOf(turn: Turn, submission: TurnSubmission): boolean {
-  return turn.text === submission.text && turn.author === submission.author;
+  return turn.text === submission.text && isSameAuthor(turn.author, submission.author);
+}
+
+function isSameAuthor(left: TurnAuthor, right: TurnAuthor): boolean {
+  if (left.kind === 'principal') return right.kind === 'principal' && left.principalId === right.principalId;
+  return right.kind === 'host' && isSameRequestKey(left.delegationRequest, right.delegationRequest);
 }
 
 function hasRunningTurn(session: Session): boolean {

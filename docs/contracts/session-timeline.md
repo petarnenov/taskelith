@@ -25,10 +25,10 @@ The domain is pure: it reads no clock, random source, file, or network, and it s
 
 | Code | When |
 | --- | --- |
-| `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, an answer of the wrong kind for its request, or an answer from the wrong responder |
+| `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, an answer of the wrong kind for its request, an answer from the wrong responder, or a host turn for a request that is not a delegation request |
 | `not-found` | An unknown attempt, generation, turn, request, or handoff, or a request that is `expired` or `unresolved` |
 | `conflict` | An attempt of another task, an attempt the session already bound or that another session of the task holds, another native session ID, a repeated idempotency key with another author or text, a repeated turn ID, a request key repeated with other content, a second outcome, a second response, a second handoff, a handoff taken twice, or taken by the same session or by a session of another task |
-| `precondition-failed` | Every other state the change does not allow: a bound attempt that has not ended, a generation that is not the next one or not running, no active bound attempt, a stopped session, a turn that is not the next deliverable one, a turn that is not running in the named generation, a response for an attempt or ownership generation that is not the active bound one, a delivery report for a request that is not answered or whose delivery is no longer pending, or a handoff before the stop or while a generation runs |
+| `precondition-failed` | Every other state the change does not allow: a bound attempt that has not ended, a generation that is not the next one or not running, no active bound attempt, a stopped session, a turn that is not the next deliverable one, a turn that is not running in the named generation, a host turn for a delegation request that is neither `expired` nor `unresolved`, a response for an attempt or ownership generation that is not the active bound one, a delivery report for a request that is not answered or whose delivery is no longer pending, or a handoff before the stop or while a generation runs |
 
 ## 3. Sessions, attempts, and generations
 
@@ -66,12 +66,13 @@ A generation counts the session's native processes (agent harness port contract 
 
 ### 4.1 Submission and idempotency
 
-`submitTurn(session, submission)` records a user turn from its `TurnId`, its `IdempotencyKey`, its author (`PrincipalId`), and its text, and returns the session, the turn, and the effect, `recorded` or `duplicate`. In order:
+`submitTurn(session, submission)` records a turn from its `TurnId`, its `IdempotencyKey`, its author, and its text, and returns the session, the turn, and the effect, `recorded` or `duplicate`. The author is a person (`PrincipalId`) or the host with the `RequestKey` of a delegation request: when a delegated child's outcome can no longer be returned as a response, because the request is `expired` or `unresolved`, the host delivers it as a turn whose ID and key it derives from the delegation ID (agent harness port contract section 7.4). In order:
 
 1. Text outside its bound fails with `invalid`.
 2. A key the session holds returns that turn with the effect `duplicate`, whatever its state, when the author and the text are equal; with another author or text it fails with `conflict` ([product ports contract](product-ports.md) section 2 rule 7). A retry never creates another turn.
 3. A `TurnId` the session holds fails with `conflict`.
 4. A stopped session fails with `precondition-failed`.
+5. A host author whose request the session does not hold fails with `not-found`; a request that is not a delegation request fails with `invalid`; a delegation request that is neither `expired` nor `unresolved` fails with `precondition-failed`, because a response still reaches it.
 
 A new turn is `queued` at the next position of the session, from 1 without gaps. Its ID, key, author, text, and position never change.
 
@@ -153,7 +154,7 @@ When a generation ends, through `endGeneration` or `endBoundAttempt`:
 - each `answered` request of it whose delivery is `pending` becomes `delivery-uncertain`;
 - each of its `delivered` turns becomes `outcome-unknown`.
 
-These states are final. They are shown, and they lead to no answer, no resend, and no new turn: a retry of an `outcome-unknown` turn with its idempotency key returns it unchanged, and a new attempt at the same text needs a new key and is a new turn. A request of the next generation is a new request for a fresh decision. Queued turns stay queued for the next generation (agent harness port contract sections 5 and 6; architecture invariant 14).
+These states are final. They are shown, and they lead to no answer, no resend, and no new turn, except the host's turn of section 4.1 that delivers a delegated child's outcome to an `unresolved` delegation request: a retry of an `outcome-unknown` turn with its idempotency key returns it unchanged, and a new attempt at the same text needs a new key and is a new turn. A request of the next generation is a new request for a fresh decision. Queued turns stay queued for the next generation (agent harness port contract sections 5 and 6; architecture invariant 14).
 
 ## 7. Output stream and cursor
 

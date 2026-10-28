@@ -32,6 +32,7 @@ import {
   generation,
   permissionRequest,
   requestKey,
+  sessionWithDelegation,
   sessionWithOpenRequest,
   sessionWithRunningTurn,
   submitted,
@@ -52,11 +53,6 @@ function request(session: Session, recording: RequestRecording): Session {
 
 function inputRequest(native: string): RequestRecording {
   return { key: requestKey(native), kind: 'input-request', turnId: turnId('turn-1'), text: 'which branch?' };
-}
-
-function sessionWithDelegation(): Session {
-  const recording: RequestRecording = { ...permissionRequest('request-2'), kind: 'delegation-request', text: 'split it' };
-  return request(sessionWithRunningTurn(), recording);
 }
 
 function delegationResult(delegationId = 'child-1', summary = 'done'): ResponseSubmission {

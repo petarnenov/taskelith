@@ -19,6 +19,7 @@ import {
   type Session,
   type SessionGeneration,
   type SessionId,
+  type TurnAuthor,
   type TurnId,
 } from '@taskelith/execution';
 import { value } from '@taskelith/testing';
@@ -39,6 +40,7 @@ export const CHILD_TASK = taskId('task-1-child');
 export const HARNESS = value(parseIdentifier('HarnessPluginId', 'harness-a'));
 export const NATIVE = nativeSessionId('native-1');
 export const AUTHOR = value(parseIdentifier('PrincipalId', 'person-1'));
+export const PERSON: TurnAuthor = { kind: 'principal', principalId: AUTHOR };
 export const FIRST_ATTEMPT = attemptId('attempt-1');
 export const SECOND_ATTEMPT = attemptId('attempt-2');
 export const OWNERSHIP = ownership(1);
@@ -58,7 +60,7 @@ export function runningSession(): Session {
 }
 
 export function submitted(session: Session, name: string, text = `text of ${name}`): Session {
-  const submission = { turnId: turnId(name), key: turnKey(`key-${name}`), author: AUTHOR, text };
+  const submission = { turnId: turnId(name), key: turnKey(`key-${name}`), author: PERSON, text };
   return value(submitTurn(session, submission)).session;
 }
 
@@ -77,6 +79,16 @@ export function requestKey(native: string, at = 1): RequestKey {
 
 export function permissionRequest(native: string, turn = 'turn-1', at = 1): RequestRecording {
   return { key: requestKey(native, at), kind: 'permission-request', turnId: turnId(turn), text: `may I ${native}` };
+}
+
+export function recordedRequest(session: Session, recording: RequestRecording): Session {
+  return value(recordRequest(session, recording));
+}
+
+// A session whose running turn has the open delegation request `request-2`.
+export function sessionWithDelegation(): Session {
+  const recording: RequestRecording = { ...permissionRequest('request-2'), kind: 'delegation-request', text: 'split it' };
+  return recordedRequest(sessionWithRunningTurn(), recording);
 }
 
 // A session whose running turn has the open permission request `request-1`.

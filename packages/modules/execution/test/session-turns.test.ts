@@ -12,14 +12,21 @@ import {
   recordTurnOutcome,
   startGeneration,
   submitTurn,
+  type RequestKey,
   type Session,
+  type TurnAuthor,
   type TurnEnd,
+  type TurnSubmission,
 } from '@taskelith/execution';
 import { failed, value } from '@taskelith/testing';
 import {
-  AUTHOR,
   NATIVE,
+  PERSON,
   allow,
+  permissionRequest,
+  recordedRequest,
+  requestKey,
+  sessionWithDelegation,
   generation,
   runningSession,
   sessionWithOpenRequest,
@@ -29,10 +36,21 @@ import {
   turnKey,
 } from './session-fixtures.ts';
 
-const OTHER_AUTHOR = value(parseIdentifier('PrincipalId', 'person-2'));
+const OTHER_PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-2')) };
 
 function submission(name: string, text = `text of ${name}`) {
-  return { turnId: turnId(name), key: turnKey(`key-${name}`), author: AUTHOR, text };
+  return { turnId: turnId(name), key: turnKey(`key-${name}`), author: PERSON, text };
+}
+
+// The host's turn that delivers a delegated child's outcome (port, 7.4).
+function outcomeTurn(request: RequestKey = requestKey('request-2')): TurnSubmission {
+  const author: TurnAuthor = { kind: 'host', delegationRequest: request };
+  return { turnId: turnId('delegation-child-1'), key: turnKey('delegation-child-1'), author, text: 'child-1 completed' };
+}
+
+function resumedAfter(session: Session): Session {
+  const ended = value(endGeneration(session, generation(1)));
+  return value(startGeneration(ended, { generation: generation(2), nativeSessionId: NATIVE }));
 }
 
 function end(name: string, outcome: TurnEnd['outcome'] = 'completed', at = 1): TurnEnd {
@@ -51,7 +69,7 @@ test('a submitted turn keeps the caller-supplied identity, author, and text, and
   const result = value(submitTurn(runningSession(), submission('turn-1', 'hello')));
   assert.equal(result.effect, 'recorded');
   assert.deepEqual(result.turn, {
-    id: turnId('turn-1'), key: turnKey('key-turn-1'), author: AUTHOR, text: 'hello', position: 1, state: 'queued',
+    id: turnId('turn-1'), key: turnKey('key-turn-1'), author: PERSON, text: 'hello', position: 1, state: 'queued',
   });
   assert.deepEqual(result.session.turns, [result.turn]);
 });
@@ -77,7 +95,7 @@ test('a key reused with other text fails with conflict', () => {
 
 test('a key reused by another author fails with conflict', () => {
   const session = submitted(runningSession(), 'turn-1');
-  const byOther = { ...submission('turn-1'), turnId: turnId('turn-2'), author: OTHER_AUTHOR };
+  const byOther = { ...submission('turn-1'), turnId: turnId('turn-2'), author: OTHER_PERSON };
   assert.equal(failed(submitTurn(session, byOther)).code, 'conflict');
 });
 
@@ -183,4 +201,32 @@ test('an account-limit-reached outcome stops the session, and a new turn fails',
   assert.ok(isStopped(stopped));
   assert.equal(failed(submitTurn(stopped, submission('turn-2'))).code, 'precondition-failed');
   assert.equal(value(submitTurn(stopped, submission('turn-1'))).effect, 'duplicate');
+});
+
+test('the host delivers the outcome of an unresolved delegation request as a turn', () => {
+  const resumed = resumedAfter(sessionWithDelegation());
+  const result = value(submitTurn(resumed, outcomeTurn()));
+  assert.equal(result.effect, 'recorded');
+  assert.deepEqual(result.turn.author, { kind: 'host', delegationRequest: requestKey('request-2') });
+  assert.equal(nextDeliverableTurn(result.session)?.id, 'delegation-child-1');
+});
+
+test('the host delivers the outcome of an expired delegation request as a turn', () => {
+  const expired = completed(sessionWithDelegation(), 'turn-1');
+  assert.equal(value(submitTurn(expired, outcomeTurn())).effect, 'recorded');
+});
+
+test('a host turn needs a delegation request that can no longer be answered', () => {
+  const resumed = resumedAfter(recordedRequest(sessionWithDelegation(), permissionRequest('request-1')));
+  assert.equal(failed(submitTurn(resumed, outcomeTurn(requestKey('nope')))).code, 'not-found');
+  assert.equal(failed(submitTurn(resumed, outcomeTurn(requestKey('request-1')))).code, 'invalid');
+  assert.equal(failed(submitTurn(sessionWithDelegation(), outcomeTurn())).code, 'precondition-failed');
+});
+
+test('a retried host turn is a duplicate, and its key from a person fails with conflict', () => {
+  const session = value(submitTurn(resumedAfter(sessionWithDelegation()), outcomeTurn())).session;
+  assert.equal(value(submitTurn(session, outcomeTurn())).effect, 'duplicate');
+  assert.equal(failed(submitTurn(session, { ...outcomeTurn(), author: PERSON })).code, 'conflict');
+  const otherRequest = { ...outcomeTurn(), author: { kind: 'host' as const, delegationRequest: requestKey('request-3') } };
+  assert.equal(failed(submitTurn(session, otherRequest)).code, 'conflict');
 });

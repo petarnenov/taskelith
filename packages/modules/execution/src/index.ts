@@ -98,6 +98,7 @@ export {
   type SessionLimit,
   type SessionStart,
   type Turn,
+  type TurnAuthor,
   type TurnDelivery,
   type TurnEnd,
   type TurnIdentity,

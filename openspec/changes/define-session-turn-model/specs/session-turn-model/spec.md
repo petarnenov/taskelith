@@ -162,7 +162,7 @@ A consumed response SHALL become `delivered`, `refused`, or `delivery-uncertain`
 - **THEN** the response is `delivery-uncertain`, and a second delivery report fails with `precondition-failed`
 
 ### Requirement: Reconciliation without replay
-When a generation ends, each of its open requests SHALL become `unresolved`, each consumed response without a report SHALL become `delivery-uncertain`, and each delivered turn without an outcome SHALL become `outcome-unknown`; these states SHALL be final and SHALL lead to no answer, resend, or new turn.
+When a generation ends, each of its open requests SHALL become `unresolved`, each consumed response without a report SHALL become `delivery-uncertain`, and each delivered turn without an outcome SHALL become `outcome-unknown`; these states SHALL be final and SHALL lead to no answer, resend, or new turn other than the host's delegation outcome turn.
 
 #### Scenario: Restart during a pending approval
 - **WHEN** generation 1 ends while a permission request has no response
@@ -175,6 +175,17 @@ When a generation ends, each of its open requests SHALL become `unresolved`, eac
 #### Scenario: Uncertain answer
 - **WHEN** generation 1 ends while a consumed response has no delivery report
 - **THEN** the response is `delivery-uncertain` and is listed among the uncertain deliveries
+
+### Requirement: Delegation outcome turn
+A turn's author SHALL be a person or the host; the host SHALL author only the turn that delivers a delegated child's outcome to a delegation request that is `expired` or `unresolved`, naming that request; a host turn naming an unknown request SHALL fail with `not-found`, another kind of request with `invalid`, and a delegation request in another state with `precondition-failed`.
+
+#### Scenario: Delegation outcome after a restart
+- **WHEN** generation 1 ends while a delegation request is open, and the host submits the child's outcome as a turn naming that request
+- **THEN** the turn is recorded and queued with the host as its author
+
+#### Scenario: Delegation request still answerable
+- **WHEN** the host submits an outcome turn naming an open delegation request
+- **THEN** it fails with `precondition-failed`
 
 ### Requirement: Output retention with cursor recovery
 Output SHALL take session-wide positions from 1 without gaps, each tied to its turn and generation, and empty output SHALL record no entry and take no position; the retained window SHALL hold at most `OUTPUT_RETENTION_BYTES`, 10 MiB of UTF-8 text, dropping the oldest entries, and reading after a cursor older than the window SHALL return `cursor-expired` with the earliest retained position.

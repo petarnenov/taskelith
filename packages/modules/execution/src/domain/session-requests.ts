@@ -5,6 +5,7 @@ import {
   activeBoundAttempt,
   appended,
   isLiveTurn,
+  isSameRequestKey,
   isTextWithin,
   replaced,
   sessionFailure,
@@ -37,7 +38,7 @@ const MAX_DELEGATION_ID_LENGTH = 128;
 // Records a native request in the returned session (contract, section 5.1).
 export function recordRequest(session: Session, recording: RequestRecording): Result<Session> {
   if (!isTextWithin(recording.text, 0, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got request text out of bounds');
-  const existing = session.requests.find((request) => isSameKey(request.key, recording.key));
+  const existing = session.requests.find((request) => isSameRequestKey(request.key, recording.key));
   if (existing !== undefined) {
     return isSameRecording(existing, recording) ? ok(session) : sessionFailure('conflict', session, 'holds another request under this key');
   }
@@ -127,11 +128,7 @@ function isAnswerFrom(answer: Answer, responder: Responder): boolean {
 }
 
 function indexOfRequest(session: Session, key: RequestKey): number {
-  return session.requests.findIndex((request) => isSameKey(request.key, key));
-}
-
-function isSameKey(left: RequestKey, right: RequestKey): boolean {
-  return left.generation === right.generation && left.nativeRequestId === right.nativeRequestId;
+  return session.requests.findIndex((request) => isSameRequestKey(request.key, key));
 }
 
 function isSameRecording(request: NativeRequest, recording: RequestRecording): boolean {
