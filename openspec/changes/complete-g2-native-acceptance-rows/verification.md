@@ -60,6 +60,21 @@ The iMac's Docker Desktop gives no host network outside its virtual machine, whi
 - `make verify` on that working tree, the commit after `09a62b39`: exit 0; tests 2363, pass 2316, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.40 % branches, 98.95 % functions; comments within the length rule; OpenSpec 70 passed; every checked link conforms.
 - Coverage of the changed product files (lines, branches, functions): `packages/testing` `linux-launch.js` 100, 100, 100; `apps/worker` `execution-supervision.js` 97.96, 87.67, 91.67; `apps/worker` `main.js` 91.23, 91.67, 84.21 (uncovered: the entry under `import.meta.main` and the launch failure report, which the move did not touch).
 
+## Review pass 1 fixes
+
+Pass 1 (reviewer A) found 2 Medium and 1 Low; the coordinator records the pass in `passes.jsonl` and `findings.jsonl`. Fixes, on the working tree after `fd24a25f`:
+
+- Finding 1 (Medium, `test/g2-cancellation-races.test.ts`): `assertCancelled` takes the cancel point. After a proven start (race c when the seed cancels after the start, race e) it requires the outcome `exited` with a proven start and `CANCEL_SIGNAL`; where the process may not have started (race b, race c after W4 and before the start, the granted rounds of race f) `not-started` stays allowed and an `exited` outcome must carry the signal. Fail-before with the outcome forced to `not-started` in a temporary local edit: `TASKELITH_TEST_SEED=20261026 make verify-linux-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='a cancel after W4|a crash between W1'`, exit 2, tests 2, fail 2 (`a started process ends exited`); the edit was removed.
+- Finding 2 (Medium, `tools/linux-cgroup/crash-windows.sh`): the script takes the node:test options, then `--` and the files; without files after a `--` it runs the crash windows, so a separate option value is never a file. `make verify-linux-g2-scenarios` passes `-- <files>`; `make verify-linux-crash-windows` passes no `--` and runs as before. `test_arguments` is sourced by four new tests in `test/linux-crash-windows-script.test.ts` (`--test-name-pattern=value` and `--test-name-pattern value`, each with and without files, and no files): tests 7, pass 7; with the script of `fd24a25f`, which has no such function, tests 7, pass 3, fail 4.
+- Finding 3 (Low, `acceptance.md`): the stale writes cite the stale ownership generation (lines 47; 108) and the stale recovery epoch scenarios (lines 49, 51; 110, 112) separately; design decision 8 says the same.
+
+Checks after the fixes:
+
+- `make verify-linux-crash-windows`: exit 0, tests 29, pass 29, fail 0. `make verify-linux-crash-windows PATTERN=redelivered`: exit 0, tests 1, pass 1.
+- `make verify-linux-g2-scenarios`: exit 0, tests 18, pass 17, fail 0, skipped 1 (race g); seeds races `984716667`, partitions `127468814`, stale generations `392610103`.
+- `make verify`: exit 0; tests 2367, pass 2320, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.39 % branches, 98.95 % functions; OpenSpec 70 passed; every checked link conforms.
+- The native acceptance evidence stays that of `c8e624d6`. The fixes change the runner's argument form, which both runs used only with `=` options and the default or `FILES` files, and tighten an assertion: in both runs races c and e recorded `exited by SIGKILL` (lines 45, 48; 106, 109), and race c after the start (seed `20261026`, line 45) is the only after-start case the stricter check adds, so both runs would have passed it. They were not re-run on the fixed commit.
+
 ## Follow-ups
 
 - A services-network mode of the privileged runner for Docker Desktop, so that a macOS host can run the Linux scenarios.
