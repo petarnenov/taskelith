@@ -7518,6 +7518,34 @@
       ]
     },
     {
+      "bom-ref": "cookie@2.0.1",
+      "type": "library",
+      "name": "cookie",
+      "version": "2.0.1",
+      "scope": "required",
+      "purl": "pkg:npm/cookie@2.0.1",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie/-/cookie-2.0.1.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "cae4e8a95bd1ae3ea97c35d113240002ff12900124ffc192de34114e250c9bae9356d0589aa41ea048cbd8b9aaf11a68eb6ef5bc7efa2274c28538ad1009bae7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "core-util-is@1.0.3",
       "type": "library",
       "name": "core-util-is",
@@ -23413,6 +23441,7 @@
         "@taskelith/worker-supervisor@0.0.0",
         "@taskelith/worker@0.0.0",
         "@types/pg@8.23.1",
+        "cookie@2.0.1",
         "pg@8.23.1"
       ]
     },
@@ -23529,6 +23558,7 @@
         "@taskelith/observability@0.0.0",
         "@taskelith/scheduling@0.0.0",
         "@taskelith/sdlc@0.0.0",
+        "@taskelith/secrets@0.0.0",
         "@taskelith/testing@0.0.0",
         "@types/pg@8.23.1",
         "node-pg-migrate@9.0.0",
@@ -24138,6 +24168,10 @@
     },
     {
       "ref": "convert-hrtime@5.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "cookie@2.0.1",
       "dependsOn": []
     },
     {

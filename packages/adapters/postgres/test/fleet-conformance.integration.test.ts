@@ -10,6 +10,7 @@ import {
   fleetWorker,
   installationIdentity,
   type CredentialGeneration,
+  type EnrolledWorker,
 } from '@taskelith/fleet';
 import {
   CommittingFleetRegistry,
@@ -19,7 +20,7 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
-import { ok, parseInstant } from '@taskelith/kernel';
+import { ok, parseInstant, type Instant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
 import pg from 'pg';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -114,6 +115,43 @@ test('a publisher that waited for the lock pushes every entry committed meanwhil
   assert.equal(value(await registry.publishRevocations(push)), 0);
 });
 
+test('a renewal that waits for the row lock until past the deadline is refused', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const worker = fleetWorker('w1', 'j1');
+  await enrollAll(registry, worker);
+  const deadline = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
+  value(await registry.requestRotation(worker.workerId, { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' }));
+  let now = worker.enrolledAt;
+  const holder = new pg.Client({ connectionString: url.href });
+  await holder.connect();
+  await holder.query('BEGIN');
+  await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
+  const renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
+  // The barrier: the renewal is waiting for the row lock.
+  await waitForWaitingRowLock(holder);
+  now = deadline;
+  await holder.query('COMMIT');
+  await holder.end();
+
+  const late = await renewing;
+  assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
+  assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
+  assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+});
+
+async function waitForWaitingRowLock(client: pg.Client): Promise<void> {
+  for (let tries = 0; tries < 200; tries++) {
+    const { rows } = await client.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+         WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`,
+    );
+    if (rows[0]!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('the renewal never waited for the row lock');
+}
+
 async function waitForWaitingLock(client: pg.Client): Promise<void> {
   for (let tries = 0; tries < 200; tries++) {
     const { rows } = await client.query<{ waiting: number }>(
@@ -143,6 +181,15 @@ function nextGeneration(worker: ReturnType<typeof fleetWorker>): CredentialGener
   };
 }
 
+// The registry's two steps that make `next` current and keep generation 1
+// as the predecessor until `deadline`; the renewal is just before it.
+async function renewed(registry: CommittingFleetRegistry, worker: EnrolledWorker, next: CredentialGeneration, deadline: Instant) {
+  const order = { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' };
+  value(await registry.requestRotation(worker.workerId, order));
+  const renewedAt = value(parseInstant(new Date(Date.parse(deadline) - 1).toISOString()));
+  value(await registry.renew(worker.workerId, next, 'jwt', { now: () => renewedAt }));
+}
+
 const predecessorColumn = (workerId: string) =>
   query<{ enrollment: string; predecessor_valid_until: Date | null }>(
     url,
@@ -156,7 +203,7 @@ test('a due row whose record holds no predecessor is cleared, and the sweep goes
   const [skipped, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
   await enrollAll(registry, skipped, rotated);
   const next = nextGeneration(rotated);
-  value(await registry.rotate(rotated.workerId, 1, next, rotated.enrolledAt, rotated.enrolledAt));
+  await renewed(registry, rotated, next, rotated.enrolledAt);
   await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
   const [before] = await predecessorColumn('w1');
 
@@ -175,7 +222,7 @@ test('a due row without an enrollment record is not swept', { concurrency: false
   const registry = new CommittingFleetRegistry(database);
   const [bare, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
   await enrollAll(registry, bare, rotated);
-  value(await registry.rotate(rotated.workerId, 1, nextGeneration(rotated), rotated.enrolledAt, rotated.enrolledAt));
+  await renewed(registry, rotated, nextGeneration(rotated), rotated.enrolledAt);
   await query(url, "UPDATE workers SET enrollment = NULL, predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
   const before = await predecessorColumn('w1');
 
@@ -190,7 +237,7 @@ test('a due row whose predecessor is still in its grace window expires nothing y
   const worker = fleetWorker('w1', 'j1');
   await enrollAll(registry, worker);
   const graceEnds = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
-  value(await registry.rotate(worker.workerId, 1, nextGeneration(worker), graceEnds, worker.enrolledAt));
+  await renewed(registry, worker, nextGeneration(worker), graceEnds);
   await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [worker.enrolledAt]);
 
   assert.equal(value(await registry.expirePredecessors(worker.enrolledAt)), 0, 'the record, not the column, decides');

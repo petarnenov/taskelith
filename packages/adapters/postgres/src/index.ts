@@ -1,3 +1,4 @@
+export { PostgresAccessStore, PostgresAccessTransaction } from './access-repositories.js';
 export {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,

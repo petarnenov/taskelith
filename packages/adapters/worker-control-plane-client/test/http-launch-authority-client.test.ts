@@ -52,7 +52,7 @@ async function text(request: IncomingMessage): Promise<string> {
 }
 
 function client(timeoutMilliseconds = 2000): HttpLaunchAuthorityClient {
-  return new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
+  return new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl, bearer: () => CREDENTIAL, timeoutMilliseconds });
 }
 
 test('a request carries the bearer and the contract body, and a grant comes back as the domain grant', async () => {
@@ -68,10 +68,20 @@ test('a request carries the bearer and the contract body, and a grant comes back
   assert.ok(checkHttpSchema('LaunchAuthorizationRequest', request.body).ok);
 });
 
+test('the bearer is read at each request, so an adopted generation is used at once', async () => {
+  answer = { status: 200, body: { outcome: 'expired' } };
+  let bearer = CREDENTIAL;
+  const rotating = new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl, bearer: () => bearer, timeoutMilliseconds: 2000 });
+  value(await rotating.authorize(REQUEST));
+  bearer = `tkwk_${'N'.repeat(43)}`;
+  value(await rotating.authorize(REQUEST));
+  assert.deepEqual(seen.slice(-2).map(({ authorization }) => authorization), [`Bearer ${CREDENTIAL}`, `Bearer ${bearer}`]);
+});
+
 test('a base without a trailing slash keeps its path', async () => {
   answer = { status: 200, body: { outcome: 'expired' } };
   const bare = new URL(baseUrl.href.replace(/\/$/, ''));
-  value(await new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: bare, credential: CREDENTIAL, timeoutMilliseconds: 2000 }).authorize(REQUEST));
+  value(await new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: bare, bearer: () => CREDENTIAL, timeoutMilliseconds: 2000 }).authorize(REQUEST));
   assert.equal(seen.at(-1)!.path, '/api/launch-authorizations');
 });
 
@@ -91,7 +101,7 @@ test('only a 503, a timeout, or no connection is undecided', async () => {
   assert.deepEqual([failed(await client().authorize(REQUEST)).code, failed(await client().authorize(REQUEST)).details.status], ['unavailable', '503']);
   answer = { status: 200, body: { outcome: 'expired' }, delayMilliseconds: 300 };
   assert.equal(failed(await client(50).authorize(REQUEST)).code, 'unavailable');
-  const closed = new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://127.0.0.1:1/'), credential: CREDENTIAL, timeoutMilliseconds: 500 });
+  const closed = new HttpLaunchAuthorityClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://127.0.0.1:1/'), bearer: () => CREDENTIAL, timeoutMilliseconds: 500 });
   assert.equal(failed(await closed.authorize(REQUEST)).code, 'unavailable');
   for (const [status, code] of [[502, 'unavailable'], [504, 'unavailable'], [401, 'forbidden'], [400, 'invalid'], [500, 'internal']] as const) {
     answer = { status, body: { ...failure, code } };

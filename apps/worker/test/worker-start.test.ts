@@ -9,6 +9,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/cont
 import type { JournalSnapshot } from '@taskelith/execution';
 import {
   stubAdmissionCheck,
+  type CredentialRenewalClient,
   type Enrollment,
   type EnrollmentClient,
   type EnrollmentRequest,
@@ -55,6 +56,12 @@ const TOKEN = `tken_${'T'.repeat(43)}`;
 const ENROLLMENT: Enrollment = {
   installationId: 'a'.repeat(32), workerId: id('WorkerId', `w${'b'.repeat(32)}`), credentialGeneration: 1, recoveryEpoch: 1 as Enrollment['recoveryEpoch'],
   protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: `tkwk_${'C'.repeat(43)}`, broker: 'broker creds text' },
+};
+
+// No rotation is requested in these tests, so no renewal call is made.
+const UNUSED_RENEWAL: CredentialRenewalClient = {
+  renew: async () => err(failure('internal', 'no renewal expected')),
+  confirm: async () => err(failure('internal', 'no confirmation expected')),
 };
 
 const INSTALLATION_CA: InstallationCa = { certificatePem: 'installation CA PEM', sha256: 'ab'.repeat(32) };
@@ -167,7 +174,7 @@ afterEach(async () => {
 
 function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
-    installationCa: enrollment, enrollment: enrollment.pinned, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
+    installationCa: enrollment, enrollment: enrollment.pinned, renewal: () => UNUSED_RENEWAL, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
     sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), daemon, pressurePollMilliseconds: 10,
     admissionChecks, ...(launching === undefined ? {} : { launching }),
   };
@@ -182,8 +189,8 @@ class RecordingLaunching {
   hostAnswer: Result<LaunchHost> = ok({ clock: new FakeClock(), supervision: new FakeSupervisions().factory });
 
   readonly dependencies: LaunchingDependencies = {
-    authority: (credential, installationCa) => {
-      this.credentials.push(credential);
+    authority: (bearer, installationCa) => {
+      this.credentials.push(bearer());
       this.pins.push(installationCa);
       return this.authority;
     },
@@ -504,6 +511,26 @@ test('a runtime failure stops the launches, then closes the root, and settles st
   assert.deepEqual(launchFailures, []);
   await assert.rejects(worker.stop(), /close failed/);
   assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
+});
+
+test('a worker whose every generation the broker rejected in 3 rounds stops with credentials-expired', async () => {
+  broker.answer = err(failure('unavailable', 'the broker could not connect', { cause: 'Authorization Violation', reason: 'credentials-rejected' }));
+  const worker = value(await startWorker(settings, dependencies()));
+  const host: ServiceProcess = { on: () => undefined, off: () => undefined };
+  const lines: string[] = [];
+  const served = serveUntilStopped(worker, host, (line) => lines.push(line));
+  await until(() => timers.waiting.includes(5_000));
+  timers.elapse(5_000);
+  await until(() => timers.waiting.includes(10_000));
+  timers.elapse(10_000);
+  await served;
+  assert.equal(broker.endpoints.length, 3, 'one generation per round, three rounds');
+  assert.equal(host.exitCode, 1);
+  const [line] = lines;
+  assert.deepEqual([JSON.parse(line!).error.code, JSON.parse(line!).error.details.reason], ['forbidden', 'credentials-expired']);
+  assert.match(line!, /enroll the worker again/);
+  assert.equal(line!.includes(ENROLLMENT.credentials.controlPlane), false);
+  await assert.rejects(worker.stop(), (error: unknown) => (error as { code?: string }).code === 'forbidden');
 });
 
 test('stop closes the connection and the root once, and a signal stops a served worker', async () => {

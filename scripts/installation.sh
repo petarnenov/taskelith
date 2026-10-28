@@ -119,11 +119,75 @@ finish_reproducible() {
   exit "$status"
 }
 
+# The manifest.json of a saved image; it names the platform image's config.
+saved_manifest() {
+  if ! docker image save "$1" | tar -xOf - manifest.json; then
+    echo "installation.sh: the manifest.json of the saved image $1 cannot be read" >&2
+    return 1
+  fi
+}
+
+# The platform image's config digest, the name of its blob in a saved image;
+# on the containerd store the image ID is the digest of its index instead.
+config_digest() {
+  local manifest config configs=()
+  manifest="$(saved_manifest "$1")" || return
+  while read -r config; do configs+=("$config"); done \
+    < <(grep -o '"Config": *"[^"]*"' <<< "$manifest" | sed 's/.*"\([^"]*\)"$/\1/')
+  if [ "${#configs[@]}" -ne 1 ]; then
+    echo "installation.sh: the saved image $1 names ${#configs[@]} image configs, not one" >&2
+    return 1
+  fi
+  if ! [[ "${configs[0]}" =~ ^blobs/sha256/([0-9a-f]{64})$ ]]; then
+    echo "installation.sh: the saved image $1 names no image config blob: ${configs[0]}" >&2
+    return 1
+  fi
+  echo "sha256:${BASH_REMATCH[1]}"
+}
+
+# The ordered layer digests of an image, separated by spaces.
+image_layers() {
+  docker image inspect --format '{{range .RootFS.Layers}}{{.}} {{end}}' "$1"
+}
+
+# Names each layer index whose digests differ; fails when one does.
+report_layers() {
+  local first_layers second_layers index=0 status=0
+  read -r -a first_layers <<< "$1"
+  read -r -a second_layers <<< "$2"
+  while [ "$index" -lt "${#first_layers[@]}" ] || [ "$index" -lt "${#second_layers[@]}" ]; do
+    if [ "${first_layers[index]:-none}" != "${second_layers[index]:-none}" ]; then
+      echo "installation.sh: layer $index differs: ${first_layers[index]:-none} and ${second_layers[index]:-none}" >&2
+      status=1
+    fi
+    index=$((index + 1))
+  done
+  return "$status"
+}
+
+# Compares the builds' platform images by config digest and ordered layers,
+# names each part that differs, and fails when one does.
+compare_builds() {
+  local first="$1" second="$2" first_config second_config first_layers second_layers status=0
+  first_config="$(config_digest "$first")" || return
+  second_config="$(config_digest "$second")" || return
+  first_layers="$(image_layers "$first")" || return
+  second_layers="$(image_layers "$second")" || return
+  report_layers "$first_layers" "$second_layers" || status=1
+  if [ "$first_config" != "$second_config" ]; then
+    echo "installation.sh: the image configs differ: $first_config and $second_config" >&2
+    status=1
+  fi
+  if [ "$status" -eq 0 ]; then
+    echo "installation.sh: both builds gave the worker image config $first_config"
+  fi
+  return "$status"
+}
+
 # Builds the worker image twice from fresh contexts of one revision, without
-# the build cache, and passes only when both builds give one image ID.
+# the build cache, and passes only when both builds give one platform image.
 check_reproducible() (
   local revision epoch first="$worker_image-first" second="$worker_image-second" context="" image
-  local first_id second_id
   require_pins verify-worker-image-reproducible
   trap 'finish_reproducible $?' EXIT
   revision="$(source_revision)" || exit
@@ -134,13 +198,7 @@ check_reproducible() (
     unpack_context "$revision" "$context"
     build_image "$context" "$epoch" worker "$image" --no-cache
   done
-  first_id="$(docker image inspect --format '{{.Id}}' "$first")"
-  second_id="$(docker image inspect --format '{{.Id}}' "$second")"
-  if [ "$first_id" != "$second_id" ]; then
-    echo "installation.sh: two builds of one revision gave $first_id and $second_id" >&2
-    exit 1
-  fi
-  echo "installation.sh: both builds gave the worker image $first_id"
+  compare_builds "$first" "$second"
 )
 
 # Prints the init result once: it holds the operator secret (contract 4).

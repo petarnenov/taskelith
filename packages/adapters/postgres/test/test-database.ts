@@ -14,6 +14,7 @@ const TABLES = [
   'operator_credentials', 'audit_events', 'enrollment_tokens', 'broker_revocations', 'evidence', 'launch_authorizations',
   'launch_rejections', 'current_revisions', 'delegation_requests', 'producer_cursors', 'inventory_requests', 'inventory_report_parts',
   'unrecorded_processes', 'placement_rotation', 'placement_outcomes', 'worker_self_check_results',
+  'principals', 'installation_roles', 'operator_principal', 'project_roles', 'browser_sessions', 'access_audit_events',
 ];
 let created = 0;
 

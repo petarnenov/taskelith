@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { readConfirmedSecret } from './secret-input.js';
 import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostConstraints, HostPlatform, WorkerAdmissionSnapshot } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -14,9 +15,14 @@ export const ADMIN_USAGE = [
   '  reset-operator-credential --actor WHO --reason WHY',
   '  issue-installation-certificates',
   '  issue-enrollment-token [--platform linux|darwin] [--architecture x64|arm64] [--hostname NAME]',
-  '  rotate-worker WORKER_ID | revoke-worker WORKER_ID | expire-grace-windows',
+  '  rotate-worker WORKER_ID --actor WHO --reason WHY',
+  '  revoke-worker WORKER_ID | expire-grace-windows',
   '  worker-admission',
-  'The last five read the operator credential from TASKELITH_OPERATOR_TOKEN.',
+  '  create-principal --login-name NAME --actor WHO --reason WHY',
+  '  set-password --login-name NAME --actor WHO --reason WHY (the password on standard input)',
+  '  assign-project-role --project ID --login-name NAME --role ROLE --actor WHO --reason WHY',
+  '  remove-project-role --project ID --login-name NAME --actor WHO --reason WHY',
+  'All but the first three read the operator credential from TASKELITH_OPERATOR_TOKEN.',
 ].join('\n');
 
 export interface AdminIo {
@@ -24,6 +30,9 @@ export interface AdminIo {
   readonly platform: NodeJS.Platform;
   readonly ownerUid: number;
   write(line: string): void;
+  // A new secret, unechoed and typed twice on a terminal; only set-password
+  // needs it. A cancelled or mistyped input is a failure.
+  readSecret?(prompt: string): Promise<Result<string>>;
 }
 
 // Runs one administrative command and returns the exit status: 0, 1 for a
@@ -45,10 +54,10 @@ async function runCommand(command: Command, io: AdminIo): Promise<number> {
   const opened = openAdministration(io, command.name);
   if (!opened.ok) return fail(io, opened.error);
   try {
-    const outcome = await run(opened.value, command, io.environment);
+    const outcome = await run(opened.value, command, io);
     if (!outcome.ok) return fail(io, outcome.error);
     io.write(JSON.stringify(outcome.value));
-    return isPartial(outcome.value) ? 1 : 0;
+    return 0;
   } finally {
     await opened.value.close();
   }
@@ -63,6 +72,7 @@ interface Command {
 const OPTIONS = {
   actor: { type: 'string' }, reason: { type: 'string' },
   platform: { type: 'string' }, architecture: { type: 'string' }, hostname: { type: 'string' },
+  'login-name': { type: 'string' }, project: { type: 'string' }, role: { type: 'string' },
 } as const;
 const WORKER_COMMANDS = new Set(['rotate-worker', 'revoke-worker']);
 // It restores a lost installation-ca.pem, so it must not need the broker CA.
@@ -71,7 +81,7 @@ const PLATFORMS = new Set<string>(['linux', 'darwin']);
 const ARCHITECTURES = new Set<string>(['x64', 'arm64']);
 const COMMANDS = new Set([
   'init', 'reset-operator-credential', 'issue-installation-certificates', 'issue-enrollment-token', 'expire-grace-windows',
-  'worker-admission', ...WORKER_COMMANDS,
+  'worker-admission', 'create-principal', 'set-password', 'assign-project-role', 'remove-project-role', ...WORKER_COMMANDS,
 ]);
 
 function parse(argv: readonly string[]): Result<Command> {
@@ -107,10 +117,23 @@ function openAdministration(io: AdminIo, commandName: string): Result<Administra
   });
 }
 
-async function run(admin: Administration, command: Command, environment: Environment): Promise<Result<unknown>> {
+async function run(admin: Administration, command: Command, io: AdminIo): Promise<Result<unknown>> {
   const invocation = { actor: command.values.actor ?? '', reason: command.values.reason ?? '' };
-  const operator = environment.TASKELITH_OPERATOR_TOKEN ?? '';
+  const operator = io.environment.TASKELITH_OPERATOR_TOKEN ?? '';
+  const loginName = command.values['login-name'] ?? '';
+  const target = { projectId: command.values.project ?? '', loginName };
   switch (command.name) {
+    case 'create-principal':
+      return admin.createPrincipal(operator, loginName, invocation);
+    case 'set-password': {
+      if (io.readSecret === undefined) return err(failure('invalid', 'set-password reads the password from standard input'));
+      const password = await io.readSecret(`new password for ${loginName}: `);
+      return password.ok ? admin.setPassword(operator, loginName, password.value, invocation) : password;
+    }
+    case 'assign-project-role':
+      return admin.assignProjectRole(operator, { ...target, role: command.values.role ?? '' }, invocation);
+    case 'remove-project-role':
+      return admin.removeProjectRole(operator, target, invocation);
     case 'init':
       return admin.initialize(invocation);
     case 'reset-operator-credential':
@@ -120,9 +143,7 @@ async function run(admin: Administration, command: Command, environment: Environ
     case 'issue-enrollment-token':
       return admin.issueEnrollmentToken(operator, constraints(command.values));
     case 'rotate-worker':
-      return mapped(await admin.rotateWorker(operator, command.worker!), (rotated) => rotated.revocationsPublished
-        ? rotated
-        : { ...rotated, retry: 'run expire-grace-windows to publish the pending revocation' });
+      return admin.rotateWorker(operator, command.worker!, invocation);
     case 'revoke-worker':
       return mapped(await admin.revokeWorker(operator, command.worker!), (revocation) => revocation.commandConsumerRemoved
         ? { revoked: command.worker }
@@ -132,12 +153,6 @@ async function run(admin: Administration, command: Command, environment: Environ
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }
-}
-
-// A committed rotation whose dropped broker user the broker does not know
-// yet: its secrets are printed, and the status asks for a retry.
-function isPartial(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && (value as { revocationsPublished?: unknown }).revocationsPublished === false;
 }
 
 // The workers view with each detail redacted again, since a worker wrote
@@ -176,5 +191,6 @@ if (import.meta.main) {
     platform: process.platform,
     ownerUid: process.getuid?.() ?? 0,
     write: (line) => process.stdout.write(`${line}\n`),
+    readSecret: (prompt) => readConfirmedSecret(prompt, 'repeat the new password: '),
   });
 }

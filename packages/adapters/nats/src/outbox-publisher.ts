@@ -33,9 +33,9 @@ export interface OutboxPublisherOptions {
 
 export const OUTBOX_BATCH = 100;
 
-// Wire contracts section 2: a confirmation and an inventory request have
-// no identity, so each is sent without a `Nats-Msg-Id`.
-const WITHOUT_MESSAGE_ID = new Set(['execution.observations.confirmed', 'worker.inventory.requested']);
+// Wire contracts section 2: a confirmation and the request notices have no
+// identity, so each is sent without a `Nats-Msg-Id`.
+const WITHOUT_MESSAGE_ID = new Set(['execution.observations.confirmed', 'worker.inventory.requested', 'worker.credentials.rotation-requested']);
 
 interface SubjectBackoff {
   readonly failures: number;

@@ -1,4 +1,4 @@
-import type { Instant } from '@taskelith/kernel';
+import { err, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import type { HardControl } from '@taskelith/scheduling';
@@ -57,11 +57,21 @@ export interface CredentialGeneration {
   readonly brokerIssuedAt: Instant;
 }
 
-// The predecessor stays valid until `validUntil`, the end of the rotation's
-// grace window (trust model section 4).
+// A rotation that `rotate-worker` requested: generation `generation`, which
+// must be confirmed by `deadline`; the renewal adds the JWT it signed.
+export interface RotationRequest {
+  readonly generation: number;
+  readonly requestedAt: Instant;
+  readonly deadline: Instant;
+  readonly brokerUserJwt?: string;
+}
+
+// The predecessor stays valid until its successor is confirmed or
+// `validUntil`, the rotation's deadline (installation contract sec. 6).
 export interface WorkerCredentials {
   readonly current: CredentialGeneration;
   readonly previous?: CredentialGeneration & { readonly validUntil: Instant };
+  readonly rotation?: RotationRequest;
 }
 
 export interface EnrolledWorker {
@@ -102,20 +112,52 @@ export interface BrokerRevocation {
   readonly revokedAt: Instant;
 }
 
-export interface Rotation {
+// Why a renewal or a confirmation does not apply to the stored credentials.
+export type RotationConflict = 'rotation-not-requested' | 'renewal-mismatch' | 'confirmation-mismatch';
+
+// An open rotation is kept, so a repeated request changes nothing.
+export function requestRotation(credentials: WorkerCredentials, requestedAt: Instant, deadline: Instant): WorkerCredentials {
+  if (credentials.rotation !== undefined) return credentials;
+  const rotation = Object.freeze({ generation: credentials.current.generation + 1, requestedAt, deadline });
+  return Object.freeze({ ...credentials, rotation });
+}
+
+// `next` becomes current and the current one its predecessor until the
+// deadline; the same key and hash again leave the credentials unchanged.
+export function renewCredentials(
+  credentials: WorkerCredentials,
+  next: CredentialGeneration,
+  brokerUserJwt: string,
+): Result<WorkerCredentials, RotationConflict> {
+  const { rotation, current } = credentials;
+  if (rotation === undefined || rotation.generation !== next.generation) return err('rotation-not-requested');
+  if (rotation.brokerUserJwt !== undefined) {
+    const same = current.brokerUserKey === next.brokerUserKey && current.controlPlaneHash === next.controlPlaneHash;
+    return same ? ok(credentials) : err('renewal-mismatch');
+  }
+  const previous = Object.freeze({ ...current, validUntil: rotation.deadline });
+  return ok(Object.freeze({ current: next, previous, rotation: Object.freeze({ ...rotation, brokerUserJwt }) }));
+}
+
+export interface Confirmation {
   readonly credentials: WorkerCredentials;
-  // The predecessor, whose broker user the rotation drops at once.
+  // The predecessor the confirmation drops; none for a repeat.
   readonly dropped?: CredentialGeneration;
 }
 
-// A rotation keeps the current generation as the predecessor until the end
-// of the grace window; an older predecessor is dropped.
-export function rotateCredentials(credentials: WorkerCredentials, next: CredentialGeneration, validUntil: Instant): Rotation {
-  const rotated = Object.freeze({ current: next, previous: Object.freeze({ ...credentials.current, validUntil }) });
-  const previous = credentials.previous;
-  if (previous === undefined) return { credentials: rotated };
-  const { validUntil: _ended, ...dropped } = previous;
-  return { credentials: rotated, dropped };
+// Confirms the renewed current generation, or repeats a confirmed one.
+export function confirmCredentials(credentials: WorkerCredentials, generation: number): Result<Confirmation, RotationConflict> {
+  const { current, previous, rotation } = credentials;
+  if (current.generation !== generation) return err('confirmation-mismatch');
+  if (rotation?.brokerUserJwt === undefined || previous === undefined) return ok({ credentials });
+  const { validUntil: _deadline, ...dropped } = previous;
+  return ok({ credentials: Object.freeze({ current }), dropped });
+}
+
+// A requested rotation whose deadline passed before the worker renewed it.
+export function unrenewedPastDeadline(credentials: WorkerCredentials, now: Instant): boolean {
+  const { rotation } = credentials;
+  return rotation !== undefined && rotation.brokerUserJwt === undefined && Date.parse(rotation.deadline) <= Date.parse(now);
 }
 
 // Every generation of the worker, current and predecessor.
@@ -137,8 +179,8 @@ export interface WorkerPrincipal {
   readonly generation: number;
 }
 
-// The predecessor whose grace window has ended by `now`, if any; every
-// registry's sweep expires exactly this one.
+// The predecessor whose deadline has passed by `now`, if any; every
+// registry's sweep expires exactly this one, with its rotation.
 export function expiredPredecessor(credentials: WorkerCredentials, now: Instant): WorkerCredentials['previous'] {
   const previous = credentials.previous;
   return previous !== undefined && Date.parse(previous.validUntil) <= Date.parse(now) ? previous : undefined;

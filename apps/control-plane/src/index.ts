@@ -1,6 +1,14 @@
 export { readServiceEndpoints, type Environment, type ServiceEndpoints } from './service-endpoints.js';
 export { ADMIN_USAGE, adminMain, printableWorkerAdmission, type AdminIo } from './admin/admin-main.js';
-export { Administration, type AdministrationSettings, type EnrollmentBundle, type Initialization } from './admin/administration.js';
+export {
+  Administration,
+  START_OWNER_INVOCATION,
+  type AccessAdapters,
+  type AdministrationSettings,
+  type EnrollmentBundle,
+  type Initialization,
+} from './admin/administration.js';
+export { readConfirmedSecret, readStandardInputLine } from './admin/secret-input.js';
 export {
   INSTALLATION_CA_FILE,
   SERVER_CERTIFICATES,
@@ -16,7 +24,10 @@ export {
 } from './admin/installation-authority.js';
 export { LOCAL_SERVER_HOSTS, MAX_SERVER_HOSTS, readServerHosts } from './admin/server-hosts.js';
 export { readBrokerTls } from './broker-tls.js';
-export { ROUTES, type RouteDefinition } from './api/routes.js';
+export { ROUTES, type RouteDefinition, type SecurityScheme } from './api/routes.js';
+export { ACCESS_REQUIREMENTS, requirementBeforeBody, ruleOf, type RequirementRule } from './api/access-requirements.js';
+export { requestLogFields, type RequestFacts } from './api/request-log.js';
+export { SESSION_COOKIE, expiredSessionCookie, sessionCookie, sessionSetCookie } from './api/session-cookie.js';
 export {
   StatusAnswer,
   createApiRequestListener,
@@ -25,6 +36,7 @@ export {
   type ApiHandlers,
   type ApiRequest,
   type ApiServer,
+  type Caller,
   type Upload,
 } from './api/api-server.js';
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
@@ -54,6 +66,7 @@ export {
   GRACE_WINDOW_SWEEP_MILLISECONDS,
   LAUNCH_PARAMETERS,
   PLACEMENT_PASS_MILLISECONDS,
+  SESSION_PURGE_MILLISECONDS,
   SHUTDOWN_DEADLINE_MILLISECONDS,
   startControlPlane,
   type ApiEndpoint,
@@ -65,6 +78,7 @@ export { repairCommandConsumers, REVOKED_CONSUMER_REMOVALS_PER_START } from './c
 export { requestStartInventories } from './composition/start-inventory-requests.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
+export { RotationNoticingFleetRegistry } from './composition/rotation-noticing-fleet-registry.js';
 export {
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,
