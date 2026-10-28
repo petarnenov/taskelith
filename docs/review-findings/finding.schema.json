@@ -112,7 +112,7 @@
   },
   "$defs": {
     "role": {
-      "description": "Reviewer role of the review process, A or B; under policy version 5 reviewer A makes passes 1 and 3 and reviewer B pass 2.",
+      "description": "Reviewer role of the review process, A or B: role A makes passes 1 and 3 and role B pass 2, under policy version 5 by one reviewer A and since version 8 by the reviewers of the review sequence.",
       "type": "string",
       "enum": ["A", "B"]
     },

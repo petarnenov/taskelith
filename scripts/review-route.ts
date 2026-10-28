@@ -2,7 +2,7 @@ import type { Size } from './checklist-record.ts';
 import type { Reviewer, Role } from './review-findings.ts';
 
 // Domain and port of the review route: the router input, the decisions,
-// and the reviewer table that maps a tier to the plans of passes 1 and 2.
+// and the reviewer table that maps a tier to the plan of each pass.
 
 export const ROUTE_FILE = 'route.json';
 export const ROUTE_SCHEMA_PATH = 'docs/review-findings/route.schema.json';
@@ -33,13 +33,16 @@ export interface RouteFeatures {
   readonly capabilityHistory: CapabilityHistory;
 }
 
+export type PassNumber = 1 | 2 | 3;
+
 export interface PassPlan {
-  readonly pass: 1 | 2;
+  readonly pass: PassNumber;
   readonly role: Role;
   readonly reviewer: Required<Reviewer>;
 }
 
-export type PassPlans = readonly [PassPlan, PassPlan];
+// Rule version 1 plans passes 1 and 2; version 2 adds pass 3.
+export type PassPlans = readonly PassPlan[];
 
 export interface RouteDecision {
   readonly tier: Tier;
@@ -157,19 +160,21 @@ export interface ReviewRouter<Decision, Input = RouteFeatures> {
 
 // The version of the rule's thresholds and of its reviewer table. A change
 // of either bumps it; older ones stay, so archived records stay valid.
-export const RULE_VERSION = 1;
+export const RULE_VERSION = 2;
 
-interface TierEfforts {
-  readonly reviewerA: string;
-  readonly reviewerB: string;
+type ReviewerModel = Pick<Reviewer, 'harness' | 'model'>;
+
+// One planned pass: its reviewer, the networked one for a change with
+// external facts, and the effort of each tier.
+interface PassSeat {
+  readonly pass: PassNumber;
+  readonly role: Role;
+  readonly reviewer: ReviewerModel;
+  readonly networkedReviewer: ReviewerModel;
+  readonly efforts: Readonly<Record<Tier, string>>;
 }
 
-interface ReviewerTable {
-  readonly reviewerA: Pick<Reviewer, 'harness' | 'model'>;
-  readonly networkedReviewerA: Pick<Reviewer, 'harness' | 'model'>;
-  readonly reviewerB: Pick<Reviewer, 'harness' | 'model'>;
-  readonly efforts: Readonly<Record<Tier, TierEfforts>>;
-}
+type ReviewerTable = readonly PassSeat[];
 
 export interface TriggerThresholds {
   readonly linesChanged: number;
@@ -178,9 +183,12 @@ export interface TriggerThresholds {
   readonly elevatedSizes: readonly Size[];
 }
 
+const THRESHOLDS_V1: TriggerThresholds = { linesChanged: 400, filesChanged: 18, capabilities: 3, elevatedSizes: ['M-L', 'L'] };
+
 // The thresholds of design.md "Rule table", per rule version.
 const TRIGGER_THRESHOLDS: ReadonlyMap<number, TriggerThresholds> = new Map([
-  [1, { linesChanged: 400, filesChanged: 18, capabilities: 3, elevatedSizes: ['M-L', 'L'] }],
+  [1, THRESHOLDS_V1],
+  [2, THRESHOLDS_V1],
 ]);
 
 // Undefined for an unknown rule version.
@@ -188,21 +196,28 @@ export function triggerThresholds(version: number): TriggerThresholds | undefine
   return TRIGGER_THRESHOLDS.get(version);
 }
 
-// standard is the configured effort of the reviewer assignment of
-// 2026-10-27; elevated is a recommendation until governance allows it.
+const SOL: ReviewerModel = { harness: 'codex', model: 'gpt-6.1-sol' };
+const ASTRA: ReviewerModel = { harness: 'codex', model: 'gpt-6-astra' };
+const FABLE: ReviewerModel = { harness: 'claude', model: 'claude-fable-5-1' };
+const OPUS: ReviewerModel = { harness: 'claude', model: 'claude-opus-5-5' };
+
+// Version 1: the reviewer assignment of 2026-10-27, passes 1 and 2.
+const REVIEWER_TABLE_V1: ReviewerTable = [
+  { pass: 1, role: 'A', reviewer: SOL, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 2, role: 'B', reviewer: OPUS, networkedReviewer: OPUS, efforts: { standard: 'high', elevated: 'xhigh' } },
+];
+
+// Version 2: the review sequence of 2026-10-28; pass 3 runs only after a
+// pass 2 with a Medium or worse finding. elevated is unauthorized.
+const REVIEWER_TABLE_V2: ReviewerTable = [
+  { pass: 1, role: 'A', reviewer: ASTRA, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 2, role: 'B', reviewer: OPUS, networkedReviewer: OPUS, efforts: { standard: 'medium', elevated: 'xhigh' } },
+  { pass: 3, role: 'A', reviewer: SOL, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+];
+
 const REVIEWER_TABLES: ReadonlyMap<number, ReviewerTable> = new Map([
-  [
-    1,
-    {
-      reviewerA: { harness: 'codex', model: 'gpt-6.1-sol' },
-      networkedReviewerA: { harness: 'claude', model: 'claude-fable-5-1' },
-      reviewerB: { harness: 'claude', model: 'claude-opus-5-5' },
-      efforts: {
-        standard: { reviewerA: 'medium', reviewerB: 'high' },
-        elevated: { reviewerA: 'high', reviewerB: 'xhigh' },
-      },
-    },
-  ],
+  [1, REVIEWER_TABLE_V1],
+  [2, REVIEWER_TABLE_V2],
 ]);
 
 type PlanFeatures = Pick<RouteFeatures, 'externalFacts'>;
@@ -219,10 +234,9 @@ export function versionedPassPlans(version: number, tier: Tier, features: PlanFe
 }
 
 function tablePlans(table: ReviewerTable, tier: Tier, { externalFacts }: PlanFeatures): PassPlans {
-  const efforts = table.efforts[tier];
-  const reviewerA = externalFacts ? table.networkedReviewerA : table.reviewerA;
-  return [
-    { pass: 1, role: 'A', reviewer: { ...reviewerA, variant: efforts.reviewerA } },
-    { pass: 2, role: 'B', reviewer: { ...table.reviewerB, variant: efforts.reviewerB } },
-  ];
+  return table.map(({ pass, role, reviewer, networkedReviewer, efforts }) => ({
+    pass,
+    role,
+    reviewer: { ...(externalFacts ? networkedReviewer : reviewer), variant: efforts[tier] },
+  }));
 }

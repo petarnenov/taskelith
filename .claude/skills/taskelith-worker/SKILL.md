@@ -20,7 +20,7 @@ The handoff message names:
 - the branch and its head, the archive commit;
 - a short summary;
 - the evidence;
-- the review passes, with the reviewer, A or B, session ID, and finding count of each;
+- the review passes, with the reviewer and role, A or B, session ID, and finding count of each, and the fixes that no later pass reviewed, for the coordinator's architect check;
 - that the review findings are recorded in the change's `findings.jsonl`, each code or doc finding with its capability, and each pass that ran to a report in its `passes.jsonl`;
 - the `make verify` totals;
 - the remaining gates.

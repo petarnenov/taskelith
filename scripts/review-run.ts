@@ -23,20 +23,24 @@ import {
 // make review: the route gate before pass 1, and the reviewer's fixed
 // invocation in a clean environment; the worker writes the pass line.
 
-export const REVIEW_USAGE = 'usage: make review CHANGE=<change> PASS=<1-9> ROLE=<A|B> '
+export const REVIEW_USAGE = 'usage: make review CHANGE=<change> PASS=<1-9> [ROLE=<A|B>] '
   + 'REVIEWER=<reviewer key> PROMPT=<prompt file> LOG=<log file>';
 
 export const EXIT_REFUSED = 1;
 export const EXIT_USAGE = 2;
 export const EXIT_ROUTED = 3;
 export const EXIT_REVIEWER_FAILED = 4;
+// The "Policy version" line of docs/governance.md; a test keeps them equal.
+export const GOVERNANCE_POLICY_VERSION = 8;
 
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const MAX_PASS = 9;
 const COMMIT = /^[0-9a-f]{40}$/;
-// Governance policy version 5: reviewer A makes passes 1 and 3, B pass 2.
+// Governance "Review sequence": role A makes passes 1 and 3, B pass 2.
 const PASS_ROLES: ReadonlyMap<number, Role> = new Map([[1, 'A'], [2, 'B'], [3, 'A']]);
+// ROLE may be empty: it then defaults to the pass's role.
+const ROLE_ARGUMENT = 2;
 const CLI_LOG_SUFFIX = '.cli.log';
 // Started with -i and the allowlist, the reviewer inherits nothing else.
 const ENV_COMMAND = '/usr/bin/env';
@@ -100,13 +104,11 @@ function usage(reason: string): ReviewRefusal {
 }
 
 export function parseRequest(args: readonly string[], root: string): ReviewRequest {
-  if (args.length !== 6 || args.some((arg) => arg === '')) throw usage('every argument is required');
-  const [change, pass, role, key, promptFile, log] = args as [string, string, string, string, string, string];
+  if (args.length !== 6 || args.some((arg, index) => arg === '' && index !== ROLE_ARGUMENT)) throw usage('every argument is required');
+  const [change, pass, givenRole, key, promptFile, log] = args as [string, string, string, string, string, string];
   if (!CHANGE_NAME.test(change) || change === 'archive') throw usage(`CHANGE "${change}" is no change name`);
   if (!/^[1-9]$/.test(pass) || Number(pass) > MAX_PASS) throw usage(`PASS "${pass}" is none of 1 to ${MAX_PASS}`);
-  if (role !== 'A' && role !== 'B') throw usage(`ROLE "${role}" is neither A nor B`);
-  const passRole = PASS_ROLES.get(Number(pass));
-  if (passRole !== undefined && role !== passRole) throw usage(`ROLE "${role}" is not the role of pass ${pass}, which is ${passRole}`);
+  const role = passRole(Number(pass), givenRole);
   const reviewer = REVIEWER_INVOCATIONS.get(key);
   if (reviewer === undefined) throw usage(`REVIEWER "${key}" is no authorized reviewer key`);
   if (!existsSync(join(root, changeDirectory(change)))) throw new ReviewRefusal(`${changeDirectory(change)} is no active change`);
@@ -114,6 +116,18 @@ export function parseRequest(args: readonly string[], root: string): ReviewReque
   checkReviewFiles(root, { prompt: request.promptFile, logs: writtenLogs(request) });
   refuseSummarizedPass(root, request);
   return request;
+}
+
+// ROLE defaults to the role of the pass; a given one must match it.
+function passRole(pass: number, given: string): Role {
+  const expected = PASS_ROLES.get(pass);
+  if (given === '') {
+    if (expected === undefined) throw usage(`ROLE is required for pass ${pass}`);
+    return expected;
+  }
+  if (given !== 'A' && given !== 'B') throw usage(`ROLE "${given}" is neither A nor B`);
+  if (expected !== undefined && given !== expected) throw usage(`ROLE "${given}" is not the role of pass ${pass}, which is ${expected}`);
+  return given;
 }
 
 function cliLogOf(request: ReviewRequest): string {
@@ -229,12 +243,12 @@ async function attemptRoute(change: string, dependencies: ReviewDependencies): P
 }
 
 // route.json only recommends: the authorized effort stays (governance
-// "Routed effort", policy version 7); pass 3 keeps pass 1's reviewer.
+// "Routed effort").
 function recommendation(root: string, request: ReviewRequest): string[] {
   const path = routePath(root, request.change);
   const rule = existsSync(path) ? routeRecord(path)?.rule : undefined;
   const passes = isRecord(rule) && Array.isArray(rule.passes) ? rule.passes : [];
-  const recommended = plannedReviewer(passes[request.role === 'B' ? 1 : 0]);
+  const recommended = plannedReviewer(plannedPass(passes, request.pass));
   if (recommended === undefined) return [];
   const chosen = request.reviewer.reviewer;
   if (recommended.harness !== chosen.harness || recommended.model !== chosen.model) {
@@ -243,13 +257,20 @@ function recommendation(root: string, request: ReviewRequest): string[] {
   if (recommended.variant === undefined || recommended.variant === chosen.variant) {
     return [`route: recommends ${reviewerKey(recommended)}`];
   }
-  return [`route: recommends effort ${recommended.variant}; the authorized ${chosen.variant} applies (policy version 7)`];
+  return [`route: recommends effort ${recommended.variant}; the authorized ${chosen.variant} applies (policy version ${GOVERNANCE_POLICY_VERSION})`];
 }
 
-// Only another reviewer A goes to the coordinator; the brief's stays.
+// Only another reviewer of role A, passes 1 and 3, goes to the coordinator;
+// the brief's stays.
 function otherReviewer(recommended: string, request: ReviewRequest): string {
   const kept = `route: recommends ${recommended}; the brief's ${reviewerKey(request.reviewer.reviewer)} stays`;
-  return request.role === 'A' ? `${kept}, so report the other reviewer A to the coordinator` : kept;
+  return request.role === 'A' ? `${kept}, so report the other reviewer of pass ${request.pass} to the coordinator` : kept;
+}
+
+// Plans are in pass order; rule version 1 plans no pass 3, which kept
+// pass 1's reviewer.
+function plannedPass(passes: readonly unknown[], pass: number): unknown {
+  return passes[pass - 1] ?? (pass === 3 ? passes[0] : undefined);
 }
 
 function plannedReviewer(plan: unknown): Reviewer | undefined {

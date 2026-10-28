@@ -19,22 +19,33 @@
     },
     "features": { "$ref": "#/$defs/features" },
     "rule": {
-      "description": "The rule router's decision, the floor that assigns the reviewers and effort of passes 1 and 2.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["version", "tier", "triggers", "passes"],
-      "properties": {
-        "version": { "description": "Version of the rule table.", "type": "integer", "minimum": 1, "maximum": 999 },
-        "tier": { "$ref": "#/$defs/tier" },
-        "triggers": {
-          "description": "The triggers that fired, in the rule table's order; empty exactly when the tier is standard.",
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 7,
-          "items": { "enum": ["lines", "files", "capabilities", "security", "contracts", "docker", "size"] }
+      "description": "The rule router's decision, the floor that recommends the reviewer and effort of each pass. Its pass plans depend on its version, so a record of an earlier version stays valid.",
+      "oneOf": [
+        {
+          "description": "Rule version 1: the plans of pass 1, reviewer A, and pass 2, reviewer B.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "tier", "triggers", "passes"],
+          "properties": {
+            "version": { "description": "Version of the rule table.", "const": 1 },
+            "tier": { "$ref": "#/$defs/tier" },
+            "triggers": { "$ref": "#/$defs/triggers" },
+            "passes": { "$ref": "#/$defs/twoPasses" }
+          }
         },
-        "passes": { "$ref": "#/$defs/passes" }
-      }
+        {
+          "description": "Rule version 2 and later: the plans of passes 1 and 3, reviewer A, and pass 2, reviewer B; pass 3 runs only after a pass 2 with a Medium or worse finding.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "tier", "triggers", "passes"],
+          "properties": {
+            "version": { "description": "Version of the rule table.", "type": "integer", "minimum": 2, "maximum": 999 },
+            "tier": { "$ref": "#/$defs/tier" },
+            "triggers": { "$ref": "#/$defs/triggers" },
+            "passes": { "$ref": "#/$defs/threePasses" }
+          }
+        }
+      ]
     },
     "shadow": {
       "description": "The shadow router's answer, or why there is none. It decides nothing.",
@@ -51,7 +62,7 @@
             "tier": { "$ref": "#/$defs/tier" },
             "thirdPassProbability": { "description": "The model's probability that the change needs review pass 3.", "$ref": "#/$defs/probability" },
             "threshold": { "description": "The probability at or above which the shadow tier is elevated.", "$ref": "#/$defs/probability" },
-            "passes": { "$ref": "#/$defs/passes" },
+            "passes": { "$ref": "#/$defs/shadowPasses" },
             "latencyMs": { "$ref": "#/$defs/latency" }
           }
         },
@@ -76,7 +87,7 @@
               }
             },
             "expectedPasses": { "description": "The score answer plus one, from 1 to 3.", "type": "number", "minimum": 1, "maximum": 3 },
-            "passes": { "$ref": "#/$defs/passes" },
+            "passes": { "$ref": "#/$defs/shadowPasses" },
             "latencyMs": { "$ref": "#/$defs/latency" }
           }
         },
@@ -118,7 +129,14 @@
     "probability": { "type": "number", "minimum": 0, "maximum": 1 },
     "latency": { "description": "Milliseconds from request to answer or failure.", "type": "integer", "minimum": 0, "maximum": 600000 },
     "count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
-    "passes": {
+    "triggers": {
+      "description": "The triggers that fired, in the rule table's order; empty exactly when the tier is standard.",
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 7,
+      "items": { "enum": ["lines", "files", "capabilities", "security", "contracts", "docker", "size"] }
+    },
+    "twoPasses": {
       "description": "Reviewer and effort of pass 1, reviewer A, and pass 2, reviewer B.",
       "type": "array",
       "minItems": 2,
@@ -128,6 +146,25 @@
         { "$ref": "#/$defs/passPlanTwo" }
       ],
       "items": false
+    },
+    "threePasses": {
+      "description": "Reviewer and effort of pass 1, reviewer A, pass 2, reviewer B, and pass 3, reviewer A.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/passPlanOne" },
+        { "$ref": "#/$defs/passPlanTwo" },
+        { "$ref": "#/$defs/passPlanThree" }
+      ],
+      "items": false
+    },
+    "shadowPasses": {
+      "description": "The pass plans of the shadow tier, in the shape of the record's rule version, which validation checks.",
+      "oneOf": [
+        { "$ref": "#/$defs/twoPasses" },
+        { "$ref": "#/$defs/threePasses" }
+      ]
     },
     "passPlanOne": {
       "type": "object",
@@ -146,6 +183,16 @@
       "properties": {
         "pass": { "const": 2 },
         "role": { "const": "B" },
+        "reviewer": { "$ref": "urn:taskelith:review-finding#/properties/reviewer" }
+      }
+    },
+    "passPlanThree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "role", "reviewer"],
+      "properties": {
+        "pass": { "const": 3 },
+        "role": { "const": "A" },
         "reviewer": { "$ref": "urn:taskelith:review-finding#/properties/reviewer" }
       }
     },
@@ -178,7 +225,7 @@
             "docsOnly": { "type": "boolean" }
           }
         },
-        "externalFacts": { "description": "The change's design.md has an External facts section, so reviewer A needs network access.", "type": "boolean" },
+        "externalFacts": { "description": "The change's design.md has an External facts section, so its reviewers need network access.", "type": "boolean" },
         "size": {
           "oneOf": [
             { "$ref": "urn:taskelith:review-checklist#/properties/size" },
