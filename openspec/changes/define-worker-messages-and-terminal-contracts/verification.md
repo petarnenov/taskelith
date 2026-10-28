@@ -27,7 +27,8 @@ Status: developed and verified by the author; review pass 1 by reviewer A done a
 - `837d51a5` `docs: record review pass 1 of the define worker messages and terminal contracts change` (findings, passes, this section, tasks); the fifth `make verify` run checked its tree, `e30d90c6e351eb006e592996e1d0b00b6e475d9a`.
 - `a4bbf41b` `docs: record the verification of review pass 1 of the define worker messages and terminal contracts change` records that run.
 - `3b6bb234` `chore(contracts): report a turn whose acceptance is unknown apart from a refused one` (the architect's answer of 2026-10-28 on pass 1 finding 3: `session.turn.acceptance-unknown`, the narrowed `port-refused`, `recordTurnAcceptanceUnknown` in the session timeline contract, tests, breaking-change declaration, contract pages, design, proposal, tasks, and spec deltas).
-- The commit after it records finding 3 as fixed (findings, this section); the sixth `make verify` run checks its tree, and the commit after that records the run.
+- `a3135bb3` `docs: record the fix of review pass 1 finding 3 of the define worker messages and terminal contracts change` (findings, this section); the `make verify` runs of logs `wmt-verify-7.log` and `wmt-verify-8.log` checked its tree, `03361d2d9f3fba882d152a9367d258d727343d5a`.
+- The commit after it records that run.
 
 ## Environment
 
@@ -83,7 +84,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e30d90c6e351eb006e592996e1d0b00b6e475d9a`; tests 3220, pass 3167, fail 0, skipped 53; all files 99.45% lines, 92.80% branches, 99.00% functions.
+- `make verify`: passed, profile full, tree `03361d2d9f3fba882d152a9367d258d727343d5a`; tests 3221, pass 3168, fail 0, skipped 53; all files 99.45% lines, 92.78% branches, 99.03% functions.
 - `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`: passed, `Change 'define-worker-messages-and-terminal-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
 - Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
@@ -134,6 +135,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | `npm run openspec -- validate --all --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | 72 passed, 0 failed; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
 | Body lengths of the changed and new requirements, in characters | Session command outcomes 472, Turn acceptance unknown report 433, Session observations 440, `session-turn-model` Turn acceptance unknown 418 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
+| `make verify` on `a3135bb3`, clean tree (log `wmt-verify-7.log` in the session scratchpad) | Failed in one unrelated Docker timing test, `h. an unauthorized start cancels only that execution` of `test/g2-cancellation-races.test.ts` (`the authorized start not met within 20000 ms`), which this change does not touch |
+| `make verify` on `a3135bb3`, clean tree (log `wmt-verify-8.log`), the one rerun | Passed, profile full, tree `03361d2d9f3fba882d152a9367d258d727343d5a`, stamp written; generated part above |
 
 The fixes change contracts, not only records, and pass 1 found High findings, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
