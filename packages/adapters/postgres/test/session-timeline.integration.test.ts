@@ -130,6 +130,14 @@ test.describe('session timeline on PostgreSQL', { concurrency: false }, () => {
     assert.deepEqual(await query(url, 'SELECT count(*)::int AS rows FROM agent_session_attempts'), [{ rows: 1 }]);
   });
 
+  test('a change of a session with a bound attempt leaves its attempt row unwritten', async () => {
+    await runningSession(service);
+    const attemptRowVersion = () => query<{ xmin: string }>(url, 'SELECT xmin::text AS xmin FROM agent_session_attempts');
+    const before = await attemptRowVersion();
+    value(await service.submitTurn(SESSION, turn('key-1')));
+    assert.deepEqual(await attemptRowVersion(), before);
+  });
+
   test('an answer racing its generation end is either answered then delivery-uncertain, or not-found on an unresolved request', async () => {
     await sessionWithOpenRequest(service);
     const [left, right] = racingServices();

@@ -1,8 +1,9 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { TaskId } from '@taskelith/sdlc';
-import type { AttemptId, IdempotencyKey, SessionId } from '../domain/identifiers.js';
+import type { AttemptId, SessionId } from '../domain/identifiers.js';
 import type { Session } from '../domain/session-records.js';
 import type {
+  HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
   SessionRecords,
@@ -77,7 +78,7 @@ class MemorySessionRecords implements SessionRecords {
 class MemoryIdempotencyRecords implements IdempotencyRecords {
   constructor(private readonly state: State) {}
 
-  async find(sessionId: SessionId, scope: string, key: IdempotencyKey): Promise<Result<IdempotencyRecord | undefined>> {
+  async find(sessionId: SessionId, scope: string, key: HeldKey): Promise<Result<IdempotencyRecord | undefined>> {
     return ok(this.state.keys.get(keyOf(sessionId, scope, key)));
   }
 
@@ -89,7 +90,7 @@ class MemoryIdempotencyRecords implements IdempotencyRecords {
   }
 }
 
-function keyOf(sessionId: SessionId, scope: string, key: IdempotencyKey): string {
+function keyOf(sessionId: SessionId, scope: string, key: HeldKey): string {
   return JSON.stringify([sessionId, scope, key]);
 }
 

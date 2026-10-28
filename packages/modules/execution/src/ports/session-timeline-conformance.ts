@@ -165,6 +165,17 @@ export const SESSION_TIMELINE_STORE_CONFORMANCE: readonly ConformanceCase<Sessio
     },
   },
   {
+    name: 'a held key recorded without an outcome reads back without one',
+    async check(store) {
+      const problems: string[] = [];
+      must(await run(store, (tx) => tx.sessions.add(session('session-1'))));
+      const { outcome: _outcome, ...held } = keyRecord('response:1:request-1', 'key-1');
+      expectSuccess(problems, 'record', await run(store, (tx) => tx.idempotency.record(session('session-1').id, held)));
+      expectRead(problems, 'find', await run(store, (tx) => tx.idempotency.find(session('session-1').id, held.scope, held.key)), held);
+      return problems;
+    },
+  },
+  {
     name: 'a transaction whose work fails stores none of its writes',
     async check(store) {
       const problems: string[] = [];

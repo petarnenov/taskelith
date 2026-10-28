@@ -69,7 +69,7 @@ async function requestStates(): Promise<string[]> {
   return value(await service.readSession(SESSION)).requests.map((request) => request.state);
 }
 
-// A turn delivered in generation 1 and a second queued turn.
+// A turn delivered in generation 1.
 async function deliveredTurn(): Promise<void> {
   await runningSession(service);
   const first = value(await service.submitTurn(SESSION, turn('turn-1')));

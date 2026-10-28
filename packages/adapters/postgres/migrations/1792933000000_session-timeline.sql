@@ -26,13 +26,14 @@ CREATE TABLE agent_session_attempts (
   task_id text NOT NULL
 );
 
--- Client idempotency keys with the keyed digest of the unredacted input.
+-- Held keys with the keyed digest of the unredacted input; the outcome
+-- is null where the scope names it, as for a response.
 CREATE TABLE session_idempotency_keys (
   session_id text NOT NULL REFERENCES agent_sessions (session_id),
   scope text NOT NULL,
   key text NOT NULL,
   digest text NOT NULL,
-  outcome text NOT NULL,
+  outcome text,
   PRIMARY KEY (session_id, scope, key)
 );
 

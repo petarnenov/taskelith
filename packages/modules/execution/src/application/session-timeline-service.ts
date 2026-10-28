@@ -1,4 +1,4 @@
-import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { EvidenceReference } from '@taskelith/sdlc';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
@@ -47,6 +47,7 @@ import {
 } from '../domain/session-turns.js';
 import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
 import type {
+  HeldKey,
   IdempotencyRecord,
   SessionTimelineStore,
   SessionTimelineTransaction,
@@ -178,20 +179,19 @@ export class SessionTimelineService {
     if (!isTextWithin(recording.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got request text out of bounds`, { session: sessionId })));
     }
-    const key = parseIdentifier('IdempotencyKey', recording.key.nativeRequestId);
-    if (!key.ok) return Promise.resolve(key);
+    const key = recording.key.nativeRequestId;
     const scope = requestScope(recording.key);
     const digest = this.#digest.digest(requestInput(recording));
     return this.#store.transaction(async (tx) => {
       const stored = await storedSession(tx, sessionId);
       if (!stored.ok) return stored;
-      const prior = await tx.idempotency.find(sessionId, scope, key.value);
+      const prior = await tx.idempotency.find(sessionId, scope, key);
       if (!prior.ok) return prior;
       if (prior.value !== undefined) return repeatedRequest(stored.value.session, prior.value, digest);
       const redacted = { ...recording, text: this.#redactor.redact(recording.text) };
       const recorded = recordRequest(stored.value.session, redacted);
       if (!recorded.ok) return recorded;
-      const held = await tx.idempotency.record(sessionId, { scope, key: key.value, digest, outcome: recording.turnId });
+      const held = await tx.idempotency.record(sessionId, { scope, key, digest, outcome: recording.turnId });
       return held.ok ? written(tx, stored.value, recorded) : held;
     });
   }
@@ -215,7 +215,7 @@ export class SessionTimelineService {
       }
       const consumed = consumeResponse(stored.value.session, { ...command.response, answer: this.#redactedAnswer(answer) });
       if (!consumed.ok) return consumed;
-      const recorded = await tx.idempotency.record(sessionId, { scope, key: command.key, digest, outcome: scope });
+      const recorded = await tx.idempotency.record(sessionId, { scope, key: command.key, digest });
       if (!recorded.ok) return recorded;
       const replaced = await written(tx, stored.value, consumed);
       return replaced.ok ? requestOf(consumed.value, request) : replaced;
@@ -331,7 +331,7 @@ function requestOf(session: Session, key: RequestKey): Result<NativeRequest> {
   return ok(request);
 }
 
-function keyReused(sessionId: SessionId, key: IdempotencyKey): Result<never> {
+function keyReused(sessionId: SessionId, key: HeldKey): Result<never> {
   return err(failure('conflict', `session ${sessionId} holds the key ${key} with other input`, { session: sessionId, reason: KEY_REUSED }));
 }
 

@@ -1,6 +1,5 @@
 import { createHmac } from 'node:crypto';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { redactSecrets } from './scrub.js';
 
 export const INPUT_DIGEST_KEY_BYTES = 32;
 
@@ -23,12 +22,5 @@ export class HmacInputDigest {
 
   digest(input: string): string {
     return createHmac('sha256', this.#key).update(input, 'utf8').digest('hex');
-  }
-}
-
-// The Execution module's SessionTextRedactor port over redactSecrets.
-export class SecretTextRedactor {
-  redact(text: string): string {
-    return redactSecrets(text);
   }
 }

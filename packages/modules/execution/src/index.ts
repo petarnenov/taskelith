@@ -489,6 +489,7 @@ export { InMemorySessionTimelineStore } from './adapters/in-memory-session-timel
 export type { InputDigest, SessionTextRedactor, TurnIdSource } from './ports/session-input.js';
 export { SESSION_TIMELINE_STORE_CONFORMANCE } from './ports/session-timeline-conformance.js';
 export type {
+  HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
   SessionRecords,

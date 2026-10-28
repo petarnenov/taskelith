@@ -1,5 +1,5 @@
 import type {
-  IdempotencyKey,
+  HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
   OutputEntry,
@@ -75,7 +75,7 @@ class PostgresSessionRecords implements SessionRecords {
       [timeline.id, timeline.taskId, encodeRecord(recordOf(timeline))],
     );
     if (rowCount === 0) return err(failure('conflict', `the session ${timeline.id} exists`, { session: timeline.id }));
-    const bound = await this.#bindAttempts(timeline);
+    const bound = await this.#bindAttempts(timeline, timeline.attempts);
     if (!bound.ok) return bound;
     await this.#insertOutput(timeline.id, timeline.output.entries);
     return ok(undefined);
@@ -90,7 +90,8 @@ class PostgresSessionRecords implements SessionRecords {
     if (rowCount === 0) {
       return err(failure('conflict', `the session ${stored.session.id} changed since version ${stored.version}`, { session: stored.session.id }));
     }
-    const bound = await this.#bindAttempts(next);
+    const known = new Set(stored.session.attempts.map((attempt) => attempt.id));
+    const bound = await this.#bindAttempts(next, next.attempts.filter((attempt) => !known.has(attempt.id)));
     if (!bound.ok) return bound;
     const appended = next.output.entries.filter((entry) => entry.position > stored.session.output.lastPosition);
     await this.#insertOutput(next.id, appended);
@@ -106,10 +107,10 @@ class PostgresSessionRecords implements SessionRecords {
     return ok(Object.freeze(sessions));
   }
 
-  // The attempt table's key keeps an attempt in one session even when two
-  // transactions bind it at once (design decision 3).
-  async #bindAttempts(timeline: TimelineSession): Promise<Result<void>> {
-    for (const attempt of timeline.attempts) {
+  // Writes only new bindings; the key keeps an attempt in one session even
+  // when two transactions bind it at once (design decision 3).
+  async #bindAttempts(timeline: TimelineSession, attempts: TimelineSession['attempts']): Promise<Result<void>> {
+    for (const attempt of attempts) {
       const { rows } = await this.#session.query<{ session_id: string }>(
         `INSERT INTO agent_session_attempts (attempt_id, session_id, task_id) VALUES ($1, $2, $3)
          ON CONFLICT (attempt_id) DO UPDATE SET attempt_id = EXCLUDED.attempt_id RETURNING session_id`,
@@ -153,13 +154,15 @@ class PostgresIdempotencyRecords implements IdempotencyRecords {
     this.#session = session;
   }
 
-  async find(sessionId: SessionId, scope: string, key: IdempotencyKey): Promise<Result<IdempotencyRecord | undefined>> {
-    const { rows } = await this.#session.query<{ digest: string; outcome: string }>(
+  async find(sessionId: SessionId, scope: string, key: HeldKey): Promise<Result<IdempotencyRecord | undefined>> {
+    const { rows } = await this.#session.query<{ digest: string; outcome: string | null }>(
       'SELECT digest, outcome FROM session_idempotency_keys WHERE session_id = $1 AND scope = $2 AND key = $3',
       [sessionId, scope, key],
     );
     const row = rows[0];
-    return ok(row === undefined ? undefined : Object.freeze({ scope, key, digest: row.digest, outcome: row.outcome }));
+    if (row === undefined) return ok(undefined);
+    const outcome = row.outcome === null ? {} : { outcome: row.outcome };
+    return ok(Object.freeze({ scope, key, digest: row.digest, ...outcome }));
   }
 
   async record(sessionId: SessionId, record: IdempotencyRecord): Promise<Result<void>> {
@@ -167,7 +170,7 @@ class PostgresIdempotencyRecords implements IdempotencyRecords {
     const { rowCount } = await this.#session.query(
       `INSERT INTO session_idempotency_keys (session_id, scope, key, digest, outcome) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT DO NOTHING`,
-      [sessionId, record.scope, record.key, record.digest, record.outcome],
+      [sessionId, record.scope, record.key, record.digest, record.outcome ?? null],
     );
     if (rowCount === 0) return err(failure('conflict', `the session ${sessionId} holds the key ${record.key}`, { session: sessionId }));
     return ok(undefined);

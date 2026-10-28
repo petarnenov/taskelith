@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
-import { HmacInputDigest, SecretTextRedactor } from '@taskelith/secrets';
+import { HmacInputDigest } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
 
 const KEY = Buffer.alloc(32, 7);
@@ -21,10 +21,4 @@ test('a key of another size is refused with a reason that holds no key byte', ()
     assert.equal(refused.code, 'precondition-failed');
     assert.equal(refused.message, `the input digest key has ${size} bytes, not 32`);
   }
-});
-
-test('session text is redacted with the shapes of redactSecrets', () => {
-  const redacted = new SecretTextRedactor().redact('clone https://user:hunter2@example.com/repo');
-  assert.equal(redacted.includes('hunter2'), false);
-  assert.equal(redacted.includes('example.com/repo'), true);
 });

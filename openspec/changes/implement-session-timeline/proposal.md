@@ -11,7 +11,7 @@ This change is 13a of the split that the coordinator accepted (`design.md`, "Coo
 - Application service in `@taskelith/execution`: session opening, attempt binding across a task's sessions, turn submission and response consumption with client idempotency keys checked by an HMAC-SHA-256 digest of the unredacted input, session text redacted before it is recorded, request recording committed before display, the host's reports applied through the domain, and reads that show no output.
 - Digest key: `control-plane/session-input-digest.key`, created once with mode `0600`; the service refuses to start without it or with another size.
 - PostgreSQL adapter: the session timeline tables in their own numbered migration, an attempt unique across all sessions, the idempotency key tables, and the crash points `SessionTimelineCommit.before` and `.after`.
-- Tests: domain unit tests, the conformance suite on the in-memory store and on PostgreSQL 18.6, PostgreSQL-backed race and idempotency tests, and `SIGKILL` crash tests, each written first and run failing.
+- Tests: domain unit tests, the conformance suite on the in-memory store and on PostgreSQL 18.6, PostgreSQL-backed race and idempotency tests, and `SIGKILL` crash tests, each written first and run failing, except the down migration test, which a later mutation run checks (`verification.md`).
 
 ## Capabilities
 
