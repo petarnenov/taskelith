@@ -1,11 +1,12 @@
 # Verification
 
-Draft record before `make verify` and the review passes, which are pending (Remaining gates).
+Record before the review passes, which are pending (Remaining gates).
 
 ## Scope and source
 
 - **Source:** the coordinator's brief (Niki, 2026-10-28) for G3 item 17 (`docs/g3-plan.md`, row 17). Size M.
 - **Base revision:** `a899d5d2` (`origin/dev`, merge of pull request #382).
+- **Merge of dev:** `origin/dev` `f3a53f17` (merge of pull request #383, `adopt-process-performance-recommendations`) merged into the branch with merge commit `1206034c`, without conflicts.
 - **Revision verified:** `56a63b3b`: the specs, the contract, and the AsyncAPI document (`454a056d`), then the domain, the conformance suite, and the tests (`56a63b3b`).
 - **Scope:** head-bound SDLC gates and gate evidence; the code head owned by the SDLC module and refined by the workspace module (design decision 1); staleness for a new code head; no restored approval after an artifact edit; rejection of evidence from another head; the SDLC AsyncAPI document 0.4.0; a head-bound gate in the gate repository suite; the Git workspace contract sections 5 and 14.
 - **Out of scope:** the review and verification stages (item 21), auto-merge (item 23), the SCM plugin (item 20), the UI, and the evidence record's `codeRevision` and the merge queue's `CodeHead` (design decision 1 (i), chosen by the coordinator: the follow-up change `align-code-head-names`).
@@ -42,9 +43,9 @@ Author checks, run on `56a63b3b` and its working tree:
 - With `packages/modules/sdlc/src` and `packages/modules/workspace/src` of `a899d5d2` restored and built, `code-head-binding.test.ts` fails to load: `The requested module '@taskelith/sdlc' does not provide an export named 'isGateOutdatedByCodeHead'` (0 pass, 1 fail). The sources were restored afterwards.
 - A probe on that base build, with the base API only, showed each gap: a gate opened with a `codeHead` that is approved stays passed after a new head, because `markGateStale` with the unchanged specification is rejected and nothing else marks it; after a specification edit and its revert, `reopenGate` and the superseded approval pass the gate again; and an approval at another head passes the gate. On `56a63b3b` the same probe stops at `reopenGate`, which refuses the head-bound gate.
 
-## Review passes
+## Independent review
 
-None yet.
+None yet; the coordinator assigns the passes.
 
 ## Limitations
 
@@ -55,7 +56,7 @@ None yet.
 
 ## Remaining gates
 
-- `make verify` (coordinator's Docker slot).
+- `make verify` on the final committed tree and `make record-check` before pass 1.
 - Review passes 1 and 2 (and 3 if needed) with their records.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
