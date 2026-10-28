@@ -65,13 +65,14 @@ Checks after the fixes:
 - `make findings ARGS="validate"`: `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`
 - `npm run verify:links`: `Every checked link conforms.`
 - An archive in a scratch copy of the tree: `+ 3` requirements in `delivery-planning`, then `Totals: 71 passed, 0 failed (71 items)`.
+- `make verify` on `d9dac478` (tree `1f38bfd9`), docs-only profile: passed, exit 0; `make record` wrote the generated part below from its log.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile docs-only, tree `70668be2be9d24746034664edc1a0db8344b3ff7`; no test totals in the log; no coverage totals.
+- `make verify`: passed, profile docs-only, tree `1f38bfd974d4560472e8a7d61dd11e8e7dc17abc`; no test totals in the log; no coverage totals.
 - `npm run openspec -- validate schedule-intent-and-council-gates --strict`: passed, `Change 'schedule-intent-and-council-gates' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
 - Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
@@ -80,6 +81,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18294-e032-78a1-8c38-e7bb8a42d960` | 0 | 0 | 2 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `5a0c0907-4313-477f-a00a-94241fca3a1e` | 0 | 0 | 3 | 6 |
 <!-- make record: end -->
 
 ## Remaining gates
