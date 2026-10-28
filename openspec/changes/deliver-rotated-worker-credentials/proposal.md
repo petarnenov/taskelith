@@ -23,7 +23,7 @@ None.
 ### Modified Capabilities
 
 - `installation-enrollment`: "Worker credentials" and "Worker bearer authentication" modified; "Rotation request", "Credential renewal", "Credential confirmation", and "Credential audit events" added.
-- `control-plane-api`: "Background loops and observability" and "Worker credential scheme" modified; "Credential renewal and confirmation operations" added.
+- `control-plane-api`: "Background loops and observability", "Worker credential scheme", and "Authentication, CSRF, and role order" modified, the last so that the worker credential operations need no operator role; "Credential renewal and confirmation operations" added.
 - `execution-wire-contracts`: "Worker channels" modified, which adds the rotation notice and also names the inventory request, which the command channel already carries but the living text omits; "Credential rotation contracts" added, which defines the notice, `renewWorkerCredentials`, and `confirmWorkerCredentials`.
 - `nats-transport`: "Rejected broker credentials" added.
 - `worker-journal-adapter`: "Credential adoption files" added.

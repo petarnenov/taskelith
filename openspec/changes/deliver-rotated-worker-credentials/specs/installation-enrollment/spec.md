@@ -94,7 +94,7 @@ A confirmation SHALL authenticate with the generation it names, and SHALL drop t
 - **THEN** the answer succeeds, the predecessor is dropped, and the audit trail holds `worker-credential.rotation-expired` with reason `unconfirmed` and no confirmation event
 
 ### Requirement: Credential audit events
-Every audit event SHALL name its subject: `operator` for the operator credential's events and the worker identifier for a worker's. The rotation request, the renewal, the confirmation, and the expiry at the deadline SHALL each write one immutable event, `worker-credential.rotation-requested`, `.renewed`, `.confirmed`, and `.rotation-expired`, naming the new generation. A refused renewal SHALL be logged only.
+Every credential event in `audit_events` SHALL name its subject: `operator` for the operator credential's events and the worker identifier for a worker's; access audit events have their own table and model. The rotation request, the renewal, the confirmation, and the expiry at the deadline SHALL each write one immutable event, `worker-credential.rotation-requested`, `.renewed`, `.confirmed`, and `.rotation-expired`, naming the new generation. A refused renewal SHALL be logged only.
 
 #### Scenario: Audit trail of a rotation
 - **WHEN** a rotation is requested, renewed, and confirmed
