@@ -34,5 +34,5 @@ test('the printed workers view redacts every detail and keeps the rest', () => {
 
 test('the usage names the worker admission command among the operator commands', () => {
   assert.match(ADMIN_USAGE, /^ {2}worker-admission$/m);
-  assert.match(ADMIN_USAGE, /The last five read the operator credential/);
+  assert.match(ADMIN_USAGE, /All but the first three read the operator credential/);
 });

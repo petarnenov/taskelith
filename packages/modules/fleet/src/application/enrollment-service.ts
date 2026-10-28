@@ -1,5 +1,5 @@
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
-import { checkAdministrativeInvocation, type Secrets } from '@taskelith/access';
+import { checkInvocation, type Secrets } from '@taskelith/access';
 import type { RecoveryEpoch, WorkerId } from '@taskelith/execution';
 import type { Clock } from '@taskelith/sdlc';
 import {
@@ -128,7 +128,7 @@ export class EnrollmentService {
   // Only requests the next generation (installation contract section 6);
   // an open rotation is answered unchanged.
   async requestRotation(workerId: WorkerId, invocation: RotationInvocation): Promise<Result<RequestedRotation>> {
-    const checked = checkAdministrativeInvocation(invocation);
+    const checked = checkInvocation(invocation);
     if (!checked.ok) return checked;
     const requestedAt = this.#deps.clock.now();
     const { rotationGraceMilliseconds, rotationHardCapMilliseconds } = this.#limits;

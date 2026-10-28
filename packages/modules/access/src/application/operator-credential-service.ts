@@ -26,7 +26,7 @@ export class OperatorCredentialService {
   }
 
   async bootstrap(invocation: AdministrativeInvocation): Promise<Result<string>> {
-    const checked = checkAdministrativeInvocation(invocation);
+    const checked = checkInvocation(invocation);
     if (!checked.ok) return checked;
     const current = await this.#deps.credentials.current();
     if (!current.ok) return current;
@@ -37,7 +37,7 @@ export class OperatorCredentialService {
   // Replaces the credential; it changes nothing else, so it never lifts a
   // recovery-epoch quarantine (trust model section 2).
   async reset(invocation: AdministrativeInvocation): Promise<Result<string>> {
-    const checked = checkAdministrativeInvocation(invocation);
+    const checked = checkInvocation(invocation);
     if (!checked.ok) return checked;
     const current = await this.#deps.credentials.current();
     if (!current.ok) return current;
@@ -66,8 +66,8 @@ export class OperatorCredentialService {
   }
 }
 
-// An audited command's actor and reason, each 1 to 512 characters.
-export function checkAdministrativeInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
+// Both texts are required, bounded, and recorded in the audit trail.
+export function checkInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
   for (const [name, text] of [['actor', actor], ['reason', reason]] as const) {
     if (text.trim() === '' || text.length > AUDIT_TEXT_MAX_LENGTH) {
       return err(failure('invalid', `the ${name} must be 1-${AUDIT_TEXT_MAX_LENGTH} characters`, { field: name }));
