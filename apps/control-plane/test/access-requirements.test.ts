@@ -30,7 +30,7 @@ const SECTION_3: Record<string, string> = {
   readBoard: 'viewer-or-owner', readTaskDetail: 'viewer-or-owner', readInbox: 'viewer-or-owner', readInboxCounts: 'viewer-or-owner',
   listAgentSessions: 'viewer-or-owner', readAgentSession: 'viewer-or-owner', listAgentSessionTurns: 'viewer-or-owner',
   listAgentSessionRequests: 'viewer-or-owner', readAgentSessionOutput: 'viewer-or-owner', streamProjectEvents: 'viewer-or-owner',
-  submitTurn: 'operator', respondToNativeRequest: 'operator', answerInboxItem: 'operator',
+  submitTurn: 'operator', respondToNativeRequest: 'operator', answerInboxItem: 'operator', openTerminal: 'operator',
 };
 
 function rowOf(operationId: string): string {
