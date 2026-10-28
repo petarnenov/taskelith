@@ -32,14 +32,14 @@ Hosts: macOS on Intel, `/usr/bin/make` GNU Make 3.81, `/usr/local/bin/gmake` GNU
 
 ## Checks
 
-`make verify` ran on the clean committed tree of `PENDING` (tree `PENDING`) with Node.js 24.22.1, after every review fix.
+`make verify` ran on the clean committed tree of `36929732` (tree `a7c8054f`) with Node.js 24.22.1, after every review fix and after the pass 3 records: exit 0, profile full. Tests: 2650, 2643 pass, 0 fail, 0 cancelled, 7 skipped. Coverage of all files: lines 99.36%, branches 92.52%, functions 99.06%. It ran the two "as typed" tests under `make` 3.81 and `gmake` 4.4.1. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows it before the archive, and it changes only this file.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `500b0f70428365c19c7df992269672c1a85a3cef`; tests 2650, pass 2643, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `a7c8054f7d3b4a773b710fede9e7485997ba7977`; tests 2650, pass 2643, fail 0, skipped 7; all files 99.36% lines, 92.52% branches, 99.06% functions.
 - `npm run openspec -- validate fix-make-argument-expansion --strict`: passed, `Change 'fix-make-argument-expansion' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s).`.
 - Spec diff against the merge base `f3a53f172dc2` with `origin/dev`: no change under `openspec/specs`.
@@ -48,6 +48,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18170-2d21-7473-b894-3e58f95f8cd3` | 0 | 0 | 0 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `36d32c77-543a-4229-a7f1-a54173f11108` | 0 | 0 | 2 | 3 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18182-d5e2-7602-a406-aa3832362160` | 0 | 0 | 1 | 0 |
 <!-- make record: end -->
 
 ## Review
