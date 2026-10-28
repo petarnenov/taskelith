@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { GIT_ROUTE_ENVIRONMENT, numstatFiles, statusPaths } from '../scripts/review-route-environment.ts';
+import { GIT_ROUTE_ENVIRONMENT, gitEnvironment, numstatFiles, statusPaths } from '../scripts/review-route-environment.ts';
+import { CREDENTIAL_VARIABLE } from '../scripts/review-route-jev.ts';
 import {
   archivedReviewsOf,
   capabilitiesUnder,
@@ -129,6 +130,11 @@ test('the git output parsers read NUL-separated status and numstat', () => {
     { path: 'scripts/a.ts', lines: 5 },
     { path: 'docs/logo.png', lines: 0 },
   ]);
+});
+
+test('git children get neither hook variables nor the router credential', () => {
+  const inherited = { PATH: '/usr/bin', GIT_DIR: '/elsewhere', [CREDENTIAL_VARIABLE]: 'sentinel-credential' };
+  assert.deepEqual(gitEnvironment(inherited, '/work/repo'), { PATH: '/usr/bin', GIT_CEILING_DIRECTORIES: '/work' });
 });
 
 function withRepository(check: (root: string) => void): void {

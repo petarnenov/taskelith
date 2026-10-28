@@ -82,6 +82,13 @@ test('shadow passes outside the reviewer table are inconsistent', () => {
   ]);
 });
 
+test('a rule version without a reviewer table is reported', () => {
+  const rule = { ...ruleDecision(QUIET_FEATURES), version: 2 };
+  assert.deepEqual(routeRecordProblems(roundTrip(record({ rule })), 'route-me', checkSchema), [
+    'rule version 2 has no reviewer table',
+  ]);
+});
+
 test('a record of another change is reported', () => {
   assert.deepEqual(routeRecordProblems(roundTrip(record()), 'other-change', checkSchema), [
     'change "route-me" is not its directory\'s change "other-change"',

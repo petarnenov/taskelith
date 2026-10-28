@@ -261,7 +261,7 @@ test('--rule-only --save writes valid lines and prints the figures', withHistory
   for (const line of lines) assert.deepEqual(checkSchema(line), []);
   const at = git(history.root, 'rev-parse', 'HEAD');
   assert.match(run.stdout, new RegExp(`^Route evaluation of 2 archived change\\(s\\) as of ${at}, in merge order\\.$`, 'm'));
-  assert.match(run.stdout, /^Features of the revision that pass 1 reviewed; 1 approximate from the merged diff\.$/m);
+  assert.match(run.stdout, /^Features of the revision named by the branch's first "pass 1" commit; 1 approximate from the merged diff\.$/m);
   assert.match(run.stdout, /^Excluded: three \(no-pull-request-merge\), four \(several-artifacts\)\.$/m);
   assert.match(run.stdout, /^ {2}rule elevated: 1 change\(s\), third pass 0 \(0%\)/m);
   assert.match(run.stdout, /^Without pass summaries, lower bounds: 1 change\(s\)/m);
