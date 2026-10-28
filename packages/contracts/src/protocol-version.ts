@@ -6,6 +6,10 @@ export type ProtocolVersionWindow = MessageSchemas['ProtocolVersionWindow'];
 // version could not execute needs the next version.
 export const EXECUTION_PROTOCOL_VERSION = 1;
 
+// The first version that carries session work; the control plane sends it
+// only to a worker whose common version is at least this one.
+export const SESSION_PROTOCOL_VERSION = 2;
+
 export const SUPPORTED_PROTOCOL_VERSIONS: ProtocolVersionWindow = Object.freeze({
   minimum: EXECUTION_PROTOCOL_VERSION,
   maximum: EXECUTION_PROTOCOL_VERSION,

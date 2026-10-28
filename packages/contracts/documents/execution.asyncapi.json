@@ -2,8 +2,8 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.8.0",
-    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation, an inventory request, a credential rotation notice, and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
+    "version": "0.9.0",
+    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation, an inventory request, a credential rotation notice, and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support. Since protocol version 2 (G3 sub-change 9d) the command channel also carries the session commands and the notice of a refreshed per-run SCM credential, and the observation channel the session observations and the adoption confirmation; a message never carries a secret."
   },
   "defaultContentType": "application/json",
   "channels": {
@@ -36,6 +36,18 @@
         },
         "credentialRotationRequested": {
           "$ref": "#/components/messages/credentialRotationRequested"
+        },
+        "turnDelivery": {
+          "$ref": "#/components/messages/turnDelivery"
+        },
+        "responseDelivery": {
+          "$ref": "#/components/messages/responseDelivery"
+        },
+        "delegationResultDelivery": {
+          "$ref": "#/components/messages/delegationResultDelivery"
+        },
+        "scmCredentialRefreshed": {
+          "$ref": "#/components/messages/scmCredentialRefreshed"
         }
       }
     },
@@ -95,6 +107,42 @@
         },
         "inventoryReported": {
           "$ref": "#/components/messages/inventoryReported"
+        },
+        "generationStarted": {
+          "$ref": "#/components/messages/generationStarted"
+        },
+        "generationEnded": {
+          "$ref": "#/components/messages/generationEnded"
+        },
+        "turnDelivered": {
+          "$ref": "#/components/messages/turnDelivered"
+        },
+        "turnNotDelivered": {
+          "$ref": "#/components/messages/turnNotDelivered"
+        },
+        "turnAcceptanceUnknown": {
+          "$ref": "#/components/messages/turnAcceptanceUnknown"
+        },
+        "turnEnded": {
+          "$ref": "#/components/messages/turnEnded"
+        },
+        "requestRecorded": {
+          "$ref": "#/components/messages/requestRecorded"
+        },
+        "responseDeliveryReported": {
+          "$ref": "#/components/messages/responseDeliveryReported"
+        },
+        "outputAppended": {
+          "$ref": "#/components/messages/outputAppended"
+        },
+        "limitSignaled": {
+          "$ref": "#/components/messages/limitSignaled"
+        },
+        "scmCredentialAdopted": {
+          "$ref": "#/components/messages/scmCredentialAdopted"
+        },
+        "scmCredentialNotAdopted": {
+          "$ref": "#/components/messages/scmCredentialNotAdopted"
         }
       }
     },
@@ -140,6 +188,18 @@
         },
         {
           "$ref": "#/channels/workerCommands/messages/credentialRotationRequested"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/turnDelivery"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/responseDelivery"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/delegationResultDelivery"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/scmCredentialRefreshed"
         }
       ]
     },
@@ -193,6 +253,42 @@
         },
         {
           "$ref": "#/channels/workerObservations/messages/inventoryReported"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/generationStarted"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/generationEnded"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/turnDelivered"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/turnNotDelivered"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/turnAcceptanceUnknown"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/turnEnded"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/requestRecorded"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/responseDeliveryReported"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/outputAppended"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/limitSignaled"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/scmCredentialAdopted"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/scmCredentialNotAdopted"
         }
       ]
     },
@@ -977,6 +1073,45 @@
           "retryOf": {
             "$ref": "#/components/schemas/Identifier",
             "description": "The attempt this attempt retries."
+          },
+          "session": {
+            "$ref": "#/components/schemas/AssignmentSessionBinding",
+            "description": "The attempt's agent session: required from protocol version 2 (`SessionProtocolVersion`), absent at version 1."
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "protocolVersion"
+          ],
+          "properties": {
+            "protocolVersion": {
+              "$ref": "#/components/schemas/SessionProtocolVersion"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "required": [
+            "session"
+          ],
+          "properties": {
+            "session": {
+              "$ref": "#/components/schemas/AssignmentSessionBinding"
+            }
+          }
+        },
+        "else": {
+          "not": {
+            "type": "object",
+            "required": [
+              "session"
+            ],
+            "properties": {
+              "session": {
+                "$ref": "#/components/schemas/AssignmentSessionBinding"
+              }
+            }
           }
         }
       },
@@ -2267,6 +2402,1762 @@
             "description": "The worker clock; informational only."
           }
         }
+      },
+      "AgentSessionId": {
+        "$ref": "#/components/schemas/Identifier",
+        "description": "A session of the session timeline (`SessionId`), one task's agent session; not a login session."
+      },
+      "AgentSessionGeneration": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "A generation of an agent session, one native process, from 1 (`SessionGeneration`)."
+      },
+      "TurnId": {
+        "$ref": "#/components/schemas/Identifier",
+        "description": "A turn's immutable identity."
+      },
+      "TurnText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536,
+        "description": "A turn's text, 1 to 65,536 characters (`MAX_HARNESS_TEXT_LENGTH`)."
+      },
+      "TurnOutcome": {
+        "type": "string",
+        "enum": [
+          "completed",
+          "interrupted",
+          "turn-limit-reached",
+          "account-limit-reached",
+          "failed"
+        ],
+        "description": "How a turn ended (`TURN_OUTCOMES`)."
+      },
+      "HarnessFailure": {
+        "type": "string",
+        "enum": [
+          "authentication",
+          "transport",
+          "harness-exited",
+          "protocol",
+          "internal"
+        ],
+        "description": "Why a turn failed (`HARNESS_FAILURES`)."
+      },
+      "NativeRequestId": {
+        "$ref": "#/components/schemas/Identifier",
+        "description": "The opaque native request ID that the harness port returned."
+      },
+      "NativeRequestKey": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A native request's identity within its session: its generation and native request ID (`RequestKey`).",
+        "required": [
+          "generation",
+          "nativeRequestId"
+        ],
+        "properties": {
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "nativeRequestId": {
+            "$ref": "#/components/schemas/NativeRequestId"
+          }
+        }
+      },
+      "NativeRequestKind": {
+        "type": "string",
+        "enum": [
+          "permission-request",
+          "input-request",
+          "delegation-request"
+        ],
+        "description": "A native request's kind (`HarnessRequestKind`)."
+      },
+      "ClassifiedOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The plugin's classification of a permission request's native action into a harness-neutral operation (agent harness port contract section 7.2): G3 defines `push` with the full branch ref it pushes to. An unclassified request has none and matches no standing rule.",
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "push"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^refs/heads/[^\\x00-\\x20\\x7f~^:?*\\[\\\\]+$",
+            "description": "The full branch ref, `refs/heads/` and a branch name."
+          }
+        }
+      },
+      "HarnessText": {
+        "type": "string",
+        "maxLength": 65536,
+        "description": "Text of a native request, an output entry, or an answer, at most 65,536 characters (`MAX_HARNESS_TEXT_LENGTH`)."
+      },
+      "NativeAnswer": {
+        "description": "A consumed answer: a person's or a standing rule's permission answer, a person's input answer, or the host's delegation result (session timeline contract section 5.2).",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "decision"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "permission"
+              },
+              "decision": {
+                "$ref": "#/components/schemas/PermissionDecision"
+              },
+              "message": {
+                "$ref": "#/components/schemas/HarnessText"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "text"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "input"
+              },
+              "text": {
+                "$ref": "#/components/schemas/HarnessText"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "delegationId",
+              "outcome",
+              "summary"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "delegation-result"
+              },
+              "delegationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/DelegationResultOutcome"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/HarnessText"
+              }
+            }
+          }
+        ]
+      },
+      "PermissionDecision": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "deny"
+        ],
+        "description": "A permission answer (`PERMISSION_DECISIONS`)."
+      },
+      "DelegationResultOutcome": {
+        "type": "string",
+        "enum": [
+          "completed",
+          "rejected",
+          "failed",
+          "cancelled"
+        ],
+        "description": "A delegated child's outcome in a delegation result (`DELEGATION_OUTCOMES`)."
+      },
+      "Responder": {
+        "description": "Who gave a consumed answer: a person, a standing rule, or the host.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "principalId"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "principal"
+              },
+              "principalId": {
+                "$ref": "#/components/schemas/Identifier"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ruleId"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "standing-rule"
+              },
+              "ruleId": {
+                "$ref": "#/components/schemas/Identifier"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "host"
+              }
+            }
+          }
+        ]
+      },
+      "TurnAuthor": {
+        "description": "A person, or the host with the delegation request whose child's outcome the turn delivers (session timeline contract section 4.1).",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "principalId"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "principal"
+              },
+              "principalId": {
+                "$ref": "#/components/schemas/Identifier"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "delegationRequest"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "host"
+              },
+              "delegationRequest": {
+                "$ref": "#/components/schemas/NativeRequestKey"
+              }
+            }
+          }
+        ]
+      },
+      "TimelinePosition": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "A position in one of a session's ordered lists (turns, native requests, or output), from 1 without gaps."
+      },
+      "ExternalId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "description": "An identifier that an external service issues, compared exactly and never parsed (source control contract section 2, rule 3)."
+      },
+      "DelegationResult": {
+        "description": "The result of a delegation: pending until the child task ends or the delegation is rejected, then its outcome and summary.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "attemptId",
+              "parentTaskId",
+              "childTaskId"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "pending"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "attemptId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The delegating attempt."
+              },
+              "parentTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "childTaskId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The child task that the delegation request named."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "attemptId",
+              "parentTaskId",
+              "childTaskId",
+              "outcome",
+              "summary",
+              "endedAt"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "ended"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "attemptId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The delegating attempt."
+              },
+              "parentTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "childTaskId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The child task that the delegation request named."
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/DelegationResultOutcome"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/DelegationSummary"
+              },
+              "endedAt": {
+                "$ref": "#/components/schemas/Instant"
+              }
+            }
+          }
+        ]
+      },
+      "DelegationSummary": {
+        "type": "string",
+        "maxLength": 65536,
+        "description": "The summary of a delegated child task for its parent, at most `MAX_HARNESS_TEXT_LENGTH` characters; text of the child's run, redacted as that run's text is."
+      },
+      "SessionProtocolVersion": {
+        "type": "integer",
+        "minimum": 2,
+        "description": "The execution protocol version of a session command or observation: 2 or later, so that a worker of version 1 rejects it with `execution.command.rejected` and the control plane sends session work only to a worker whose common version is 2 or later."
+      },
+      "AssignmentSessionBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The agent session an offer of protocol version 2 binds its attempt to: the session, its harness, and the model and effort it runs with, and to resume it, its native session and next generation. No credential; the slot credential keeps its own HTTPS channel.",
+        "required": [
+          "sessionId",
+          "harness",
+          "model",
+          "effort"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness plugin (`HarnessPluginId`) that runs the session; a session never changes its harness."
+          },
+          "model": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness model the session runs with, set per session."
+          },
+          "effort": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The harness effort the session runs with, set per session."
+          },
+          "resume": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Present to resume the ended session at its next generation; absent, the attempt starts a new session at generation 1.",
+            "required": [
+              "nativeSessionId",
+              "generation"
+            ],
+            "properties": {
+              "nativeSessionId": {
+                "$ref": "#/components/schemas/Identifier",
+                "description": "The opaque native session ID that the resume keeps."
+              },
+              "generation": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentSessionGeneration"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 2
+                  }
+                ],
+                "description": "The generation after the session's last one."
+              }
+            }
+          }
+        }
+      },
+      "TurnDeliveryPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "generation",
+          "turn"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/SessionProtocolVersion"
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration",
+            "description": "The running generation the turn is sent for; the host delivers it in no other."
+          },
+          "turn": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The turn as recorded, with its immutable identity; its text is the recorded, redacted text.",
+            "required": [
+              "turnId",
+              "position",
+              "author",
+              "text"
+            ],
+            "properties": {
+              "turnId": {
+                "$ref": "#/components/schemas/TurnId"
+              },
+              "position": {
+                "$ref": "#/components/schemas/TimelinePosition"
+              },
+              "author": {
+                "$ref": "#/components/schemas/TurnAuthor"
+              },
+              "text": {
+                "$ref": "#/components/schemas/TurnText"
+              }
+            }
+          }
+        }
+      },
+      "TurnDeliveryCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Delivers a queued turn to the session's running generation; the control plane sends it only for the turn that `nextDeliverableTurn` returns, one at a time.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "session.turn.deliver"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnDeliveryPayload"
+          }
+        }
+      },
+      "ResponseDeliveryPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request",
+          "answer",
+          "responder"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/SessionProtocolVersion"
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "request": {
+            "$ref": "#/components/schemas/NativeRequestKey"
+          },
+          "answer": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NativeAnswer"
+              },
+              {
+                "not": {
+                  "type": "object",
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "delegation-result"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "responder": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Responder"
+              },
+              {
+                "not": {
+                  "type": "object",
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "host"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "responder"
+          ],
+          "properties": {
+            "responder": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "standing-rule"
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "permission"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ResponseDeliveryCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Delivers a consumed permission or input answer to the native request it answers, with the approver that gave it: a principal or a standing rule, never the host.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "session.response.deliver"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResponseDeliveryPayload"
+          }
+        }
+      },
+      "DelegationResultDeliveryPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "sessionId",
+          "request",
+          "result"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/SessionProtocolVersion"
+          },
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "request": {
+            "$ref": "#/components/schemas/NativeRequestKey"
+          },
+          "result": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DelegationResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "state"
+                ],
+                "properties": {
+                  "state": {
+                    "const": "ended"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "DelegationResultDeliveryCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Returns an ended delegation's result to the parent's open delegation request; the host is its responder.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "session.delegation-result.deliver"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/DelegationResultDeliveryPayload"
+          }
+        }
+      },
+      "ScmCredentialRefreshedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "runId",
+          "credentialId",
+          "version"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/SessionProtocolVersion"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "credentialId": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "The version to fetch."
+          }
+        }
+      },
+      "ScmCredentialRefreshedCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A notice that a run's per-run SCM credential has a new version, which the worker fetches with `fetchRunScmCredential`. It never carries a secret.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "execution.scm-credential.refreshed"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ScmCredentialRefreshedPayload"
+          }
+        }
+      },
+      "GenerationStartedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "generation",
+          "nativeSessionId",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "nativeSessionId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The opaque native session ID; a resume keeps it."
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "GenerationStartedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The harness port started or resumed the session's native process.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.generation.started"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/GenerationStartedPayload"
+          }
+        }
+      },
+      "GenerationEndedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "generation",
+          "cause",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "session-ended",
+              "lost"
+            ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "GenerationEndedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The generation ended: the port reported its end, or the host lost it.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.generation.ended"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/GenerationEndedPayload"
+          }
+        }
+      },
+      "TurnDeliveredPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "turnId",
+          "generation",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "TurnDeliveredObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The port accepted the turn in the named generation, or answered its repeated submission with `conflict` or `precondition-failed` naming it as the running turn.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.turn.delivered"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnDeliveredPayload"
+          }
+        }
+      },
+      "TurnNotDeliveredPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "turnId",
+          "generation",
+          "reason",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "reason": {
+            "type": "string",
+            "description": "`generation-not-running`: the command's generation no longer runs; `port-refused`: `submitTurn` answered `not-found`, `unavailable`, or `precondition-failed` without naming the turn as the running one, and the host stops the generation when it still runs; `turn-invalid`: the plugin returned `invalid` for the bounded request, which no resend cures.",
+            "enum": [
+              "generation-not-running",
+              "port-refused",
+              "turn-invalid"
+            ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "TurnNotDeliveredObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The host did not deliver the turn: its generation no longer runs, or the plugin returned a refusal that proves it did not accept the turn. With turn-invalid the turn becomes refused, final, and the next queued turn follows it; otherwise the turn stays queued for the next generation.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.turn.not-delivered"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnNotDeliveredPayload"
+          }
+        }
+      },
+      "TurnAcceptanceUnknownPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "turnId",
+          "generation",
+          "reason",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "conflict",
+              "timeout",
+              "crash"
+            ],
+            "description": "`conflict`: `submitTurn` answered `conflict` without naming the turn as the running one; `timeout`: it did not answer in time; `crash`: the plugin failed with `internal`, threw, or returned a result that the host's parser rejected, or a restart found the command journaled without its outcome."
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "TurnAcceptanceUnknownObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The host cannot tell whether the port accepted the turn: the port answered conflict for its turn ID without naming it as the running turn, the submission timed out, or the host or plugin failed before it recorded the answer. The host stops the generation when it still runs. The turn becomes outcome-unknown, is final, and is never resent; no later turn is delivered in that generation.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.turn.acceptance-unknown"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnAcceptanceUnknownPayload"
+          }
+        }
+      },
+      "TurnEndedPayload": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sessionId",
+              "turnId",
+              "generation",
+              "outcome",
+              "recoveryEpoch"
+            ],
+            "properties": {
+              "sessionId": {
+                "$ref": "#/components/schemas/AgentSessionId"
+              },
+              "turnId": {
+                "$ref": "#/components/schemas/TurnId"
+              },
+              "generation": {
+                "$ref": "#/components/schemas/AgentSessionGeneration"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "interrupted",
+                  "turn-limit-reached",
+                  "account-limit-reached"
+                ]
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sessionId",
+              "turnId",
+              "generation",
+              "outcome",
+              "failure",
+              "recoveryEpoch"
+            ],
+            "properties": {
+              "sessionId": {
+                "$ref": "#/components/schemas/AgentSessionId"
+              },
+              "turnId": {
+                "$ref": "#/components/schemas/TurnId"
+              },
+              "generation": {
+                "$ref": "#/components/schemas/AgentSessionGeneration"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "failed"
+              },
+              "failure": {
+                "$ref": "#/components/schemas/HarnessFailure"
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
+              }
+            }
+          }
+        ]
+      },
+      "TurnEndedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The port's `turn-ended`; a failure is present exactly when the outcome is `failed`.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.turn.ended"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnEndedPayload"
+          }
+        }
+      },
+      "RequestRecordedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "request",
+          "kind",
+          "turnId",
+          "text",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "request": {
+            "$ref": "#/components/schemas/NativeRequestKey"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NativeRequestKind"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "text": {
+            "$ref": "#/components/schemas/HarnessText"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ClassifiedOperation"
+          }
+        },
+        "if": {
+          "type": "object",
+          "required": [
+            "operation"
+          ],
+          "properties": {
+            "operation": {
+              "$ref": "#/components/schemas/ClassifiedOperation"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "permission-request"
+            }
+          }
+        }
+      },
+      "RequestRecordedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A native permission, input, or delegation request that the port emitted during a delivered turn; its text is redacted by value on the worker.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.request.recorded"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RequestRecordedPayload"
+          }
+        }
+      },
+      "ResponseDeliveryReportedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "request",
+          "report",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "request": {
+            "$ref": "#/components/schemas/NativeRequestKey"
+          },
+          "report": {
+            "type": "string",
+            "enum": [
+              "delivered",
+              "refused",
+              "delivery-uncertain"
+            ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "ResponseDeliveryReportedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The host's one report of delivering a consumed response, a delegation result included, through the port; nothing is resent.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.response.delivery-reported"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResponseDeliveryReportedPayload"
+          }
+        }
+      },
+      "OutputAppendedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "turnId",
+          "generation",
+          "chunk",
+          "text",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "turnId": {
+            "$ref": "#/components/schemas/TurnId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "chunk": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "text": {
+            "$ref": "#/components/schemas/HarnessText"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "OutputAppendedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One chunk of the port's `output` for a delivered turn, redacted by value on the worker; `chunk` numbers the chunks of one generation from 1 without gaps.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.output.appended"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OutputAppendedPayload"
+          }
+        }
+      },
+      "LimitSignaledPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "generation",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "sessionId": {
+            "$ref": "#/components/schemas/AgentSessionId"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/AgentSessionGeneration"
+          },
+          "resetsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "LimitSignaledObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The port's `limit` account signal of the session's slot, with its reset time when known.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "session.limit.signaled"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LimitSignaledPayload"
+          }
+        }
+      },
+      "ScmCredentialAdoptedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "credentialId",
+          "version",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "credentialId": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "ScmCredentialAdoptedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker fetched the named version and passes it to every later workspace operation of the attempt. The previous version ends only once every attempt of the run that held it adopted this version or a later one, or no longer holds its ownership.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.scm-credential.adopted"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ScmCredentialAdoptedPayload"
+          }
+        }
+      },
+      "ScmCredentialNotAdoptedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "credentialId",
+          "version",
+          "reason",
+          "recoveryEpoch"
+        ],
+        "properties": {
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "credentialId": {
+            "$ref": "#/components/schemas/ExternalId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "fetch-refused",
+              "superseded",
+              "attempt-not-held"
+            ]
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          }
+        }
+      },
+      "ScmCredentialNotAdoptedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker did not adopt the named version and keeps its current one: the fetch was refused, a later version was adopted first, or the worker no longer holds the attempt.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.scm-credential.not-adopted"
+                  },
+                  "protocolVersion": {
+                    "$ref": "#/components/schemas/SessionProtocolVersion"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ScmCredentialNotAdoptedPayload"
+          }
+        }
       }
     },
     "messages": {
@@ -2422,6 +4313,118 @@
         "title": "worker.credentials.rotation-requested",
         "payload": {
           "$ref": "#/components/schemas/CredentialRotationRequested"
+        }
+      },
+      "turnDelivery": {
+        "name": "turnDeliveryCommand",
+        "title": "session.turn.deliver",
+        "payload": {
+          "$ref": "#/components/schemas/TurnDeliveryCommand"
+        }
+      },
+      "responseDelivery": {
+        "name": "responseDeliveryCommand",
+        "title": "session.response.deliver",
+        "payload": {
+          "$ref": "#/components/schemas/ResponseDeliveryCommand"
+        }
+      },
+      "delegationResultDelivery": {
+        "name": "delegationResultDeliveryCommand",
+        "title": "session.delegation-result.deliver",
+        "payload": {
+          "$ref": "#/components/schemas/DelegationResultDeliveryCommand"
+        }
+      },
+      "scmCredentialRefreshed": {
+        "name": "scmCredentialRefreshedCommand",
+        "title": "execution.scm-credential.refreshed",
+        "payload": {
+          "$ref": "#/components/schemas/ScmCredentialRefreshedCommand"
+        }
+      },
+      "generationStarted": {
+        "name": "generationStartedObservation",
+        "title": "session.generation.started",
+        "payload": {
+          "$ref": "#/components/schemas/GenerationStartedObservation"
+        }
+      },
+      "generationEnded": {
+        "name": "generationEndedObservation",
+        "title": "session.generation.ended",
+        "payload": {
+          "$ref": "#/components/schemas/GenerationEndedObservation"
+        }
+      },
+      "turnDelivered": {
+        "name": "turnDeliveredObservation",
+        "title": "session.turn.delivered",
+        "payload": {
+          "$ref": "#/components/schemas/TurnDeliveredObservation"
+        }
+      },
+      "turnNotDelivered": {
+        "name": "turnNotDeliveredObservation",
+        "title": "session.turn.not-delivered",
+        "payload": {
+          "$ref": "#/components/schemas/TurnNotDeliveredObservation"
+        }
+      },
+      "turnAcceptanceUnknown": {
+        "name": "turnAcceptanceUnknownObservation",
+        "title": "session.turn.acceptance-unknown",
+        "payload": {
+          "$ref": "#/components/schemas/TurnAcceptanceUnknownObservation"
+        }
+      },
+      "turnEnded": {
+        "name": "turnEndedObservation",
+        "title": "session.turn.ended",
+        "payload": {
+          "$ref": "#/components/schemas/TurnEndedObservation"
+        }
+      },
+      "requestRecorded": {
+        "name": "requestRecordedObservation",
+        "title": "session.request.recorded",
+        "payload": {
+          "$ref": "#/components/schemas/RequestRecordedObservation"
+        }
+      },
+      "responseDeliveryReported": {
+        "name": "responseDeliveryReportedObservation",
+        "title": "session.response.delivery-reported",
+        "payload": {
+          "$ref": "#/components/schemas/ResponseDeliveryReportedObservation"
+        }
+      },
+      "outputAppended": {
+        "name": "outputAppendedObservation",
+        "title": "session.output.appended",
+        "payload": {
+          "$ref": "#/components/schemas/OutputAppendedObservation"
+        }
+      },
+      "limitSignaled": {
+        "name": "limitSignaledObservation",
+        "title": "session.limit.signaled",
+        "payload": {
+          "$ref": "#/components/schemas/LimitSignaledObservation"
+        }
+      },
+      "scmCredentialAdopted": {
+        "name": "scmCredentialAdoptedObservation",
+        "title": "execution.scm-credential.adopted",
+        "payload": {
+          "$ref": "#/components/schemas/ScmCredentialAdoptedObservation"
+        }
+      },
+      "scmCredentialNotAdopted": {
+        "name": "scmCredentialNotAdoptedObservation",
+        "title": "execution.scm-credential.not-adopted",
+        "payload": {
+          "$ref": "#/components/schemas/ScmCredentialNotAdoptedObservation"
         }
       }
     }

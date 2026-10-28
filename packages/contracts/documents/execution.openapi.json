@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.7.0",
-    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), the renewal and confirmation of a rotated worker credential generation (G3 sub-change 26c), launch authorization (G2 decision D12 (a)), delegation and its result, task results, evidence with its retirement, the reconciliation queue and re-admission, and the delivery of slot and per-run SCM credentials to a worker (G3 sub-change 9c). Worker operations use the per-worker credential. Operator operations use the installation bootstrap credential (G2 decision D10 (a)); since 9c the evidence, reconciliation, and re-admission operations also accept the browser session of the control-plane document."
+    "version": "0.8.0",
+    "description": "Worker enrollment, the public installation CA that a worker checks before it enrolls (G3 sub-change 26b), the renewal and confirmation of a rotated worker credential generation (G3 sub-change 26c), launch authorization (G2 decision D12 (a)), delegation and its result, task results, evidence with its retirement, the reconciliation queue and re-admission, and the delivery of slot and per-run SCM credentials to a worker (G3 sub-change 9c). Worker operations use the per-worker credential. Operator operations use the installation bootstrap credential (G2 decision D10 (a)); since 9c the evidence, reconciliation, and re-admission operations also accept the browser session of the control-plane document. Since G3 sub-change 9d, the worker's terminal relay connection, whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
     "/installation/ca": {
@@ -1976,6 +1976,146 @@
           },
           "503": {
             "description": "The credential store or the database is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workers/relay": {
+      "get": {
+        "operationId": "openWorkerRelay",
+        "summary": "Open the worker's outbound terminal relay connection as a WebSocket",
+        "description": "The authenticated worker opens its one relay connection; a new one replaces the older, which the control plane closes. The relay carries only terminal frames, never a command, an observation, or a credential.",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": true,
+            "description": "The WebSocket upgrade.",
+            "schema": {
+              "type": "string",
+              "const": "websocket"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Version",
+            "in": "header",
+            "required": true,
+            "description": "The WebSocket version of RFC 6455.",
+            "schema": {
+              "type": "string",
+              "const": "13"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Key",
+            "in": "header",
+            "required": true,
+            "description": "The client's handshake nonce, 16 random bytes in base64.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]{22}==$"
+            }
+          },
+          {
+            "name": "Sec-WebSocket-Protocol",
+            "in": "header",
+            "required": true,
+            "description": "The subprotocols the client offers, a comma-separated list that must include `taskelith.relay.v1`; the 101 answer selects it.",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024,
+              "pattern": "(^|,)[ \\t]*taskelith\\.relay\\.v1[ \\t]*(,|$)"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols: the connection is a WebSocket that carries the frames of `terminal.asyncapi.json`.",
+            "headers": {
+              "Upgrade": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "websocket"
+                }
+              },
+              "Connection": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Upgrade"
+                }
+              },
+              "Sec-WebSocket-Accept": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9+/]{27}=$"
+                }
+              },
+              "Sec-WebSocket-Protocol": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "taskelith.relay.v1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A handshake header is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is missing, unknown, revoked, or of a retired generation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The worker's common protocol version is below 2.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayRefusal"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A store the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4151,6 +4291,40 @@
                   "remote-origin-mismatch",
                   "credential-ended"
                 ]
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RelayRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 422 of `openWorkerRelay`: the worker's common protocol version is below 2, so it carries no terminal.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "precondition-failed"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "protocol-not-supported"
               }
             },
             "additionalProperties": {

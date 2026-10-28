@@ -78,7 +78,7 @@ A new turn is `queued` at the next position of the session, from 1 without gaps.
 
 ### 4.2 Queued, serialized delivery
 
-All turns are mutable in G3, because no harness declares concurrent turns (agent harness port contract section 6). A turn submitted while another runs is queued and delivered when the running turn ends, one at a time in position order, so the port's rejection of a second turn never fires for a queued turn. `nextDeliverableTurn(session)` returns the earliest queued turn when the session is not stopped, a generation runs, and no turn is `delivered`; otherwise nothing.
+All turns are mutable in G3, because no harness declares concurrent turns (agent harness port contract section 6). A turn submitted while another runs is queued and delivered when the running turn ends, one at a time in position order, so the port's rejection of a second turn never fires for a queued turn. `nextDeliverableTurn(session)` returns the earliest queued turn when the session is not stopped, a generation runs, no turn is `delivered`, and no turn of the running generation became `outcome-unknown` through section 4.4; otherwise nothing. A `refused` turn (section 4.5) is not queued and holds nothing.
 
 `deliverTurn(session, delivery)` records that the host submitted the turn in the named generation, after the port accepted it. An unknown turn fails with `not-found`. A turn that is not `queued`, a stopped session, a generation that is not running, another `delivered` turn, or a turn other than the earliest queued one fails with `precondition-failed`. The turn becomes `delivered` in that generation.
 
@@ -88,7 +88,7 @@ All turns are mutable in G3, because no harness declares concurrent turns (agent
 
 1. A failure present or missing against that rule fails with `invalid`.
 2. An unknown turn fails with `not-found`.
-3. A turn that is `ended` or `outcome-unknown` fails with `conflict`.
+3. A turn that is `ended`, `outcome-unknown`, or `refused` fails with `conflict`.
 4. A `queued` turn, or a generation other than the turn's, fails with `precondition-failed`.
 
 The turn becomes `ended` with its outcome. Each of its requests that is still `open` becomes `expired` (agent harness port contract section 7.3). An `account-limit-reached` outcome stops the session (section 8).
@@ -98,7 +98,30 @@ The turn becomes `ended` with its outcome. Each of its requests that is still `o
 | `queued` | Recorded, not yet delivered |
 | `delivered` | Delivered in its generation, without an outcome |
 | `ended` | Ended with one outcome |
-| `outcome-unknown` | Its generation ended before its outcome; final (section 6) |
+| `outcome-unknown` | Its generation ended before its outcome (section 6), or the host cannot tell whether the port accepted it (section 4.4); final |
+| `refused` | The harness plugin refused it as `invalid`, which proves it never ran (section 4.5); final |
+
+### 4.4 Acceptance unknown
+
+The architect added this operation on 2026-10-28 (G3 item 9d, `define-worker-messages-and-terminal-contracts`). The port answers `conflict` for a turn ID the native session has seen, and a host that cannot tell whether a turn reached the harness reconciles it through the timeline and never resubmits it (agent harness port contract section 6). `recordTurnAcceptanceUnknown(session, report)` records that report for a turn from its `TurnId` and the generation it was sent for. In order:
+
+1. An unknown turn or generation fails with `not-found`.
+2. A turn that is `outcome-unknown` returns the session unchanged, a repeat.
+3. A turn that is `delivered`, `ended`, or `refused` fails with `conflict`.
+4. A turn other than the earliest `queued` one fails with `precondition-failed`.
+
+The turn becomes `outcome-unknown` in that generation, the state that section 6 gives a delivered turn whose outcome is lost: final, never resent, and never delivered again, so `nextDeliverableTurn` moves past it to the next queued turn, but only in a later generation: the turn may still run in the harness, so while the generation it was sent for runs, nothing is deliverable (section 4.2), and the host stops that generation ([worker messages and terminal contract](worker-messages-and-terminal.md) section 3). A later outcome for it fails as section 4.3 states, its requests as section 5.1, and its output as section 7. The generation need not run and a stopped session takes it, because a report can follow a crash; then the next queued turn waits only for the next generation (architect's amendment, 2026-10-28).
+
+### 4.5 Refused turns
+
+The architect added this operation on 2026-10-28 (G3 item 9d, review pass 2 finding M2). An `invalid` that the harness plugin returned from `submitTurn` proves the harness never accepted the turn, and since this timeline bounds every turn's text (section 2 rule 5), it is a defect of the plugin that a resend never cures. `recordTurnRefused(session, report)` records it for a turn from its `TurnId` and the generation it was sent for. In order:
+
+1. An unknown turn or generation fails with `not-found`.
+2. A turn that is `refused` returns the session unchanged, a repeat.
+3. A turn that is `delivered`, `ended`, or `outcome-unknown` fails with `conflict`.
+4. A turn other than the earliest `queued` one fails with `precondition-failed`.
+
+The turn becomes `refused` in that generation: final, never resent, and never delivered again. Because it never ran, `nextDeliverableTurn` moves past it at once, in the same generation, so a persistent `invalid` never blocks the session's later turns. A later outcome for it fails as section 4.3 states, its requests as section 5.1, and its output as section 7. The generation need not run and a stopped session takes it, because the report can arrive after the generation ended. The other refusals of `submitTurn` leave the turn `queued` for the next generation, and the host stops the generation ([worker messages and terminal contract](worker-messages-and-terminal.md) section 3).
 
 ## 5. Native requests and responses
 
@@ -189,7 +212,7 @@ This item adds, through `make`, unit tests of the domain in `packages/modules/ex
 
 The items that build on it add:
 
-- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, and the reconciliation of section 6 applied at a restart, with the crash points of each path.
+- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, the reconciliation of section 6 applied at a restart, `recordTurnAcceptanceUnknown` of section 4.4 in the domain and the service, with `nextDeliverableTurn` returning nothing while the turn's generation runs, the state `refused` and `recordTurnRefused` of section 4.5 in the domain and the service, with a persistent `invalid` that does not block later turns, and the crash points of each path.
 - Item 18: the host tests that the agent harness port contract section 11 lists, through this timeline.
 - Item 14: a reader whose cursor expired falls back to a durable snapshot.
 

@@ -63,6 +63,9 @@ export const CLASSIFIED_OPERATION_KINDS = Object.freeze(['push'] as const);
 
 export type ClassifiedOperationKind = (typeof CLASSIFIED_OPERATION_KINDS)[number];
 
+// The detail of a refused submitTurn that names the turn still running.
+export const RUNNING_TURN_DETAIL = 'runningTurnId';
+
 // `path` locates the binary inside the plugin's installed package, so the
 // host can check its digest before it hands the path to a start or resume.
 export interface PinnedBinaryData {

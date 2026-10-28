@@ -30,7 +30,7 @@ const SECTION_3: Record<string, string> = {
   readBoard: 'viewer-or-owner', readTaskDetail: 'viewer-or-owner', readInbox: 'viewer-or-owner', readInboxCounts: 'viewer-or-owner',
   listAgentSessions: 'viewer-or-owner', readAgentSession: 'viewer-or-owner', listAgentSessionTurns: 'viewer-or-owner',
   listAgentSessionRequests: 'viewer-or-owner', readAgentSessionOutput: 'viewer-or-owner', streamProjectEvents: 'viewer-or-owner',
-  submitTurn: 'operator', respondToNativeRequest: 'operator', answerInboxItem: 'operator',
+  submitTurn: 'operator', respondToNativeRequest: 'operator', answerInboxItem: 'operator', openTerminal: 'operator',
 };
 
 function rowOf(operationId: string): string {
@@ -60,8 +60,8 @@ test('every G2 operator operation is checked on the project of its resource', ()
   assert.deepEqual(['listQuarantine', 'redriveQuarantined'].map(rowOf), ['owner', 'owner']);
 });
 
-test('the credential renewal and confirmation take the worker credential and need no operator role', () => {
-  for (const operationId of ['renewWorkerCredentials', 'confirmWorkerCredentials']) {
+test('the credential renewal, confirmation, and relay take the worker credential and need no operator role', () => {
+  for (const operationId of ['renewWorkerCredentials', 'confirmWorkerCredentials', 'openWorkerRelay']) {
     const operation = executionOperations.find((candidate) => candidate.operationId === operationId)!;
     assert.deepEqual(schemesOf(operation), ['workerCredential'], operationId);
     assert.equal(rowOf(operationId), 'none', operationId);

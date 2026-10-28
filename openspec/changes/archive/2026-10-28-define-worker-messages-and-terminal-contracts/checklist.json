@@ -1,0 +1,101 @@
+{
+  "change": "define-worker-messages-and-terminal-contracts",
+  "generatedAt": "2026-10-28T13:26:50.853Z",
+  "devCommit": "72989e7c89a8890b8df98f9aa6c9ce2ad7992a3c",
+  "query": {
+    "capabilities": [
+      "control-plane-wire-contracts",
+      "product-ports"
+    ],
+    "files": [
+      "docs/contracts/**",
+      "packages/contracts/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 61
+      },
+      {
+        "category": "docs",
+        "count": 33
+      },
+      {
+        "category": "spec-wording",
+        "count": 32
+      },
+      {
+        "category": "redaction",
+        "count": 18
+      },
+      {
+        "category": "concurrency-race",
+        "count": 9
+      },
+      {
+        "category": "error-handling",
+        "count": 4
+      },
+      {
+        "category": "naming",
+        "count": 4
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 532,
+        "inChecklist": 437
+      },
+      "mediumOrWorse": {
+        "findings": 233,
+        "inChecklist": 196
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 94
+      },
+      {
+        "category": "spec-wording",
+        "count": 60
+      },
+      {
+        "category": "docs",
+        "count": 58
+      },
+      {
+        "category": "stale-citation",
+        "count": 34
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 287,
+        "inChecklist": 283
+      },
+      "mediumOrWorse": {
+        "findings": 50,
+        "inChecklist": 48
+      }
+    }
+  }
+}

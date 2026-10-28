@@ -3,6 +3,7 @@ import {
   DELEGATION_OUTCOMES,
   MAX_HARNESS_TEXT_LENGTH,
   PERMISSION_DECISIONS,
+  RUNNING_TURN_DETAIL,
   type AgentHarness,
   type AgentHarnessCapabilities,
   type ClassifiedOperationData,
@@ -166,8 +167,9 @@ export class ScriptedAgentHarness implements AgentHarness {
     const session = this.#running(request);
     if (!session.ok) return session;
     const { turnIds, current } = session.value;
-    if (turnIds.has(request.turnId)) return fail('conflict', 'the turn was already submitted');
-    if (current.running !== undefined) return fail('precondition-failed', 'a turn is running');
+    const running: Record<string, string> = current.running === undefined ? {} : { [RUNNING_TURN_DETAIL]: current.running.turnId };
+    if (turnIds.has(request.turnId)) return fail('conflict', 'the turn was already submitted', running);
+    if (current.running !== undefined) return fail('precondition-failed', 'a turn is running', running);
     turnIds.add(request.turnId);
     this.#play(current, request.turnId, this.#script[request.text] ?? [{ output: request.text }]);
     return ok(undefined);
@@ -450,8 +452,8 @@ function isText(value: unknown): boolean {
   return typeof value === 'string' && value.length <= MAX_HARNESS_TEXT_LENGTH;
 }
 
-function fail(code: FailureCode, message: string): Result<never> {
-  return err(failure(code, message));
+function fail(code: FailureCode, message: string, details: Readonly<Record<string, string>> = {}): Result<never> {
+  return err(failure(code, message, details));
 }
 
 // An unbounded single-consumer queue; the test scripts are short.

@@ -86,3 +86,7 @@ test('documents may share a security scheme name only for the same scheme', () =
 test('the control-plane document is generated with the other contract documents', () => {
   assert.ok(CONTRACT_DOCUMENTS.some(({ kind, path }) => kind === 'openapi' && path === 'packages/contracts/documents/control-plane.openapi.json'));
 });
+
+test('the terminal frames are generated with the other contract documents', () => {
+  assert.ok(CONTRACT_DOCUMENTS.some(({ kind, path }) => kind === 'asyncapi' && path === 'packages/contracts/documents/terminal.asyncapi.json'));
+});

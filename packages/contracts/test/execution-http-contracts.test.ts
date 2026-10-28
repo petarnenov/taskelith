@@ -94,9 +94,9 @@ function refusal(reason: string) {
   return { code: 'precondition-failed', message: `refused: ${reason}`, details: { reason } };
 }
 
-test('the execution document is OpenAPI 3.1.0 at version 0.7.0 with the 9c operations', () => {
+test('the execution document is OpenAPI 3.1.0 at version 0.8.0 with the 9c operations', () => {
   assert.equal(EXECUTION.openapi, '3.1.0');
-  assert.equal(EXECUTION.info.version, '0.7.0');
+  assert.equal(EXECUTION.info.version, '0.8.0');
   for (const reference of referencesIn(EXECUTION)) assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
   for (const id of NEW_OPERATIONS) operation(id);
   assert.equal(operation('retireEvidence').method, 'delete');

@@ -12,6 +12,7 @@ import {
   MAX_HARNESS_TEXT_LENGTH,
   PERMISSION_DECISIONS,
   REQUIRED_HARNESS_CAPABILITIES,
+  RUNNING_TURN_DETAIL,
   SESSION_END_REASONS,
   SUBSCRIPTION_MECHANISMS,
   ScriptedAgentHarness,
@@ -327,6 +328,21 @@ test('the scripted harness keeps its own rules outside the suite', async () => {
   await harness.exitHarness('unknown');
 });
 
+test('a refused submission names the running turn, so a host can tell its own turn runs', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session, events } = await started(harness);
+  assert.equal(RUNNING_TURN_DETAIL, 'runningTurnId');
+  assert.equal(code(await harness.submitTurn({ ...session, turnId: 't1', text: 'long' })), 'ok');
+  const again = await harness.submitTurn({ ...session, turnId: 't1', text: 'long' });
+  const second = await harness.submitTurn({ ...session, turnId: 't2', text: 'recall' });
+  assert.deepEqual(!again.ok && [again.error.code, again.error.details], ['conflict', { runningTurnId: 't1' }]);
+  assert.deepEqual(!second.ok && [second.error.code, second.error.details], ['precondition-failed', { runningTurnId: 't1' }]);
+  assert.equal(code(await harness.interrupt({ ...session, turnId: 't1' })), 'ok');
+  while ((await events.next()).value?.kind !== 'turn-ended');
+  const idle = await harness.submitTurn({ ...session, turnId: 't1', text: 'long' });
+  assert.deepEqual(!idle.ok && [idle.error.code, idle.error.details], ['conflict', {}]);
+});
+
 test('the scripted harness ends an interrupted turn as interrupted, even at once', async () => {
   const harness = new ScriptedAgentHarness({ ...OPTIONS, script: { quick: [{ output: 'done' }] } });
   const { session, events } = await started(harness);
@@ -549,6 +565,13 @@ class WrongCodeHarness extends ScriptedAgentHarness {
   override async submitTurn(request: TurnRequest): Promise<Result<void>> {
     const result = await super.submitTurn(request);
     return !result.ok && result.error.code === 'conflict' ? err(failure('invalid', 'x')) : result;
+  }
+}
+
+class AnonymousRunningTurnHarness extends ScriptedAgentHarness {
+  override async submitTurn(request: TurnRequest): Promise<Result<void>> {
+    const result = await super.submitTurn(request);
+    return result.ok ? result : err(failure(result.error.code, result.error.message));
   }
 }
 
@@ -778,6 +801,7 @@ test('the suite reports each broken rule', async () => {
     ['no Result', new NoResultHarness(OPTIONS), 'result'],
     ['hanging operation', new HangingHarness(OPTIONS), 'timeout'],
     ['wrong failure code', new WrongCodeHarness(OPTIONS), 'outcome'],
+    ['running turn not named', new AnonymousRunningTurnHarness(OPTIONS), 'outcome'],
     ['changed native session ID', new ChangedSessionIdHarness(OPTIONS), 'result'],
     ['stray events', new StrayEventHarness(OPTIONS), 'event'],
     ['replay after resume', new ReplayHarness(OPTIONS), 'event'],
