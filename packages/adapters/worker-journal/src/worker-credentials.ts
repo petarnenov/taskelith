@@ -43,9 +43,14 @@ export function writeCredentials(paths: WorkerPaths, enrollment: WorkerEnrollmen
 
 // The identity's credentials, read only through safe control-record paths.
 export function readWorkerCredentials(paths: WorkerPaths, identity: WorkerIdentity): Result<WorkerCredentials> {
-  const controlPlane = readCredential(paths, identity.credentials.controlPlane);
+  return readCredentialFiles(paths, identity.credentials);
+}
+
+// The credentials of one generation's references, as the identity names them.
+export function readCredentialFiles(paths: WorkerPaths, references: CredentialReferences): Result<WorkerCredentials> {
+  const controlPlane = readCredential(paths, references.controlPlane);
   if (!controlPlane.ok) return controlPlane;
-  const broker = readCredential(paths, identity.credentials.broker);
+  const broker = readCredential(paths, references.broker);
   return broker.ok ? ok(Object.freeze({ controlPlane: controlPlane.value, broker: broker.value })) : broker;
 }
 
@@ -66,7 +71,7 @@ export function readInstallationCaPin(paths: WorkerPaths): Result<string> {
   return readControlFile(paths, paths.installationCa, 'the pinned installation CA', missing);
 }
 
-function readControlFile(paths: WorkerPaths, path: string, name: string, remedy?: string): Result<string> {
+export function readControlFile(paths: WorkerPaths, path: string, name: string, remedy?: string): Result<string> {
   const safe = checkControlPath(paths.dataRoot, path, ownerUid());
   if (!safe.ok) return safe;
   if (!existsSync(path)) {

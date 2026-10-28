@@ -4,6 +4,7 @@ import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import {
   parseInstallationId,
   type Enrollment,
+  type CredentialRenewalClient,
   type EnrollmentClient,
   type InstallationCaSource,
   type StartFacts,
@@ -25,7 +26,6 @@ import {
   openWorkerRoot,
   readInstallationCaPin,
   readVolumeSpace,
-  readWorkerCredentials,
   truncateBufferedLogs,
   workerPaths,
   type JournalClock,
@@ -38,7 +38,9 @@ import {
 } from '@taskelith/worker-journal';
 import { AdmissionPressure, shedBufferedLogs } from './admission-pressure.js';
 import { BrokerSession, type BrokerLink } from './broker-session.js';
+import { BrokerDial } from './broker-dial.js';
 import { CommandIntake } from './command-intake.js';
+import { CredentialRotation } from './credential-rotation.js';
 import type { DaemonOverheadSource } from './daemon-overhead.js';
 import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
@@ -54,6 +56,8 @@ export interface WorkerDependencies {
   // Reads the CA before the token is sent; enrollment then pins it.
   readonly installationCa: InstallationCaSource;
   readonly enrollment: (installationCa: string) => EnrollmentClient;
+  // Renews and confirms the worker's credential generations.
+  readonly renewal: (installationCa: string) => CredentialRenewalClient;
   readonly connect: (endpoint: WorkerTransportEndpoint) => Promise<Result<TransportConnection>>;
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
@@ -76,9 +80,9 @@ export interface WorkerDependencies {
 }
 
 // What launches need beyond the journal: the launch authority with the
-// worker's control-plane credential and pinned CA, and the supervision.
+// worker's current bearer and pinned CA, and the supervision.
 export interface LaunchingDependencies {
-  readonly authority: (credential: string, installationCa: string) => LaunchAuthorityClient;
+  readonly authority: (bearer: () => string, installationCa: string) => LaunchAuthorityClient;
   readonly host: (settings: WorkerSettings, executions: string) => Result<LaunchHost>;
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly draw: () => number;
@@ -197,10 +201,14 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId, installati
 // broker's work runs while a connection is up.
 async function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {
   const { identity } = root;
-  const credentials = readWorkerCredentials(root.paths, identity);
-  if (!credentials.ok) return credentials;
   const installationCa = readInstallationCaPin(root.paths);
   if (!installationCa.ok) return installationCa;
+  let session: BrokerSession<TransportLink> | undefined;
+  const rotation = CredentialRotation.open({
+    paths: root.paths, identity, renewal: dependencies.renewal(installationCa.value), redial: () => session?.redial(),
+    sleep: dependencies.sleep, draw: dependencies.draw, ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+  });
+  if (!rotation.ok) return rotation;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;
   const subjects = workerSubjects(address.value, identity.workerId);
@@ -210,11 +218,11 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const logger = dependencies.logger ?? SILENT_LOGGER;
   const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: tasks.signal, logger });
   const pressure = admissionPressure(settings, dependencies, root);
-  const credential = credentials.value.controlPlane;
   const selfCheck = await runSelfCheck(dependencies.admissionChecks, startFacts(settings));
   if (!selfCheck.ok) return selfCheck;
   const selfCheckFailed = hasFailedCheck(selfCheck.value);
-  const launcher = launchOrchestrator({ settings, dependencies, root, credential, installationCa: installationCa.value, contact, pressure, selfCheckFailed });
+  const bearer = rotation.value.bearer;
+  const launcher = launchOrchestrator({ settings, dependencies, root, bearer, installationCa: installationCa.value, contact, pressure, selfCheckFailed });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
@@ -222,11 +230,12 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   if (!pressured.ok) return pressured;
   const reported = root.journal.recordSelfCheck(selfCheck.value);
   if (!reported.ok) return reported;
-  const session = brokerSession({
-    settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
+  session = brokerSession({
+    settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, rotation: rotation.value,
     installationCa: installationCa.value, selfCheckFailed, ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
   tasks.add(session.run(tasks.signal));
+  tasks.add(rotation.value.run(tasks.signal));
   tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
   tasks.add(dependencies.daemon.watch(tasks.signal));
   if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
@@ -264,7 +273,7 @@ interface OrchestratorContext {
   readonly settings: WorkerSettings;
   readonly dependencies: WorkerDependencies;
   readonly root: WorkerRoot;
-  readonly credential: string;
+  readonly bearer: () => string;
   readonly installationCa: string;
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
@@ -274,7 +283,7 @@ interface OrchestratorContext {
 // The host reconciles and removes records with or without a launch
 // command; only a command and a passed self-check add the launch authority.
 function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
-  const { settings, dependencies, root, credential, installationCa, contact, pressure, selfCheckFailed } = context;
+  const { settings, dependencies, root, bearer, installationCa, contact, pressure, selfCheckFailed } = context;
   const { launching } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
@@ -284,7 +293,7 @@ function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestr
   const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
     journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
-    ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(credential, installationCa) }),
+    ...(settings.launch === undefined || selfCheckFailed ? {} : { authority: launching.authority(bearer, installationCa) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(containments === undefined ? {} : { containments }),
     ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
@@ -315,7 +324,7 @@ interface SessionContext {
   readonly subjects: WorkerSubjects;
   readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
-  readonly broker: string;
+  readonly rotation: CredentialRotation;
   readonly installationCa: string;
   readonly selfCheckFailed: boolean;
   readonly launcher?: LaunchOrchestrator;
@@ -323,18 +332,22 @@ interface SessionContext {
 
 interface TransportLink extends BrokerLink {
   readonly transport: TransportConnection;
+  readonly generation: number;
 }
 
 function brokerSession(context: SessionContext): BrokerSession<TransportLink> {
-  const { settings, dependencies, root, address, subjects, contact, broker, installationCa } = context;
+  const { settings, dependencies, root, address, subjects, contact, rotation, installationCa } = context;
   const { sleep, draw, limits } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   // The pinned CA is the broker TLS's only CA, never the system's.
-  const endpoint = { server: settings.natsUrl, creds: broker, address, workerId: root.identity.workerId, tls: { ca: installationCa } };
+  const endpoint = { server: settings.natsUrl, address, workerId: root.identity.workerId, tls: { ca: installationCa } };
+  const dial = new BrokerDial({ candidates: () => rotation.brokerCandidates(), dial: (creds) => dependencies.connect({ ...endpoint, creds }), logger });
   return new BrokerSession<TransportLink>({
     connect: async () => {
-      const connected = await dependencies.connect(endpoint);
-      return connected.ok ? ok(transportLink(connected.value)) : connected;
+      const connected = await dial.connect();
+      if (!connected.ok) return connected;
+      rotation.linked(connected.value.generation);
+      return ok(transportLink(connected.value.link, connected.value.generation));
     },
     serve: (link, signal) => serveConnection(context, link.transport, signal),
     linkUp: (link, signal) => runTogether(signal, [
@@ -348,8 +361,8 @@ function brokerSession(context: SessionContext): BrokerSession<TransportLink> {
   });
 }
 
-function transportLink(transport: TransportConnection): TransportLink {
-  return { transport, statuses: transport.connection.status(), close: () => transport.close() };
+function transportLink(transport: TransportConnection, generation: number): TransportLink {
+  return { transport, generation, statuses: transport.connection.status(), close: () => transport.close() };
 }
 
 function observationPublishing(context: SessionContext, transport: TransportConnection) {
@@ -368,7 +381,7 @@ async function serveConnection(context: SessionContext, transport: TransportConn
   const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
     ...publishing, capacity: settings.capacity, pressure: context.pressure, selfCheckFailed: context.selfCheckFailed, newReportId: randomUUID,
-    ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
+    onRotationRequested: context.rotation.requested, ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
   const consumer = workerCommandConsumer(transport.js, address, root.identity.workerId, intake.handle, options);

@@ -6,7 +6,12 @@ import { JsonLinesLogSink, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { Logger } from '@taskelith/observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
-import { HttpEnrollmentClient, HttpInstallationCaSource, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import {
+  HttpCredentialRenewalClient,
+  HttpEnrollmentClient,
+  HttpInstallationCaSource,
+  HttpLaunchAuthorityClient,
+} from '@taskelith/worker-control-plane-client';
 import { ProcessDaemonOverhead } from './daemon-overhead.js';
 import { linuxContainmentCheck } from './linux-containment-check.js';
 import { supervisionHost } from './execution-supervision.js';
@@ -33,6 +38,7 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
   return {
     installationCa: new HttpInstallationCaSource(address),
     enrollment: (installationCa) => new HttpEnrollmentClient({ ...address, installationCa }),
+    renewal: (installationCa) => new HttpCredentialRenewalClient({ ...address, installationCa }),
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
@@ -54,7 +60,7 @@ function supervisorVersion(): string {
 function productionLaunching(settings: WorkerSettings, logger: Logger): LaunchingDependencies {
   const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
-    authority: (credential, installationCa) => new HttpLaunchAuthorityClient({ ...endpoint, credential, installationCa }),
+    authority: (bearer, installationCa) => new HttpLaunchAuthorityClient({ ...endpoint, bearer, installationCa }),
     host: (hostSettings, executions) => supervisionHost(hostSettings, executions, supervisorVersion()),
     sleep,
     draw: Math.random,
@@ -122,7 +128,7 @@ export async function serveUntilStopped(worker: RunningWorker, host: ServiceProc
   let stopping: Promise<void> | undefined;
   const shutdown = () => {
     stopping ??= worker.stop().catch((error: unknown) => {
-      write(JSON.stringify({ error: { code: 'internal', message: redactSecrets(`stopping the worker failed: ${String(error)}`) } }));
+      write(stopFailureLine(error));
       host.exitCode = 1;
     });
   };
@@ -131,6 +137,13 @@ export async function serveUntilStopped(worker: RunningWorker, host: ServiceProc
   shutdown();
   await stopping;
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.off(signal, shutdown);
+}
+
+// A runtime failure, such as `credentials-expired`, keeps its code and
+// reason; anything else is an internal line.
+function stopFailureLine(error: unknown): string {
+  if (isFailure(error)) return JSON.stringify({ error: redactFailure(error) });
+  return internalLine(redactSecrets(`stopping the worker failed: ${String(error)}`));
 }
 
 if (import.meta.main) {

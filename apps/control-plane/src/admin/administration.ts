@@ -12,7 +12,7 @@ import {
   type InitializedInstallation,
   type InstallationIdentity,
   type IssuedCertificate,
-  type RotatedCredentials,
+  type RequestedRotation,
   type WorkerAdmissionSnapshot,
   type WorkerCommandConsumers,
   type WorkerRevocation,
@@ -36,7 +36,7 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import { NodeSecrets, RandomIdentifiers } from '@taskelith/secrets';
-import { LaunchRevokingFleetRegistry } from '../composition/launch-revoking-fleet-registry.js';
+import { RotationNoticingFleetRegistry } from '../composition/rotation-noticing-fleet-registry.js';
 import { ensureBrokerTrust, readBrokerAuthority } from './broker-trust.js';
 import {
   ensureInstallationAuthority,
@@ -164,8 +164,9 @@ export class Administration {
     });
   }
 
-  rotateWorker(operatorSecret: string, workerId: string): Promise<Result<RotatedCredentials>> {
-    return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.rotate(id)));
+  // Requests the next generation; nothing secret is made or printed.
+  rotateWorker(operatorSecret: string, workerId: string, invocation: AdministrativeInvocation): Promise<Result<RequestedRotation>> {
+    return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.requestRotation(id, invocation)));
   }
 
   revokeWorker(operatorSecret: string, workerId: string): Promise<Result<WorkerRevocation>> {
@@ -221,7 +222,7 @@ export class Administration {
     const service = new EnrollmentService({
       installation: identity.value,
       serverProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
-      registry: new LaunchRevokingFleetRegistry(this.#database),
+      registry: new RotationNoticingFleetRegistry(this.#database),
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),
       broker: new NatsBrokerCredentials(authority.value, system.value.connection),

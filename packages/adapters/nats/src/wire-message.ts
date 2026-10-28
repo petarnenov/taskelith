@@ -18,6 +18,7 @@ export const COMMAND_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.free
 export const COMMAND_SUBJECT_NOTICES: Readonly<Record<string, SchemaName>> = Object.freeze({
   'execution.observations.confirmed': 'ObservationsConfirmed',
   'worker.inventory.requested': 'InventoryRequested',
+  'worker.credentials.rotation-requested': 'CredentialRotationRequested',
 });
 
 export const OBSERVATION_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.freeze({

@@ -4,7 +4,11 @@ export {
   EnrollmentService,
   type Enrollment,
   type EnrollmentServiceDependencies,
-  type RotatedCredentials,
+  type ConfirmedCredentials,
+  type CredentialRenewalRequest,
+  type RenewedCredentials,
+  type RequestedRotation,
+  type RotationInvocation,
   type WorkerRevocation,
 } from './application/enrollment-service.js';
 export {
@@ -14,13 +18,17 @@ export {
 } from './application/installation-service.js';
 export {
   commonProtocolVersion,
+  confirmCredentials,
   credentialGenerations,
   expiredPredecessor,
   hostMismatch,
   isExpired,
+  renewCredentials,
+  requestRotation,
   revocationOf,
-  rotateCredentials,
+  unrenewedPastDeadline,
   validGenerations,
+  type Confirmation,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
@@ -30,13 +38,25 @@ export {
   type HostConstraints,
   type HostPlatform,
   type ProtocolWindow,
-  type Rotation,
+  type RotationConflict,
+  type RotationRequest,
   type WorkerCapacity,
   type WorkerCredentials,
   type WorkerHost,
   type WorkerPrincipal,
 } from './domain/enrollment.js';
 export { FLEET_LIMITS, type FleetLimits } from './domain/fleet-limits.js';
+export { CONTROL_PLANE_ACTOR, WORKER_ACTOR, type RotationExpiry } from './domain/credential-audit.js';
+export {
+  confirmationStep,
+  predecessorExpiryStep,
+  renewalStep,
+  requestStep,
+  rotationConflict,
+  rotationExpiryStep,
+  type RotationOrderFacts,
+  type RotationStep,
+} from './domain/credential-rotation.js';
 export {
   FIRST_RECOVERY_EPOCH,
   installationIdentity,
@@ -45,7 +65,8 @@ export {
   parseWorkerId,
   type InstallationIdentity,
 } from './domain/installation.js';
-export type { BrokerCredentials, IssuedBrokerCredential } from './ports/broker-credentials.js';
+export type { BrokerCredentials, IssuedBrokerCredential, SignedBrokerUser } from './ports/broker-credentials.js';
+export type { CredentialRenewalClient, RenewalAnswer, RenewalMaterial } from './ports/credential-renewal-client.js';
 export type { WorkerCommandConsumers } from './ports/command-consumers.js';
 export {
   CERTIFICATE_ISSUER_CONFORMANCE,
@@ -54,7 +75,7 @@ export {
 } from './ports/certificate-issuer-conformance.js';
 export { FLEET_REGISTRY_CONFORMANCE, INSTALLATION_TABLE_CONFORMANCE, fleetToken, fleetWorker } from './ports/fleet-conformance.js';
 export type { EnrollmentClient, InstallationCa, InstallationCaSource } from './ports/enrollment-client.js';
-export type { FleetRegistry } from './ports/fleet-registry.js';
+export type { FleetRegistry, RotationOrder } from './ports/fleet-registry.js';
 export type { IdentifierSource } from './ports/identifier-source.js';
 export type { InstallationRecord, InstallationTable } from './ports/installation-records.js';
 export {

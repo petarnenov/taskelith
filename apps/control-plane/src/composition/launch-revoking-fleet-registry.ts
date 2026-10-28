@@ -23,4 +23,16 @@ export class LaunchRevokingFleetRegistry extends CommittingFleetRegistry {
       return releaseRevokedWorker(tx, workerId, correlationId.value);
     });
   }
+
+  // A rotation past its deadline without a renewal revokes the worker.
+  override expireRotation(workerId: WorkerId, now: Instant): Promise<Result<boolean>> {
+    const correlationId = parseIdentifier('CorrelationId', `c-${randomUUID()}`);
+    if (!correlationId.ok) return Promise.resolve(correlationId);
+    return this.#database.transaction(async (tx) => {
+      const revoked = await tx.fleet.expireRotation(workerId, now);
+      if (!revoked.ok || !revoked.value) return revoked;
+      const released = await releaseRevokedWorker(tx, workerId, correlationId.value);
+      return released.ok ? revoked : released;
+    });
+  }
 }

@@ -1,10 +1,11 @@
 export { InMemoryOperatorCredentials } from './adapters/in-memory-operator-credentials.js';
 export {
   OperatorCredentialService,
+  checkAdministrativeInvocation,
   type AdministrativeInvocation,
   type OperatorCredentialServiceDependencies,
 } from './application/operator-credential-service.js';
-export { AUDIT_TEXT_MAX_LENGTH, type AuditEvent, type AuditEventKind, type OperatorCredential } from './domain/operator-credential.js';
+export { AUDIT_TEXT_MAX_LENGTH, OPERATOR_AUDIT_SUBJECT, type AuditEvent, type AuditEventKind, type OperatorCredential } from './domain/operator-credential.js';
 export { OPERATOR_CREDENTIALS_CONFORMANCE } from './ports/access-conformance.js';
 export type { OperatorCredentials } from './ports/operator-credentials.js';
 export type { SecretHash } from './domain/secret-hash.js';

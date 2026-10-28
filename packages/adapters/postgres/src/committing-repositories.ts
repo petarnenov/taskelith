@@ -27,6 +27,8 @@ import type {
   FleetRegistry,
   InstallationIdentity,
   InstallationTable,
+  RotationOrder,
+  RotationRequest,
 } from '@taskelith/fleet';
 import type {
   AdmissionId,
@@ -244,8 +246,16 @@ export class CommittingFleetRegistry implements FleetRegistry {
     return this.#database.readOnly((tx) => tx.fleet.workerByCredentialHash(hash));
   }
 
-  rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
-    return this.#database.transaction((tx) => tx.fleet.rotate(workerId, expectedGeneration, next, validUntil, at));
+  requestRotation(workerId: WorkerId, order: RotationOrder): Promise<Result<RotationRequest>> {
+    return this.#database.transaction((tx) => tx.fleet.requestRotation(workerId, order));
+  }
+
+  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>> {
+    return this.#database.transaction((tx) => tx.fleet.renew(workerId, next, brokerUserJwt, at));
+  }
+
+  confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>> {
+    return this.#database.transaction((tx) => tx.fleet.confirm(workerId, generation, at));
   }
 
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
@@ -254,6 +264,18 @@ export class CommittingFleetRegistry implements FleetRegistry {
 
   expirePredecessors(now: Instant): Promise<Result<number>> {
     return this.#database.transaction((tx) => tx.fleet.expirePredecessors(now));
+  }
+
+  unrenewedRotations(now: Instant): Promise<Result<readonly WorkerId[]>> {
+    return this.#database.readOnly((tx) => tx.fleet.unrenewedRotations(now));
+  }
+
+  expireRotation(workerId: WorkerId, now: Instant): Promise<Result<boolean>> {
+    return this.#database.transaction((tx) => tx.fleet.expireRotation(workerId, now));
+  }
+
+  credentialAuditTrail(workerId: WorkerId): Promise<Result<readonly AuditEvent[]>> {
+    return this.#database.readOnly((tx) => tx.fleet.credentialAuditTrail(workerId));
   }
 
   publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {

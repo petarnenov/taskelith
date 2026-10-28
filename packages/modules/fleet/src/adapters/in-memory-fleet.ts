@@ -1,19 +1,27 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
-import type { SecretHash } from '@taskelith/access';
+import type { AuditEvent, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import {
+  confirmationStep,
+  predecessorExpiryStep,
+  renewalStep,
+  requestStep,
+  rotationExpiryStep,
+  type RotationStep,
+} from '../domain/credential-rotation.js';
+import {
   credentialGenerations,
-  expiredPredecessor,
   isExpired,
   revocationOf,
-  rotateCredentials,
+  unrenewedPastDeadline,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
   type EnrollmentToken,
+  type RotationRequest,
 } from '../domain/enrollment.js';
 import type { InstallationIdentity } from '../domain/installation.js';
-import type { FleetRegistry } from '../ports/fleet-registry.js';
+import type { FleetRegistry, RotationOrder } from '../ports/fleet-registry.js';
 import type { InstallationRecord, InstallationTable } from '../ports/installation-records.js';
 
 // Each method checks and writes without awaiting, so that concurrent writers
@@ -22,6 +30,7 @@ export class InMemoryFleetRegistry implements FleetRegistry {
   readonly #tokens = new Map<SecretHash, { token: EnrollmentToken; used: boolean }>();
   readonly #workers = new Map<WorkerId, EnrolledWorker>();
   readonly #revocations = new Map<string, { revocation: BrokerRevocation; published: boolean }>();
+  readonly #audit: AuditEvent[] = [];
   readonly #now: () => Instant;
   #publishing: Promise<unknown> = Promise.resolve();
 
@@ -88,17 +97,30 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return settle(ok(holders[0]));
   }
 
-  rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
-    const worker = this.#workers.get(workerId);
-    if (worker === undefined) return settle(err(failure('not-found', `no worker ${workerId}`)));
-    if (worker.revokedAt !== undefined) return settle(err(failure('forbidden', `worker ${workerId} is revoked`)));
-    if (worker.credentials.current.generation !== expectedGeneration) {
-      return settle(err(failure('conflict', `the current generation is ${worker.credentials.current.generation}`)));
-    }
-    const rotation = rotateCredentials(worker.credentials, next, validUntil);
-    if (rotation.dropped !== undefined) this.#record([revocationOf(rotation.dropped, at)]);
-    this.#workers.set(workerId, Object.freeze({ ...worker, credentials: rotation.credentials }));
-    return settle(ok(undefined));
+  requestRotation(workerId: WorkerId, order: RotationOrder): Promise<Result<RotationRequest>> {
+    const worker = this.#activeWorker(workerId);
+    if (!worker.ok) return settle(worker);
+    const step = requestStep(worker.value, order);
+    this.#apply(step);
+    return settle(ok(step.request));
+  }
+
+  renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, at: Instant): Promise<Result<RotationRequest>> {
+    const worker = this.#activeWorker(workerId);
+    if (!worker.ok) return settle(worker);
+    const step = renewalStep(worker.value, next, brokerUserJwt, at);
+    if (!step.ok) return settle(step);
+    this.#apply(step.value);
+    return settle(ok(step.value.request));
+  }
+
+  confirm(workerId: WorkerId, generation: number, at: Instant): Promise<Result<boolean>> {
+    const worker = this.#activeWorker(workerId);
+    if (!worker.ok) return settle(worker);
+    const step = confirmationStep(worker.value, generation, at);
+    if (!step.ok) return settle(step);
+    this.#apply(step.value);
+    return settle(ok(step.value.dropped));
   }
 
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
@@ -113,13 +135,30 @@ export class InMemoryFleetRegistry implements FleetRegistry {
   expirePredecessors(now: Instant): Promise<Result<number>> {
     let expired = 0;
     for (const worker of this.#workers.values()) {
-      const previous = expiredPredecessor(worker.credentials, now);
-      if (previous === undefined) continue;
-      this.#record([revocationOf(previous, previous.validUntil)]);
-      this.#workers.set(worker.workerId, Object.freeze({ ...worker, credentials: Object.freeze({ current: worker.credentials.current }) }));
+      const step = predecessorExpiryStep(worker, now);
+      if (step === undefined) continue;
+      this.#apply(step);
       expired += 1;
     }
     return settle(ok(expired));
+  }
+
+  unrenewedRotations(now: Instant): Promise<Result<readonly WorkerId[]>> {
+    const due = [...this.#workers.values()].filter((worker) => worker.revokedAt === undefined && unrenewedPastDeadline(worker.credentials, now));
+    return settle(ok(Object.freeze(due.map((worker) => worker.workerId).sort())));
+  }
+
+  expireRotation(workerId: WorkerId, now: Instant): Promise<Result<boolean>> {
+    const worker = this.#workers.get(workerId);
+    if (worker === undefined) return settle(err(failure('not-found', `no worker ${workerId} is enrolled`)));
+    const step = rotationExpiryStep(worker, now);
+    if (step === undefined) return settle(ok(false));
+    this.#apply(step);
+    return settle(ok(true));
+  }
+
+  credentialAuditTrail(workerId: WorkerId): Promise<Result<readonly AuditEvent[]>> {
+    return settle(ok(Object.freeze(this.#audit.filter((event) => event.subject === workerId))));
   }
 
   publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
@@ -135,6 +174,18 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     if (!pushed.ok) return pushed;
     for (const entry of unpublished) entry.published = true;
     return ok(unpublished.length);
+  }
+
+  #activeWorker(workerId: WorkerId): Result<EnrolledWorker> {
+    const worker = this.#workers.get(workerId);
+    if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
+    return worker.revokedAt === undefined ? ok(worker) : err(failure('forbidden', `worker ${workerId} is revoked`));
+  }
+
+  #apply(step: RotationStep): void {
+    this.#record(step.revocations);
+    if (step.event !== undefined) this.#audit.push(step.event);
+    this.#workers.set(step.worker.workerId, step.worker);
   }
 
   #record(revocations: readonly BrokerRevocation[]): void {

@@ -1,6 +1,7 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
-import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
+import type { ConfirmedCredentials, CredentialRenewalRequest, Enrollment, EnrollmentRequest, RenewedCredentials, WorkerPrincipal } from '@taskelith/fleet';
+import type { SecretHash } from '@taskelith/access';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
 import type { DelegationService } from '../application/delegation-service.js';
@@ -23,6 +24,8 @@ export interface ApiServices {
   readonly enrollment: {
     enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
     authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>>;
+    renew(principal: WorkerPrincipal, request: CredentialRenewalRequest): Promise<Result<RenewedCredentials>>;
+    confirm(principal: WorkerPrincipal, generation: number): Promise<Result<ConfirmedCredentials>>;
   };
   readonly launches: {
     authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
@@ -75,6 +78,10 @@ export class ControlPlaneApi implements ApiHandlers {
         return ok({ certificate: this.#services.installationCa });
       case 'enrollWorker':
         return this.#enroll(bearer, request.body as HttpSchemas['EnrollmentRequest']);
+      case 'renewWorkerCredentials':
+        return this.#renew(request);
+      case 'confirmWorkerCredentials':
+        return this.#confirm(request);
       case 'authorizeLaunch':
         return this.#authorizeLaunch(request);
       case 'listQuarantine':
@@ -99,6 +106,25 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!enrolled.ok) return enrolled;
     const { installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials } = enrolled.value;
     return ok({ installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials });
+  }
+
+  // The schema admits only the public key and a lowercase SHA-256.
+  async #renew({ worker, body }: ApiRequest): Promise<Result<HttpSchemas['CredentialRenewal']>> {
+    if (worker === undefined) return err(failure('internal', 'renewWorkerCredentials reached its handler without a worker'));
+    const { credentialGeneration, brokerUserPublicKey, controlPlaneSecretSha256 } = body as HttpSchemas['CredentialRenewalRequest'];
+    const renewed = await this.#services.enrollment.renew(worker, {
+      credentialGeneration, brokerUserPublicKey, controlPlaneSecretSha256: controlPlaneSecretSha256 as SecretHash,
+    });
+    if (!renewed.ok) return renewed;
+    const { brokerUserJwt, deadline } = renewed.value;
+    return ok({ credentialGeneration: renewed.value.credentialGeneration, brokerUserJwt, deadline });
+  }
+
+  async #confirm({ worker, body }: ApiRequest): Promise<Result<HttpSchemas['CredentialConfirmation']>> {
+    if (worker === undefined) return err(failure('internal', 'confirmWorkerCredentials reached its handler without a worker'));
+    const { credentialGeneration } = body as HttpSchemas['CredentialConfirmationRequest'];
+    const confirmed = await this.#services.enrollment.confirm(worker, credentialGeneration);
+    return confirmed.ok ? ok({ ...confirmed.value }) : confirmed;
   }
 
   async #authorizeLaunch(request: ApiRequest): Promise<Result<HttpSchemas['LaunchAuthorizationOutcome']>> {

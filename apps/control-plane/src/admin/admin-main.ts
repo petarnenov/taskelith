@@ -14,7 +14,8 @@ export const ADMIN_USAGE = [
   '  reset-operator-credential --actor WHO --reason WHY',
   '  issue-installation-certificates',
   '  issue-enrollment-token [--platform linux|darwin] [--architecture x64|arm64] [--hostname NAME]',
-  '  rotate-worker WORKER_ID | revoke-worker WORKER_ID | expire-grace-windows',
+  '  rotate-worker WORKER_ID --actor WHO --reason WHY',
+  '  revoke-worker WORKER_ID | expire-grace-windows',
   '  worker-admission',
   'The last five read the operator credential from TASKELITH_OPERATOR_TOKEN.',
 ].join('\n');
@@ -48,7 +49,7 @@ async function runCommand(command: Command, io: AdminIo): Promise<number> {
     const outcome = await run(opened.value, command, io.environment);
     if (!outcome.ok) return fail(io, outcome.error);
     io.write(JSON.stringify(outcome.value));
-    return isPartial(outcome.value) ? 1 : 0;
+    return 0;
   } finally {
     await opened.value.close();
   }
@@ -120,9 +121,7 @@ async function run(admin: Administration, command: Command, environment: Environ
     case 'issue-enrollment-token':
       return admin.issueEnrollmentToken(operator, constraints(command.values));
     case 'rotate-worker':
-      return mapped(await admin.rotateWorker(operator, command.worker!), (rotated) => rotated.revocationsPublished
-        ? rotated
-        : { ...rotated, retry: 'run expire-grace-windows to publish the pending revocation' });
+      return admin.rotateWorker(operator, command.worker!, invocation);
     case 'revoke-worker':
       return mapped(await admin.revokeWorker(operator, command.worker!), (revocation) => revocation.commandConsumerRemoved
         ? { revoked: command.worker }
@@ -132,12 +131,6 @@ async function run(admin: Administration, command: Command, environment: Environ
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }
-}
-
-// A committed rotation whose dropped broker user the broker does not know
-// yet: its secrets are printed, and the status asks for a retry.
-function isPartial(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && (value as { revocationsPublished?: unknown }).revocationsPublished === false;
 }
 
 // The workers view with each detail redacted again, since a worker wrote

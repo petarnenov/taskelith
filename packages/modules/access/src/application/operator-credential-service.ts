@@ -1,6 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
-import { AUDIT_TEXT_MAX_LENGTH, type AuditEventKind } from '../domain/operator-credential.js';
+import { AUDIT_TEXT_MAX_LENGTH, OPERATOR_AUDIT_SUBJECT, type AuditEventKind } from '../domain/operator-credential.js';
 import type { OperatorCredentials } from '../ports/operator-credentials.js';
 import type { Secrets } from '../ports/secrets.js';
 
@@ -26,7 +26,7 @@ export class OperatorCredentialService {
   }
 
   async bootstrap(invocation: AdministrativeInvocation): Promise<Result<string>> {
-    const checked = checkInvocation(invocation);
+    const checked = checkAdministrativeInvocation(invocation);
     if (!checked.ok) return checked;
     const current = await this.#deps.credentials.current();
     if (!current.ok) return current;
@@ -37,7 +37,7 @@ export class OperatorCredentialService {
   // Replaces the credential; it changes nothing else, so it never lifts a
   // recovery-epoch quarantine (trust model section 2).
   async reset(invocation: AdministrativeInvocation): Promise<Result<string>> {
-    const checked = checkInvocation(invocation);
+    const checked = checkAdministrativeInvocation(invocation);
     if (!checked.ok) return checked;
     const current = await this.#deps.credentials.current();
     if (!current.ok) return current;
@@ -60,13 +60,14 @@ export class OperatorCredentialService {
     const occurredAt = this.#deps.clock.now();
     const installed = await this.#deps.credentials.install(
       { generation, hash: issued.hash, issuedAt: occurredAt },
-      { kind, generation, actor: invocation.actor, reason: invocation.reason, occurredAt },
+      { kind, subject: OPERATOR_AUDIT_SUBJECT, generation, actor: invocation.actor, reason: invocation.reason, occurredAt },
     );
     return installed.ok ? ok(issued.secret) : installed;
   }
 }
 
-function checkInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
+// An audited command's actor and reason, each 1 to 512 characters.
+export function checkAdministrativeInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
   for (const [name, text] of [['actor', actor], ['reason', reason]] as const) {
     if (text.trim() === '' || text.length > AUDIT_TEXT_MAX_LENGTH) {
       return err(failure('invalid', `the ${name} must be 1-${AUDIT_TEXT_MAX_LENGTH} characters`, { field: name }));
