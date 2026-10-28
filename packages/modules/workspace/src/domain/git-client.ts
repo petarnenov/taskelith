@@ -24,6 +24,8 @@ export const GIT_BUILT_ENVIRONMENT = Object.freeze({
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_TERMINAL_PROMPT: '0',
+  // No replace ref an agent made changes the objects that Git reads.
+  GIT_NO_REPLACE_OBJECTS: '1',
 });
 
 // Command-scope settings of every Git process, in this order; a process
