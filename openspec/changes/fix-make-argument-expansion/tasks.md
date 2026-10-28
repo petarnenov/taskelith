@@ -15,6 +15,6 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review pass 1 (reviewer A) and its fixes
+- [x] 4.1 Review pass 1 (reviewer A) and its fixes: no findings
 - [ ] 4.2 Review pass 2 (reviewer B) and its fixes
 - [ ] 4.3 Archive the change

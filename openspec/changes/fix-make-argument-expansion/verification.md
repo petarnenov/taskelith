@@ -65,6 +65,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 1 (reviewer A) and pass 2 (reviewer B), as the coordinator assigns them.
+- Review pass 2 (reviewer B) record, and pass 3 if the review process requires it.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
