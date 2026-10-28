@@ -1,6 +1,6 @@
 # Verification: define-session-turn-model
 
-Status: phase 2 developed; independent review pending.
+Status: phase 2 developed; review pass 1 (reviewer A) fixed, pass 2 pending.
 
 ## Scope and source
 
@@ -15,6 +15,7 @@ Status: phase 2 developed; independent review pending.
 - Base: `dev` `1c73e1a7`.
 - Phase 1 commit: `a6acbc51` `docs: design the session turn model`.
 - Phase 2 commits: `d16b3828` `docs: record the delegate decisions of the session turn model`; `a0fbf051` `docs: add the session timeline contract`; `c88e1ada` `test: add the failing session timeline tests`; `7041ebe2` `chore: implement the session timeline domain`; `a72e133d` `chore: define the shared harness values in the execution domain`; and the commit that adds this record.
+- Review pass 1 fixes: `e076bed5` `test: build the session generations inside each test`; `f9d91d1b` `chore: record no entry for empty session output`; `87a5c2af` `chore: make the host the responder of delegation results`; `ff0e2ef5` `test: cover the bounds of every session answer text`; `ba741f9e` `docs: separate recording a session request from persisting it`; and the commit that records the pass.
 
 ## Way of working
 
@@ -37,6 +38,23 @@ On `c88e1ada` (`test: add the failing session timeline tests`), whose session ti
 
 After the implementation (`7041ebe2`), the same command reported `tests 71`, `pass 71`, `fail 0`. One test changed with the implementation: the expired-cursor test of `session-output` appended `'y'` and `'z'` beyond a full window, which drops only one entry, so it asserted the wrong earliest position; it now appends two full chunks.
 
+### Follow-up check after review pass 1
+
+The record above stays as it was; pass 1 finding 3 showed that 24 tests never ran in it. `e076bed5` builds the generations inside each test (`generationStart` in `session-attempts`, `firstTurnEnd` in `session-handoff`). In a scratch directory outside the repository, the tree of `ba741f9e` with `packages/modules/execution/src` replaced by that of `c88e1ada` (the stubs), after `npm run build`, `node --experimental-strip-types --test --test-reporter=tap packages/modules/execution/test/session-<file>.test.ts` reported, each with exit status 1:
+
+| File | Tests | Pass | Fail | Failures |
+| --- | --- | --- | --- | --- |
+| `session-attempts` | 16 | 0 | 16 | 15 `not implemented`; 1 the stubbed parser's `internal` failure |
+| `session-handoff` | 8 | 0 | 8 | 7 `not implemented`; 1 the stubbed parser's `internal` failure |
+| `session-requests` | 24 | 1 | 23 | 18 `not implemented`; 5 the stubbed parser's `internal` failure |
+
+The passing test pins `REQUEST_STATES` and `DELIVERY_STATES`. The four answer bound tests of finding 4 (permission message, input text, delegation summary, delegation ID) are among the failures. Nothing of the scratch directory was committed.
+
+### Fail-before of the pass 1 behavior fixes
+
+- Finding 1: with the new tests of `f9d91d1b` on the domain of `e076bed5` (before the fix), `node --experimental-strip-types --test --test-reporter=tap packages/modules/execution/test/session-output.test.ts` reported `tests 10`, `pass 9`, `fail 1`: "empty output records no entry and takes no position" failed, the 1000 empty appends reaching `lastPosition` 1001. After the fix: `tests 10`, `pass 10`, `fail 0`.
+- Finding 2: with the new tests of `87a5c2af` on the domain of `f9d91d1b` (before the fix), `session-requests.test.ts` reported `tests 21`, `pass 20`, `fail 1`: "only the host returns a delegation result, and the host answers nothing else" failed with `expected a failure`. After the fix, `session-*.test.ts` reported `tests 74`, `pass 74`, `fail 0`.
+
 ## Checks
 
 | Revision | Command | Result |
@@ -51,10 +69,16 @@ After the implementation (`7041ebe2`), the same command reported `tests 71`, `pa
 | `7041ebe2` | `make verify` | Failed: `npm run check:boundaries` reported seven R03 violations (author self-check above) |
 | Working tree that became `a72e133d` | `node --experimental-strip-types --test packages/modules/execution/test/*.test.ts` (after `npm run build`) | `tests 240`, `pass 240`, `fail 0` |
 | Working tree that became `a72e133d` | `make verify` | Passed, exit status 0: `tests 2619`, `suites 45`, `pass 2572`, `fail 0`, `skipped 47`; coverage over all files 99.33% lines, 92.72% branches, 99.00% functions; the new files `harness-values.js` and `identifiers.js` 100, 100, 100 and the session files as in the row above; boundary checks passed; `Totals: 70 passed, 0 failed (70 items)` in OpenSpec validation; every checked link conforms; every active change archives into strictly valid specs; every findings file valid (58 files, 38 pass summary files); packed file allowlist and installed CLI verification passed |
+| Working tree of the pass 1 record, on `ba741f9e` | `node --experimental-strip-types --test --test-reporter=tap packages/modules/execution/test/session-*.test.ts` (after `npm run build`) | `tests 77`, `pass 77`, `fail 0` |
+| Same | Coverage command of the `7041ebe2` row, session files only | Lines, branches, functions: `session-attempts.js` 100, 100, 100; `session-handoff.js` 100, 96.15, 100; `session-output.js` 100, 94.12, 100; `session-records.js` 100, 100, 100; `session-requests.js` 100, 98.36, 100; `session-turns.js` 100, 100, 100 |
+| Same | `npm run openspec -- validate define-session-turn-model --strict` | Change 'define-session-turn-model' is valid |
+| Same | `make findings ARGS="validate"` | Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s) |
+| Same | `make verify` | Passed, exit status 0: `tests 2625`, `suites 45`, `pass 2578`, `fail 0`, `skipped 47`; coverage over all files 99.33% lines, 92.72% branches, 99.00% functions; boundary checks passed; `Totals: 70 passed, 0 failed (70 items)`; every checked link conforms; every active change archives into strictly valid specs; every comment within the rule; every findings file valid; packed file allowlist and installed CLI verification passed |
 
 ## Independent review
 
-Pending. `passes.jsonl` and `findings.jsonl` are empty: no pass has run.
+- Pass 1, reviewer A: Codex `gpt-6.1-sol`, variant `medium`, session `01a1810d-68db-72f2-bb07-f7912fe9652f`; 0 critical, 0 high, 3 medium, 2 low, all fixed ([findings](findings.jsonl), [passes](passes.jsonl)). Finding 1 is design decision 32 and finding 2 decision 33. The findings outside this directory name the capability `execution-model`, the closest existing one, because `make findings` accepts only directories under `openspec/specs` and rejects `session-turn-model` as unknown.
+- Pass 2, reviewer B: pending.
 
 ## Limitations
 
@@ -64,6 +88,6 @@ Pending. `passes.jsonl` and `findings.jsonl` are empty: no pass has run.
 
 ## Remaining gates
 
-- The independent review by reviewers A and B, and `make verify` after its fixes.
+- Review pass 2 by reviewer B and, if needed, pass 3 by reviewer A.
 - Follow-up for the coordinator, outside this change: add item 4 to the handoff owners of the [agent harness port contract](/docs/contracts/agent-harness-port.md) section 4.1 ([design](design.md) source note 2).
 - Integration into dev by the coordinator (single pull request).
