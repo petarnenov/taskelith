@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { chmodSync } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -389,6 +390,34 @@ test('a program still running at the run bound is killed and freed, and the work
     assert.equal(host.launched.length, 1, 'no retry');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('a failure record that cannot be written still kills the overrunning program, and a later reclaim runs it again', { timeout: 30_000 }, async () => {
+  const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
+  const hold = join(holdDirectory, 'hold');
+  await writeFile(hold, '');
+  const host = holdingHost(hold);
+  await withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const attempt = join(git.checkout(FIRST), '..');
+    const mode = await modeOf(attempt);
+    const unwritable = git.reopen({
+      reach: (point) => {
+        if (point === 'WS8.after') chmodSync(attempt, 0o500);
+      },
+    });
+    const reclaimed = await unwritable.reclaim(FIRST).finally(() => chmod(attempt, mode));
+    assert.equal(failed(reclaimed).code, 'unavailable');
+    const containment = host.launched[0]!;
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
+    assert.deepEqual(await readRecord(git), { containment, reclaimFailed: false });
+    await rm(hold);
+    value(await git.local.reclaim(FIRST));
+    assert.equal(host.launched.length, 2, 'the later reclaim runs the program once more');
+    assert.deepEqual(await git.local.handedOff(), []);
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });
 

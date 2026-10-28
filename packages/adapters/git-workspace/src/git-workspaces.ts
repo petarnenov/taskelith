@@ -361,13 +361,13 @@ export class GitWorkspaces implements WorkspaceProvider {
     return this.#failedProgram(path, launched);
   }
 
-  // The failure is durable first, so the program never runs again; then
-  // its containment is killed, proven empty, and freed (section 3, step 7).
+  // The failure is written durably first; the containment is then killed,
+  // proven empty, and freed, also when that write fails (section 3, step 7).
   async #failedProgram(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
     const { containment } = launched;
     const recorded = await writeHandOffRecord(path, { containment, reclaimFailed: true });
-    if (!recorded.ok) return recorded;
-    return this.#cleanedUp(containment, () => launched.kill());
+    const cleanedUp = await this.#cleanedUp(containment, () => launched.kill());
+    return recorded.ok ? cleanedUp : recorded;
   }
 
   // After a durable failure every outcome is `reclaim-failed`; a cleanup
