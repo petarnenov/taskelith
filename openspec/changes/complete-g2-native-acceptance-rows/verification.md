@@ -73,7 +73,7 @@ Checks after the fixes:
 - `make verify-linux-crash-windows`: exit 0, tests 29, pass 29, fail 0. `make verify-linux-crash-windows PATTERN=redelivered`: exit 0, tests 1, pass 1.
 - `make verify-linux-g2-scenarios`: exit 0, tests 18, pass 17, fail 0, skipped 1 (race g); seeds races `984716667`, partitions `127468814`, stale generations `392610103`.
 - `make verify`: exit 0; tests 2367, pass 2320, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.39 % branches, 98.95 % functions; OpenSpec 70 passed; every checked link conforms.
-- The native acceptance evidence stays that of `c8e624d6`. The fixes change the runner's argument form, which both runs used only with `=` options and the default or `FILES` files, and tighten an assertion: in both runs races c and e recorded `exited by SIGKILL` (lines 45, 48; 106, 109), and race c after the start (seed `20261026`, line 45) is the only after-start case the stricter check adds, so both runs would have passed it. They were not re-run on the fixed commit.
+- The native acceptance evidence stays that of `c8e624d6`. The fixes change the runner's argument form, which both runs used only with `=` options and the default or `FILES` files, and tighten an assertion: in both runs races c and e recorded `exited by SIGKILL` (lines 45, 48; 106, 109), and the stricter check covers race c after the start (seed `20261026`, line 45) and race e (lines 48; 109), all recorded as exited by that signal. The records do not state `startProven`, so that part of the check is shown only by the runs after the fix. They were not re-run on the fixed commit.
 
 ## Follow-ups
 
