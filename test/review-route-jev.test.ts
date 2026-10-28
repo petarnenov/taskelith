@@ -233,9 +233,17 @@ test('a local server that never answers times out without a retry', async () => 
   assert.equal(requests, 1);
 });
 
-test('a closed port is a network failure', async () => {
-  let endpoint = '';
-  await withServer(() => undefined, async (url) => { endpoint = url; });
-  const decision = await new JevRouter({ credential: CREDENTIAL, endpoint }).route(QUIET_FEATURES);
-  assert.equal(decision.status === 'failed' && decision.reason, 'network');
+// The server keeps its port bound and resets every connection, so no
+// other process can answer in its place.
+test('a reset connection is a network failure', async () => {
+  const server: Server = createServer();
+  server.on('connection', (socket) => socket.destroy());
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/systemone`;
+    const decision = await new JevRouter({ credential: CREDENTIAL, endpoint }).route(QUIET_FEATURES);
+    assert.equal(decision.status === 'failed' && decision.reason, 'network');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
