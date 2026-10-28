@@ -4137,9 +4137,15 @@
       "BranchName": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 255,
-        "pattern": "^[\\x21-\\x7e]+$",
-        "description": "A branch name of printable ASCII without whitespace; the control plane also checks it as a Git reference name."
+        "maxLength": 1024,
+        "pattern": "^(?!-)(?!/)(?!\\.)(?!HEAD$)(?!.*(?:\\.\\.|@\\{|//|/\\.|\\.lock(?:/|$)|[/.]$))[^\\x00-\\x20\\x7f~^:?*\\[\\\\]+$",
+        "description": "A branch name that `git check-ref-format --branch` accepts, non-ASCII letters included: no control character, space, '~', '^', ':', '?', '*', '[', or '\\'; no '..', '@{', or '//'; no component that starts with '.' or ends with '.lock'; not starting with '-' or '/', not ending with '/' or '.', and not 'HEAD'. Git sets no length limit; at most 1024 characters only bound the request, as `ExternalId` does."
+      },
+      "RemoteUrl": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https://[^/?#@\\s]+(?:[/?#]\\S*)?$",
+        "description": "The repository's HTTPS remote URL without user information, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. The control plane also refuses one that `checkRemoteTransport` refuses under the policy `https-only`."
       },
       "MergeMethod": {
         "type": "string",
@@ -4155,6 +4161,7 @@
         "required": [
           "integrationId",
           "repository",
+          "remoteUrl",
           "integrationBranch",
           "mergeMethod"
         ],
@@ -4166,9 +4173,12 @@
           "repository": {
             "$ref": "#/components/schemas/ExternalId"
           },
+          "remoteUrl": {
+            "$ref": "#/components/schemas/RemoteUrl"
+          },
           "integrationBranch": {
             "$ref": "#/components/schemas/BranchName",
-            "description": "The target branch of the project's merges (product ports section 6.3)."
+            "description": "The target branch of the project's merges (product ports section 6.3) and the base branch of its workspaces (git workspace contract section 3)."
           },
           "mergeMethod": {
             "$ref": "#/components/schemas/MergeMethod"
@@ -4181,6 +4191,7 @@
         "required": [
           "integrationId",
           "repository",
+          "remoteUrl",
           "integrationBranch",
           "mergeMethod",
           "revision"
@@ -4191,6 +4202,9 @@
           },
           "repository": {
             "$ref": "#/components/schemas/ExternalId"
+          },
+          "remoteUrl": {
+            "$ref": "#/components/schemas/RemoteUrl"
           },
           "integrationBranch": {
             "$ref": "#/components/schemas/BranchName"
@@ -4817,7 +4831,7 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "__Host-taskelith-session",
-        "description": "The server-side session identifier, 256 random bits, in a cookie set with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`; the `__Host-` prefix makes the browser refuse it otherwise. Never readable by scripts and never in a response body."
+        "description": "The server-side session identifier, 256 random bits, in a cookie set with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/`, without `Domain`. The `__Host-` prefix makes the browser refuse the cookie without `Secure` and `Path=/` or with `Domain`; `HttpOnly` and `SameSite=Strict` rest on the server alone. Never readable by scripts and never in a response body."
       },
       "csrfToken": {
         "type": "apiKey",

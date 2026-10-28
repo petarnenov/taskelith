@@ -14,6 +14,7 @@ type SecurityRequirement = Record<string, string[]>;
 interface Operation {
   readonly operationId: string;
   readonly security: SecurityRequirement[];
+  readonly parameters?: { readonly name: string }[];
   readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
   readonly responses: Record<string, { headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
 }
@@ -123,6 +124,13 @@ test('every operation other than GET requires the CSRF header with the session c
       );
     }
   }
+});
+
+test('every mutation but the session operations also accepts the operator bearer alone', () => {
+  const mutations = OPERATIONS.filter(({ method, operationId }) => method !== 'get' && operationId !== WEBHOOK);
+  const bearer = mutations.filter(({ security }) => security.some((requirement) => 'operatorToken' in requirement));
+
+  assert.deepEqual(mutations.filter((candidate) => !bearer.includes(candidate)).map(({ operationId }) => operationId).sort(), ['logIn', 'logOut']);
 });
 
 test('only reading the session is allowed without a credential, apart from the webhook receiver', () => {
@@ -240,7 +248,9 @@ test('projects carry their defaults, members, auto-merge setting, and repository
     noEligibleSlot: 'wait',
   };
   const binding: HttpComponents['schemas']['RepositoryBindingUpdate'] = {
-    binding: { integrationId: 'i1', repository: 'owner/repository', integrationBranch: 'dev', mergeMethod: 'merge-commit' },
+    binding: {
+      integrationId: 'i1', repository: 'owner/repository', remoteUrl: 'https://scm.example/owner/repository.git', integrationBranch: 'dev', mergeMethod: 'merge-commit',
+    },
   };
 
   assert.ok(checkHttpSchema('ProjectCreation', { name: 'Taskelith', defaults }).ok);
@@ -250,7 +260,37 @@ test('projects carry their defaults, members, auto-merge setting, and repository
   assert.ok(violations(checkHttpSchema('MemberAssignment', { role: 'installation-owner' })).some((text) => text.includes('/role')));
   assert.ok(checkHttpSchema('AutoMergeSetting', { enabled: true, revision: 1 }).ok);
   assert.ok(checkHttpSchema('RepositoryBindingUpdate', binding).ok);
-  assert.ok(violations(checkHttpSchema('RepositoryBindingInput', { ...binding.binding, integrationBranch: 'feature branch' })).length > 0);
+  assert.ok(checkHttpSchema('RepositoryBinding', { ...binding.binding, revision: 1 }).ok);
+  const { remoteUrl: _remoteUrl, ...withoutRemote } = binding.binding;
+  assert.ok(violations(checkHttpSchema('RepositoryBindingInput', withoutRemote)).some((text) => text.includes('remoteUrl')));
+});
+
+test('a binding branch is any name that git check-ref-format --branch accepts', () => {
+  const accepted = ['dev', 'release/версия', 'feature/a.b', '@', 'a@b', 'HEADS'];
+  const refused = [
+    'feature branch', '-x', '/x', '.x', 'a/.b', 'a..b', 'a@{b', 'a//b', 'x.lock', 'x.lock/y', 'x/', 'x.', 'HEAD',
+    'a~1', 'a^', 'a:b', 'a?b', 'a*b', 'a[b', 'a\\b', 'a\u007fb', 'a\tb', 'x'.repeat(1025),
+  ];
+
+  for (const name of accepted) assert.ok(checkHttpSchema('BranchName', name).ok, name);
+  for (const name of refused) assert.ok(violations(checkHttpSchema('BranchName', name)).length > 0, name);
+});
+
+test('a binding remote is an HTTPS URL without user information', () => {
+  const refused = [
+    'http://scm.example/acme/project.git', 'https://agent@scm.example/acme/project.git', 'https://:token@scm.example/acme/project.git',
+    'ssh://git@scm.example/acme/project.git', 'scm.example:acme/project.git', 'https://scm.example/a b',
+  ];
+
+  assert.ok(checkHttpSchema('RemoteUrl', 'https://scm.example/acme/project.git').ok);
+  for (const remote of refused) assert.ok(violations(checkHttpSchema('RemoteUrl', remote)).length > 0, remote);
+});
+
+test('every list but the workers snapshot pages by identifier', () => {
+  const lists = OPERATIONS.filter(({ method, operationId }) => method === 'get' && operationId.startsWith('list'));
+  const paged = lists.filter(({ parameters }) => (parameters ?? []).some(({ name }) => name === 'after'));
+
+  assert.deepEqual(lists.filter((candidate) => !paged.includes(candidate)).map(({ operationId }) => operationId), ['listWorkers']);
 });
 
 test('the workers view holds the admission state and self-check results, never a credential', () => {
