@@ -38,7 +38,9 @@ import { LaunchRevokingFleetRegistry } from '../composition/launch-revoking-flee
 import { ensureBrokerTrust, readBrokerAuthority } from './broker-trust.js';
 import {
   ensureInstallationAuthority,
+  installationCaFingerprint,
   issueServerCertificates,
+  readInstallationCa,
   readServerCertificate,
   storedInstallationAuthority,
   INSTALLATION_CA_FILE,
@@ -48,6 +50,12 @@ import {
   type StoredServerCertificate,
 } from './installation-authority.js';
 import { LOCAL_SERVER_HOSTS } from './server-hosts.js';
+
+// What the operator hands a new worker (installation contract section 5).
+export interface EnrollmentBundle {
+  readonly enrollmentToken: string;
+  readonly installationCaSha256: string;
+}
 
 export interface AdministrationSettings {
   readonly dataRoot: string;
@@ -137,8 +145,19 @@ export class Administration {
     return this.#operator.reset(invocation);
   }
 
-  issueEnrollmentToken(operatorSecret: string, constraints: HostConstraints): Promise<Result<string>> {
-    return this.#asOperator(operatorSecret, (enrollment) => enrollment.issueToken(constraints));
+  // The public authority certificate, for `readInstallationCa`.
+  installationCa(): Result<string> {
+    return readInstallationCa(this.#namespace);
+  }
+
+  // The CA is read first, so a bundle without its fingerprint is never
+  // issued and no token is spent on it.
+  async issueEnrollmentToken(operatorSecret: string, constraints: HostConstraints): Promise<Result<EnrollmentBundle>> {
+    const installationCa = this.installationCa();
+    if (!installationCa.ok) return installationCa;
+    const installationCaSha256 = installationCaFingerprint(installationCa.value);
+    const token = await this.#asOperator(operatorSecret, (enrollment) => enrollment.issueToken(constraints));
+    return token.ok ? ok({ enrollmentToken: token.value, installationCaSha256 }) : token;
   }
 
   rotateWorker(operatorSecret: string, workerId: string): Promise<Result<RotatedCredentials>> {

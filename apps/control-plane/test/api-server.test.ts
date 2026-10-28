@@ -55,6 +55,24 @@ test('the bearer scheme is matched in any case, and the token exactly', async ()
   assert.equal((await call('GET', '/runs/r/tasks/t/result', { authorization: `Bearer ${OPERATOR.toLowerCase()}` })).status, 401);
 });
 
+// A syntactically valid block; the response check reads no DER.
+const CERTIFICATE = `-----BEGIN CERTIFICATE-----\n${'A'.repeat(64)}\n-----END CERTIFICATE-----\n`;
+
+test('the installation CA is public: no bearer is needed, and one is ignored', async () => {
+  let api = new ControlPlaneApi({ installationCa: CERTIFICATE } as never);
+  answers = { readInstallationCa: () => ok({ certificate: CERTIFICATE }) };
+  const bare = await fetch(`${base}/installation/ca`);
+  assert.deepEqual([bare.status, await bare.json()], [200, { certificate: CERTIFICATE }]);
+  assert.equal((await call('GET', '/installation/ca', { authorization: 'Bearer tkop_wrong' })).status, 200);
+  assert.deepEqual(value(await api.handle('readInstallationCa', { parameters: [] } as unknown as ApiRequest, '')), { certificate: CERTIFICATE });
+  api = new ControlPlaneApi({ installationCa: `${CERTIFICATE}-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n` } as never);
+  answers = { readInstallationCa: async () => api.handle('readInstallationCa', { parameters: [] } as unknown as ApiRequest, '') } as never;
+  const keyed = await fetch(`${base}/installation/ca`);
+  const body = await keyed.text();
+  assert.equal(keyed.status, 500, 'an answer with key material is a defect, never sent');
+  assert.doesNotMatch(body, /PRIVATE KEY/);
+});
+
 test('a credential store that is down is 503, not a refused credential', async () => {
   storeDown = true;
   try {
@@ -120,7 +138,7 @@ test('every response closes its connection, so no idle socket is reused', async 
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: { authenticate: async () => ok(undefined) },
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: { authenticate: async () => ok(undefined) },
     enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
@@ -201,7 +219,7 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
     enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
@@ -332,7 +350,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   ];
   let next = 0;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
   });
@@ -354,7 +372,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
 test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {
   const received: unknown[] = [];
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async (_principal, values) => {
       received.push(values);
@@ -403,7 +421,7 @@ test('an undecided launch operation is 503, never 500', async () => {
 test('a delegation while the database is down is 503 with a Failure', async () => {
   const down = { transaction: async () => err(failure('unavailable', 'the database is down')) } as unknown as ControlPlaneStore;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, launches: undefined as never, delegations: new DelegationService(down),
   });
   const delegationServer = createApiServer({

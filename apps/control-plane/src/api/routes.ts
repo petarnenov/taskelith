@@ -1,7 +1,8 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { FailureCode } from '@taskelith/kernel';
 
-export type SecurityScheme = 'operatorToken' | 'enrollmentToken' | 'workerCredential';
+// `none`: a public operation, which reads no bearer at all.
+export type SecurityScheme = 'operatorToken' | 'enrollmentToken' | 'workerCredential' | 'none';
 
 // One operation of the OpenAPI documents: how a request reaches it and how
 // its failures map to the statuses the document declares.
@@ -43,6 +44,10 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'readTaskResult', method: 'GET', pattern: new RegExp(`^/runs/${SEGMENT}/tasks/${SEGMENT}/result$`), security: 'operatorToken',
     response: 'TaskResult', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'readInstallationCa', method: 'GET', pattern: /^\/installation\/ca$/, security: 'none', response: 'InstallationCa', success: 200,
+    statuses: COMMON,
   },
   {
     operationId: 'enrollWorker', method: 'POST', pattern: /^\/workers\/enrollments$/, security: 'enrollmentToken', body: 'EnrollmentRequest',
