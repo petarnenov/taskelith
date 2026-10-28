@@ -1,0 +1,67 @@
+# Verification: complete-g2-native-acceptance-rows
+
+## Scope and source
+
+G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assigned by the coordinator and developed in a briefed subagent. Scope and decisions: [design.md](design.md). Item 43 stays open: its macOS rows, race g, the `macos-26-arm64` re-run, the `linux-ubuntu-24.04-arm64` entry, and the hosted `ubuntu-24.04` re-dispatch.
+
+## Revision
+
+- Base: `dev` `3f23516a`.
+- `0caf2b47` `test: run the G2 scenarios in the privileged Linux cgroup runner` (shared Linux launch helpers, runner, target, guard, and cancel signal; the fail-before runs are on this commit).
+- `a20ebb2e` `chore: export the worker's Linux launch host`.
+- `767b832c` `test: launch the G2 scenario workers through the Linux cgroup host`.
+- `c8e624d6` `test: run the G2 races and partitions in native acceptance on Linux` (the evidence runs are on this commit).
+- The change documents, `results.jsonl`, and `acceptance.md` come after it and change no input of the runs.
+
+## Environment
+
+`uname -a`: `Linux GEO-PetarPetrov 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux`. Native Ubuntu 26.04.1 LTS host, cgroup v2; Docker Engine - Community 29.8.2 (not Docker Desktop), Docker Compose 5.6.0, storage driver overlayfs, ext4 volumes; Node.js 24.22.1 pinned for the targets and in the test image. `TMPDIR=/home/petar/.cache/taskelith-verify-tmp` for every run.
+
+## Fail-before
+
+- Runner forwarding: `node --experimental-strip-types --test test/linux-crash-windows-script.test.ts` with the new test and the base `scripts/linux-crash-windows.sh` gave tests 3, pass 2, fail 1 (no `--env TASKELITH_TOXIPROXY_URL`); after the change tests 3, pass 3, fail 0.
+- Containment guard, on `0caf2b47` (guard and target, scenario workers still on the process-group host): `make verify-linux-g2-scenarios PATTERN='a cancel after W4|an unauthorized start'`, exit 2; race c (seed `3709635626`, cancel after the start) and race h each failed with `process <pid> runs in /sys/fs/cgroup/, not under /sys/fs/cgroup/executions/` (the container's root cgroup as `/proc/<pid>/cgroup` shows it).
+- Cancel signal, on `0caf2b47`: `make verify-linux-g2-scenarios PATTERN='a crash between W1'`, exit 2; race e (seed `1476658390`) failed in `assertCancelled`: actual `{ kind: 'signal', signal: 'SIGTERM' }`, expected `SIGKILL`.
+- Native acceptance runner: `node --experimental-strip-types --test test/native-acceptance-runner.test.ts` with the new tests and the base `scripts/native-acceptance.sh` gave tests 14, pass 9, fail 5 (the two new tests and the three that check the not-applicable lists); after the change tests 14, pass 14, fail 0.
+
+## After the seam
+
+- Working tree of `767b832c` (before its commit): `make verify-linux-g2-scenarios`, exit 0 in 1 min 35 s: tests 18, pass 17, fail 0, skipped 1 (race g, not applicable on Linux); races seed `2358440917`, partitions seed `634222300`, stale generations seed `3255677099`.
+- Unit tests: `apps/worker/test/execution-supervision.test.ts` and `packages/testing/test/linux-launch.test.ts`, tests 24, pass 24, fail 0.
+
+## Revert proof (B2, `scope-execution-cancellation`)
+
+`#targetedLaunches` in `apps/worker/src/launch-orchestrator.ts:324` was reverted locally to return every launch of the target's assignments, the widening that B2 removed (a partial revert: the launch filter only, not the cancel-file scope). `make verify-linux-g2-scenarios FILES=test/g2-cancellation-races.test.ts PATTERN='an unauthorized start'`, exit 2: race h (seed `3547295174`) failed with `one attempt`, actual 2, expected 1, so the owning execution was stopped and retried. The file was restored with `git checkout` and the build rerun; it is not part of any commit.
+
+## Native acceptance
+
+On `c8e624d6`, `TASKELITH_TEST_SEED=<seed> make native-acceptance ENTRIES=linux RESULTS=<scratch>/results-<seed>.jsonl`, one run after the other:
+
+| Seed | Local time | Exit | Last line | Records |
+| --- | --- | --- | --- | --- |
+| `20261026` | 2026-10-28 02:17:35 to 02:24:56 | 0 | `every proof passed` | 61, all `passed`, all with an acceptance context: 12 proofs and 49 own records |
+| `7` | 02:24:56 to 02:32:16 | 0 | `every proof passed` | 61, the same split |
+
+Every record names commit `c8e624d606f93c6c69b033cec92e158dcadbea63`. [results.jsonl](results.jsonl) is the two files in that order (122 lines). New proofs: `acceptance-cancellation-races` tests 12, pass 11, skipped 1 (race g), fail 0, in both runs (lines 54, 115), with 11 scenario records each (lines 43 to 53, 104 to 114); `acceptance-partition` tests 6, pass 6, fail 0 (lines 61, 122), with 6 scenario records each (lines 55 to 60, 116 to 121). Races c, e, and a granted round of f ended their process by `SIGKILL` in both runs (lines 45, 48, 50, 106, 109, 111). The unchanged proofs passed as before: crash windows 28 of 28, duplicate delivery 1 of 1, privileged cgroup tests 17 of 17, journal suites 101 of 103 with 2 skipped. The rows: [acceptance.md](acceptance.md).
+
+## Hosted arm64 runner
+
+`gh api repos/petarnenov/taskelith`: public, owner type `User`; `gh api repos/petarnenov/taskelith/actions/runners`: total 0 (no self-hosted runner). `github/docs` `data/reusables/actions/supported-github-runners.md` (last commit `eb5a6158a3`, 2026-10-16) lists `ubuntu-24.04-arm` among the standard GitHub-hosted runners for public repositories, free and unlimited there. Nothing was dispatched on it. Follow-up: add a `linux-ubuntu-24.04-arm64` hosted dispatch.
+
+## Not applicable: the Intel iMac for the Docker-Engine row
+
+The iMac's Docker Desktop gives no host network outside its virtual machine, which the privileged runner needs (`run-g2-crash-windows-on-linux` design decision 3), so it cannot give the Docker-Engine evidence of the Linux worker image. The GitHub-hosted `ubuntu-24.04` runner of `.github/workflows/linux-acceptance.yml` gives it; it is re-dispatched after the merge (follow-up).
+
+## Checks
+
+CHECKS
+
+## Follow-ups
+
+- A services-network mode of the privileged runner for Docker Desktop, so that a macOS host can run the Linux scenarios.
+- A `linux-ubuntu-24.04-arm64` hosted dispatch on `ubuntu-24.04-arm`.
+- After the merge: dispatch `linux-acceptance.yml` on `dev` and record its run, which now includes the two new proofs.
+
+## Independent review
+
+Not yet run; the coordinator runs it.
