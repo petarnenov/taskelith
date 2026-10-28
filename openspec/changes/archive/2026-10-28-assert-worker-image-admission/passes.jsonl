@@ -1,0 +1,2 @@
+{"change": "assert-worker-image-admission", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a180e7-3932-7c21-8253-444196812986", "counts": {"critical": 0, "high": 0, "medium": 1, "low": 2}}
+{"change": "assert-worker-image-admission", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "c463850b-11df-4e63-8b7d-7c550e412a9c", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 6}}

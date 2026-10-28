@@ -13,6 +13,7 @@ import {
   type InstallationIdentity,
   type IssuedCertificate,
   type RotatedCredentials,
+  type WorkerAdmissionSnapshot,
   type WorkerCommandConsumers,
   type WorkerRevocation,
 } from '@taskelith/fleet';
@@ -30,6 +31,7 @@ import type { Logger, Metrics } from '@taskelith/observability';
 import {
   CommittingInstallationTable,
   CommittingOperatorCredentials,
+  CommittingWorkerAdmissions,
   migrate,
   PostgresDatabase,
 } from '@taskelith/postgres';
@@ -151,6 +153,14 @@ export class Administration {
 
   expireGraceWindows(operatorSecret: string): Promise<Result<number>> {
     return this.#asOperator(operatorSecret, (enrollment) => enrollment.expireGraceWindows());
+  }
+
+  // The workers view; the operator credential stands for
+  // installation-owner, as for the other operator commands.
+  async workerAdmission(operatorSecret: string): Promise<Result<WorkerAdmissionSnapshot>> {
+    const authenticated = await this.#operator.authenticate(operatorSecret);
+    if (!authenticated.ok) return authenticated;
+    return new CommittingWorkerAdmissions(this.#database).workers();
   }
 
   // The service's database, operator credential, and verified installation,

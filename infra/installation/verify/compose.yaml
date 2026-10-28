@@ -1,0 +1,6 @@
+# Test-only addition of make verify-installation: a launch command, so the
+# worker runs its linux-containment self-check instead of skipping it.
+services:
+  worker:
+    environment:
+      TASKELITH_WORKER_COMMAND: '["/usr/local/bin/node", "-e", "setTimeout(() => {}, 1000)"]'
