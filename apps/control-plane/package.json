@@ -25,7 +25,8 @@
     "@taskelith/postgres": "0.0.0",
     "@taskelith/scheduling": "0.0.0",
     "@taskelith/sdlc": "0.0.0",
-    "@taskelith/secrets": "0.0.0"
+    "@taskelith/secrets": "0.0.0",
+    "cookie": "2.0.1"
   },
   "devDependencies": {
     "@nats-io/jetstream": "3.4.0",

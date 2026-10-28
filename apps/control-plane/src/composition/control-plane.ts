@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  AuthorizationService,
+  LoginThrottle,
+  SessionService,
+  type LoginThrottleSettings,
+  type SessionLifetime,
+} from '@taskelith/access';
 import { parseLaunchParameters, type LaunchParametersInput } from '@taskelith/execution';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import {
@@ -27,9 +35,10 @@ import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } 
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
 import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
-import { Administration, type AdministrationSettings } from '../admin/administration.js';
+import { Administration, START_OWNER_INVOCATION, type AdministrationSettings } from '../admin/administration.js';
 import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { ROUTES } from '../api/routes.js';
 import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
@@ -53,6 +62,8 @@ export const LOST_CONTACT_TIMEOUT_MILLISECONDS = 30_000;
 export const LOST_CONTACT_CHECK_MILLISECONDS = 10_000;
 // The launch ttl and skew of docs/operational-targets.md (provisional).
 export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 });
+// How often ended and expired browser sessions are purged (provisional).
+export const SESSION_PURGE_MILLISECONDS = 60_000;
 // How long a stop waits for the loops before it cancels what still blocks.
 export const SHUTDOWN_DEADLINE_MILLISECONDS = 30_000;
 const CANCELLED_SETTLE_MILLISECONDS = 5_000;
@@ -81,6 +92,10 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   // The targets unless configured; tests pass shorter or smaller ones.
   readonly transportLimits?: TransportLimits;
   readonly launchParameters?: LaunchParametersInput;
+  // Provisional values with documented defaults (Q6, Q8).
+  readonly sessionLifetime?: SessionLifetime;
+  readonly loginThrottle?: LoginThrottleSettings;
+  readonly sessionPurgeMilliseconds?: number;
 }
 
 export interface RunningControlPlane {
@@ -114,6 +129,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(() => admin.value.close());
   const identity = await admin.value.verifiedInstallation();
   if (!identity.ok) return identity;
+  const owner = await admin.value.ensureOwner(START_OWNER_INVOCATION);
+  if (!owner.ok) return owner;
   const tls = listenerTls(admin.value, settings);
   if (!tls.ok) return tls;
   const installationCa = admin.value.installationCa();
@@ -146,19 +163,34 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!parameters.ok) return parameters;
   const workflows = new WorkflowRegistry(settings.workflows);
   const launches = new LaunchAuthority(database, { workflows, parameters: parameters.value, newLaunchAuthId: () => `l${randomUUID()}` });
-  const requests = createApiRequestListener(new ControlPlaneApi({
-    runs: new RunService(database, workflows),
+  const access = admin.value.access;
+  const clock = { now: () => settings.now?.() ?? systemNow() };
+  const sessions = new SessionService({
+    ...access, random: access.secrets, clock,
+    throttle: new LoginThrottle({ clock, sleep: (milliseconds) => sleep(milliseconds), ...(settings.loginThrottle === undefined ? {} : { settings: settings.loginThrottle }) }),
+    ...(settings.sessionLifetime === undefined ? {} : { lifetime: settings.sessionLifetime }),
+  });
+  const runs = new RunService(database, workflows);
+  const api = new ControlPlaneApi({
+    runs,
     tasks: new TaskService(database),
     evidence: new EvidenceService(database, volume.value),
     delegations: new DelegationService(database),
-    operator: admin.value.operator,
+    operator: admin.value.operatorPrincipal,
+    sessions,
+    authorization: new AuthorizationService(access.store),
+    runProjects: { projectOf: (runId) => runs.projectOf(runId) },
+    logger,
     enrollment: enrollment.value.service,
     launches,
     installationCa: installationCa.value,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
-  }), { logger });
-  const servers = [createTlsApiServer(requests, tls.value.worker), createTlsApiServer(requests, tls.value.browser)];
+  });
+  // The session operations are served on the browser endpoint only.
+  const workerRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.browserOnly) });
+  const browserRequests = createApiRequestListener(api, { logger });
+  const servers = [createTlsApiServer(workerRequests, tls.value.worker), createTlsApiServer(browserRequests, tls.value.browser)];
   const closeApi = once(async () => {
     await Promise.all(servers.map((server) => close(server)));
   });
@@ -225,6 +257,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('heartbeats', heartbeats.run(controller.signal)),
     supervise('lost-contact', runPeriodically(async () => logFailure(logger, 'fleet.lost-contact.failed', await lostContact.markLost()), controller.signal, lostContactCheck)),
     supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
+    supervise('sessions', runPeriodically(async () => logFailure(logger, 'access.sessions.purge.failed', await sessions.purgeExpired()), controller.signal,
+      settings.sessionPurgeMilliseconds ?? SESSION_PURGE_MILLISECONDS)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];

@@ -1,0 +1,104 @@
+{
+  "change": "implement-operator-login-and-roles",
+  "generatedAt": "2026-10-28T12:54:12.058Z",
+  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "trust-and-operational-foundation",
+      "control-plane-wire-contracts"
+    ],
+    "files": [
+      "packages/modules/access/**",
+      "apps/control-plane/**",
+      "packages/adapters/postgres/**",
+      "docs/contracts/control-plane-wire-contracts.md"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 17
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 14
+      },
+      {
+        "category": "docs",
+        "count": 10
+      },
+      {
+        "category": "naming",
+        "count": 8
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "spec-wording",
+        "count": 6
+      },
+      {
+        "category": "concurrency-race",
+        "count": 4
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 513,
+        "inChecklist": 419
+      },
+      "mediumOrWorse": {
+        "findings": 225,
+        "inChecklist": 174
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 93
+      },
+      {
+        "category": "docs",
+        "count": 58
+      },
+      {
+        "category": "spec-wording",
+        "count": 56
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 281,
+        "inChecklist": 277
+      },
+      "mediumOrWorse": {
+        "findings": 48,
+        "inChecklist": 46
+      }
+    }
+  }
+}

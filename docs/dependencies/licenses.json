@@ -6,14 +6,14 @@
   },
   "provenance": {
     "package.json": "26e3a4bcd8e162909c5f9c2d6506f2f683db1ef29fe1d6d0d49ea5aaa4a3ba0b",
-    "package-lock.json": "1e8335ad34bb2ba7675c96cd6e904c550f34b2a4627c0618400cf78461cc1780",
+    "package-lock.json": "787ace4df8e8f1828b5ee1958e269c7781a772133ec125ed9b8be0d0a8b96971",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "0901ee7cc6d1e69888723ee259925f8deae87083e60951d8395665855c77ad38",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
-  "packageCount": 766,
+  "packageCount": 767,
   "packagesWithGaps": 41,
   "packages": [
     {
@@ -7197,6 +7197,25 @@
         {
           "path": "node_modules/convert-hrtime/license",
           "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/cookie",
+      "name": "cookie",
+      "version": "2.0.1",
+      "integrity": "sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "75cd16a27d7d0018a08dcbe46eef242f5cbaae4c47efd95979c77ddad59e5fac",
+      "licenseFiles": [
+        {
+          "path": "node_modules/cookie/LICENSE",
+          "sha256": "c02110eedc16c7114f1a9bdc026c65626ce1d9c7e27fd51a8e0feee8a48a6858"
         }
       ],
       "gaps": []
