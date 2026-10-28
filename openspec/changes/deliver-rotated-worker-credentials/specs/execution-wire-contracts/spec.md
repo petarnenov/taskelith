@@ -11,25 +11,10 @@ The AsyncAPI document SHALL define a command channel, an observation channel, an
 - **WHEN** the heartbeat channel address is resolved
 - **THEN** it is `taskelith.<installationId>.workers.<workerId>.heartbeats`, and its only message is `worker.heartbeat`
 
-### Requirement: Execution HTTP operations
-The OpenAPI document SHALL define `enrollWorker`, `renewWorkerCredentials`, `confirmWorkerCredentials`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, `downloadEvidence`, `readInstallationCa`, and the operations of "G3 execution operations", each with its credential: an enrollment token, the worker credential, the operator credential, or the browser session; only `readInstallationCa`, which answers the public installation CA certificate, SHALL declare none. Errors SHALL use the kernel failure shape.
-
-#### Scenario: Parent in a delegation request
-- **WHEN** a delegation request names `parentTaskId`
-- **THEN** the request body is invalid
-
-#### Scenario: Worker in a launch request
-- **WHEN** a launch authorization request names `workerId`
-- **THEN** the request body is invalid
-
-#### Scenario: Key material in the installation CA answer
-- **WHEN** an `InstallationCa` answer holds a PEM private-key block
-- **THEN** the answer is invalid
-
 ## ADDED Requirements
 
 ### Requirement: Credential rotation notice
-The AsyncAPI document SHALL define `worker.credentials.rotation-requested` on the command channel with the worker, the requested `credentialGeneration`, and the `deadline`, and no secret. A renewal request SHALL carry only the NKey public key and the SHA-256 of the bearer secret, and its answer the user JWT and the deadline.
+The AsyncAPI document SHALL define `worker.credentials.rotation-requested` on the command channel with the worker, the requested `credentialGeneration`, and the `deadline`, and no secret. The OpenAPI document SHALL define `renewWorkerCredentials` and `confirmWorkerCredentials` under the worker credential. A renewal request SHALL carry only the NKey public key and the SHA-256 of the bearer secret, and its answer the user JWT and the deadline.
 
 #### Scenario: Notice with a secret
 - **WHEN** a rotation notice carries a field beyond its schema, such as a bearer secret
