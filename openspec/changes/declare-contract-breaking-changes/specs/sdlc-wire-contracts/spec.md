@@ -4,7 +4,7 @@
 `packages/contracts/breaking-changes.json` SHALL list, per contract document path and per version that declared breaking changes, the version, a non-blank English reason, and the breaking changes the check reports, keeping earlier versions as history. `make contract-compatibility` SHALL fail when the file does not match its schema, names an unknown document, has a version that is not semantic, repeats a path and version, or is not sorted by path, version precedence, then version text.
 
 #### Scenario: Malformed declarations
-- **WHEN** an entry has a blank reason, a version `0.4`, or the same path and version as another entry
+- **WHEN** an entry has a blank reason, a version `0.4`, changes not sorted and unique, or the same path and version as another entry
 - **THEN** the check fails and names the entry and the problem
 
 #### Scenario: Build metadata
