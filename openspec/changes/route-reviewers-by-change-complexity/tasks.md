@@ -23,11 +23,11 @@
 
 ## 3. Phase 3: integration after `adopt-process-performance-recommendations` reaches `dev`
 
-- [ ] 3.1 Merge `origin/dev` and reconcile the deltas with governance version 6 and its conditional pass 3.
-- [ ] 3.2 Wire `route` (`runRoute`) and `route-evaluation` (`runRouteEvaluation`) into `scripts/findings.ts`, validate `route.json`, and extend `effect` with the per-change routing rows from `route.json` and `passes.jsonl`, the reviewers that followed the route, and the figures of `routingFigures` (`design.md` "Planned edits", "Effect extension").
-- [ ] 3.3 Update `docs/governance.md` (routed effort under the reviewer assignment, shadow decides nothing), `docs/agent-task-protocol.md` (worker step, record, effect, invocations), the `Makefile` comment, and the `taskelith-task-protocol` and `taskelith-coordinator` skills.
-- [ ] 3.4 Run `make findings ARGS="route --change route-reviewers-by-change-complexity"` on this change and commit its `route.json`.
-- [ ] 3.5 Run `make verify`, `npm run openspec -- validate --all --strict`, and the findings validation; complete `verification.md`.
+- [x] 3.1 Merge `origin/dev` and reconcile the deltas with governance version 6 and its conditional pass 3.
+- [x] 3.2 Wire `route` (`runRoute`) and `route-evaluation` (`runRouteEvaluation`) into `scripts/findings.ts`, validate `route.json`, and extend `effect` with the per-change routing rows from `route.json` and `passes.jsonl`, the reviewers that followed the route, and the figures of `routingFigures` (`design.md` "Planned edits", "Effect extension").
+- [x] 3.3 Update `docs/governance.md` (routed effort under the reviewer assignment, shadow decides nothing), `docs/agent-task-protocol.md` (worker step, record, effect, invocations), the `Makefile` comment, and the `taskelith-task-protocol` and `taskelith-coordinator` skills.
+- [x] 3.4 Run `make findings ARGS="route --change route-reviewers-by-change-complexity"` on this change and commit its `route.json`.
+- [x] 3.5 Run `make verify`, `npm run openspec -- validate --all --strict`, and the findings validation; complete `verification.md`.
 
 ## 4. Review and archive
 
