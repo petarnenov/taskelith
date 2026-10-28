@@ -35,8 +35,9 @@ import {
   turnKey,
 } from './session-fixtures.ts';
 
-const GENERATION_1 = { generation: generation(1), nativeSessionId: NATIVE };
-const GENERATION_2 = { generation: generation(2), nativeSessionId: NATIVE };
+function generationStart(number: number) {
+  return { generation: generation(number), nativeSessionId: NATIVE };
+}
 
 function endedFirstAttempt() {
   return value(endBoundAttempt(value(bindAttempt(newSession(), binding(), [])), FIRST_ATTEMPT));
@@ -108,18 +109,18 @@ test('the first generation is 1 under the active attempt and records the native 
 });
 
 test('a generation needs an active bound attempt', () => {
-  assert.equal(failed(startGeneration(newSession(), GENERATION_1)).code, 'precondition-failed');
-  assert.equal(failed(startGeneration(endedFirstAttempt(), GENERATION_1)).code, 'precondition-failed');
+  assert.equal(failed(startGeneration(newSession(), generationStart(1))).code, 'precondition-failed');
+  assert.equal(failed(startGeneration(endedFirstAttempt(), generationStart(1))).code, 'precondition-failed');
 });
 
 test('a generation starts only as the next one after the last ended', () => {
   const bound = value(bindAttempt(newSession(), binding(), []));
-  assert.equal(failed(startGeneration(bound, GENERATION_2)).code, 'precondition-failed');
+  assert.equal(failed(startGeneration(bound, generationStart(2))).code, 'precondition-failed');
   const running = runningSession();
-  assert.equal(failed(startGeneration(running, GENERATION_2)).code, 'precondition-failed');
+  assert.equal(failed(startGeneration(running, generationStart(2))).code, 'precondition-failed');
   const ended = value(endGeneration(running, generation(1)));
   assert.equal(failed(startGeneration(ended, { generation: generation(3), nativeSessionId: NATIVE })).code, 'precondition-failed');
-  const resumed = value(startGeneration(ended, GENERATION_2));
+  const resumed = value(startGeneration(ended, generationStart(2)));
   assert.equal(runningGeneration(resumed)?.generation, 2);
 });
 

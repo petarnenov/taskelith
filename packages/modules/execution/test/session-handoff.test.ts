@@ -36,7 +36,9 @@ import {
 
 const RESET = instant('2026-10-28T12:00:00.000Z');
 const SNAPSHOT = evidence('timeline-snapshot-1');
-const TURN_1_END = { turnId: turnId('turn-1'), generation: generation(1), outcome: 'completed' as const };
+function firstTurnEnd() {
+  return { turnId: turnId('turn-1'), generation: generation(1), outcome: 'completed' as const };
+}
 
 function delivered(session: Session, name: string): Session {
   return value(deliverTurn(submitted(session, name), { turnId: turnId(name), generation: generation(1) }));
@@ -44,7 +46,7 @@ function delivered(session: Session, name: string): Session {
 
 // turn-1 completed, turn-2 runs with an open request when the limit comes.
 function limitedAndEnded(): Session {
-  const completed = value(recordTurnOutcome(sessionWithRunningTurn(), TURN_1_END));
+  const completed = value(recordTurnOutcome(sessionWithRunningTurn(), firstTurnEnd()));
   const running = value(recordRequest(delivered(completed, 'turn-2'), permissionRequest('request-2', 'turn-2')));
   const stopped = recordLimitSignal(running, { resetsAt: RESET });
   return value(endGeneration(stopped, generation(1)));
@@ -61,7 +63,7 @@ test('a limit signal stops the session, which accepts no new turn, delivery, or 
   assert.equal(isStopped(queued), false);
   assert.deepEqual(stopped.limit, {});
   const next = { turnId: turnId('turn-2'), generation: generation(1) };
-  const done = value(recordTurnOutcome(stopped, TURN_1_END));
+  const done = value(recordTurnOutcome(stopped, firstTurnEnd()));
   assert.equal(failed(deliverTurn(done, next)).code, 'precondition-failed');
   const ended = value(endGeneration(done, generation(1)));
   assert.equal(failed(startGeneration(ended, { generation: generation(2), nativeSessionId: NATIVE })).code, 'precondition-failed');
@@ -72,7 +74,7 @@ test('a running turn of a stopped session still records its requests, responses,
   const asked = value(recordRequest(stopped, permissionRequest('request-1')));
   const answered = value(consumeResponse(asked, allow()));
   assert.equal(answered.requests[0]?.state, 'answered');
-  assert.equal(value(recordTurnOutcome(answered, TURN_1_END)).turns[0]?.state, 'ended');
+  assert.equal(value(recordTurnOutcome(answered, firstTurnEnd())).turns[0]?.state, 'ended');
 });
 
 test('a later limit signal records a reset time the stop lacks, and otherwise changes nothing', () => {
@@ -96,7 +98,7 @@ test('the handoff holds the session, task, harness, reset time, last turn with a
 });
 
 test('a handoff after an account-limit-reached outcome names that turn and no reset time', () => {
-  const limit = { ...TURN_1_END, outcome: 'account-limit-reached' as const };
+  const limit = { ...firstTurnEnd(), outcome: 'account-limit-reached' as const };
   const stopped = value(endGeneration(value(recordTurnOutcome(sessionWithRunningTurn(), limit)), generation(1)));
   const handoff = value(writeHandoff(stopped, SNAPSHOT)).handoff;
   assert.equal(handoff?.lastTurnWithOutcome, 'turn-1');
