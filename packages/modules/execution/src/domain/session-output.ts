@@ -16,8 +16,8 @@ import {
 // The live stream bound per active attempt (operational targets, section 2).
 export const OUTPUT_RETENTION_BYTES = 10 * 1024 * 1024;
 
-// Appends output at the next position and drops the oldest entries that no
-// longer fit the retained window (contract, section 7).
+// Appends non-empty output at the next position and drops the oldest entries
+// that no longer fit the retained window (contract, section 7).
 export function appendOutput(session: Session, output: OutputAppend): Result<Session> {
   if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got output text out of bounds');
   const turn = session.turns.find((candidate) => candidate.id === output.turnId);
@@ -25,6 +25,7 @@ export function appendOutput(session: Session, output: OutputAppend): Result<Ses
   if (!isLiveTurn(session, turn, output.generation)) {
     return sessionFailure('precondition-failed', session, `does not run turn ${turn.id} in generation ${output.generation}`);
   }
+  if (output.text === '') return ok(session);
   const position = session.output.lastPosition + 1;
   const entry: OutputEntry = { turnId: output.turnId, generation: output.generation, text: output.text, position };
   return ok(withChanges(session, { output: withinBound([...session.output.entries, entry], session.output.retainedBytes, entry) }));

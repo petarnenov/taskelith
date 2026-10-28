@@ -155,9 +155,9 @@ These states are final. They are shown, and they lead to no answer, no resend, a
 
 ## 7. Output stream and cursor
 
-`appendOutput(session, output)` records the port's `output` event from its turn, generation, and text, at the next session-wide position, from 1 without gaps. Text outside its bound fails with `invalid`; an unknown turn fails with `not-found`; a generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
+`appendOutput(session, output)` records the port's `output` event from its turn, generation, and text, at the next session-wide position, from 1 without gaps. Text outside its bound fails with `invalid`; an unknown turn fails with `not-found`; a generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`. After these checks, an empty text records no entry, takes no position, and returns the session unchanged, since it carries nothing to show; the port allows an empty `output` event (agent harness port contract section 2, bounds table).
 
-The session retains a window of its latest entries of at most `OUTPUT_RETENTION_BYTES`, 10,485,760 bytes (`10 MiB`) of UTF-8 text, the [operational targets](../operational-targets.md) bound of the live session stream buffer per active attempt. Appending drops the oldest entries until the window fits; positions are never reused.
+The session retains a window of its latest entries of at most `OUTPUT_RETENTION_BYTES`, 10,485,760 bytes (`10 MiB`) of UTF-8 text, the [operational targets](../operational-targets.md) bound of the live session stream buffer per active attempt. Appending drops the oldest entries until the window fits; positions are never reused. Because every retained entry holds at least one byte, the window holds at most `OUTPUT_RETENTION_BYTES` entries.
 
 `readOutputAfter(session, cursor)` takes a cursor, `0` before any output or the position of the last entry the reader holds. A cursor that is not a safe integer from 0 to the last position fails with `invalid`. A cursor at or after the position before the earliest retained entry returns `entries`, the retained entries after it in order. An older cursor returns `cursor-expired` with the earliest retained position, and the reader falls back to a durable snapshot, which item 14 provides (architecture R14).
 

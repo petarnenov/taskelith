@@ -161,7 +161,7 @@ When a generation ends, each of its open requests SHALL become `unresolved`, eac
 - **THEN** the response is `delivery-uncertain` and is listed among the uncertain deliveries
 
 ### Requirement: Output retention with cursor recovery
-Output SHALL take session-wide positions from 1 without gaps, each tied to its turn and generation; the retained window SHALL hold at most `OUTPUT_RETENTION_BYTES`, 10 MiB of UTF-8 text, dropping the oldest entries, and reading after a cursor older than the window SHALL return `cursor-expired` with the earliest retained position.
+Output SHALL take session-wide positions from 1 without gaps, each tied to its turn and generation, and empty output SHALL record no entry and take no position; the retained window SHALL hold at most `OUTPUT_RETENTION_BYTES`, 10 MiB of UTF-8 text, dropping the oldest entries, and reading after a cursor older than the window SHALL return `cursor-expired` with the earliest retained position.
 
 #### Scenario: Read after a cursor
 - **WHEN** a reader asks for output after a retained position
@@ -170,6 +170,10 @@ Output SHALL take session-wide positions from 1 without gaps, each tied to its t
 #### Scenario: Window bound
 - **WHEN** output beyond 10 MiB of UTF-8 text is appended
 - **THEN** the oldest entries leave the window, and the retained text is at most 10 MiB
+
+#### Scenario: Empty output
+- **WHEN** output with empty text is appended for the running turn
+- **THEN** the session is unchanged, with no new entry or position
 
 #### Scenario: Expired cursor
 - **WHEN** a reader asks for output after a position that left the retained window

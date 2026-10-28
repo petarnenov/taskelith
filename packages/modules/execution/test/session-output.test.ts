@@ -64,6 +64,20 @@ test('output beyond 10 MiB drops the oldest entries, and the window stays within
   assert.ok(over.output.retainedBytes <= OUTPUT_RETENTION_BYTES);
 });
 
+test('empty output records no entry and takes no position, so it never grows the window', () => {
+  const session = appended(sessionWithRunningTurn(), 'a');
+  const empties = appended(session, ...Array.from({ length: 1000 }, () => ''));
+  assert.equal(empties, session);
+  assert.deepEqual(empties.output, { entries: [{ turnId: 'turn-1', generation: 1, text: 'a', position: 1 }], retainedBytes: 1, lastPosition: 1 });
+});
+
+test('one-byte output counts one byte each, so the window holds at most as many entries as bytes', () => {
+  const tiny = appended(chunks(CHUNKS_IN_WINDOW), 'y', 'y', 'y');
+  assert.equal(tiny.output.entries[0]?.position, 2);
+  assert.equal(tiny.output.entries.length, CHUNKS_IN_WINDOW + 2);
+  assert.equal(tiny.output.retainedBytes, OUTPUT_RETENTION_BYTES - MAX_HARNESS_TEXT_LENGTH + 3);
+});
+
 test('a cursor that left the window is cursor-expired with the earliest retained position', () => {
   const over = appended(chunks(CHUNKS_IN_WINDOW), CHUNK, CHUNK);
   assert.deepEqual(value(readOutputAfter(over, 0)), { kind: 'cursor-expired', earliestRetained: 3 });
