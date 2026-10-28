@@ -118,7 +118,7 @@ The wire enumerations of refusal, non-retryable launch rejection, launch rejecti
 - **THEN** the package tests fail
 
 ### Requirement: Execution HTTP operations
-The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, and `downloadEvidence`. Each SHALL declare its credential: an enrollment token, the worker credential, or the operator credential. Errors SHALL use the kernel failure shape.
+The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, `downloadEvidence`, and `readInstallationCa`. Each SHALL declare its credential: an enrollment token, the worker credential, or the operator credential; only `readInstallationCa`, which answers the public installation CA certificate, SHALL declare none. Errors SHALL use the kernel failure shape.
 
 #### Scenario: Parent in a delegation request
 - **WHEN** a delegation request names `parentTaskId`
@@ -127,6 +127,10 @@ The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDel
 #### Scenario: Worker in a launch request
 - **WHEN** a launch authorization request names `workerId`
 - **THEN** the request body is invalid
+
+#### Scenario: Key material in the installation CA answer
+- **WHEN** an `InstallationCa` answer holds a PEM private-key block
+- **THEN** the answer is invalid
 
 ### Requirement: Launch authorization outcome
 `authorizeLaunch` SHALL return the decision recorded for its `operationId` with status 200. The decision is a grant with its bound values, `ttlMilliseconds`, and `skewMilliseconds`, a rejection with its reason and retryability, a revoked grant with its revocation reason, or an expired grant. Status 503 SHALL mean that no decision was reached.

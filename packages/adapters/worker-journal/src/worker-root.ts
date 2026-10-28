@@ -18,7 +18,7 @@ import { rootFailure } from './journal-failure.js';
 import { checkJournalFault, clearJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
 import { SqliteWorkerJournal, type CommitPointHook, type JournalClock } from './sqlite-worker-journal.js';
 import { checkVolume, probeVolume, type VolumeProbe } from './volume.js';
-import { writeCredentials, type WorkerEnrollment } from './worker-credentials.js';
+import { writeCredentials, writeInstallationCaPin, type WorkerEnrollment } from './worker-credentials.js';
 import { readIdentity, serializeIdentity, type WorkerIdentity } from './worker-identity.js';
 import { ownerUid, workerPaths, type WorkerPaths } from './worker-paths.js';
 
@@ -93,8 +93,8 @@ export function claimWorkerRoot(options: WorkerRootOptions): Result<RootClaim> {
   return ok(rootClaim(paths, options, lock.value));
 }
 
-// Enrollment's part (items 13, 20): the journal, then the credentials, then
-// the identity, so an identity without a journal means a loss (section 2).
+// Enrollment's part (items 13, 20): the journal, the credentials, the CA,
+// then the identity, so an identity without a journal means a loss.
 export function enrollWorkerRoot(options: WorkerRootOptions, enrollment: WorkerEnrollment): Result<WorkerRoot> {
   const claim = claimWorkerRoot(options);
   return claim.ok ? claim.value.complete(enrollment) : claim;
@@ -146,6 +146,8 @@ function createJournalThenIdentity(
   created.value.close();
   const credentials = writeCredentials(paths, enrollment);
   if (!credentials.ok) return credentials;
+  const pinned = writeInstallationCaPin(paths, enrollment);
+  if (!pinned.ok) return pinned;
   const { installationId, workerId, journalId, credentialGeneration } = enrollment;
   const identity: WorkerIdentity = { installationId, workerId, journalId, credentialGeneration, credentials: credentials.value };
   const written = createOnce(paths.identity, serializeIdentity(identity));
@@ -244,7 +246,7 @@ function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Re
   const uid = ownerUid();
   // The workspace root too: the execution group's grant must not follow it.
   const records = [
-    paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs,
+    paths.identity, paths.credentials, paths.installationCa, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs,
     paths.workspaces,
   ];
   for (const record of records) {

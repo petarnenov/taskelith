@@ -23,7 +23,7 @@ const BINDING: JournalBinding = {
   installationId: id('InstallationId', 'installation1'), workerId: id('WorkerId', WORKER), journalId: id('JournalId', 'journal-1'),
   recoveryEpoch: value(parseRecoveryEpoch(1)),
 };
-const ENROLLMENT: WorkerEnrollment = { ...BINDING, credentialGeneration: 1, credentials: { controlPlane: 'tkwk_test', broker: 'creds' } };
+const ENROLLMENT: WorkerEnrollment = { ...BINDING, credentialGeneration: 1, credentials: { controlPlane: 'tkwk_test', broker: 'creds' }, installationCa: 'installation CA' };
 const CAPACITY: WorkerCapacity = { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8000, controls: ['memory-limit'] };
 
 class FakeBroker {

@@ -15,9 +15,11 @@
     "@taskelith/fleet": "0.0.0",
     "@taskelith/kernel": "0.0.0",
     "@taskelith/observability": "0.0.0",
-    "@taskelith/sdlc": "0.0.0"
+    "@taskelith/sdlc": "0.0.0",
+    "undici": "7.30.1"
   },
   "devDependencies": {
+    "@taskelith/certificates": "0.0.0",
     "@taskelith/testing": "0.0.0"
   }
 }
