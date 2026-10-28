@@ -33,6 +33,9 @@ export interface ReclaimHost {
   populated(containment: ReclaimContainment): Promise<boolean>;
   // Frees what `launch` made, once the containment is proven empty.
   release(containment: ReclaimContainment): Promise<void>;
+  // Kills what a recorded containment still holds, so that a later
+  // reclaim finishes the cleanup of a failed program (section 3).
+  killRecorded(containment: ReclaimContainment): Promise<void>;
 }
 
 // The program and the arguments before the reclaim's own; a test may
@@ -194,6 +197,10 @@ export class LinuxReclaimHost implements ReclaimHost {
       if (error.code !== 'ENOENT') throw error;
     });
   }
+
+  killRecorded(containment: ReclaimContainment): Promise<void> {
+    return killCgroup(join(this.#parent, cgroupName(containment)));
+  }
 }
 
 // `cgroup.kill` kills every process of the cgroup and its descendants; a
@@ -250,4 +257,8 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
   }
 
   async release(): Promise<void> {}
+
+  // A recorded group identifier may be another group's by now, so it is
+  // only proven, never signalled (contract section 3, reused group).
+  async killRecorded(): Promise<void> {}
 }

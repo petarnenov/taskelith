@@ -312,7 +312,7 @@ export class GitWorkspaces implements WorkspaceProvider {
     const path = this.#handOffRecordOf(attemptId);
     const current = await readHandOffRecord(path);
     if (!current.ok || current.value === undefined) return current.ok ? ok(undefined) : current;
-    if (current.value.reclaimFailed) return reclaimFailed();
+    if (current.value.reclaimFailed) return this.#cleanedUp(current.value.containment, (held) => this.#reclaimHost.killRecorded(held));
     const proven = await this.#provenEmpty(current.value);
     if (!proven.ok) return proven;
     const checkout = join(recorded.value.directory, WORKSPACE_LAYOUT.checkout);
@@ -367,9 +367,20 @@ export class GitWorkspaces implements WorkspaceProvider {
     const { containment } = launched;
     const recorded = await writeHandOffRecord(path, { containment, reclaimFailed: true });
     if (!recorded.ok) return recorded;
-    await launched.kill();
-    const released = await this.#released(containment);
-    return released.ok ? reclaimFailed() : reclaimFailed(`; ${released.error.message}`);
+    return this.#cleanedUp(containment, () => launched.kill());
+  }
+
+  // After a durable failure every outcome is `reclaim-failed`; a cleanup
+  // that a fault interrupts is finished by a later reclaim.
+  async #cleanedUp(containment: ReclaimContainment | null, kill: (held: ReclaimContainment) => Promise<void>): Promise<Result<void>> {
+    if (containment === null) return reclaimFailed();
+    try {
+      await kill(containment);
+      const released = await this.#released(containment);
+      return released.ok ? reclaimFailed() : reclaimFailed(`; ${released.error.message}`);
+    } catch {
+      return reclaimFailed('; the cleanup of its containment is unfinished');
+    }
   }
 
   // Frees the containment of an exited program once it is proven empty.
@@ -760,7 +771,7 @@ async function withinBound(exited: Promise<ReclaimOutcome>, boundMs: number): Pr
   }
 }
 
-// `remainder` tells of a containment still populated after the kill.
+// `remainder` tells why the containment is not freed yet.
 function reclaimFailed(remainder = ''): Result<never> {
   const message = `the reclaim program failed; the workspace stays handed off${remainder}`;
   return workspaceFailure('precondition-failed', 'reclaim-failed', message);

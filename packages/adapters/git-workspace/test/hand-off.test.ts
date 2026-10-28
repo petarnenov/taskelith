@@ -206,7 +206,7 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
     }
     assert.equal(host.launched.length, 1);
     assert.deepEqual(await readRecord(git), { containment: host.launched[0], reclaimFailed: true });
-    assert.deepEqual(host.released, host.launched, 'the empty containment of the failed program is freed');
+    assert.deepEqual(host.released[0], host.launched[0], 'the empty containment of the failed program is freed');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
     value(await git.local.handOff(FIRST));
@@ -214,6 +214,52 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
     assert.equal(failed(await git.local.handOff(SECOND)).code, 'not-found');
   }, { reclaimHost: host });
 });
+
+type CleanupStep = 'kill' | 'populated' | 'release';
+
+// A file system fault as Node raises it, with a path in its message.
+const cleanupFault = (syscall: string) => Object.assign(new Error(`EIO: i/o error, ${syscall} '/private/checkout'`), { code: 'EIO', syscall });
+
+// The first call of `step` meets a file system fault; every other call
+// goes to the counting host it wraps.
+function faultingOnce(step: CleanupStep, inner: CountingHost): ReclaimHost {
+  let faulted = false;
+  const once = <T>(name: CleanupStep, call: () => Promise<T>): Promise<T> => {
+    if (name !== step || faulted) return call();
+    faulted = true;
+    return Promise.reject(cleanupFault(name));
+  };
+  return {
+    executionAccount: inner.executionAccount,
+    launch: async (checkout, containmentName) => {
+      const launched = await inner.launch(checkout, containmentName);
+      return launched.ok ? ok({ ...launched.value, kill: () => once('kill', () => launched.value.kill()) }) : launched;
+    },
+    populated: (containment) => once('populated', () => inner.populated(containment)),
+    release: (containment) => once('release', () => inner.release(containment)),
+    killRecorded: (containment) => inner.killRecorded(containment),
+  };
+}
+
+for (const step of ['kill', 'populated', 'release'] as const) {
+  test(`a fault at ${step} after a failed program still fails as reclaim-failed, and a later reclaim cleans up`, () => {
+    const host = failingHost();
+    return withFixture(async (git) => {
+      value(await git.local.prepare(request(git)));
+      value(await git.local.handOff(FIRST));
+      const interrupted = failed(await git.local.reclaim(FIRST));
+      assert.deepEqual([interrupted.details.reason, interrupted.message.includes('/private')], ['reclaim-failed', false]);
+      assert.match(interrupted.message, /cleanup of its containment is unfinished/);
+      const containment = host.launched[0]!;
+      assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
+      assert.deepEqual(host.released, []);
+      assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
+      assert.deepEqual([host.killedRecorded, host.released], [[containment], [containment]], 'the restarted reclaim cleans up');
+      assert.equal(host.launched.length, 1, 'the program never runs again');
+      assert.deepEqual(await git.local.handedOff(), [FIRST]);
+    }, { reclaimHost: faultingOnce(step, host) });
+  });
+}
 
 test('a worker killed after a failed program and before its record runs the program once more', () => {
   const host = failingHost();
@@ -379,6 +425,8 @@ class GatedReleaseHost implements ReclaimHost {
     await this.reclaimed;
     return false;
   }
+
+  async killRecorded(): Promise<void> {}
 
   async release(): Promise<void> {
     this.#inRelease = true;
