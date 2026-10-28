@@ -1,6 +1,6 @@
 # Verification: implement-operator-login-and-roles
 
-Status: implemented and verified by the author; independent review pending.
+Status: implemented and verified by the author; review pass 1 found 1 High and 7 Medium findings, seven fixed and one (M3) returned to the coordinator; pass 2 pending.
 
 ## Scope and source
 
@@ -65,7 +65,24 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending: pass 1 by reviewer A, pass 2 by reviewer B. The brief's efforts run, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, although `route.json` recommended `high` for reviewer A and `xhigh` for reviewer B, because governance does not authorize the routed effort (coordinator R1, 2026-10-28).
+Pass 1 by reviewer A is below; pass 2 by reviewer B is pending. The brief's efforts run, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, although `route.json` recommended `high` for reviewer A and `xhigh` for reviewer B, because governance does not authorize the routed effort (coordinator R1, 2026-10-28).
+
+### Review pass 1
+
+Reviewer A, Codex CLI 0.164.0, model `gpt-6.1-sol`, effort `medium` (the brief's; `route.json` recommended `high`), sandbox read-only, at `36a1ae5a`. Invocation: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt file>`. The session header confirmed the model, the effort, and the read-only sandbox; session `01a182da-e6a9-7210-84a5-8ab41618a5cf`. The working tree snapshot before and after the pass was the same (`7989577a695f41197b912100793aef9a6f3665ae53e280a6dd274883d4d8ae3d`), so the reviewer changed no file. It ran 52 tests and `verify:comments`, which passed; the HTTP suite could not listen in its sandbox (`EPERM`), and it ran neither `make verify` nor the PostgreSQL suites.
+
+Findings: 0 Critical, 1 High, 7 Medium, 0 Low, as `findings.jsonl` records them. Each fix has a test that fails before it and passes after it, run on the built workspace before and after the fix.
+
+- **H1 (concurrency-race), `a0405509`.** A login read the principal and its hash before the slow verification and outside the rotation, so a `set-password` that finished meanwhile could not stop it, and a due rehash wrote the old password over the new one. The rotation transaction now rereads the principal and refuses the login with `login-failed` unless it is enabled and still has the verified hash. Two tests change the password while a gated verification waits, against a current and a rehash-due hash.
+- **M1 (concurrency-race), `a0405509`.** The rotation now rereads the session and answers `unauthenticated` unless it is still live; a test expires the anonymous session while the verification waits.
+- **M2 (contract-drift), `b466cd50`.** `submitTask` checked its run's project after the body. A `resource-project` rule now names where its project is, `path-resource` or `body`, and the server calls `ApiHandlers.authorizeResource` before the body, so only `createRun` checks its role after the body, as wire contracts section 2 allows. A session probe of `submitTask` with an invalid body gets the 403 `role-required` for a foreign and an unknown run alike.
+- **M3 (contract-drift), open.** The schema of `LoginRequest` counts `Password.maxLength` before NFC, so a password of up to 1024 characters after NFC can be refused at login when sent decomposed. Normalizing before the schema check would accept a body the document's `maxLength` refuses as sent; that is a contract decision, returned to the coordinator with options, and the line's outcome stays `deferred` until it is answered.
+- **M4 (contract-drift), `6172ede0`.** An unknown name cost one computation at the current parameters, a wrong password for a legacy hash only its weaker ones. A failed verification now lasts at least the last measured cost at the current parameters, and computes one when none was measured yet. A test with a fake whose cost is memory times passes shows the same cost for an unknown name and a current and a legacy hash.
+- **M5 (redaction), `643c7c8a`.** The request log kept every query parameter. Routes now declare the query parameters of their document (`listQuarantine`: `from`), and the log keeps only those, still redacted; a test checks every route against the documents, and wire contracts section 7 names the declared query parameters. Unit and HTTP tests show that a password and unprefixed tokens in the query are not logged.
+- **M6 (error-handling), `c30fddee`.** The secret reader decoded each chunk alone. A `StringDecoder` now decodes across chunks; a test splits a line at every byte.
+- **M7 (error-handling), `c30fddee`.** Ctrl-C ended the line as if confirmed. It now answers a `cancelled` failure after the terminal mode is restored, and `set-password` writes nothing; a unit test checks the modes, and the PostgreSQL test checks that the hashes, the audit trail, and the sessions are unchanged.
+
+Route: not routed again. Worker step 4 asks for a new route only when the fixes of the `make verify` run before pass 1 change the diff, not after review fixes, as pass 2 of `route-reviewers-by-change-complexity` found (its finding 5).
 
 ## Remaining gates
 
@@ -74,5 +91,5 @@ Pending: pass 1 by reviewer A, pass 2 by reviewer B. The brief's efforts run, re
 - Change 10b: `retireEvidence`, the 404 of a download whose record was retired meanwhile, and the sweep of evidence content whose digest no record refers to (Q13, D2; execution wire contracts section 9).
 - The other operations of execution wire contracts section 8.1, by the items that own their handlers (D2): `listUnknownExecutions`, `listUnrecordedProcesses`, and `readmitTask` item 44; `readDelegationResult` item 38; `fetchSlotCredential` item 12; `issueRunScmCredential` and `fetchRunScmCredential` item 21.
 - Item 11: the 403 on the operator operations of the G2 execution and SDLC documents, named in its brief.
-- Review passes.
+- The coordinator's decision on pass 1 M3, then review pass 2 by reviewer B.
 - Integration into dev by the coordinator (single pull request)
