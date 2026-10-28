@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
-import type { CredentialRenewalClient, RenewalAnswer, RenewalMaterial } from '@taskelith/fleet';
+import type { CredentialRenewalClient, CredentialRenewalRequest, RenewedCredentials } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Failure, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
@@ -38,16 +38,17 @@ function deferred<T>() {
 
 // Answers each call from its queue and announces it to the waiting test.
 class FakeRenewal implements CredentialRenewalClient {
-  readonly renewals: Array<{ bearer: string; material: RenewalMaterial }> = [];
+  readonly renewals: Array<{ bearer: string; request: CredentialRenewalRequest }> = [];
   readonly confirmations: Array<{ bearer: string; generation: number }> = [];
-  renewAnswers: Array<Result<RenewalAnswer>> = [];
+  renewAnswers: Array<Result<RenewedCredentials>> = [];
   confirmAnswers: Array<Result<void>> = [];
   #renewed = deferred<void>();
   #confirmed = deferred<void>();
 
-  async renew(bearer: string, material: RenewalMaterial): Promise<Result<RenewalAnswer>> {
-    this.renewals.push({ bearer, material });
-    const answer = this.renewAnswers.shift() ?? ok({ generation: material.generation, brokerUserJwt: `jwt-${material.generation}`, deadline: DEADLINE });
+  async renew(bearer: string, request: CredentialRenewalRequest): Promise<Result<RenewedCredentials>> {
+    this.renewals.push({ bearer, request });
+    const { credentialGeneration } = request;
+    const answer = this.renewAnswers.shift() ?? ok({ credentialGeneration, brokerUserJwt: `jwt-${credentialGeneration}`, deadline: DEADLINE });
     this.#renewed.resolve();
     return answer;
   }
@@ -141,11 +142,11 @@ test('a notice for the next generation renews it, adopts it, re-dials, and confi
   assert.equal(pending.controlPlane.startsWith('tkwk_'), true, 'the generator the control plane uses');
 
   await renewal.renewed(1);
-  const [{ bearer, material }] = renewal.renewals;
+  const [{ bearer, request }] = renewal.renewals;
   assert.equal(bearer, BEARER_1, 'renewed with the confirmed generation');
-  assert.equal(material.generation, 2);
-  assert.match(material.brokerUserKey, /^U[A-Z2-7]{55}$/);
-  assert.equal(material.controlPlaneSha256, sha256(pending.controlPlane), 'only the hash leaves the worker');
+  assert.equal(request.credentialGeneration, 2);
+  assert.match(request.brokerUserPublicKey, /^U[A-Z2-7]{55}$/);
+  assert.equal(request.controlPlaneSecretSha256, sha256(pending.controlPlane), 'only the hash leaves the worker');
 
   await announced.promise;
   const adopted = value(readIdentity(root.paths.identity));
@@ -195,7 +196,7 @@ test('a worker restarted after storing the pending generation renews it with the
 
   started();
   await renewal.renewed(2);
-  assert.deepEqual(renewal.renewals[1]!.material, renewal.renewals[0]!.material, 'the stored key and secret are renewed again');
+  assert.deepEqual(renewal.renewals[1]!.request, renewal.renewals[0]!.request, 'the stored key and secret are renewed again');
 });
 
 test('a start after a crash in the removal of the confirmed predecessor removes its files', async () => {
@@ -280,7 +281,7 @@ test('a next notice while a confirmation answer was lost is stored, then renewed
   await renewal.renewed(2);
   assert.deepEqual(renewal.confirmations.map(({ generation }) => generation), [2, 2], 'generation 2 is confirmed first');
   assert.equal(renewal.renewals[1]!.bearer, bearer2);
-  assert.equal(renewal.renewals[1]!.material.generation, 3);
+  assert.equal(renewal.renewals[1]!.request.credentialGeneration, 3);
   await waitUntil(() => value(readIdentity(root.paths.identity)).credentialGeneration === 3);
 });
 

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import { checkHttpSchema } from '@taskelith/contracts';
+import type { CredentialRenewalRequest } from '@taskelith/fleet';
 import { HttpCredentialRenewalClient } from '@taskelith/worker-control-plane-client';
 import { failed, value } from '@taskelith/testing';
 
@@ -10,7 +11,9 @@ import { failed, value } from '@taskelith/testing';
 const PLAIN_HTTP_CA = 'unused CA';
 
 const BEARER = `tkwk_${'B'.repeat(43)}`;
-const MATERIAL = { generation: 2, brokerUserKey: `U${'A'.repeat(55)}`, controlPlaneSha256: 'ab'.repeat(32) };
+const RENEWAL_REQUEST: CredentialRenewalRequest = {
+  credentialGeneration: 2, brokerUserPublicKey: `U${'A'.repeat(55)}`, controlPlaneSecretSha256: 'ab'.repeat(32) as CredentialRenewalRequest['controlPlaneSecretSha256'],
+};
 const RENEWAL = { credentialGeneration: 2, brokerUserJwt: 'eyJ.jwt.sig', deadline: '2026-11-01T09:00:00.000Z' };
 
 let answer: { status: number; body: unknown } = { status: 200, body: RENEWAL };
@@ -39,11 +42,11 @@ function client(): HttpCredentialRenewalClient {
 
 test('a renewal sends only the public key and the hash under the current bearer', async () => {
   answer = { status: 200, body: RENEWAL };
-  assert.deepEqual(value(await client().renew(BEARER, MATERIAL)), { generation: 2, brokerUserJwt: RENEWAL.brokerUserJwt, deadline: RENEWAL.deadline });
+  assert.deepEqual(value(await client().renew(BEARER, RENEWAL_REQUEST)), { credentialGeneration: 2, brokerUserJwt: RENEWAL.brokerUserJwt, deadline: RENEWAL.deadline });
   const request = seen.at(-1)!;
   assert.deepEqual([request.path, request.authorization], ['/api/workers/credentials/renewals', `Bearer ${BEARER}`]);
   assert.ok(checkHttpSchema('CredentialRenewalRequest', request.body).ok);
-  assert.deepEqual(request.body, { credentialGeneration: 2, brokerUserPublicKey: MATERIAL.brokerUserKey, controlPlaneSecretSha256: MATERIAL.controlPlaneSha256 });
+  assert.deepEqual(request.body, RENEWAL_REQUEST);
 });
 
 test('a confirmation names its generation under the new bearer', async () => {
@@ -55,15 +58,15 @@ test('a confirmation names its generation under the new bearer', async () => {
 
 test('a refusal keeps its code and reason; an answer for another generation or schema is internal', async () => {
   answer = { status: 409, body: { code: 'conflict', message: 'refused', details: { reason: 'rotation-not-requested' } } };
-  const refused = failed(await client().renew(BEARER, MATERIAL));
+  const refused = failed(await client().renew(BEARER, RENEWAL_REQUEST));
   assert.deepEqual([refused.code, refused.details.reason], ['conflict', 'rotation-not-requested']);
   assert.equal(refused.message.includes(BEARER), false);
   answer = { status: 503, body: { code: 'unavailable', message: 'down', details: {} } };
   assert.equal(failed(await client().confirm(BEARER, 2)).code, 'unavailable');
   answer = { status: 200, body: { ...RENEWAL, credentialGeneration: 3 } };
-  assert.equal(failed(await client().renew(BEARER, MATERIAL)).code, 'internal');
+  assert.equal(failed(await client().renew(BEARER, RENEWAL_REQUEST)).code, 'internal');
   answer = { status: 200, body: { ...RENEWAL, brokerUserJwt: '' } };
-  assert.equal(failed(await client().renew(BEARER, MATERIAL)).code, 'internal');
+  assert.equal(failed(await client().renew(BEARER, RENEWAL_REQUEST)).code, 'internal');
   answer = { status: 200, body: { credentialGeneration: 3, revocationsPublished: true } };
   assert.equal(failed(await client().confirm(BEARER, 2)).code, 'internal');
   answer = { status: 200, body: {} };
@@ -72,6 +75,6 @@ test('a refusal keeps its code and reason; an answer for another generation or s
 
 test('no answer is unavailable', async () => {
   const unreachable = new HttpCredentialRenewalClient({ installationCa: PLAIN_HTTP_CA, baseUrl: new URL('http://127.0.0.1:1/'), timeoutMilliseconds: 500 });
-  assert.equal(failed(await unreachable.renew(BEARER, MATERIAL)).code, 'unavailable');
+  assert.equal(failed(await unreachable.renew(BEARER, RENEWAL_REQUEST)).code, 'unavailable');
   assert.equal(failed(await unreachable.confirm(BEARER, 2)).code, 'unavailable');
 });

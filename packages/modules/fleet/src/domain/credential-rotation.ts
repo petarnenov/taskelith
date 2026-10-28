@@ -1,4 +1,4 @@
-import type { AuditEvent } from '@taskelith/access';
+import type { AuditEvent, SecretHash } from '@taskelith/access';
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import { credentialEvent, expiryEvent, WORKER_ACTOR } from './credential-audit.js';
 import {
@@ -24,15 +24,30 @@ export interface RotationStep {
   readonly event?: AuditEvent;
 }
 
-export interface RotationOrderFacts {
+// What `rotate-worker` asks for: the request time, its deadline, and the
+// operator's actor and reason for the audit event.
+export interface RotationOrder {
   readonly requestedAt: Instant;
   readonly deadline: Instant;
   readonly actor: string;
   readonly reason: string;
 }
 
+// The public part of the generation the worker generated.
+export interface CredentialRenewalRequest {
+  readonly credentialGeneration: number;
+  readonly brokerUserPublicKey: string;
+  readonly controlPlaneSecretSha256: SecretHash;
+}
+
+export interface RenewedCredentials {
+  readonly credentialGeneration: number;
+  readonly brokerUserJwt: string;
+  readonly deadline: Instant;
+}
+
 // A new request is audited; an open one is answered unchanged.
-export function requestStep(worker: EnrolledWorker, order: RotationOrderFacts): RotationStep & { readonly request: RotationRequest } {
+export function requestStep(worker: EnrolledWorker, order: RotationOrder): RotationStep & { readonly request: RotationRequest } {
   const credentials = requestRotation(worker.credentials, order.requestedAt, order.deadline);
   const request = credentials.rotation!;
   if (credentials === worker.credentials) return { worker, revocations: [], request };

@@ -1,5 +1,5 @@
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
-import { checkAdministrativeInvocation, type SecretHash, type Secrets } from '@taskelith/access';
+import { checkAdministrativeInvocation, type Secrets } from '@taskelith/access';
 import type { RecoveryEpoch, WorkerId } from '@taskelith/execution';
 import type { Clock } from '@taskelith/sdlc';
 import {
@@ -15,7 +15,7 @@ import {
   type RotationRequest,
   type WorkerPrincipal,
 } from '../domain/enrollment.js';
-import { rotationConflict } from '../domain/credential-rotation.js';
+import { rotationConflict, type CredentialRenewalRequest, type RenewedCredentials } from '../domain/credential-rotation.js';
 import { FLEET_LIMITS, type FleetLimits } from '../domain/fleet-limits.js';
 import { parseWorkerId, type InstallationIdentity } from '../domain/installation.js';
 import type { BrokerCredentials } from '../ports/broker-credentials.js';
@@ -46,18 +46,6 @@ export interface RequestedRotation {
   readonly deadline: Instant;
 }
 
-// The public part of the generation the worker generated.
-export interface CredentialRenewalRequest {
-  readonly credentialGeneration: number;
-  readonly brokerUserPublicKey: string;
-  readonly controlPlaneSecretSha256: SecretHash;
-}
-
-export interface RenewedCredentials {
-  readonly credentialGeneration: number;
-  readonly brokerUserJwt: string;
-  readonly deadline: Instant;
-}
 
 // `revocationsPublished` false means the dropped predecessor is recorded but
 // the broker does not know yet; the next publication retries it.

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { launchRetryDelay } from '@taskelith/execution';
 import type { CredentialRenewalClient } from '@taskelith/fleet';
 import { failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
@@ -146,11 +145,11 @@ export class CredentialRotation {
   // Renewed with the confirmed generation's bearer; a replay of the same
   // material answers the same JWT.
   async #renew(pending: PendingGeneration): Promise<Step> {
-    const brokerUserKey = brokerUserPublicKey(pending.brokerSeed);
-    if (brokerUserKey === undefined) throw failure('internal', `the pending generation ${pending.credentialGeneration} holds no NKey user seed`);
-    const controlPlaneSha256 = createHash('sha256').update(pending.controlPlane, 'utf8').digest('hex');
-    const material = { generation: pending.credentialGeneration, brokerUserKey, controlPlaneSha256 };
-    const renewed = await this.#options.renewal.renew(this.#current.controlPlane, material);
+    const publicKey = brokerUserPublicKey(pending.brokerSeed);
+    if (publicKey === undefined) throw failure('internal', `the pending generation ${pending.credentialGeneration} holds no NKey user seed`);
+    const controlPlaneSecretSha256 = SECRETS.hashOf(pending.controlPlane);
+    const request = { credentialGeneration: pending.credentialGeneration, brokerUserPublicKey: publicKey, controlPlaneSecretSha256 };
+    const renewed = await this.#options.renewal.renew(this.#current.controlPlane, request);
     if (!renewed.ok) return this.#unfinished('renewal', pending.credentialGeneration, renewed.error);
     const broker = credsFile(renewed.value.brokerUserJwt, new TextEncoder().encode(pending.brokerSeed));
     const next = { controlPlane: pending.controlPlane, broker };
@@ -197,9 +196,11 @@ export class CredentialRotation {
   }
 }
 
-// The bearer comes from the generator the control plane uses.
+// The generator and hash the control plane uses for the bearer.
+const SECRETS = new NodeSecrets();
+
 function newGeneration(generation: number): PendingGeneration {
-  const { secret } = new NodeSecrets().issue('worker');
+  const { secret } = SECRETS.issue('worker');
   return { credentialGeneration: generation, controlPlane: secret, brokerSeed: newBrokerUserKey().seed };
 }
 

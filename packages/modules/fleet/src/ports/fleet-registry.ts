@@ -2,6 +2,7 @@ import type { Instant, Result } from '@taskelith/kernel';
 import type { AuditEvent, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import type { Clock } from '@taskelith/sdlc';
+import type { RotationOrder } from '../domain/credential-rotation.js';
 import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken, RotationRequest } from '../domain/enrollment.js';
 
 // Tokens, enrolled workers, and the durable list of broker users to revoke;
@@ -49,13 +50,4 @@ export interface FleetRegistry {
   // When a recorded revocation is unpublished, hands every recorded one to
   // `push`, then marks them published; one publisher runs at a time.
   publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>>;
-}
-
-// What `rotate-worker` asks for: the request time, its deadline, and the
-// operator's actor and reason for the audit event.
-export interface RotationOrder {
-  readonly requestedAt: Instant;
-  readonly deadline: Instant;
-  readonly actor: string;
-  readonly reason: string;
 }

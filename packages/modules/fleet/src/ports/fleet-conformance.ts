@@ -4,7 +4,8 @@ import type { JournalId, WorkerId } from '@taskelith/execution';
 import { expectCode, expectRead, expectSame, expectSuccess, type Clock, type ConformanceCase } from '@taskelith/sdlc';
 import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
 import { installationIdentity } from '../domain/installation.js';
-import type { FleetRegistry, RotationOrder } from './fleet-registry.js';
+import type { RotationOrder } from '../domain/credential-rotation.js';
+import type { FleetRegistry } from './fleet-registry.js';
 import type { InstallationTable } from './installation-records.js';
 
 // Shared suites; each case gets an empty store.

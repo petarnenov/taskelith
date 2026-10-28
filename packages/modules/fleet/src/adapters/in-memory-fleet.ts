@@ -8,6 +8,7 @@ import {
   renewalStep,
   requestStep,
   rotationExpiryStep,
+  type RotationOrder,
   type RotationStep,
 } from '../domain/credential-rotation.js';
 import {
@@ -22,7 +23,7 @@ import {
   type RotationRequest,
 } from '../domain/enrollment.js';
 import type { InstallationIdentity } from '../domain/installation.js';
-import type { FleetRegistry, RotationOrder } from '../ports/fleet-registry.js';
+import type { FleetRegistry } from '../ports/fleet-registry.js';
 import type { InstallationRecord, InstallationTable } from '../ports/installation-records.js';
 
 // Each method checks and writes without awaiting, so that concurrent writers

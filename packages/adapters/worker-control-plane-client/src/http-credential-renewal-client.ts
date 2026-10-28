@@ -1,5 +1,5 @@
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
-import type { CredentialRenewalClient, RenewalAnswer, RenewalMaterial } from '@taskelith/fleet';
+import type { CredentialRenewalClient, CredentialRenewalRequest, RenewedCredentials } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { pinnedTarget, postJson, statusFailure, type ControlPlaneEndpoint, type HttpTarget } from './control-plane-http.js';
 import { sanitizeFailureText } from './failure-cause.js';
@@ -13,12 +13,8 @@ export class HttpCredentialRenewalClient implements CredentialRenewalClient {
     this.#target = pinnedTarget(endpoint);
   }
 
-  async renew(bearer: string, material: RenewalMaterial): Promise<Result<RenewalAnswer>> {
-    const request: HttpSchemas['CredentialRenewalRequest'] = {
-      credentialGeneration: material.generation,
-      brokerUserPublicKey: material.brokerUserKey,
-      controlPlaneSecretSha256: material.controlPlaneSha256,
-    };
+  async renew(bearer: string, renewal: CredentialRenewalRequest): Promise<Result<RenewedCredentials>> {
+    const request: HttpSchemas['CredentialRenewalRequest'] = { ...renewal };
     const answered = await postJson(this.#target, 'workers/credentials/renewals', bearer, request);
     if (!answered.ok) return answered;
     if (answered.value.status !== 200) return err(statusFailure('renewWorkerCredentials', answered.value));
@@ -27,8 +23,8 @@ export class HttpCredentialRenewalClient implements CredentialRenewalClient {
     const { credentialGeneration, brokerUserJwt, deadline } = checked.value;
     const at = parseInstant(deadline);
     if (!at.ok) return err(failure('internal', 'the renewal deadline is not an instant'));
-    if (credentialGeneration !== material.generation) return err(failure('internal', 'the control plane renewed another generation'));
-    return ok(Object.freeze({ generation: credentialGeneration, brokerUserJwt, deadline: at.value }));
+    if (credentialGeneration !== renewal.credentialGeneration) return err(failure('internal', 'the control plane renewed another generation'));
+    return ok(Object.freeze({ credentialGeneration, brokerUserJwt, deadline: at.value }));
   }
 
   async confirm(bearer: string, generation: number): Promise<Result<void>> {
