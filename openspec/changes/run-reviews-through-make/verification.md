@@ -51,13 +51,14 @@ Before the change both test files fail to load, because the scripts do not exist
 
 - `npm run openspec -- validate run-reviews-through-make --strict`: `Change 'run-reviews-through-make' is valid`.
 - `node --experimental-strip-types --test test/review-run.test.ts test/reviewer-invocations.test.ts`: 21 tests, 21 pass.
+- After decision 3, `make verify` on `75452e81` failed in its type check (`TS4104` at `test/review-run.test.ts`, a mutable return type; fixed in `7aba1c6b`), and on `7aba1c6b` in strict OpenSpec validation (task 4.2 under group 5; moved in `21888276`). It passed on `21888276`, whose stamp the route gate needed, and on `b927de52` with the new `route.json`, the run recorded below.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `15d001bc5dcc4b9d09b94ee35c6ec0268009b6a5`; tests 3079, pass 3055, fail 0, skipped 24; all files 99.37% lines, 92.68% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `56ce4b2724a833a86cc57e58a138f8ab96c87690`; tests 3079, pass 3055, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
 - `npm run openspec -- validate run-reviews-through-make --strict`: passed, `Change 'run-reviews-through-make' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 67 file(s); every pass summary file is valid: 47 file(s); every route file is valid: 3 file(s).`.
 - Spec diff against the merge base `bbce0e81d8e6` with `origin/dev`: no change under `openspec/specs`.
