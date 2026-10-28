@@ -24,7 +24,8 @@ function invocationOf(key: string): ReviewerInvocation {
   return invocation;
 }
 
-test('the table holds the nine authorized reviewers under canonical keys', () => {
+// Fails before the change: opus had only its #high key.
+test('the table holds the nine authorized reviewers, opus at medium and high', () => {
   assert.deepEqual([...REVIEWER_INVOCATIONS.keys()], [
     'codex gpt-6.1-sol#medium',
     'opencode opencode-go/kimi-k3.1-pro#high',
@@ -34,6 +35,7 @@ test('the table holds the nine authorized reviewers under canonical keys', () =>
     'opencode opencode-go/kimi-k2.7-code#default',
     'codex gpt-6-astra#medium',
     'opencode opencode-go/qwen3.8-max#medium',
+    'claude claude-opus-5-5#medium',
     'claude claude-opus-5-5#high',
   ]);
   for (const [key, invocation] of REVIEWER_INVOCATIONS) {
@@ -64,6 +66,8 @@ test('Claude Code runs in plan mode without editing tools and with stdin closed'
   });
   assert.deepEqual(invocationOf('claude claude-fable-5-1#medium').invocation(CONTEXT).args.slice(1, 5),
     ['--model', 'claude-fable-5-1', '--effort', 'medium']);
+  assert.deepEqual(invocationOf('claude claude-opus-5-5#medium').invocation(CONTEXT).args.slice(1, 5),
+    ['--model', 'claude-opus-5-5', '--effort', 'medium']);
 });
 
 test('OpenCode runs standalone with -m, its variant, and stdin closed, never --auto', () => {

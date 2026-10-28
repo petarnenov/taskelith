@@ -9,11 +9,13 @@ import { featuresWith, QUIET_FEATURES, touching } from './review-route-fake.ts';
 
 const planKeys = (tier: Tier, externalFacts: boolean) => passPlans(tier, { externalFacts }).map(({ reviewer }) => reviewerKey(reviewer));
 
-test('the reviewer table assigns each tier and external facts case', () => {
-  assert.deepEqual(planKeys('standard', false), ['codex gpt-6.1-sol#medium', 'claude claude-opus-5-5#high']);
-  assert.deepEqual(planKeys('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#high']);
-  assert.deepEqual(planKeys('elevated', false), ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
-  assert.deepEqual(planKeys('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#xhigh']);
+// Fails before the change: rule version 1 planned passes 1 and 2 only.
+test('the reviewer table of rule version 2 plans the review sequence', () => {
+  assert.equal(RULE_VERSION, 2);
+  assert.deepEqual(planKeys('standard', false), ['codex gpt-6-astra#medium', 'claude claude-opus-5-5#medium', 'codex gpt-6.1-sol#medium']);
+  assert.deepEqual(planKeys('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'claude claude-fable-5-1#medium']);
+  assert.deepEqual(planKeys('elevated', false), ['codex gpt-6-astra#high', 'claude claude-opus-5-5#xhigh', 'codex gpt-6.1-sol#high']);
+  assert.deepEqual(planKeys('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#xhigh', 'claude claude-fable-5-1#high']);
 });
 
 test('the current plans are those of the current rule version', () => {
@@ -25,20 +27,25 @@ test('the current plans are those of the current rule version', () => {
 });
 
 test('rule version 1 keeps its reviewer table', () => {
-  const keys = versionedPassPlans(1, 'elevated', { externalFacts: false })!.map(({ reviewer }) => reviewerKey(reviewer));
-  assert.deepEqual(keys, ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
+  const keysOf = (tier: Tier, externalFacts: boolean) =>
+    versionedPassPlans(1, tier, { externalFacts })!.map(({ reviewer }) => reviewerKey(reviewer));
+  assert.deepEqual(keysOf('standard', false), ['codex gpt-6.1-sol#medium', 'claude claude-opus-5-5#high']);
+  assert.deepEqual(keysOf('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#high']);
+  assert.deepEqual(keysOf('elevated', false), ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
+  assert.deepEqual(keysOf('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#xhigh']);
   assert.equal(versionedPassPlans(0, 'standard', { externalFacts: false }), undefined);
 });
 
-test('rule version 1 keeps its thresholds', () => {
+test('rule versions 1 and 2 share the thresholds', () => {
+  assert.deepEqual(versionedTriggers(2, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
   assert.deepEqual(versionedTriggers(1, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
   assert.deepEqual(versionedTriggers(1, featuresWith({ linesChanged: 399 })), []);
   assert.equal(versionedTriggers(0, QUIET_FEATURES), undefined);
 });
 
-test('pass plans name pass 1 reviewer A and pass 2 reviewer B', () => {
-  const [first, second] = passPlans('standard', { externalFacts: false });
-  assert.deepEqual([first.pass, first.role, second.pass, second.role], [1, 'A', 2, 'B']);
+test('pass plans name passes 1 and 3 role A and pass 2 role B', () => {
+  const plans = passPlans('standard', { externalFacts: false });
+  assert.deepEqual(plans.map(({ pass, role }) => [pass, role]), [[1, 'A'], [2, 'B'], [3, 'A']]);
 });
 
 const BOUNDARIES: readonly { name: string; below: RouteFeatures; at: RouteFeatures; trigger: Trigger }[] = [
@@ -105,13 +112,13 @@ test('a large change without external facts gets the elevated Codex plan', async
   const decision = await new RuleRouter().route(featuresWith({ linesChanged: 420, filesChanged: 6 }));
   assert.equal(decision.tier, 'elevated');
   assert.deepEqual(decision.triggers, ['lines']);
-  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
+  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['codex gpt-6-astra#high', 'claude claude-opus-5-5#xhigh', 'codex gpt-6.1-sol#high']);
 });
 
 test('a small change with external facts gets the standard Fable plan', async () => {
   const decision = await new RuleRouter().route(featuresWith({ externalFacts: true }));
   assert.equal(decision.tier, 'standard');
-  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#high']);
+  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'claude claude-fable-5-1#medium']);
 });
 
 test('the same features give equal decisions', async () => {

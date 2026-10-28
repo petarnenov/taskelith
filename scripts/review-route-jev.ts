@@ -96,13 +96,13 @@ export function shadowState({ features, reference, content }: ShadowInput): Reco
   };
 }
 
-// The criteria restate governance "Conditional third pass", not the rule.
+// The criteria restate governance "Review sequence", not the rule.
 const THIRD_PASS_QUESTION = {
   type: 'noul',
   instructions: 'This software change will need a third review pass.',
   criteria: {
-    true: 'Reviewer B in pass 2 will find a Critical or High issue, or pass 2 will include a Medium issue and its fixes, including fixes for accompanying Low issues, will change files other than records and documentation.',
-    false: 'No third pass will be needed: the review ends after a Low-only pass, or pass 2 finds no Critical or High issue and its fixes, if any, touch only records and documentation.',
+    true: 'The reviewer of pass 2 will find a Medium, High, or Critical issue.',
+    false: 'The review ends at a Low-only or clean pass 1 or pass 2.',
   },
 } as const;
 
@@ -120,7 +120,7 @@ export function requestContext({ thirdPassShare, byLinesChanged }: ReferenceRate
   const bands = byLinesChanged.map(({ band, thirdPassShare: share }) => `${band} ${percent(share)}`);
   return {
     meaning: 'Features of one software change in the Taskelith repository, measured before its independent code review.',
-    review: 'Each change gets review passes: pass 1 by reviewer A, pass 2 by reviewer B. A third pass is required only when pass 2 found a Critical or High finding, or when the fixes after pass 2 changed more than records and documentation.',
+    review: 'Each change gets review passes in a fixed order, each by its own reviewer: pass 1, pass 2, then pass 3. The review ends at the first pass with only Low findings or none; a third pass runs when pass 2 found a Medium, High, or Critical issue.',
     baseRate: `In this repository ${percent(thirdPassShare)} of reviewed changes needed a third pass.`,
     byLinesChanged: `Third-pass rate by lines changed: ${bands.join(', ')}.`,
     fields: FIELD_MEANINGS,

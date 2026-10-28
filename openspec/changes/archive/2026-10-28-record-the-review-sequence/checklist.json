@@ -1,0 +1,104 @@
+{
+  "change": "record-the-review-sequence",
+  "generatedAt": "2026-10-28T18:45:31.464Z",
+  "devCommit": "0d15b095642e331fe47cd82c5d959bdc3ac09d2c",
+  "query": {
+    "capabilities": [
+      "review-process"
+    ],
+    "files": [
+      "docs/governance.md",
+      "docs/agent-task-protocol.md",
+      "scripts/reviewer-invocations.ts",
+      "scripts/review-*.ts",
+      ".claude/skills/**",
+      "test/review-*"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 28
+      },
+      {
+        "category": "error-handling",
+        "count": 18
+      },
+      {
+        "category": "redaction",
+        "count": 10
+      },
+      {
+        "category": "docs",
+        "count": 8
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 5
+      },
+      {
+        "category": "naming",
+        "count": 5
+      },
+      {
+        "category": "process",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 617,
+        "inChecklist": 509
+      },
+      "mediumOrWorse": {
+        "findings": 280,
+        "inChecklist": 232
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 102
+      },
+      {
+        "category": "spec-wording",
+        "count": 72
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 36
+      },
+      {
+        "category": "contract-drift",
+        "count": 18
+      },
+      {
+        "category": "process",
+        "count": 18
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 319,
+        "inChecklist": 313
+      },
+      "mediumOrWorse": {
+        "findings": 57,
+        "inChecklist": 55
+      }
+    }
+  }
+}
