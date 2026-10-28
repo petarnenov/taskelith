@@ -1,6 +1,6 @@
 # Verification: extend-execution-http-contracts
 
-Status: developed and verified by the author; review pending (passes 1 to 3 below are not yet run).
+Status: developed and verified by the author; review pass 1 done and its findings fixed; pass 2 pending, and pass 3 if governance "Conditional third pass" requires it; not archived.
 
 ## Scope and source
 
@@ -17,7 +17,9 @@ Status: developed and verified by the author; review pending (passes 1 to 3 belo
 - `cec67667` `docs: record the verification of the extend execution HTTP contracts change` (this record and `tasks.md`).
 - `2f97c01e` `chore: align two shared schema descriptions with the control-plane document` (the descriptions of `DelegationResultOutcome` and `ExecutionEvidenceKind`, byte-identical to 9b's control-plane document).
 - `f50c7010` `chore: define the first slot credential delivery and the evidence role scenario` (the architect's decisions of 2026-10-28: `fetchSlotCredential` descriptions, design decisions 9 and 10, the spec delta, contract page sections 8.1, 8.6, and 9, the account pool section 7 sentence, and a contract test).
-- The commit that updates this record, and the one that records the `make verify` run of the resulting tree, change only this record; that head is the one that review pass 1 reviews. The earlier `make verify` runs below checked older trees and stay as history.
+- `041ef537` `docs: record the first slot credential delivery in the verification record` and `12e41374` `docs: record the verification of the first slot credential delivery` change only this record; `12e41374` is the head that review pass 1 reviewed.
+- `9bd16222` `chore: fix review pass 1 findings of the execution HTTP contracts` (document, contract page sections 8.2, 8.4, 8.6, and 8.7, design decisions 5, 7, and 10, the spec delta, and five tests).
+- The commit `docs: record review pass 1 of the execution HTTP contracts` adds `passes.jsonl`, `findings.jsonl`, and the pass 1 section; the `make verify` run of pass 1's fixes checks its tree, and the commit after it records that run. The earlier `make verify` runs below checked older trees and stay as history.
 
 ## Environment
 
@@ -60,6 +62,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 - Contract only: no handler enforces the roles, the 404 for a principal of another project, the credential checks and their order, the remote re-check, or the refusal records; items 10, 12, 21, 38, and 44 must, and their tests must check them.
 - The breaking narrowing of the evidence reads is invisible to `make contract-compatibility` (design decision 2); only the minor version and the contract page declare it.
 - The first slot credential delivery is `fetchSlotCredential` after the launch authorization (design decision 9); item 12 implements it and defines no other wire form.
+- The shadow answer of `route.json` is missing, failure code `missing-credential`, because the session environment that routed the change predated the shadow router's key; `route.json` stays as it is and the change is not routed again (architect decision, 2026-10-28).
 - The route record recommends reviewer A at `high` and reviewer B at `xhigh`. Under governance "Routed effort" these elevated efforts apply only after a later governance change that the owner approves; the coordinator assigns the reviewers and efforts.
 
 <!-- make record: begin -->
@@ -76,11 +79,34 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending: passes 1 to 3 under governance "Independent review process", run by the session that briefed this change.
+### Pass 1
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, variant `medium`, session `01a18262-f3c8-7d62-8ea3-5f9432d7c185`, read-only, on `12e41374` (diff `ff7ab7a0...12e41374`); the snapshot was unchanged by the review.
+- Result: Critical 0, High 1, Medium 6, Low 1, each claim checked against its source before the fix, all fixed in `9bd16222` and recorded in `findings.jsonl`.
+  1. High, retention counted from the capture: it counts from `publishedAt`, as `retentionEndsAt` and the evidence-store specification do (contract page section 8.2, design decision 5, scenario "Old capture published recently").
+  2. Medium, `details.retainedUntil` untyped and optional: `RetentionRefusal` requires it as an `Instant`.
+  3. Medium, the evidence bound of 64 could not represent a valid domain object: `withEvidence` keeps every entry and no source sets a bound, so the bound is removed (design decision 7).
+  4. Medium, evidence of only `cancellation-not-applied` validated: `contains` requires an entry of another kind, as `isUnknownExecution` does.
+  5. Medium, page cursors by a non-unique identifier: the order and cursors are by task then execution identifier and by worker then observation identifier, the `unrecorded_processes` key, with `UnknownExecutionCursor`, `UnrecordedProcessCursor`, and paired `after` parameters (contract page section 8.4).
+  6. Medium, `credential-ended` only for a fetch: an issue whose current version a revocation ended answers it too, after the remote checks; the refusal order is unchanged (contract page section 8.7, design decision 10).
+  7. Medium, scenario "Revoked slot" expected `revoked`: a revocation cancels the attempt (account pool section 8.1), so the scenario expects the earlier `attempt-not-launchable` of section 7.3.
+  8. Low, "Repeated issue" ignored a refresh between the calls: the same version only without a refresh between, and scenario "Refresh between two issues".
+- Fix checks, on the working tree of `9bd16222`:
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate extend-execution-http-contracts --strict` | `Change 'extend-execution-http-contracts' is valid` |
+| `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments`; `npx tsc -p tsconfig.check.json` | Every checked link conforms; every active OpenSpec change archives into strictly valid specs; every comment is within the comment length rule; `tsc` exit 0 |
+| `node --experimental-strip-types --test packages/contracts/test/*.test.ts`, after `npm run build` | 75 tests, all passed |
+| Fail-before: `execution-http-contracts.test.ts` with the document of `12e41374`, after `npm run build` | tests 18, pass 13, fail 5: `evidence retirement refuses a record within its retention with a typed 422`, `the retention counts from the publication, not the capture`, `the reconciliation queue pages by a composite position with at most 100 items`, `a page boundary between equal identifiers keeps its position`, `an unknown execution keeps all its evidence, not only an unapplied cancellation`; restored, 18 of 18 pass |
+| Spec delta requirement body lengths, in characters | Execution HTTP operations 496, G3 execution operations 448, Per-project evidence reads 328, Evidence retirement 412, Delegation result read 369, Reconciliation queue reads 402, Task re-admission 326, Slot credential delivery 461, Per-run SCM credential delivery 448, Remote re-check at SCM credential delivery 413, Credential deliveries never kept 255 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+
+The fixes change contracts, not only records, and pass 1 found a High finding, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
 ## Remaining gates
 
-- Review passes 1 and 2, and pass 3 if governance "Conditional third pass" requires it.
+- Review pass 2 by reviewer B, and pass 3 by reviewer A if required, with their fixes and records.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 

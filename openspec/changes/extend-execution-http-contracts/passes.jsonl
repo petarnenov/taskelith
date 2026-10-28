@@ -1,0 +1,1 @@
+{"change": "extend-execution-http-contracts", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a18262-f3c8-7d62-8ea3-5f9432d7c185", "counts": {"critical": 0, "high": 1, "medium": 6, "low": 1}}
