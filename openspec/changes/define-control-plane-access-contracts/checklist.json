@@ -1,0 +1,103 @@
+{
+  "change": "define-control-plane-access-contracts",
+  "generatedAt": "2026-10-28T09:09:49.536Z",
+  "devCommit": "9196804b89c6a20806beee7fd73c22459c548241",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "contract-tooling",
+      "trust-and-operational-foundation"
+    ],
+    "files": [
+      "packages/contracts/**",
+      "scripts/generate-contracts.ts",
+      "docs/contracts/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 42
+      },
+      {
+        "category": "docs",
+        "count": 22
+      },
+      {
+        "category": "spec-wording",
+        "count": 21
+      },
+      {
+        "category": "redaction",
+        "count": 13
+      },
+      {
+        "category": "concurrency-race",
+        "count": 6
+      },
+      {
+        "category": "error-handling",
+        "count": 3
+      },
+      {
+        "category": "stale-citation",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 429,
+        "inChecklist": 328
+      },
+      "mediumOrWorse": {
+        "findings": 182,
+        "inChecklist": 153
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 84
+      },
+      {
+        "category": "docs",
+        "count": 52
+      },
+      {
+        "category": "spec-wording",
+        "count": 45
+      },
+      {
+        "category": "stale-citation",
+        "count": 33
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 15
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 254,
+        "inChecklist": 251
+      },
+      "mediumOrWorse": {
+        "findings": 42,
+        "inChecklist": 41
+      }
+    }
+  }
+}

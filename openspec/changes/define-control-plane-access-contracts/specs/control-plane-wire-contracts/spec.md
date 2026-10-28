@@ -1,0 +1,108 @@
+## Purpose
+
+Define the contract-first control-plane access API of G3 item 9a: an OpenAPI 3.1 document for login and sessions, project setup, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver, with its security schemes, failures, roles, and secret handling, before items 10 to 15 implement it.
+
+## ADDED Requirements
+
+### Requirement: Control-plane document
+`@taskelith/contracts` SHALL hold `documents/control-plane.openapi.json` (OpenAPI 3.1.0) with a semantic `info.version`, starting at 0.1.0, and the build SHALL generate its types and validators with the other documents'. The rules that its schemas cannot express SHALL be stated in `docs/contracts/control-plane-wire-contracts.md`. A breaking change SHALL need a higher minor version while the major version is 0.
+
+#### Scenario: Document generated
+- **WHEN** the build generates the contract types
+- **THEN** they include every schema and operation of the control-plane document
+
+#### Scenario: Shared schema reused
+- **WHEN** the control-plane document defines a schema whose name another document defines
+- **THEN** both definitions are identical
+
+### Requirement: Browser session and CSRF schemes
+The document SHALL define `browserSession`, a cookie under the `__Host-` prefix that is `HttpOnly`, `Secure`, and `SameSite=Strict`; `csrfToken`, the `X-CSRF-Token` header; and the other documents' `operatorToken`. Every operation other than GET, except the webhook receiver, SHALL accept only the cookie together with the CSRF header, or the operator bearer alone.
+
+#### Scenario: Mutation without the CSRF header
+- **WHEN** a request authenticated by the session cookie changes state without the session's CSRF token
+- **THEN** it is refused with 403 and reason `csrf-token-invalid`, and nothing takes effect
+
+#### Scenario: Mutation with the operator bearer
+- **WHEN** the CLI sends a mutation with the operator bearer and no CSRF header
+- **THEN** the request is authenticated as the bearer's principal
+
+### Requirement: Login session
+`readSession` SHALL need no credential and, when no valid session is presented, SHALL start an anonymous server-side session and return its CSRF token. `logIn` SHALL need that session's cookie and token, and on success SHALL give the session a new identifier and a new CSRF token. `logOut` SHALL end the session.
+
+#### Scenario: Session fixation
+- **WHEN** a login succeeds on an anonymous session
+- **THEN** the session identifier and CSRF token from before the login no longer authenticate
+
+#### Scenario: Wrong password
+- **WHEN** a login name and password do not match
+- **THEN** the answer is 401 with reason `login-failed` and does not say which is wrong
+
+### Requirement: Access failures
+Authentication, CSRF, and authorization failures SHALL be distinct kernel failures with code `forbidden`: 401 `AuthenticationFailure` (`unauthenticated` or `login-failed`), 403 `CsrfRejection` (`csrf-token-invalid`), and 403 `AccessDenial` (`role-required`). The control plane SHALL authenticate, then check the CSRF token, then the role, before it reads the request body.
+
+#### Scenario: CSRF rejection is not an access denial
+- **WHEN** a body with reason `csrf-token-invalid` is checked against `AccessDenial`
+- **THEN** it is invalid, and it is valid as a `CsrfRejection`
+
+### Requirement: Operation roles
+Each operation SHALL require the role that `docs/contracts/control-plane-wire-contracts.md` section 3 names: `installation-owner` for creating projects, project members, the workers view, enrollment tokens, account slots, and SCM integration changes; `project-maintainer` for project changes, defaults, auto-merge, and the repository binding; and `project-viewer` or above, or `installation-owner`, for a project's reads.
+
+#### Scenario: Maintainer assigns a member
+- **WHEN** a `project-maintainer` without `installation-owner` assigns a role on its project
+- **THEN** the answer is 403 with reason `role-required`
+
+### Requirement: Project setup operations
+The document SHALL define creating, reading, listing, and renaming projects, assigning and removing a principal's one role on a project, reading and replacing the project defaults, reading and changing the auto-merge setting, and reading and changing the repository binding. Every update SHALL name the revision it read and fail with 409 `conflict` when it moved.
+
+#### Scenario: Concurrent default changes
+- **WHEN** two maintainers replace a project's defaults from the same revision
+- **THEN** one succeeds and the other fails with 409
+
+### Requirement: Workers view operation
+`listWorkers` SHALL return the worker admission view: every enrolled worker that is not revoked, in identifier order, with its host, enrollment time, admission state, last report time, and stored self-check results, and no credential or credential hash. When a source cannot be read it SHALL answer 503 with no partial data.
+
+#### Scenario: Credential field in the view
+- **WHEN** a workers view entry carries a credential generation
+- **THEN** the entry is invalid
+
+### Requirement: Enrollment token operations
+The document SHALL define listing pending enrollment tokens without their secrets, issuing a token, rotating a pending token into a new one with its constraints, and revoking a pending token. Only the 201 response of issuing or rotating SHALL carry the token's secret. A rotation or revocation SHALL serialize with a redemption of the same token, so that exactly one of them succeeds.
+
+#### Scenario: Revocation races a redemption
+- **WHEN** a token is revoked while a worker redeems it
+- **THEN** either the worker is enrolled and the revocation fails with 422, or the revocation succeeds and the redemption fails with `token-invalid`
+
+### Requirement: Account slot operations
+The document SHALL define listing, adding, changing, revoking, reinstating, and removing account slots, and rotating a slot's credential, each change by compare-and-set on the slot's revision. A slot credential SHALL be write-only. A project member's view of its pools SHALL say whether a slot also serves other projects without naming them.
+
+#### Scenario: Slot in a project's view
+- **WHEN** a slot serves the project and another project
+- **THEN** the project's view shows it as shared and names neither its allowed projects nor its credential
+
+### Requirement: SCM integration setup
+The document SHALL define listing, reading, creating, and changing SCM integrations, each with an SCM plugin, a label, plugin-defined settings, and plugin-defined write-only secrets. A response SHALL name the stored secrets and never carry their values, and no schema SHALL name an SCM.
+
+#### Scenario: Secrets in a response
+- **WHEN** an integration record carries its secrets' values
+- **THEN** the record is invalid
+
+### Requirement: Webhook receiver
+`receiveScmWebhook` SHALL need no session, CSRF token, or operator credential. It SHALL take the body as bytes of any media type and leave verification over those exact bytes to the integration's plugin. An unknown integration and a failed verification SHALL answer the same 401; a verified delivery and a repeat of a recorded one SHALL answer 202.
+
+#### Scenario: Unsigned delivery
+- **WHEN** a delivery arrives without a valid signature
+- **THEN** the answer is 401 and nothing is recorded
+
+### Requirement: Secrets in responses
+No response schema SHALL reach a write-only value: a password, a slot credential, or an SCM integration's secrets. Apart from a session's CSRF token, which authenticates nothing without the cookie, a new enrollment token's secret SHALL be the only secret in a response body, and each response with it or with a CSRF token SHALL send `Cache-Control: no-store`. The session identifier SHALL travel only in `Set-Cookie`.
+
+#### Scenario: Write-only value in a response
+- **WHEN** any operation's response schema reaches a schema marked `writeOnly`
+- **THEN** the contract tests fail
+
+### Requirement: Identifiers and pages
+An identifier that the control plane mints for a project, principal, enrollment token, slot, or SCM integration SHALL be one lowercase letter and 32 lowercase hexadecimal digits from 128 random bits; on the wire it SHALL be an `Identifier`. A list SHALL return at most 100 items in identifier order and a `next` identifier while more remain.
+
+#### Scenario: Next page
+- **WHEN** a list has more than 100 items
+- **THEN** the first page returns 100 and a `next` identifier that, passed as `after`, starts the next page
