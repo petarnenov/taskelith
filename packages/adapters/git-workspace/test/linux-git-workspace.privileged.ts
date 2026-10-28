@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -110,8 +111,26 @@ const homeCgroup = async () => (await readFile('/proc/self/cgroup', 'utf8')).tri
 
 interface ContainedProcess {
   readonly pid: number;
-  readonly uid: number;
+  readonly identity: ProcessIdentity;
   readonly cgroup: string;
+}
+
+// Real, effective, saved, and file system ids, and supplementary groups.
+interface ProcessIdentity {
+  readonly uids: readonly number[];
+  readonly gids: readonly number[];
+  readonly groups: readonly number[];
+}
+
+const EXECUTION_IDENTITY: ProcessIdentity = { uids: Array(4).fill(EXECUTION.uid), gids: Array(4).fill(EXECUTION.gid), groups: [] };
+
+function identityOf(status: string): ProcessIdentity {
+  const ids = (name: string) => {
+    const line = new RegExp(`^${name}:(.*)$`, 'm').exec(status);
+    if (line === null) throw new Error(`/proc status has no ${name} line`);
+    return line[1]!.split(/\s+/).filter(Boolean).map(Number);
+  };
+  return { uids: ids('Uid'), gids: ids('Gid'), groups: ids('Groups') };
 }
 
 // The processes of a cgroup; one that exits while it is read is left out.
@@ -124,7 +143,7 @@ async function processesOf(cgroupName: string): Promise<ContainedProcess[]> {
 async function processOf(pid: number): Promise<ContainedProcess | undefined> {
   try {
     const status = await readFile(`/proc/${pid}/status`, 'utf8');
-    return { pid, uid: Number(/^Uid:\s+(\d+)/m.exec(status)![1]), cgroup: (await readFile(`/proc/${pid}/cgroup`, 'utf8')).trim() };
+    return { pid, identity: identityOf(status), cgroup: (await readFile(`/proc/${pid}/cgroup`, 'utf8')).trim() };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH') return undefined;
     throw error;
@@ -141,6 +160,15 @@ async function untilPopulated(cgroupName: string): Promise<void> {
   throw new Error(`${cgroupName} never held a process`);
 }
 
+// Once the record names the containment, the program has signalled ready.
+async function untilRecorded(git: GitFixture): Promise<void> {
+  for (let polls = 0; polls < 200; polls += 1) {
+    if ((await recordOf(git))?.containment) return;
+    await delay(50);
+  }
+  throw new Error('the hand-off record never named the containment');
+}
+
 async function holdFile(): Promise<string> {
   const hold = join(holds, `hold-${Math.random().toString(16).slice(2)}`);
   await writeFile(hold, '');
@@ -154,6 +182,15 @@ test('the worker image holds the pinned Git client and package', async () => {
   value(await verifyGitClient(GIT_CLIENT_PINS.linux));
   const run = await runProcess('/usr/bin/dpkg-query', ['--show', '--showformat=${Version}', 'git'], { env: { PATH: '/usr/bin:/bin' } });
   assert.equal(run.stdout.toString('utf8'), '1:2.43.0-1ubuntu7.4');
+});
+
+// CAP_KILL (5), CAP_SETGID (6), and CAP_SETUID (7), and no other.
+const WORKER_CAPABILITIES = (2n ** 5n | 2n ** 6n | 2n ** 7n).toString(16).padStart(16, '0');
+
+test('the tests run as root with only the setuid, setgid, and kill capabilities', async () => {
+  const status = await readFile('/proc/self/status', 'utf8');
+  for (const set of ['CapBnd', 'CapEff']) assert.equal(new RegExp(`^${set}:\\s+(\\w+)$`, 'm').exec(status)?.[1], WORKER_CAPABILITIES, set);
+  assert.equal(process.getuid!(), 0);
 });
 
 for (const conformance of WORKSPACE_CONFORMANCE) {
@@ -210,7 +247,7 @@ test('a surviving reclaim program in its recorded containment holds the workspac
     const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
     assert.deepEqual((await recordOf(git))?.containment, { kind: 'cgroup', name });
     const running = await processesOf(name);
-    assert.ok(running.length > 0 && running.every(({ uid, cgroup }) => uid === EXECUTION.uid && cgroup === inContainment(name)), JSON.stringify(running));
+    assert.ok(running.length > 0 && running.every(({ identity, cgroup }) => isDeepStrictEqual(identity, EXECUTION_IDENTITY) && cgroup === inContainment(name)), JSON.stringify(running));
     const restarted = git.reopen();
     const started = Date.now();
     assert.equal(failed(await restarted.reclaim(FIRST)).code, 'unavailable');
@@ -245,7 +282,7 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
     value(await git.local.handOff(FIRST));
     const reclaiming = git.local.reclaim(FIRST);
     const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
-    await untilPopulated(name);
+    await untilRecorded(git);
     await writeFile(join(CONTAINMENT_PARENT, name, 'cgroup.kill'), '1');
     assert.equal(reasonOf(await reclaiming), 'reclaim-failed');
     assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
@@ -272,13 +309,16 @@ async function fifoIn(directory: string, name: string): Promise<string> {
   return path;
 }
 
+// A FIFO read waits for a program; a regressed one must fail, not hang.
+const FIFO_TEST_BOUND_MS = 60_000;
+
 // Runs a program behind a root shell that writes its exit code into the
 // FIFO `status`, so a test reads the code even of an orphaned program.
 function reporting(status: string, args: readonly string[]): ReclaimProgram {
   return { executable: '/bin/sh', args: ['-c', 'status="$1"; shift; "$@"; echo $? > "$status"', 'reclaim', status, process.execPath, ...args] };
 }
 
-test('a reclaim program without go in its window or with a dead worker exits abandoned and unchanged', async () => {
+test('a reclaim program without go in its window or with a dead worker exits abandoned and unchanged', { timeout: FIFO_TEST_BOUND_MS }, async () => {
   const control = await accountCheckout();
   const eager = value(await linuxHost(testProgram('eager')).launch(control.checkout, 'reclaim-eager'));
   assert.equal(await eager.go(), 'succeeded');
@@ -288,7 +328,7 @@ test('a reclaim program without go in its window or with a dead worker exits aba
   const lateStatus = await fifoIn(holds, 'status-late');
   const windowed = linuxHost(reporting(lateStatus, [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '3000']));
   const late = value(await windowed.launch(checkout, 'reclaim-late-go'));
-  assert.deepEqual((await processesOf('reclaim-late-go')).map(({ uid, cgroup }) => [uid, cgroup]), [[EXECUTION.uid, inContainment('reclaim-late-go')]]);
+  assert.deepEqual((await processesOf('reclaim-late-go')).map(({ identity, cgroup }) => [identity, cgroup]), [[EXECUTION_IDENTITY, inContainment('reclaim-late-go')]]);
   assert.equal(await readFile(lateStatus, 'utf8'), `${RECLAIM_EXIT.abandoned}\n`);
   assert.equal(await populatedNow('reclaim-late-go'), false);
   const deadStatus = await fifoIn(holds, 'status-dead');
@@ -302,7 +342,7 @@ test('a reclaim program without go in its window or with a dead worker exits aba
   for (const made of [control, waiting]) await made.remove();
 });
 
-test('a Linux launch resolves only once its program is in its cgroup as the execution account', async () => {
+test('a Linux launch resolves only once its program is in its cgroup as the execution account', { timeout: FIFO_TEST_BOUND_MS }, async () => {
   const made = await accountCheckout();
   const { checkout, file } = made;
   const [arrived, release] = [await fifoIn(holds, 'arrived'), await fifoIn(holds, 'release')];
@@ -316,12 +356,26 @@ test('a Linux launch resolves only once its program is in its cgroup as the exec
   const [settledWhileHeld, processesWhileHeld] = [settled, await processesOf('reclaim-held')];
   await writeFile(release, 'x');
   const launched = value(await launching);
-  assert.deepEqual((await processesOf('reclaim-held')).map(({ uid, cgroup }) => [uid, cgroup]), [[EXECUTION.uid, inContainment('reclaim-held')]]);
+  assert.deepEqual((await processesOf('reclaim-held')).map(({ identity, cgroup }) => [identity, cgroup]), [[EXECUTION_IDENTITY, inContainment('reclaim-held')]]);
   assert.equal(await launched.go(), 'succeeded');
   assert.equal(await modeOf(file), 0o660);
   assert.deepEqual([settledWhileHeld, processesWhileHeld], [false, []], 'held before its cgroup, the program is not ready');
   await held.release(launched.containment);
   await made.remove();
+});
+
+const containmentExists = async (name: string) => (await readdir(CONTAINMENT_PARENT)).includes(name);
+
+test('a launch that fails or is not ready within its bound frees its empty cgroup', { timeout: FIFO_TEST_BOUND_MS }, async () => {
+  const ended = linuxHost({ executable: '/bin/sh', args: ['-c', 'exit 1', 'reclaim'] });
+  assert.equal(failed(await ended.launch('/nonexistent', 'reclaim-ended')).code, 'unavailable');
+  assert.equal(await containmentExists('reclaim-ended'), false);
+  const silent = new LinuxReclaimHost({
+    containmentParent: CONTAINMENT_PARENT, executionAccount: EXECUTION, readyBoundMs: SHORT_BOUND_MS,
+    program: { executable: '/bin/sh', args: ['-c', 'read go', 'reclaim'] },
+  });
+  assert.match(failed(await silent.launch('/nonexistent', 'reclaim-silent')).message, /not ready within its bound/);
+  assert.equal(await containmentExists('reclaim-silent'), false);
 });
 
 test('a reclaim program that runs after the exit keeps the one slot of the worker held', async () => {
