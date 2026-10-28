@@ -21,5 +21,6 @@
 ## 4. Review and archive
 
 - [x] 4.0 Fix the five findings of review pass 1, with fail-before tests, and record them
+- [x] 4.0a Fix the seven findings of review pass 2, with fail-before tests, record them, and record the coordinator's answers A1 and A2
 - [ ] 4.1 Review passes with reviewers A and B, recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
 - [ ] 4.2 Archive the change in the last commit of the branch
