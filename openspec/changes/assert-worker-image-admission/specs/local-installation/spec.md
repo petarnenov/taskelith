@@ -14,7 +14,7 @@
 ## ADDED Requirements
 
 ### Requirement: Bounded admission wait of the bring-up check
-Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail at once on `self-check-failed`, printing each failed check ID with its redacted details, on a refused read, and on an admission without a passed `linux-containment` check. It SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, by default 300.
+Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail at once on `self-check-failed`, printing each failed check ID with its redacted details, on a refused read, and on an admission without a passed `linux-containment` check. It SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS` seconds in base 10, by default 300, and SHALL kill a read still running then.
 
 #### Scenario: Failed self-check
 - **WHEN** the workers view shows the worker `self-check-failed` with a failed `linux-containment` result
@@ -23,6 +23,10 @@ Each admission wait of `make verify-installation` SHALL read the workers view th
 #### Scenario: Admission timeout
 - **WHEN** the worker is still `awaiting-self-check` when the bound ends
 - **THEN** the check fails and says that the worker was not admitted within the bound
+
+#### Scenario: Hung read
+- **WHEN** a read of the workers view is still running when the bound ends
+- **THEN** the read is killed and the check fails as a timeout
 
 #### Scenario: Containment check not run
 - **WHEN** the worker is `admitted` with `linux-containment` `not-applicable`

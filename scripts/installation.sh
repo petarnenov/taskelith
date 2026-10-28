@@ -334,38 +334,71 @@ verify() {
   remove_throwaway "built, bootstrapped, started, enrolled, admitted, restarted, admitted again, certificates re-issued and served, removed"
 }
 
-# The workers view of the administrative entry, as JSON.
-worker_admission() {
-  compose run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission
+# The workers view of the administrative entry, as JSON. Run it in the
+# background: it replaces that subshell, so that a kill reaches docker.
+read_worker_admission() {
+  exec docker compose "${compose_files[@]}" --project-name "$project" \
+    run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission
+}
+
+# Reads the view into OUTPUT and its diagnostics into LOG; a read still
+# running at DEADLINE is killed, and the function then fails.
+bounded_admission_read() {
+  local output="$1" log="$2" deadline="$3" reader
+  read_worker_admission > "$output" 2>> "$log" &
+  reader=$!
+  while kill -0 "$reader" 2>/dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      kill "$reader" 2>/dev/null || true
+      wait "$reader" 2>/dev/null || true
+      echo "installation.sh: a read of the workers view did not end in time" >> "$log"
+      return 1
+    fi
+    sleep 1
+  done
+  wait "$reader" || true
 }
 
 # Polls the workers view until the one worker is admitted with a passed
 # linux-containment check reported after AFTER; prints the view's asOf.
 await_worker_admission() {
-  local deadline output status log
+  local bound deadline status=3 files
   case "$ADMISSION_SECONDS" in
     ''|*[!0-9]*) echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be whole seconds" >&2; return 2 ;;
   esac
-  deadline=$((SECONDS + ADMISSION_SECONDS))
-  log="$(mktemp "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
-  while true; do
-    output="$(worker_admission 2> "$log")" || true
+  bound=$((10#$ADMISSION_SECONDS))
+  deadline=$((SECONDS + bound))
+  files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    : > "$files/log"
+    if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
     status=0
-    printf '%s' "$output" | node --experimental-strip-types "$repository/scripts/installation-admission.ts" \
-      linux-containment "$1" 2>> "$log" || status=$?
-    if [ "$status" -ne 3 ] || [ "$SECONDS" -ge "$deadline" ]; then break; fi
+    node --experimental-strip-types "$repository/scripts/installation-admission.ts" linux-containment "$1" \
+      < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?
+    if [ "$status" -ne 3 ]; then break; fi
     sleep "$ADMISSION_POLL_SECONDS"
   done
-  if [ "$status" -ne 0 ]; then
-    cat "$log" >&2
-    if [ "$status" -eq 3 ]; then
-      echo "installation.sh: the worker was not admitted within ${ADMISSION_SECONDS}s" >&2
-    else
-      echo "installation.sh: the worker admission check failed" >&2
-    fi
-  fi
-  rm -f "$log"
+  # An admission read when the bound has passed is a timeout too.
+  if [ "$status" -eq 0 ] && [ "$SECONDS" -ge "$deadline" ]; then status=3; fi
+  report_admission "$status" "$files" "$bound"
+  rm -rf "$files"
   return "$status"
+}
+
+# Prints the asOf of an admission, or the last read's diagnostics and why
+# the wait failed.
+report_admission() {
+  local status="$1" files="$2" bound="$3"
+  if [ "$status" -eq 0 ]; then
+    cat "$files/as-of"
+    return
+  fi
+  cat "$files/log" >&2
+  if [ "$status" -eq 3 ]; then
+    echo "installation.sh: the worker was not admitted within ${bound}s" >&2
+  else
+    echo "installation.sh: the worker admission check failed" >&2
+  fi
 }
 
 # After `certificates`, with no restart of its own: new certificates served,

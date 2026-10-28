@@ -330,11 +330,12 @@ test('a failed read of the commit time stops every build before any image is bui
 });
 
 // Prints the views FAKE_VIEWS/1, /2, ... of successive `worker-admission`
-// runs, and FAKE_VIEWS/last after them.
+// runs, and FAKE_VIEWS/last after them, each after FAKE_DELAY seconds.
 const admissionDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case " $* " in
   *" admin worker-admission "*)
+    if [ -n "$FAKE_DELAY" ]; then sleep "$FAKE_DELAY"; fi
     count=$(($(cat "$FAKE_VIEWS/count") + 1))
     echo "$count" > "$FAKE_VIEWS/count"
     if [ -f "$FAKE_VIEWS/$count" ]; then cat "$FAKE_VIEWS/$count"; else cat "$FAKE_VIEWS/last"; fi ;;
@@ -397,10 +398,45 @@ test('a failed self-check fails the admission check at once and names the failed
 });
 
 test('a worker still awaiting its self-check at the deadline fails the admission check as a timeout', () => {
-  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '0' });
+  const outcome = checkAdmission([admissionView('awaiting-self-check')], { TASKELITH_ADMISSION_SECONDS: '1' });
   assert.equal(outcome.status, 3);
+  assert.equal(admissionReads(outcome).length, 1, 'no read starts after the bound');
   assert.match(outcome.stderr, /the worker is awaiting-self-check/);
-  assert.match(outcome.stderr, /the worker was not admitted within 0s/);
+  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+});
+
+function timed(run: () => BuildOutcome): { outcome: BuildOutcome; seconds: number } {
+  const started = Date.now();
+  const outcome = run();
+  return { outcome, seconds: (Date.now() - started) / 1000 };
+}
+
+test('a read that hangs is killed at the bound and fails the admission check as a timeout', () => {
+  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.ok(seconds < 20, `ended after ${seconds}s`);
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 2s/);
+});
+
+test('an admission that a read returns only after the bound is a timeout', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '1', FAKE_DELAY: '3' });
+  assert.equal(outcome.status, 3);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+});
+
+test('a bound with a leading zero is read in base 10', () => {
+  const admitted = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '08' });
+  assert.equal(admitted.status, 0, admitted.stderr);
+  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '010', FAKE_DELAY: '30',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /the worker was not admitted within 10s/);
+  assert.ok(seconds >= 10, `ended after ${seconds}s, before 10`);
 });
 
 test('a refused read of the workers view fails the admission check at once', () => {
