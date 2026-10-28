@@ -33,22 +33,30 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64 iMac), Node.js 24.22.1 from `.nvmrc`, Docker
 
 The tests of `dbd1eb30` were run against the previous `scripts/installation.sh` (`git show a10ceaaf:scripts/installation.sh` in the working tree, restored afterwards) with `node --experimental-strip-types --test --test-name-pattern="reproducib|HEAD moves|removal" test/installation-script.test.ts` (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/ed004e12-a323-48a1-bf4e-0b555978c16b/scratchpad/fail-before.log`): 7 of 10 tests failed. The containerd test failed because the old check exited 1 with `two builds of one revision gave sha256:036dad823c49 and sha256:abc511323824`; the pass test and the five tests of differing parts, a missing config digest, and a failed layer read failed on the old messages and statuses. The `HEAD` move and the two removal tests passed in both runs. With the change, 10 of 10 pass.
 
+After review pass 1, the tests of `2f1e02bf` were run the same way against `scripts/installation.sh` of `8c9268ab`, the pass 1 code (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/ed004e12-a323-48a1-bf4e-0b555978c16b/scratchpad/fail-before-pass1.log`): 7 of 12 failed. The containerd test `the reproducibility check passes on one platform image in two indexes with their own attestations` failed with `the build metadata .../first.json names no image config digest`, the defect of finding H1; the other six failed on that message, the old `--metadata-file` argument, or the old missing save step. The `HEAD` move, the two removal tests, the missing layer, and the failed layer read passed in both runs. With the fix, 12 of 12 pass.
+
 ## Checks
 
 - `npm run openspec -- validate compare-worker-image-manifests --strict`: `Change 'compare-worker-image-manifests' is valid`.
 - `make verify-worker-image-reproducible` on the clean tree of `9ddabc46`, classic image store: passed in 3 min 45 s with `installation.sh: both builds gave the worker image config sha256:5af9f0da19e0819158465af48d16a312ed856cd17fdc4bf9eaddcdcfceaf5f21`, and both images were removed (`docker images` lists no `-reproducible-` tag afterwards).
-- `make verify` on the clean tree of `9ddabc46` passed on its first run, no rerun; the generated part below records it.
+- `make verify` on the clean tree of `9ddabc46` passed on its first run, no rerun.
+- After the pass 1 fixes, `make verify-worker-image-reproducible` on the clean tree of `ec9d8e97`, classic image store: passed in 4 min 4 s with `installation.sh: both builds gave the worker image config sha256:be48a55bb977579d9ea493b4025d0bd3db652816f2f1cf9f9f369504be09f802`, read from the saved manifests, and both images were removed.
+- `make verify` on the clean tree of `ec9d8e97` passed on its first run, no rerun; the generated part below records it.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `cc501fa3c94768a7b74dc49495608189d1f2724f`; tests 3213, pass 3198, fail 0, skipped 15; all files 99.45% lines, 92.69% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `6ad71098f78426436402c874319201346015ec6d`; tests 3215, pass 3200, fail 0, skipped 15; all files 99.45% lines, 92.67% branches, 99.07% functions.
 - `npm run openspec -- validate compare-worker-image-manifests --strict`: passed, `Change 'compare-worker-image-manifests' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 74 file(s); every pass summary file is valid: 54 file(s); every route file is valid: 10 file(s).`.
 - Spec diff against the merge base `a10ceaaf860c` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a1831a-5209-7d10-8002-cb76a2a8363d` | 0 | 1 | 1 | 0 |
 <!-- make record: end -->
 
 ## Limitations
@@ -63,6 +71,9 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Archive of the change after review.
 - Integration into dev by the coordinator (single pull request)
 
-## Review
+## Review pass 1
 
-Not yet run.
+Reviewer A, Codex CLI `codex gpt-6.1-sol#medium`, session `01a1831a-5209-7d10-8002-cb76a2a8363d`; it reported model `gpt-6.1-sol`, effort `medium`, sandbox `read-only`, and the worktree snapshot `dcd109bf1a38e4ac6439391f90ea5068a77b9bf4a65e20c6875fdec350372b0c` before and after. Findings: 0 Critical, 1 High, 1 Medium, 0 Low, both fixed in `2f1e02bf`.
+
+- **H1 (error-handling).** BuildKit names `containerimage.config.digest` in the metadata file only when it returns the image manifest; for an index with attestations, the containerd case, the key is missing and the check failed. The check now reads the config digest from the `Config` entry of the `manifest.json` of `docker image save`, on both stores and without network access; `--metadata-file` is gone, the layers still come from `RootFS.Layers`, and attestations stay enabled. A failed save or `tar`, no or several `Config` entries, or an entry that is not a `blobs/sha256/` digest fails the check with a message that names the image. Design decision 2 and the docs say so.
+- **M1 (missing-fail-before-test).** The stub writes BuildKit's metadata without a config digest when the image ID is an index digest and serves a saved `manifest.json`; new tests cover two indexes with equal configs and layers, a differing layer under differing index digests, a failed save, and manifests with two, no, or a legacy config entry. The containerd test fails against the pass 1 code (see "Fail-before").
