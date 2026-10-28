@@ -3,14 +3,16 @@ import { createHook } from 'node:async_hooks';
 import { createHash, X509Certificate } from 'node:crypto';
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:https';
-import type { AddressInfo } from 'node:net';
+import { createServer as createTcpServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { TLSSocket } from 'node:tls';
 import { after, afterEach, before, test } from 'node:test';
+import { createUser } from '@nats-io/nkeys';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import { authorityValidity, serverCertificateValidity, stubAdmissionCheck, type IssuedCertificate } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant } from '@taskelith/kernel';
-import type { WorkerTransportEndpoint } from '@taskelith/nats';
+import { connectWorkerTransport, credsFile, TransportAddress, type WorkerTransportEndpoint } from '@taskelith/nats';
 import { trustCertificateAuthority, value } from '@taskelith/testing';
 import { productionDependencies, workerMain, type RunningWorker, type WorkerSettings } from '@taskelith/worker';
 import { workerPaths } from '@taskelith/worker-journal';
@@ -173,4 +175,35 @@ test('a worker enrolls over pinned TLS, pins the broker too, and listens on noth
   assert.deepEqual(genuine.tokens, [TOKEN]);
   assert.deepEqual(endpoints[0]?.tls, { ca: installation.certificatePem }, 'the pinned CA is the broker TLS\'s only CA');
   assert.deepEqual(listeners, [], 'the worker opened no listening socket');
+});
+
+// A broker that asks for TLS in its INFO, then presents the foreign CA's
+// certificate and records each handshake and decrypted byte.
+test('NODE_TLS_REJECT_UNAUTHORIZED=0 does not let a foreign broker get the credential', async (t) => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  t.after(() => {
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  });
+  const certificate = await serverCertificate(foreign);
+  const received: Buffer[] = [];
+  let handshakes = 0;
+  const broker = createTcpServer((socket) => {
+    socket.write(`INFO ${JSON.stringify({ server_id: 'foreign', version: '2.15.1', proto: 1, max_payload: 1048576, tls_required: true })}\r\n`);
+    const secure = new TLSSocket(socket, { isServer: true, cert: certificate.certificatePem, key: certificate.privateKeyPem });
+    secure.on('secure', () => { handshakes += 1; });
+    secure.on('data', (chunk: Buffer) => received.push(chunk));
+    secure.on('error', () => undefined);
+  });
+  await new Promise<void>((resolve) => broker.listen(0, '127.0.0.1', () => resolve()));
+  t.after(() => new Promise((resolve) => broker.close(resolve)));
+  const connected = await connectWorkerTransport({
+    server: new URL(`nats://127.0.0.1:${(broker.address() as AddressInfo).port}`), creds: credsFile('header.claims.signature', createUser().getSeed()),
+    address: value(TransportAddress.of(ENROLLMENT.installationId)), workerId: ENROLLMENT.workerId,
+    tls: { ca: installation.certificatePem },
+  });
+  assert.equal(connected.ok, false);
+  assert.equal(handshakes, 0, 'the client refused the foreign certificate');
+  assert.deepEqual(received, [], 'no CONNECT, and so no credential, reached the foreign broker');
 });

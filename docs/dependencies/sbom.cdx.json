@@ -23601,6 +23601,7 @@
     {
       "ref": "@taskelith/worker@0.0.0",
       "dependsOn": [
+        "@nats-io/nkeys@2.0.3",
         "@taskelith/certificates@0.0.0",
         "@taskelith/contracts@0.0.0",
         "@taskelith/data-root@0.0.0",

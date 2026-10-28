@@ -26,6 +26,7 @@
     "@taskelith/worker-supervisor": "0.0.0"
   },
   "devDependencies": {
+    "@nats-io/nkeys": "2.0.3",
     "@taskelith/certificates": "0.0.0",
     "@taskelith/testing": "0.0.0"
   }
