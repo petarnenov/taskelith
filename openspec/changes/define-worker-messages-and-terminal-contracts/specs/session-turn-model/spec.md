@@ -18,3 +18,14 @@
 #### Scenario: Turn not the earliest queued
 - **WHEN** the host reports acceptance unknown for the second queued turn
 - **THEN** it fails with `precondition-failed`
+
+### Requirement: Turn refused by the harness plugin
+`recordTurnRefused` SHALL make the earliest queued turn `refused` in the named generation when the harness plugin returned `invalid` for it; the state SHALL be final, the turn never resent, and `nextDeliverableTurn` SHALL move past it at once. A repeat SHALL return the session unchanged, a delivered, ended, or `outcome-unknown` turn SHALL fail with `conflict`, and another queued turn with `precondition-failed`.
+
+#### Scenario: Persistent invalid does not block later turns
+- **WHEN** the plugin returns `invalid` for the earliest queued turn while its generation runs and the host reports it
+- **THEN** the turn is `refused`, and the next queued turn is the next deliverable turn in the same generation
+
+#### Scenario: Refused turn not the earliest queued
+- **WHEN** the host reports a refusal for the second queued turn
+- **THEN** it fails with `precondition-failed`

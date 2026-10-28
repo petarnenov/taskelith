@@ -77,7 +77,7 @@ The command channel SHALL carry `session.turn.deliver`, `session.response.delive
 - **THEN** the command is valid
 
 ### Requirement: Session command outcomes
-Each session command SHALL have an outcome observation: a turn delivery `session.turn.delivered`, `session.turn.not-delivered` with `generation-not-running` or a `port-refused` that proves non-acceptance, leaving the turn queued, or `session.turn.acceptance-unknown`; a response or delegation result `session.response.delivery-reported`; a notice an adoption or non-adoption. The control plane SHALL mint one `commandId` per turn and generation, and per consumed response.
+Each session command SHALL have an outcome observation: a turn delivery `session.turn.delivered`, `session.turn.not-delivered` with `generation-not-running`, `port-refused`, or `turn-invalid`, or `session.turn.acceptance-unknown`; a response or delegation result `session.response.delivery-reported`; a notice an adoption or non-adoption. The control plane SHALL mint one `commandId` per turn and generation, and per consumed response.
 
 #### Scenario: Generation ended before delivery
 - **WHEN** the host receives a turn delivery for a generation that no longer runs
@@ -111,6 +111,24 @@ When the host reports `session.turn.acceptance-unknown` while the turn's generat
 #### Scenario: Crash after the generation ended
 - **WHEN** a restarted host finds a turn delivery journaled without its outcome and the generation already ended
 - **THEN** it reports `session.turn.acceptance-unknown` with `crash` at once, and closes nothing
+
+### Requirement: Generation stopped on a port refusal
+When `submitTurn` fails with `not-found`, `unavailable`, or `precondition-failed` naming another turn as running or none, the host SHALL stop the generation with `closeSession` when it still runs and report `session.turn.not-delivered` with `port-refused`. The turn SHALL stay queued, and the control plane SHALL send it again in the next generation with a new command.
+
+#### Scenario: Another turn running
+- **WHEN** `submitTurn` fails with `precondition-failed` whose `runningTurnId` names another turn
+- **THEN** the host closes the generation, reports `port-refused`, and the turn is delivered in the next generation
+
+#### Scenario: Harness unavailable
+- **WHEN** `submitTurn` fails with `unavailable`
+- **THEN** the host closes the generation and reports `port-refused`, and the turn stays queued
+
+### Requirement: Turn refused by the plugin
+When the harness plugin returns `invalid` from `submitTurn`, the host SHALL report `session.turn.not-delivered` with `turn-invalid` and leave the generation running. The control plane SHALL apply it through `recordTurnRefused`, so that the turn becomes `refused`, final and never resent, and the next queued turn follows it in the same generation.
+
+#### Scenario: Persistent invalid does not block later turns
+- **WHEN** the plugin returns `invalid` for a turn on every submission
+- **THEN** the turn is reported once with `turn-invalid`, becomes `refused`, and the session's next queued turn is delivered
 
 ### Requirement: Observations the timeline refuses
 A session observation that the timeline refuses other than as a repeat, such as the outcome, a request, or the output of an `outcome-unknown` turn, SHALL be applied without effect: confirmed, recorded in the inbox and the cursor, and logged as evidence, so it never holds the producer's sequence.

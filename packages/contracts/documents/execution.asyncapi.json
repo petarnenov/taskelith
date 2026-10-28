@@ -3405,9 +3405,11 @@
           },
           "reason": {
             "type": "string",
+            "description": "`generation-not-running`: the command's generation no longer runs; `port-refused`: `submitTurn` answered `not-found`, `unavailable`, or `precondition-failed` without naming the turn as the running one, and the host stops the generation when it still runs; `turn-invalid`: the plugin returned `invalid` for the bounded request, which no resend cures.",
             "enum": [
               "generation-not-running",
-              "port-refused"
+              "port-refused",
+              "turn-invalid"
             ]
           },
           "recoveryEpoch": {
@@ -3418,7 +3420,7 @@
       "TurnNotDeliveredObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The host did not deliver the turn: its generation no longer runs, or the plugin returned a refusal that proves it did not accept the turn. The turn stays queued.",
+        "description": "The host did not deliver the turn: its generation no longer runs, or the plugin returned a refusal that proves it did not accept the turn. With turn-invalid the turn becomes refused, final, and the next queued turn follows it; otherwise the turn stays queued for the next generation.",
         "required": [
           "metadata",
           "payload"

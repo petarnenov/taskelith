@@ -315,9 +315,21 @@ test('a turn the port may have accepted is reported apart from one it proved it 
   assert.ok(notDelivered('port-refused').ok);
   assert.ok(!unknown('port-refused').ok);
   assert.deepEqual(enumAt(SCHEMAS.TurnAcceptanceUnknownPayload!, 'properties', 'reason'), ['conflict', 'timeout', 'crash']);
-  assert.deepEqual(enumAt(SCHEMAS.TurnNotDeliveredPayload!, 'properties', 'reason'), ['generation-not-running', 'port-refused']);
+  assert.deepEqual(enumAt(SCHEMAS.TurnNotDeliveredPayload!, 'properties', 'reason'), ['generation-not-running', 'port-refused', 'turn-invalid']);
   assert.deepEqual(unknownFields, refusalFields);
   assert.deepEqual(SCHEMAS.TurnAcceptanceUnknownPayload!.required, SCHEMAS.TurnNotDeliveredPayload!.required);
+});
+
+test('a turn the plugin refused as invalid becomes refused, and other refusals stop its generation', () => {
+  const notDelivered = (reason: string) => checkMessageSchema('TurnNotDeliveredObservation',
+    observation('session.turn.not-delivered', { ...OBSERVATION_EXAMPLES['session.turn.delivered']!, reason }));
+  const reason = (SCHEMAS.TurnNotDeliveredPayload as { properties: { reason: { description: string } } }).properties.reason;
+  const description = (SCHEMAS.TurnNotDeliveredObservation as { description: string }).description;
+
+  assert.ok(notDelivered('turn-invalid').ok);
+  assert.match(reason.description, /`turn-invalid`: the plugin returned `invalid`/);
+  assert.match(reason.description, /`port-refused`: .*the host stops the generation/);
+  assert.match(description, /becomes refused, final, and the next queued turn follows it/);
 });
 
 test('a turn ends with one outcome of the port, with a failure exactly when it failed', () => {
