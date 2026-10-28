@@ -87,7 +87,16 @@ Architect check (Niki, 2026-10-28): unreviewed fixes e05565aa (F1, F2, U1, U3) a
 - The Purpose of `openspec/specs/review-process/spec.md` still says "two alternating reviewers per change"; a delta cannot change a Purpose, so a spec-maintenance change updates it.
 - `make findings ARGS="effect"` compares only the reviewers of passes 1 and 2 with the route when it reports whether a review followed the route; pass 3 is not compared.
 
+## Archive checks
+
+Checked state: the tree of the archive commit, the working tree after `npm run openspec -- archive record-the-review-sequence --yes` (1 added, 13 modified, 2 renamed in `review-process`):
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `make verify`: passed, profile full, on that uncommitted working tree, no stamp written; tests 3481, pass 3472, fail 0, skipped 9 (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/0427c315-6988-45ca-8b27-69ae57925400/scratchpad/verify4.log`).
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-record-the-review-sequence` valid; 240 passed and 14 failed, all older archived changes this change does not touch (13 from 2026-10-24 to 2026-10-26 and `2026-10-28-adopt-process-performance-recommendations`).
+- `git diff aff291bb -- openspec/specs` (merge base with `origin/dev`): only `openspec/specs/review-process/spec.md`, this change's applied delta.
+- The moved change has `findings.jsonl` (2 findings) and `passes.jsonl` (1 pass); `make findings ARGS="validate"`: 80 findings files, 60 pass summary files, and 16 route files valid.
+
 ## Remaining gates
 
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
