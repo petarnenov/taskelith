@@ -172,7 +172,7 @@ A stream SHALL end on any change of its principal's roles in its project, or of 
 - **THEN** its stream receives `stream-ended` with `role-changed` and ends, and the client reads the board again, now with `callerMayAct` true, and resumes with its `Last-Event-ID`
 
 #### Scenario: Role removed
-- **WHEN** the principal of a project stream loses every role on the project
+- **WHEN** the principal of a project stream, who holds no `installation-owner` role, loses every role on the project
 - **THEN** its stream receives `stream-ended` with `role-changed` and ends, and the reconnection is refused with 403
 
 ### Requirement: Event payloads and session text
@@ -198,7 +198,7 @@ A repeated turn, inbox answer, or native response SHALL be compared by its input
 - **THEN** the answer is 200 with `duplicate` and the first turn
 
 #### Scenario: Concurrent repeats with one key
-- **WHEN** two turns with one idempotency key and texts that redact alike are submitted concurrently
+- **WHEN** two turns with one idempotency key and different texts that redact alike are submitted concurrently
 - **THEN** exactly one is recorded, and the other, retried after its transaction conflicts, answers 409 `idempotency-key-reused`
 
 ### Requirement: Session schemas shared with the worker messages
