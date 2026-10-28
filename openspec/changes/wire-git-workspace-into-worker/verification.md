@@ -14,6 +14,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16e, developed by a briefed s
 - `3a6784fe` the first route (`route.json`, unedited). The `make verify` on its tree failed at `npm run verify:comments` (`apps/worker/src/workspace-slots.ts:16: comment spans 3 lines (max 2)`); `624112b7` fixed the comment, which changed the diff after routing, so `b513fe37` deleted `route.json` and `e7d61265` routed again, unedited, as worker step 4 of the agent task protocol requires. Both routes gave the same result.
 - `efbb79ca` `docs: record the verification of the wire git workspace into worker change`, the revision that review pass 1 reviewed.
 - Review pass 1 fixes: `f40abcec` (finding 1), `824ccab2` (finding 3), `3acc3dc1` (finding 2), `291f9822` (finding 4), `00a1e2b0` (finding 5, the worker-runtime delta of finding 1, and the contract text of findings 1 and 2), `004144e1` (the git-workspace-port delta of finding 2 with its "Interrupted cleanup" scenario, and design, proposal, and tasks, with the architect's answers N1 and N2), and `38d39dda` (the pass 1 line of `passes.jsonl` and the five lines of `findings.jsonl`). `route.json` is not routed again: worker step 4 routes before pass 1 only.
+- Review pass 2 fixes: `c764fd2a` (finding 4), `45b308d8` (finding 3 and the tests of answer A2), `d26690b6` (findings 1, 2, and 5 and the contract and spec text of finding 4), `44b5b314` (design and tasks, with the coordinator's answers A1 and A2), `aeaf36b8` (findings 6 and 7), and the records commits after `aeaf36b8` (the pass 2 line of `passes.jsonl`, the seven lines of `findings.jsonl`, and this record).
 
 ## Environment
 
@@ -80,8 +81,12 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 - Section 3, step 7 (Q9): the reused process group on macOS as an accepted residual risk.
 - Section 9 (Q2): the table row `precondition-failed`, `hardlinks-unprotected`.
 - The header records the revision.
-- Section 3, step 6 (review pass 1, finding 1): the worker owes the capacity declaration of a reclaim in its journal, so that a later reclaim or the next start journals it after a journal failure or a crash. No architect answer names this sentence (`design.md`, "Open Questions").
-- Section 3, step 7 (review pass 1, finding 2): a fault that interrupts the kill, proof, or removal still fails with `reclaim-failed`, and a later `reclaim` finishes the cleanup without the program, killing through the recorded cgroup's `cgroup.kill` on Linux and only proving a recorded process group on macOS. No architect answer names this sentence either.
+- Section 3, step 6 (review pass 1, finding 1): the worker owes the capacity declaration of a reclaim in its journal, so that a later reclaim or the next start journals it after a journal failure or a crash. The coordinator accepted it as answer A1 (Niki, 2026-10-28; `design.md`, "Review pass 1 follow-up questions").
+- Section 3, step 7 (review pass 1, finding 2): a fault that interrupts the kill, proof, or removal still fails with `reclaim-failed`, and a later `reclaim` finishes the cleanup without the program, killing through the recorded cgroup's `cgroup.kill` on Linux and only proving a recorded process group on macOS, which it never signals. The coordinator accepted it as answer A2 (Niki, 2026-10-28), which also asks for the explicit macOS no-signal rule; the sentence states it.
+- `docs/contracts/execution-wire-contracts.md` section 5, the row "Capacity declared" (review pass 2, finding 1): the worker declares again after a reclaim that removes a hand-off record, also unchanged, as `docs/contracts/git-workspace.md` section 3, step 6, and worker-runtime "Capacity declaration" already say; the header names the sub-change.
+- Section 3, step 7 (review pass 2, finding 2): the proof by polling, never by killing, applies to a record without a failure; a record with `reclaimFailed` is cleaned up as the cleanup of a failed program says.
+- Section 3, step 7 (review pass 2, finding 4, keeping the answer to Q6): a fault of the durable write of the failure still kills, proves, and removes the containment, and `reclaim` fails with that write's `unavailable`; the record then names the containment without the failure, so a later `reclaim` proves it empty and runs the program once more, as after a crash at `WS8.after`, and the slot stays held until a reclaim succeeds.
+- The header records the pass 2 fixes.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -127,19 +132,44 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - After the fixes: `npm run build`, then `node --experimental-strip-types --test` of `packages/adapters/git-workspace/test/*.test.ts`, `apps/worker/test/*.test.ts`, and `packages/adapters/worker-journal/test/*.test.ts` gave tests 654, pass 652, fail 0, skipped 2 (the privileged ones); `npm run check:boundaries` and `npm run verify:comments` passed; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, the longest requirement body 468 characters ("Reclaim program containment" and "Capacity declaration"); `make findings ARGS="validate"` valid. `make verify` and `make verify-linux-git-workspace` are under "Checks".
 - The fixes change code and contracts, and pass 1 found a High finding, so pass 2 by reviewer B is required.
 
+### Pass 2
+
+- Reviewer B: Claude Code, model `claude-opus-5-5`, effort `medium`, permission mode `plan` with `Edit`, `Write`, and `NotebookEdit` disallowed, session `b1712a46-c45e-4d1a-bc1a-c52f61a40928`, on `d318d297`. The worktree snapshot before and after the review was `d6b801991b88aaa7c523bfa26658d844ce7a672402f83c8f76f58ee101565e97`, equal.
+- Invocation (from `make review`): `claude -p --model claude-opus-5-5 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, environment `PATH HOME USER LANG TERM`, started 2026-10-28T20:35:34.937Z. Model confirmation: `model: claude-opus-5-5 (reported)`, from the stream's own report, printed by `make review`. `route.json` recommends pass 2 reviewer B `claude claude-opus-5-5#xhigh`; `make review` printed "route: recommends effort xhigh; the authorized medium applies (policy version 8)", and the brief names `claude claude-opus-5-5#medium`.
+- Result: Critical 0, High 0, Medium 4, Low 3, matching the pass 2 line of `passes.jsonl`; all seven fixed and recorded in `findings.jsonl`. The reviewer reported one denied write of a note outside the worktree, which changed no file of the review.
+  1. Medium, contract-drift (`docs/contracts/execution-wire-contracts.md`, the row "Capacity declared"): the row did not name the declaration after a reclaim. Fixed in `d26690b6` ("Contract amendments").
+  2. Medium, contract-drift (`docs/contracts/git-workspace.md` section 3, step 7, and git-workspace-port "Reclaim program containment"): the proof without a kill also covered a record with `reclaimFailed`, whose later reclaim kills the cgroup on Linux. Fixed in `d26690b6`: both apply it only to a record without a failure and send the other to "Killed reclaim containment".
+  3. Medium, missing-fail-before-test (`reclaim-host.ts`, `killUnreapedGroup`): no test checked the guard that spares an exited program's group. Fixed in `45b308d8`: `ProcessGroupReclaimHost` takes an injected `SendSignal`, with tests below.
+  4. Medium, error-handling (`git-workspaces.ts`, `#failedProgram`): a fault of the durable `reclaimFailed` write skipped the kill. Fixed in `c764fd2a`, keeping the answer to Q6: the containment is still killed, proven empty, and freed, the write's `unavailable` is returned, and the slot stays held until a reclaim succeeds; the contract and the spec state that outcome in `d26690b6` (new scenario "Failure record not written").
+  5. Low, spec-wording (git-workspace-port "Interrupted cleanup" and "Killed reclaim containment"): fixed in `d26690b6`; the scenario kills only a Linux cgroup and on one account only proves the group empty without a signal, and the requirement again keeps a containment populated at the proof's bound.
+  6. Low, evidence-mismatch (this record, "Author self-check"): the longest requirement before the fixes was given as current. Fixed in `aeaf36b8`.
+  7. Low, stale-citation (this record, "Revision"): `004144e1`, not `00a1e2b0`, holds the git-workspace-port delta of pass 1 finding 2. Fixed in `aeaf36b8`.
+- Answers A1 and A2 (Niki, 2026-10-28) are recorded in `design.md`. A2 asks for the macOS no-signal rule in the contract and in a test: contract section 3, step 7, states it, and the two tests "a one-account host never signals a recorded process group, also one still running" and "on one account a later reclaim of a failed program signals no recorded process group" check it.
+- Fail-before, with the new tests on the fixed tree and one source change at a time, rebuilt with `npx tsc -b packages/adapters/git-workspace`, then restored (log `16e-pass2-failbefore.out` in the session scratchpad):
+
+| Test | How it failed before the fix |
+| --- | --- |
+| `hand-off.test.ts` "a failure record that cannot be written still kills the overrunning program, and a later reclaim runs it again" | With `#failedProgram` of `d318d297`: `AssertionError: the program is killed and proven gone` (`populated` was `true`) |
+| `reclaim-program.test.ts` "a one-account kill signals the group of an unreaped program, never that of an exited one" | Mutant without the guard `exitCode !== null \|\| signalCode !== null`: `the group of an exited program is not signalled`, 2 signals where 1 was expected |
+| `hand-off.test.ts` "on one account a later reclaim of a failed program signals no recorded process group" | The same mutant: `no process group is signalled`, one `SIGKILL` to the exited group; a mutant whose `killRecorded` sends `SIGKILL` to the recorded group: the same assertion, one `SIGKILL` |
+| `reclaim-program.test.ts` "a one-account host never signals a recorded process group, also one still running" | The `killRecorded` mutant: `the recorded group is not signalled`, one `SIGKILL` |
+
+  The behavior of the last three already held on `d318d297`, so their fail-before is the mutants; `d318d297` had no injected signal call to observe it.
+- After the fixes: `node --experimental-strip-types --test packages/adapters/git-workspace/test/*.test.ts` gave tests 224, pass 224, fail 0; `npm run verify:comments` passed; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, the longest requirement body 489 characters ("Reclaim program containment"; "Killed reclaim containment" 482), and an archive of the change in a scratch copy of `openspec/` validated every spec strictly (71 passed); `make findings ARGS="validate"` valid. `make verify` and `make verify-linux-git-workspace` are under "Checks".
+- The pass 2 fixes change code and pass 2 found Medium findings, so pass 3 by reviewer A is required.
+
 ## Limitations
 
 - A whole worker started through the worker image's entrypoint was not run: the entrypoint's group is tested with its fakes, the umask and the hard-link reader through the injected `WorkspaceHost`, and the real `/proc/sys/fs/protected_hardlinks` read is untested; the slot service's real hand-off and reclaim are tested only through the adapter's own suites.
 - A crash between the hand-off record's removal and the capacity declaration is simulated by a fake workspace that throws after removing the record; the real adapter's crash points are not combined with the worker's journal.
 - The intake's `handedOff` wiring in `worker-start.ts` is exercised through `CommandIntake` directly; the start test's broker has no consumer.
 - The delegated-child scenario moved to worker-runtime "Slot held by a handed-off workspace" is item 38's test.
-- Residual risk (Q9): on macOS a recorded process group identifier can be reused by an unrelated group after the program's group ended; the proof then reads it as populated, which only delays the reclaim to the proof's bound and reports the workspace, and never releases one early. The kill after the run bound signals a group only while Node has not reaped its leader, so it never kills a reused group.
+- Residual risk (Q9): on macOS a recorded process group identifier can be reused by an unrelated group after the program's group ended; the proof then reads it as populated, which only delays the reclaim to the proof's bound and reports the workspace, and never releases one early. The kill after the run bound signals a group only while Node has not reaped its leader, so it never kills a reused group; since review pass 2 a test with an injected signal call checks it.
 - Until item 21, a failed reclaim is visible only as the log line `worker.workspace.reclaim-failed` and the held slot (Q5; `design.md`, "Obligations and residual risks").
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B (required: pass 1 found a High finding and its fixes change code), and pass 3 by reviewer A if governance "Conditional third pass" requires it.
-- The coordinator's confirmation of the two contract sentences of the pass 1 fixes that no architect answer names ("Contract amendments").
+- Review pass 3 by reviewer A (required: pass 2 found Medium findings, and its fixes change code).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
