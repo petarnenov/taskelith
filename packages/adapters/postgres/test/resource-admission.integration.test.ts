@@ -30,6 +30,7 @@ import { CrashPoints, SimulatedCrash, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, retriedTask, seedWorker, usedAdmission } from './capacity-fixtures.ts';
 import { checkMessageSchema } from '@taskelith/contracts';
 import { AT, assignment } from './fixtures.ts';
+import { gatedStore, rendezvous } from './gated-transactions.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -259,10 +260,15 @@ test('a slot admits exactly its own concurrency limit, and each reservation reco
 test('two placements racing for the last unit of a slot reserve it at most once', async () => {
   const slot = await addSlot('slot-1', 1);
   const { tasks, workers } = await slotPlacementSetup(['task-1', 'task-2']);
-  const racing = await Promise.all(tasks.map((task, index) => service.reserve(placement(task, `race-${index}`, {
-    workerId: workers[index]!, slotRequest: SLOT_REQUEST,
-  }))));
+  // Both first attempts read the free unit before either reserves it.
+  const read = { member: 'ledger', method: 'heldForCredential', arrive: rendezvous(2) } as const;
+  const racers = tasks.map(() => gatedStore(database, read));
+  const racing = await Promise.all(tasks.map((task, index) => new ResourceAdmissionService(racers[index]!.store, NO_WAIT).reserve(
+    placement(task, `race-${index}`, { workerId: workers[index]!, slotRequest: SLOT_REQUEST }),
+  )));
   assert.deepEqual(racing.map(kind).sort(), ['placed', 'waiting:provider-concurrency-exhausted']);
+  const waiting = racing.findIndex((result) => kind(result) !== 'placed');
+  assert.ok(racers[waiting]!.attempts() >= 2, 'the waiting placement was not retried');
   const [held] = await query<{ count: number }>(url,
     "SELECT count(*)::int AS count FROM assignments WHERE reservation_state = 'held' AND $1 = ANY (provider_credentials)", [slot.id]);
   assert.deepEqual(held, { count: 1 });

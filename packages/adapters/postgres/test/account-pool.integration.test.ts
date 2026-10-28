@@ -17,6 +17,7 @@ import {
 } from '@taskelith/scheduling';
 import { AesGcmSlotCredentialCipher } from '@taskelith/secrets';
 import { id, value } from '@taskelith/testing';
+import { gatedStore, rendezvous } from './gated-transactions.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -101,12 +102,19 @@ function input(name: string, secret: SlotSecret): AddAccountSlotInput {
 }
 
 test('of two concurrent adds for the last allowed slot at most one commits, and the other keeps no credential', async () => {
-  const ports = { store: database, credentials: credentials(), deliveries: ONE_SLOT };
+  // Both first attempts count before either inserts, so one must retry.
+  const read = { member: 'accountSlots', method: 'countNotRemoved', arrive: rendezvous(2) } as const;
+  const racers = [gatedStore(database, read), gatedStore(database, read)];
   const secrets = [value(sentinel()), value(sentinel())];
-  const added = await Promise.all(['slot-a', 'slot-b'].map((name, index) => addAccountSlot(ports, input(name, secrets[index]!))));
+  const shared = credentials();
+  const added = await Promise.all(['slot-a', 'slot-b'].map((name, index) => addAccountSlot(
+    { store: racers[index]!.store, credentials: shared, deliveries: ONE_SLOT }, input(name, secrets[index]!),
+  )));
   assert.deepEqual(added.map((result) => result.ok).sort(), [false, true]);
-  const refused = added.find((result) => !result.ok);
-  assert.equal(refused !== undefined && !refused.ok && refused.error.code, 'invalid');
+  const loser = added.findIndex((result) => !result.ok);
+  const refused = added[loser]!;
+  assert.equal(!refused.ok && refused.error.code, 'invalid');
+  assert.ok(racers[loser]!.attempts() >= 2, 'the refused add was not retried');
   assert.ok(!JSON.stringify(refused).includes(secrets[0]!.reveal()) && !JSON.stringify(refused).includes(secrets[1]!.reveal()));
   const slots = await query<{ slot_id: string }>(url, 'SELECT slot_id FROM account_slots');
   const kept = await query<{ slot_id: string }>(url, 'SELECT slot_id FROM slot_credentials');
