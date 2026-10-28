@@ -66,7 +66,8 @@ export class OperatorCredentialService {
   }
 }
 
-function checkInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
+// Both texts are required, bounded, and recorded in the audit trail.
+export function checkInvocation({ actor, reason }: AdministrativeInvocation): Result<void> {
   for (const [name, text] of [['actor', actor], ['reason', reason]] as const) {
     if (text.trim() === '' || text.length > AUDIT_TEXT_MAX_LENGTH) {
       return err(failure('invalid', `the ${name} must be 1-${AUDIT_TEXT_MAX_LENGTH} characters`, { field: name }));
