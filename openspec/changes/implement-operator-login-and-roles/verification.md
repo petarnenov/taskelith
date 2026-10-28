@@ -1,6 +1,6 @@
 # Verification: implement-operator-login-and-roles
 
-Status: implemented and verified by the author; review pass 1 found 1 High and 7 Medium findings, seven fixed and one (M3) returned to the coordinator; pass 2 pending.
+Status: implemented and verified by the author; review pass 1 found 1 High and 7 Medium findings, all fixed, M3 under coordinator decision (c); review pass 2 found 3 Medium and 6 Low findings, all fixed and not yet reviewed; pass 3 by reviewer A pending.
 
 ## Scope and source
 
@@ -72,7 +72,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1 by reviewer A is below; pass 2 by reviewer B is pending. The brief's efforts run, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, although `route.json` recommended `high` for reviewer A and `xhigh` for reviewer B, because governance does not authorize the routed effort (coordinator R1, 2026-10-28).
+Passes 1 by reviewer A and 2 by reviewer B are below; pass 3 by reviewer A is pending. The brief's efforts run, reviewer A Codex `gpt-6.1-sol` at `medium` and reviewer B Claude Code `claude-opus-5-5` at `high`, although `route.json` recommended `high` for reviewer A and `xhigh` for reviewer B, because governance does not authorize the routed effort (coordinator R1, 2026-10-28).
 
 ### Review pass 1
 
@@ -91,6 +91,22 @@ Findings: 0 Critical, 1 High, 7 Medium, 0 Low, as `findings.jsonl` records them.
 
 Route: not routed again. Worker step 4 asks for a new route only when the fixes of the `make verify` run before pass 1 change the diff, not after review fixes, as pass 2 of `route-reviewers-by-change-complexity` found (its finding 5).
 
+### Review pass 2
+
+Reviewer B, Claude Code, model `claude-opus-5-5`, effort `high` (the brief's; `route.json` recommended `xhigh`), permission mode `plan` with the editing tools disallowed, at `b3d111d7`. Invocation: `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`. The last result line of the log confirmed the model in `modelUsage`, subtype `success`, session `3c7a6540-e2db-421d-bb86-e6cbcdd8a95f`. The working tree snapshot before and after the pass was the same (`c783c50f26818f99842524b4f4835f16cf103d9a462bf0f63971b25edc7cbf54`), so the reviewer changed no file. It ran `git fetch origin dev` to find the merge base, which updated remote refs only, `git diff`, `jq`, and `npm run verify:comments`, which passed; it ran neither `make verify` nor the PostgreSQL suites.
+
+It confirmed all eight pass 1 fixes. New findings: 0 Critical, 0 High, 3 Medium, 6 Low, as `findings.jsonl` records them. The fixes are not yet reviewed (pass 3). Each behaviour change has a test that fails before it, run on the built workspace before and after the fix.
+
+- **M-1 (concurrency-race), `55d9d5fa`.** Parallel attempts all passed the throttle before any failure was recorded, so one client could keep the hash queue full and make every login answer 503, and the bound of 10 000 keys forgot the oldest, so failures on other names reset a target's counter. `LoginThrottle.attempt` now runs attempts one at a time per source address and per login name, in that order, waiting the delay inside that turn while a key is throttled, so one address holds at most one hash slot. An address with 4 attempts waiting or running gets 503 `unavailable` at once; there is no new status, no contract change, and no lockout (Q8). Keys with a failure in the window are never forgotten: expired keys are dropped, and while the table is full a key it cannot hold is delayed as if throttled. Before the fix, six parallel attempts from one address ran their verifications together and the two beyond four never answered (the test timed out), and filling the table reset the target.
+- **M-2 (error-handling), `5dec6d54`.** On a terminal, backspace and delete drop the last code point, Ctrl-U clears the line, Ctrl-D ends only an empty line, as a cancel, and any other C0 control key, escape sequences included, refuses the input with reason `control-character`. `set-password` reads the password through `readConfirmedSecret`, which on a terminal asks twice and refuses differing entries with reason `entries-differ`; piped input is read once, as before. Before the fix the editing tests failed.
+- **M-3 (spec-wording), `da1de3d3`.** The deltas add "Login throttling without lockout", "Provisional session lifetimes", and "Run resources deny unknown and foreign alike" to `control-plane-api`, and "A password change ends the principal's sessions" and "Temporary G2 bridge" to `trust-and-operational-foundation`, each with a scenario that an existing or new test covers. Each requirement is under 500 characters, and `npm run verify:archive` archives the change in a scratch copy into strictly valid specs.
+- **L-1 (contract-drift), `bce0bf40`.** A test reads `Password.maxLength` from `control-plane.openapi.json`, compares it with `PASSWORD_POLICY.maximumCodePoints`, and checks the NFC and NFD forms of 512 `é` and of 1024 astral characters against the `LoginRequest` schema.
+- **L-2 (concurrency-race), `953113c9`.** A PostgreSQL test holds the rotation transaction after its principal read while another pool commits a password change that ends the principal's sessions; the login answers `login-failed`, the new hash stays, and no session is logged in.
+- **L-3 (stale-citation), this record.** The status line names both passes, and tasks 6.2 and 6.3 are checked.
+- **L-4 (error-handling), `953113c9`.** The adapter reads the `kind` column and answers `internal` for an unknown kind; a PostgreSQL test drops the check, inserts a `delegate` row, and restores the check.
+- **L-5 (naming), `953113c9`.** The two imports from `@taskelith/access` are one, and the session port exposes `start()`, now public on `SessionService`, instead of `read(undefined)`.
+- **L-6 (error-handling), `953113c9`.** `trimAnonymous(cap, limit)` deletes at most the purge batch, oldest first, on both stores; the conformance suite checks the limit.
+
 ## Remaining gates
 
 - The temporary G2 bridge, under which an `installation-owner` passes the project requirements of the G2 operator operations, is retired by item 11 ([design](design.md) decision 6, Q5).
@@ -98,5 +114,5 @@ Route: not routed again. Worker step 4 asks for a new route only when the fixes 
 - Change 10b: `retireEvidence`, the 404 of a download whose record was retired meanwhile, and the sweep of evidence content whose digest no record refers to (Q13, D2; execution wire contracts section 9).
 - The other operations of execution wire contracts section 8.1, by the items that own their handlers (D2): `listUnknownExecutions`, `listUnrecordedProcesses`, and `readmitTask` item 44; `readDelegationResult` item 38; `fetchSlotCredential` item 12; `issueRunScmCredential` and `fetchRunScmCredential` item 21.
 - Item 11: the 403 on the operator operations of the G2 execution and SDLC documents, named in its brief.
-- Review pass 2 by reviewer B.
+- Review pass 3 by reviewer A: governance "Conditional third pass" requires it, because the pass 2 fixes change code, not only records and documentation.
 - Integration into dev by the coordinator (single pull request)
