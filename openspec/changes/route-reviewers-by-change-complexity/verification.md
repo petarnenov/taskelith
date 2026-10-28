@@ -276,6 +276,17 @@ Node.js 24.22.1, the `.nvmrc` pin, by its full nvm path. Every command that runs
 - `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`: `make record: wrote the generated part of openspec/changes/route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`.
 - `npm run openspec -- validate --all --strict`: `Totals: 70 passed, 0 failed (70 items)`. `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
 
+### Review pass 3
+
+- **Reviewer:** A, Claude Code, model `claude-fable-5-1`, effort `medium`, permission mode `plan`, editing tools disallowed, session `284b2a33-2961-4c24-9735-98f6a99f9b3a`.
+- **Revision reviewed:** `96d0bfce`, with the pass 2 fixes; a confirmation of those fixes only.
+- **Invocation:** `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null`, with the credential variable removed from the reviewer's environment.
+- **Model confirmation:** `claude-fable-5-1` in the `modelUsage` of the last `"type":"result"` line.
+- **Snapshot:** before and after the pass `700cce7f…`, unchanged.
+- **Result:** Critical 0, High 0, Medium 0, Low 1, as in `passes.jsonl` line 3 and `findings.jsonl` line 22. The reviewer confirmed all eleven pass 2 fixes and the coordinator's correction of the idea date to 2026-10-28.
+- **1, Low, evidence-mismatch** (`findings.jsonl:16`): pass 2 finding 6 did not name the pass that missed it, although the `missing-credential` wording was already in the `route.json` of `939de6b0`, which pass 1 reviewed at `7cecc59a` and cited (L9) without raising it. Fixed in `229e7c64`: the line carries `"missedBy":{"pass":1,"role":"A"}`, and "Review pass 2" bullet 6 says so. Outcome `fixed-unreviewed`.
+- **End of review:** a Low-only pass ends the review under governance "Low findings are fixed", so the finding is fixed without another review; the review is also complete at the three-pass cap.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -297,5 +308,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) ran on 2026-10-28 ("Live shadow evaluation").
 - A later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
-- Independent review pass 3 by reviewer A, required by governance "Conditional third pass" because the pass 2 fixes change code and tests; archive (`tasks.md` 4.2 and 4.3).
+- The merge of `fix-make-argument-expansion` from dev before the archive, as the coordinator instructed; it is not yet on dev at `f3a53f17`.
+- The archive (`tasks.md` 4.3).
 - Integration into dev by the coordinator (single pull request).
