@@ -16,14 +16,14 @@ Define the contract-first control-plane access API of G3 item 9a: an OpenAPI 3.1
 - **THEN** both definitions are identical
 
 ### Requirement: Browser session and CSRF schemes
-The document SHALL define `browserSession`, a cookie under the `__Host-` prefix that is `HttpOnly`, `Secure`, and `SameSite=Strict`; `csrfToken`, the `X-CSRF-Token` header; and the other documents' `operatorToken`. Every operation other than GET, except the webhook receiver, SHALL accept only the cookie together with the CSRF header, or the operator bearer alone.
+The document SHALL define `browserSession`, a cookie under the `__Host-` prefix that is `HttpOnly`, `Secure`, and `SameSite=Strict`; `csrfToken`, the `X-CSRF-Token` header; and the other documents' `operatorToken`. Every operation other than GET, except the webhook receiver, SHALL accept the cookie together with the CSRF header, every such operation other than `logIn` and `logOut` SHALL also accept the operator bearer alone, and none SHALL accept another credential.
 
 #### Scenario: Mutation without the CSRF header
 - **WHEN** a request authenticated by the session cookie changes state without the session's CSRF token
 - **THEN** it is refused with 403 and reason `csrf-token-invalid`, and nothing takes effect
 
 #### Scenario: Mutation with the operator bearer
-- **WHEN** the CLI sends a mutation with the operator bearer and no CSRF header
+- **WHEN** the CLI sends a mutation that declares the operator bearer, with that bearer and no CSRF header
 - **THEN** the request is authenticated as the bearer's principal
 
 ### Requirement: Login session
@@ -38,7 +38,7 @@ The document SHALL define `browserSession`, a cookie under the `__Host-` prefix 
 - **THEN** the answer is 401 with reason `login-failed` and does not say which is wrong
 
 ### Requirement: Access failures
-Authentication, CSRF, and authorization failures SHALL be distinct kernel failures with code `forbidden`: 401 `AuthenticationFailure` (`unauthenticated` or `login-failed`), 403 `CsrfRejection` (`csrf-token-invalid`), and 403 `AccessDenial` (`role-required`). The control plane SHALL authenticate, then check the CSRF token, then the role, before it reads the request body.
+Authentication, CSRF, and authorization failures SHALL be distinct kernel failures with code `forbidden`: 401 `AuthenticationFailure` (`unauthenticated` or `login-failed`), 403 `CsrfRejection` (`csrf-token-invalid`), and 403 `AccessDenial` (`role-required`). For an operation with a session or bearer requirement, the control plane SHALL authenticate, then check the CSRF token, then the role, before it reads the request body.
 
 #### Scenario: CSRF rejection is not an access denial
 - **WHEN** a body with reason `csrf-token-invalid` is checked against `AccessDenial`
@@ -52,11 +52,15 @@ Each operation SHALL require the role that `docs/contracts/control-plane-wire-co
 - **THEN** the answer is 403 with reason `role-required`
 
 ### Requirement: Project setup operations
-The document SHALL define creating, reading, listing, and renaming projects, assigning and removing a principal's one role on a project, reading and replacing the project defaults, reading and changing the auto-merge setting, and reading and changing the repository binding. Every update SHALL name the revision it read and fail with 409 `conflict` when it moved.
+The document SHALL define creating, reading, listing, and renaming projects, assigning and removing a principal's one role on a project, the project defaults, the auto-merge setting, and the repository binding. `updateProject`, `updateProjectDefaults`, `updateAutoMergeSetting`, and `bindRepository` on a bound project SHALL name the revision they read and fail with 409 `conflict` when it moved. A first binding and a member assignment or removal SHALL name none.
 
 #### Scenario: Concurrent default changes
 - **WHEN** two maintainers replace a project's defaults from the same revision
 - **THEN** one succeeds and the other fails with 409
+
+#### Scenario: Concurrent member assignments
+- **WHEN** two installation owners assign different roles to the same principal on one project
+- **THEN** both succeed and the role of the assignment serialized last stays
 
 ### Requirement: Workers view operation
 `listWorkers` SHALL return the worker admission view: every enrolled worker that is not revoked, in identifier order, with its host, enrollment time, admission state, last report time, and stored self-check results, and no credential or credential hash. When a source cannot be read it SHALL answer 503 with no partial data.
@@ -87,7 +91,7 @@ The document SHALL define listing, reading, creating, and changing SCM integrati
 - **THEN** the record is invalid
 
 ### Requirement: Webhook receiver
-`receiveScmWebhook` SHALL need no session, CSRF token, or operator credential. It SHALL take the body as bytes of any media type and leave verification over those exact bytes to the integration's plugin. An unknown integration and a failed verification SHALL answer the same 401; a verified delivery and a repeat of a recorded one SHALL answer 202.
+`receiveScmWebhook` SHALL need no session, CSRF token, or operator credential. It SHALL read at most its limit of raw bytes of any media type, then have the integration's plugin verify the signature over those exact bytes, and only then read the payload. An unknown integration and a failed verification SHALL answer the same 401; a verified delivery and a repeat of a recorded one SHALL answer 202.
 
 #### Scenario: Unsigned delivery
 - **WHEN** a delivery arrives without a valid signature
@@ -101,8 +105,8 @@ No response schema SHALL reach a write-only value: a password, a slot credential
 - **THEN** the contract tests fail
 
 ### Requirement: Identifiers and pages
-An identifier that the control plane mints for a project, principal, enrollment token, slot, or SCM integration SHALL be one lowercase letter and 32 lowercase hexadecimal digits from 128 random bits; on the wire it SHALL be an `Identifier`. A list SHALL return at most 100 items in identifier order and a `next` identifier while more remain.
+An identifier that the control plane mints for a project, principal, enrollment token, slot, or SCM integration SHALL be one lowercase letter and 32 lowercase hexadecimal digits from 128 random bits; on the wire it SHALL be an `Identifier`. Every list other than `listWorkers`, which returns one unpaged snapshot, SHALL return at most 100 items in identifier order and a `next` identifier while more remain.
 
 #### Scenario: Next page
-- **WHEN** a list has more than 100 items
+- **WHEN** a list other than `listWorkers` has more than 100 items
 - **THEN** the first page returns 100 and a `next` identifier that, passed as `after`, starts the next page
