@@ -12,7 +12,7 @@ import {
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
-import { parseInstant, type Result } from '@taskelith/kernel';
+import { err, failure, parseInstant, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
   InMemoryAccountSlots,
@@ -280,6 +280,20 @@ test('a slot beyond its pair limit is invalid and its stored version is discarde
   expectInvalidWithoutSecret(await addAccountSlot(ports, input('slot-2')));
   value(await slots.replace({ ...first, state: 'removed', revision: 3 }, 2));
   assert.equal((await addAccountSlot(ports, input('slot-2'))).ok, true);
+});
+
+test('an add whose commit outcome is unknown keeps its stored version', async () => {
+  const { slots, credentials, ports } = await commandFixture();
+  const lostReply: CapacityStore = {
+    transaction: async (work) => {
+      const committed = await ports.store.transaction(work);
+      return committed.ok ? err(failure('unavailable', 'the commit outcome is unknown', { outcome: 'unknown' })) : committed;
+    },
+  };
+  const added = await addAccountSlot({ ...ports, store: lostReply }, input('slot-1'));
+  assert.equal(!added.ok && added.error.code, 'unavailable');
+  const stored = value(await slots.get(id('ProviderCredentialId', 'slot-1')));
+  assert.deepEqual(credentials.storedVersions(stored.id), [stored.credentialVersion]);
 });
 
 test('a duplicate slot is a conflict and keeps the existing credential only', async () => {

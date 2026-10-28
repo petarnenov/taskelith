@@ -1,5 +1,5 @@
 import type { HarnessPluginId } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
   parseAccountSlot,
@@ -30,8 +30,8 @@ export interface AccountSlotCommandPorts {
   readonly deliveries: AdmittedDeliveries;
 }
 
-// Pool sections 6.2 and 7.1: store, then add with the limit check; an `Err`
-// discards the version, a rejection may have committed, so it keeps it.
+// Pool sections 6.2 and 7.1: store, then add with the limit check; a version
+// that may be committed is kept for the sweep of section 8.1.
 export async function addAccountSlot(ports: AccountSlotCommandPorts, input: AddAccountSlotInput): Promise<Result<AccountSlot>> {
   const delivery = await ports.deliveries.find(input.harnessId, input.mechanismId);
   if (delivery === undefined) return err(notAdmitted(input));
@@ -39,8 +39,12 @@ export async function addAccountSlot(ports: AccountSlotCommandPorts, input: AddA
   if (!draft.ok) return draft;
   const version = await ports.credentials.store(input.id, input.secret);
   const added = await ports.store.transaction((tx) => addWithinLimit(tx, slotRecord(input, version), delivery));
-  if (!added.ok) await ports.credentials.discard(input.id, version);
+  if (!added.ok && !mayHaveCommitted(added.error)) await ports.credentials.discard(input.id, version);
   return added;
+}
+
+function mayHaveCommitted(failed: Failure): boolean {
+  return failed.code === 'unavailable' && failed.details.outcome === 'unknown';
 }
 
 const FIRST_CREDENTIAL_VERSION = mustVersion(1);
