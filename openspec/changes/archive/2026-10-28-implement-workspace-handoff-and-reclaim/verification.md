@@ -110,6 +110,10 @@ Review pass 3, each on the tree of `ae465618` with one change undone, rebuilt, a
 | `make findings ARGS="route --change implement-workspace-handoff-and-reclaim"`, again after `db767f8f` | `e33d2c5f` | The same result: "route: elevated (lines, files, contracts, docker, size), rule version 1"; reviewer A `codex gpt-6.1-sol#high`, reviewer B `claude claude-opus-5-5#xhigh`; shadow `jev-1.14.0` agrees; committed unedited as `6b9a59e7`; routed once more after `2c038591` with the same result, committed unedited as `613818cd` |
 | `make findings ARGS="route --change implement-workspace-handoff-and-reclaim"` | `34a9773d` | "route: elevated (lines, files, contracts, docker, size), rule version 1"; pass 1 reviewer A `codex gpt-6.1-sol#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`; shadow agrees; recommendation only, committed unedited as `254cf2d7`. The coordinator decided on 2026-10-28 that the review runs at the brief's efforts, reviewer A `codex gpt-6.1-sol` medium and reviewer B `claude claude-opus-5-5` high, since "Routed effort" is not authorized yet |
 
+## Archive
+
+On the tree of the archive commit, after `npm run openspec -- archive implement-workspace-handoff-and-reclaim --yes`: `npm run openspec -- validate --all --strict --no-interactive` passed (71 of 71); the line `change/2026-10-28-implement-workspace-handoff-and-reclaim` of `npm run openspec -- validate --archived --no-interactive` passed; `git diff` against the merge base with `origin/dev` under `openspec/specs` changes only `openspec/specs/git-workspace-port/spec.md`; the moved change has its `findings.jsonl` and `passes.jsonl`, and `make findings ARGS="validate"` passed; `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` passed, profile full: tests 3457, suites 46, pass 3410, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.75 % branches, 98.88 % functions.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -149,4 +153,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - 16e: killing a program left running past `RECLAIM_RUN_BOUND_MS`, freeing its slot, and any retry (coordinator decision N6), and freeing the empty cgroup of a failed program.
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator.
 - 16e: the worker wiring and admission.
-- Integration into `dev` by the coordinator.
+- Integration into dev by the coordinator (single pull request).
