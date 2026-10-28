@@ -472,10 +472,12 @@ test('a forged cache tree never hides a staged change', () => withFixture(async 
 
 // A pack whose index names `object` for the bytes of `forged`, with the
 // loose object gone, so that Git reads the forged bytes for that name.
-async function forgeObject(git: GitFixture, object: string, forged: string): Promise<void> {
+async function forgeObject(git: GitFixture, object: string, forged: string, type = 'blob'): Promise<void> {
   const pack = join(git.checkout(FIRST), '.git', 'objects', 'pack');
-  await native(git, ['pack-objects', '-q', join(pack, 'pack')], `${await native(git, ['hash-object', '-w', '--stdin'], forged)}\n`);
-  const idx = join(pack, (await readdir(pack)).find((name) => name.endsWith('.idx'))!);
+  // The smart HTTP clone leaves a pack of its own.
+  const cloned = new Set(await readdir(pack));
+  await native(git, ['pack-objects', '-q', join(pack, 'pack')], `${await native(git, ['hash-object', '-t', type, '-w', '--stdin'], forged)}\n`);
+  const idx = join(pack, (await readdir(pack)).find((name) => name.endsWith('.idx') && !cloned.has(name))!);
   await chmod(idx, 0o644);
   const bytes = await readFile(idx);
   const name = Buffer.from(object, 'hex');
@@ -495,6 +497,27 @@ test('an object whose bytes do not hash to its name fails the snapshot', () => w
   assert.equal(await native(git, ['cat-file', '-p', blob]), 'forged', 'Git reads the forged bytes');
   assert.deepEqual(value(await local.inspect(FIRST)).dirtyReasons, []);
   assert.equal(failed(await local.snapshot(FIRST)).code, 'internal');
+}));
+
+test('a commit whose bytes do not hash to its name fails the push ancestry check', () => withFixture(async (git) => {
+  const { fixture, local } = git;
+  const write = fixture.credentials.write;
+  const branch = taskBranchName(TASK, sha256IdentifierDigest);
+  value(await local.prepare(request(git)));
+  await fixture.writeFile(FIRST, 'pushed.txt', 'pushed\n');
+  await fixture.commitAll(FIRST, 'pushed');
+  const pushed = value(await local.push({ attemptId: FIRST, credential: write, expectedRemoteHead: null }));
+  await native(git, ['reset', '--quiet', '--hard', 'HEAD~1']);
+  await fixture.commitAll(FIRST, 'beside');
+  const beside = await native(git, ['rev-parse', 'HEAD']);
+  await fixture.commitAll(FIRST, 'head');
+  // The forged bytes name the pushed commit as the parent of `beside`.
+  const forged = (await native(git, ['cat-file', 'commit', beside])).replace(/^parent [0-9a-f]+$/m, `parent ${pushed.commit}`);
+  await forgeObject(git, beside, `${forged}\n`, 'commit');
+  assert.equal(await native(git, ['merge-base', '--is-ancestor', pushed.commit, 'HEAD']), '', 'Git reads the forged parent');
+  const refused = failed(await local.push({ attemptId: FIRST, credential: write, expectedRemoteHead: pushed.commit }));
+  assert.deepEqual([refused.code, /does not hash to its name/.test(refused.message)], ['internal', true]);
+  assert.equal(await fixture.remoteHead(branch), pushed.commit);
 }));
 
 test('a clean head with an empty directory named .. fails the snapshot', () => withFixture(async (git) => {
