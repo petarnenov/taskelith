@@ -60,10 +60,10 @@ Before the change both test files fail to load, because the scripts do not exist
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `902bb5d7532023fff66fe1f0c0a36d59812b3ae4`; tests 3093, pass 3069, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `2e526aa4e6e980be404b0fac4003a42945cae961`; tests 3208, pass 3193, fail 0, skipped 15; all files 99.45% lines, 92.67% branches, 99.07% functions.
 - `npm run openspec -- validate run-reviews-through-make --strict`: passed, `Change 'run-reviews-through-make' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 67 file(s); every pass summary file is valid: 47 file(s); every route file is valid: 3 file(s).`.
-- Spec diff against the merge base `bbce0e81d8e6` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 73 file(s); every pass summary file is valid: 53 file(s); every route file is valid: 9 file(s).`.
+- Spec diff against the merge base `7efc48d330b4` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -123,6 +123,7 @@ Fail-before: the new test was run against the scripts of `1fa1376d` (log `/priva
 - **Return.** The coordinator returned the branch: `make integrate` merging `origin/dev` `7efc48d3` conflicted in the `Makefile`, where dev's `34d99f3a` (PR #393) added the `contract-breaking-changes` target and its unexported `BASE`. No coordinator merge reached the branch. The archive commit `0ce24235` was reverted in `f95ae3c6`, which restores the active change and the living specs from before the archive; its tree equals that of `32ed0205`. The change is archived again after the return review.
 - **Merge** `d48339a0` of `origin/dev` `7efc48d3`; merge base before it `bbce0e81`. The `Makefile` is the only file both sides changed, with two conflicts, each resolved by keeping both sides: the `unexport` line keeps dev's `BASE` and this change's `PASS ROLE REVIEWER PROMPT` (`unexport BRANCH TITLE BODY RESUME CHANGE LOG BASE PASS ROLE REVIEWER PROMPT`), and the `.PHONY` line keeps dev's `contract-breaking-changes` and this change's `review`. Dev's target bodies and comments, `contract-breaking-changes` and the new `contract-compatibility` comment, merged without conflict, as did this change's `review` target. `package-lock.json` is unchanged by the merge, so `make setup` did not run again.
 - **Reconciliation.** The only delta, `specs/review-process/spec.md`, adds three requirements, "Review command", "Review route gate", and "Reviewer environment", and modifies, removes, or renames none. Between `bbce0e81` and `7efc48d3`, dev changed the living specs `control-plane-wire-contracts`, `delivery-planning`, `evidence-store`, `execution-wire-contracts`, `git-workspace-port`, `product-ports`, and `sdlc-wire-contracts`, but not `review-process`, and no living spec has a requirement of the three names, so the delta stays unchanged. Its requirement statements have 487, 334, and 275 characters. `npm run openspec -- validate run-reviews-through-make --strict` passed. A trial archive in a scratch copy of the merged tree applied `+ 3, ~ 0, - 0, → 0` to `review-process`, and `openspec validate --all --strict` passed 71 of 71; the copy was deleted.
+- **`make verify`** on `7b6b0c53` (tree `2e526aa4`), full profile, exit 0, stamp written: tests 3208, pass 3193, fail 0, skipped 15; coverage 99.45% lines, 92.67% branches, 99.07% functions; 0 breaking changes of each of the five contract documents against the merge base `7efc48d3`. `make record` wrote "Generated checks" from its log.
 
 ## Limitations
 
