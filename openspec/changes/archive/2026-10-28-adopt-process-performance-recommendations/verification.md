@@ -203,10 +203,21 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 - `pre-push` accepts a full stamp whose tree differs from HEAD only in the change's `verification.md` and runs only the non-Docker checks; this needs an owner decision.
 
+## Archive checks
+
+Run on the tree of the archive commit, the archive of `61fd67e3` (which includes the fix `12c8d75d`) on merge base `1c73e1a7` with `origin/dev`, on 2026-10-28, without Docker. It redoes the archive `7345968f` of `70244ae6`, kept as `backup/adopt-ppr-archive-7345968f`, which predates the fix:
+
+- `npm run openspec -- archive adopt-process-performance-recommendations --yes`: archived as `2026-10-28-adopt-process-performance-recommendations`; `agent-task-protocol` 6 added, 1 modified, 1 removed; `development-environment` 1 added, 1 modified; `integration-flow` 2 added, 2 modified; `review-process` 1 added, 3 modified.
+- `npm run openspec -- validate --strict --all --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: 218 passed, 14 failed; 13 are archived changes of 2026-10-24 to 2026-10-26 with open tasks, the same as at the previous archive, and the fourteenth is this change, whose task 4.8 stays open until the `make verify` below runs.
+- `git diff 61fd67e3 -- openspec/specs` is identical to `git diff 70244ae6 7345968f -- openspec/specs`: only the four specs of the deltas, with the 10 added, 7 modified, and 1 removed requirements; the fix changed no spec.
+- The moved change has `findings.jsonl` (27 lines) and `passes.jsonl` (4 lines); `npm run verify:findings`: 58 findings files and 38 pass summary files valid.
+- `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:archive`: no active change, nothing to archive.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a new `make verify`: the working tree differs from the verified tree `c363d0f91cb4` in the moved change, the four living specs, and the fix `12c8d75d` (`scripts/verify-stamp.ts`, `test/verify-stamp.test.ts`), and the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty. The generated part stays the record of `4e0b20a3`.
+- `make verify`: not run here. The full `make verify` of the archived head runs directly before the push and writes the stamp that the `pre-push` hook reuses, so the push runs no second `make verify`; its result is reported in the handoff, not in this tree.
+
 ## Remaining gates
 
-- Full `make verify` of the head with `12c8d75d`, in the Docker slot
-- `make record` and `make record-check` of that run
-- Archive of the change, as the last commit
-- Push (the `pre-push` hook) and handoff
-- Integration into dev by the coordinator (single pull request)
+- Full `make verify` of the archived head, directly before the push, and the push (the `pre-push` hook reuses its stamp)
+- Handoff to the coordinator, with that `make verify` result
+- Integration into dev by the coordinator (single pull request), whose `make integrate` runs the full `make verify` of the merged tree, which now also includes `dev` `a899d5d2` (#382)

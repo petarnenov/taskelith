@@ -29,5 +29,5 @@
 - [x] 4.5 Review pass 3 (reviewer A), required by "Conditional third pass": 2 Medium findings fixed unreviewed in `945b09f7` under "At most three passes"
 - [x] 4.6 `make verify`, `make record`, and `make record-check` of the pass 2 and pass 3 fixes: passed on `4e0b20a3`
 - [x] 4.7 Fix the blocked push: `gitIn` drops inherited `GIT_` variables, unreviewed after the cap, in `12c8d75d`
-- [ ] 4.8 `make verify`, `make record`, and `make record-check` of `12c8d75d`
-- [ ] 4.9 Archive the change
+- [ ] 4.8 `make verify` of the archived head with `12c8d75d`, run directly before the push, whose `pre-push` hook reuses its stamp; its result goes into the handoff, not this tree, so `make record` and `make record-check` do not run for it
+- [x] 4.9 Archive the change
