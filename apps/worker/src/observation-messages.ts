@@ -1,6 +1,7 @@
 import { EXECUTION_PROTOCOL_VERSION, type MessageSchemas } from '@taskelith/contracts';
 import type { AssignmentRefusal, CommandCause, ExecutionExit, ExecutionSubject, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
 import { ok, type Instant, type Result } from '@taskelith/kernel';
+import { displayText } from './display-text.js';
 
 // The wire shapes of execution.asyncapi.json for what the journal records.
 
@@ -37,6 +38,10 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
     case 'admission-pressure-changed': {
       const metadata = metadataOf(entry, 'worker.admission-pressure.changed', { correlationId: entry.position.observationId });
       return ok({ metadata, payload: { causes: fact.causes } });
+    }
+    case 'self-check-reported': {
+      const metadata = metadataOf(entry, 'worker.self-check.reported', { correlationId: entry.position.observationId });
+      return ok({ metadata, payload: { results: fact.results } });
     }
     case 'launch-rejected': {
       const { executionId, assignmentId, operationId, reason } = fact;
@@ -96,18 +101,7 @@ function exitedPayload(exit: ExecutionExit): Record<string, unknown> {
   return { status, startProven, spawnFailed: false, terminationEvidence: termination };
 }
 
-const DISPLAY_TEXT_MAXIMUM = 1024;
-// C0 and C1 control characters, which `DisplayText` forbids.
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
-
 const SPAWN_FAILED = 'the spawn failed';
-
-// Text as `DisplayText`: no control characters, at most 1024 characters,
-// and `fallback` when nothing is left.
-function displayText(text: string, fallback: string): string {
-  const cleaned = [...text.replace(CONTROL_CHARACTERS, ' ').trim()].slice(0, DISPLAY_TEXT_MAXIMUM).join('');
-  return cleaned === '' ? fallback : cleaned;
-}
 
 // An execution fact is about its attempt at the generation of the offer.
 function aboutAttempt(entry: OutboxEntry, observationType: string, subject: ExecutionSubject): Record<string, unknown> {

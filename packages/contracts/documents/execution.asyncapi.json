@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
   },
   "defaultContentType": "application/json",
@@ -86,6 +86,9 @@
         },
         "admissionPressureChanged": {
           "$ref": "#/components/messages/admissionPressureChanged"
+        },
+        "selfCheckReported": {
+          "$ref": "#/components/messages/selfCheckReported"
         },
         "inventoryReported": {
           "$ref": "#/components/messages/inventoryReported"
@@ -178,6 +181,9 @@
         },
         {
           "$ref": "#/channels/workerObservations/messages/admissionPressureChanged"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/selfCheckReported"
         },
         {
           "$ref": "#/channels/workerObservations/messages/inventoryReported"
@@ -541,7 +547,8 @@
           "worker-capacity-exhausted",
           "resource-ceiling-exceeded",
           "control-not-enforceable",
-          "worker-admission-pressure"
+          "worker-admission-pressure",
+          "worker-self-check-failed"
         ]
       },
       "AdmissionPressureCause": {
@@ -609,7 +616,7 @@
       "ObservationMetadata": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration; a command rejection, an unrecorded process, capacity, and admission pressure are about none.",
+        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration; a command rejection, an unrecorded process, capacity, admission pressure, and a self-check report are about none.",
         "required": [
           "observationId",
           "observationType",
@@ -2038,6 +2045,148 @@
           }
         }
       },
+      "SelfCheckId": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+        "description": "A worker admission check: 1-64 lowercase letters, digits, and '-', starting with a letter."
+      },
+      "NotApplicableReason": {
+        "type": "string",
+        "description": "Why a check does not apply at this start, derived on the worker from its platform and launch settings.",
+        "enum": [
+          "platform-not-covered",
+          "no-launch-command"
+        ]
+      },
+      "SelfCheckResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check passed.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "passed"
+              },
+              "details": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check failed; each detail is a problem.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "failed"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DisplayText"
+                },
+                "minItems": 1,
+                "maxItems": 8
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The check does not apply at this start; the one detail is the reason.",
+            "required": [
+              "checkId",
+              "outcome",
+              "details"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/components/schemas/SelfCheckId"
+              },
+              "outcome": {
+                "type": "string",
+                "const": "not-applicable"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/NotApplicableReason"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "SelfCheckReportedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "description": "One result per composed check. A schema cannot require distinct checkIds; the control plane decides a check named more than once as one failed result.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SelfCheckResult"
+            },
+            "minItems": 1,
+            "maxItems": 8
+          }
+        }
+      },
+      "SelfCheckReportedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The results of the worker admission checks the worker ran at its start (worker admission contract).",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "worker.self-check.reported"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SelfCheckReportedPayload"
+          }
+        }
+      },
       "WorkerHeartbeat": {
         "type": "object",
         "additionalProperties": false,
@@ -2199,6 +2348,13 @@
         "title": "worker.admission-pressure.changed",
         "payload": {
           "$ref": "#/components/schemas/AdmissionPressureChangedObservation"
+        }
+      },
+      "selfCheckReported": {
+        "name": "selfCheckReportedObservation",
+        "title": "worker.self-check.reported",
+        "payload": {
+          "$ref": "#/components/schemas/SelfCheckReportedObservation"
         }
       },
       "inventoryReported": {

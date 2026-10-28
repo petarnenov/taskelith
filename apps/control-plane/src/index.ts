@@ -1,8 +1,31 @@
 export { readServiceEndpoints, type Environment, type ServiceEndpoints } from './service-endpoints.js';
 export { ADMIN_USAGE, adminMain, type AdminIo } from './admin/admin-main.js';
 export { Administration, type AdministrationSettings, type Initialization } from './admin/administration.js';
+export {
+  INSTALLATION_CA_FILE,
+  SERVER_CERTIFICATES,
+  ensureInstallationAuthority,
+  issueServerCertificates,
+  readServerCertificate,
+  storedInstallationAuthority,
+  type IssuedServerCertificates,
+  type ServerHosts,
+  type ServerName,
+} from './admin/installation-authority.js';
+export { LOCAL_SERVER_HOSTS, MAX_SERVER_HOSTS, readServerHosts } from './admin/server-hosts.js';
+export { readBrokerTls } from './broker-tls.js';
 export { ROUTES, type RouteDefinition } from './api/routes.js';
-export { StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type Upload } from './api/api-server.js';
+export {
+  StatusAnswer,
+  createApiRequestListener,
+  createApiServer,
+  createTlsApiServer,
+  type ApiHandlers,
+  type ApiRequest,
+  type ApiServer,
+  type Upload,
+} from './api/api-server.js';
+export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
@@ -31,6 +54,8 @@ export {
   PLACEMENT_PASS_MILLISECONDS,
   SHUTDOWN_DEADLINE_MILLISECONDS,
   startControlPlane,
+  type ApiEndpoint,
+  type BrowserEndpoint,
   type ControlPlaneSettings,
   type RunningControlPlane,
 } from './composition/control-plane.js';
@@ -38,5 +63,11 @@ export { repairCommandConsumers, REVOKED_CONSUMER_REMOVALS_PER_START } from './c
 export { requestStartInventories } from './composition/start-inventory-requests.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
-export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';
+export {
+  DEFAULT_API_HOST,
+  DEFAULT_API_PORT,
+  DEFAULT_BROWSER_HOST,
+  DEFAULT_BROWSER_PORT,
+  readControlPlaneSettings,
+} from './composition/settings.js';
 export { controlPlaneMain, serveUntilStopped, type ServiceProcess } from './main.js';

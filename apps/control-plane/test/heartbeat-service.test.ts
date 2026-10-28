@@ -24,7 +24,7 @@ const after = (milliseconds: number): Instant => value(instantFromEpochMilliseco
 function record(workerId: string): WorkerPlacementRecord {
   return {
     workerId: workerId as WorkerId, enrolled: true, revoked: false, draining: false, reachable: false, slots: 2, cpuMillicores: 4000,
-    memoryMebibytes: 8192, controls: [], protocolVersion: 1,
+    memoryMebibytes: 8192, controls: [], protocolVersion: 1, admitted: true,
   };
 }
 

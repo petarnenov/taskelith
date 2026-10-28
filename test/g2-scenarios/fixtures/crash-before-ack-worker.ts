@@ -6,6 +6,8 @@ import { ScenarioWorker, type ScriptedRun } from '../scenario-worker.ts';
 // acknowledge a command of the armed type: after W1, before the ack.
 export interface CrashingWorkerArguments {
   readonly apiUrl: string;
+  // The installation CA, which the process trusts for the API.
+  readonly installationCa: string;
   readonly base: string;
   readonly nats: string;
   readonly name: string;

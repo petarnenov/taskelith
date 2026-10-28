@@ -11,13 +11,14 @@ export interface SupersessionWorker {
   readonly revoked: boolean;
   readonly draining: boolean;
   readonly reachable: boolean;
+  readonly admitted: boolean;
   readonly admissionPressureSince?: Instant;
 }
 
-// Contract section 6: due at once for a gone worker, otherwise after the
-// acknowledgement or admission pressure bound.
+// Contract section 6: due at once for a gone worker or one not admitted,
+// otherwise after the acknowledgement or admission pressure bound.
 export function isSupersessionDue(assignment: Assignment, worker: SupersessionWorker | undefined, at: Instant): boolean {
-  if (worker === undefined || worker.revoked || worker.draining || !worker.reachable) return true;
+  if (worker === undefined || worker.revoked || worker.draining || !worker.reachable || !worker.admitted) return true;
   const unacknowledged = assignment.state === 'offered'
     && elapsed(assignment.reservation.createdAt, at) >= UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS;
   const pressured = worker.admissionPressureSince !== undefined

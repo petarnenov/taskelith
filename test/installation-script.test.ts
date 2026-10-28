@@ -75,6 +75,32 @@ test('a failed check prints the control-plane log before it removes the project'
   assert.ok(logs < (removals[removals.length - 1] ?? -1), 'before the last removal');
 });
 
+// Reports every service as running, so `certificates` restarts both.
+const runningDocker = `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case " $* " in *" ps --quiet --status running "*) echo container ;; esac
+exit 0
+`;
+
+test('re-issued certificates are installed, then the running broker and control plane restart', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-certificates-'));
+  try {
+    writeFileSync(join(root, 'docker'), runningDocker);
+    chmodSync(join(root, 'docker'), 0o755);
+    const calls = join(root, 'calls');
+    writeFileSync(calls, '');
+    const run = spawnSync('bash', [script, 'certificates', 'installation-script-test'], {
+      encoding: 'utf8', env: { PATH: [root, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const recorded = readFileSync(calls, 'utf8').trim().split('\n');
+    const order = ['admin issue-installation-certificates', 'nats-setup', 'restart nats control-plane'].map((call) => indexOfCall(recorded, call));
+    assert.ok(order.every((index, position) => index >= 0 && (position === 0 || index > order[position - 1]!)), recorded.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const WORKER_CAPABILITIES = 'CapInh:\t0000000000000000\nCapPrm:\t00000000000000e0\nCapEff:\t00000000000000e0\n'
   + 'CapBnd:\t00000000000000e0\nCapAmb:\t0000000000000000\n';
 const REFUSED = 'bash: line 1: /sys/fs/cgroup/init/cgroup.procs: Permission denied';

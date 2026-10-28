@@ -218,9 +218,10 @@ export class LaunchOrchestrator {
     if (this.#launch(execution.assignmentId, snapshot, signal, executionId)) this.#claimInherited(executionId);
   }
 
-  // Without a launch command its journal rows wait for a start with one.
+  // Without a launch authority (no launch command, or a failed self-check)
+  // its journal rows wait for a start that has one.
   #deferResume(executionId: ExecutionId): void {
-    if (this.#claimInherited(executionId)) this.#logger.info('worker.reconciliation.deferred', { executionId, reason: 'no launch command' });
+    if (this.#claimInherited(executionId)) this.#logger.info('worker.reconciliation.deferred', { executionId, reason: 'no launch authority' });
   }
 
   // A pending W2 or an unused grant is sealed; a journaled record goes to

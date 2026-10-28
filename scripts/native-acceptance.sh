@@ -13,6 +13,8 @@ cancellation_suites="$supervisor_suites apps/worker/test/command-intake.test.ts"
 cancellation_pattern='cancel|descendant'
 crash_windows='apps/control-plane/test/crash-windows.integration.test.ts'
 duplicate_pattern='redelivered'
+cancellation_scenarios='test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts'
+partition_scenarios='test/g2-partition.test.ts'
 failed_proofs=''
 not_applicable_proofs=''
 node_test='node --experimental-strip-types --test'
@@ -105,6 +107,23 @@ linux_crash_window_proofs() {
     $target PATTERN="$duplicate_pattern"
 }
 
+# The G2 races and partitions through the Linux cgroup supervisor, whose
+# privileged runner needs a Linux Docker host.
+linux_scenario_proofs() {
+  local target="$make_command --no-print-directory verify-linux-g2-scenarios"
+  local reason='make verify-linux-g2-scenarios needs a Linux Docker host'
+  if [ "$(uname -s)" != Linux ]; then
+    not_applicable cancellation acceptance-cancellation-races "$reason"
+    not_applicable connectivity acceptance-partition "$reason"
+    return
+  fi
+  # shellcheck disable=SC2086
+  prove cancellation acceptance-cancellation-races harness-composition \
+    $target FILES="$cancellation_scenarios"
+  # shellcheck disable=SC2086
+  prove connectivity acceptance-partition harness-composition $target FILES="$partition_scenarios"
+}
+
 linux_entry() {
   local suites="$make_command --no-print-directory linux-test-suites"
   # shellcheck disable=SC2086
@@ -125,6 +144,7 @@ linux_entry() {
     prove connectivity acceptance-connectivity-suites linux-test-container $suites SUITES="$connectivity_suites"
   }
   linux_crash_window_proofs
+  linux_scenario_proofs
 }
 
 # Removes FILE on any exit, after the EXIT trap that was already set.

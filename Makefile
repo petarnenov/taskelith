@@ -26,7 +26,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate record record-check \
-	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
+	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -46,6 +46,7 @@ verify-stamped: toolchain
 # VERIFY_PROFILE=docs-only skips only the Docker test suites of make test.
 verify-checks: toolchain
 	npm run verify:comments
+	npm run verify:private-keys
 	npm run verify:findings
 	$(if $(filter docs-only,$(VERIFY_PROFILE)),@echo "make verify: docs-only profile skips make test",$(MAKE) --no-print-directory test)
 	$(MAKE) contract-compatibility
@@ -134,6 +135,16 @@ verify-linux-crash-windows:
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
 		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
 
+# Opt-in G2 races, stale generations, and partitions through the Linux
+# cgroup supervisor (privileged, host network); FILES and PATTERN select.
+G2_SCENARIO_FILES := test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts test/g2-partition.test.ts
+verify-linux-g2-scenarios:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
+		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
+		-- $(or $(FILES),$(G2_SCENARIO_FILES))
+
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.
 linux-test-suites:
@@ -157,6 +168,15 @@ installation-bootstrap:
 # Installs the broker trust again, for example after a failed bootstrap.
 installation-broker-config:
 	@bash scripts/installation.sh broker-config $(INSTALLATION)
+
+# Issues the API and NATS server certificates again (397 days, provisional)
+# and restarts the running broker and control plane to load them.
+installation-certificates:
+	@bash scripts/installation.sh certificates $(INSTALLATION)
+
+# Prints the installation's public CA, for a native worker to trust.
+installation-ca:
+	@bash scripts/installation.sh installation-ca $(INSTALLATION)
 
 installation-start:
 	@bash scripts/installation.sh start $(INSTALLATION)

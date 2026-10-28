@@ -49,6 +49,8 @@ export interface WorkspaceLifecycle {
   handOff(attemptId: AttemptId): Promise<Result<void>>;
   // Only after the attempt's process sets are proven empty; idempotent.
   reclaim(attemptId: AttemptId): Promise<Result<void>>;
+  // Listed attempts whose hand-off record exists, in the order of `list`.
+  handedOff(): Promise<readonly AttemptId[]>;
 }
 
 // Read by verification, review, and the evidence path (sections 6 and 10).
@@ -58,7 +60,8 @@ export interface WorkspaceHeads {
   snapshot(attemptId: AttemptId): Promise<Result<HeadSnapshot>>;
 }
 
-// Fast-forward only, never forced, task branch only (contract section 8).
+// Leased on the expected head, fast-forward only, task branch only: the
+// remote branch never moves off the leased head's descendants (section 8).
 export interface TaskBranchPublisher {
   // The remote task branch head now; null while the branch is absent.
   readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>>;

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Authorized alternating reviewers
-Each Taskelith change without an owner-accepted review exception SHALL be independently reviewed by two owner-authorized reviewers, A and B, of different harnesses unless "No reviewer of another harness" applies, each invoked read-only with its model and effort set in the invocation. Pass 1 SHALL be A's full review, pass 2 B's full, independent review that also checks the pass 1 fixes, and pass 3 A's confirmation of the pass 2 fixes only. No other reviewer SHALL cross-review the change.
+Each change without an owner-accepted review exception SHALL be independently reviewed by two owner-authorized reviewers, A and B, of different harnesses unless "No reviewer of another harness" or "Reviewer assignment" allows one, each read-only with model and effort set in the invocation. Pass 1 SHALL be A's full review, pass 2 B's full, independent review that also checks pass 1's fixes, and pass 3 A's confirmation of pass 2's fixes only. No other reviewer SHALL cross-review the change.
 
 #### Scenario: Review recorded
 - **WHEN** a change's `verification.md` records an independent review

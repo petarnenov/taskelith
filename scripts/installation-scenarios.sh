@@ -89,6 +89,7 @@ scenario_project() {
   bootstrap_operator "$scenario" 'opt-in failure scenario'
   start
   enroll
+  trust_installation_ca
   url="$(api_url)"
 }
 
@@ -596,7 +597,7 @@ start_native_worker() {
   local run="$1" token="$2" node
   node="$(command -v node)"
   TASKELITH_CONTROL_PLANE_URL="$url" TASKELITH_NATS_URL="$nats_url" TASKELITH_DATA_DIR="$native_root" \
-    TASKELITH_ENROLLMENT_TOKEN="$token" \
+    TASKELITH_ENROLLMENT_TOKEN="$token" TASKELITH_NATS_CA="$ca_file" \
     TASKELITH_WORKER_COMMAND="[\"$node\", \"-e\", \"setTimeout(() => {}, 1000)\"]" \
     node "$repository/apps/worker/dist/main.js" > "$(native_log "$run")" 2>&1 &
   native_worker_pid=$!
@@ -676,6 +677,7 @@ native_worker_lifecycle_scenario() {
   build
   bootstrap_operator "$scenario" 'opt-in native acceptance'
   start
+  trust_installation_ca
   url="$(api_url)"
   nats_url="nats://$(compose port nats 4222)"
   architecture="$(node -p process.arch)"

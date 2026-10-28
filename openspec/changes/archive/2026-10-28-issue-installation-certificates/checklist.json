@@ -1,0 +1,102 @@
+{
+  "change": "issue-installation-certificates",
+  "generatedAt": "2026-10-27T22:18:55.048Z",
+  "devCommit": "46e21ef19e624bc50f264a5b307e3058292ee294",
+  "query": {
+    "capabilities": [
+      "installation-enrollment",
+      "nats-transport",
+      "trust-and-operational-foundation",
+      "control-plane-api",
+      "worker-contact",
+      "local-installation"
+    ],
+    "files": [],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 3
+      },
+      {
+        "category": "contract-drift",
+        "count": 2
+      },
+      {
+        "category": "docs",
+        "count": 2
+      },
+      {
+        "category": "redaction",
+        "count": 2
+      },
+      {
+        "category": "spec-wording",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 300,
+        "inChecklist": 233
+      },
+      "mediumOrWorse": {
+        "findings": 120,
+        "inChecklist": 100
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 60
+      },
+      {
+        "category": "docs",
+        "count": 45
+      },
+      {
+        "category": "spec-wording",
+        "count": 26
+      },
+      {
+        "category": "stale-citation",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 11
+      },
+      {
+        "category": "contract-drift",
+        "count": 9
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 179,
+        "inChecklist": 179
+      },
+      "mediumOrWorse": {
+        "findings": 29,
+        "inChecklist": 29
+      }
+    }
+  }
+}

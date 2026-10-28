@@ -16,6 +16,7 @@ export {
 export { isSecretFieldName, redactCorrelation, redactFields, redactText } from './domain/redaction.js';
 export {
   MARKED_SECRET_RULES,
+  pemPrivateKeySpans,
   REDACTED,
   redactAuthorizationValues,
   redactBearerTokens,
@@ -26,13 +27,17 @@ export {
   redactKeyColonValues,
   redactKeyValuePairs,
   redactNkeySeeds,
+  redactPemPrivateKeys,
   redactSchemelessUserinfo,
   redactUrlUserinfo,
   redactUrlUserinfoEvenEmpty,
   redactWith,
+  replaceSpans,
   SECRET_SHAPE_RULES,
   textRule,
+  TOKEN_SHAPE_RULES,
   type TextRule,
+  type TextSpan,
 } from './domain/redaction-rules.js';
 export {
   G2_SIGNALS,
