@@ -7,7 +7,7 @@ import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
-import { GitWorkspaces, sha256IdentifierDigest, verifyGitClient, type CrashPointHook, type GitWorkspaceCrashPoint } from '@taskelith/git-workspace';
+import { GitWorkspaces, ProcessGroupReclaimHost, sha256IdentifierDigest, verifyGitClient, type CrashPointHook, type GitWorkspaceCrashPoint } from '@taskelith/git-workspace';
 import {
   HEAD_SNAPSHOT_CONTENT_TYPE,
   WORKSPACE_LAYOUT,
@@ -399,7 +399,7 @@ test('a failing revision lookup fails a prepare instead of reading as a missing 
   await writeFile(path, `#!/bin/sh\n[ "$1" = rev-parse ] && [ "$2" = --verify ] && exit 128\nexec ${SYSTEM_GIT} "$@"\n`);
   await chmod(path, 0o755);
   const client = value(await verifyGitClient({ path, version: await systemGitVersion() }));
-  const failing = new GitWorkspaces({ dataRoot: fixture.dataRoot, client, remoteTransport: 'https-or-loopback-http' });
+  const failing = new GitWorkspaces({ dataRoot: fixture.dataRoot, client, remoteTransport: 'https-or-loopback-http', reclaimHost: new ProcessGroupReclaimHost() });
   assert.equal(failed(await failing.prepare(request(git))).code, 'internal');
   assert.deepEqual([await failing.list(), await fixture.leftovers()], [[], []]);
 }));

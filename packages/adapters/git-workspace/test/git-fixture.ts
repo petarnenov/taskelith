@@ -1,18 +1,26 @@
 import { spawn } from 'node:child_process';
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, chown, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
+import { crashEnvironment } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import {
   GitWorkspaces,
   NO_CRASH_POINTS,
+  ProcessGroupReclaimHost,
   sha256IdentifierDigest,
   verifyGitClient,
   type CrashPointHook,
+  type ExecutionAccount,
   type GitTimer,
-  type GitWorkspaceOperations,
+  type GitWorkspaceCrashPoint,
+  type OperationChains,
+  type ReclaimContainment,
+  type ReclaimHost,
+  type ReclaimProgram,
   type VerifiedGitClient,
 } from '@taskelith/git-workspace';
 import {
@@ -29,7 +37,6 @@ import {
   type TreeEntry,
   type WorkspaceCredential,
   type WorkspaceFixture,
-  type WorkspaceProvider,
 } from '@taskelith/workspace';
 
 // A local bare repository served over smart HTTP on 127.0.0.1, a recording
@@ -241,6 +248,10 @@ sub put { my ($name, $text) = @_; open(my $out, '>', "$record.tmp/$name") or die
 put('argv', join("\\0", $0, @ARGV));
 put('env', join("\\0", map { "$_=$ENV{$_}" } sort keys %ENV));
 put('cwd', $cwd);
+for my $file ('cgroup', 'status') {
+  next unless -r "/proc/$$/$file";
+  local $/; open(my $in, '<', "/proc/$$/$file") or die; put($file, <$in>); close $in;
+}
 if (defined $config && -f $config) { local $/; open(my $in, '<', $config) or die; binmode $in; put('config', <$in>); close $in; }
 rename "$record.tmp", $record or die;
 exec { '${SYSTEM_GIT}' } '${SYSTEM_GIT}', @ARGV;
@@ -268,6 +279,24 @@ interface RawProcess {
   readonly cwd: string;
   readonly environment: Record<string, string>;
   readonly repositoryConfig: string | null;
+}
+
+// Where a Git process ran, from its /proc entries at its start (Linux).
+export interface GitProcessPlacement {
+  readonly argv: readonly string[];
+  readonly pid: number;
+  // `/proc/<pid>/cgroup` and the real user of `/proc/<pid>/status`.
+  readonly cgroup: string | null;
+  readonly uid: number | null;
+}
+
+async function recordedPlacements(logDirectory: string): Promise<GitProcessPlacement[]> {
+  const records = (await readdir(logDirectory)).filter((name) => !name.endsWith('.tmp')).sort();
+  return Promise.all(records.map(async (name) => {
+    const read = (file: string) => readFile(join(logDirectory, name, file), 'utf8').catch(() => null);
+    const uid = /^Uid:\s+(\d+)/m.exec((await read('status')) ?? '')?.[1];
+    return { argv: (await read('argv'))!.split('\0'), pid: Number(name.split('-').at(-1)), cgroup: await read('cgroup'), uid: uid === undefined ? null : Number(uid) };
+  }));
 }
 
 async function recordedProcesses(logDirectory: string): Promise<RawProcess[]> {
@@ -345,26 +374,93 @@ export function credential(credentialId: string, repositories: string[], permiss
   return { credentialId, secret, authorization, repositories, permissions };
 }
 
-// The operations 16d adds; a case that reaches one fails loudly.
-function later(operation: string) {
-  return async (): Promise<never> => {
-    throw new Error(`${operation} is not implemented before sub-change 16d`);
-  };
+const RECLAIM_LAUNCHER = fileURLToPath(new URL('./reclaim-launcher.ts', import.meta.url));
+const CRASH_WORKER = fileURLToPath(new URL('./crash-worker.ts', import.meta.url));
+
+// The reclaim host a crash worker composes, as JSON can carry it.
+export type CrashWorkerHost =
+  | { readonly kind: 'separate-account'; readonly program?: ReclaimProgram }
+  | { readonly kind: 'linux'; readonly containmentParent: string; readonly executionAccount: ExecutionAccount; readonly program?: ReclaimProgram };
+
+export interface CrashedOperation {
+  readonly operation: 'handOff' | 'reclaim';
+  readonly attemptId: AttemptId;
+  readonly point: GitWorkspaceCrashPoint;
+  readonly host: CrashWorkerHost;
 }
 
-export function providerOf(operations: GitWorkspaceOperations): WorkspaceProvider {
+export interface CrashWorkerConfig extends CrashedOperation {
+  readonly dataRoot: string;
+  readonly pin: GitClientPin;
+}
+
+// Runs the operation in a worker process of its own over the fixture's
+// data root and waits until SIGKILL ends it at the point; nothing cleans up.
+export async function killedWorker(git: GitFixture, operation: CrashedOperation): Promise<void> {
+  const config: CrashWorkerConfig = { ...operation, dataRoot: git.dataRoot, pin: git.fixture.gitClient };
+  const worker = spawn(process.execPath, ['--experimental-strip-types', CRASH_WORKER, JSON.stringify(config)], {
+    env: { ...process.env, ...crashEnvironment(operation.point) }, stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  worker.stderr.on('data', (chunk: Buffer) => (stderr += String(chunk)));
+  const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((done) => worker.once('close', (...ended) => done(ended)));
+  if (signal !== 'SIGKILL') throw new Error(`the worker did not die at ${operation.point}: exit ${code}, ${stderr}`);
+}
+
+// Launches the fixed reclaim program from a process of its own, which then
+// dies by SIGKILL before `go`; returns the program's containment.
+export async function launchedByDeadWorker(args: readonly string[]): Promise<ReclaimContainment> {
+  const launcher = spawn(process.execPath, ['--experimental-strip-types', RECLAIM_LAUNCHER, ...args], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const closed = new Promise((done) => launcher.once('close', done));
+  let printed = '';
+  for await (const chunk of launcher.stdout) {
+    printed += String(chunk);
+    if (printed.includes('\n')) break;
+  }
+  launcher.kill('SIGKILL');
+  await closed;
+  if (!printed.includes('\n')) throw new Error('the launcher printed no containment');
+  return JSON.parse(printed) as ReclaimContainment;
+}
+
+// Keeps the containments of the programs another host starts and frees.
+export class CountingHost implements ReclaimHost {
+  readonly launched: ReclaimContainment[] = [];
+  readonly released: ReclaimContainment[] = [];
+  readonly #inner: ReclaimHost;
+
+  constructor(inner: ReclaimHost) {
+    this.#inner = inner;
+  }
+
+  get executionAccount() {
+    return this.#inner.executionAccount;
+  }
+
+  async launch(checkout: string, containmentName: string) {
+    const launched = await this.#inner.launch(checkout, containmentName);
+    if (launched.ok) this.launched.push(launched.value.containment);
+    return launched;
+  }
+
+  populated(containment: ReclaimContainment) {
+    return this.#inner.populated(containment);
+  }
+
+  release(containment: ReclaimContainment) {
+    this.released.push(containment);
+    return this.#inner.release(containment);
+  }
+}
+
+// The one-account host that declares the worker's own account as the
+// execution account, so a test without root meets a separate account.
+export function simulatedSeparateAccount(host: ReclaimHost = new ProcessGroupReclaimHost()): ReclaimHost {
   return {
-    prepare: (request) => operations.prepare(request),
-    list: () => operations.list(),
-    remove: (attemptId) => operations.remove(attemptId),
-    sweep: () => operations.sweep(),
-    inspect: (attemptId) => operations.inspect(attemptId),
-    snapshot: (attemptId) => operations.snapshot(attemptId),
-    readRemoteHead: (request) => operations.readRemoteHead(request),
-    push: (request) => operations.push(request),
-    handOff: later('handOff'),
-    reclaim: later('reclaim'),
-    handedOff: later('handedOff'),
+    executionAccount: { uid: process.getuid!(), gid: process.getgid!() },
+    launch: (checkout, containmentName) => host.launch(checkout, containmentName),
+    populated: (containment) => host.populated(containment),
+    release: (containment) => host.release(containment),
   };
 }
 
@@ -416,11 +512,24 @@ export interface GitFixtureOptions {
   readonly gitTimeLimitMs?: number;
   // The read credential's secret, such as a short one.
   readonly readSecret?: string;
+  // The one-account process group host unless a test passes another.
+  readonly reclaimHost?: ReclaimHost;
+  readonly reclaimProofBoundMs?: number;
+  readonly reclaimRunBoundMs?: number;
+  readonly operationChains?: OperationChains;
+  // The directory the scratch directory goes into; `tmpdir()` by default.
+  readonly scratchParent?: string;
+  // Gives the data root, `worker/`, and the workspace root this group and
+  // the traverse-only mode of contract section 2, as enrollment does.
+  readonly executionGroup?: number;
 }
 
 export interface GitFixture {
   readonly fixture: WorkspaceFixture;
-  readonly local: GitWorkspaceOperations;
+  readonly local: GitWorkspaces;
+  readonly dataRoot: string;
+  // Every Git process the adapter started so far, with its placement.
+  gitPlacements(): Promise<readonly GitProcessPlacement[]>;
   readonly remote: SmartHttpRemote;
   readonly client: VerifiedGitClient;
   readonly scratch: string;
@@ -432,6 +541,11 @@ export interface GitFixture {
   // Publishes the workspace's head natively, as another party could.
   publish(attemptId: AttemptId, branch: string): Promise<void>;
   dispose(): Promise<void>;
+}
+
+async function traverseOnly(directory: string, group: number): Promise<void> {
+  await chown(directory, -1, group);
+  await chmod(directory, 0o710);
 }
 
 async function seedRemote(scratch: string, bare: string): Promise<void> {
@@ -447,7 +561,7 @@ async function seedRemote(scratch: string, bare: string): Promise<void> {
 }
 
 export async function createGitFixture(options: GitFixtureOptions = {}): Promise<GitFixture> {
-  const scratch = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-git-workspace-')));
+  const scratch = await realpath(await mkdtemp(join(options.scratchParent ?? tmpdir(), 'taskelith-git-workspace-')));
   const dataRoot = join(scratch, 'data');
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
@@ -455,6 +569,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   }
   const root = join(dataRoot, WORKSPACE_LAYOUT.root);
   await mkdir(root, { recursive: true });
+  if (options.executionGroup !== undefined) {
+    for (const directory of [scratch, dataRoot, join(dataRoot, 'worker'), root]) await traverseOnly(directory, options.executionGroup);
+  }
   const served = join(scratch, 'served');
   const bare = join(served, 'acme', 'project.git');
   await seedRemote(scratch, bare);
@@ -470,9 +587,10 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   const grants = new Map<string, readonly Grant[]>([[credentials.read.authorization, ['read']], [credentials.write.authorization, ['read', 'write']]]);
   const remote = await SmartHttpRemote.start(served, grants);
   const others: SmartHttpRemote[] = [];
-  const { gitTimeLimitMs } = options;
-  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) =>
-    new GitWorkspaces({ dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs });
+  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimRunBoundMs, operationChains, reclaimHost = new ProcessGroupReclaimHost() } = options;
+  const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) => new GitWorkspaces({
+    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs, reclaimRunBoundMs, operationChains,
+  });
   const local = reopen(options.crashPoints);
   const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };
   const nameOf = (attemptId: AttemptId) => workspaceDirectoryName(attemptId, sha256IdentifierDigest);
@@ -490,7 +608,7 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   };
   let remoteCommits = 0;
   const fixture: WorkspaceFixture = {
-    provider: providerOf(local),
+    provider: local,
     dataRoot,
     identifierDigest: sha256IdentifierDigest,
     binding,
@@ -498,10 +616,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
     baseTree: BASE_TREE,
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
-    // 16b composes no execution account; hand-offs come with 16d.
-    separateExecutionIdentity: false,
+    separateExecutionIdentity: reclaimHost.executionAccount !== null,
     gitClient: pin,
-    reopen: () => providerOf(reopen()),
+    reopen: () => reopen(),
     writeFile: (attemptId, path, text) => write(attemptId, path, (target) => writeFile(target, text)),
     writeBytes: (attemptId, path, content) => write(attemptId, path, (target) => writeFile(target, content)),
     writeExecutable: (attemptId, path, text) => write(attemptId, path, async (target) => {
@@ -580,6 +697,8 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   return {
     fixture,
     local,
+    dataRoot,
+    gitPlacements: () => recordedPlacements(logDirectory),
     remote,
     client,
     scratch,

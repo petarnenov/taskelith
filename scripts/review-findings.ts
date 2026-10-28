@@ -201,7 +201,7 @@ function capabilityProblems(finding: Finding, capabilities: ReadonlySet<string> 
 
 // Common token shapes: Taskelith and GitHub tokens, JWTs, private keys, NATS
 // seeds, AWS and Slack keys, API keys, and URL user information.
-const SECRET_PATTERNS: readonly RegExp[] = [
+export const SECRET_PATTERNS: readonly RegExp[] = [
   /\btk(?:op|en|wk)_[A-Za-z0-9_-]{20,}/,
   /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/,
   /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,

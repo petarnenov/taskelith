@@ -31,7 +31,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review \
-	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
+	test docker-slot services-up services-down verify-linux-cgroup verify-linux-git-workspace verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -137,6 +137,13 @@ verify-linux-cgroup:
 	@$(MAKE) --no-print-directory linux-test-image
 	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE) \
 		$(if $(PATTERN),--test-name-pattern='$(PATTERN)')
+
+# Opt-in Linux tests of the Git workspace adapter in the worker image with
+# its pinned Git (privileged, no network), out of make verify; PATTERN selects.
+verify-linux-git-workspace:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(INSTALLATION_PINS) bash scripts/installation.sh build-worker $(INSTALLATION)-git-workspace
+	bash scripts/linux-git-workspace.sh taskelith-worker:$(INSTALLATION)-git-workspace $(if $(PATTERN),--test-name-pattern='$(PATTERN)')
 
 # Opt-in G2 crash windows on Linux (privileged, host network), out of make
 # verify; PATTERN selects and SKIP_PATTERN skips tests by name.

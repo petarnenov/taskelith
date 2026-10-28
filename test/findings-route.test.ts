@@ -241,6 +241,28 @@ test('effect adds a routing row per archived change with route.json', () => {
   assert.deepEqual(routing.followedRoute, { changes: 2, following: 1, share: 0.5 });
 });
 
+const THIRD_PASS_ANSWER: ShadowDecision = {
+  router: 'jev',
+  status: 'answered',
+  model: 'jev-1.14.0',
+  tier: 'standard',
+  thirdPassProbability: 0.2,
+  threshold: 0.4,
+  passes: passPlans('standard', { externalFacts: false }),
+  latencyMs: 300,
+};
+
+test('effect reports a P(third) answer and scores it', () => {
+  const archive = { ...ROUTED_ARCHIVE, [`${ARCHIVE}/2026-10-22-unreviewed/route.json`]: routeRecord('unreviewed', { shadow: THIRD_PASS_ANSWER }) };
+  const json = withRepository(archive, (root) => runFindings(['effect', '--json'], root, NO_GIT));
+  assert.equal(json.exitCode, 0, json.stderr);
+  const routing = (JSON.parse(json.stdout) as { routing: RoutingJson }).routing;
+  assert.deepEqual(routing.rows[2]!.shadow, { status: 'answered', tier: 'standard', thirdPass: 0.2 });
+  const text = withRepository(archive, (root) => runFindings(['effect'], root, NO_GIT)).stdout;
+  assert.match(text, /^ {2}unreviewed: rule standard \(no trigger\), shadow standard \(P\(third\) 0\.20\);/m);
+  assert.match(text, /^ {2}shadow: P\(third\) of 1 change\(s\), Brier score 0\.04, AUC n\/a$/m);
+});
+
 test('effect prints the routing section after the checklist effect', () => {
   const result = withRepository(ROUTED_ARCHIVE, (root) => runFindings(['effect'], root, NO_GIT));
   assert.equal(result.exitCode, 0, result.stderr);

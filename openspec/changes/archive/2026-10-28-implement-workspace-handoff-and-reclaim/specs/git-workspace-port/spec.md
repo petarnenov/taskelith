@@ -1,0 +1,119 @@
+## ADDED Requirements
+
+### Requirement: Conformance run of the Git adapter
+The adapter's tests SHALL run every case of `WORKSPACE_CONFORMANCE` against it, with a local bare repository served over Git's smart HTTP protocol on `127.0.0.1` behind the server's own credential check and a recording wrapper as its pinned client, skipping none, and SHALL run the whole suite again with an execution account declared.
+
+#### Scenario: Hand-off cases with an execution account
+- **WHEN** the adapter declares an execution account
+- **THEN** the cases of a separate account check that one workspace at a time is handed off
+
+### Requirement: Git adapter hand-off and reclaim
+The Git workspace adapter SHALL implement `handOff`, `reclaim`, and `handedOff` with a hand-off record written durably before the checkout opens, SHALL run `handOff`, `reclaim`, and `remove` of one workspace one at a time, SHALL check for another hand-off and write its own record as one step per workspace root, record the reclaim program's containment once the program is ready and before `go`, and prove a recorded containment empty by polling, never killing it, up to a bound of 30 seconds.
+
+#### Scenario: Concurrent hand-offs
+- **WHEN** two workspaces of an adapter with an execution account are handed off concurrently
+- **THEN** exactly one hand-off succeeds and the other fails with reason `other-workspace-handed-off`
+
+#### Scenario: Hand-off during a reclaim
+- **WHEN** a workspace is handed off while its reclaim runs
+- **THEN** the hand-off starts after the reclaim ends and leaves the hand-off record and the open checkout together
+
+#### Scenario: Crash at a hand-off or reclaim point
+- **WHEN** the worker crashes at a point from `WS5.after` to `WS10.before` and restarts
+- **THEN** `handedOff` returns the workspace, Git work on it fails with reason `workspace-handed-off`, and the next `reclaim` completes
+
+#### Scenario: Containment populated at the bound
+- **WHEN** the containment that a hand-off record names is still populated at the bound
+- **THEN** `reclaim` and `handOff` fail with `unavailable`, the workspace stays handed off, and no process of the containment is killed
+
+### Requirement: Reclaim program of the worker image
+The reclaim program SHALL be a fixed module of the adapter that changes nothing until the worker writes `go` on its input, that writes only its readiness signal on its output, and that reports its outcome through its exit code; on Linux it SHALL enter its cgroup `reclaim-<name>` as root and switch to the execution account, without a supplementary group, before it signals readiness.
+
+#### Scenario: Worker gone before the record
+- **WHEN** the worker crashes after it started the program and before it wrote `go`
+- **THEN** the program exits without changing the checkout and leaves its containment empty
+
+#### Scenario: No go within the window
+- **WHEN** a started program gets no `go` within its window, 60 seconds by default (`RECLAIM_GO_BOUND_MS`)
+- **THEN** it exits without changing the checkout and leaves its containment empty, and its `reclaim` fails with `unavailable`, keeps the hand-off record without a failure, and a retry reclaims
+
+#### Scenario: Program in its containment
+- **WHEN** a Linux worker's reclaim program runs
+- **THEN** `/proc/<pid>/status` shows the execution account and `/proc/<pid>/cgroup` the containment `reclaim-<name>` under the containment parent
+
+### Requirement: Git workspace Linux tests in the worker image
+The worker image SHALL install the package `git=1:2.43.0-1ubuntu7.4` and fail its build unless that package and `git version 2.43.0` are installed, and `make verify-linux-git-workspace` SHALL run the conformance suite and the contract's Linux tests in that image as root with only `CAP_SETUID`, `CAP_SETGID`, and `CAP_KILL`, the execution group, and umask `0007`.
+
+#### Scenario: Git process placement
+- **WHEN** the Linux tests prepare, inspect, snapshot, read the remote head, push, hand off, reclaim, and remove
+- **THEN** every Git process shows uid 0 in `/proc/<pid>/status` and the worker's home cgroup in `/proc/<pid>/cgroup`
+
+
+## MODIFIED Requirements
+
+### Requirement: Reclaim program containment
+Unless the identities are the same, the worker SHALL record the reclaim program's containment `reclaim-<name>` under its containment parent in the hand-off record after the program entered it and signalled readiness and before `go`. The scan SHALL skip it, and the worker SHALL prove it empty by polling, without a kill, before it reclaims, runs Git, or hands off again, reporting it for reconciliation at a bound. A failed program SHALL keep the workspace handed off.
+
+#### Scenario: Surviving reclaim program
+- **WHEN** the worker restarts while the reclaim program of its previous run still runs
+- **THEN** it does not reclaim again, run Git on the workspace, or hand it off until that program's process set is proven empty
+
+#### Scenario: Failed reclaim program
+- **WHEN** the reclaim program exits with a failure
+- **THEN** `reclaim` fails with `precondition-failed` and reason `reclaim-failed`, the workspace stays handed off, and the program does not run again
+
+#### Scenario: Program past its run bound
+- **WHEN** the reclaim program still runs 10 minutes after `go` (`RECLAIM_RUN_BOUND_MS`)
+- **THEN** `reclaim` fails with reason `reclaim-failed`, the record keeps the failure, and the program is not killed, so its populated containment keeps the workspace handed off
+
+#### Scenario: Reclaim containment at start
+- **WHEN** the worker restarts while a reclaim program runs in the containment that a hand-off record names
+- **THEN** it reports no unrecorded process for that containment and kills no process of it
+
+#### Scenario: Crash before the failure is recorded
+- **WHEN** the worker is killed after its reclaim program failed and before the failure is durable in the hand-off record, and `reclaim` is called after the restart
+- **THEN** the worker proves the containment empty and runs the program again, and a failure again is recorded and fails with reason `reclaim-failed`
+
+#### Scenario: Program past the bound
+- **WHEN** the containment that a hand-off record names is still populated at the bound
+- **THEN** the workspace stays handed off and is reported for reconciliation
+
+#### Scenario: Program not yet ready
+- **WHEN** the reclaim program has started but has not yet entered its containment and signalled readiness
+- **THEN** the worker has not recorded the containment and has not written `go`, and if the program is not ready within 60 seconds (`RECLAIM_READY_BOUND_MS`), the worker abandons it and `reclaim` fails with `unavailable`
+
+#### Scenario: Waiting program without its worker
+- **WHEN** a launched program's worker dies before `go`, or no `go` arrives within 60 seconds
+- **THEN** the program exits without changing the checkout and leaves its containment empty
+
+### Requirement: Reclaim program on one account
+Where the execution and worker identities are the same account, as on macOS, the reclaim program SHALL run as the worker identity, without a containment, in a process group of its own, which the hand-off record SHALL name after the program signals readiness and before `go`, and which the worker SHALL prove empty, as it does a containment, before it reclaims again, runs Git on the workspace, or hands it off.
+
+#### Scenario: Reclaim program on macOS
+- **WHEN** a macOS worker reclaims a workspace
+- **THEN** the reclaim program runs as the worker's account in its own process group, which the hand-off record names while it runs
+
+### Requirement: Repository configuration rewrite
+Before its first Git call on a ready checkout, after the checks of its Git directory, an operation SHALL write `.git/config` anew as a file of mode `0660` that it creates exclusively without following a link and renames into place, holding only the repository format version and object format of the workspace record, and SHALL delete `.git/info`, so that no link there is written through and no planted setting or rule acts.
+
+#### Scenario: Planted filter, hook, and monitor
+- **WHEN** the agent planted `core.hooksPath`, a filter driver, `core.fsmonitor`, `include.path`, and `credential.helper` before an `inspect`, `snapshot`, and `remove`
+- **THEN** none of them runs, and no Git process starts with one in its repository configuration
+
+#### Scenario: Planted ignore rule
+- **WHEN** the agent writes `*.work` into `.git/info/exclude` and leaves an untracked file `unpublished.work`
+- **THEN** `inspect` reports `untracked`, `remove` fails with reason `workspace-dirty`, and `.git/info` is gone
+
+#### Scenario: Linked configuration
+- **WHEN** `.git/config` is a symbolic or hard link to a control record
+- **THEN** the rewrite replaces the link and the control record is unchanged
+
+#### Scenario: Harness Git after the rewrite
+- **WHEN** a Linux checkout whose configuration the worker rewrote is handed off
+- **THEN** the harness's Git, as the execution account, reads `.git/config` and commits
+
+## REMOVED Requirements
+
+### Requirement: Conformance run of the local operations
+**Reason**: The cases that need `handOff` or `reclaim` now run, so no case is skipped and the skip list is gone.
+**Migration**: "Conformance run of the Git adapter" runs every case of the suite against the adapter.
