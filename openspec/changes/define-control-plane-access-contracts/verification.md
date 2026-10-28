@@ -75,7 +75,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `518dfdf0c215c935e27d27c358806d1afc89ef09`; tests 2932, pass 2885, fail 0, skipped 47; all files 99.35% lines, 92.72% branches, 99.00% functions.
+- `make verify`: passed, profile full, tree `11922209c408aaba85889b16a76c4e084cd9cc71`; tests 2934, pass 2887, fail 0, skipped 47; all files 99.35% lines, 92.74% branches, 99.00% functions.
 - `npm run openspec -- validate define-control-plane-access-contracts --strict`: passed, `Change 'define-control-plane-access-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 63 file(s); every pass summary file is valid: 43 file(s); every route file is valid: 2 file(s).`.
 - Spec diff against the merge base `9196804b89c6` with `origin/dev`: no change under `openspec/specs`.
@@ -84,6 +84,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a181dd-9282-7cc3-9cac-62361e988c19` | 0 | 0 | 6 | 3 |
+| 2 | B | `claude claude-opus-5-5#high` | `cb157568-8906-453c-8fd2-df2e21c2aae4` | 0 | 1 | 5 | 10 |
 <!-- make record: end -->
 
 ## Independent review
