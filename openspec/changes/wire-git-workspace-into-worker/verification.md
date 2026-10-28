@@ -15,6 +15,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16e, developed by a briefed s
 - `efbb79ca` `docs: record the verification of the wire git workspace into worker change`, the revision that review pass 1 reviewed.
 - Review pass 1 fixes: `f40abcec` (finding 1), `824ccab2` (finding 3), `3acc3dc1` (finding 2), `291f9822` (finding 4), `00a1e2b0` (finding 5, the worker-runtime delta of finding 1, and the contract text of findings 1 and 2), `004144e1` (the git-workspace-port delta of finding 2 with its "Interrupted cleanup" scenario, and design, proposal, and tasks, with the architect's answers N1 and N2), and `38d39dda` (the pass 1 line of `passes.jsonl` and the five lines of `findings.jsonl`). `route.json` is not routed again: worker step 4 routes before pass 1 only.
 - Review pass 2 fixes: `c764fd2a` (finding 4), `45b308d8` (finding 3 and the tests of answer A2), `d26690b6` (findings 1, 2, and 5 and the contract and spec text of finding 4), `44b5b314` (design and tasks, with the coordinator's answers A1 and A2), `aeaf36b8` (findings 6 and 7), `64917d03` (the pass 2 line of `passes.jsonl`, the seven lines of `findings.jsonl`, and this record), `ff78b57d` (the two tests of `reclaim-program.test.ts` typed through the `ReclaimHost` port, after the first `make verify` below failed its type check), and the commit after it (`make record` and the checks below).
+- Review pass 3 fixes, unreviewed: `08a9347d` (finding 1), `51daebe7` (finding 2), `23caaad6` (finding 3, and the `design.md` text of finding 1), `7845c3da` (the `design.md` text of finding 2), `fb2b6108` (the pass 3 line of `passes.jsonl` and the three lines of `findings.jsonl`), and the commit after it (`make record`, the checks below, and this record).
 
 ## Environment
 
@@ -64,8 +65,10 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `make verify` | `fb2b6108`, after the pass 3 fixes, tree `3cac536f` (log `16e-verify-4.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3575, suites 46, pass 3528, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify-linux-git-workspace` | `fb2b6108` | Passed: tests 43, pass 43, fail 0, skipped 0 (log `16e-linux-4.log`) |
 | `make verify` | `64917d03` | Failed at `npm run check:boundaries`: `reclaim-program.test.ts(265,29): error TS2554` (the one-account host's `killRecorded` takes no argument), fixed in `ff78b57d` |
-| `make verify` | `ff78b57d`, after the pass 2 fixes, tree `d1b22d39` (log `16e-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3571, suites 46, pass 3524, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify` | `ff78b57d`, after the pass 2 fixes, tree `d1b22d39` (log `16e-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3571, suites 46, pass 3524, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions; its `make record` was replaced by the run after the pass 3 fixes |
 | `make verify-linux-git-workspace` | `ff78b57d` | Passed: tests 43, pass 43, fail 0, skipped 0 (log `16e-linux-3.log`) |
 | `make verify` | `3a6784fe` | Failed at `npm run verify:comments` (one comment of 3 lines), fixed in `624112b7` |
 | `make verify` | `38d39dda`, after the pass 1 fixes, tree `1fb8f298` (log `16e-verify-2.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3567, suites 46, pass 3520, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.77 % branches, 98.76 % functions; its `make record` was replaced by the run after the pass 2 fixes |
@@ -88,15 +91,16 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 - Section 3, step 7 (review pass 1, finding 2): a fault that interrupts the kill, proof, or removal still fails with `reclaim-failed`, and a later `reclaim` finishes the cleanup without the program, killing through the recorded cgroup's `cgroup.kill` on Linux and only proving a recorded process group on macOS, which it never signals. The coordinator accepted it as answer A2 (Niki, 2026-10-28), which also asks for the explicit macOS no-signal rule; the sentence states it.
 - `docs/contracts/execution-wire-contracts.md` section 5, the row "Capacity declared" (review pass 2, finding 1): the worker declares again after a reclaim that removes a hand-off record, also unchanged, as `docs/contracts/git-workspace.md` section 3, step 6, and worker-runtime "Capacity declaration" already say; the header names the sub-change.
 - Section 3, step 7 (review pass 2, finding 2): the proof by polling, never by killing, applies to a record without a failure; a record with `reclaimFailed` is cleaned up as the cleanup of a failed program says.
-- Section 3, step 7 (review pass 2, finding 4, keeping the answer to Q6): a fault of the durable write of the failure still kills, proves, and removes the containment, and `reclaim` fails with that write's `unavailable`; the record then names the containment without the failure, so a later `reclaim` proves it empty and runs the program once more, as after a crash at `WS8.after`, and the slot stays held until a reclaim succeeds.
-- The header records the pass 2 fixes.
+- Section 3, step 7 (review pass 2, finding 4, keeping the answer to Q6): a fault of the durable write of the failure still kills, proves, and removes the containment, and `reclaim` fails with that write's `unavailable`; the record then names the containment without the failure, so a later `reclaim` proves it empty and runs the program once more, as after a crash at `WS8.after`, and the slot stays held until a reclaim succeeds. That holds only for a fault before the rename into place (review pass 3, finding 3, below).
+- Section 3, step 7 (review pass 3, findings 1 and 3, unreviewed): a write fault that a file system call throws is handled the same way, and a later `reclaim` follows the record that it reads: after a fault before the rename it runs the program once more; after a fault of the directory flush that follows the rename the record keeps the failure, and it finishes the cleanup without starting the program.
+- The header records the pass 2 and pass 3 fixes.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `d1b22d39fe81ade01ab82fb856d57fa4d18bf560`; tests 3571, pass 3524, fail 0, skipped 47; all files 99.37% lines, 92.78% branches, 98.76% functions.
+- `make verify`: passed, profile full, tree `3cac536f345d2d68c2df22cac60d4fe9dee4432d`; tests 3575, pass 3528, fail 0, skipped 47; all files 99.37% lines, 92.78% branches, 98.76% functions.
 - `npm run openspec -- validate wire-git-workspace-into-worker --strict`: passed, `Change 'wire-git-workspace-into-worker' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).`.
 - Spec diff against the merge base `166673998210` with `origin/dev`: no change under `openspec/specs`.
@@ -106,6 +110,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18418-c2ef-7430-8b47-0d49b8341c30` | 0 | 1 | 3 | 1 |
 | 2 | B | `claude claude-opus-5-5#medium` | `b1712a46-c45e-4d1a-bc1a-c52f61a40928` | 0 | 0 | 4 | 3 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18459-5a52-7251-8d82-c4ac209370dd` | 0 | 0 | 2 | 1 |
 <!-- make record: end -->
 
 ## Independent review
@@ -162,6 +167,26 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - After the fixes: `node --experimental-strip-types --test packages/adapters/git-workspace/test/*.test.ts` gave tests 224, pass 224, fail 0; `npm run verify:comments` passed; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, the longest requirement body 489 characters ("Reclaim program containment"; "Killed reclaim containment" 482), and an archive of the change in a scratch copy of `openspec/` validated every spec strictly (71 passed); `make findings ARGS="validate"` valid. `make verify` and `make verify-linux-git-workspace` are under "Checks".
 - The pass 2 fixes change code and pass 2 found Medium findings, so pass 3 by reviewer A is required.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox read-only, session `01a18459-5a52-7251-8d82-c4ac209370dd`, on `4531fcf7`. The worktree snapshot before and after the review was `05a4a27cc2bd982d9f36e66f84f5f971c03dfbe2037e2f6dd4fea5b514571d6d`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C /home/petar/taskelith-worktrees/wire-git-workspace-into-worker -`, environment `PATH HOME USER LANG TERM`, started 2026-10-28T21:10:10.563Z. Model confirmation: `model: gpt-6.1-sol (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`, printed by `make review`. `route.json` recommends pass 3 reviewer A `codex gpt-6.1-sol#high`; `make review` printed "route: recommends effort high; the authorized medium applies (policy version 8)", and the brief names `codex gpt-6.1-sol#medium`.
+- Result: Critical 0, High 0, Medium 2, Low 1, matching the pass 3 line of `passes.jsonl`. The reviewer confirmed the pass 2 fixes of findings 1 to 3 and 5 to 7 and found the fix of pass 2 finding 4 partial (finding 1 below). Pass 3 is the last pass (governance "At most three passes per task"), so all three fixes are unreviewed: `findings.jsonl` records each as `fixed-unreviewed`.
+  1. Medium, error-handling (`packages/adapters/git-workspace/src/git-workspaces.ts:368`, `#failedProgram`): `replaceFileAsync` throws a fault of its `rename`, such as `EIO`, so the reclaim rejected before `#cleanedUp`, and an overrunning program kept running. Fixed, unreviewed, in `08a9347d`: the write runs through `failingFileSystemAsUnavailable`, which turns a Node system error into `unavailable` and still rejects a simulated crash or a programming error, so the kill, the proof, and the release run; `design.md` decision 9 states it in `23caaad6`. No `missedBy`: pass 2 reported the fault of this write as its finding 4, whose fix was partial.
+  2. Medium, concurrency-race (`apps/worker/src/workspace-slots.ts:63`, `reclaim`): concurrent reclaims of two workspaces shared the one owed declaration, so the first one's declaration cleared the second one's debt, also when the worker died after the second removal. Fixed, unreviewed, in `51daebe7` (code and tests) and `7845c3da` (`design.md` decision 7): `WorkspaceSlots` chains its reclaims, so each owes, reclaims, updates the held set, and declares before the next starts. `missedBy` pass 2, role B: the owed declaration came with the pass 1 fixes (`f40abcec`).
+  3. Low, spec-wording (git-workspace-port scenario "Failure record not written", `docs/contracts/git-workspace.md:69`, `design.md` decision 9, and the pass 2 bullet of "Contract amendments"): a fault after the rename into place, a failed flush of the directory, leaves `reclaimFailed` in the record, so a later reclaim does not run the program. Fixed, unreviewed, in `23caaad6`: the texts separate a fault before the rename from one after it, the later reclaim follows the record that it reads, and the new scenario "Failure record not flushed" and a test cover the second case.
+- Fail-before, with the new tests on the source of `4531fcf7` (`packages/adapters/git-workspace/src` and `apps/worker/src` checked out from it, `npm run build`, then restored and rebuilt; log `16e-pass3-failbefore.out` in the session scratchpad):
+
+| Test | How it failed before the fix |
+| --- | --- |
+| `hand-off.test.ts` "a failure record whose rename throws still kills, proves empty, and frees the overrunning program" | `AssertionError: the program is killed and proven gone` (`populated` was `true`) |
+| `workspace-slots.test.ts` "two concurrent reclaims of different workspaces each declare the capacity" | `[held, declarations, owed]` was `[[], 1, false]`, expected `[[], 2, false]` |
+| `workspace-slots.test.ts` "a worker killed after the second of two concurrent removals still owes its declaration" | `[declarations, owed]` was `[1, false]`, expected `[1, true]` |
+| `hand-off.test.ts` "a failure record renamed into place before its directory flush fails keeps the failure, so no reclaim runs the program again" | It guards behavior that `4531fcf7` already had, so it passed there; the fix of finding 3 corrects the texts. A mutant whose `#reclaim` ignores a recorded `reclaimFailed` failed it: `the program never runs again`, 2 launches where 1 was expected |
+
+- After the fixes: `node --experimental-strip-types --test` of `packages/adapters/git-workspace/test/*.test.ts` and `apps/worker/test/*.test.ts` gave tests 551, pass 551, fail 0; `make findings ARGS="validate"` valid; `npm run openspec -- validate wire-git-workspace-into-worker --strict` valid, requirement bodies unchanged, the longest 489 characters ("Reclaim program containment"; "Killed reclaim containment" 482); an archive of the change in a scratch copy of `openspec/` validated every spec strictly (71 passed). `make verify` and `make verify-linux-git-workspace` are under "Checks".
+- Architect check of the unreviewed pass 3 fixes (`08a9347d`, `51daebe7`, `23caaad6`, `7845c3da`, governance "Architect check of unreviewed fixes"): pending, by the coordinator before the handoff.
+
 ## Limitations
 
 - A whole worker started through the worker image's entrypoint was not run: the entrypoint's group is tested with its fakes, the umask and the hard-link reader through the injected `WorkspaceHost`, and the real `/proc/sys/fs/protected_hardlinks` read is untested; the slot service's real hand-off and reclaim are tested only through the adapter's own suites.
@@ -173,7 +198,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A (required: pass 2 found Medium findings, and its fixes change code).
+- The architect check of the unreviewed pass 3 fixes by the coordinator (governance "Architect check of unreviewed fixes"), before the handoff.
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
 - `make verify-worker-image-reproducible`, arranged by the coordinator.
 - Item 18: calling `RunningWorker.workspaceSlots` around each execution; item 21: the `reclaim-failed` observation; item 38: the delegated-child half of "One handed-off workspace".
