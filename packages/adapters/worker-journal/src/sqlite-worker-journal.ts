@@ -276,10 +276,18 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordCapacity(capacity: DeclaredCapacity): Result<void> {
+    return this.#declareCapacity(capacity, 'when-changed');
+  }
+
+  redeclareCapacity(capacity: DeclaredCapacity): Result<void> {
+    return this.#declareCapacity(capacity, 'always');
+  }
+
+  #declareCapacity(capacity: DeclaredCapacity, when: 'when-changed' | 'always'): Result<void> {
     return this.#connection.transact((database) => {
       const meta = metaRow(database);
       const declared = JSON.stringify(canonicalCapacity(capacity));
-      if (meta.declared_capacity === declared) return ok(undefined);
+      if (when === 'when-changed' && meta.declared_capacity === declared) return ok(undefined);
       const declaration = storedInteger<number>(meta, 'capacity_declarations') + 1;
       database.prepare('UPDATE journal_meta SET declared_capacity = ?, capacity_declarations = ?').run(declared, declaration);
       this.#append(database, { kind: 'capacity-declared', declaration, capacity });

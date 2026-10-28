@@ -43,7 +43,15 @@ import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
 import { exceededTimeLimit, succeeded, type GitRunner, type GitTimer } from './git-runner.js';
-import { HANDED_OFF, readHandOffRecord, removeHandOffRecord, writeHandOffRecord, type HandOffRecord, type ReclaimContainment } from './hand-off-record.js';
+import {
+  HANDED_OFF,
+  readHandOffRecord,
+  removeHandOffRecord,
+  writeHandOffRecord,
+  type HandedOffWorkspace,
+  type HandOffRecord,
+  type ReclaimContainment,
+} from './hand-off-record.js';
 import { parseCommitParents, type GitObjectType } from './git-objects.js';
 import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
@@ -80,7 +88,7 @@ export interface GitWorkspacesOptions {
 // interval at which it is polled (contract section 3).
 export const RECLAIM_PROOF_BOUND_MS = 30_000;
 export const RECLAIM_PROOF_INTERVAL_MS = 200;
-// After it the program counts as failed and is left running (section 3).
+// After it the program counts as failed and is killed (section 3).
 export const RECLAIM_RUN_BOUND_MS = 600_000;
 
 export const sha256IdentifierDigest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
@@ -246,6 +254,18 @@ export class GitWorkspaces implements WorkspaceProvider {
     return listed.filter((_, index) => recorded[index]);
   }
 
+  // The records of `handedOff`, for the worker's held slots; a record
+  // removed meanwhile is left out, and an unreadable one rejects.
+  async handOffRecords(): Promise<readonly HandedOffWorkspace[]> {
+    const attempts = await this.handedOff();
+    const read = await Promise.all(attempts.map(async (attemptId) => {
+      const record = await readHandOffRecord(this.#handOffRecordOf(attemptId));
+      if (!record.ok) throw new Error(record.error.message);
+      return record.value === undefined ? [] : [{ attemptId, record: record.value }];
+    }));
+    return read.flat();
+  }
+
   // Section 3, step 6: the record first, so that a restart keeps the
   // hand-off, then the checkout opens to the execution group.
   async #handOff(attemptId: AttemptId): Promise<Result<void>> {
@@ -338,8 +358,18 @@ export class GitWorkspaces implements WorkspaceProvider {
       const released = await this.#released(containment);
       return released.ok ? goTooLate() : released;
     }
-    const failed = await writeHandOffRecord(path, { containment, reclaimFailed: true });
-    return failed.ok ? reclaimFailed() : failed;
+    return this.#failedProgram(path, launched);
+  }
+
+  // The failure is durable first, so the program never runs again; then
+  // its containment is killed, proven empty, and freed (section 3, step 7).
+  async #failedProgram(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
+    const { containment } = launched;
+    const recorded = await writeHandOffRecord(path, { containment, reclaimFailed: true });
+    if (!recorded.ok) return recorded;
+    await launched.kill();
+    const released = await this.#released(containment);
+    return released.ok ? reclaimFailed() : reclaimFailed(`; ${released.error.message}`);
   }
 
   // Frees the containment of an exited program once it is proven empty.
@@ -730,8 +760,10 @@ async function withinBound(exited: Promise<ReclaimOutcome>, boundMs: number): Pr
   }
 }
 
-function reclaimFailed(): Result<never> {
-  return workspaceFailure('precondition-failed', 'reclaim-failed', 'the reclaim program failed; the workspace stays handed off');
+// `remainder` tells of a containment still populated after the kill.
+function reclaimFailed(remainder = ''): Result<never> {
+  const message = `the reclaim program failed; the workspace stays handed off${remainder}`;
+  return workspaceFailure('precondition-failed', 'reclaim-failed', message);
 }
 
 // The program changed nothing; the record stays, and a retry may succeed.

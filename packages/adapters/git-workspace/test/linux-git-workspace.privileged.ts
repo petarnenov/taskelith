@@ -175,6 +175,7 @@ async function holdFile(): Promise<string> {
   return hold;
 }
 
+const containmentExists = async (name: string) => (await readdir(CONTAINMENT_PARENT)).includes(name);
 const reasonOf = (result: Result<unknown>) => failed(result).details.reason;
 const recordOf = async (git: GitFixture, attemptId = FIRST) => parseHandOffRecord(await readFile(join(git.checkout(attemptId), '..', WORKSPACE_LAYOUT.handOffRecord), 'utf8'));
 
@@ -272,6 +273,8 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
     value(await git.local.prepare(request(git)));
     value(await git.local.handOff(FIRST));
     for (const provider of [git.local, git.reopen()]) assert.equal(reasonOf(await provider.reclaim(FIRST)), 'reclaim-failed');
+    const failedName = reclaimContainmentName(FIRST, sha256IdentifierDigest);
+    assert.equal(await containmentExists(failedName), false, 'the empty cgroup of the failed program is removed');
     assert.equal(failing.launched.length, 1);
     assert.equal((await recordOf(git))?.reclaimFailed, true);
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
@@ -288,6 +291,22 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
     assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
     await rm(hold);
   }, { reclaimHost: linuxHost(testProgram('hold', hold)) });
+});
+
+test('a reclaim program past its run bound is killed and its cgroup removed, and the workspace stays handed off', async () => {
+  const hold = await holdFile();
+  const host = linuxHost(testProgram('hold', hold));
+  await withLinuxFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    const name = reclaimContainmentName(FIRST, sha256IdentifierDigest);
+    assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(await containmentExists(name), false, 'the killed program is proven gone and its cgroup removed');
+    assert.deepEqual(await recordOf(git), { containment: { kind: 'cgroup', name }, reclaimFailed: true });
+    assert.equal(reasonOf(await git.reopen().reclaim(FIRST)), 'reclaim-failed');
+    assert.equal(host.launched.length, 1, 'no retry');
+    assert.deepEqual(await git.local.handedOff(), [FIRST]);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(hold, { force: true }));
 });
 
 const populatedNow = async (cgroupName: string) => (await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.events'), 'utf8')).includes('populated 1');
@@ -397,8 +416,6 @@ test('a Linux launch resolves only once its program is in its cgroup as the exec
   await held.release(launched.containment);
   await made.remove();
 });
-
-const containmentExists = async (name: string) => (await readdir(CONTAINMENT_PARENT)).includes(name);
 
 test('a launch that fails or is not ready within its bound frees its empty cgroup', { timeout: FIFO_TEST_BOUND_MS }, async () => {
   const ended = linuxHost({ executable: '/bin/sh', args: ['-c', 'exit 1', 'reclaim'] });

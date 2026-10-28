@@ -49,6 +49,8 @@ export interface WorkerJournal {
   recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void>;
   // Journals a declaration only when it differs from the last one.
   recordCapacity(capacity: DeclaredCapacity): Result<void>;
+  // Journals a declaration even when unchanged, as after a reclaim.
+  redeclareCapacity(capacity: DeclaredCapacity): Result<void>;
   // The current causes of admission pressure; an empty list clears it.
   recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void>;
   // The worker admission check results of this start.

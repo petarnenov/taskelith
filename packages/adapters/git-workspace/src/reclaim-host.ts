@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import { mkdir, readFile, rmdir } from 'node:fs/promises';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdir, readFile, rmdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ReclaimContainment } from './hand-off-record.js';
@@ -17,6 +17,9 @@ export interface LaunchedReclaim {
   go(): Promise<ReclaimOutcome>;
   // Ends the program before `go`; it exits without a change.
   abandon(): void;
+  // Kills every process of the containment after the run bound or a
+  // failure; the adapter then proves it empty (contract section 3).
+  kill(): Promise<void>;
 }
 
 // Starts the reclaim program and reads its containment (contract
@@ -48,6 +51,7 @@ interface StartedProgram {
   readonly pid: number;
   go(): Promise<ReclaimOutcome>;
   abandon(): void;
+  killGroup(): void;
 }
 
 interface ProgramStart {
@@ -81,9 +85,21 @@ function startProgram(program: ReclaimProgram, args: readonly string[], readyBou
           return exited;
         },
         abandon,
+        killGroup: () => killUnreapedGroup(child),
       }));
     });
   });
+}
+
+// Only while Node has not reaped the leader, so its group identifier
+// cannot belong to another group yet; a reaped leader's group is not killed.
+function killUnreapedGroup(child: ChildProcess): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  try {
+    process.kill(-child.pid!, 'SIGKILL');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
 }
 
 type Readiness = 'ready' | 'ended' | 'late';
@@ -151,7 +167,10 @@ export class LinuxReclaimHost implements ReclaimHost {
     const { uid, gid } = this.executionAccount;
     const args = ['--checkout', checkout, '--cgroup', cgroup, '--uid', String(uid), '--gid', String(gid)];
     const { started, exited } = await startProgram(this.#program, args, this.#readyBoundMs);
-    if (started.ok) return ok({ ...started.value, containment: { kind: 'cgroup', name: containmentName } });
+    if (started.ok) {
+      const { go, abandon } = started.value;
+      return ok({ containment: { kind: 'cgroup', name: containmentName }, go, abandon, kill: () => killCgroup(cgroup) });
+    }
     await removeIfEmpty(cgroup);
     // A program still in its cgroup frees it on exit; a fault keeps it.
     void exited.then(() => removeIfEmpty(cgroup)).catch(() => {});
@@ -175,6 +194,14 @@ export class LinuxReclaimHost implements ReclaimHost {
       if (error.code !== 'ENOENT') throw error;
     });
   }
+}
+
+// `cgroup.kill` kills every process of the cgroup and its descendants; a
+// cgroup that is gone holds none.
+async function killCgroup(cgroup: string): Promise<void> {
+  await writeFile(join(cgroup, 'cgroup.kill'), '1').catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') throw error;
+  });
 }
 
 // The kernel refuses to remove a populated cgroup (`EBUSY`), so only an
@@ -204,7 +231,9 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
 
   async launch(checkout: string): Promise<Result<LaunchedReclaim>> {
     const { started } = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
-    return started.ok ? ok({ ...started.value, containment: { kind: 'process-group', id: started.value.pid } }) : started;
+    if (!started.ok) return started;
+    const { pid, go, abandon, killGroup } = started.value;
+    return ok({ containment: { kind: 'process-group', id: pid }, go, abandon, kill: async () => killGroup() });
   }
 
   async populated(containment: ReclaimContainment): Promise<boolean> {

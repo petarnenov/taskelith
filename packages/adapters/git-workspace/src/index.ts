@@ -27,6 +27,7 @@ export {
   readHandOffRecord,
   removeHandOffRecord,
   writeHandOffRecord,
+  type HandedOffWorkspace,
   type HandOffRecord,
   type ReclaimContainment,
 } from './hand-off-record.js';

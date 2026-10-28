@@ -206,6 +206,7 @@ test('a failed reclaim program keeps the workspace handed off and never runs aga
     }
     assert.equal(host.launched.length, 1);
     assert.deepEqual(await readRecord(git), { containment: host.launched[0], reclaimFailed: true });
+    assert.deepEqual(host.released, host.launched, 'the empty containment of the failed program is freed');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
     value(await git.local.handOff(FIRST));
@@ -324,7 +325,7 @@ test('a program that is not ready within its bound fails the reclaim as unavaila
   }, { reclaimHost: host });
 });
 
-test('a program still running at the run bound fails the reclaim and is left running', { timeout: 30_000 }, async () => {
+test('a program still running at the run bound is killed and freed, and the workspace stays handed off', { timeout: 30_000 }, async () => {
   const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
   const hold = join(holdDirectory, 'hold');
   await writeFile(hold, '');
@@ -335,13 +336,12 @@ test('a program still running at the run bound fails the reclaim and is left run
     assert.equal(failed(await git.local.reclaim(FIRST)).details.reason, 'reclaim-failed');
     const containment = host.launched[0]!;
     assert.deepEqual(await readRecord(git), { containment, reclaimFailed: true });
-    assert.equal(await host.populated(containment), true, 'the program is never killed');
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
     assert.equal(failed(await git.reopen().reclaim(FIRST)).details.reason, 'reclaim-failed');
-    assert.equal(host.launched.length, 1);
+    assert.equal(host.launched.length, 1, 'no retry');
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
-    await rm(hold);
-    assert.equal(await waitUntilEmpty(host, containment), true);
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });
 
@@ -367,7 +367,9 @@ class GatedReleaseHost implements ReclaimHost {
   #inRelease = false;
 
   async launch() {
-    const launched: LaunchedReclaim = { containment: { kind: 'process-group', id: 424242 }, go: async () => 'succeeded', abandon: () => {} };
+    const launched: LaunchedReclaim = {
+      containment: { kind: 'process-group', id: 424242 }, go: async () => 'succeeded', abandon: () => {}, kill: async () => {},
+    };
     return ok(launched);
   }
 
