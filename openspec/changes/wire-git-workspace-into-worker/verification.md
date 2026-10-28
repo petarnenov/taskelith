@@ -65,7 +65,9 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 
 | Check | Revision | Result |
 | --- | --- | --- |
-| `make verify` | `fb2b6108`, after the pass 3 fixes, tree `3cac536f` (log `16e-verify-4.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3575, suites 46, pass 3528, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify` | `c750efab`, after the return fixes, tree `81dbdd73` (log `16e-verify-return.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3618, suites 46, pass 3571, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.77 % branches, 98.76 % functions. `make record` of this run is under "Generated checks" |
+| `make verify` | `a56b58a3`, after the merge of `8b18c540` | Failed one test, `installation-composition.test.ts` (Return and reconciliation, item 6), fixed in `af44f063` |
+| `make verify` | `fb2b6108`, after the pass 3 fixes, tree `3cac536f` (log `16e-verify-4.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3575, suites 46, pass 3528, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions. its `make record` was replaced by the run after the return fixes |
 | `make verify-linux-git-workspace` | `fb2b6108` | Passed: tests 43, pass 43, fail 0, skipped 0 (log `16e-linux-4.log`) |
 | `make verify` | `64917d03` | Failed at `npm run check:boundaries`: `reclaim-program.test.ts(265,29): error TS2554` (the one-account host's `killRecorded` takes no argument), fixed in `ff78b57d` |
 | `make verify` | `ff78b57d`, after the pass 2 fixes, tree `d1b22d39` (log `16e-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3571, suites 46, pass 3524, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.78 % branches, 98.76 % functions; its `make record` was replaced by the run after the pass 3 fixes |
@@ -100,10 +102,10 @@ Without a fail-before, because they guard behavior that already held: "a worker 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `3cac536f345d2d68c2df22cac60d4fe9dee4432d`; tests 3575, pass 3528, fail 0, skipped 47; all files 99.37% lines, 92.78% branches, 98.76% functions.
+- `make verify`: passed, profile full, tree `81dbdd73149248a2f31ffe2384c4deed14f324b9`; tests 3618, pass 3571, fail 0, skipped 47; all files 99.37% lines, 92.77% branches, 98.76% functions.
 - `npm run openspec -- validate wire-git-workspace-into-worker --strict`: passed, `Change 'wire-git-workspace-into-worker' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).`.
-- Spec diff against the merge base `166673998210` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 84 file(s); every pass summary file is valid: 64 file(s); every route file is valid: 20 file(s).`.
+- Spec diff against the merge base `8b18c5406e9c` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
