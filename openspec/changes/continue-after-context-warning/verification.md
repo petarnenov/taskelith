@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification and `make verify` are recorded below; the review passes are pending.
+Date: 2026-10-28. The author's verification and `make verify` are recorded below; the review ended at pass 1.
 
 ## Scope and source
 
@@ -17,7 +17,7 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 
 ## Author self-check
 
-- **Grep.** A search outside `openspec/changes/archive/` and `node_modules` for `150,000`, `150000`, `150k`, `/compact`, `/clear`, `Context size`, `context-warning`, `warns before`, and `sends it no work until` found the rule in `docs/agent-task-protocol.md:86-90`, `AGENTS.md:26`, `.claude/skills/taskelith-task-protocol/SKILL.md:19`, `.claude/skills/taskelith-coordinator/SKILL.md:22` (a pointer to the section), the living spec `openspec/specs/agent-task-protocol/spec.md` ("Context size warning" and "Thin session context"), and `scripts/context-warning.ts:79` with its test. `docs/governance.md` does not hold the rule. `docs/fleet.md:19` mentions `/clear` only for the clear after integration, and `.claude/skills/taskelith-worker/SKILL.md` does not state the rule; both are unchanged (design.md D1). The `taskelith-task-protocol` skill's "stop and wait for the coordinator" concerns the handoff, not the warning, and is unchanged.
+- **Grep.** A search outside `openspec/changes/archive/` and `node_modules` for `150,000`, `150000`, `150k`, `/compact`, `/clear`, `Context size`, `context-warning`, `warns before`, and `sends it no work until` found the rule in `docs/agent-task-protocol.md:86-90`, `AGENTS.md:26`, `.claude/skills/taskelith-task-protocol/SKILL.md:19`, `.claude/skills/taskelith-coordinator/SKILL.md:22` (a pointer to the section), the living spec `openspec/specs/agent-task-protocol/spec.md` ("Context size warning" and "Thin session context"), and `scripts/context-warning.ts:79` with its test. `docs/governance.md` does not hold the rule. `docs/fleet.md:19` mentions `/clear` only to say that the owner does not `/clear` a worker's session after each integration, and `.claude/skills/taskelith-worker/SKILL.md` does not state the rule; both are unchanged (design.md D1). The `taskelith-task-protocol` skill's "stop and wait for the coordinator" concerns the handoff, not the warning, and is unchanged.
 - **Contract.** The protocol, `AGENTS.md`, the two skills, and the spec delta all say that the session warns, recommends `/compact` or `/clear`, and continues without waiting. The worker bullet's hold on new work is removed (design.md D2). "Thin session context" says the hook warns without blocking and needs no change.
 - **Hook.** Its message, "record what a reset would lose, tell the owner, and recommend /compact or /clear", tells no session to stop or wait, so the hook, its 140,000-token threshold, and its test are unchanged; no fail-before test applies, since no code changes.
 - **Spec.** The modified requirement keeps its name and both scenario names; its body has 352 characters, under the strict limit after archive.
@@ -35,7 +35,14 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 
 ## Review
 
-Passes pending: pass 1 `codex gpt-6-astra#medium` (role A), pass 2 `claude claude-opus-5-5#medium` (role B), and pass 3 `codex gpt-6.1-sol#medium` (role A) only after a pass 2 with a Medium or worse finding, as the brief assigns.
+Reviewer A: Codex CLI, `codex gpt-6-astra#medium`, run as `make review CHANGE=continue-after-context-warning PASS=1 REVIEWER='codex gpt-6-astra#medium'`, model `gpt-6-astra`, effort medium, sandbox `read-only` reported, session `01a1846b-5306-7c80-9325-a7f8b6da5f6c`. The worktree snapshot was `a7ad178f26cc5305f91919cdb3c282bc5a0b25c3fcb37a47767d0536a7e4da9c` before and after the pass. Counts: Critical 0, High 0, Medium 0, Low 2, each recorded in `findings.jsonl` as `fixed-unreviewed`:
+
+1. Low, process: this record's Review section and remaining gates presented pass 2 as mandatory, although governance "Review sequence" ends the review after a pass with only Low findings or none. Fixed: the section records the actual outcome, the review ended at pass 1, and the remaining gates no longer name further passes.
+2. Low, stale-citation: design.md D1 and the author self-check described `docs/fleet.md:19` as a rule about `/clear` after integration; its text says that the owner does not `/clear` a worker's session after each integration. Fixed in both places, keeping the conclusion that `docs/fleet.md` needs no change.
+
+Pass 1 reported only Low findings, so under governance "Review sequence" the review ended at pass 1: no pass 2 or pass 3 ran. Both fixes are unreviewed (governance "Low findings are fixed").
+
+Architect check of the unreviewed fixes by the coordinator (Niki): pending.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -56,6 +63,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review passes 1 and 2, and pass 3 if pass 2 reports a Medium or worse finding
+- Architect check of the unreviewed fixes by the coordinator (Niki)
 - Archive of the change as the last commit of the branch
 - Integration into dev by the coordinator (single pull request)

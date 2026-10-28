@@ -24,8 +24,9 @@ before`, and the worker bullet found the rule in `docs/agent-task-protocol.md`
 "Context size", `AGENTS.md`, the `taskelith-task-protocol` skill, the
 `taskelith-coordinator` skill (a pointer to the section), the living spec
 `agent-task-protocol`, and the hook. `docs/governance.md` does not hold it.
-`docs/fleet.md` mentions `/clear` only for the clear after integration, and
-the `taskelith-worker` skill does not state the rule; both stay unchanged.
+`docs/fleet.md` mentions `/clear` only to say that the owner does not clear a
+worker's session after each integration, and the `taskelith-worker` skill does
+not state the rule; both stay unchanged.
 
 ### D2. The worker bullet
 
