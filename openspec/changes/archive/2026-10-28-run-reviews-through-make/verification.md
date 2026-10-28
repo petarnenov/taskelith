@@ -142,6 +142,19 @@ Worker step 10 asks reviewer A to review the resolved diff and the reconciliatio
 - The Antigravity model label line is taken from the CLI's own default logs of 2026-10-24, not from a `--log-file` log of a `make review` run, and its `conversation_id` reading follows the protocol's description; the OpenCode export format is taken from one real export. Both stay unverified until a first `make review` run of each.
 - The pass 3 fix is unreviewed, because it was made after the last pass.
 
+## Archive checks
+
+Run on the tree of the archive commit, the archive of `5d319035` on merge base `7efc48d3` with `origin/dev`, on 2026-10-28, after the return under worker step 10:
+
+- `npm run openspec -- archive run-reviews-through-make --yes`: archived as `2026-10-28-run-reviews-through-make`; `review-process` 3 added (`+ 3, ~ 0, - 0, → 0`).
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: 233 passed, 14 failed; this change passes, and the 14 are the archived changes of 2026-10-24 to 2026-10-26 with open tasks and `2026-10-28-adopt-process-performance-recommendations`, none of them added by this change.
+- `git diff 7efc48d3 -- openspec/specs`: only `openspec/specs/review-process/spec.md`, 53 insertions, the three requirements of the delta.
+- The moved change has `findings.jsonl` (22 lines) and `passes.jsonl` (4 lines); `make findings ARGS="validate"`: 73 findings files, 53 pass summary files, and 9 route files valid.
+- `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:archive`: every active change archives into strictly valid specs.
+- `make record-check`: finds the archived change and fails with 3 problems, as expected without a new `make verify`: the working tree differs from the verified tree `366054143a90` in the moved change and the living spec, and the archived form recomputes the OpenSpec line as `validate --all` and the spec diff as non-empty. The generated part stays the record of `5d319035`.
+- `make verify`: not run here. The `make verify` of the archived head runs directly after the archive commit and writes the stamp that the `pre-push` hook reuses; its result is reported in the handoff, not in this tree.
+
 ## Remaining gates
 
 - The Antigravity and OpenCode allowlists and model confirmation stay unverified against their real CLIs until a first `make review` run of each.
