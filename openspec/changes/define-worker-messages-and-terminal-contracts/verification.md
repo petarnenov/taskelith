@@ -1,6 +1,6 @@
 # Verification: define-worker-messages-and-terminal-contracts
 
-Status: developed and verified by the author; review pass 1 by reviewer A done and its seven findings fixed, finding 3 by the architect's answer of 2026-10-28; review pass 2 by reviewer B done, 19 of its 20 findings fixed, H1 by the architect's amendment and M2 by the architect's answer of 2026-10-28, and L11 declined, which the architect accepted; pass 3 pending.
+Status: developed and verified by the author; review pass 1 by reviewer A done and its seven findings fixed, finding 3 by the architect's answer of 2026-10-28; review pass 2 by reviewer B done, 19 of its 20 findings fixed, H1 by the architect's amendment and M2 by the architect's answer of 2026-10-28, and L11 declined, which the architect accepted; review pass 3 by reviewer A done, its nine findings fixed unreviewed, which the architect approved and checks before integration.
 
 ## Scope and source
 
@@ -205,8 +205,33 @@ The pass 2 fixes change contracts, the agent harness port, and tests, not only r
 - The file:line citations into files the merge changed are current; `docs/g3-plan.md:187` is the row "The harness port exposes model and effort per session (ADR 0014)".
 - `make verify` on `b5dc60d6` (log `9d-verify-11-failed.log`) failed in two tests: the access rule above, and the timing test `a bound with a leading zero is read in base 10` of `test/installation-script.test.ts` (ended after 9.045 s, below its 10 s bound), which this change does not touch and which passed when run alone. After `24ad1bd3`, `make verify` on the clean tree (log `9d-verify-11.log`) passed: profile full, tree `6ac5a938dde138770fbe94c71a884b34474197da`, 3420 tests, 3367 passed, 0 failed, 53 skipped; generated part above. `g2-cancellation-races` needed no rerun.
 
+## Pass 3
+
+- Reviewer A: Codex, model `gpt-6.1-sol`, effort `medium`, sandbox `read-only`, session `01a183c1-e959-78e1-a15f-4b519f9bc165`, on `0fe9dd48` after the merge of `dev` `7442b1bb`; the worktree snapshot before and after the review was `f681b0b44f7726638b8efa685cc6d0324e4911b58a5da82bde1ed2d8602836e0`, unchanged. The route recommends effort `high`; the authorized `medium` applied (policy version 7).
+- Invocation: `make review`, which ran `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C <worktree> -` with the prompt on standard input and only `PATH`, `HOME`, `USER`, `LANG`, and `TERM` in its environment, the Codex row of the [agent task protocol](/docs/agent-task-protocol.md). Model confirmation: `make review` printed `model: gpt-6.1-sol (reported)`, `effort: medium (reported)`, and `sandbox: read-only (reported)`.
+- Result: Critical 0, High 0, Medium 6, Low 3, each claim checked against its source; none was wrong. The architect (Niki) approved all nine fixes. By the owner rule of 2026-10-28 no review confirms fixes after pass 3: all nine are `fixed-unreviewed`, and the architect checks them, commit by commit, before integration. No finding names an earlier miss: each concerns text that the merge or the pass 2 fixes wrote after pass 2.
+  1. M1, Medium, contract-drift, `061f9fca`: the merge had replaced the `info.description` of `execution.asyncapi.json` with this change's sentence behind a stray `X`; `dev`'s description is restored and this change's sentence appended.
+  2. M2, Medium, contract-drift, `2e41a487`: the same for `execution.openapi.json`, with the relay sentence appended. A three-way comparison of every field of both documents against the merge base `10fc3bbe` and both parents (`21531809`, `7442b1bb`) found no other lost field: only the two descriptions, the intended versions 0.9.0 and 0.8.0, and the intended shift of `sendWorkerCommand` messages 5 to 9 behind the rotation notice. `make contract-breaking-changes BASE=7442b1bb` still prints 110 changes for `execution.asyncapi.json` and 0 for the others, and `make contract-compatibility` reports no undeclared breaking change, so the 0.9.0 entry is unchanged.
+  3. M3, Medium, contract-drift, `edd95cbd`: `openWorkerRelay` had no rule in `apps/control-plane/src/api/access-requirements.ts`, so `ruleOf` required the owner. The architect's condition holds: its only security alternative is `workerCredential`, with no empty alternative and no operator scheme, as for `renewWorkerCredentials` and `confirmWorkerCredentials`. It gets their `none` rule, the access test of the worker-credential operations covers it, and the requirement "Worker relay connection" (406 characters) says the relay runs under the worker's own credential and checks no operator role, with the scenario "Relay under the worker credential".
+  4. M4, Medium, spec-wording, `27fffedb`: the scenario "Turn ID already seen by the port", and the `session-turn-model` scenario "Turn ID already seen", now apply only to a `conflict` that names no running turn or another one.
+  5. M5, Medium, contract-drift, `71884dcd`: the observation table of the contract page maps `turn-invalid` to `recordTurnRefused`, the turn final `refused` and the queue moving on, and `port-refused`, whose generation the host stopped, and `generation-not-running` to no function, the turn queued for the next generation; `design.md` notes that the pass 2 answer superseded the pass 1 mapping of `invalid`. The spec deltas, the session timeline, and the documents already split the reasons so.
+  6. M6, Medium, contract-drift, `3d86c521`: a reattach cursor whose `terminalId` is not the attached terminal is ignored, and output follows from the earliest retained chunk; only a cursor of the attached terminal is range-checked, closing with `invalid-frame` beyond its last sequence (`terminal.asyncapi.json`, contract page section 7, scenario "Cursor of an ended terminal"). The architect asked for a contract test that pins the rule: `a cursor of another terminal is ignored, and only the attached one is range-checked`.
+  7. L1, Low, stale-citation, `1e37b5c6`: the parenthesis "no G3 plan row names model or effort" is removed from `design.md`.
+  8. L2, Low, evidence-mismatch, `1e37b5c6`: the merge record says that the merge lost both descriptions and names their restoring commits.
+  9. L3, Low, stale-citation, `1e37b5c6` and the commit that records this pass: the pass 2 finding M3 in `findings.jsonl` and this record label the plugin `invalid` mapped to `port-refused` as superseded by `c5228fa8`.
+- Fix checks, on the working tree of `1e37b5c6`:
+
+| Command | Result |
+| --- | --- |
+| Fail-before M3: `node --experimental-strip-types --test apps/control-plane/test/access-requirements.test.ts` with only the test changed, the built package without the rule | tests 9, pass 8, fail 1: the worker-credential test, `openWorkerRelay` read `owner` |
+| Fail-before M6: `node --experimental-strip-types --test packages/contracts/test/terminal-contracts.test.ts` with the pass 2 `terminal.asyncapi.json`, after `npm run build` (log `9d-m6-fail-before.log`) | tests 12, pass 11, fail 1: `a cursor of another terminal is ignored, and only the attached one is range-checked` |
+| `npm run build`, then `node --experimental-strip-types --test packages/contracts/test/*.test.ts test/generate-contracts.test.ts packages/modules/execution/test/*.test.ts packages/adapters/nats/test/transport.test.ts apps/control-plane/test/access-requirements.test.ts` (log `9d-p3-after.log`) | 422 tests, all passed |
+| `make contract-breaking-changes BASE=7442b1bb`, then `make contract-compatibility` | 110 for `execution.asyncapi.json`, 0 for the others, `terminal.asyncapi.json` absent at the base; `Contract documents have no undeclared breaking change.` |
+| `npm run openspec -- validate --all --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | 72 passed, 0 failed; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 77 file(s); every pass summary file is valid: 57 file(s); every route file is valid: 13 file(s).` |
+
 ## Remaining gates
 
-- Independent review pass 3 by reviewer A.
+- The architect's check of the nine unreviewed pass 3 fixes before integration.
 - Archive on the branch (worker step 7).
 - Integration into dev by the coordinator (single pull request).
