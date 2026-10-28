@@ -30,8 +30,8 @@ export interface AdminIo {
   readonly ownerUid: number;
   write(line: string): void;
   // One line of standard input, read without echo on a terminal; only
-  // set-password needs it.
-  readSecret?(prompt: string): Promise<string>;
+  // set-password needs it. A cancelled input is a failure.
+  readSecret?(prompt: string): Promise<Result<string>>;
 }
 
 // Runs one administrative command and returns the exit status: 0, 1 for a
@@ -126,7 +126,8 @@ async function run(admin: Administration, command: Command, io: AdminIo): Promis
       return admin.createPrincipal(operator, loginName, invocation);
     case 'set-password': {
       if (io.readSecret === undefined) return err(failure('invalid', 'set-password reads the password from standard input'));
-      return admin.setPassword(operator, loginName, await io.readSecret(`new password for ${loginName}: `), invocation);
+      const password = await io.readSecret(`new password for ${loginName}: `);
+      return password.ok ? admin.setPassword(operator, loginName, password.value, invocation) : password;
     }
     case 'assign-project-role':
       return admin.assignProjectRole(operator, { ...target, role: command.values.role ?? '' }, invocation);

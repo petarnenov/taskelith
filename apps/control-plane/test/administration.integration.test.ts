@@ -9,7 +9,7 @@ import { Administration, adminMain, repairCommandConsumers, type AdminIo } from 
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
 import type { EnrollmentService } from '@taskelith/fleet';
-import { err, failure, parseIdentifier } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { createAccount } from '@nats-io/nkeys';
 import {
   BrokerAuthority,
@@ -334,11 +334,11 @@ test('a missing setting fails with its name only', async () => {
   assert.match(lines[0]!, /TASKELITH_POSTGRES_URL is not set/);
 });
 
-async function adminWithSecret(argv: string[], token: string, secret: string): Promise<{ status: number; output: Record<string, unknown> }> {
+async function adminWithSecret(argv: string[], token: string, secret: string | Result<string>): Promise<{ status: number; output: Record<string, unknown> }> {
   const lines: string[] = [];
   const io: AdminIo = {
     environment: { ...ENVIRONMENT, TASKELITH_OPERATOR_TOKEN: token }, platform: process.platform, ownerUid,
-    write: (line) => lines.push(line), readSecret: async () => secret,
+    write: (line) => lines.push(line), readSecret: async () => (typeof secret === 'string' ? ok(secret) : secret),
   };
   const status = await adminMain(argv, io);
   return { status, output: JSON.parse(lines.join('\n')) };
@@ -370,4 +370,10 @@ test('the owner exists from initialization, and only its credential manages prin
   const [stored] = await rows(database, "SELECT password_hash FROM principals WHERE login_name = 'bob'") as Array<{ password_hash: string }>;
   assert.match(stored?.password_hash ?? '', /^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);
   assert.doesNotMatch(JSON.stringify([set.output, weak.output, audit]), new RegExp(password));
+  const state = () => Promise.all(['SELECT password_hash FROM principals', 'SELECT kind FROM access_audit_events', 'SELECT * FROM browser_sessions']
+    .map((query) => rows(database, query)));
+  const before = await state();
+  const cancel = err(failure('invalid', 'the input was cancelled', { reason: 'cancelled' }));
+  const cancelled = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, cancel);
+  assert.deepEqual([cancelled.status, await state()], [1, before], 'a cancelled set-password changes nothing');
 });
