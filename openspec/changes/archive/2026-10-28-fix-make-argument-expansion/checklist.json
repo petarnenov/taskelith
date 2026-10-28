@@ -1,0 +1,104 @@
+{
+  "change": "fix-make-argument-expansion",
+  "generatedAt": "2026-10-28T07:20:32.121Z",
+  "devCommit": "f3a53f172dc265d5e710105df3f5dbe5be99a24a",
+  "query": {
+    "capabilities": [
+      "development-environment",
+      "integration-flow",
+      "agent-task-protocol"
+    ],
+    "files": [
+      "Makefile",
+      "scripts/**",
+      "test/*record*",
+      "test/integrate*"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 26
+      },
+      {
+        "category": "contract-drift",
+        "count": 22
+      },
+      {
+        "category": "redaction",
+        "count": 6
+      },
+      {
+        "category": "concurrency-race",
+        "count": 4
+      },
+      {
+        "category": "naming",
+        "count": 4
+      },
+      {
+        "category": "docs",
+        "count": 3
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 405,
+        "inChecklist": 311
+      },
+      "mediumOrWorse": {
+        "findings": 176,
+        "inChecklist": 141
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 75
+      },
+      {
+        "category": "docs",
+        "count": 50
+      },
+      {
+        "category": "spec-wording",
+        "count": 41
+      },
+      {
+        "category": "stale-citation",
+        "count": 31
+      },
+      {
+        "category": "contract-drift",
+        "count": 16
+      },
+      {
+        "category": "process",
+        "count": 14
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 235,
+        "inChecklist": 233
+      },
+      "mediumOrWorse": {
+        "findings": 37,
+        "inChecklist": 37
+      }
+    }
+  }
+}

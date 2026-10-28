@@ -162,7 +162,7 @@ The coordinator SHALL merge `dev` into a handed-off branch only on a local integ
 - **THEN** nothing is pushed, and the merge stays only in the local integration worktree
 
 ### Requirement: Shared integration command
-The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=<body>`, through `scripts/integrate.sh`, passing the arguments as typed, which integrates one archived branch: it checks the main clone, merges `origin/dev` in an integration worktree, requires a clean tree and a full stamp of the merged tree, running the full `make verify` when there is none, pushes, merges the pull request, cleans up, and prints `LANDED <branch> <url> <head>`.
+The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=<body>`, through `scripts/integrate.sh`, passing the arguments as typed under GNU Make 3.81 and 4.4, which integrates one archived branch: it checks the main clone, merges `origin/dev` in an integration worktree, requires a clean tree and a full stamp of the merged tree, running the full `make verify` when there is none, pushes, merges the pull request, cleans up, and prints `LANDED <branch> <url> <head>`.
 
 #### Scenario: Clean integration
 - **WHEN** the coordinator runs `make integrate` for an archived branch that merges cleanly and passes
@@ -192,8 +192,12 @@ The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=
 - **WHEN** the main clone is not on a clean `dev` that `origin/dev` fast-forwards
 - **THEN** the command exits with status 8 before it changes anything on the remote
 
+#### Scenario: Arguments as typed under GNU Make 3.81 and 4.4
+- **WHEN** `BRANCH`, `TITLE`, `BODY`, or `RESUME` contains `$(shell ...)`, `$$`, or backticks and the command runs under GNU Make 3.81 or 4.4
+- **THEN** make runs none of it and the script receives every argument byte for byte
+
 ### Requirement: Generated verification record
-`make record CHANGE=<change> LOG=<log>` SHALL write the mechanical part of the change's `verification.md` between generated markers: the `make verify` result, tree, test counts, and coverage of the log's last complete run, the strict OpenSpec and findings validations, the spec diff stat, and the passes of `passes.jsonl`. `make record-check` SHALL fail when that part differs from reality or from the line `make record` stored with the stamp; a worker SHALL run it before pass 1.
+`make record CHANGE=<change> LOG=<log>`, taking both as typed, SHALL write the mechanical part of CHANGE's `verification.md` between generated markers: the `make verify` result, tree, test counts, and coverage of the log's last complete run, the strict OpenSpec and findings validations, the spec diff stat, and the passes of `passes.jsonl`. `make record-check` SHALL fail when that part differs from reality or from the line `make record` stored with the stamp; a worker SHALL run it before pass 1.
 
 #### Scenario: Record refreshed
 - **WHEN** a worker runs `make record` after a passing `make verify`
@@ -206,6 +210,10 @@ The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=
 #### Scenario: Edited result
 - **WHEN** a recorded test count or coverage figure differs from what `make record` read from the log
 - **THEN** `make record-check` fails
+
+#### Scenario: Arguments as typed under GNU Make 3.81 and 4.4
+- **WHEN** `CHANGE` or `LOG` contains `$(shell ...)`, `$$`, or backticks and `make record` or `make record-check` runs under GNU Make 3.81 or 4.4
+- **THEN** make runs none of it and the script receives every argument byte for byte
 
 ### Requirement: Thin session context
 A coordinator SHALL offload polling to background scripts or notifications and keep briefs in files; a worker SHALL do task work in subagents and keep its session across tasks, with no owner `/clear` after each integration. The tracked `.claude/settings.json` SHALL run a hook that warns, without blocking and without printing transcript content, when the estimated context nears 150,000 tokens.
