@@ -24,7 +24,8 @@ Status: developed and verified by the author; review pass 1 by reviewer A done a
 - `cd436617` `docs: drop the route record before routing the schema table test fix` and `22e7aada` `docs: route the define worker messages and terminal contracts change after the schema table test fix` (`route.json`, unedited), because the fix changed the routed diff (worker step 4). The fourth `make verify` run checked the tree of `22e7aada`, `a4907d444c87716da32f1688d7d8d84a67446f9b`.
 - `b7a90da5` `docs: record the verification of the session binding of the define worker messages and terminal contracts change` (this record), the head that review pass 1 reviewed.
 - `a03dee0c` `chore(contracts): fix the review pass 1 findings of the worker messages and terminal contracts` (Independent review, Pass 1). `route.json` stays as routed, because the review has started.
-- The commits after it record pass 1 and its verification.
+- `837d51a5` `docs: record review pass 1 of the define worker messages and terminal contracts change` (findings, passes, this section, tasks); the fifth `make verify` run checked its tree, `e30d90c6e351eb006e592996e1d0b00b6e475d9a`.
+- The commit after it records that run.
 
 ## Environment
 
@@ -80,11 +81,15 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js v24.22.1 from `.nvmrc` 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a4907d444c87716da32f1688d7d8d84a67446f9b`; tests 3217, pass 3164, fail 0, skipped 53; all files 99.45% lines, 92.79% branches, 99.03% functions.
+- `make verify`: passed, profile full, tree `e30d90c6e351eb006e592996e1d0b00b6e475d9a`; tests 3220, pass 3167, fail 0, skipped 53; all files 99.45% lines, 92.80% branches, 99.00% functions.
 - `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`: passed, `Change 'define-worker-messages-and-terminal-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).`.
 - Spec diff against the merge base `10fc3bbe6b7c` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a182e0-3947-77e3-851c-7879eb0bfb88` | 0 | 3 | 4 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -113,6 +118,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | `npm run openspec -- validate define-worker-messages-and-terminal-contracts --strict`; `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | Valid; every checked link conforms; every comment is within the rule; every active change archives into strictly valid specs; `tsc` exit 0 |
 | Body lengths of the changed and new `execution-wire-contracts` requirements, in characters | Delegation result response command 438, SCM credential adoption confirmation 471, Session observation recovery epoch 428, Classified permission request 333, Terminal start failure 365 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 72 file(s); every pass summary file is valid: 52 file(s); every route file is valid: 8 file(s).` |
+| `make verify` on `837d51a5`, clean tree (log `wmt-verify-5.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `e30d90c6e351eb006e592996e1d0b00b6e475d9a`, stamp written; generated part above |
 
 The fixes change contracts, not only records, and pass 1 found High findings, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
