@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  asyncapiBreakingChanges,
   asyncapiContractChanges,
   BREAKING_CHANGES_PATH,
   type BreakingChangeDeclaration,
@@ -11,6 +12,7 @@ import {
   formatDeclarations,
   listedDeclarations,
   oasdiffBreakingChanges,
+  parseMode,
   readDeclarations,
   reservedParserKeys,
   sortedChanges,
@@ -243,4 +245,20 @@ test('the listing prints the file format with the head version and an empty reas
     `${FILE}: /declarations/0/reason must match pattern "\\S"`,
     `${FILE}: /declarations/1/reason must match pattern "\\S"`,
   ]);
+});
+
+test('the check takes --print, optionally with --base, and nothing else', () => {
+  assert.deepEqual(parseMode([]), { print: false, base: undefined });
+  assert.deepEqual(parseMode(['--print']), { print: true, base: undefined });
+  assert.deepEqual(parseMode(['--print', '--base', '9196804b']), { print: true, base: '9196804b' });
+  for (const args of [['--base', '9196804b'], ['--write'], ['extra'], ['--print', '--base']]) assert.equal(parseMode(args), undefined, args.join(' '));
+});
+
+test('AsyncAPI breaking changes are computed in process from two documents', async () => {
+  const document = (channels: Record<string, unknown>) => JSON.stringify({ asyncapi: '3.0.0', info: { title: 'Events', version: '0.1.0' }, channels });
+  const base = document({ events: { address: 'events' }, audit: { address: 'audit' } });
+
+  assert.deepEqual(await asyncapiBreakingChanges(base, base), []);
+  assert.deepEqual(await asyncapiBreakingChanges(base, document({ events: { address: 'events' } })), ['remove /channels/audit']);
+  await assert.rejects(asyncapiBreakingChanges('{}', base), /base is not a valid AsyncAPI document/);
 });
