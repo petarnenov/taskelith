@@ -136,7 +136,7 @@ test('enrollment creates the journal before the identity, with private modes', (
   assert.equal(statSync(paths.credentials).mode & 0o777, 0o700);
   assert.equal(existsSync(`${paths.journal}-shm`), false);
   assert.deepEqual(JSON.parse(readFileSync(paths.identity, 'utf8')), {
-    format: 1,
+    format: 2,
     installationId: BINDING.installationId,
     workerId: BINDING.workerId,
     journalId: BINDING.journalId,
@@ -361,7 +361,7 @@ test('a journal that is not the one the identity names fails startup', () => {
     writeFileSync(paths.identity, JSON.stringify({ ...stored, ...invalid }));
     assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'corrupt');
   }
-  writeFileSync(paths.identity, JSON.stringify({ format: 2 }));
+  writeFileSync(paths.identity, JSON.stringify({ format: 3 }));
   assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'newer-format');
   writeFileSync(paths.identity, '{');
   assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'corrupt');

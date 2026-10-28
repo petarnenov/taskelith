@@ -283,10 +283,12 @@ test('every predicate reaches the revocation and the cancellation through the wr
   assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, cases.length);
 });
 
-test('a predecessor credential within its grace window authenticates but launches nothing', async () => {
+test('a predecessor credential before its confirmation authenticates but launches nothing', async () => {
   const { request } = await placed();
   const next = { ...WORKER.credentials.current, generation: 2, controlPlaneHash: 'cp-next' as never, brokerUserKey: 'U-next' };
-  value(await fleet.rotate(WORKER.workerId, 1, next, '2100-01-01T00:00:00.000Z' as never, WORKER.enrolledAt));
+  const order = { requestedAt: WORKER.enrolledAt, deadline: '2100-01-01T00:00:00.000Z' as never, actor: 'ops', reason: 'test' };
+  value(await fleet.requestRotation(WORKER.workerId, order));
+  value(await fleet.renew(WORKER.workerId, next, 'jwt', WORKER.enrolledAt));
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized');
   const current = { ...request, operationId: id('OperationId', 'operation-2') as never };
   assert.equal(kindOf(await authority.authorize({ ...PRINCIPAL, generation: 2 }, current)), 'granted');

@@ -67,7 +67,7 @@ async function bytes(request: IncomingMessage): Promise<Buffer> {
 }
 
 function publisher(timeoutMilliseconds = 2000): HttpEvidencePublisher {
-  return new HttpEvidencePublisher({ installationCa: PLAIN_HTTP_CA, baseUrl, credential: CREDENTIAL, timeoutMilliseconds });
+  return new HttpEvidencePublisher({ installationCa: PLAIN_HTTP_CA, baseUrl, bearer: () => CREDENTIAL, timeoutMilliseconds });
 }
 
 test('a publication posts the record and the content as two parts with the bearer', async () => {

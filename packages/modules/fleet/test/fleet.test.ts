@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { InMemoryOperatorCredentials, OperatorCredentialService, type SecretHash, type Secrets } from '@taskelith/access';
 import { err, failure, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import type { WorkerId } from '@taskelith/execution';
 import {
   EnrollmentService,
   FLEET_LIMITS,
@@ -90,6 +91,11 @@ class RecordingBroker implements BrokerCredentials {
     const userKey = `U-${workerId}-${generation}`;
     this.issued.push(userKey);
     return ok({ creds: `creds-${userKey}`, userKey, issuedAt: value(parseInstant('2026-10-25T08:00:00.000Z')) });
+  }
+
+  async sign(_installation: unknown, workerId: string, generation: number, userKey: string) {
+    if (!userKey.startsWith('U')) return err(failure('invalid', 'not a user key'));
+    return ok({ jwt: `jwt-${workerId}-${generation}-${userKey}`, issuedAt: value(parseInstant('2026-10-25T08:00:00.000Z')) });
   }
 
   async publishRevocations(revocations: readonly BrokerRevocation[]) {
@@ -210,64 +216,153 @@ test('enrollment refuses an unknown or expired token, another host, no common ve
   assert.equal(reason(await service.enroll(expiring, request('journal-3'))), 'token-invalid');
 });
 
-test('rotation keeps the old generation for the grace window, then revokes its broker user', async () => {
-  const { clock, broker, service } = enrollment();
-  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
-  const rotated = value(await service.rotate(enrolled.workerId));
+const OPERATOR = { actor: 'ops@example.test', reason: 'scheduled rotation' };
 
-  assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [2, true]);
-  assert.deepEqual(value(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)).generation, 2);
-  assert.deepEqual(value(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1);
-  assert.deepEqual(value(await service.expireGraceWindows()), 0);
-  clock.advance(FLEET_LIMITS.rotationGraceMilliseconds);
-  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).details.reason, 'worker-not-authorized');
-  assert.deepEqual(value(await service.expireGraceWindows()), 1);
+// The worker's side of a renewal: only the key and the secret's hash leave it.
+function material(generation: number, secret = `worker-next-${generation}`, userKey = `U-own-${generation}`) {
+  return { credentialGeneration: generation, brokerUserPublicKey: userKey, controlPlaneSecretSha256: `hash:${secret}` as SecretHash };
+}
+
+async function enrolledWorker() {
+  const fixture = enrollment();
+  const enrolled = value(await fixture.service.enroll(value(await fixture.service.issueToken({})), request()));
+  const principal = value(await fixture.service.authenticateWorkerBearer(enrolled.credentials.controlPlane));
+  return { ...fixture, enrolled, principal };
+}
+
+// Requests, renews, and confirms one generation after the current one.
+async function rotateFully(service: EnrollmentService, workerId: WorkerId, bearer: string, generation: number) {
+  value(await service.requestRotation(workerId, OPERATOR));
+  const principal = value(await service.authenticateWorkerBearer(bearer));
+  value(await service.renew(principal, material(generation)));
+  const next = value(await service.authenticateWorkerBearer(`worker-next-${generation}`));
+  return value(await service.confirm(next, generation));
+}
+
+test('a rotation request names the next generation and its deadline, and prints no secret', async () => {
+  const { clock, service, enrolled } = await enrolledWorker();
+  const requested = value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  const deadline = new Date(Date.parse(clock.now()) + FLEET_LIMITS.rotationHardCapMilliseconds).toISOString();
+  assert.deepEqual(requested, { workerId: enrolled.workerId, credentialGeneration: 2, deadline });
+  clock.advance(1000);
+  assert.deepEqual(value(await service.requestRotation(enrolled.workerId, OPERATOR)), requested, 'an open request is answered unchanged');
+  assert.equal(failed(await service.requestRotation(enrolled.workerId, { actor: '', reason: 'x' })).code, 'invalid');
+  assert.equal(value(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'N stays valid');
+});
+
+test('a renewal without an open request for the next generation is rotation-not-requested', async () => {
+  const { service, enrolled, principal } = await enrolledWorker();
+  const unrequested = failed(await service.renew(principal, material(2)));
+  assert.deepEqual([unrequested.code, unrequested.details.reason], ['conflict', 'rotation-not-requested']);
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  const skipped = failed(await service.renew(principal, material(3)));
+  assert.deepEqual([skipped.code, skipped.details.reason], ['conflict', 'rotation-not-requested'], 'only N+1');
+});
+
+test('a repeated renewal with the same material answers the same JWT; other material is renewal-mismatch', async () => {
+  const { broker, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  const renewed = value(await service.renew(principal, material(2)));
+  assert.equal(renewed.brokerUserJwt, `jwt-${enrolled.workerId}-2-U-own-2`);
+  broker.sign = async () => err(failure('internal', 'a replay must not sign again'));
+  assert.deepEqual(value(await service.renew(principal, material(2))), renewed);
+  const other = failed(await service.renew(principal, material(2, 'worker-other', 'U-other')));
+  assert.deepEqual([other.code, other.details.reason], ['conflict', 'renewal-mismatch']);
+  assert.equal(value(await service.authenticateWorkerBearer('worker-next-2')).generation, 2);
+  assert.equal(value(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'N kept until confirm');
+});
+
+test('a key that is not an NKey user key is refused before anything is recorded', async () => {
+  const { service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  assert.equal(failed(await service.renew(principal, material(2, 'worker-next-2', 'N-not-a-user'))).code, 'invalid');
+  assert.equal(failed(await service.authenticateWorkerBearer('worker-next-2')).code, 'forbidden');
+});
+
+test('the confirmation drops the predecessor at once and publishes its revocation', async () => {
+  const { broker, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  value(await service.renew(principal, material(2)));
+  const mismatch = failed(await service.confirm(principal, 2));
+  assert.deepEqual([mismatch.code, mismatch.details.reason], ['conflict', 'confirmation-mismatch'], 'confirmed with N+1 only');
+  const next = value(await service.authenticateWorkerBearer('worker-next-2'));
+  assert.deepEqual(value(await service.confirm(next, 2)), { credentialGeneration: 2, revocationsPublished: true });
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.deepEqual(broker.revoked, ['U-worker-1-1']);
+  assert.deepEqual(value(await service.confirm(next, 2)), { credentialGeneration: 2, revocationsPublished: true }, 'a replay');
+});
 
-  value(await service.rotate(enrolled.workerId));
-  value(await service.rotate(enrolled.workerId));
-  assert.deepEqual(broker.revoked, ['U-worker-1-1', 'U-worker-1-2'], 'a second rotation drops the older predecessor');
+test('at the deadline an unconfirmed renewal keeps N+1 and drops N', async () => {
+  const { clock, broker, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  value(await service.renew(principal, material(2)));
+  assert.deepEqual(value(await service.expireGraceWindows()), 0);
+  clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds);
+  assert.deepEqual(value(await service.expireGraceWindows()), 1);
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.equal(value(await service.authenticateWorkerBearer('worker-next-2')).generation, 2);
+  assert.deepEqual(broker.revoked, ['U-worker-1-1']);
+});
+
+test('at the deadline a rotation that was never renewed revokes the worker', async () => {
+  const { clock, broker, consumers, service, enrolled } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds - 1);
+  assert.deepEqual(value(await service.expireGraceWindows()), 0);
+  clock.advance(1);
+  assert.deepEqual(value(await service.expireGraceWindows()), 1);
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.deepEqual(broker.revoked, ['U-worker-1-1']);
+  assert.deepEqual(consumers.removed, [enrolled.workerId]);
+});
+
+test('a revoked worker gets no rotation, and a consumer the sweep cannot remove is reported', async () => {
+  const { clock, consumers, service, enrolled } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  clock.advance(FLEET_LIMITS.rotationHardCapMilliseconds);
+  consumers.down = true;
+  const kept = failed(await service.expireGraceWindows());
+  assert.deepEqual([kept.code, kept.details.workers], ['unavailable', enrolled.workerId]);
+  assert.equal(failed(await service.requestRotation(enrolled.workerId, OPERATOR)).details.reason, 'worker-not-authorized');
+  assert.deepEqual(value(await service.expireGraceWindows()), 0, 'the revocation stays committed');
 });
 
 test('a revocation the broker missed stays recorded and is published by the next sweep', async () => {
-  const { broker, service } = enrollment();
-  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
-  value(await service.rotate(enrolled.workerId));
-  value(await service.rotate(enrolled.workerId));
+  const { broker, service, enrolled } = await enrolledWorker();
+  await rotateFully(service, enrolled.workerId, enrolled.credentials.controlPlane, 2);
   broker.down = true;
-  const partial = value(await service.rotate(enrolled.workerId));
-  assert.deepEqual([partial.credentialGeneration, partial.revocationsPublished], [4, false], 'a committed rotation keeps its secrets');
+  const partial = await rotateFully(service, enrolled.workerId, 'worker-next-2', 3);
+  assert.deepEqual([partial.credentialGeneration, partial.revocationsPublished], [3, false], 'a committed confirmation stays');
   assert.equal(failed(await service.revoke(enrolled.workerId)).code, 'unavailable');
-  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
-  assert.equal(failed(await service.rotate(enrolled.workerId)).details.reason, 'worker-not-authorized', 'a revoked worker gets no new generation');
+  assert.equal(failed(await service.authenticateWorkerBearer('worker-next-3')).code, 'forbidden');
+  assert.equal(failed(await service.requestRotation(enrolled.workerId, OPERATOR)).details.reason, 'worker-not-authorized');
 
   broker.down = false;
   assert.deepEqual(value(await service.expireGraceWindows()), 0);
-  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2', 'U-worker-1-3', 'U-worker-1-4']);
+  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-own-2', 'U-own-3'].sort());
 });
 
-test('a publication that throws after a committed rotation still returns the new secrets', async () => {
-  const { broker, service } = enrollment();
-  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
-  value(await service.rotate(enrolled.workerId));
+test('a publication that throws after a committed confirmation still answers it', async () => {
+  const { broker, service, enrolled } = await enrolledWorker();
   broker.publishRevocations = async () => {
     throw new Error('statement timeout');
   };
-  const rotated = value(await service.rotate(enrolled.workerId));
-  assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [3, false]);
-  assert.equal(value(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)).generation, 3);
+  const confirmed = await rotateFully(service, enrolled.workerId, enrolled.credentials.controlPlane, 2);
+  assert.deepEqual(confirmed, { credentialGeneration: 2, revocationsPublished: false });
+  assert.equal(value(await service.authenticateWorkerBearer('worker-next-2')).generation, 2);
 });
 
 test('revocation denies every credential of the worker at once', async () => {
-  const { broker, consumers, service } = enrollment();
-  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
-  value(await service.rotate(enrolled.workerId));
+  const { broker, consumers, service, enrolled, principal } = await enrolledWorker();
+  value(await service.requestRotation(enrolled.workerId, OPERATOR));
+  value(await service.renew(principal, material(2)));
   assert.deepEqual(value(await service.revoke(enrolled.workerId)), { commandConsumerRemoved: true });
   assert.deepEqual(consumers.removed, [enrolled.workerId], 'its command consumer is removed');
 
-  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
+  assert.deepEqual(broker.revoked.sort(), ['U-own-2', 'U-worker-1-1']);
   assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
-  assert.equal(failed(await service.rotate(enrolled.workerId)).code, 'forbidden');
+  assert.equal(failed(await service.authenticateWorkerBearer('worker-next-2')).code, 'forbidden');
+  assert.equal(failed(await service.requestRotation(enrolled.workerId, OPERATOR)).code, 'forbidden');
   const unknown = value(parseWorkerId('worker-9'));
   assert.equal(failed(await service.revoke(unknown)).code, 'not-found');
   assert.deepEqual(consumers.removed, [enrolled.workerId], 'an unknown worker removes nothing');
@@ -286,7 +381,7 @@ test('a consumer the broker cannot remove leaves the worker revoked', async () =
 });
 
 test('a worker bearer names its own worker and generation, and nothing else authenticates', async () => {
-  const { clock, registry, service } = enrollment();
+  const { registry, service } = enrollment();
   const first = value(await service.enroll(value(await service.issueToken({})), request()));
   const second = value(await service.enroll(value(await service.issueToken({})), request('journal-2')));
 
@@ -296,11 +391,10 @@ test('a worker bearer names its own worker and generation, and nothing else auth
     assert.equal(failed(await service.authenticateWorkerBearer(secret)).details.reason, 'worker-not-authorized', secret);
   }
   const unknown = failed(await service.authenticateWorkerBearer('worker-99'));
-  const rotated = value(await service.rotate(first.workerId));
-  clock.advance(FLEET_LIMITS.rotationGraceMilliseconds);
-  assert.deepEqual(failed(await service.authenticateWorkerBearer(first.credentials.controlPlane)), unknown, 'past the grace window');
+  await rotateFully(service, first.workerId, first.credentials.controlPlane, 2);
+  assert.deepEqual(failed(await service.authenticateWorkerBearer(first.credentials.controlPlane)), unknown, 'confirmed away');
   value(await service.revoke(first.workerId));
-  assert.deepEqual(failed(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)), unknown, 'revoked, current generation');
+  assert.deepEqual(failed(await service.authenticateWorkerBearer('worker-next-2')), unknown, 'revoked, current generation');
   registry.workerByCredentialHash = async () => err(failure('unavailable', 'the store is down'));
   assert.equal(failed(await service.authenticateWorkerBearer(second.credentials.controlPlane)).code, 'unavailable');
 });

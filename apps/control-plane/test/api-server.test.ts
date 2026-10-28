@@ -239,7 +239,7 @@ test('the API authenticates a worker bearer through enrollment', async () => {
   const api = new ControlPlaneApi({
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
-    enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
+    enrollment: { enroll: undefined as never, renew: undefined as never, confirm: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
   assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
   assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);

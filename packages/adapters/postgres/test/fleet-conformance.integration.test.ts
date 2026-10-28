@@ -10,6 +10,7 @@ import {
   fleetWorker,
   installationIdentity,
   type CredentialGeneration,
+  type EnrolledWorker,
 } from '@taskelith/fleet';
 import {
   CommittingFleetRegistry,
@@ -19,7 +20,7 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
-import { ok, parseInstant } from '@taskelith/kernel';
+import { ok, parseInstant, type Instant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
 import pg from 'pg';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -143,6 +144,14 @@ function nextGeneration(worker: ReturnType<typeof fleetWorker>): CredentialGener
   };
 }
 
+// The registry's two steps that make `next` current and keep generation 1
+// as the predecessor until `deadline`.
+async function renewed(registry: CommittingFleetRegistry, worker: EnrolledWorker, next: CredentialGeneration, deadline: Instant) {
+  const order = { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' };
+  value(await registry.requestRotation(worker.workerId, order));
+  value(await registry.renew(worker.workerId, next, 'jwt', worker.enrolledAt));
+}
+
 const predecessorColumn = (workerId: string) =>
   query<{ enrollment: string; predecessor_valid_until: Date | null }>(
     url,
@@ -156,7 +165,7 @@ test('a due row whose record holds no predecessor is cleared, and the sweep goes
   const [skipped, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
   await enrollAll(registry, skipped, rotated);
   const next = nextGeneration(rotated);
-  value(await registry.rotate(rotated.workerId, 1, next, rotated.enrolledAt, rotated.enrolledAt));
+  await renewed(registry, rotated, next, rotated.enrolledAt);
   await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
   const [before] = await predecessorColumn('w1');
 
@@ -175,7 +184,7 @@ test('a due row without an enrollment record is not swept', { concurrency: false
   const registry = new CommittingFleetRegistry(database);
   const [bare, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
   await enrollAll(registry, bare, rotated);
-  value(await registry.rotate(rotated.workerId, 1, nextGeneration(rotated), rotated.enrolledAt, rotated.enrolledAt));
+  await renewed(registry, rotated, nextGeneration(rotated), rotated.enrolledAt);
   await query(url, "UPDATE workers SET enrollment = NULL, predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
   const before = await predecessorColumn('w1');
 
@@ -190,7 +199,7 @@ test('a due row whose predecessor is still in its grace window expires nothing y
   const worker = fleetWorker('w1', 'j1');
   await enrollAll(registry, worker);
   const graceEnds = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
-  value(await registry.rotate(worker.workerId, 1, nextGeneration(worker), graceEnds, worker.enrolledAt));
+  await renewed(registry, worker, nextGeneration(worker), graceEnds);
   await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [worker.enrolledAt]);
 
   assert.equal(value(await registry.expirePredecessors(worker.enrolledAt)), 0, 'the record, not the column, decides');

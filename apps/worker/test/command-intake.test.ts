@@ -367,6 +367,32 @@ test('an inventory request is answered with a fresh snapshot in parts', async ()
   assert.equal(failed(await deliver(request(WORKER))).code, 'unavailable');
 });
 
+test('a rotation notice for this worker reaches the driver, whose failure keeps it unacknowledged', async () => {
+  const notice = (workerId: string) => ({
+    messageType: 'worker.credentials.rotation-requested', schemaVersion: 1, protocolVersion: 1, issuedAt: T0, workerId,
+    credentialGeneration: 2, deadline: '2026-11-01T09:00:00.000Z',
+  });
+  assertSchema('CredentialRotationRequested', notice(WORKER));
+  intake = newIntake(CAPACITY);
+  assert.deepEqual(await deliver(notice(WORKER)), ok(undefined), 'without a driver it is acknowledged and ignored');
+  const requested: number[] = [];
+  let answer: Result<void> = ok(undefined);
+  intake = new CommandIntake({
+    journal: root.journal, capacity: CAPACITY, pressure, selfCheckFailed: false, publish: broker.publish, observationSubject: SUBJECT,
+    newReportId: () => 'report-1', now: () => T0, journalFault: () => root.journal.fault,
+    onRotationRequested: (received) => {
+      requested.push(received.credentialGeneration);
+      return answer;
+    },
+  });
+  value(await deliver(notice('worker-2')));
+  value(await deliver(notice(WORKER)));
+  answer = err(failure('internal', 'the pending file could not be written'));
+  assert.equal(failed(await deliver(notice(WORKER))).code, 'internal');
+  assert.deepEqual(requested, [2, 2], 'another worker\'s notice is ignored');
+  assert.equal(broker.published.length, 0);
+});
+
 // W2 for the first intent, as 20c's launches will journal it.
 function beginLaunch(): LaunchRequest {
   const { assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = value(root.journal.snapshot()).intents[0]!;
