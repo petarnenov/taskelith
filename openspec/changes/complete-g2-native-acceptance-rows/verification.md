@@ -10,8 +10,9 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 - `0caf2b47` `test: run the G2 scenarios in the privileged Linux cgroup runner` (shared Linux launch helpers, runner, target, guard, and cancel signal; the fail-before runs are on this commit).
 - `a20ebb2e` `chore: export the worker's Linux launch host`.
 - `767b832c` `test: launch the G2 scenario workers through the Linux cgroup host`.
-- `c8e624d6` `test: run the G2 races and partitions in native acceptance on Linux` (the evidence runs are on this commit).
+- `c8e624d6` `test: run the G2 races and partitions in native acceptance on Linux` (the first evidence runs, superseded, are on this commit).
 - `09a62b39` `docs: record the Linux x86_64 rows of G3 item 43` and the commit after it (links, this record) change no input of the runs.
+- Review pass 1 fixes: `de099e67`, `f4044cd0`, `e6229c44`, `75aa2b99`; review pass 2 fixes: `c708b307`, `0783d040`, `16b937a8`, `bcee61d3` (the evidence runs are on `bcee61d3`), and the commit that records them.
 
 ## Environment
 
@@ -35,14 +36,16 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 
 ## Native acceptance
 
-On `c8e624d6`, `TASKELITH_TEST_SEED=<seed> make native-acceptance ENTRIES=linux RESULTS=<scratch>/results-<seed>.jsonl`, one run after the other:
+`TASKELITH_TEST_SEED=<seed> make native-acceptance ENTRIES=linux RESULTS=<scratch>/results-<seed>.jsonl`, one run after the other, on two commits:
 
-| Seed | Local time | Exit | Last line | Records |
-| --- | --- | --- | --- | --- |
-| `20261026` | 2026-10-28 02:17:35 to 02:24:56 | 0 | `every proof passed` | 61, all `passed`, all with an acceptance context: 12 proofs and 49 own records |
-| `7` | 02:24:56 to 02:32:16 | 0 | `every proof passed` | 61, the same split |
+| Commit | Seed | Local time | Exit | Last line | Records |
+| --- | --- | --- | --- | --- | --- |
+| `c8e624d6` (superseded) | `20261026` | 2026-10-28 02:17:35 to 02:24:56 | 0 | `every proof passed` | 61, all `passed`, all with an acceptance context: 12 proofs and 49 own records |
+| `c8e624d6` (superseded) | `7` | 02:24:56 to 02:32:16 | 0 | `every proof passed` | 61, the same split |
+| `bcee61d3` | `20261026` | 03:02:34 to 03:08:48 | 0 | `every proof passed` | 61, the same split |
+| `bcee61d3` | `7` | 03:08:48 to 03:14:16 | 0 | `every proof passed` | 61, the same split |
 
-Every record names commit `c8e624d606f93c6c69b033cec92e158dcadbea63`. [results.jsonl](results.jsonl) is the two files in that order (122 lines). New proofs: `acceptance-cancellation-races` tests 12, pass 11, skipped 1 (race g), fail 0, in both runs (lines 54, 115), with 11 scenario records each (lines 43 to 53, 104 to 114); `acceptance-partition` tests 6, pass 6, fail 0 (lines 61, 122), with 6 scenario records each (lines 55 to 60, 116 to 121). Races c, e, and a granted round of f ended their process by `SIGKILL` in both runs (lines 45, 48, 50, 106, 109, 111). The unchanged proofs passed as before: crash windows 28 of 28, duplicate delivery 1 of 1, privileged cgroup tests 17 of 17, journal suites 101 of 103 with 2 skipped. The rows: [acceptance.md](acceptance.md).
+The `bcee61d3` runs, after the fixes of review passes 1 and 2, are the evidence: every record names commit `bcee61d3c73c7a537c9ff4f8ee3fe7243851b532`, and [results.jsonl](results.jsonl) is their two files in that order (122 lines). The `c8e624d6` runs preceded the fixes; they are not kept in the change, and their records differ from these only in the order of the crash-window records within each run and in the scenario details that seeds and timing vary. The line numbers below hold for both. New proofs: `acceptance-cancellation-races` tests 12, pass 11, skipped 1 (race g), fail 0, in both runs (lines 54, 115), with 11 scenario records each (lines 43 to 53, 104 to 114); `acceptance-partition` tests 6, pass 6, fail 0 (lines 61, 122), with 6 scenario records each (lines 55 to 60, 116 to 121). Races c, e, and a granted round of f ended their process by `SIGKILL` in both runs (lines 45, 48, 50, 106, 109, 111). The unchanged proofs passed as before: crash windows 28 of 28, duplicate delivery 1 of 1, privileged cgroup tests 17 of 17, journal suites 101 of 103 with 2 skipped. The rows: [acceptance.md](acceptance.md).
 
 ## Hosted arm64 runner
 
@@ -54,7 +57,7 @@ The iMac's Docker Desktop gives no host network outside its virtual machine, whi
 
 ## Checks
 
-- `npm run openspec -- validate complete-g2-native-acceptance-rows --strict`: valid. Spec bodies: 409, 457, and 256 characters.
+- `npm run openspec -- validate complete-g2-native-acceptance-rows --strict`: valid. Spec bodies: 409, 435 (457 before review pass 2), and 256 characters.
 - `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid.
 - `make verify` on `09a62b39` failed only in `npm run verify:links`: the docs linked the active change's `acceptance.md`. The links became plain mentions, to be linked at the archive (task 5.1).
 - `make verify` on that working tree, the commit after `09a62b39`: exit 0; tests 2363, pass 2316, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.40 % branches, 98.95 % functions; comments within the length rule; OpenSpec 70 passed; every checked link conforms.
@@ -73,7 +76,36 @@ Checks after the fixes:
 - `make verify-linux-crash-windows`: exit 0, tests 29, pass 29, fail 0. `make verify-linux-crash-windows PATTERN=redelivered`: exit 0, tests 1, pass 1.
 - `make verify-linux-g2-scenarios`: exit 0, tests 18, pass 17, fail 0, skipped 1 (race g); seeds races `984716667`, partitions `127468814`, stale generations `392610103`.
 - `make verify`: exit 0; tests 2367, pass 2320, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.39 % branches, 98.95 % functions; OpenSpec 70 passed; every checked link conforms.
-- The native acceptance evidence stays that of `c8e624d6`. The fixes change the runner's argument form, which both runs used only with `=` options and the default or `FILES` files, and tighten an assertion: in both runs races c and e recorded `exited by SIGKILL` (lines 45, 48; 106, 109), and the stricter check covers race c after the start (seed `20261026`, line 45) and race e (lines 48; 109), all recorded as exited by that signal. The records do not state `startProven`, so that part of the check is shown only by the runs after the fix. They were not re-run on the fixed commit.
+- At pass 1 the native acceptance evidence stayed that of `c8e624d6`; the runs on `bcee61d3` ("Native acceptance") replace it. The fixes change the runner's argument form, which both runs used only with `=` options and the default or `FILES` files, and tighten an assertion: in both runs races c and e recorded `exited by SIGKILL` (lines 45, 48; 106, 109), and the stricter check covers race c after the start (seed `20261026`, line 45) and race e (lines 48; 109), all recorded as exited by that signal. The records do not state `startProven`, so that part of the check is shown only by the runs after the fix. They were not re-run on the fixed commit.
+
+## Review pass 2 fixes
+
+Pass 2 (reviewer B) ran at `759dbc21` and found 1 Medium and 14 Low; the coordinator records its counts in `passes.jsonl` and `findings.jsonl`.
+
+| Finding | Fix | Commit |
+| --- | --- | --- |
+| M1: a missing or partial launch environment silently dropped the cgroup mode | `linuxLaunchFromEnvironment` throws on a partial launch on Linux, and throws when `TASKELITH_REQUIRE_LINUX_LAUNCH=1` is set without a full Linux launch; `tools/linux-cgroup/crash-windows.sh` sets that marker for both privileged targets. Three new unit tests in `packages/testing/test/linux-launch.test.ts` (tests 7, pass 7); with the `packages/testing/src` of `759dbc21` the file fails to load, because the marker export is missing (tests 1, fail 1). On this host, `TASKELITH_REQUIRE_LINUX_LAUNCH=1 node --experimental-strip-types --test test/g2-cancellation-races.test.ts` fails at load naming the three missing variables, and `TASKELITH_EXECUTION_UID=2000 ... test/g2-partition.test.ts` fails with `a partial Linux launch: TASKELITH_CONTAINMENT_PARENT, TASKELITH_EXECUTION_GID not set`. The launch host is not added to the records (optional, not done) | `c708b307` |
+| L1: the guard claim for seed 7 in `acceptance.md` | race h in both runs, race c in the `20261026` run | `bcee61d3` |
+| L2: the spec's guard claim | narrowed to race h and race c when its cancel lands after the start; a scenario for the required launch added | `bcee61d3` |
+| L3: the proposal's guard and signal claims | the same narrowing; the signal applies to races b, c, e, and f through `assertCancelled` | `bcee61d3` |
+| L4: task 4.2 unticked | ticked | `bcee61d3` |
+| L5: "Independent review: not yet run" | summarizes pass 1 and names pass 2 | `bcee61d3` |
+| L6: the quoted guard failure and `cgroup-layout.sh` | the exact log lines quoted, and the root cgroup explained by a check in the image ("Fail-before"); a follow-up for the layout script | `bcee61d3` |
+| L7: `process-group-supervision.ts:38-52` | `:38-55` | `bcee61d3` |
+| L8: the skip reason of the supervision host tests | "supervisionHost composes the Linux platform only on Linux" | `16b937a8` |
+| L9: one test for two cases | split into "without a launch prepares nothing" (now `precondition-failed`) and "a launch without an account prepares none"; `apps/worker/test/execution-supervision.test.ts` tests 20, pass 20 | `16b937a8` |
+| L10: `echo` swallowed `-n`, `-e`, `-E` | `printf '%s\n'`; new test with `--test-name-pattern -e -n -E` (tests 8, pass 8; with the script of `759dbc21` tests 8, fail 1) | `c708b307` |
+| L11: the open list of `docs/worker-platforms.md` | adds the hosted `ubuntu-24.04` re-dispatch | `bcee61d3` |
+| L12: "Done since" in ADR 0015 | "Since done" | `bcee61d3` |
+| L13: the evidence commit before the fixes | `acceptance.md` names the superseded `c8e624d6` runs and the fixes; the evidence is now the re-run on `bcee61d3` | this record |
+| L14: the guard checked only the delegated parent | `assertContained` takes the worker's own containment parent and requires a containment directly below it (`isContainmentOf`), so the bare parent, a deeper cgroup, and another worker's containment fail; `test/g2-scenario-launch.test.ts` tests 2, pass 2 | `0783d040` |
+
+Checks after the fixes:
+
+- `make verify-linux-crash-windows` on `bcee61d3`: exit 0, tests 29, pass 29, fail 0.
+- `make verify-linux-g2-scenarios` on `bcee61d3`: exit 0, tests 18, pass 17, fail 0, skipped 1 (race g); seeds races `1364487483`, partitions `3860545978`, stale generations `3825485312`.
+- Native acceptance re-run on `bcee61d3`, seeds `20261026` and `7`: both exit 0, `every proof passed`, 61 records each, all `passed` ("Native acceptance").
+- `make verify` on `bcee61d3` with the re-run's `results.jsonl` and `acceptance.md`: exit 0; tests 2373, pass 2326, fail 0, cancelled 0, skipped 47, todo 0; all files 99.29 % lines, 92.40 % branches, 98.95 % functions; `linux-launch.js` 100, 100, 100; `execution-supervision.js` 97.96, 87.67, 91.67; OpenSpec 70 passed; comments within the length rule; every checked link conforms; 53 findings and 33 pass summary files valid.
 
 ## Follow-ups
 

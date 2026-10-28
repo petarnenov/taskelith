@@ -2,12 +2,12 @@
 
 **Native-host evidence, Linux x86_64 only.** This table records the Linux entry `linux-ubuntu-24.04-x86_64` on a native Linux host with Docker Engine, not Docker Desktop. It adds the system-level cancellation part and the connectivity part of the G2 rows that 25b, 25c, and `run-g2-native-acceptance-linux-host` left to 24c, now run through the worker's Linux cgroup supervisor ([design](design.md) decisions 2 and 8). It does not cover the macOS entries, race g, the `macos-26-arm64` re-run, or `linux-ubuntu-24.04-arm64`, and it does not replace the GitHub-hosted `ubuntu-24.04` runner record, which is re-dispatched after the merge.
 
-Recorded 2026-10-28 on commit `c8e624d6` by two runs of `make native-acceptance ENTRIES=linux` into [results.jsonl](results.jsonl) ("line N" below):
+Recorded 2026-10-28 on commit `bcee61d3`, after the fixes of review passes 1 and 2, by two runs of `make native-acceptance ENTRIES=linux` into [results.jsonl](results.jsonl) ("line N" below):
 
-- seed `20261026` (`TASKELITH_TEST_SEED=20261026`), 02:17:35 to 02:24:56 local, exit 0, `every proof passed`: lines 1 to 61;
-- seed `7`, 02:24:56 to 02:32:16 local, exit 0, `every proof passed`: lines 62 to 122.
+- seed `20261026` (`TASKELITH_TEST_SEED=20261026`), 03:02:34 to 03:08:48 local, exit 0, `every proof passed`: lines 1 to 61;
+- seed `7`, 03:08:48 to 03:14:16 local, exit 0, `every proof passed`: lines 62 to 122.
 
-Each run wrote 61 records, all `passed`, all on commit `c8e624d606f93c6c69b033cec92e158dcadbea63`, each with an `acceptance` field naming its entry, row, command, and platform: 12 proofs and 49 own records of the scenarios they ran. The seeds are those of 24c's evidence. Below, "lines A; B" name the line in the first run and in the second (B is A plus 61). The rows are the G2 rows of the [native acceptance gates](/docs/worker-platforms.md#native-acceptance-gates); resource budgets and real integrations belong to later gates.
+Each run wrote 61 records, all `passed`, all on commit `bcee61d3c73c7a537c9ff4f8ee3fe7243851b532`, each with an `acceptance` field naming its entry, row, command, and platform: 12 proofs and 49 own records of the scenarios they ran. The seeds are those of 24c's evidence. The first evidence, two runs with the same seeds on `c8e624d6` (2026-10-28 02:17 to 02:32, 122 records, all passed), preceded the review fixes: the stricter race c and e assertion and the runner's `--` form of pass 1, and the required Linux launch and the guard below the worker's own containment parent of pass 2 ([verification](verification.md#review-pass-1-fixes), "Review pass 1 fixes" and "Review pass 2 fixes"); these runs replace it, and only the order of the crash-window records within each run differs. Below, "lines A; B" name the line in the first run and in the second (B is A plus 61). The rows are the G2 rows of the [native acceptance gates](/docs/worker-platforms.md#native-acceptance-gates); resource budgets and real integrations belong to later gates.
 
 ## Platform
 
