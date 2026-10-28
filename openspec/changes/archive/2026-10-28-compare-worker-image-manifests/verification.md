@@ -74,7 +74,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Archive of the change after review.
 - Integration into dev by the coordinator (single pull request)
 
 ## Review pass 1
@@ -100,3 +99,13 @@ Reviewer B, Claude Code `claude claude-opus-5-5#high`, session `93e7c704-8c25-41
 Reviewer A, Codex CLI `codex gpt-6.1-sol#medium`, session `01a18341-1dc8-78a3-b3d9-9ac9b1c63283`; it reported model `gpt-6.1-sol`, effort `medium`, sandbox `read-only`, and the worktree snapshot `619f32311573572b21f2e5c142d3d0337f0f61168997bbd3ad69d385c56b9d52` before and after. Findings: 0 Critical, 0 High, 0 Medium, 1 Low, fixed in `c3bb6aac` without another review, because the pass found only Low findings. The review ends with this pass.
 
 - **L1 (evidence-mismatch).** "Evidence check" and the L1 entry of "Review pass 2" said both containerd stub tests have the same config and layers; the failing one has a differing first layer. Both places now say the passing test has the same config and layers and the failing one a differing first layer (fixed, unreviewed).
+
+## Archive
+
+After review pass 3 and its fix, and after the records of the containerd run (`78d636b9`), every task in `tasks.md` is ticked and `npm run openspec -- archive compare-worker-image-manifests --yes` moved the change to `openspec/changes/archive/2026-10-28-compare-worker-image-manifests` and applied its delta: `local-installation`, 1 modified requirement. The checks below ran on the resulting working tree, the tree of the archive commit, before this section was written.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed (71 items).
+- `make verify`: passed, profile full (`scripts/installation.sh` changed), on the uncommitted working tree, so no stamp was written; tests 3215, pass 3200, fail 0, skipped 15; all files 99.45% lines, 92.67% branches, 99.07% functions. It passed on its first run, no rerun.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-28-compare-worker-image-manifests`; the command's result on older archived changes is not counted.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/local-installation/spec.md`, 7 insertions and 3 deletions, the intended edit of the requirement "Opt-in reproducibility check": its new text, the changed scenario "Differing builds", and the new scenario "Differing image index only".
+- The moved change has its `findings.jsonl` (9 findings over 3 passes: 2, 6, and 1) and its `passes.jsonl` (3 passes); `make findings ARGS="validate"` passed: `Every findings file is valid: 74 file(s); every pass summary file is valid: 54 file(s); every route file is valid: 10 file(s).`
