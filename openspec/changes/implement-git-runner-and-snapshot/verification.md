@@ -18,6 +18,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16b, developed by a briefed s
 - Author self-check fix before pass 2, at the coordinator's request (design D15): `c5f0b006` (test first), `fbcc1c16` (`core.untrackedCache=false` in `GIT_COMMAND_SCOPE_SETTINGS`), `b713717d` (contract section 7, spec scenario "Forged untracked cache", design, this record's limitation removed). `55b0fb23` recorded that fix and is the head that review pass 2 reviewed.
 - Pass 2 fixes: `e20e2f33` `test: cover the pass 2 findings of the Git workspace adapter before their fixes` (the fail-before run of pass 2 ran on this commit); `41da9696` (module: the reason `unsafe-tree-path`, `isSafeTreeName`, `core.commitGraph=false` and `core.multiPackIndex=false`; the deletion of the adapter's `src/index-flags.ts`, which belongs to the next commit, landed here by mistake and is left there because the branch is never rewritten); `3cb0f27c` (adapter: verified objects, the index rebuild and comparison, the Git directory's entry types and `.git` in any case, absence only on `ENOENT` or `ENOTDIR`, the nominal verified client, the prepare's staging cleanup, and the adapted tests); `5b941461` (contract sections 3, 6, 7, 9, and 10, design, proposal, spec delta, tasks); `6e61f97d` (`passes.jsonl` and `findings.jsonl` of pass 2). The latest checks ran on `6e61f97d`.
 - The commit that adds this record changes no checked input other than this file.
+- Merge `a29577a3` of `origin/dev` `f3a53f17` (#383, adopt-process-performance-recommendations) between pass 2 and pass 3, without conflict; it changed no file under `packages/modules/workspace`, `packages/adapters/git-workspace`, `docs/contracts/git-workspace.md`, or `openspec/specs/git-workspace-port`, nor this change's directory. The full `make verify` of the merged tree and its `make record` are under "Generated checks".
 
 ## Environment
 
@@ -80,6 +81,9 @@ The same command on `e1a486ec`: tests 76, pass 61, fail 0, skipped 15 (duration 
 | `npm run openspec -- validate implement-git-runner-and-snapshot --strict` | `5b941461` | "Change 'implement-git-runner-and-snapshot' is valid" |
 | Scratch archive as above | `6e61f97d` | "Totals: + 9, ~ 2"; validation 69 passed, 0 failed |
 | `make findings ARGS="validate"` | `6e61f97d` | "Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s)." |
+
+<!-- make record: begin -->
+<!-- make record: end -->
 
 ## Review
 
