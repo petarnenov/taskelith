@@ -20,7 +20,7 @@ G3 item 43 (`docs/g3-plan.md`, row 43), Linux x86_64 parts only, size M-L, assig
 ## Fail-before
 
 - Runner forwarding: `node --experimental-strip-types --test test/linux-crash-windows-script.test.ts` with the new test and the base `scripts/linux-crash-windows.sh` gave tests 3, pass 2, fail 1 (no `--env TASKELITH_TOXIPROXY_URL`); after the change tests 3, pass 3, fail 0.
-- Containment guard, on `0caf2b47` (guard and target, scenario workers still on the process-group host): `make verify-linux-g2-scenarios PATTERN='a cancel after W4|an unauthorized start'`, exit 2; race c (seed `3709635626`, cancel after the start) and race h each failed with `process <pid> runs in /sys/fs/cgroup/, not under /sys/fs/cgroup/executions/` (the container's root cgroup as `/proc/<pid>/cgroup` shows it).
+- Containment guard, on `0caf2b47` (guard and target, scenario workers still on the process-group host): `make verify-linux-g2-scenarios PATTERN='a cancel after W4|an unauthorized start'`, exit 2; race c (seed `3709635626`, cancel after the start) and race h failed with `process 52 runs in /sys/fs/cgroup/, not under /sys/fs/cgroup/executions/` and `process 67 runs in /sys/fs/cgroup/, not under /sys/fs/cgroup/executions/` (the log's exact lines). The root, not `init/`: `tools/linux-cgroup/cgroup-layout.sh:4-7` moves the processes that `cgroup.procs` lists while it reads that file, and the read skips the entry shell. A check in the image (`docker run --rm --init --privileged --cgroupns=private --entrypoint bash taskelith-linux-cgroup:test -c 'source /usr/local/lib/taskelith/cgroup-layout.sh; cat /proc/self/cgroup; cat /proc/1/cgroup'`) printed `0::/` for the shell and its children and `0::/init` for PID 1, while writing the shell's own PID to `init/cgroup.procs` directly moves it. So the test processes run in the namespace root. The containment checks are unaffected, because `executions/` enables no controller; the layout script is outside this change (follow-up).
 - Cancel signal, on `0caf2b47`: `make verify-linux-g2-scenarios PATTERN='a crash between W1'`, exit 2; race e (seed `1476658390`) failed in `assertCancelled`: actual `{ kind: 'signal', signal: 'SIGTERM' }`, expected `SIGKILL`.
 - Native acceptance runner: `node --experimental-strip-types --test test/native-acceptance-runner.test.ts` with the new tests and the base `scripts/native-acceptance.sh` gave tests 14, pass 9, fail 5 (the two new tests and the three that check the not-applicable lists); after the change tests 14, pass 14, fail 0.
 
@@ -79,8 +79,10 @@ Checks after the fixes:
 
 - A services-network mode of the privileged runner for Docker Desktop, so that a macOS host can run the Linux scenarios.
 - A `linux-ubuntu-24.04-arm64` hosted dispatch on `ubuntu-24.04-arm`.
+- `tools/linux-cgroup/cgroup-layout.sh` leaves the entry shell, and so the test processes, in the namespace root cgroup instead of `init/`.
 - After the merge: dispatch `linux-acceptance.yml` on `dev` and record its run, which now includes the two new proofs.
 
 ## Independent review
 
-Not yet run; the coordinator runs it.
+- Pass 1 (reviewer A): Codex `gpt-6.1-sol`, recorded by the coordinator in `passes.jsonl` and `findings.jsonl`: Critical 0, High 0, Medium 2, Low 1. Fixed in `de099e67` (finding 1), `f4044cd0` (finding 2), and `e6229c44` and `75aa2b99` (finding 3); see "Review pass 1 fixes".
+- Pass 2 (reviewer B), at `759dbc21`: in progress; the coordinator records its counts. Its fixes: "Review pass 2 fixes".

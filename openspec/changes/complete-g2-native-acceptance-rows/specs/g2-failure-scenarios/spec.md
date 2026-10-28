@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Scenarios through the Linux cgroup supervisor
-When the delegated cgroup and the execution account are set, as `make verify-linux-g2-scenarios` sets them in its privileged Linux image, each scenario worker, the crash-before-ack worker included, SHALL launch through the worker's own Linux launch host, the cgroup supervisor with the execution account, in place of the test-side process-group launch host, and a started scripted process SHALL be checked to run in a containment under the delegated cgroup.
+When the delegated cgroup and the execution account are set, as the privileged runner of `make verify-linux-g2-scenarios` sets them, each scenario worker, the crash-before-ack worker included, SHALL launch through the worker's own Linux launch host, the cgroup supervisor with the execution account, instead of the test-side process-group launch host. A partial launch, or a missing one under that runner, SHALL fail the scenario file.
 
 #### Scenario: Privileged Linux runner
 - **WHEN** `make verify-linux-g2-scenarios` runs the cancellation races
-- **THEN** a scripted process started in scenarios c and h runs in a cgroup under the delegated parent, and a check fails the scenario otherwise
+- **THEN** the scripted process of race h, and of race c when its cancel lands after the start, runs in a containment directly below its worker's own containment parent, and a check fails the scenario otherwise
+
+#### Scenario: Launch required by the runner
+- **WHEN** the runner requires the Linux launch and a launch variable is missing, or only some launch variables are set
+- **THEN** the scenario file fails when it loads, naming the missing variables, and no scenario falls back to the process-group launch host
 
 #### Scenario: Unprivileged run
 - **WHEN** `make verify` runs the same files on a Linux host without those settings
