@@ -1,6 +1,6 @@
 # Verification: define-board-session-and-event-stream-contracts
 
-Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A pending, because the pass 2 fixes change the document and tests; not archived.
+Status: developed and verified by the author; review passes 1 to 3 done and their findings fixed; the pass 3 fixes, Low only, are not reviewed again under governance; not archived.
 
 ## Scope and source
 
@@ -19,7 +19,9 @@ Status: developed and verified by the author; review passes 1 and 2 done and the
 - `41042399` `chore: fix review pass 1 findings of the board, session, and event stream contracts` (contract page sections 7, 9, 10, and 12, product ports section 4.2, document `BoardChangedEvent` and descriptions, design decisions 10, 15, 16, and 18, spec deltas, three tests).
 - `1725ac5e` `docs: record review pass 1 of the board, session, and event stream contracts` (`passes.jsonl`, `findings.jsonl`, the pass 1 section); the `make verify` run of pass 1's fixes checked its tree, and `d19d2aa7` records that run: the head that review pass 2 reviewed.
 - `9fcc1bc1` `chore: fix review pass 2 findings of the board, session, and event stream contracts` (document: `NativeRequestInboxSubject`, `InputAnswerText`, `StreamEndedEvent`, and descriptions; `CardSubject` of `needs-you.ts`; contract page sections 7 to 10 and 12; product ports sections 4.1 to 4.3; design decisions 9, 10, 15, 16, 18 to 20, and 22; spec deltas; contract tests).
-- The commit `docs: record review pass 2 of the board, session, and event stream contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record corrections of findings 13 and 14 of pass 2; the `make verify` run of pass 2's fixes checked its tree, and the commit after it records that run.
+- The commit `docs: record review pass 2 of the board, session, and event stream contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record corrections of findings 13 and 14 of pass 2; the `make verify` run of pass 2's fixes checked its tree, and the commit after it records that run: `7b294f60`, the head that review pass 3 reviewed.
+- `20b4a78e` `docs: fix review pass 3 findings of the board, session, and event stream contracts` (spec delta scenarios "Role removed" and "Concurrent repeats with one key", contract page section 7 "Atomic key check", design decision 18).
+- The commit `docs: record review pass 3 of the board, session, and event stream contracts` adds the pass 3 lines of `passes.jsonl` and `findings.jsonl` and the pass 3 section; the `make verify` run of pass 3's fixes checked its tree, and the commit after it records that run.
 
 ## Environment
 
@@ -137,9 +139,27 @@ The fixes change contracts, not only records, and pass 1 found High findings, so
 
 The pass 2 fixes change the document, a port type, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
+### Pass 3
+
+- Reviewer A: Codex CLI `codex exec` v0.163.0, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, approval `never`, as its header confirms, session `01a1827d-b25d-71b0-a495-22d1bda0cd23`, on `7b294f60` over the diff `d19d2aa7...7b294f60`, asked only to confirm each pass 2 fix; the snapshot before and after the review was `62c5cbfaa6673ce29def75340bbe8768bbc0c1827033348dff269ef885479351`, unchanged. It confirmed the other pass 2 fixes and the architect's decision, and ran the 77 contract tests, all passed.
+- Result: Critical 0, High 0, Medium 0, Low 3, all introduced by pass 2's fixes, so no earlier pass missed them and they have no `missedBy`; none declined, all fixed in `20b4a78e` and recorded in `findings.jsonl`. A Low-only pass is fixed without another review (governance "Independent review process").
+  1. Low, spec-wording: the scenario "Role removed" names a principal who holds no `installation-owner` role; with that role, the reconnection stays allowed.
+  2. Low, spec-wording: the scenario "Concurrent repeats with one key" names different texts that redact alike, because an identical text with the same author repeats as a 200 `duplicate`.
+  3. Low, docs: the contract page "Atomic key check" and design decision 18 state at most one committed effect: both commands may pass the check and call the domain or source, but the losing transaction is rolled back with its effect and retried, and answers as a repeat.
+- Fix checks, on the working tree of `20b4a78e`:
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate define-board-session-and-event-stream-contracts --strict` | `Change 'define-board-session-and-event-stream-contracts' is valid` |
+| `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments` | Every checked link conforms; every active OpenSpec change archives into strictly valid specs; every comment is within the comment length rule |
+| `node --experimental-strip-types --test --test-isolation=none packages/contracts/test/board-session-contracts.test.ts packages/contracts/test/control-plane-contracts.test.ts packages/contracts/test/contracts.test.ts packages/modules/execution/test/product-ports.test.ts`, after `npm run build` | 77 tests, all passed |
+| Spec delta requirement bodies | Unchanged; only two scenarios changed, none over 479 characters |
+| `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+
+The fixes change wording only and add no behavior, so no fail-before test applies.
+
 ## Remaining gates
 
-- Review pass 3 by reviewer A, with its fixes and records.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
