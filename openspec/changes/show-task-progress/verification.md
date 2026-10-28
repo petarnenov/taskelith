@@ -30,18 +30,22 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm; Zaki's host `hpz600` r
 
 - `node --experimental-strip-types --test test/task-progress.test.ts`: 21 of 21 passed.
 - `npm run openspec -- validate show-task-progress --strict`: `Change 'show-task-progress' is valid`.
-- `make verify` on the clean tree of `6670b70f` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress2.log`). An earlier run on `8cbf2f17` was stopped before it finished, to take the owner's requirement.
+- `make verify` on the clean tree of `6670b70f` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress2.log`). An earlier run on `8cbf2f17` was stopped before it finished, to take the owner's requirement. After the pass 1 fixes, `make verify` on the clean tree of `b3d19168` passed, profile full (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/9e6d2b58-9924-418b-9480-54a98f608053/scratchpad/verify-progress3.log`); the generated checks below record that run.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a6194ae97ac73bc86244f64898833ac9072aa0cb`; tests 3535, pass 3526, fail 0, skipped 9; all files 99.43% lines, 92.67% branches, 98.92% functions.
+- `make verify`: passed, profile full, tree `ef2a230a903c78b9b55364033acdca557d4458ea`; tests 3545, pass 3536, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions.
 - `npm run openspec -- validate show-task-progress --strict`: passed, `Change 'show-task-progress' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).`.
 - Spec diff against the merge base `166673998210` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1842b-9887-7de0-ad44-779dc8e6a1d5` | 0 | 0 | 7 | 1 |
 <!-- make record: end -->
 
 ## Review
