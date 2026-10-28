@@ -66,6 +66,8 @@ test('a failure names the variable and never its value', () => {
     for (const text of Object.values(change)) if (text !== undefined) assert.equal(failure.message.includes(text), false, failure.message);
   }
   assert.equal(failed(readWorkerSettings({ ...BASE, TASKELITH_DATA_DIR: 'relative' }, FACTS)).code, 'invalid');
+  const plain = failed(readWorkerSettings({ ...BASE, TASKELITH_CONTROL_PLANE_URL: 'http://control-plane:8443/' }, FACTS));
+  assert.deepEqual([plain.code, plain.message], ['invalid', 'TASKELITH_CONTROL_PLANE_URL must be a https: URL']);
 });
 
 test('only linux or darwin on x64 or arm64 hosts a worker', () => {

@@ -155,7 +155,9 @@ test('the pinned installation CA is read only while present, nonempty, and safe'
   writeFileSync(paths.installationCa, '');
   assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
   rmSync(paths.installationCa);
+  const missing = failed(readInstallationCa(paths));
   assert.equal(reasonOf(readInstallationCa(paths)), 'corrupt');
+  assert.equal(missing.message, 'the pinned installation CA is missing; remove worker/ and enroll again with a new token and its fingerprint');
   symlinkSync(paths.identity, paths.installationCa);
   assert.equal(reasonOf(readInstallationCa(paths)), 'unsafe-path');
 });

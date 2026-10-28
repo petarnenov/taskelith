@@ -60,15 +60,19 @@ export function writeInstallationCa(paths: WorkerPaths, enrollment: WorkerEnroll
 }
 
 // The pinned CA, the only CA of the worker's TLS; a root enrolled without
-// one fails closed.
+// one, before 26b, fails closed: no migration, as nothing was released.
 export function readInstallationCa(paths: WorkerPaths): Result<string> {
-  return readControlFile(paths, paths.installationCa, 'the pinned installation CA');
+  const missing = 'remove worker/ and enroll again with a new token and its fingerprint';
+  return readControlFile(paths, paths.installationCa, 'the pinned installation CA', missing);
 }
 
-function readControlFile(paths: WorkerPaths, path: string, name: string): Result<string> {
+function readControlFile(paths: WorkerPaths, path: string, name: string, remedy?: string): Result<string> {
   const safe = checkControlPath(paths.dataRoot, path, ownerUid());
   if (!safe.ok) return safe;
-  if (!existsSync(path)) return err(rootFailure('corrupt', `${name} is missing`, { path }));
+  if (!existsSync(path)) {
+    const message = remedy === undefined ? `${name} is missing` : `${name} is missing; ${remedy}`;
+    return err(rootFailure('corrupt', message, { path }));
+  }
   const synced = syncBeforeUse(path);
   if (!synced.ok) return synced;
   const content = readFileSync(path, 'utf8');
