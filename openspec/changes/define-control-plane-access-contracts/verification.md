@@ -85,7 +85,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   - L2, docs: design decision 19 states that a login name starts with a letter or digit.
   - L3, evidence-mismatch: the limitation on the routed effort now cites governance "Routed effort" instead of the coordinator.
 - The findings outside this directory name the capability `control-plane-api`, the closest existing one, because `make findings` accepts only directories under `openspec/specs` and this change creates `control-plane-wire-contracts`; the spec delta findings name it too, because they concern the contract rather than this record.
-- Route: `route.json` is kept. The fixes change 104 lines (81 added, 23 removed) in five files the route already counted, with no new file, capability, or touched area, so its features keep their triggers (`lines`, `contracts`) and its tier `elevated`.
+- Route: `route.json` is kept. The fixes change 104 lines (81 added, 23 removed) in five files the change already touched, with no new file, capability, or touched area, so its features keep their triggers (`lines`, `contracts`) and its tier `elevated`.
 - Pass 2, reviewer B: Claude Code `claude-opus-5-5`, effort `high`; pending.
 
 ## Remaining gates
