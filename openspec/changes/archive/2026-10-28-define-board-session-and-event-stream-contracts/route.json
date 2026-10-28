@@ -1,0 +1,65 @@
+{
+  "change": "define-board-session-and-event-stream-contracts",
+  "generatedAt": "2026-10-28T11:40:03.863Z",
+  "devCommit": "ff7ab7a0622d556c0ce586305e0ae600bb256833",
+  "headCommit": "bf681fe04ba7ae52441f2c6462e8df71c7f65cf7",
+  "features": {
+    "linesChanged": 7593,
+    "filesChanged": 9,
+    "capabilities": [
+      "control-plane-wire-contracts",
+      "product-ports"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "L",
+    "capabilityHistory": {
+      "changes": 6,
+      "thirdPassShare": 0.8333333333333334,
+      "mediumOrWorsePerChange": 12.333333333333334
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "contracts",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "failed",
+    "reason": "missing-credential",
+    "latencyMs": 0
+  }
+}
