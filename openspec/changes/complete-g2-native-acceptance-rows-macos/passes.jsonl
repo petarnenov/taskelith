@@ -1,1 +1,2 @@
 {"change": "complete-g2-native-acceptance-rows-macos", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a181b7-647f-7d90-abe6-9892355ab6ca", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 2}}
+{"change": "complete-g2-native-acceptance-rows-macos", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "d58a9021-a9a3-40ca-8b5d-d7e096f085bb", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 8}}
