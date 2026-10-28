@@ -1,0 +1,104 @@
+{
+  "change": "continue-after-context-warning",
+  "generatedAt": "2026-10-28T21:14:22.737Z",
+  "devCommit": "c49cb6a3a2e12e6b4f9a503b2c5d67fc258726d3",
+  "query": {
+    "capabilities": [
+      "agent-task-protocol"
+    ],
+    "files": [
+      "AGENTS.md",
+      "docs/agent-task-protocol.md",
+      ".claude/skills/**",
+      "scripts/context-warning.ts",
+      ".claude/settings.json",
+      "test/context-warning*"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 10
+      },
+      {
+        "category": "contract-drift",
+        "count": 5
+      },
+      {
+        "category": "docs",
+        "count": 4
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 1
+      },
+      {
+        "category": "process",
+        "count": 1
+      },
+      {
+        "category": "redaction",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 673,
+        "inChecklist": 523
+      },
+      "mediumOrWorse": {
+        "findings": 308,
+        "inChecklist": 256
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 108
+      },
+      {
+        "category": "spec-wording",
+        "count": 78
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 41
+      },
+      {
+        "category": "contract-drift",
+        "count": 20
+      },
+      {
+        "category": "process",
+        "count": 19
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 339,
+        "inChecklist": 333
+      },
+      "mediumOrWorse": {
+        "findings": 61,
+        "inChecklist": 59
+      }
+    }
+  }
+}

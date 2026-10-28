@@ -87,11 +87,11 @@ The owner set this rule on 2026-10-25. Since 2026-10-27 (owner) sessions keep th
 - **Worker.** It does all task work in subagents ([subagent execution](#subagent-execution)) and keeps only the protocol steps in its main session.
 - **Warning hook.** The tracked [`.claude/settings.json`](../.claude/settings.json) runs [`scripts/context-warning.ts`](../scripts/context-warning.ts) on every prompt. It estimates the context from the transcript, from the usage of the newest response or, without one, from the transcript size at four bytes per token, and prints one warning line at 140,000 tokens or more (`TASKELITH_CONTEXT_WARN_TOKENS` changes the threshold). It is an estimate, never blocks a prompt, and never prints transcript content.
 
-When a session's context approaches 150,000 tokens, the session tells the owner and recommends `/compact` or `/clear`, because only the owner can run them in the session's window. It warns before the limit, not after.
+When a session's context approaches 150,000 tokens, the session tells the owner and recommends `/compact` or `/clear`, because only the owner can run them in the session's window, and then continues its work without waiting for them (owner, 2026-10-28). It warns before the limit, not after.
 
 - **Record first.** Before it warns, the session records what a reset would lose. A worker commits its work and notes its state and open questions in the change's `tasks.md` or `verification.md`; the coordinator updates its notes on assignments and pending integrations.
 - **Recommend one.** It recommends `/compact` while a task is in progress or decisions are not yet recorded, and `/clear` when everything needed is recorded. A worker in the middle of a task recommends only `/compact`; it recommends `/clear` only between tasks, when nothing it needs is unrecorded.
-- **Worker.** A worker also tells the coordinator, which sends it no work until the worker reports that it is ready again.
+- **Worker.** A worker also tells the coordinator and keeps its task going.
 - **Coordinator.** The coordinator also says whether any handoff is waiting for integration.
 
 ## Review findings record
