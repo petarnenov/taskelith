@@ -766,7 +766,7 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       const reachesRemote = (argv: readonly string[]) => argv.includes(fixture.binding.remote);
       processes.forEach((process, index) => {
         const credentialId = [...steps].reverse().find(({ from }) => from <= index)?.credentialId ?? null;
-        const expected = { credentialId: reachesRemote(process.argv) ? credentialId : null };
+        const expected = { credentialId: reachesRemote(process.argv) ? credentialId : null, clientPath: fixture.gitClient.path };
         problems.push(...gitProcessProblems(process, expected, sensitive));
       });
       const remote = processes.filter(({ argv }) => reachesRemote(argv));

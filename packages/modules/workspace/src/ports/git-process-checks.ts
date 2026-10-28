@@ -1,4 +1,4 @@
-import { GIT_BUILT_ENVIRONMENT, GIT_CLIENT_PINS, GIT_COMMAND_SCOPE_SETTINGS, GIT_CREDENTIAL_SETTING, GIT_NEUTRAL_DIRECTORY } from '../domain/git-client.js';
+import { GIT_BUILT_ENVIRONMENT, GIT_COMMAND_SCOPE_SETTINGS, GIT_CREDENTIAL_SETTING, GIT_NEUTRAL_DIRECTORY } from '../domain/git-client.js';
 import type { WorkspaceCredential } from '../domain/workspace.js';
 import { REDACTED_VALUE, redactedHeader, type GitProcessObservation } from './workspace-fixture.js';
 
@@ -12,7 +12,6 @@ const GIT_OPERATIONS = new Set([
 const SENSITIVE_MINIMUM_LENGTH = 8;
 // Operations that reach only the remote and so start in no repository.
 const NEUTRAL_OPERATIONS = new Set(['clone', 'ls-remote']);
-const PINNED_PATHS = new Set<string>(Object.values(GIT_CLIENT_PINS).map(({ path }) => path));
 const HEADER_MARKER_PREFIX = redactedHeader('').slice(0, -1);
 
 const base64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
@@ -60,13 +59,15 @@ export function pushArgumentProblems(process: GitProcessObservation, expected: r
 // remote, or none.
 export interface ExpectedGitProcess {
   readonly credentialId: string | null;
+  // The path of the Git client pin the adapter was composed with.
+  readonly clientPath: string;
 }
 
 export function gitProcessProblems(process: GitProcessObservation, expected: ExpectedGitProcess, sensitive: readonly string[]): string[] {
   const label = processLabel(process);
   const problems: string[] = [];
   if (!Number.isSafeInteger(process.pid) || process.pid <= 0) problems.push(`${label}: no process identifier`);
-  if (!PINNED_PATHS.has(process.argv[0] ?? '')) problems.push(`${label}: not started through the pinned client's path`);
+  if (process.argv[0] !== expected.clientPath) problems.push(`${label}: not started through the pinned client's path`);
   if (process.argv.some((arg) => holdsSensitive(arg, sensitive))) problems.push(`${label}: a credential in an argument`);
   if (NEUTRAL_OPERATIONS.has(operationOf(process.argv)) && (process.cwd !== GIT_NEUTRAL_DIRECTORY || process.repositoryConfig !== null)) {
     problems.push(`${label}: needs no checkout but starts in a repository or outside ${GIT_NEUTRAL_DIRECTORY}`);

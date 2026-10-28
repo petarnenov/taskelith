@@ -32,6 +32,7 @@ import {
   workspaceFailure,
   type CodeHeadIdentity,
   type DirtyReason,
+  type GitClientPin,
   type GitObjectId,
   type GitProcessObservation,
   type GitTreeEntry,
@@ -294,16 +295,18 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   readonly repository: RepositoryId;
   readonly digest: IdentifierDigest;
   readonly defects: DoubleDefects;
+  readonly gitClient: GitClientPin;
   private readonly racingChecks = new CheckBarrier();
   // The defective hand-off state that lives only as long as the provider.
   private readonly handedOffInMemory = new Set<AttemptId>();
 
-  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}) {
+  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}, gitClient: GitClientPin = GIT_CLIENT_PINS.linux) {
     this.root = join(dataRoot, WORKSPACE_LAYOUT.root);
     this.service = service;
     this.repository = repository;
     this.digest = digest;
     this.defects = defects;
+    this.gitClient = gitClient;
   }
 
   async prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
@@ -578,7 +581,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (credential !== undefined) this.service.calls += 1;
     const repositoryConfig = checkout === undefined ? null : await readFile(join(checkout, GIT_CONFIG_FILE), 'utf8').catch(() => null);
     const pid = this.service.processes.length + FIRST_PROCESS_ID;
-    const client = this.defects.runsGitFromPath ? 'git' : GIT_CLIENT_PINS.linux.path;
+    const client = this.defects.runsGitFromPath ? 'git' : this.gitClient.path;
     const argv = [client, ...this.credentialArguments(credential), ...args];
     const cwd = checkout ?? GIT_NEUTRAL_DIRECTORY;
     this.service.processes.push({ argv, pid, cwd, environment: this.gitEnvironment(credential), repositoryConfig });
@@ -889,7 +892,7 @@ function observed(process: GitProcessObservation, credentials: readonly Workspac
 }
 
 // A fresh data root with control records, a service, and the fixture.
-export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
+export async function createFixture(defects: DoubleDefects = {}, gitClient: GitClientPin = GIT_CLIENT_PINS.linux): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
   const dataRoot = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-workspace-')));
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
@@ -899,7 +902,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   const service = new FakeGitService(BASE_BRANCH, BASE_TREE);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
   const digest = identifierDigest(defects);
-  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects);
+  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects, gitClient);
   const provider = make();
   const binding: RepositoryBinding = { repository, remote: 'https://scm.example/acme/project.git', baseBranch: BASE_BRANCH };
   const checkout = async (attemptId: AttemptId) => mustParse(await provider.checkoutOf(attemptId));
@@ -927,6 +930,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
     separateExecutionIdentity: true,
+    gitClient,
     reopen: make,
     writeFile: (attemptId, path, text) => write(attemptId, path, textFile(text)),
     writeBytes: (attemptId, path, content) => write(attemptId, path, file(content)),

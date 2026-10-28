@@ -131,3 +131,28 @@ for (const defects of LEAKING_DEFECTS) {
     }
   });
 }
+
+// A wrapper at another path, as a test composes the adapter with.
+const WRAPPER_PIN = { path: '/opt/taskelith/test/git-wrapper', version: 'git version 2.43.0' };
+
+test('a provider composed with another Git client pin passes the suite through that path', async () => {
+  for (const conformance of WORKSPACE_CONFORMANCE) {
+    const { fixture, dispose } = await createFixture({}, WRAPPER_PIN);
+    try {
+      assert.deepEqual(await conformance.check(fixture), [], conformance.name);
+    } finally {
+      await dispose();
+    }
+  }
+});
+
+test('the Git process case reports a process that does not start through the composed pin', async () => {
+  const { fixture, dispose } = await createFixture({}, WRAPPER_PIN);
+  try {
+    const misreported = { ...fixture, gitClient: { ...WRAPPER_PIN, path: '/usr/local/bin/git' } };
+    const processCase = WORKSPACE_CONFORMANCE.find(({ name }) => name === GIT_PROCESSES)!;
+    assert.match((await processCase.check(misreported)).join('\n'), /not started through the pinned client's path/);
+  } finally {
+    await dispose();
+  }
+});

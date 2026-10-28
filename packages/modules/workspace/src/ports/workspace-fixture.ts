@@ -1,4 +1,5 @@
 import type { AttemptId } from '@taskelith/execution';
+import type { GitClientPin } from '../domain/git-client.js';
 import type { IdentifierDigest, RepositoryBinding, TreeEntry, WorkspaceCredential } from '../domain/workspace.js';
 import type { WorkspaceProvider } from './workspace-provider.js';
 
@@ -51,6 +52,8 @@ export interface WorkspaceFixture {
   // Executions run under a separate account that all of them share, so the
   // provider holds one handed-off workspace at a time (section 3).
   readonly separateExecutionIdentity: boolean;
+  // The Git client pin the provider was composed with (section 7).
+  readonly gitClient: GitClientPin;
   // A new provider over the same data root, as after a worker restart.
   reopen(): WorkspaceProvider;
   writeFile(attemptId: AttemptId, path: string, text: string): Promise<void>;
