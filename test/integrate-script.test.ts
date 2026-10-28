@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -182,6 +182,8 @@ test('a clean branch is merged, verified, pushed, landed, and cleaned up', async
       'make verify',
       PR_LIST,
       `gh pr create --base dev --head ${BRANCH} --title Feature title --body Feature body`,
+      '',
+      integrationLine(run),
       `gh pr merge ${URL} --merge`,
       'npm ci --silent',
     ]);
@@ -446,6 +448,98 @@ test('a fresh run for a branch already in dev only cleans up', async () => {
     assert.deepEqual(calls(fixture), [PR_LIST, 'npm ci --silent']);
     assert.match(run.stdout, /LANDED feature none /);
     assert.doesNotMatch(remoteHeads(fixture), /refs\/heads\/feature/);
+  });
+});
+
+const ISO_SECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+interface IntegrationRecord {
+  readonly tree: string;
+  readonly verify: string;
+  readonly profile: string;
+  readonly verifySeconds: number;
+  readonly change: string;
+  readonly branch: string;
+  readonly started: string;
+}
+
+function integrationLine(run: Run): string {
+  const line = run.stdout.split('\n').find((text) => text.startsWith('Integration: '));
+  assert.ok(line !== undefined, run.stdout);
+  return line;
+}
+
+function integrationRecords(fixture: Fixture): IntegrationRecord[] {
+  const path = join(fixture.state, 'taskelith', 'integrations.jsonl');
+  return readFileSync(path, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as IntegrationRecord);
+}
+
+function lineOf(record: IntegrationRecord): string {
+  return `Integration: tree ${record.tree}; verify ${record.verify}; profile ${record.profile}`
+    + `; verify seconds ${record.verifySeconds}; change ${record.change}; branch ${record.branch}; started ${record.started}`;
+}
+
+function stampTime(fixture: Fixture): string {
+  const common = git(fixture.main, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+  const directory = join(common, 'taskelith-verify-stamps');
+  const [stamp] = readdirSync(directory);
+  assert.ok(stamp !== undefined);
+  return (JSON.parse(readFileSync(join(directory, stamp), 'utf8')) as { verifiedAt: string }).verifiedAt;
+}
+
+test('an integration that ran make verify records its line in the pull request and the log', async () => {
+  await withFixture((fixture) => {
+    const before = Date.now();
+    const run = integrate(fixture, [BRANCH, 'title', 'Coordinator body']);
+    assert.equal(run.status, 0, run.stderr);
+    const records = integrationRecords(fixture);
+    assert.equal(records.length, 1);
+    const [record] = records;
+    assert.ok(record !== undefined);
+    assert.deepEqual(Object.keys(record), ['tree', 'verify', 'profile', 'verifySeconds', 'change', 'branch', 'started']);
+    assert.equal(record.tree, git(fixture.main, 'rev-parse', 'HEAD^{tree}').trim());
+    assert.equal(record.verify, 'ran');
+    assert.equal(record.profile, 'full');
+    assert.ok(Number.isInteger(record.verifySeconds) && record.verifySeconds >= 0);
+    assert.equal(record.change, '2026-10-27-feature');
+    assert.equal(record.branch, BRANCH);
+    assert.match(record.started, ISO_SECOND);
+    assert.ok(Date.parse(record.started) >= before - 1000 && Date.parse(record.started) <= Date.now());
+    assert.equal(integrationLine(run), lineOf(record));
+    const create = calls(fixture).join('\n');
+    assert.ok(create.includes(`--body Coordinator body\n\n${lineOf(record)}\ngh pr merge`), create);
+  });
+});
+
+test('an integration that reused a stamp records the stamp time', async () => {
+  await withFixture((fixture) => {
+    assert.equal(integrate(fixture, [BRANCH, 'title', 'body'], { FAKE_VERIFY_STATUS: '2' }).status, 4);
+    assert.equal(existsSync(join(fixture.state, 'taskelith', 'integrations.jsonl')), false);
+    const tree = git(fixture.worktree, 'rev-parse', 'HEAD^{tree}').trim();
+    execFileSync(process.execPath, ['--experimental-strip-types', stampScript, 'write', 'full', tree], {
+      cwd: fixture.worktree, env: environment(fixture, {}),
+    });
+    const verifiedAt = stampTime(fixture);
+    const resumed = integrate(fixture, ['--resume', BRANCH, 'title', 'body']);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const [record, ...more] = integrationRecords(fixture);
+    assert.deepEqual(more, []);
+    assert.ok(record !== undefined);
+    assert.equal(record.verify, `reused stamp of ${verifiedAt}`);
+    assert.equal(record.tree, tree);
+    assert.ok(record.verifySeconds <= 60, String(record.verifySeconds));
+    assert.equal(integrationLine(resumed), lineOf(record));
+  });
+});
+
+test('a failed append to the integration log only warns', async () => {
+  await withFixture((fixture) => {
+    mkdirSync(join(fixture.state, 'taskelith', 'integrations.jsonl'), { recursive: true });
+    const run = integrate(fixture, [BRANCH, 'title', 'body']);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /warning: could not append the integration line to .*integrations\.jsonl/);
+    assert.match(integrationLine(run), /^Integration: tree [0-9a-f]{40}; verify ran; /);
+    assert.match(run.stdout, /LANDED feature /);
   });
 });
 
