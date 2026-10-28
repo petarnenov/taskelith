@@ -11,7 +11,7 @@
 ## 3. Evidence
 
 - [x] 3.1 Fail-before and pass-after under GNU Make 3.81 and 4.4.1, and the Linux repro in `debian:trixie-slim`
-- [ ] 3.2 `make verify` on the clean committed tree, `make record`, and `make record-check`
+- [x] 3.2 `make verify` on the clean committed tree, `make record`, and `make record-check`: passed on `cac17956`
 
 ## 4. Review and archive
 
