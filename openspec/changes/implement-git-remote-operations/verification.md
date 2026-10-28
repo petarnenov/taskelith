@@ -12,7 +12,10 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16c, developed by a briefed s
 - `94deb819` `docs: record the implement-git-remote-operations change and amend contract section 7` (contract sections 7 and 13 and its header, proposal, design, spec delta, tasks, empty `findings.jsonl` and `passes.jsonl`, `checklist.json`).
 - `fcf5a2f4` `docs: route the implement-git-remote-operations change` (`route.json`, unedited).
 - `cbc8fd37` `docs: shorten the modified Git configuration scope requirement`, after the first `make verify` (Checks). The recorded `make verify` ran on this commit's clean tree.
-- The commit that completes this record changes no checked input other than this file.
+- `ba442610` `docs: record the verification of implement-git-remote-operations`: the head that review pass 1 reviewed.
+- `683feb1c` `chore: parse the remote head before redaction and bound the Git time limit`: the fixes of review pass 1 with their tests.
+- `501840c6` `docs: record the pass 1 fixes in the implement-git-remote-operations design` (design decisions 6 and 9).
+- The pass 1 records (`findings.jsonl`, `passes.jsonl`, this file) follow; the `make verify` of "After review pass 1" ran on their clean tree, and the commit that completes this record changes no checked input other than this file.
 
 ## Environment
 
@@ -24,7 +27,7 @@ Native Ubuntu 26.04.1 LTS host, Linux 7.0.0-38-generic x86_64; Node.js 24.22.1 (
 - Push arguments: exactly `taskBranchPushArguments`, no `-C`, started in the checkout; no bare `--force`, bare `--force-with-lease`, `+` refspec, or cancelling option anywhere (`grep -n "force" packages/adapters/git-workspace/src/*.ts` finds only `rm` options; the lease comes from `taskBranchPushArguments`).
 - Crash points: contract section 3 names none for the remote operations (design D7), so none was added.
 - Comments: at most two lines of at most 80 characters (`npm run verify:comments`).
-- Tests: no fixed sleep; the two tests that wait for a killed process group poll a condition (`kill` with signal 0 until `ESRCH`) with a 30 s deadline; the time limits under test are 1000 ms (runner) and 1500 ms (adapter), far above the milliseconds the shell or the Perl wrapper needs before the stalled process starts, and each test asserts that its stalled process was recorded and its request reached the remote, so an early kill cannot pass it.
+- Tests: no fixed sleep; the tests that wait for a killed process group poll a condition (`kill` with signal 0 until `ESRCH`) with a 30 s deadline. Since review pass 1 (findings 4 and 5) no test races a real time limit: an injected `ManualGitTimer` arms each limit, and the test fires it only after a readiness signal, the stalled client's atomically written pid file (runner) or the test server's `beforeAnswer` hook for the stalled request (adapter); a 30 s watchdog (`within`) bounds the termination after the kill, and cleanup expires the timer and kills leftovers on failure.
 - Checklist categories: contract-drift (Q1 and Q2 amend section 7 with what the code does; D2, D3, and D6 name every detail the adapter settled); error-handling (D2, D3, D6: every Git failure maps to `unavailable` or `internal`, unreadable output to `internal`); spec-wording (each new requirement is under 500 characters with a scenario that a named test checks); redaction (D9); missing-fail-before-test (below); concurrency-race (the lease race test drives the race through the server's hook, without timing).
 
 ## Fail-before
@@ -70,7 +73,26 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Review
 
-No review pass has run yet; `passes.jsonl` and `findings.jsonl` are empty.
+### Pass 1
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox (`codex gpt-6.1-sol#medium`). The route record recommends `high` for pass 1; it only recommends (governance "Routed effort").
+- Invocation, run by the coordinator session: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: the Codex session ran `gpt-6.1-sol` with reasoning effort `medium`, as the coordinator's pass report states.
+- Session: `01a18236-6bcc-7be2-a94b-9740320041c8`.
+- Reviewed: `803c7057..ba442610`. Snapshot of the worktree before and after the pass: `7b8c4bd558d046c4f7f11a1e388da32bb4ce8a3c5fc4f112ba939689bea8eca0` both times, so the reviewer changed no file.
+- Counts: Critical 0, High 0, Medium 5, Low 0, as in `passes.jsonl`. The reviewer wrote in Bulgarian; the findings below and in `findings.jsonl` are the author's English summaries.
+
+Findings and resolutions, all fixed in `683feb1c` (design decisions 6 and 9 updated in `501840c6`):
+
+1. **Medium, contract-drift** (`git-workspaces.ts:265`): the remote head was parsed from the already scrubbed `ls-remote` output, so a short valid secret such as `task` corrupted the ref (`refs/heads/<redacted>elith/...`) and the head read `null`, or corrupted an object name into `internal`. Fixed: `GitRunner.runParsed` hands the raw output to a parser inside the runner and scrubs only its failure message; `run` still returns scrubbed output. Tests: "a short read secret that matches the task branch ref still reads the remote head" (adapter, through the smart-HTTP remote), "a parser reads the raw output, so a short secret cannot corrupt the data" (a secret inside both the ref and the object name), and "a parser failure is scrubbed, and a failed process is not parsed".
+2. **Medium, error-handling** (`git-runner.ts:67`): a time limit above 2,147,483,647 ms passed validation, and `setTimeout` fires it after 1 ms. Fixed: such a limit is a `RangeError` (`MAX_GIT_TIME_LIMIT_MS`). Test: "the time limit is ten minutes by default and must fit the timer" accepts the maximum and refuses one more and `Number.MAX_SAFE_INTEGER`.
+3. **Medium, redaction** (`git-runner.ts:114`): the time limit message was not scrubbed, so a credential form inside the client path (secret `git` in `/usr/bin/git`) or the limit could leak. Fixed: the runner scrubs each whole composed message, the time limit and the start failure, path included. Tests: "the time limit message is scrubbed of a credential form in the client path" and "a client that cannot start is unavailable, its message scrubbed".
+4. **Medium, test-flakiness** (`git-runner.test.ts:197`): the runner test relied on the shell recording its pids before a real 1000 ms timer, with no upper bound on the termination. Fixed: an injected `GitTimer` (`GitWorkspacesOptions.gitTimer`, `GitRunner.withTimer`), fired after the client recorded its pids; a 30 s watchdog and cleanup on failure. "the system timer expires after its delay unless disarmed" and "a time limit set later keeps the injected timer" cover the default timer and the composition.
+5. **Medium, test-flakiness** (`remote-operations.test.ts:256`): the stalled `prepare` and `readRemoteHead` tests relied on the request reaching the server before a real 1500 ms timer. Fixed: the server's `beforeAnswer` hook signals the request, then the test fires the injected timer; a 30 s watchdog bounds the operation, and cleanup expires the timer.
+
+Fail-before of the fixes: on the working tree of `683feb1c` with fixes 1 to 3 reverted in the source (the range bound, both message scrubs, and `#remoteHead` back on `run` with the scrubbed output), then restored (`git diff` empty), `npm run build` and `node --experimental-strip-types --test packages/adapters/git-workspace/test/git-runner.test.ts packages/adapters/git-workspace/test/remote-operations.test.ts` gave tests 35, pass 31, fail 4: "a client that cannot start is unavailable, its message scrubbed", "a short read secret that matches the task branch ref still reads the remote head", "the time limit is ten minutes by default and must fit the timer", and "the time limit message is scrubbed of a credential form in the client path". With the fixes: tests 35, pass 35. Findings 4 and 5 are timing races, which no test can make fail on demand; their tests now have no race left to lose. The raw-output parser test passes without fix 1 because the runner gained `runParsed` with the fix; the adapter test is the fail-before test of finding 1.
+
+Route: the fixes changed the diff, but worker step 4 asks for a new route only after fixes of the pre-review `make verify` run, not after review fixes (finding 5 of `route-reviewers-by-change-complexity`, pass 2), so `route.json` stays the pre-review record of `fcf5a2f4`.
 
 ## Limitations
 
@@ -86,7 +108,7 @@ No review pass has run yet; `passes.jsonl` and `findings.jsonl` are empty.
 
 ## Remaining gates
 
-- Review passes: reviewer A (pass 1) and reviewer B (pass 2), and pass 3 only as governance requires.
+- Review pass 2 by reviewer B, and pass 3 only as governance requires.
 - Integration into dev by the coordinator (single pull request).
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator; it now includes the remote cases and the smart-HTTP server.
 - 16d: the hand-off, the reclaim program and its containment, `WS5` to `WS10`, and the Linux tests in the worker image with the pinned Git, which un-skip the last 6 cases.
