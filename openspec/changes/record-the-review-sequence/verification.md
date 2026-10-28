@@ -18,7 +18,7 @@ macOS (Darwin 25.6.0), Node.js from `.nvmrc` through nvm.
 ## Author self-check
 
 - **Scope.** No routed effort is authorized: the `elevated` efforts (pass 1 `high`, pass 2 `xhigh`, pass 3 `high`) stay recommendations, and `make review` still prints that the authorized effort applies. `docs/fleet.md` is untouched. Jev stays shadow-only at threshold 0.4.
-- **One rule.** `git grep -n -i -E "conditional third pass|alternating|reviewers A and B|reviewer A for passes"` outside `openspec/changes/archive/` and this change finds only governance's history in "Policy version" and in "Review sequence" ("replacing version 5's ..."), the living spec text that this change's delta replaces at archive, and one unrelated test constant (`apps/control-plane/test/placement-service.test.ts`). The scripts' messages name the pass and role, not alternating reviewers.
+- **One rule.** After the pass 1 fixes (`e05565aa`), `git grep -n -i -E "conditional third pass|alternating|reviewers A and B|reviewer A for passes" -- . ':!openspec/changes/archive/' ':!openspec/changes/record-the-review-sequence/'` finds only: governance's history in "Policy version" (line 3), in "Review sequence" ("replacing version 5's ...", line 31), and in "Tasks during the change to version 8" (line 46, the rule of versions 5 to 7); `openspec/specs/review-process/spec.md` lines 8, 28, 410, 414, 424, 474, and 534, which this change's delta renames or replaces at archive, line 4, the Purpose, which a delta cannot change (see "Follow-ups"), and line 185, the history requirement "Changes under the one-reviewer rule"; and the unrelated test constant `ALTERNATING` (`apps/control-plane/test/placement-service.test.ts` lines 372, 385, 393, and 401). Before pass 1 the search also found the UI proof of concept's Reviews badge and its README, which this record missed (pass 1 finding 2). The scripts' messages name the pass and role, not alternating reviewers.
 - **Compatibility.** Rule version 1 keeps its reviewer table and thresholds; the archived `route.json` files validate (`make findings ARGS="validate"`, see "Generated checks"), and `test/review-route-record.test.ts` "a record of rule version 1 with two pass plans stays valid" checks a version 1 record against the new schema.
 - **Roles.** `finding.schema.json` and `pass.schema.json` keep `A` and `B`; only the role description changes. No archived record is edited.
 - **Spec.** The modified and added requirements have at most 496 characters; `npm run verify:archive`, which `make verify` runs, archives the change into strictly valid specs. Every scenario of each modified requirement keeps its name, as the pinned OpenSpec requires.
@@ -51,15 +51,39 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
+## Review
+
+### Pass 1
+
+Reviewer A: Codex CLI, `codex gpt-6-astra#medium`, the brief's reviewer of pass 1, on `df1f1c4c`, invoked as `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, started 2026-10-28T19:10:53Z, session `01a183ec-253d-7343-9562-cd4589026abd`. The reviewer's header reported model `gpt-6-astra`, effort `medium`, and sandbox `read-only`. The worktree snapshot was `28e36b6c064181059b17f539d83050d63fd773ac4e669ca91ad462daa1dba07d` before and after the pass. Counts: Critical 0, High 0, Medium 0, Low 2, recorded in `findings.jsonl`. The pass is Low-only, so it ends the review under governance "Review sequence": both findings are fixed without another pass and are `fixed-unreviewed`.
+
+1. **Low, docs, UI badge.** `docs/ui-poc/src/screens/Reviews.tsx:306` showed `Reviewers A and B per task`, and `docs/ui-poc/README.md:61` quoted it as current. Fixed in `e05565aa`: the badge reads `Assigned reviewer per pass`, and the README quotes it, keeping the note that the published version 7 build predates the badge changes; nothing is republished.
+2. **Low, evidence mismatch.** The "One rule" self-check claimed that the stale wording search found only history, the replaced spec, and a test constant, though it also found finding 1's places, so task 4.3 was ticked too early. Fixed in this record: the search was rerun after finding 1, and "One rule" records its exact exclusions and every match.
+
+### Unreviewed fixes
+
+No later pass reviews these fixes; each is marked unreviewed for the coordinator's architect check (governance "Architect check of unreviewed fixes").
+
+1. Pass 1 finding 1 (`e05565aa`): `docs/ui-poc/src/screens/Reviews.tsx:306` and `docs/ui-poc/README.md:61`.
+2. Pass 1 finding 2: the "One rule" self-check of this record.
+3. Coordinator decision U1 (`e05565aa`): `docs/governance.md:46`, "Tasks during the change to version 8": the owner's decision of 2026-10-28 applies from that decision, not from version 8 reaching `dev`; a task whose pass 1 ran before it finishes under the rule of versions 5 to 7, and a task briefed on or after it follows "Review sequence". The spec delta and the protocol are unchanged, because they refer to governance for the rule in force.
+4. Worker finding U3 (`e05565aa`): `make review` printed `the authorized medium applies (policy version 7)` for this change's own pass 1, under policy version 8. `scripts/review-run.ts:34` adds `GOVERNANCE_POLICY_VERSION = 8`, used by the recommendation at line 260, and the comments at lines 40 and 245 to 246 no longer name a version. `test/review-run.test.ts` expects `(policy version 8)`, and the new test "the policy version that make review names is the governance one" compares the constant with the "Policy version" line of `docs/governance.md`. Fail-before: with the scripts of `df1f1c4c` and the changed expectations, the recommendation test failed (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/0427c315-6988-45ca-8b27-69ae57925400/scratchpad/fail-before-u3-regex.log`, 25 of 26 passed); with the new test as well, the file failed to load on the missing export (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/0427c315-6988-45ca-8b27-69ae57925400/scratchpad/fail-before-u3.log`). With the fix, 27 of 27 tests of `test/review-run.test.ts` pass.
+
+Architect check of the unreviewed fixes: pending (coordinator).
+
 ## Limitations
 
 - The `effect` routing section still compares only the reviewers of passes 1 and 2 with the route (design.md "Risks").
 - The Jev reference rates come from records reviewed under the conditional third pass rule (design.md D9).
-- No review under the new sequence has run yet; this change's own review is its first.
+- This change's own review is the first under the new sequence; it ended with the Low-only pass 1.
+
+## Follow-ups
+
+- The Purpose of `openspec/specs/review-process/spec.md` still says "two alternating reviewers per change"; a delta cannot change a Purpose, so a spec-maintenance change updates it.
+- `make findings ARGS="effect"` compares only the reviewers of passes 1 and 2 with the route when it reports whether a review followed the route; pass 3 is not compared.
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 of the review sequence, as the coordinator assigns them.
-- Architect check by the coordinator of every fix that no later pass reviews.
+- Architect check by the coordinator of the unreviewed fixes listed under "Unreviewed fixes".
 - Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
