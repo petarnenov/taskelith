@@ -1,5 +1,5 @@
 import type { NatsConnection } from '@nats-io/nats-core';
-import type { BrokerCredentials, BrokerRevocation, InstallationIdentity, IssuedBrokerCredential } from '@taskelith/fleet';
+import type { BrokerCredentials, BrokerRevocation, InstallationIdentity, IssuedBrokerCredential, SignedBrokerUser } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, type Result } from '@taskelith/kernel';
 import { brokerFailure } from './broker-failure.js';
 import type { BrokerAuthority } from './broker-authority.js';
@@ -35,6 +35,19 @@ export class NatsBrokerCredentials implements BrokerCredentials {
     const instant = instantFromEpochMilliseconds(issuedAt * 1000);
     if (!instant.ok) return instant;
     return ok({ ...this.#authority.user(`${workerId}.${generation}`, issuedAt, permissions.value), issuedAt: instant.value });
+  }
+
+  async sign(installation: InstallationIdentity, workerId: string, generation: number, userKey: string): Promise<Result<SignedBrokerUser>> {
+    const address = TransportAddress.of(installation.installationId);
+    if (!address.ok) return address;
+    const permissions = address.value.workerPermissions(workerId);
+    if (!permissions.ok) return permissions;
+    const issuedAt = this.#now();
+    const instant = instantFromEpochMilliseconds(issuedAt * 1000);
+    if (!instant.ok) return instant;
+    const jwt = this.#authority.userJwtFor(userKey, `${workerId}.${generation}`, issuedAt, permissions.value);
+    if (jwt === undefined) return err(failure('invalid', 'the broker user public key is not an NKey user key', { field: 'brokerUserPublicKey' }));
+    return ok(Object.freeze({ jwt, issuedAt: instant.value }));
   }
 
   // The list replaces the account's, so the registry keeps every entry and

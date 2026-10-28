@@ -232,6 +232,28 @@ test('a link that closes without a stop is closed and a new one connected', asyn
   await running;
 });
 
+test('a re-dial closes the held link and connects a new one; without a link it does nothing', async () => {
+  const trace = newTrace();
+  const held = session(trace);
+  held.redial();
+  const running = held.run(stopping.signal);
+  await flush();
+  assert.equal(trace.links.length, 1);
+  held.redial();
+  await flush();
+  assert.deepEqual([trace.links.length, trace.links[0]?.closed, trace.served[0]?.aborted], [2, 1, true]);
+  stopping.abort();
+  await running;
+});
+
+test('a forbidden connection failure stops the session without a retry', async () => {
+  const trace = newTrace();
+  const expired = failure('forbidden', 'enroll the worker again', { reason: 'credentials-expired' });
+  trace.answers = [err(expired)];
+  await assert.rejects(session(trace).run(stopping.signal), (error: unknown) => error === expired);
+  assert.deepEqual([trace.links.length, timers.waiting], [0, []]);
+});
+
 test('a failed close or serve reaches the caller after the link is closed', async () => {
   const trace = newTrace();
   const failing = session(trace, async () => Promise.reject(new Error('serve failed')));

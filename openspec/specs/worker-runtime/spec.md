@@ -535,3 +535,44 @@ An enrolled worker SHALL keep the checked CA as `worker/installation-ca.pem` and
 #### Scenario: Root without the pin
 - **WHEN** an enrolled root has no `worker/installation-ca.pem`
 - **THEN** the start fails with reason `corrupt` before any request or broker connection
+
+### Requirement: Credential rotation on the worker
+On a notice for its next generation a worker SHALL store a new NKey and `tkwk_` secret before it acknowledges the notice, renew with its current bearer, adopt the answer keeping the previous generation, reconnect with the new broker user, and confirm with the new bearer only after that connection succeeded. A renewal or confirmation answered 400, 401, 403, or 409 SHALL end the attempt with a log line; any other failure, a 500 included, SHALL be retried after 5 s doubling to 60 s with jitter.
+
+#### Scenario: Rotation
+- **WHEN** a connected worker receives the notice for its next generation
+- **THEN** it renews, connects with the new broker user, confirms, and its launch authorizations then carry the new bearer
+
+#### Scenario: Control plane failure
+- **WHEN** a renewal or a confirmation is answered 500
+- **THEN** the worker sends it again after the retry delay, and an answered retry completes the rotation
+
+#### Scenario: Notice for another generation
+- **WHEN** a worker receives a notice for its current or an older generation
+- **THEN** it acknowledges the notice and changes no file
+
+#### Scenario: Notice before the confirmation finished
+- **WHEN** a worker whose confirmation answer was lost receives the notice for the generation after its adopted one
+- **THEN** it stores the new generation before it acknowledges the notice, confirms the adopted one, and then renews the new one with the adopted bearer
+
+### Requirement: Rotation resumed at every start
+Every worker start SHALL resume a rotation from its files: a stored generation that is not adopted SHALL be renewed, and an adopted generation that is not confirmed SHALL be confirmed once the broker connection uses it. With no kept predecessor, the files of the generation before the current one and the current one's pending file SHALL be removed.
+
+#### Scenario: Crash between adoption and confirmation
+- **WHEN** a worker stops after it adopted the new generation and before it confirmed it, and starts again
+- **THEN** it connects with the new generation and confirms it, and the previous generation's files are removed
+
+#### Scenario: Crash during the removal of the predecessor's files
+- **WHEN** a worker stops after its identity dropped the confirmed predecessor and before all of that generation's files and the pending file were removed, and starts again
+- **THEN** the start removes the files that are left and keeps the current generation's files
+
+### Requirement: Expired broker credentials
+When the broker rejects a worker's credentials, the worker SHALL try every generation it holds; after 3 consecutive rounds in which every generation was rejected it SHALL stop with code `forbidden` and reason `credentials-expired` and name re-enrollment. Other broker failures SHALL keep the endless retry.
+
+#### Scenario: Revoked worker
+- **WHEN** every broker credential of a worker is rejected 3 times in a row
+- **THEN** the worker stops with reason `credentials-expired`, and its exit status is 1
+
+#### Scenario: Broker outage
+- **WHEN** the broker is unreachable for many attempts
+- **THEN** the worker keeps trying and does not stop

@@ -63,6 +63,14 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'Enrollment', success: 201, statuses: { ...COMMON, conflict: 409, 'precondition-failed': 422 },
   },
   {
+    operationId: 'renewWorkerCredentials', method: 'POST', pattern: /^\/workers\/credentials\/renewals$/, security: ['workerCredential'],
+    body: 'CredentialRenewalRequest', response: 'CredentialRenewal', success: 200, statuses: { ...COMMON, conflict: 409 },
+  },
+  {
+    operationId: 'confirmWorkerCredentials', method: 'POST', pattern: /^\/workers\/credentials\/confirmations$/, security: ['workerCredential'],
+    body: 'CredentialConfirmationRequest', response: 'CredentialConfirmation', success: 200, statuses: { ...COMMON, conflict: 409 },
+  },
+  {
     operationId: 'authorizeLaunch', method: 'POST', pattern: /^\/launch-authorizations$/, security: ['workerCredential'],
     body: 'LaunchAuthorizationRequest', response: 'LaunchAuthorizationOutcome', success: 200,
     // The contract has no 500: an undecided operation is retried (section 3).

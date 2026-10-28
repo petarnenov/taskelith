@@ -14,18 +14,18 @@ import type { ControlPlaneClientSettings } from './http-launch-authority-client.
 // of the multipart body. A 502, 503, or 504, or no answer, is `unavailable`.
 export class HttpEvidencePublisher implements EvidencePublisher {
   readonly #target: HttpTarget;
-  readonly #credential: string;
+  readonly #bearer: () => string;
 
   constructor(settings: ControlPlaneClientSettings) {
     this.#target = pinnedTarget(settings);
-    this.#credential = settings.credential;
+    this.#bearer = settings.bearer;
   }
 
   async publish(publication: EvidencePublication, content: Uint8Array): Promise<Result<EvidenceRecord>> {
     const form = new FormData();
     form.append('record', new Blob([JSON.stringify(publication)], { type: 'application/json' }));
     form.append('content', new Blob([Uint8Array.from(content)], { type: 'application/octet-stream' }));
-    const answered = await postForm(this.#target, 'evidence', this.#credential, form);
+    const answered = await postForm(this.#target, 'evidence', this.#bearer(), form);
     if (!answered.ok) return answered;
     const { status, body } = answered.value;
     if (status !== 200 && status !== 201) return err(statusFailure('publishEvidence', answered.value));

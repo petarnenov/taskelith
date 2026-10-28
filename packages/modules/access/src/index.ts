@@ -30,7 +30,7 @@ export {
 } from './application/session-service.js';
 export type { AccessAuditEvent, AccessAuditKind } from './domain/access-audit.js';
 export { csrfTokenMatches } from './domain/csrf.js';
-export { AUDIT_TEXT_MAX_LENGTH, type AuditEvent, type AuditEventKind, type OperatorCredential } from './domain/operator-credential.js';
+export { AUDIT_TEXT_MAX_LENGTH, OPERATOR_AUDIT_SUBJECT, type AuditEvent, type AuditEventKind, type OperatorCredential } from './domain/operator-credential.js';
 export { checkNewPassword, normalizePassword, PASSWORD_POLICY, type PasswordPolicy } from './domain/password-policy.js';
 export {
   OWNER_LOGIN_NAME,

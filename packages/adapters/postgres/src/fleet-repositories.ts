@@ -1,12 +1,16 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
-import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
+import { OPERATOR_AUDIT_SUBJECT, type AuditEvent, type OperatorCredential, type OperatorCredentials, type SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
+import type { Clock } from '@taskelith/sdlc';
 import {
+  confirmationStep,
   credentialGenerations,
-  expiredPredecessor,
   installationIdentity,
+  predecessorExpiryStep,
+  renewalStep,
+  requestStep,
   revocationOf,
-  rotateCredentials,
+  rotationExpiryStep,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
@@ -15,7 +19,11 @@ import {
   type HostConstraints,
   type InstallationIdentity,
   type InstallationTable,
+  type RotationOrder,
+  type RotationRequest,
+  type RotationStep,
 } from '@taskelith/fleet';
+import { appendAuditEvent } from './audit-events.js';
 import { instant } from './capacity-repositories.js';
 import { decodeRecord, encodeRecord } from './record-codec.js';
 import type { Session } from './session.js';
@@ -131,23 +139,30 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment));
   }
 
-  async rotate(
-    workerId: WorkerId,
-    expectedGeneration: number,
-    next: CredentialGeneration,
-    validUntil: Instant,
-    at: Instant,
-  ): Promise<Result<void>> {
-    const worker = await this.#read(workerId, 'FOR UPDATE');
-    if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
-    if (worker.revokedAt !== undefined) return err(failure('forbidden', `worker ${workerId} is revoked`));
-    if (worker.credentials.current.generation !== expectedGeneration) {
-      return err(failure('conflict', `the current generation is ${worker.credentials.current.generation}`));
-    }
-    const rotation = rotateCredentials(worker.credentials, next, validUntil);
-    if (rotation.dropped !== undefined) await this.#record(workerId, [revocationOf(rotation.dropped, at)]);
-    await this.#write(workerId, { ...worker, credentials: rotation.credentials });
-    return ok(undefined);
+  async requestRotation(workerId: WorkerId, order: RotationOrder): Promise<Result<RotationRequest>> {
+    const worker = await this.#activeWorker(workerId);
+    if (!worker.ok) return worker;
+    const step = requestStep(worker.value, order);
+    await this.#apply(step);
+    return ok(step.request);
+  }
+
+  async renew(workerId: WorkerId, next: CredentialGeneration, brokerUserJwt: string, clock: Clock): Promise<Result<RotationRequest>> {
+    const worker = await this.#activeWorker(workerId);
+    if (!worker.ok) return worker;
+    const step = renewalStep(worker.value, next, brokerUserJwt, clock.now());
+    if (!step.ok) return step;
+    await this.#apply(step.value);
+    return ok(step.value.request);
+  }
+
+  async confirm(workerId: WorkerId, generation: number, clock: Clock): Promise<Result<boolean>> {
+    const worker = await this.#activeWorker(workerId);
+    if (!worker.ok) return worker;
+    const step = confirmationStep(worker.value, generation, clock.now());
+    if (!step.ok) return step;
+    await this.#apply(step.value);
+    return ok(step.value.dropped);
   }
 
   async revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
@@ -170,16 +185,42 @@ export class PostgresFleetRegistry implements FleetRegistry {
     let expired = 0;
     for (const row of rows) {
       const worker = decodeRecord<EnrolledWorker>(row.enrollment);
-      const previous = expiredPredecessor(worker.credentials, now);
-      if (previous === undefined) {
+      const step = predecessorExpiryStep(worker, now);
+      if (step === undefined) {
         await this.#write(worker.workerId, worker);
         continue;
       }
-      await this.#record(worker.workerId, [revocationOf(previous, previous.validUntil)]);
-      await this.#write(worker.workerId, { ...worker, credentials: { current: worker.credentials.current } });
+      await this.#apply(step);
       expired += 1;
     }
     return ok(expired);
+  }
+
+  // The column finds candidates; `expireRotation` decides from the record.
+  async unrenewedRotations(now: Instant): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      `SELECT worker_id FROM workers WHERE rotation_deadline <= $1 AND enrollment IS NOT NULL AND NOT revoked
+       ORDER BY worker_id COLLATE "C"`,
+      [now],
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id)));
+  }
+
+  async expireRotation(workerId: WorkerId, now: Instant): Promise<Result<boolean>> {
+    const worker = await this.#read(workerId, 'FOR UPDATE');
+    if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
+    const step = rotationExpiryStep(worker, now);
+    if (step === undefined) {
+      await this.#write(workerId, worker);
+      return ok(false);
+    }
+    await this.#session.query('UPDATE workers SET revoked = true WHERE worker_id = $1', [workerId]);
+    await this.#apply(step);
+    return ok(true);
+  }
+
+  async credentialAuditTrail(workerId: WorkerId): Promise<Result<readonly AuditEvent[]>> {
+    return ok(await auditTrailOf(this.#session, workerId));
   }
 
   // Run it in its own READ COMMITTED transaction: the advisory lock makes
@@ -207,13 +248,27 @@ export class PostgresFleetRegistry implements FleetRegistry {
     }
   }
 
-  // The hash columns follow the record, so a dropped predecessor's goes.
+  async #activeWorker(workerId: WorkerId): Promise<Result<EnrolledWorker>> {
+    const worker = await this.#read(workerId, 'FOR UPDATE');
+    if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
+    return worker.revokedAt === undefined ? ok(worker) : err(failure('forbidden', `worker ${workerId} is revoked`));
+  }
+
+  async #apply(step: RotationStep): Promise<void> {
+    await this.#record(step.worker.workerId, step.revocations);
+    if (step.event !== undefined) await appendAuditEvent(this.#session, step.event);
+    await this.#write(step.worker.workerId, step.worker);
+  }
+
+  // The hash and deadline columns follow the record, so a dropped
+  // predecessor's go.
   async #write(workerId: WorkerId, worker: EnrolledWorker): Promise<void> {
-    const { current, previous } = worker.credentials;
+    const { current, previous, rotation } = worker.credentials;
+    const unrenewedDeadline = rotation?.brokerUserJwt === undefined && worker.revokedAt === undefined ? rotation?.deadline ?? null : null;
     await this.#session.query(
-      `UPDATE workers SET enrollment = $2, predecessor_valid_until = $3, control_plane_hash = $4, previous_control_plane_hash = $5
-       WHERE worker_id = $1`,
-      [workerId, encodeRecord(worker), previous?.validUntil ?? null, current.controlPlaneHash, previous?.controlPlaneHash ?? null],
+      `UPDATE workers SET enrollment = $2, predecessor_valid_until = $3, control_plane_hash = $4, previous_control_plane_hash = $5,
+       rotation_deadline = $6 WHERE worker_id = $1`,
+      [workerId, encodeRecord(worker), previous?.validUntil ?? null, current.controlPlaneHash, previous?.controlPlaneHash ?? null, unrenewedDeadline],
     );
   }
 
@@ -267,6 +322,7 @@ interface CredentialRow {
 
 interface AuditRow {
   readonly kind: AuditEvent['kind'];
+  readonly subject: string;
   readonly generation: number;
   readonly actor: string;
   readonly reason: string;
@@ -300,19 +356,22 @@ export class PostgresOperatorCredentials implements OperatorCredentials {
         [next.generation, next.hash, next.issuedAt, next.generation - 1],
       );
     if (written.rowCount === 0) return err(failure('conflict', `generation ${next.generation} is not the next operator credential`));
-    await this.#session.query(
-      'INSERT INTO audit_events (kind, generation, actor, reason, occurred_at) VALUES ($1, $2, $3, $4, $5)',
-      [event.kind, event.generation, event.actor, event.reason, event.occurredAt],
-    );
+    await appendAuditEvent(this.#session, event);
     return ok(undefined);
   }
 
+  // The operator credential's events only; a worker's are its own trail.
   async auditTrail(): Promise<Result<readonly AuditEvent[]>> {
-    const { rows } = await this.#session.query<AuditRow>(
-      'SELECT kind, generation, actor, reason, occurred_at FROM audit_events ORDER BY position',
-    );
-    return ok(rows.map((row) => Object.freeze({
-      kind: row.kind, generation: row.generation, actor: row.actor, reason: row.reason, occurredAt: instant(row.occurred_at),
-    })));
+    return ok(await auditTrailOf(this.#session, OPERATOR_AUDIT_SUBJECT));
   }
+}
+
+async function auditTrailOf(session: Session, subject: string): Promise<readonly AuditEvent[]> {
+  const { rows } = await session.query<AuditRow>(
+    'SELECT kind, subject, generation, actor, reason, occurred_at FROM audit_events WHERE subject = $1 ORDER BY position',
+    [subject],
+  );
+  return Object.freeze(rows.map((row) => Object.freeze({
+    kind: row.kind, subject: row.subject, generation: row.generation, actor: row.actor, reason: row.reason, occurredAt: instant(row.occurred_at),
+  })));
 }

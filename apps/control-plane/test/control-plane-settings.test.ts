@@ -18,6 +18,7 @@ import {
   serveUntilStopped,
   WorkflowRegistry,
 } from '@taskelith/control-plane';
+import { FLEET_LIMITS } from '@taskelith/fleet';
 import { TRANSPORT_LIMITS } from '@taskelith/nats';
 import { parseWorkflowDefinition, parseWorkflowRunBinding } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
@@ -136,6 +137,14 @@ test('the streams take the target byte limit unless configured', () => {
     const failure = failed(readControlPlaneSettings({ ...BASE, TASKELITH_STREAM_MAX_BYTES: text }, 'linux', 501));
     assert.equal(failure.details.variable, 'TASKELITH_STREAM_MAX_BYTES', text);
   }
+});
+
+// The catch-up path of an offline worker: its unacknowledged notice must
+// stay in the command stream until the rotation's deadline.
+test('the command stream keeps a rotation notice at least until the rotation deadline', () => {
+  const { rotationGraceMilliseconds, rotationHardCapMilliseconds } = FLEET_LIMITS;
+  const deadline = Math.max(rotationGraceMilliseconds, rotationHardCapMilliseconds);
+  assert.ok(TRANSPORT_LIMITS.streamMaxAgeMilliseconds >= deadline, `${TRANSPORT_LIMITS.streamMaxAgeMilliseconds} < ${deadline}`);
 });
 
 test('the known workflows come from a JSON file', () => {

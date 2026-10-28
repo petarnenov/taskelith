@@ -4,7 +4,9 @@ export {
   EnrollmentService,
   type Enrollment,
   type EnrollmentServiceDependencies,
-  type RotatedCredentials,
+  type ConfirmedCredentials,
+  type RequestedRotation,
+  type RotationInvocation,
   type WorkerRevocation,
 } from './application/enrollment-service.js';
 export {
@@ -14,13 +16,17 @@ export {
 } from './application/installation-service.js';
 export {
   commonProtocolVersion,
+  confirmCredentials,
   credentialGenerations,
   expiredPredecessor,
   hostMismatch,
   isExpired,
+  renewCredentials,
+  requestRotation,
   revocationOf,
-  rotateCredentials,
+  unrenewedPastDeadline,
   validGenerations,
+  type Confirmation,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
@@ -30,13 +36,27 @@ export {
   type HostConstraints,
   type HostPlatform,
   type ProtocolWindow,
-  type Rotation,
+  type RotationConflict,
+  type RotationRequest,
   type WorkerCapacity,
   type WorkerCredentials,
   type WorkerHost,
   type WorkerPrincipal,
 } from './domain/enrollment.js';
 export { FLEET_LIMITS, type FleetLimits } from './domain/fleet-limits.js';
+export { CONTROL_PLANE_ACTOR, WORKER_ACTOR, type RotationExpiry } from './domain/credential-audit.js';
+export {
+  confirmationStep,
+  predecessorExpiryStep,
+  renewalStep,
+  requestStep,
+  rotationConflict,
+  rotationExpiryStep,
+  type CredentialRenewalRequest,
+  type RenewedCredentials,
+  type RotationOrder,
+  type RotationStep,
+} from './domain/credential-rotation.js';
 export {
   FIRST_RECOVERY_EPOCH,
   installationIdentity,
@@ -45,7 +65,8 @@ export {
   parseWorkerId,
   type InstallationIdentity,
 } from './domain/installation.js';
-export type { BrokerCredentials, IssuedBrokerCredential } from './ports/broker-credentials.js';
+export type { BrokerCredentials, IssuedBrokerCredential, SignedBrokerUser } from './ports/broker-credentials.js';
+export type { CredentialRenewalClient } from './ports/credential-renewal-client.js';
 export type { WorkerCommandConsumers } from './ports/command-consumers.js';
 export {
   CERTIFICATE_ISSUER_CONFORMANCE,

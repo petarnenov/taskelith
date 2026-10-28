@@ -533,6 +533,51 @@ describe('enrollment and quarantine', () => {
     await again.stop();
   });
 
+  test('a rotation reaches the running worker, which renews, re-dials with N+1, and confirms', { timeout: 60_000 }, async () => {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const dataDir = join(base, 'rotation-root');
+    const environment = {
+      TASKELITH_DATA_DIR: dataDir, TASKELITH_CONTROL_PLANE_URL: `https://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+    };
+    const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
+      ...testBrokerDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
+    });
+    const lines: string[] = [];
+    const bundle = { TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string, TASKELITH_INSTALLATION_CA_SHA256: issued.installationCaSha256 as string };
+    const worker = await workerMain({ ...environment, ...bundle }, (line) => lines.push(line), dependencies);
+    assert.ok(worker, lines.join('\n'));
+    const { workerId } = worker.identity;
+    const identity = () => JSON.parse(readFileSync(join(dataDir, 'worker', 'identity'), 'utf8')) as { credentialGeneration: number; previous?: unknown };
+    const bearer1 = readFileSync(join(dataDir, 'worker', 'credentials', 'control-plane.1'), 'utf8');
+    const unrequested = await call('POST', '/workers/credentials/renewals', { bearer: bearer1, body: {
+      credentialGeneration: 2, brokerUserPublicKey: `U${'A'.repeat(55)}`, controlPlaneSecretSha256: 'ab'.repeat(32),
+    } });
+    assert.deepEqual([unrequested.status, (unrequested.body.details as { reason: string }).reason], [409, 'rotation-not-requested']);
+    try {
+      const rotated = await admin(['rotate-worker', workerId, '--actor', 'ops', '--reason', 'api test'], { TASKELITH_OPERATOR_TOKEN: operator });
+      assert.equal(rotated.credentialGeneration, 2);
+      await waitFor(async () => identity().credentialGeneration === 2 && identity().previous === undefined, 30_000);
+      const kinds = await sql<{ kind: string; subject: string; generation: number }>(database,
+        "SELECT kind, subject, generation FROM audit_events WHERE subject = $1 ORDER BY position", [workerId]);
+      assert.deepEqual(kinds.map(({ kind, generation }) => [kind, generation]), [
+        ['worker-credential.rotation-requested', 2], ['worker-credential.renewed', 2], ['worker-credential.confirmed', 2],
+      ]);
+      assert.equal((await call('POST', '/launch-authorizations', { bearer: bearer1, body: {} })).status, 401, 'N is dropped at once');
+      const [row] = await sql<{ rotation_deadline: Date | null }>(database, 'SELECT rotation_deadline FROM workers WHERE worker_id = $1', [workerId]);
+      assert.equal(row?.rotation_deadline, null);
+      assert.equal(lines.join('\n').includes(bearer1), false);
+    } finally {
+      await worker.stop();
+    }
+    const again = await workerMain(environment, (line) => lines.push(line), dependencies);
+    assert.ok(again, lines.join('\n'));
+    const lastContact = async () => (await sql<{ last_contact_at: Date | null }>(database,
+      'SELECT last_contact_at FROM workers WHERE worker_id = $1', [workerId]))[0]?.last_contact_at?.getTime() ?? 0;
+    const before = await lastContact();
+    await waitFor(async () => (await lastContact()) > before, 30_000);
+    await again.stop();
+  });
+
   test('a worker journals its commands before it acknowledges them and publishes its observations', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const environment = {
