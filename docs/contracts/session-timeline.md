@@ -109,7 +109,7 @@ A request is keyed by its session, its generation, and its `NativeRequestId` (ag
 3. An unknown turn fails with `not-found`.
 4. A generation that is not running, or a turn that is not `delivered` in it, fails with `precondition-failed`.
 
-The request is `open`. A request enters the timeline only this way, so it is persisted before any read of section 5.5 can show it (architecture section 7).
+The request is `open`. A request enters the timeline only this way, so a read of section 5.5 lists only recorded requests. Recording changes only the session value that `recordRequest` returns and stores nothing (section 1); persistence before display is item 13's obligation: the session timeline service commits the recorded session durably before any read shows the request or any event publishes it (architecture section 7; agent harness port contract section 2 rule 6).
 
 ### 5.2 A single response
 
@@ -187,7 +187,7 @@ This item adds, through `make`, unit tests of the domain in `packages/modules/ex
 
 The items that build on it add:
 
-- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, and the reconciliation of section 6 applied at a restart, with the crash points of each path.
+- Item 13: persistence of sessions with a uniqueness of an attempt across a task's sessions, a request committed before any read shows it or any event publishes it, a submission retried across a restart that creates no second turn, a response consumed once across concurrent answers, and the reconciliation of section 6 applied at a restart, with the crash points of each path.
 - Item 18: the host tests that the agent harness port contract section 11 lists, through this timeline.
 - Item 14: a reader whose cursor expired falls back to a durable snapshot.
 

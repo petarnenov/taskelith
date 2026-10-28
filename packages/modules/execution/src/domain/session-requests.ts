@@ -27,7 +27,7 @@ const ANSWER_KIND: Readonly<Record<HarnessRequestKind, Answer['kind']>> = Object
 
 const MAX_DELEGATION_ID_LENGTH = 128;
 
-// Records a native request before anything shows it (contract, section 5.1).
+// Records a native request in the returned session (contract, section 5.1).
 export function recordRequest(session: Session, recording: RequestRecording): Result<Session> {
   if (!isTextWithin(recording.text, 0, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got request text out of bounds');
   const existing = session.requests.find((request) => isSameKey(request.key, recording.key));
