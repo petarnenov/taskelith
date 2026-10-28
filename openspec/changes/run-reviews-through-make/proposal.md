@@ -23,4 +23,4 @@ Out of scope: moving the Jev key; a `make record-check` or `make integrate` gate
 
 ## Impact
 
-Private repository tooling and documents only: the `Makefile`, the new `scripts/review-run.ts` and `scripts/reviewer-invocations.ts`, their tests, the agent task protocol, and two skills. No published package, API, or product contract changes. Passes 1 and 2 of this change run through `make review` itself, which checks the Codex and Claude Code rows against the real CLIs.
+Private repository tooling and documents only: the `Makefile`, the new `scripts/review-run.ts`, `scripts/reviewer-invocations.ts`, and `scripts/review-files.ts` (the checks of the prompt and log files), their tests, `scripts/findings-common.ts`, which now holds the shared `isRecord` guard, the agent task protocol, and two skills. No published package, API, or product contract changes. Passes 1 and 2 of this change run through `make review` itself, which checks the Codex and Claude Code rows against the real CLIs.

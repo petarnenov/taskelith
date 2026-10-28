@@ -11,8 +11,12 @@
 - **WHEN** `REVIEWER` is no key of the table
 - **THEN** `scripts/review-run.ts` lists the keys, exits 2, and runs no reviewer
 
+#### Scenario: Wrong role
+- **WHEN** `ROLE` is B for pass 1 or 3, or A for pass 2
+- **THEN** `scripts/review-run.ts` exits 2 and runs no reviewer
+
 #### Scenario: Failed attempt
-- **WHEN** the reviewer cannot start, exits non-zero, reports no session ID, or reports no model or another one, also in OpenCode's session export or a fresh Antigravity log
+- **WHEN** the reviewer cannot start, exits non-zero, reports no session ID, or reports no model or another one, also in OpenCode's session export or a fresh Antigravity log, or Codex reports another effort or sandbox
 - **THEN** `scripts/review-run.ts` exits 4 and writes no pass line
 
 #### Scenario: Linked log
@@ -33,6 +37,10 @@ Before pass 1, when the change's `route.json` is missing or was made for another
 #### Scenario: Stamped tree
 - **WHEN** pass 1 starts with a missing `route.json` on a stamped clean tree
 - **THEN** `scripts/review-run.ts` writes `route.json`, exits 3, and runs no reviewer
+
+#### Scenario: Failed route
+- **WHEN** routing fails after a stale `route.json` was deleted
+- **THEN** `scripts/review-run.ts` restores it, exits 1, and runs no reviewer
 
 ### Requirement: Reviewer environment
 `make review` SHALL start the reviewer with no inherited environment except `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `TMPDIR`, and the variables that the reviewer's row declares, also none that the Node.js runtime adds to child processes, so that no secret reaches a reviewer.
