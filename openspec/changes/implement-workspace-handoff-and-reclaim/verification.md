@@ -39,6 +39,7 @@ G3 item 16 (`docs/g3-plan.md`, row 16), sub-change 16d, developed by a briefed s
 - The records of the pass 2 fixes, the commit names of N15 and N16 (`e4e1b3f2`), and this record of their `make verify`.
 - `8e05da54` the record of the `make verify` after the pass 2 fixes.
 - `ae465618` `chore: make the pass 3 hand-off, FIFO, and cgroup fixes deterministic` (P1, P2, P3 of review pass 3 of reviewer A on `8e05da54`: Low 3).
+- `d09a40c8` the merge of `origin/dev` `7442b1bb` (#398 to #400, among them `deliver-rotated-worker-credentials`), without a conflict. It adds a `breaking-changes.json` declaration for `execution.asyncapi.json` only; this change touches no contract document, so it needs none. Its `scripts/installation.sh` compares the platform image config and layers in `make verify-worker-image-reproducible` and leaves `build_stages` and `build_worker` as they were.
 
 ## Environment
 
@@ -141,7 +142,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- `make verify-worker-image-reproducible` compares index digests, which differ by the default provenance attestation on a Docker host with the containerd image store; fixing the check, for example with `--provenance=false` or by comparing the image manifest, is for the coordinator to assign.
+- `make verify-worker-image-reproducible` compared index digests, which differ by the default provenance attestation on a Docker host with the containerd image store; fixing the check, for example with `--provenance=false` or by comparing the image manifest, is for the coordinator to assign. Since the merge `d09a40c8`, `origin/dev` compares the platform image config and layers instead; the check was not run again here.
 
 - 16e: killing a program left running past `RECLAIM_RUN_BOUND_MS`, freeing its slot, and any retry (coordinator decision N6), and freeing the empty cgroup of a failed program.
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), arranged by the coordinator.
