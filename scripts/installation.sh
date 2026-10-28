@@ -79,29 +79,31 @@ unpack_context() {
   git -C "$repository" archive --format=tar "$1" | tar -xf - -C "$2"
 }
 
-build() (
+# Builds STAGE IMAGE pairs from one source revision; usage:
+# build_stages PINS_TARGET STAGE IMAGE [STAGE IMAGE...]
+build_stages() (
   local revision epoch context
-  require_pins installation-build
+  require_pins "$1"
+  shift
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' EXIT
   revision="$(source_revision)" || exit
   epoch="$(commit_time "$revision")" || exit
   unpack_context "$revision" "$context"
-  build_image "$context" "$epoch" control-plane "$control_plane_image"
-  build_image "$context" "$epoch" worker "$worker_image"
+  while [ "$#" -gt 0 ]; do
+    build_image "$context" "$epoch" "$1" "$2"
+    shift 2
+  done
 )
 
+build() {
+  build_stages installation-build control-plane "$control_plane_image" worker "$worker_image"
+}
+
 # The worker image alone, for the Linux tests that run in it.
-build_worker() (
-  local revision epoch context
-  require_pins verify-linux-git-workspace
-  context="$(mktemp -d)"
-  trap 'rm -rf "$context"' EXIT
-  revision="$(source_revision)" || exit
-  epoch="$(commit_time "$revision")" || exit
-  unpack_context "$revision" "$context"
-  build_image "$context" "$epoch" worker "$worker_image"
-)
+build_worker() {
+  build_stages verify-linux-git-workspace worker "$worker_image"
+}
 
 # Removes the check's images; a failed removal fails a check that passed.
 finish_reproducible() {
