@@ -59,11 +59,15 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc` t
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `4718a0a5186c63609e6698c8318fdf41c87b8b5f`; tests 3120, pass 3058, fail 0, skipped 62; all files 99.41% lines, 92.80% branches, 98.99% functions.
+- `make verify`: passed, profile full, tree `dc27ddab7337bc1066c66efc4258045a761e7b3a`; tests 3123, pass 3061, fail 0, skipped 62; all files 99.41% lines, 92.79% branches, 98.99% functions.
 - `npm run openspec -- validate define-board-session-and-event-stream-contracts --strict`: passed, `Change 'define-board-session-and-event-stream-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).`.
 - Spec diff against the merge base `ff7ab7a0622d` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a18257-d0b5-7471-beb5-90c86b982182` | 0 | 3 | 3 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -90,6 +94,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | `tsc --noEmit --strict` over the changed test files with `allowImportingTsExtensions` | Exit 0 |
 | Spec delta requirement body lengths, in characters, changed ones | Native request responses on the wire 476, Event stream cursor and resynchronization 458, Event payloads and agent text 331, Idempotency before redaction 335; Needs you items answered once by their source 496 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+| `make verify` on `1725ac5e`, clean tree (log `bsec-verify-2.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `dc27ddab`, stamp written: tests 3123, pass 3061, fail 0, skipped 62; all files 99.41% lines, 92.79% branches, 98.99% functions; generated part below |
 
 The fixes change contracts, not only records, and pass 1 found High findings, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
