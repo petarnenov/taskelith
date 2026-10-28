@@ -73,7 +73,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7271de8c6850fec5dda85a46834ef031433ee7a9`; tests 3122, pass 3060, fail 0, skipped 62; all files 99.38% lines, 92.80% branches, 98.99% functions.
+- `make verify`: passed, profile full, tree `7fe69d18a4c422f9bad30b74e1165287d0575ead`; tests 3123, pass 3061, fail 0, skipped 62; all files 99.38% lines, 92.79% branches, 98.99% functions.
 - `npm run openspec -- validate extend-execution-http-contracts --strict`: passed, `Change 'extend-execution-http-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).`.
 - Spec diff against the merge base `ff7ab7a0622d` with `origin/dev`: no change under `openspec/specs`.
@@ -82,6 +82,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18262-f3c8-7d62-8ea3-5f9432d7c185` | 0 | 1 | 6 | 1 |
+| 2 | B | `claude claude-opus-5-5#high` | `e3dce30b-4b91-4e67-9d93-938b72c7ae27` | 0 | 0 | 10 | 10 |
 <!-- make record: end -->
 
 ## Independent review
@@ -149,6 +150,7 @@ The fixes change contracts, not only records, and pass 1 found a High finding, s
 | Fail-before: `execution-http-contracts.test.ts` with the document of `e31e6481`, after `npm run build` | tests 19, pass 17, fail 2: `a re-admission names its project, key, and generation and is refused with a typed reason`, `an unknown execution or run of a worker is a typed refusal, not a 404`; restored, 19 of 19 pass |
 | Spec delta requirement body lengths, in characters | `execution-wire-contracts`: Execution HTTP operations 496 (unchanged since `764de1d8`), G3 execution operations 448, Per-project evidence reads 425, Evidence retirement 469, Delegation result read 369, Reconciliation queue reads 402, Task re-admission 449, Slot credential delivery 340, Slot credential delivery checks 474, Per-run SCM credential delivery 476, Remote re-check at SCM credential delivery 480, Credential deliveries never kept 255; `evidence-store`: Evidence reads 357, Evidence retention 375 |
 | `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+| `make verify` on `98859f2b`, clean tree (log `eehc-verify-6.log` in the session scratchpad), one run, no rerun | Passed, profile full, tree `7fe69d18`, stamp written: tests 3123, pass 3061, fail 0, skipped 62; generated part below |
 
 The pass 2 fixes change the document, contracts, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
 
