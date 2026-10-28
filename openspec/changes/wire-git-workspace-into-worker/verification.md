@@ -196,18 +196,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Residual risk (Q9): on macOS a recorded process group identifier can be reused by an unrelated group after the program's group ended; the proof then reads it as populated, which only delays the reclaim to the proof's bound and reports the workspace, and never releases one early. The kill after the run bound signals a group only while Node has not reaped its leader, so it never kills a reused group; since review pass 2 a test with an injected signal call checks it.
 - Until item 21, a failed reclaim is visible only as the log line `worker.workspace.reclaim-failed` and the held slot (Q5; `design.md`, "Obligations and residual risks").
 
-## Archive
-
-Checked state: the tree of the archive commit, `docs: archive the wire git workspace into worker change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive wire-git-workspace-into-worker --yes` on `05be9ab2`, with every task of `tasks.md` ticked, and only this section was added afterward.
-
-| Command | Result |
-| --- | --- |
-| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
-| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-28-wire-git-workspace-into-worker` |
-| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `16667399`) | Only this change's deltas: `git-workspace-port` and `worker-runtime`, 162 insertions and 35 deletions, 11 requirements added, 3 modified, and 2 removed |
-| `findings.jsonl` and `passes.jsonl` in the moved change; `make findings ARGS="validate"` | Both present (15 findings, 3 passes); `Every findings file is valid: 82 file(s); every pass summary file is valid: 62 file(s); every route file is valid: 18 file(s).` |
-| `make verify` on the archive working tree (log `16e-verify-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3575 tests, 3528 passed, 0 failed, 47 skipped; all files 99.37% lines, 92.78% branches, 98.76% functions |
-
 ## Remaining gates
 
 - The suite natively on macOS against the Git adapter with Apple's `/usr/bin/git` 2.50.1 on the iMac (contract section 13, pending gate), including the macOS composition's kill of a process group, arranged by the coordinator.
