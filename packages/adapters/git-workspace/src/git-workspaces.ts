@@ -365,7 +365,8 @@ export class GitWorkspaces implements WorkspaceProvider {
   // proven empty, and freed, also when that write fails (section 3, step 7).
   async #failedProgram(path: string, launched: LaunchedReclaim): Promise<Result<void>> {
     const { containment } = launched;
-    const recorded = await writeHandOffRecord(path, { containment, reclaimFailed: true });
+    const failure = { containment, reclaimFailed: true };
+    const recorded = await failingFileSystemAsUnavailable(() => writeHandOffRecord(path, failure));
     const cleanedUp = await this.#cleanedUp(containment, () => launched.kill());
     return recorded.ok ? cleanedUp : recorded;
   }

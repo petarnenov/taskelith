@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -419,6 +419,30 @@ test('a failure record that cannot be written still kills the overrunning progra
     value(await git.local.reclaim(FIRST));
     assert.equal(host.launched.length, 2, 'the later reclaim runs the program once more');
     assert.deepEqual(await git.local.handedOff(), []);
+  }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
+});
+
+test('a failure record whose rename throws still kills, proves empty, and frees the overrunning program', { timeout: 30_000 }, async () => {
+  const holdDirectory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-hold-'));
+  const hold = join(holdDirectory, 'hold');
+  await writeFile(hold, '');
+  const host = holdingHost(hold);
+  await withFixture(async (git) => {
+    value(await git.local.prepare(request(git)));
+    value(await git.local.handOff(FIRST));
+    // A directory at the record's name makes the rename into place throw.
+    const blocked = git.reopen({
+      reach: (point) => {
+        if (point !== 'WS8.after') return;
+        rmSync(recordPath(git));
+        mkdirSync(recordPath(git));
+      },
+    });
+    const reclaimed = failed(await blocked.reclaim(FIRST));
+    assert.deepEqual([reclaimed.code, reclaimed.message], ['unavailable', 'the file system call rename failed with EISDIR']);
+    const containment = host.launched[0]!;
+    assert.equal(await host.populated(containment), false, 'the program is killed and proven gone');
+    assert.deepEqual(host.released, [containment], 'its empty containment is freed');
   }, { reclaimHost: host, reclaimRunBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });
 
