@@ -198,6 +198,27 @@ test('a worker restarted after storing the pending generation renews it with the
   assert.deepEqual(renewal.renewals[1]!.material, renewal.renewals[0]!.material, 'the stored key and secret are renewed again');
 });
 
+test('a start after a crash in the removal of the confirmed predecessor removes its files', async () => {
+  const first = started();
+  value(first.rotation.requested({ credentialGeneration: 2 }));
+  const pending = readFileSync(join(root.paths.credentials, 'pending.2'), 'utf8');
+  await renewal.renewed(1);
+  first.rotation.linked(2);
+  await renewal.confirmed(1);
+  await waitUntil(() => !existsSync(join(root.paths.credentials, 'pending.2')));
+  first.stop.abort();
+  await first.running;
+  const superseded = { 'control-plane.1': BEARER_1, 'broker.1.creds': ENROLLMENT.credentials.broker, 'pending.2': pending };
+  const crashes = [['control-plane.1', 'broker.1.creds', 'pending.2'], ['broker.1.creds', 'pending.2'], ['pending.2']] as const;
+  for (const left of crashes) {
+    for (const name of left) writeFileSync(join(root.paths.credentials, name), superseded[name], { mode: 0o600 });
+    started();
+    for (const name of left) assert.equal(existsSync(join(root.paths.credentials, name)), false, `${name} after ${left.join(', ')}`);
+  }
+  assert.equal(value(readIdentity(root.paths.identity)).credentialGeneration, 2);
+  assert.equal(existsSync(join(root.paths.credentials, 'control-plane.2')), true, 'the confirmed generation stays');
+});
+
 test('a refused renewal ends the round with a log line; no answer is retried after the delay', async () => {
   renewal.renewAnswers = [err(failure('conflict', 'renewWorkerCredentials answered 409', { reason: 'rotation-not-requested' }))];
   const { rotation } = started();

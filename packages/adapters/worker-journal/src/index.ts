@@ -40,6 +40,7 @@ export {
   adoptGeneration,
   finishAdoption,
   readPendingGeneration,
+  removeSupersededGeneration,
   storePendingGeneration,
   type PendingGeneration,
 } from './credential-rotation-files.js';

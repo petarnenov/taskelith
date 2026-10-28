@@ -11,6 +11,7 @@ import {
   readCredentialFiles,
   readPendingGeneration,
   readWorkerCredentials,
+  removeSupersededGeneration,
   storePendingGeneration,
   type PendingGeneration,
   type WorkerCredentials,
@@ -62,12 +63,16 @@ export class CredentialRotation {
     this.#previous = previous;
   }
 
-  // Reads the files the identity names, the kept predecessor's included.
+  // Reads the files the identity names, the kept predecessor's included,
+  // and resumes the removal of a finished adoption's files.
   static open(options: CredentialRotationOptions): Result<CredentialRotation> {
     const { paths, identity } = options;
     const current = readWorkerCredentials(paths, identity);
     if (!current.ok) return current;
-    if (identity.previous === undefined) return ok(new CredentialRotation(options, current.value, undefined));
+    if (identity.previous === undefined) {
+      const removed = removeSupersededGeneration(paths, identity);
+      return removed.ok ? ok(new CredentialRotation(options, current.value, undefined)) : removed;
+    }
     const previous = readCredentialFiles(paths, identity.previous.credentials);
     return previous.ok ? ok(new CredentialRotation(options, current.value, previous.value)) : previous;
   }

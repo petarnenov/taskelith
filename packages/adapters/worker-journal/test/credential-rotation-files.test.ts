@@ -12,6 +12,7 @@ import {
   readIdentity,
   readPendingGeneration,
   readWorkerCredentials,
+  removeSupersededGeneration,
   storePendingGeneration,
   type WorkerRoot,
 } from '@taskelith/worker-journal';
@@ -77,6 +78,24 @@ test('adoption keeps the predecessor in the identity until the confirmation remo
   for (const name of ['control-plane.1', 'broker.1.creds', 'pending.2']) assert.equal(existsSync(join(paths.credentials, name)), false, name);
   assert.deepEqual(value(readWorkerCredentials(paths, finished)), NEXT);
   assert.deepEqual(value(finishAdoption(paths, finished)), finished, 'a repeat changes nothing');
+});
+
+test('only a confirmed generation has its predecessor and its pending file removed; the next pending file stays', () => {
+  const root = enroll();
+  const { paths } = root;
+  const exists = (name: string) => existsSync(join(paths.credentials, name));
+  value(removeSupersededGeneration(paths, root.identity));
+  assert.equal(exists('control-plane.1'), true, 'generation 1 supersedes nothing');
+  value(storePendingGeneration(paths, PENDING));
+  const adopted = value(adoptGeneration(paths, root.identity, 2, NEXT));
+  value(removeSupersededGeneration(paths, adopted));
+  assert.deepEqual(['control-plane.1', 'pending.2'].map(exists), [true, true], 'a kept predecessor stays');
+
+  const { previous: _kept, ...confirmed } = adopted;
+  value(storePendingGeneration(paths, { ...PENDING, credentialGeneration: 3 }));
+  value(removeSupersededGeneration(paths, confirmed));
+  assert.deepEqual(['control-plane.1', 'broker.1.creds', 'pending.2'].map(exists), [false, false, false]);
+  assert.deepEqual(['control-plane.2', 'broker.2.creds', 'pending.3'].map(exists), [true, true, true]);
 });
 
 test('an adoption repeated after a crash accepts its own files and refuses other content', () => {

@@ -86,10 +86,19 @@ export function finishAdoption(paths: WorkerPaths, identity: WorkerIdentity): Re
   if (previous === undefined) return ok(identity);
   const replaced = replaceFile(paths.identity, serializeIdentity(confirmed));
   if (!replaced.ok) return replaced;
-  const leftovers = [previous.credentials.controlPlane, previous.credentials.broker].map((reference) => join(paths.worker, reference));
-  for (const path of [...leftovers, pendingPath(paths, identity.credentialGeneration)]) rmSync(path, { force: true });
-  const synced = syncPath(paths.credentials);
-  return synced.ok ? ok(Object.freeze(confirmed)) : synced;
+  const removed = removeSupersededGeneration(paths, confirmed);
+  return removed.ok ? ok(Object.freeze(confirmed)) : removed;
+}
+
+// The identity is the durable record of a finished adoption, so every start
+// removes the files that a crash after its replacement left behind.
+export function removeSupersededGeneration(paths: WorkerPaths, identity: WorkerIdentity): Result<void> {
+  const { credentialGeneration, previous } = identity;
+  if (previous !== undefined || credentialGeneration === 1) return ok(undefined);
+  const superseded = credentialReferencesOf(credentialGeneration - 1);
+  const leftovers = [superseded.controlPlane, superseded.broker].map((reference) => join(paths.worker, reference));
+  for (const path of [...leftovers, pendingPath(paths, credentialGeneration)]) rmSync(path, { force: true });
+  return syncPath(paths.credentials);
 }
 
 // A crash may have left the file written; only the same content counts.
