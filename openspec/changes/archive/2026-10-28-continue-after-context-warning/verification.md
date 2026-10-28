@@ -61,6 +61,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6-astra#medium` | `01a1846b-5306-7c80-9325-a7f8b6da5f6c` | 0 | 0 | 0 | 2 |
 <!-- make record: end -->
 
+## Archive
+
+Every task of `tasks.md` is ticked. `npm run openspec -- archive continue-after-context-warning --yes` moved the change to `openspec/changes/archive/2026-10-28-continue-after-context-warning/` and applied the modified requirement "Context size warning" to `openspec/specs/agent-task-protocol/spec.md`. The checked state is the tree of the archive commit, `docs: archive the continue after context warning change`, the last commit of the branch; the checks below ran on that working tree before the commit, and only this section was added afterward:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-28-continue-after-context-warning` is valid.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/agent-task-protocol/spec.md`, 3 lines changed, the requirement "Context size warning" with its two scenarios, as the delta states.
+- The moved directory holds `findings.jsonl` (2 findings) and `passes.jsonl` (pass 1); `make findings ARGS="validate"` passes: `Every findings file is valid: 83 file(s); every pass summary file is valid: 63 file(s); every route file is valid: 19 file(s).`
+- `make verify`: passed, profile full, uncommitted working tree, so no stamp was written; tests 3520, pass 3511, fail 0, skipped 9; all files 99.43% lines, 92.66% branches, 98.92% functions (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/06b2129b-88b1-474a-982f-61d6a1728b94/scratchpad/verify-cacw-archive.log`).
+
 ## Limitations
 
 - No code or test changes; the change is checked by reading and by `make verify`, not by a behavioral test.
@@ -69,5 +79,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Architect check of the unreviewed fixes by the coordinator (Niki)
-- Archive of the change as the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
