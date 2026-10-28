@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Credential rotation on the worker
-On a rotation notice for its next generation a worker SHALL store a new NKey and `tkwk_` secret before it acknowledges the notice, renew with its current bearer, adopt the answer while keeping the previous generation, reconnect to the broker with the new user, and confirm with the new bearer only after that connection succeeded. A refused renewal or confirmation SHALL end the attempt with a log line; an unavailable one SHALL be retried after 5 s doubling to 60 s with jitter.
+On a notice for its next generation a worker SHALL store a new NKey and `tkwk_` secret before it acknowledges the notice, renew with its current bearer, adopt the answer keeping the previous generation, reconnect with the new broker user, and confirm with the new bearer only after that connection succeeded. A renewal or confirmation answered 400, 401, 403, or 409 SHALL end the attempt with a log line; any other failure, a 500 included, SHALL be retried after 5 s doubling to 60 s with jitter.
 
 #### Scenario: Rotation
 - **WHEN** a connected worker receives the notice for its next generation
 - **THEN** it renews, connects with the new broker user, confirms, and its launch authorizations then carry the new bearer
+
+#### Scenario: Control plane failure
+- **WHEN** a renewal or a confirmation is answered 500
+- **THEN** the worker sends it again after the retry delay, and an answered retry completes the rotation
 
 #### Scenario: Notice for another generation
 - **WHEN** a worker receives a notice for its current or an older generation

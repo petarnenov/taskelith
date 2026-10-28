@@ -235,6 +235,27 @@ test('a refused renewal ends the round with a log line; no answer is retried aft
   assert.equal(sleeps[0], 5000, 'the first launch retry delay at no jitter');
 });
 
+test('a renewal or confirmation that the control plane failed with 500 is retried after the delay', async () => {
+  const answered500 = (operation: string) => err(failure('internal', `${operation} answered 500`, { status: '500' }));
+  renewal.renewAnswers = [answered500('renewWorkerCredentials')];
+  renewal.confirmAnswers = [answered500('confirmWorkerCredentials')];
+  // Each retry delay ends at once, so the retried call follows it.
+  const { rotation } = started(options({ sleep: async (milliseconds) => {
+    sleeps.push(milliseconds);
+  } }));
+  const ended = (operation: string, delays: number) =>
+    sleeps.length === delays || sink.records.some(({ event }) => event === `worker.credentials.${operation}-refused`);
+  value(rotation.requested({ credentialGeneration: 2 }));
+  await waitUntil(() => ended('renewal', 1));
+  assert.deepEqual(sleeps, [5000], 'a 500 decided nothing, so the renewal is retried');
+  await renewal.renewed(2);
+  rotation.linked(2);
+  await waitUntil(() => ended('confirmation', 2));
+  assert.deepEqual(sleeps, [5000, 5000], 'a 500 decided nothing, so the confirmation is retried');
+  await renewal.confirmed(2);
+  await waitUntil(() => value(readIdentity(root.paths.identity)).previous === undefined);
+});
+
 test('a notice for another generation stores nothing', async () => {
   const { rotation } = started();
   assert.deepEqual(rotation.requested({ credentialGeneration: 3 }), ok(undefined));

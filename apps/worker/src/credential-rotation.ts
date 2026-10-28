@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { launchRetryDelay } from '@taskelith/execution';
 import type { CredentialRenewalClient } from '@taskelith/fleet';
-import { failure, ok, type Failure, type Result } from '@taskelith/kernel';
+import { failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import { brokerUserPublicKey, credsFile, newBrokerUserKey } from '@taskelith/nats';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { NodeSecrets } from '@taskelith/secrets';
@@ -42,6 +42,9 @@ export interface CredentialRotationOptions {
 }
 
 type Step = 'continue' | 'idle' | 'retry';
+
+// The codes of a 400, 401 or 403, and 409: the control plane decided.
+const REFUSALS: ReadonlySet<FailureCode> = new Set(['invalid', 'forbidden', 'conflict']);
 
 // Owns the worker's credential generations: it stores a requested one,
 // renews and adopts it, and confirms it once the broker link uses it.
@@ -181,11 +184,11 @@ export class CredentialRotation {
     return 'continue';
   }
 
-  // No answer is retried; a refusal ends the round until the next notice
-  // or start.
-  #unfinished(operation: string, generation: number, refused: Failure): Step {
-    const fields = { credentialGeneration: generation, code: refused.code, reason: refused.details.reason ?? refused.message };
-    if (refused.code === 'unavailable') {
+  // A refusal ends the round until the next notice or start; any other
+  // failure, a 500 included, decided nothing and is retried.
+  #unfinished(operation: string, generation: number, failed: Failure): Step {
+    const fields = { credentialGeneration: generation, code: failed.code, reason: failed.details.reason ?? failed.message };
+    if (!REFUSALS.has(failed.code)) {
       this.#logger.warn(`worker.credentials.${operation}-unavailable`, fields);
       return 'retry';
     }
