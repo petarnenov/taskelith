@@ -104,6 +104,16 @@ test('a password is 15 to 1024 code points after NFC, and never the login name',
   assert.equal(normalizePassword('é'), 'é');
 });
 
+test('a password set fits Password.maxLength in every equivalent spelling', () => {
+  const name = value(parseLoginName('alice'));
+  const astral = '\u{1F600}'.repeat(1024);
+  assert.equal(value(checkNewPassword(astral, name)), astral, 'an astral character counts once');
+  assert.equal('\u00E9'.normalize('NFD').length, 2);
+  assert.ok(checkNewPassword('\u00E9'.repeat(512), name).ok, 'its NFD has 1024 code points');
+  const refused = failed(checkNewPassword('\u00E9'.repeat(513), name));
+  assert.equal(refused.details.field, 'password', 'its NFD has 1026 code points');
+});
+
 test('login names and identifiers parse to their one canonical form', () => {
   assert.equal(value(parseLoginName('Owner.Name_1')), 'owner.name_1');
   assert.equal(parseLoginName('o'.repeat(65)).ok, false);

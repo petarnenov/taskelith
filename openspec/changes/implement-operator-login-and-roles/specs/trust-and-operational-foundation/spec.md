@@ -31,7 +31,7 @@ The principal that the operator credential authenticates SHALL be created exactl
 - **THEN** the new bearer authenticates the same principal
 
 ### Requirement: Password storage
-Passwords SHALL be normalized to Unicode NFC before the length check and before hashing, stored only as argon2id PHC strings with at least m=19456 KiB, t=2, and p=1, verified in constant time, and rehashed at login when stored parameters are weaker. An unknown login name SHALL cost the same hash computation as a wrong password. The control plane SHALL fail its start when `crypto.argon2` is missing.
+Passwords SHALL be normalized to Unicode NFC before the length check and before hashing, set only when their NFD form has at most `Password.maxLength` code points, stored only as argon2id PHC strings with at least m=19456 KiB, t=2, and p=1, verified in constant time, and rehashed at login when stored parameters are weaker. An unknown login name SHALL cost the same hash computation as a wrong password. The control plane SHALL fail its start when `crypto.argon2` is missing.
 
 #### Scenario: Known vector
 - **WHEN** the hasher computes the RFC 9106 section 5.3 argon2id test vector
@@ -40,6 +40,10 @@ Passwords SHALL be normalized to Unicode NFC before the length check and before 
 #### Scenario: Normalization
 - **WHEN** a password is set in one Unicode normalization form and presented at login in another
 - **THEN** the login succeeds
+
+#### Scenario: Decomposed length
+- **WHEN** a password is set whose NFC form fits `Password.maxLength` but whose NFD form does not
+- **THEN** it is refused as `invalid`
 
 #### Scenario: Weaker stored parameters
 - **WHEN** a principal logs in with a hash of weaker parameters

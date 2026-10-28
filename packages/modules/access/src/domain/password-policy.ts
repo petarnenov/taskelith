@@ -18,8 +18,7 @@ export function normalizePassword(password: string): string {
 // The normalized password, if it may be set for the login name.
 export function checkNewPassword(password: string, loginName: LoginName, policy: PasswordPolicy = PASSWORD_POLICY): Result<string> {
   const normalized = normalizePassword(password);
-  const length = [...normalized].length;
-  if (length < policy.minimumCodePoints || length > policy.maximumCodePoints) {
+  if (!withinBounds(normalized, policy)) {
     const bounds = `${policy.minimumCodePoints}-${policy.maximumCodePoints}`;
     return err(failure('invalid', `a password must be ${bounds} characters`, { field: 'password' }));
   }
@@ -27,4 +26,16 @@ export function checkNewPassword(password: string, loginName: LoginName, policy:
     return err(failure('invalid', 'a password must not equal the login name', { field: 'password' }));
   }
   return ok(normalized);
+}
+
+// Counted as the schema's `maxLength` counts, in code points; the NFD
+// bound lets every equivalent spelling of the password pass at login.
+function withinBounds(normalized: string, policy: PasswordPolicy): boolean {
+  const length = codePoints(normalized);
+  const decomposedLength = codePoints(normalized.normalize('NFD'));
+  return length >= policy.minimumCodePoints && decomposedLength <= policy.maximumCodePoints;
+}
+
+function codePoints(text: string): number {
+  return [...text].length;
 }
