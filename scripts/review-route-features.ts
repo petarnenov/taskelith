@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { isSize, type Size } from './checklist-record.ts';
-import { contentLines, NO_CAPABILITY, type Finding, type Severity } from './review-findings.ts';
+import { changeOfDirectory, contentLines, NO_CAPABILITY, type Finding, type Severity } from './review-findings.ts';
 import type { CapabilityHistory, RouteFeatures, Touches } from './review-route.ts';
 
 // Derives the router input of an active change from committed state,
@@ -82,7 +82,7 @@ export function featuresAt(
   };
 }
 
-function required<Value>(value: Value | undefined, refusal: string): Value {
+export function required<Value>(value: Value | undefined, refusal: string): Value {
   if (value === undefined) throw new RouteRefusal(refusal);
   return value;
 }
@@ -166,9 +166,12 @@ export function sizeOf(checklist: string | undefined): Size | null {
 }
 
 export interface ArchivedReview {
+  readonly change: string;
   readonly capabilities: ReadonlySet<string>;
   readonly highestPass: number;
   readonly mediumOrWorse: number;
+  // Reviewed per artifact, so its highest pass is no change's outcome.
+  readonly severalArtifacts: boolean;
 }
 
 const REVIEW_FILES = new Set(['findings.jsonl', 'passes.jsonl']);
@@ -186,7 +189,8 @@ export function archivedReviewsOf(files: readonly string[], read: (path: string)
   for (const [directory, paths] of filesByChange(files)) {
     const records = paths.filter((path) => REVIEW_FILES.has(posix.basename(path)) && posix.dirname(path) === directory);
     if (records.length === 0) continue;
-    reviews.push(archivedReview(capabilitiesUnder(paths, directory), records.map((path) => recordOf(path, read(path)))));
+    const change = changeOfDirectory(posix.basename(directory));
+    reviews.push(archivedReview(change, capabilitiesUnder(paths, directory), records.map((path) => recordOf(path, read(path)))));
   }
   return reviews;
 }
@@ -200,7 +204,7 @@ function filesByChange(files: readonly string[]): Map<string, string[]> {
   return byChange;
 }
 
-type RecordLine = Partial<Pick<Finding, 'pass' | 'severity' | 'capability'>>;
+type RecordLine = Partial<Pick<Finding, 'pass' | 'severity' | 'capability' | 'artifact'>>;
 
 interface ReviewRecord {
   readonly isFindings: boolean;
@@ -218,14 +222,16 @@ function recordOf(path: string, text: string): ReviewRecord {
 
 const MEDIUM_OR_WORSE: ReadonlySet<Severity> = new Set<Severity>(['critical', 'high', 'medium']);
 
-function archivedReview(specCapabilities: readonly string[], records: readonly ReviewRecord[]): ArchivedReview {
+function archivedReview(change: string, specCapabilities: readonly string[], records: readonly ReviewRecord[]): ArchivedReview {
   const findings = records.filter(({ isFindings }) => isFindings).flatMap(({ lines }) => lines);
   const findingCapabilities = findings.flatMap(({ capability }) => (capability === undefined || capability === NO_CAPABILITY ? [] : [capability]));
   const passes = records.flatMap(({ lines }) => lines.map(({ pass }) => pass ?? 0));
   return {
+    change,
     capabilities: new Set([...specCapabilities, ...findingCapabilities]),
     highestPass: Math.max(0, ...passes),
     mediumOrWorse: findings.filter(({ severity }) => severity !== undefined && MEDIUM_OR_WORSE.has(severity)).length,
+    severalArtifacts: records.some(({ lines }) => lines.some(({ artifact }) => artifact !== undefined)),
   };
 }
 
