@@ -19,7 +19,7 @@
 - [x] 2.8 Tests committed before the module, then `scripts/review-route-evaluation.ts` with `test/review-route-evaluation.test.ts` (no future history, the shadow router only as a fake), its git adapter in `scripts/review-route-environment.ts`, and `docs/review-findings/route-evaluation.schema.json`; `runRouteEvaluation` is the entry and `routeEvaluationDependencies` the composition root, wired live but never run.
 - [x] 2.9 Run the offline evaluation with `--rule-only` at `3f23516a`, save `evaluation.jsonl`, and compare it with the in-sample figures of `design.md` "Archived statistics" in `verification.md`.
 - [x] 2.11 Resolve `design.md` open question 1 as option (a), never an OpenCode reviewer, and move it into "Decisions" (7).
-- [ ] 2.10 Owner hard floor confirmed on 2026-10-28 via the coordinator (the TypeSafe account, the Master Customer Agreement with paid credits, and the data consent), and `JEV_MAF_LAB` set on this host. After the merge of `dev` in phase 3: run the offline evaluation with the shadow router, record `evaluation.jsonl` and the figures in `verification.md`, and replace the constructed response fixture with a captured one.
+- [x] 2.10 Owner hard floor confirmed on 2026-10-28 via the coordinator (the TypeSafe account, the Master Customer Agreement with paid credits, and the data consent), and `JEV_MAF_LAB` set on this host. After the merge of `dev` in phase 3: run the offline evaluation with the shadow router, record `evaluation.jsonl` and the figures in `verification.md`, and replace the constructed response fixture with a captured one.
 
 ## 3. Phase 3: integration after `adopt-process-performance-recommendations` reaches `dev`
 
@@ -31,6 +31,6 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Author self-check against the review checklist and ADR 0004, and the evidence check.
+- [x] 4.1 Author self-check against the review checklist and ADR 0004, and the evidence check.
 - [ ] 4.2 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed, each recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
 - [ ] 4.3 Archive the change in the last commit of the branch.

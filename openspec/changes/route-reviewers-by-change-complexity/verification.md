@@ -88,6 +88,8 @@ The differences have two causes, checked by a scratch script (not committed) tha
 - Lines bands. Phase 1 took the merged diff; the evaluation takes the revision that pass 1 reviewed, as `design.md` "Offline evaluation" asks, which every one of the 50 branches names, so none is approximate. Review fixes and archived spec updates leave it smaller. Three changes that needed a third pass move down a band: `alternate-reviewers-per-pass` (103 to 41 lines) and `stop-placement-pass-at-fleet-decline` (105 to 85) into under 100, and `align-slot-credential-delivery` (718 to 138) into 100 to 399.
 - Tiers. The phase 1 figures did not apply the `contracts` trigger as "Features" defines it: they counted one contract change, while `docs/contracts/**` matches 18 of the 50 at their reviewed revision. The trigger alone elevates 12 changes, of which 4 needed a third pass; with the `contracts` trigger left out, the evaluation gives 9 of 15 `elevated` and 7 of 35 `standard`, close to phase 1. The `lines` trigger fires on 11 changes (7 third passes), `files` on 5 (3), `security` on 4 (2), `docker` on 2 (1), `capabilities` on 2 (1), and `contracts` on 18 (9). The rule is unchanged; `design.md` "Archived statistics" records the correction, and "Decisions" 8 the coordinator's decision to keep the trigger.
 
+Since the live run of task 2.10, `evaluation.jsonl` holds that run ("Live shadow evaluation" below) and no longer the rule-only lines: `--save` refuses an existing file, and the live run evaluates the same 50 changes at the same revision. The rule-only figures above stay as printed; apart from `shadow`, every line of the live file equals the rule-only line of the same change (checked by a scratch script, not committed, against a copy of the rule-only file).
+
 Both figures remain in-sample: the thresholds were read off these records. As of the branch's merge base `92516221` the archive holds 51 such changes (with `normalize-reviewer-keys`): 17 third passes (33%), `standard` 4 of 24, `elevated` 13 of 27 (printed, not saved).
 
 ### Phase 3
@@ -103,6 +105,99 @@ On the branch after the merge of `origin/dev` at `f3a53f17` (#383, `adopt-proces
 - `make verify` with `TMPDIR` under the session scratchpad, on `dbba3f5b`, full profile, log at `/tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/rr-verify.log`: exit 0, `make verify: passed, profile full, tree 468985447f8578520ad993243fa804a7f8bf13d0; stamp written`; `tests 2816`, `pass 2769`, `fail 0`, `cancelled 0`, `skipped 47`; product coverage all files 99.32 lines, 92.62 branches, 98.98 functions; `Verified 766 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)`; `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.` An earlier run on `939de6b0` passed with the same counts but wrote no stamp, because this record was edited during it.
 - `make record CHANGE=route-reviewers-by-change-complexity LOG=<that log>`: `make record: wrote the generated part of openspec/changes/route-reviewers-by-change-complexity/verification.md`. `make record-check CHANGE=route-reviewers-by-change-complexity`: `make record-check: the generated part matches the tree`.
 - `npm run openspec -- validate --all --strict`: `Totals: 70 passed, 0 failed (70 items)`. `make findings ARGS="validate"`: `Every findings file is valid: 60 file(s); every pass summary file is valid: 40 file(s); every route file is valid: 1 file(s).`
+
+### Live shadow evaluation
+
+Task 2.10, on 2026-10-28, on `13a67c64` with `evaluation.jsonl` deleted from the working tree, after the owner's confirmation of the TypeSafe account, the Master Customer Agreement with paid credits, and the data consent (`b0c5a182`, `design.md` "Decisions" 6), and the owner's confirmation of this live run in the worker's session. Node.js 24.22.1 through `make findings`. The credential came from the login shell's profile and was checked by name only; its value was never printed or recorded.
+
+Command:
+
+```text
+bash -lc 'cd /home/petar/taskelith-worktrees/route-reviewers-by-change-complexity && NODE_OPTIONS=--import=file:///tmp/claude-1000/-home-petar-taskelith/b4ff37b6-62f5-4072-b2f1-67a3e58285b6/scratchpad/jev-tap/tap.mjs make findings ARGS="route-evaluation --at 3f23516a2e4ef8724f38e5c9c67267225f40ff16 --save route-reviewers-by-change-complexity"'
+```
+
+`bash -lc` supplies `JEV_MAF_LAB` from the profile. `tap.mjs`, a scratch measurement module outside the repository, wraps `fetch` for `https://api.typesafe.ai/` only: it records each response's HTTP status and its body's `usage` and top-level keys, keeps the first 2xx body, and ends the process on HTTP 401, 402, or 403 before more requests go out. It never reads request or response headers. It was needed because the adapter keeps neither `usage` nor the body ("Author self-check and evidence check" below). Its stdout and stderr went to files next to the tap; stderr was empty. Exit 0; it wrote `evaluation.jsonl` (50 lines) and printed:
+
+```text
+Route evaluation of 50 archived change(s) as of 3f23516a2e4ef8724f38e5c9c67267225f40ff16, in merge order.
+Features of the revision named by the branch's first "pass 1" commit; 0 approximate from the merged diff.
+Excluded: align-product-ports-with-g2-lifecycle (several-artifacts), revalidate-g3-foundations (several-artifacts).
+All: 50 change(s), third pass 16 (32%), mean passes 1.92, pass-1 findings per change 3.96, medium or worse in passes 1-2 per change 2.08
+  rule standard: 23 change(s), third pass 3 (13%), mean passes 1.61, pass-1 findings per change 3.17, medium or worse in passes 1-2 per change 1.09
+  rule elevated: 27 change(s), third pass 13 (48%), mean passes 2.19, pass-1 findings per change 4.63, medium or worse in passes 1-2 per change 2.93
+  shadow standard: 21 change(s), third pass 3 (14%), mean passes 1.67, pass-1 findings per change 3.29, medium or worse in passes 1-2 per change 1.19
+  shadow elevated: 29 change(s), third pass 13 (45%), mean passes 2.10, pass-1 findings per change 4.45, medium or worse in passes 1-2 per change 2.72
+  shadow: answered 50, failed 0, skipped 0; agreement 48 of 50 (96%), kappa 0.92
+  shadow: Brier score of P(elevated) 0.32, mean absolute error of passes 0.72
+  under 100 lines: 22 change(s), third pass 3 (14%), mean passes 1.64, pass-1 findings per change 3.18, medium or worse in passes 1-2 per change 1.23
+  100 to 399 lines: 17 change(s), third pass 6 (35%), mean passes 1.94, pass-1 findings per change 3.94, medium or worse in passes 1-2 per change 1.82
+  400 lines and more: 11 change(s), third pass 7 (64%), mean passes 2.46, pass-1 findings per change 5.54, medium or worse in passes 1-2 per change 4.18
+With pass summaries: 30 change(s), third pass 12 (40%), mean passes 2.07, pass-1 findings per change 3.73, medium or worse in passes 1-2 per change 2.57
+  rule standard: 14 change(s), third pass 2 (14%), mean passes 1.57, pass-1 findings per change 2.64, medium or worse in passes 1-2 per change 0.93
+  rule elevated: 16 change(s), third pass 10 (63%), mean passes 2.50, pass-1 findings per change 4.69, medium or worse in passes 1-2 per change 4.00
+  shadow standard: 13 change(s), third pass 2 (15%), mean passes 1.61, pass-1 findings per change 2.77, medium or worse in passes 1-2 per change 1.00
+  shadow elevated: 17 change(s), third pass 10 (59%), mean passes 2.41, pass-1 findings per change 4.47, medium or worse in passes 1-2 per change 3.77
+  shadow: answered 30, failed 0, skipped 0; agreement 29 of 30 (97%), kappa 0.93
+  shadow: Brier score of P(elevated) 0.24, mean absolute error of passes 0.74
+Without pass summaries, lower bounds: 20 change(s), third pass 4 (20%), mean passes 1.70, pass-1 findings per change 4.30, medium or worse in passes 1-2 per change 1.35
+  rule standard: 9 change(s), third pass 1 (11%), mean passes 1.67, pass-1 findings per change 4.00, medium or worse in passes 1-2 per change 1.33
+  rule elevated: 11 change(s), third pass 3 (27%), mean passes 1.73, pass-1 findings per change 4.54, medium or worse in passes 1-2 per change 1.36
+  shadow standard: 8 change(s), third pass 1 (13%), mean passes 1.75, pass-1 findings per change 4.13, medium or worse in passes 1-2 per change 1.50
+  shadow elevated: 12 change(s), third pass 3 (25%), mean passes 1.67, pass-1 findings per change 4.42, medium or worse in passes 1-2 per change 1.25
+  shadow: answered 20, failed 0, skipped 0; agreement 19 of 20 (95%), kappa 0.90
+  shadow: Brier score of P(elevated) 0.44, mean absolute error of passes 0.69
+Saved the evaluation to openspec/changes/route-reviewers-by-change-complexity/evaluation.jsonl.
+```
+
+Figures, from that output, `evaluation.jsonl`, and the tap's record (a scratch script, not committed, read the last two):
+
+- Agreement with the rule router: 48 of 50 tiers (96%), kappa 0.92; with pass summaries 29 of 30 (97%), kappa 0.93; without, 19 of 20 (95%), kappa 0.90. Both disagreements are rule `standard` and Jev `elevated`: `require-finding-capability` (183 lines, 9 files, P(`elevated`) 0.52) and `scope-review-passes-by-artifact` (282 lines, 10 files, 0.74); neither needed a third pass.
+
+| Third pass, all 50 | `standard` | `elevated` |
+| --- | --- | --- |
+| Rule version 1 | 3 of 23 (13%) | 13 of 27 (48%) |
+| Jev `jev-1.14.0` | 3 of 21 (14%) | 13 of 29 (45%) |
+
+- Shadow failures: none; answered 50, failed 0, skipped 0. All 50 requests returned HTTP 200 on the first try, so no retry ran, and every answer came from `jev-1.14.0`.
+- Latency (`shadow.latencyMs`, as `JevRouter` measures it): median 165 ms, max 371 ms (the first request), min 142 ms.
+- Tokens, from the `usage` of the 50 response bodies: 26,790 input tokens (535.8 per request; the design estimated about 600) and 2,408 output tokens, which are free. Cost at $0.042 per million input tokens: 26,790 × 0.042 / 1,000,000 = $0.00112518, about a tenth of a cent.
+- Every response body had the same top-level keys, `answers`, `model`, and `usage`, as the constructed fixture.
+- Jev elevates all 12 changes that the `contracts` trigger alone elevates (4 of them needed a third pass). P(`elevated`) ranged from 0 to 0.99, the tier confidence from 0.04 to 1, and the expected passes from 1.04 to 2.69. The Brier score 0.32 of P(`elevated`) against a third pass is above the 0.2176 of the constant base rate 0.32 (scratch computation): P(`elevated`) is a tier probability, not a calibrated probability of a third pass.
+- Credential checks, each printing only a count: `bash -lc 'grep -cF -- "$JEV_MAF_LAB" <file>'` printed 0 for `evaluation.jsonl` and for every tap output (the usage record, the first body, the command's stdout, and its stderr), and `git diff --cached | bash -lc 'grep -cF -- "$JEV_MAF_LAB"'` printed 0 before every commit of this task.
+
+Fixture (`fee4d7fa`): `test/fixtures/review-route/jev-systemone-response.json` is now the first body the tap kept, the answer for `record-review-findings`, byte for byte: it holds no credential, request ID, or account or organization identifier, so nothing was removed, and no header was stored. Its shape matches the constructed fixture field for field, so the adapter's mapping needed no change. Only the values differ (confidence 0.66, probabilities 0.17 and 0.83, an integral score 1.0), so `the recorded response maps to an answered shadow decision` in `test/review-route-jev.test.ts` expects them, and the test's comment and the fixture `README.md` say the body was captured live on 2026-10-28 from `jev-1.14.0`. `env -u JEV_MAF_LAB node --experimental-strip-types --test test/review-route-jev.test.ts`: `tests 32`, `pass 32`, `fail 0`.
+
+Records (`b4898f08`): the new `evaluation.jsonl`; `design.md` "Coverage" names the captured fixture, and "Live shadow results" under "Offline evaluation" records that the shadow suggests no change for rule version 2. Rule version 1 is unchanged.
+
+Re-route: the fixture, the test, `design.md`, and `evaluation.jsonl` change the diff features (4117 to 4099 changed lines; 36 files, the flags, the triggers, and the tier unchanged), so `7678f6b3` deletes `route.json` and `05f0caec` records the new one from `env -u JEV_MAF_LAB make findings ARGS="route --change route-reviewers-by-change-complexity"`: exit 0, `route: elevated (lines, files), rule version 1`, `pass 1, reviewer A: claude claude-fable-5-1#high`, `pass 2, reviewer B: claude claude-opus-5-5#xhigh`, `shadow: failed (missing-credential); the rule decided alone`, at head `7678f6b3` against `f3a53f17`.
+
+## Author self-check and evidence check
+
+Task 4.1 was not recorded before review pass 1. The author did it on 2026-10-28, after pass 1 and its fixes and before pass 2, on `05f0caec`; it does not replace the check that governance asks for before the first pass.
+
+Review checklist (`checklist.json`):
+
+- **contract-drift.** The rule table, the deltas, `route.schema.json`, and `route-evaluation.schema.json` agree; the writers validate before writing, and validation keeps one reviewer table per rule version (pass 1 M1). The fixture now is a real response with the documented fields, so the parser's contract is confirmed against the service.
+- **error-handling.** Every shadow failure maps to a closed code, and the rule decision is always written. Observation, not fixed (outside this task): `route-evaluation` does not stop on HTTP 401, 402, or 403; with a bad key or no credits it would send all 50 requests and record 50 `http-error` lines. The live run guarded this with the tap.
+- **docs.** `design.md` "Coverage", the fixture `README.md`, and this record describe the captured fixture; "Remaining gates" is updated.
+- **redaction.** The credential stays in `Credential`, and no output, record, or fixture holds it (the counts above). The tap stored no header.
+- **missing-fail-before-test.** No behaviour changed in this task: the fixture swap changed expected values only, so no fail-before run applies.
+- **naming.** One term per concept, as `design.md` "Review checklist" lists.
+- **process.** Tasks 2.10 and 4.1 are ticked with their evidence; the re-route follows worker step 4.
+- **Record quality.** Every figure of "Live shadow evaluation" comes from the command output or from the scratch reads named next to it.
+
+ADR 0004:
+
+- Clean Code and hexagonal architecture: the routers are adapters of `ReviewRouter`, the git access is behind `RouteEnvironment`, and composition roots read the credential. SOLID: no shared conformance suite runs every `ReviewRouter` adapter (`RuleRouter`, `JevRouter`, `FakeRouter`); each has its own tests. Observation, not fixed.
+- Microkernel: the routers are repository tooling under `scripts/`, not product plugins; not applicable.
+- Docker: no runnable component is added; not applicable.
+- OpenAPI: no Taskelith HTTP API is added; the client follows TypeSafe's OpenAPI document, and `route.json` and `evaluation.jsonl` have JSON schemas.
+- Makefile: `make findings ARGS="route ..."` and `ARGS="route-evaluation ..."`.
+- OpenSpec: this change.
+- Coverage: the new modules at least 75% of lines, branches, and functions ("Pass 1 fixes"); `make verify` checks product coverage.
+- Observation: the evaluation keeps no `usage` from the responses, so its cost is not in its output or `evaluation.jsonl`; the tap measured it.
+
+Evidence check: every external link of the change's records and of the fixture `README.md` is labeled as an unversioned page or pinned (`typesafe-sdk-js` at tag `v0.7.0`); the API endpoints are named as endpoints, not cited as sources. `npm run verify:links`: `Every checked link conforms.`
 
 ## Independent review
 
@@ -160,8 +255,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) is not yet run.
+- Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) ran on 2026-10-28 ("Live shadow evaluation").
 - A later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
-- The live shadow evaluation (`tasks.md` 2.10), with the owner-set credential.
-- Author self-check and evidence check; independent review; archive (`tasks.md` section 4).
+- Independent review, passes 2 and, if needed, 3; archive (`tasks.md` 4.2 and 4.3).
 - Integration into dev by the coordinator (single pull request).
