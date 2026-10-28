@@ -232,13 +232,15 @@ test('an error message that repeats the header is scrubbed of every credential f
   const { local } = git;
   value(await local.prepare(request(git)));
   await committed(git, FIRST, 'change.txt');
-  git.remote.behavior = { kind: 'echo-authorization' };
+  git.remote.behavior = { kind: 'echo-authorization', service: 'git-upload-pack' };
   const forms = formsOf(git);
   const failures = [
     failed(await local.prepare(request(git, { attemptId: SECOND }))),
     failed(await local.readRemoteHead({ attemptId: FIRST, credential: git.fixture.credentials.read })),
-    failed(await push(git, null)),
   ];
+  git.remote.behavior = { kind: 'echo-authorization', service: 'git-receive-pack' };
+  failures.push(failed(await push(git, null)));
+  assert.match(failures[2]!.message, /^the push failed/);
   for (const failure of failures) {
     assert.equal(failure.code, 'unavailable');
     assert.ok(failure.message.includes(REDACTED_VALUE), `Git repeated the header: ${failure.message}`);
@@ -248,19 +250,24 @@ test('an error message that repeats the header is scrubbed of every credential f
 
 // The stalled operation runs alone under a time limit that the test fires
 // once the remote received the request, so no host speed matters.
-for (const operation of ['readRemoteHead', 'prepare'] as const) {
+const STALLED = {
+  readRemoteHead: { process: 'ls-remote', service: 'git-upload-pack' },
+  prepare: { process: 'clone', service: 'git-upload-pack' },
+  push: { process: 'push', service: 'git-receive-pack' },
+} as const;
+
+for (const [operation, { process: stalledProcess, service }] of Object.entries(STALLED)) {
   test(`a stalled remote fails ${operation} as unavailable at the time limit and kills its process group`, () => withFixture(async (git) => {
     const { fixture } = git;
     value(await git.local.prepare(request(git)));
+    await committed(git, FIRST, 'change.txt');
     const timer = new ManualGitTimer();
     const options = { dataRoot: fixture.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http' as const };
     const limited = new GitWorkspaces({ ...options, gitTimeLimitMs: SHORT_TIME_LIMIT_MS, gitTimer: timer.timer });
-    const reached = new Promise<void>((received) => (git.remote.beforeAnswer = async () => received()));
-    git.remote.behavior = { kind: 'stall' };
+    const reached = new Promise<void>((received) => (git.remote.beforeAnswer = async ({ url }) => void (url.includes(service) && received())));
+    git.remote.behavior = { kind: 'stall', service };
     const recorded = (await fixture.gitProcesses()).length;
-    const running: Promise<Result<unknown>> = operation === 'prepare'
-      ? limited.prepare(request(git, { attemptId: SECOND }))
-      : limited.readRemoteHead({ attemptId: FIRST, credential: fixture.credentials.read });
+    const running = startStalled(git, limited, operation as keyof typeof STALLED);
     try {
       await within(reached, WITHIN_MS);
       timer.expire();
@@ -268,8 +275,8 @@ for (const operation of ['readRemoteHead', 'prepare'] as const) {
       assert.equal(failure.code, 'unavailable');
       assert.equal(timer.limits.at(-1), SHORT_TIME_LIMIT_MS);
       assert.match(failure.message, new RegExp(`longer than ${SHORT_TIME_LIMIT_MS} ms`));
-      const [stalled] = (await fixture.gitProcesses()).slice(recorded);
-      assert.ok(stalled?.argv.includes(operation === 'prepare' ? 'clone' : 'ls-remote'));
+      const stalled = (await fixture.gitProcesses()).slice(recorded).at(-1);
+      assert.ok(stalled?.argv.includes(stalledProcess), 'no Git process ran after the stalled one');
       assert.equal(await groupGone(stalled!.pid), true, 'a process of the group survived');
       assert.deepEqual([await git.local.list(), await fixture.leftovers()], [[FIRST], []]);
     } finally {
@@ -278,6 +285,22 @@ for (const operation of ['readRemoteHead', 'prepare'] as const) {
     }
   }));
 }
+
+function startStalled(git: GitFixture, limited: GitWorkspaces, operation: keyof typeof STALLED): Promise<Result<unknown>> {
+  const { read, write } = git.fixture.credentials;
+  if (operation === 'prepare') return limited.prepare(request(git, { attemptId: SECOND }));
+  if (operation === 'push') return limited.push({ attemptId: FIRST, credential: write, expectedRemoteHead: null });
+  return limited.readRemoteHead({ attemptId: FIRST, credential: read });
+}
+
+test('a push whose answer is lost after the remote took it returns the head', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  await committed(git, FIRST, 'change.txt');
+  git.remote.behavior = { kind: 'lose-answer', service: 'git-receive-pack' };
+  const pushed = value(await push(git, null));
+  assert.equal(await git.fixture.remoteHead(BRANCH), pushed.commit);
+  assert.equal((await git.fixture.gitProcesses()).at(-1)?.argv.includes('ls-remote'), true, 'the push failed first');
+}));
 
 test('a short read secret that matches the task branch ref still reads the remote head', async () => {
   const git = await createGitFixture({ readSecret: 'task' });

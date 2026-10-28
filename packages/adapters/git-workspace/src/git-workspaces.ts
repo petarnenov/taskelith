@@ -40,7 +40,7 @@ import { checkCheckoutSafety } from './checkout-safety.js';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { failingFileSystemAsUnavailable } from './file-system-failure.js';
 import type { VerifiedGitClient } from './git-client-gate.js';
-import { succeeded, type GitRunner, type GitTimer } from './git-runner.js';
+import { exceededTimeLimit, succeeded, type GitRunner, type GitTimer } from './git-runner.js';
 import { parseCommitParents, type GitObjectType } from './git-objects.js';
 import { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.js';
@@ -257,18 +257,22 @@ export class GitWorkspaces implements GitWorkspaceOperations {
       if (!descends.ok) return descends;
       if (!descends.value) return workspaceFailure('conflict', 'not-fast-forward', 'the head does not descend from the remote head');
     }
-    const pushed = await this.#leasedPush(opened.value, bound.value, request);
+    const pushed = await this.#leasedPush(opened.value, bound.value, request, head.value.commit);
     return pushed.ok ? head : pushed;
   }
 
-  // Exactly the contract's arguments; a failure after which the remote
-  // head differs from the lease is the lease's refusal.
-  async #leasedPush({ checkout }: OpenedWorkspace, bound: BoundTaskBranch, request: PushTaskBranch): Promise<Result<void>> {
+  // Exactly the contract's arguments. After a failure, a remote at the
+  // head took the push; one that differs from the lease refused it.
+  async #leasedPush({ checkout }: OpenedWorkspace, bound: BoundTaskBranch, request: PushTaskBranch, commit: string): Promise<Result<void>> {
     const args = taskBranchPushArguments(bound.branch, request.expectedRemoteHead, bound.record.binding.remote);
-    const pushed = succeeded(await this.#git.run({ args, cwd: checkout, credential: request.credential }), 'unavailable', 'the push');
+    const pushed = await this.#git.runChecked({ args, cwd: checkout, credential: request.credential }, 'unavailable', 'the push');
     if (pushed.ok) return ok(undefined);
+    // A stalled remote would stall the second read as well.
+    if (exceededTimeLimit(pushed.error)) return pushed;
     const after = await this.#remoteHead(bound, request.credential);
-    return after.ok && after.value !== request.expectedRemoteHead ? remoteMoved() : pushed;
+    if (!after.ok) return pushed;
+    if (after.value === commit) return ok(undefined);
+    return after.value === request.expectedRemoteHead ? pushed : remoteMoved();
   }
 
   // The task branch's head on the binding's remote, read in the neutral
@@ -370,7 +374,7 @@ export class GitWorkspaces implements GitWorkspaceOperations {
   async #clone(checkout: string, remote: string, credential: WorkspaceCredential): Promise<Result<void>> {
     this.#crashPoints.reach('WS1.before');
     const args = ['clone', '--no-checkout', '--quiet', '--origin', CLONE_REMOTE, '--', remote, checkout];
-    const cloned = succeeded(await this.#git.run({ args, cwd: GIT_NEUTRAL_DIRECTORY, credential }), 'unavailable', 'the clone');
+    const cloned = await this.#git.runChecked({ args, cwd: GIT_NEUTRAL_DIRECTORY, credential }, 'unavailable', 'the clone');
     if (!cloned.ok) return cloned;
     this.#crashPoints.reach('WS1.after');
     return ok(undefined);

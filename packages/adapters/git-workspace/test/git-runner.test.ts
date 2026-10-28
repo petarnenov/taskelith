@@ -313,15 +313,32 @@ test('a parser reads the raw output, so a short secret cannot corrupt the data',
   assert.equal(value(await runner.runParsed(command, parse, 'unavailable', 'the listing')), `${object}\t${ref}\n`);
   const scrubbed = new TextDecoder().decode(value(await runner.run(command)).stdout);
   assert.equal(scrubbed.includes('task'), false, 'run still scrubs the output');
+  const checked = new TextDecoder().decode(value(await runner.runChecked(command, 'unavailable', 'the listing')));
+  assert.equal(checked.includes('task'), false, 'runChecked scrubs the output');
 });
 
-test('a parser failure is scrubbed, and a failed process is not parsed', async () => {
+test('a failure message is scrubbed whole, its fixed text and exit code included', async () => {
+  const path = join(scratch, 'failing');
+  await writeFile(path, "#!/bin/sh\necho 'fatal: refused' >&2\nexit 128\n");
+  await chmod(path, 0o755);
+  const runner = new GitRunner({ path, version: '' });
+  const command = { args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: credential('short', ['acme/project'], ['write-code'], '128') };
+  const expected = `the push failed (exit ${REDACTED_VALUE}): fatal: refused`;
+  assert.equal(failed(await runner.runChecked(command, 'unavailable', 'the push')).message, expected);
+  assert.equal(failed(await runner.runParsed(command, (stdout) => ok(stdout), 'unavailable', 'the push')).message, expected);
+});
+
+test('a parser failure is scrubbed with its details, and a failed process is not parsed', async () => {
   const short = credential('short', ['acme/project'], ['read-code'], 'task');
   const command = { args: [], cwd: GIT_NEUTRAL_DIRECTORY, credential: short };
   const listing = new GitRunner(await listingClient('task\n'));
-  const refuse = (stdout: Uint8Array) => err(failure('internal', `cannot read ${new TextDecoder().decode(stdout).trim()}`, { kept: 'yes' }));
+  const refuse = (stdout: Uint8Array) => {
+    const output = new TextDecoder().decode(stdout).trim();
+    return err(failure('internal', `cannot read ${output}`, { kept: 'yes', output }));
+  };
   const refused = failed(await listing.runParsed(command, refuse, 'unavailable', 'the listing'));
-  assert.deepEqual([refused.code, refused.message, refused.details], ['internal', `cannot read ${REDACTED_VALUE}`, { kept: 'yes' }]);
+  const details = { kept: 'yes', output: REDACTED_VALUE };
+  assert.deepEqual([refused.code, refused.message, refused.details], ['internal', `cannot read ${REDACTED_VALUE}`, details]);
   let parsed = false;
   const outside = new GitRunner(pin).runParsed({ args: ['rev-parse', '--git-dir'], cwd: GIT_NEUTRAL_DIRECTORY }, () => ok((parsed = true)), 'internal', 'the lookup');
   assert.equal(failed(await outside).code, 'internal');

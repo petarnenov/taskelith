@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { err, failure, ok, type FailureCode, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import { REDACTED_VALUE, gitConfigEnvironment, type GitClientPin, type WorkspaceCredential } from '@taskelith/workspace';
 
 export interface GitCommand {
@@ -14,9 +14,8 @@ export interface GitCommand {
 export interface GitOutput {
   // Null when a signal ended the process.
   readonly exitCode: number | null;
-  // Scrubbed like standard error; only `runParsed` reads it raw.
-  readonly stdout: Uint8Array;
   // Scrubbed of every form of the command's credential.
+  readonly stdout: Uint8Array;
   readonly stderr: string;
 }
 
@@ -97,20 +96,35 @@ export class GitRunner {
   async run(command: GitCommand): Promise<Result<GitOutput>> {
     const output = await this.#spawn(command);
     if (!output.ok) return output;
-    return ok({ ...output.value, stdout: scrubOutput(output.value.stdout, command.credential) });
+    const { exitCode, stdout, stderr } = output.value;
+    return ok({ exitCode, stdout: scrubOutput(stdout, command.credential), stderr: scrubCredential(stderr, command.credential) });
+  }
+
+  // The scrubbed output of a process that must succeed.
+  async runChecked(command: GitCommand, code: FailureCode, what: string): Promise<Result<Uint8Array>> {
+    const stdout = await this.#checked(command, code, what);
+    return stdout.ok ? ok(scrubOutput(stdout.value, command.credential)) : stdout;
   }
 
   // A short credential form can match part of the data, so the parser
-  // reads the raw output; its failure message is scrubbed.
+  // reads the raw output; only its scrubbed result leaves the runner.
   async runParsed<T>(command: GitCommand, parse: GitOutputParser<T>, code: FailureCode, what: string): Promise<Result<T>> {
-    const stdout = succeeded(await this.#spawn(command), code, what);
+    const stdout = await this.#checked(command, code, what);
     if (!stdout.ok) return stdout;
     const parsed = parse(stdout.value);
-    if (parsed.ok) return parsed;
-    return err(failure(parsed.error.code, scrubCredential(parsed.error.message, command.credential), parsed.error.details));
+    return parsed.ok ? parsed : err(scrubFailure(parsed.error, command.credential));
   }
 
-  // The raw standard output; every message and standard error is scrubbed.
+  // The raw output, or a failure whose whole message is scrubbed once.
+  async #checked(command: GitCommand, code: FailureCode, what: string): Promise<Result<Uint8Array>> {
+    const output = await this.#spawn(command);
+    if (!output.ok) return output;
+    const { exitCode, stdout, stderr } = output.value;
+    if (exitCode === 0) return ok(stdout);
+    return err(failure(code, scrubCredential(`${what} failed (exit ${exitCode}): ${stderr.trim()}`, command.credential)));
+  }
+
+  // The raw output of both streams; every message is scrubbed.
   #spawn(command: GitCommand): Promise<Result<GitOutput>> {
     const scrub = (text: string) => scrubCredential(text, command.credential);
     return new Promise((done) => {
@@ -137,7 +151,7 @@ export class GitRunner {
       child.on('close', (exitCode) => {
         disarm();
         if (timedOut) return done(err(this.#timeLimitFailure(command)));
-        done(ok({ exitCode, stdout: Buffer.concat(stdout), stderr: scrub(Buffer.concat(stderr).toString('utf8')) }));
+        done(ok({ exitCode, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr).toString('utf8') }));
       });
       // A Git that exits early closes its input; its exit code reports it.
       child.stdin.on('error', () => {});
@@ -150,8 +164,20 @@ export class GitRunner {
   #timeLimitFailure(command: GitCommand) {
     const code: FailureCode = command.credential === undefined ? 'internal' : 'unavailable';
     const message = `${this.pin.path} ran longer than ${this.timeLimitMs} ms and was killed`;
-    return failure(code, scrubCredential(message, command.credential));
+    const limited = failure(code, scrubCredential(message, command.credential));
+    TIME_LIMIT_FAILURES.add(limited);
+    return limited;
   }
+}
+
+const TIME_LIMIT_FAILURES = new WeakSet<Failure>();
+
+// Whether the runner killed the process at its time limit.
+export const exceededTimeLimit = (cause: Failure) => TIME_LIMIT_FAILURES.has(cause);
+
+function scrubFailure({ code, message, details }: Failure, credential?: WorkspaceCredential): Failure {
+  const scrubbed = Object.entries(details).map(([key, text]) => [key, scrubCredential(text, credential)]);
+  return failure(code, scrubCredential(message, credential), Object.fromEntries(scrubbed));
 }
 
 const isTimeLimit = (timeLimitMs: number) =>
@@ -166,8 +192,8 @@ function killGroup(pid: number | undefined): void {
   }
 }
 
-// The output of a process that must succeed; otherwise a failure whose
-// message holds only the scrubbed standard error.
+// The output of a local process that must succeed; one that carries a
+// credential goes through `runChecked`, which scrubs the whole message.
 export function succeeded(result: Result<GitOutput>, code: FailureCode, what: string): Result<Uint8Array> {
   if (!result.ok) return result;
   if (result.value.exitCode === 0) return ok(result.value.stdout);

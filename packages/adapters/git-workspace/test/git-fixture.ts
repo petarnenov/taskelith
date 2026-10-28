@@ -99,13 +99,14 @@ export interface ReceivedRequest {
 type Grant = 'read' | 'write';
 export type GitService = 'git-upload-pack' | 'git-receive-pack';
 
-// Smart HTTP, a redirect of one request kind to another origin, no
-// answer, or an error that repeats the request's Authorization header.
+// Serve, redirect to another origin, stall, repeat the Authorization
+// header, or serve and lose the answer; every service unless one is named.
 export type RemoteBehavior =
   | { readonly kind: 'serve' }
   | { readonly kind: 'redirect'; readonly origin: string; readonly service: GitService; readonly request: 'advertisement' | 'service' }
-  | { readonly kind: 'stall' }
-  | { readonly kind: 'echo-authorization' };
+  | { readonly kind: 'stall'; readonly service?: GitService }
+  | { readonly kind: 'echo-authorization'; readonly service?: GitService }
+  | { readonly kind: 'lose-answer'; readonly service: GitService };
 
 const SERVE: RemoteBehavior = Object.freeze({ kind: 'serve' });
 const pktLine = (text: string) => `${(text.length + 4).toString(16).padStart(4, '0')}${text}`;
@@ -169,7 +170,8 @@ export class SmartHttpRemote {
     await this.beforeAnswer(received);
     const behavior = this.behavior;
     const advertisement = url.includes('/info/refs');
-    if (behavior.kind === 'stall') return;
+    const affected = !('service' in behavior) || behavior.service === undefined || url.includes(behavior.service);
+    if (behavior.kind === 'stall' && affected) return;
     if (behavior.kind === 'redirect' && url.includes(behavior.service) && advertisement === (behavior.request === 'advertisement')) {
       return void response.writeHead(302, { location: `${behavior.origin}${url}` }).end();
     }
@@ -177,15 +179,16 @@ export class SmartHttpRemote {
     if (!(this.grants.get(request.headers.authorization ?? '') ?? []).includes(grant)) {
       return void response.writeHead(401, { 'www-authenticate': 'Basic realm="taskelith"' }).end();
     }
-    if (behavior.kind === 'echo-authorization' && advertisement) {
-      const body = `${pktLine('# service=git-upload-pack\n')}0000${pktLine(`ERR ${request.headers.authorization}\n`)}`;
-      return void response.writeHead(200, { 'content-type': 'application/x-git-upload-pack-advertisement' }).end(body);
+    if (behavior.kind === 'echo-authorization' && affected && advertisement) {
+      const service = url.includes('git-receive-pack') ? 'git-receive-pack' : 'git-upload-pack';
+      const body = `${pktLine(`# service=${service}\n`)}0000${pktLine(`ERR ${request.headers.authorization}\n`)}`;
+      return void response.writeHead(200, { 'content-type': `application/x-${service}-advertisement` }).end(body);
     }
-    this.backend(request, response);
+    this.backend(request, response, behavior.kind === 'lose-answer' && affected && !advertisement);
   }
 
   // `git http-backend` as CGI, with receive-pack enabled by REMOTE_USER.
-  private backend(request: IncomingMessage, response: ServerResponse): void {
+  private backend(request: IncomingMessage, response: ServerResponse, loseAnswer: boolean): void {
     const url = new URL(request.url ?? '/', this.origin);
     const header = (name: string) => request.headers[name] as string | undefined;
     const env: Record<string, string> = {
@@ -201,6 +204,7 @@ export class SmartHttpRemote {
     const output: Buffer[] = [];
     child.stdout.on('data', (chunk: Buffer) => output.push(chunk));
     child.on('close', () => {
+      if (loseAnswer) return void response.destroy();
       const all = Buffer.concat(output);
       const split = all.indexOf('\r\n\r\n');
       const headers: Record<string, string> = {};
