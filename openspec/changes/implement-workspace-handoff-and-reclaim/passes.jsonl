@@ -1,0 +1,1 @@
+{"change": "implement-workspace-handoff-and-reclaim", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a182da-55e4-7800-adb1-5c516c82d86f", "counts": {"critical": 0, "high": 1, "medium": 6, "low": 1}}
