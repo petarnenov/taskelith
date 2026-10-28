@@ -20875,14 +20875,9 @@
       "type": "library",
       "name": "undici",
       "version": "7.30.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/undici@7.30.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -23568,13 +23563,15 @@
     {
       "ref": "@taskelith/worker-control-plane-client@0.0.0",
       "dependsOn": [
+        "@taskelith/certificates@0.0.0",
         "@taskelith/contracts@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/observability@0.0.0",
         "@taskelith/sdlc@0.0.0",
-        "@taskelith/testing@0.0.0"
+        "@taskelith/testing@0.0.0",
+        "undici@7.30.1"
       ]
     },
     {
@@ -23604,6 +23601,7 @@
     {
       "ref": "@taskelith/worker@0.0.0",
       "dependsOn": [
+        "@taskelith/certificates@0.0.0",
         "@taskelith/contracts@0.0.0",
         "@taskelith/data-root@0.0.0",
         "@taskelith/execution@0.0.0",
