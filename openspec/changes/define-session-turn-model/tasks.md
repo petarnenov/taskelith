@@ -13,9 +13,9 @@
 
 - [x] 3.1 Add `SessionId`, `TurnId`, `NativeSessionId`, and `SessionGeneration` to the Execution identifiers, and export stubs of the session timeline functions
 - [x] 3.2 Write the unit tests of every requirement against the stubs and record their failing run in `verification.md`
-- [ ] 3.3 Implement the pure domain in `packages/modules/execution/src/domain/`, reusing the harness port's identifiers and types, and export it from `@taskelith/execution`
-- [ ] 3.4 Check that no type, value, or test names a harness, vendor, model, or native field
-- [ ] 3.5 Measure the coverage of the new files
+- [x] 3.3 Implement the pure domain in `packages/modules/execution/src/domain/`, reusing the harness port's identifiers and types, and export it from `@taskelith/execution`
+- [x] 3.4 Check that no type, value, or test names a harness, vendor, model, or native field
+- [x] 3.5 Measure the coverage of the new files
 
 ## 4. Verification and review
 

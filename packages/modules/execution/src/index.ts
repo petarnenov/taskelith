@@ -70,7 +70,10 @@ export {
   DELIVERY_STATES,
   REQUEST_STATES,
   TURN_STATES,
+  activeBoundAttempt,
+  isStopped,
   openSession,
+  runningGeneration,
   type Answer,
   type AttemptBinding,
   type BoundAttempt,
@@ -103,14 +106,7 @@ export {
   type TurnSubmission,
   type TurnSubmitted,
 } from './domain/session-records.js';
-export {
-  activeBoundAttempt,
-  bindAttempt,
-  endBoundAttempt,
-  endGeneration,
-  runningGeneration,
-  startGeneration,
-} from './domain/session-attempts.js';
+export { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from './domain/session-attempts.js';
 export { deliverTurn, nextDeliverableTurn, recordTurnOutcome, submitTurn } from './domain/session-turns.js';
 export {
   consumeResponse,
@@ -120,7 +116,7 @@ export {
   uncertainDeliveries,
 } from './domain/session-requests.js';
 export { OUTPUT_RETENTION_BYTES, appendOutput, readOutputAfter } from './domain/session-output.js';
-export { isStopped, recordLimitSignal, takeHandoff, writeHandoff } from './domain/session-handoff.js';
+export { recordLimitSignal, takeHandoff, writeHandoff } from './domain/session-handoff.js';
 export {
   ADMISSION_PRESSURE_CAUSES,
   ASSIGNMENT_REFUSAL_REASONS,

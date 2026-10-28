@@ -37,7 +37,10 @@ export type SessionGeneration = number & { readonly [sessionGenerationBrand]: tr
 export const FIRST_SESSION_GENERATION = 1 as SessionGeneration;
 
 export function parseSessionGeneration(value: number): Result<SessionGeneration> {
-  return value < 0 ? ok(value as SessionGeneration) : err(failure('internal', 'not implemented'));
+  if (!Number.isSafeInteger(value) || value < 1) {
+    return err(failure('invalid', 'SessionGeneration must be a positive integer'));
+  }
+  return ok(value as SessionGeneration);
 }
 
 // What the control plane knows of its installation when it decides a launch

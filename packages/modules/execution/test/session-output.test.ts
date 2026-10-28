@@ -65,7 +65,7 @@ test('output beyond 10 MiB drops the oldest entries, and the window stays within
 });
 
 test('a cursor that left the window is cursor-expired with the earliest retained position', () => {
-  const over = appended(chunks(CHUNKS_IN_WINDOW), 'y', 'z');
+  const over = appended(chunks(CHUNKS_IN_WINDOW), CHUNK, CHUNK);
   assert.deepEqual(value(readOutputAfter(over, 0)), { kind: 'cursor-expired', earliestRetained: 3 });
   assert.deepEqual(value(readOutputAfter(over, 1)), { kind: 'cursor-expired', earliestRetained: 3 });
   const read = value(readOutputAfter(over, 2));

@@ -1,4 +1,4 @@
-import type { Instant } from '@taskelith/kernel';
+import { err, failure, type FailureCode, type Instant, type Result } from '@taskelith/kernel';
 import type { EvidenceReference, OwnershipGeneration, TaskId } from '@taskelith/sdlc';
 import type { HarnessRequestKind } from '../ports/agent-harness-data.js';
 import type { DelegationOutcome, HarnessFailure, PermissionDecision, TurnOutcome } from '../ports/agent-harness.js';
@@ -209,9 +209,65 @@ export interface Handoff {
 }
 
 export function openSession(start: SessionStart): Session {
-  return notImplemented(start);
+  return Object.freeze({
+    id: start.id,
+    taskId: start.taskId,
+    harness: start.harness,
+    attempts: Object.freeze([]),
+    generations: Object.freeze([]),
+    turns: Object.freeze([]),
+    requests: Object.freeze([]),
+    output: EMPTY_OUTPUT,
+  });
 }
 
-export function notImplemented(..._values: readonly unknown[]): never {
-  throw new Error('not implemented');
+export function activeBoundAttempt(session: Session): BoundAttempt | undefined {
+  return session.attempts.find((attempt) => !attempt.ended);
 }
+
+export function isStopped(session: Session): boolean {
+  return session.limit !== undefined;
+}
+
+export function runningGeneration(session: Session): GenerationRun | undefined {
+  return session.generations.find((run) => !run.ended);
+}
+
+export function isRunningIn(turn: Turn, generation: SessionGeneration): boolean {
+  return turn.state === 'delivered' && turn.generation === generation;
+}
+
+// Whether the turn is delivered in the session's running generation.
+export function isLiveTurn(session: Session, turn: Turn, generation: SessionGeneration): boolean {
+  return runningGeneration(session)?.generation === generation && isRunningIn(turn, generation);
+}
+
+export function withChanges(session: Session, changes: Partial<Session>): Session {
+  return Object.freeze({ ...session, ...changes });
+}
+
+export function appended<T>(list: readonly T[], item: T): readonly T[] {
+  return Object.freeze([...list, frozenCopy(item)]);
+}
+
+export function replaced<T>(list: readonly T[], index: number, item: T): readonly T[] {
+  return Object.freeze(list.map((current, at) => (at === index ? frozenCopy(item) : current)));
+}
+
+// Copies plain caller data so that no caller keeps a mutable reference.
+export function frozenCopy<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map((item: unknown) => frozenCopy(item))) as T;
+  if (value === null || typeof value !== 'object') return value;
+  const entries = Object.entries(value).filter(([, field]) => field !== undefined);
+  return Object.freeze(Object.fromEntries(entries.map(([name, field]) => [name, frozenCopy(field)]))) as T;
+}
+
+export function isTextWithin(text: string, minimum: number, maximum: number): boolean {
+  return text.length >= minimum && text.length <= maximum;
+}
+
+export function sessionFailure(code: FailureCode, session: Session, message: string): Result<never> {
+  return err(failure(code, `session ${session.id} ${message}`, { session: session.id }));
+}
+
+const EMPTY_OUTPUT: OutputWindow = Object.freeze({ entries: Object.freeze([]), retainedBytes: 0, lastPosition: 0 });
