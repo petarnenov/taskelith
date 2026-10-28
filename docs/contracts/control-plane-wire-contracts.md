@@ -101,6 +101,6 @@ The document starts at 0.1.0. A change that `make contract-compatibility` report
 - The other operations of the item 9 row, such as evidence retirement and the reconciliation queue and re-admission of item 44, belong to 9b to 9d.
 - **Item 10:** the `Access` adapter that implements section 2 and section 3, principal administration, and per-project evidence download.
 - **Items 11, 12, 15, 20, 33, and 34:** the handlers of section 4 and 5 and the screens over them.
-- **Item 26 (26c)**, which owns the enrollment endpoint where redemption happens: a redemption that refuses a revoked token with `token-invalid` (section 4), which installation contract section 5, check 1, does not yet list.
+- **Item 26, sub-change 26c** (26b landed before 9a defined revocation), which owns the enrollment endpoint where redemption happens: a redemption that refuses a revoked token with `token-invalid` (section 4), which installation contract section 5, check 1, does not yet list.
 - **Item 20:** the SCM port operation that derives the remote URL from the repository (section 4.1), after which `remoteUrl` is output-only.
 - **Items 16c and 16e:** a credential sent only to the remote URL that the control plane sent with the run (section 4.1).
