@@ -15,6 +15,7 @@ import {
   startGeneration,
   uncertainDeliveries,
   type RequestRecording,
+  type Responder,
   type ResponseSubmission,
   type Session,
 } from '@taskelith/execution';
@@ -36,6 +37,7 @@ import {
 } from './session-fixtures.ts';
 
 const RULE = value(parseIdentifier('StandingRuleId', 'rule-1'));
+const HOST: Responder = { kind: 'host' };
 
 function answered(): Session {
   return value(consumeResponse(sessionWithOpenRequest(), allow()));
@@ -47,6 +49,16 @@ function request(session: Session, recording: RequestRecording): Session {
 
 function inputRequest(native: string): RequestRecording {
   return { key: requestKey(native), kind: 'input-request', turnId: turnId('turn-1'), text: 'which branch?' };
+}
+
+function sessionWithDelegation(): Session {
+  const recording: RequestRecording = { ...permissionRequest('request-2'), kind: 'delegation-request', text: 'split it' };
+  return request(sessionWithRunningTurn(), recording);
+}
+
+function delegationResult(delegationId = 'child-1', summary = 'done'): ResponseSubmission {
+  const answer = { kind: 'delegation-result' as const, delegationId, outcome: 'completed' as const, summary };
+  return { ...allow('request-2'), answer, responder: HOST };
 }
 
 function resumed(session: Session): Session {
@@ -138,12 +150,17 @@ test('an answer text or delegation ID outside its bound fails with invalid', () 
   assert.equal(failed(consumeResponse(session, { ...allow(), answer: delegation })).code, 'invalid');
 });
 
-test('a delegation request takes a delegation result', () => {
-  const recording: RequestRecording = { ...permissionRequest('request-2'), kind: 'delegation-request', text: 'split it' };
-  const session = request(sessionWithRunningTurn(), recording);
-  const answer = { kind: 'delegation-result' as const, delegationId: 'child-1', outcome: 'completed' as const, summary: 'done' };
-  const result = value(consumeResponse(session, { ...allow('request-2'), answer }));
-  assert.equal(result.requests[0]?.state, 'answered');
+test('a delegation request takes a delegation result from the host', () => {
+  const result = value(consumeResponse(sessionWithDelegation(), delegationResult()));
+  const consumed = result.requests[0];
+  assert.equal(consumed?.state === 'answered' && consumed.response.responder.kind, 'host');
+});
+
+test('only the host returns a delegation result, and the host answers nothing else', () => {
+  const byPerson = { ...delegationResult(), responder: allow().responder };
+  assert.equal(failed(consumeResponse(sessionWithDelegation(), byPerson)).code, 'invalid');
+  const hostAllows = { ...allow(), responder: HOST };
+  assert.equal(failed(consumeResponse(sessionWithOpenRequest(), hostAllows)).code, 'invalid');
 });
 
 test('a reused native request ID in a later generation is a new open request', () => {

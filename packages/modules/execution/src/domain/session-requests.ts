@@ -14,6 +14,7 @@ import {
   type NativeRequest,
   type RequestKey,
   type RequestRecording,
+  type Responder,
   type ResponseSubmission,
   type Session,
 } from './session-records.js';
@@ -55,6 +56,7 @@ export function consumeResponse(session: Session, response: ResponseSubmission):
   }
   if (ANSWER_KIND[request.kind] !== response.answer.kind) return sessionFailure('invalid', session, `cannot answer a ${request.kind} so`);
   const { answer, responder, attemptId, ownershipGeneration } = response;
+  if (!isAnswerFrom(answer, responder)) return sessionFailure('invalid', session, `cannot take a ${answer.kind} answer from ${responder.kind}`);
   const consumed = { answer, responder, attemptId, ownershipGeneration, delivery: 'pending' as const };
   return ok(withChanges(session, { requests: replaced(session.requests, index, { ...request, state: 'answered', response: consumed }) }));
 }
@@ -111,6 +113,10 @@ function isAnswerWithinBounds(answer: Answer): boolean {
     case 'delegation-result':
       return isTextWithin(answer.delegationId, 1, MAX_DELEGATION_ID_LENGTH) && isTextWithin(answer.summary, 0, MAX_HARNESS_TEXT_LENGTH);
   }
+}
+
+function isAnswerFrom(answer: Answer, responder: Responder): boolean {
+  return (answer.kind === 'delegation-result') === (responder.kind === 'host');
 }
 
 function indexOfRequest(session: Session, key: RequestKey): number {

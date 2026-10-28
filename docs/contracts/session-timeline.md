@@ -25,7 +25,7 @@ The domain is pure: it reads no clock, random source, file, or network, and it s
 
 | Code | When |
 | --- | --- |
-| `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, or an answer of the wrong kind for its request |
+| `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, an answer of the wrong kind for its request, or an answer from the wrong responder |
 | `not-found` | An unknown attempt, generation, turn, request, or handoff, or a request that is `expired` or `unresolved` |
 | `conflict` | An attempt of another task, an attempt the session already bound or that another session of the task holds, another native session ID, a repeated idempotency key with other text, a repeated turn ID, a request key repeated with other content, a second outcome, a second response, a second handoff, a handoff taken twice, or taken by the same session or by a session of another task |
 | `precondition-failed` | Every other state the change does not allow: a bound attempt that has not ended, a generation that is not the next one or not running, no active bound attempt, a stopped session, a turn that is not the next deliverable one, a turn that is not running in the named generation, a response for an attempt or ownership generation that is not the active bound one, a delivery report for a request that is not answered or whose delivery is no longer pending, or a handoff before the stop or while a generation runs |
@@ -113,7 +113,7 @@ The request is `open`. A request enters the timeline only this way, so it is per
 
 ### 5.2 A single response
 
-`consumeResponse(session, response)` consumes one response: the request key, the answer, the responder, and the attempt with its ownership generation. The answer is a `permission` answer with a `PermissionDecision` and an optional message, an `input` answer with text, or a `delegation-result` with a delegation ID, a `DelegationOutcome`, and a summary, the kinds of the port's responses. The responder is a person (`PrincipalId`) or a standing rule (`StandingRuleId`, [product ports contract](product-ports.md) section 5). In order:
+`consumeResponse(session, response)` consumes one response: the request key, the answer, the responder, and the attempt with its ownership generation. The answer is a `permission` answer with a `PermissionDecision` and an optional message, an `input` answer with text, or a `delegation-result` with a delegation ID, a `DelegationOutcome`, and a summary, the kinds of the port's responses. The responder is a person (`PrincipalId`), a standing rule (`StandingRuleId`, [product ports contract](product-ports.md) section 5), or the host (`host`), which returns a delegated child task's outcome (agent harness port contract section 7.4). In order:
 
 1. Text outside its bound fails with `invalid`.
 2. An unknown request fails with `not-found`.
@@ -121,6 +121,7 @@ The request is `open`. A request enters the timeline only this way, so it is per
 4. An `expired` or `unresolved` request fails with `not-found`; neither is ever answered.
 5. An attempt or ownership generation other than the session's active bound attempt fails with `precondition-failed`.
 6. An answer whose kind does not match the request (`permission` for a permission request, `input` for an input request, `delegation-result` for a delegation request) fails with `invalid`.
+7. A `delegation-result` from a person or a standing rule, or another answer from the host, fails with `invalid`: the host returns every delegation result and answers nothing else.
 
 The request becomes `answered`, with the response and its delivery `pending`. A request can be answered only while its generation runs, because a generation's end leaves none `open` (section 6).
 

@@ -147,9 +147,11 @@ export type Answer =
     readonly summary: string;
   };
 
+// The host returns a delegation result, and only it (contract, section 5.2).
 export type Responder =
   | { readonly kind: 'principal'; readonly principalId: PrincipalId }
-  | { readonly kind: 'standing-rule'; readonly ruleId: StandingRuleId };
+  | { readonly kind: 'standing-rule'; readonly ruleId: StandingRuleId }
+  | { readonly kind: 'host' };
 
 export interface ResponseSubmission {
   readonly request: RequestKey;

@@ -117,7 +117,7 @@ A native request SHALL enter the timeline only by being recorded under its sessi
 - **THEN** the timeline holds it once
 
 ### Requirement: Single consumption of a response
-The first valid response to an open request SHALL be consumed with its responder, attempt, and ownership generation; a second SHALL fail with `conflict`, an unknown, expired, or unresolved request with `not-found`, an attempt or ownership generation other than the active bound one with `precondition-failed`, and a wrong kind with `invalid`, each changing nothing.
+The first valid response to an open request SHALL be consumed with its responder, attempt, and ownership generation; a second SHALL fail with `conflict`, an unknown, expired, or unresolved request with `not-found`, an attempt or ownership generation other than the active bound one with `precondition-failed`, and a wrong kind with `invalid`, each changing nothing; the host SHALL be the responder of every delegation result and of no other answer, any other pairing failing with `invalid`.
 
 #### Scenario: Duplicate response
 - **WHEN** a second response arrives for a consumed request
@@ -130,6 +130,10 @@ The first valid response to an open request SHALL be consumed with its responder
 #### Scenario: Wrong kind
 - **WHEN** an input answer is given to a permission request
 - **THEN** it fails with `invalid`
+
+#### Scenario: Delegation result from the host
+- **WHEN** the host returns a delegation result to a delegation request
+- **THEN** it is consumed with the host as its responder, and the same result from a person fails with `invalid`
 
 ### Requirement: Requests keyed by generation
 A request of a later generation that reuses an earlier generation's native request ID SHALL be accepted as a new request; a response naming the earlier generation SHALL never apply to it, and no stored answer SHALL be copied to it.
