@@ -97,27 +97,57 @@ export interface ReviewRouter<Decision> {
   route(features: RouteFeatures): Promise<Decision>;
 }
 
+// The version of the rule's triggers and of its reviewer table. A change
+// of either bumps it; older tables stay, so archived records stay valid.
+export const RULE_VERSION = 1;
+
 interface TierEfforts {
   readonly reviewerA: string;
   readonly reviewerB: string;
 }
 
+interface ReviewerTable {
+  readonly reviewerA: Pick<Reviewer, 'harness' | 'model'>;
+  readonly networkedReviewerA: Pick<Reviewer, 'harness' | 'model'>;
+  readonly reviewerB: Pick<Reviewer, 'harness' | 'model'>;
+  readonly efforts: Readonly<Record<Tier, TierEfforts>>;
+}
+
 // standard is the configured effort of the reviewer assignment of
 // 2026-10-27; elevated is a recommendation until governance allows it.
-const EFFORTS: Readonly<Record<Tier, TierEfforts>> = {
-  standard: { reviewerA: 'medium', reviewerB: 'high' },
-  elevated: { reviewerA: 'high', reviewerB: 'xhigh' },
-};
+const REVIEWER_TABLES: ReadonlyMap<number, ReviewerTable> = new Map([
+  [
+    1,
+    {
+      reviewerA: { harness: 'codex', model: 'gpt-6.1-sol' },
+      networkedReviewerA: { harness: 'claude', model: 'claude-fable-5-1' },
+      reviewerB: { harness: 'claude', model: 'claude-opus-5-5' },
+      efforts: {
+        standard: { reviewerA: 'medium', reviewerB: 'high' },
+        elevated: { reviewerA: 'high', reviewerB: 'xhigh' },
+      },
+    },
+  ],
+]);
 
-const REVIEWER_A = { harness: 'codex', model: 'gpt-6.1-sol' } as const;
-const NETWORKED_REVIEWER_A = { harness: 'claude', model: 'claude-fable-5-1' } as const;
-const REVIEWER_B = { harness: 'claude', model: 'claude-opus-5-5' } as const;
+type PlanFeatures = Pick<RouteFeatures, 'externalFacts'>;
 
-export function passPlans(tier: Tier, { externalFacts }: Pick<RouteFeatures, 'externalFacts'>): PassPlans {
-  const efforts = EFFORTS[tier];
-  const reviewerA = externalFacts ? NETWORKED_REVIEWER_A : REVIEWER_A;
+// The plans of the current rule version.
+export function passPlans(tier: Tier, features: PlanFeatures): PassPlans {
+  return tablePlans(REVIEWER_TABLES.get(RULE_VERSION)!, tier, features);
+}
+
+// The plans of the given rule version; undefined for an unknown version.
+export function versionedPassPlans(version: number, tier: Tier, features: PlanFeatures): PassPlans | undefined {
+  const table = REVIEWER_TABLES.get(version);
+  return table === undefined ? undefined : tablePlans(table, tier, features);
+}
+
+function tablePlans(table: ReviewerTable, tier: Tier, { externalFacts }: PlanFeatures): PassPlans {
+  const efforts = table.efforts[tier];
+  const reviewerA = externalFacts ? table.networkedReviewerA : table.reviewerA;
   return [
     { pass: 1, role: 'A', reviewer: { ...reviewerA, variant: efforts.reviewerA } },
-    { pass: 2, role: 'B', reviewer: { ...REVIEWER_B, variant: efforts.reviewerB } },
+    { pass: 2, role: 'B', reviewer: { ...table.reviewerB, variant: efforts.reviewerB } },
   ];
 }

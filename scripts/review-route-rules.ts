@@ -1,10 +1,10 @@
 import type { Size } from './checklist-record.ts';
-import { passPlans, TRIGGERS, type ReviewRouter, type RouteFeatures, type RuleDecision, type Trigger } from './review-route.ts';
+import { passPlans, RULE_VERSION, TRIGGERS, type ReviewRouter, type RouteFeatures, type RuleDecision, type Trigger } from './review-route.ts';
 
 // The rule router, the floor of the review route: deterministic triggers
 // read off the archived review records (design.md "Rule table").
 
-export const RULE_VERSION = 1;
+export { RULE_VERSION };
 
 export const THRESHOLDS = {
   linesChanged: 400,

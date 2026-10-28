@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { reviewerKey } from '../scripts/review-findings.ts';
-import { passPlans, type RouteFeatures, type Tier, type Trigger } from '../scripts/review-route.ts';
+import { passPlans, versionedPassPlans, type RouteFeatures, type Tier, type Trigger } from '../scripts/review-route.ts';
 import { firedTriggers, RULE_VERSION, ruleDecision, RuleRouter } from '../scripts/review-route-rules.ts';
 import { featuresWith, QUIET_FEATURES, touching } from './review-route-fake.ts';
 
@@ -14,6 +14,20 @@ test('the reviewer table assigns each tier and external facts case', () => {
   assert.deepEqual(planKeys('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#high']);
   assert.deepEqual(planKeys('elevated', false), ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
   assert.deepEqual(planKeys('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#xhigh']);
+});
+
+test('the current plans are those of the current rule version', () => {
+  for (const tier of ['standard', 'elevated'] as const) {
+    for (const externalFacts of [false, true]) {
+      assert.deepEqual(versionedPassPlans(RULE_VERSION, tier, { externalFacts }), passPlans(tier, { externalFacts }));
+    }
+  }
+});
+
+test('rule version 1 keeps its reviewer table', () => {
+  const keys = versionedPassPlans(1, 'elevated', { externalFacts: false })!.map(({ reviewer }) => reviewerKey(reviewer));
+  assert.deepEqual(keys, ['codex gpt-6.1-sol#high', 'claude claude-opus-5-5#xhigh']);
+  assert.equal(versionedPassPlans(0, 'standard', { externalFacts: false }), undefined);
 });
 
 test('pass plans name pass 1 reviewer A and pass 2 reviewer B', () => {

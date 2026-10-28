@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { reviewerKey, secretLikeStrings, type Problem, type SchemaCheck } from './review-findings.ts';
 import {
-  passPlans,
+  versionedPassPlans,
   type PassPlans,
   type RouteFeatures,
   type RuleDecision,
@@ -49,20 +49,23 @@ function secretProblems(record: RouteRecord): string[] {
   return secrets === 0 ? [] : [`${secrets} value(s) look like a secret`];
 }
 
+// Both pass plans are checked against the reviewer table of the
+// record's own rule version, so a later table leaves it valid.
 function ruleProblems({ rule, features }: RouteRecord): string[] {
-  const problems: string[] = [];
   const elevated = rule.triggers.length > 0;
-  if ((rule.tier === 'elevated') !== elevated) {
-    problems.push(`rule tier ${rule.tier} does not match ${rule.triggers.length} fired trigger(s)`);
-  }
-  if (!isDeepStrictEqual(rule.passes, passPlans(rule.tier, features))) {
-    problems.push(`rule passes are not the reviewer table's for tier ${rule.tier}`);
-  }
-  return problems;
+  const tierProblems = (rule.tier === 'elevated') === elevated
+    ? []
+    : [`rule tier ${rule.tier} does not match ${rule.triggers.length} fired trigger(s)`];
+  const expected = versionedPassPlans(rule.version, rule.tier, features);
+  if (expected === undefined) return [...tierProblems, `rule version ${rule.version} has no reviewer table`];
+  if (isDeepStrictEqual(rule.passes, expected)) return tierProblems;
+  return [...tierProblems, `rule passes are not the reviewer table's for tier ${rule.tier}`];
 }
 
-function shadowProblems({ shadow, features }: RouteRecord): string[] {
-  if (shadow.status !== 'answered' || isDeepStrictEqual(shadow.passes, passPlans(shadow.tier, features))) return [];
+function shadowProblems({ shadow, features, rule }: RouteRecord): string[] {
+  if (shadow.status !== 'answered') return [];
+  const expected = versionedPassPlans(rule.version, shadow.tier, features);
+  if (expected === undefined || isDeepStrictEqual(shadow.passes, expected)) return [];
   return [`shadow passes are not the reviewer table's for tier ${shadow.tier}`];
 }
 
