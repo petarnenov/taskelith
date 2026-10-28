@@ -72,8 +72,9 @@ No later pass reviews these fixes; each is marked unreviewed for the coordinator
 2. Pass 1 finding 2: the "One rule" self-check of this record.
 3. Coordinator decision U1 (`e05565aa`): `docs/governance.md:46`, "Tasks during the change to version 8": the owner's decision of 2026-10-28 applies from that decision, not from version 8 reaching `dev`; a task whose pass 1 ran before it finishes under the rule of versions 5 to 7, and a task briefed on or after it follows "Review sequence". The spec delta and the protocol are unchanged, because they refer to governance for the rule in force.
 4. Worker finding U3 (`e05565aa`): `make review` printed `the authorized medium applies (policy version 7)` for this change's own pass 1, under policy version 8. `scripts/review-run.ts:34` adds `GOVERNANCE_POLICY_VERSION = 8`, used by the recommendation at line 260, and the comments at lines 40 and 245 to 246 no longer name a version. `test/review-run.test.ts` expects `(policy version 8)`, and the new test "the policy version that make review names is the governance one" compares the constant with the "Policy version" line of `docs/governance.md`. Fail-before: with the scripts of `df1f1c4c` and the changed expectations, the recommendation test failed (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/0427c315-6988-45ca-8b27-69ae57925400/scratchpad/fail-before-u3-regex.log`, 25 of 26 passed); with the new test as well, the file failed to load on the missing export (log `/private/tmp/claude-503/-Users-petarnenov-taskelith/0427c315-6988-45ca-8b27-69ae57925400/scratchpad/fail-before-u3.log`). With the fix, 27 of 27 tests of `test/review-run.test.ts` pass.
+5. Coordinator-approved badge fix (`bd778b9e`): `docs/ui-poc/src/screens/Reviews.tsx:309` reads `After pass 3: fixes checked by the architect` instead of `After pass 3 the owner decides open Critical, High, Medium`; `docs/ui-poc/README.md` does not quote that badge.
 
-Architect check of the unreviewed fixes: pending (coordinator).
+Architect check (Niki, 2026-10-28): unreviewed fixes e05565aa (F1, F2, U1, U3) and bd778b9e (pass 3 badge) checked and accepted; no later review.
 
 ## Limitations
 
@@ -88,6 +89,5 @@ Architect check of the unreviewed fixes: pending (coordinator).
 
 ## Remaining gates
 
-- Architect check by the coordinator of the unreviewed fixes listed under "Unreviewed fixes".
 - Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
