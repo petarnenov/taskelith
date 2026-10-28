@@ -14,6 +14,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - Merge `1a758b85` of `origin/dev` `1c73e1a7` (#380, #381) into `8d4b3c7a`, with conflicts; the full `make verify` passed on it, and `make record` and `make record-check` passed on the record commit that follows it (see "Merge reconciliation").
 - Review pass 2 fixes, on `1e1cd10f`: `4818a7b7` scripts, tests, and `Makefile` (findings 1, 2, 3, 5, 6, 7, and 10); `149058b8` spec deltas, design, protocol, and coordinator skill (finding 4 and the text of the others); `0be2c4ab` this record (findings 8 and 9); then the pass 2 records.
 - Review pass 3 fixes, on `d9d191dd`, unreviewed under "At most three passes": `945b09f7` `scripts/integrate.sh` and its tests (findings 1 and 2); then this record.
+- `make verify` of the pass 2 and pass 3 fixes passed on `4e0b20a3`; `make record` and `make record-check` passed on the record commit that follows it, whose tree differs from `4e0b20a3`'s only in this record and `tasks.md`.
 
 ## Environment
 
@@ -58,14 +59,15 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
   - Fail-before: `test/integrate-script.test.ts --test-name-pattern=SIG` with the `scripts/integrate.sh` of `d9d191dd` and the new tests: tests 6, pass 1, fail 2, cancelled 3. The `SIGINT` and `SIGHUP` tests during `make verify` (finding 1) fail with `143 !== 130` and `143 !== 129`; the `SIGTERM` test passes. The three tests that signal the script as the supervisor starts (finding 2) time out after 120 s, because the one passed-on signal is lost and the script waits for the 300 s fake `make verify`. Afterwards `ps` showed no `sleep 300` or fake `make verify` process left.
   - After the fix: `test/integrate-script.test.ts`: tests 24, pass 24, fail 0; afterwards `ps` showed no process of the fixtures left.
   - `npx tsc -p tsconfig.check.json --noEmit`: no error. `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 58 findings files and 38 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --strict --all --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
-  - Not run: `make verify`, which needs the Docker slot, and so `make record` and `make record-check`.
+  - Not run here: `make verify`, which needs the Docker slot, and so `make record` and `make record-check`; see the next item.
+- `make verify` of the pass 2 and pass 3 fixes, on `4e0b20a3` in a Docker slot the coordinator granted, 07:40:22 to 07:44:28 local, 2026-10-28: passed, profile full, tree `c363d0f91cb4e7888ddff7b46da623c844f05aad`, stamp written; 45 suites, tests 2630, pass 2623, fail 0, cancelled 0, skipped 7; coverage 99.36% lines, 92.49% branches, 99.06% functions; OpenSpec strict 70 of 70. `make record` wrote "Generated checks" from its log, and `make record-check` passed.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b3749b81cf95925fe79d1fc4cdbefd739e79e33a`; tests 2621, pass 2614, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `c363d0f91cb4e7888ddff7b46da623c844f05aad`; tests 2630, pass 2623, fail 0, skipped 7; all files 99.36% lines, 92.49% branches, 99.06% functions.
 - `npm run openspec -- validate adopt-process-performance-recommendations --strict`: passed, `Change 'adopt-process-performance-recommendations' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 58 file(s); every pass summary file is valid: 38 file(s).`.
 - Spec diff against the merge base `1c73e1a70d92` with `origin/dev`: no change under `openspec/specs`.
@@ -75,6 +77,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a17f4c-3d06-77b2-b410-2f9550f5ebbd` | 0 | 5 | 8 | 2 |
 | merge-reconciliation 1 | A | `codex gpt-6.1-sol#medium` | `01a180d6-1001-7141-84d8-062eca3daa7c` | 0 | 0 | 0 | 0 |
+| 2 | B | `claude claude-opus-5-5#high` | `af5db442-7547-4c35-8c79-49fa9ddd3466` | 0 | 1 | 3 | 6 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a180ef-0061-7101-a785-6d196c88fbe0` | 0 | 0 | 2 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -186,7 +190,6 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
-- `make verify` of the pass 2 and pass 3 fixes, in a Docker slot the coordinator grants, then `make record` and `make record-check`
 - Archive of the change, as the last commit
 - Handoff to the coordinator
 - Integration into dev by the coordinator (single pull request)

@@ -27,5 +27,5 @@
 - [x] 4.3 Merge `origin/dev` `1c73e1a7`, reconcile the deltas, `make verify`, `make record`, and the `merge-reconciliation` review: done on `1a758b85`
 - [x] 4.4 Review pass 2 (reviewer B) and its fixes: 10 findings fixed in `4818a7b7`, `149058b8`, and `0be2c4ab`
 - [x] 4.5 Review pass 3 (reviewer A), required by "Conditional third pass": 2 Medium findings fixed unreviewed in `945b09f7` under "At most three passes"
-- [ ] 4.6 `make verify`, `make record`, and `make record-check` of the pass 2 and pass 3 fixes
+- [x] 4.6 `make verify`, `make record`, and `make record-check` of the pass 2 and pass 3 fixes: passed on `4e0b20a3`
 - [ ] 4.7 Archive the change
