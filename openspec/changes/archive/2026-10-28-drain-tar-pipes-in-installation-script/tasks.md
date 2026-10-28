@@ -17,4 +17,4 @@
 
 - [x] 4.1 Review pass 1 (reviewer A) and its fix: 1 Low, fixed without review
 - [x] 4.2 Review pass 2 (reviewer B): not run, because pass 1 had only a Low finding
-- [ ] 4.3 Archive the change
+- [x] 4.3 Archive the change
