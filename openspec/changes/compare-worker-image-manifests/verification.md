@@ -61,6 +61,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a1831a-5209-7d10-8002-cb76a2a8363d` | 0 | 1 | 1 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `93e7c704-8c25-41df-b55e-72892f3311bd` | 0 | 0 | 1 | 5 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18341-1dc8-78a3-b3d9-9ac9b1c63283` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Limitations
