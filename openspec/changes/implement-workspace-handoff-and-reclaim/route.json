@@ -1,11 +1,11 @@
 {
   "change": "implement-workspace-handoff-and-reclaim",
-  "generatedAt": "2026-10-28T13:40:07.335Z",
+  "generatedAt": "2026-10-28T14:03:47.812Z",
   "devCommit": "10fc3bbe6b7c46089e74ea32dc6d70bf79cdbe8d",
-  "headCommit": "34a9773da3abf5b4ab43705f1f73a54e6387f300",
+  "headCommit": "e33d2c5f040244f973da24e445284ff6523b66ea",
   "features": {
-    "linesChanged": 1640,
-    "filesChanged": 22,
+    "linesChanged": 1801,
+    "filesChanged": 23,
     "capabilities": [
       "git-workspace-port"
     ],
@@ -67,7 +67,7 @@
       "standard": 0,
       "elevated": 1
     },
-    "expectedPasses": 2.73,
+    "expectedPasses": 2.69,
     "passes": [
       {
         "pass": 1,
@@ -88,6 +88,6 @@
         }
       }
     ],
-    "latencyMs": 209
+    "latencyMs": 221
   }
 }
