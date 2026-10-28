@@ -1,0 +1,99 @@
+{
+  "change": "deliver-rotated-worker-credentials",
+  "generatedAt": "2026-10-28T14:00:40.624Z",
+  "devCommit": "a3a0ac4cea7cbfa5b5ff7de0357dc74a5a42dfc0",
+  "headCommit": "fb9b06a6869ad6130780c9aab93387113766d972",
+  "features": {
+    "linesChanged": 2989,
+    "filesChanged": 77,
+    "capabilities": [
+      "control-plane-api",
+      "execution-wire-contracts",
+      "installation-enrollment",
+      "nats-transport",
+      "worker-journal-adapter",
+      "worker-runtime"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": true,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "L",
+    "capabilityHistory": {
+      "changes": 10,
+      "thirdPassShare": 0.6,
+      "mediumOrWorsePerChange": 6.6
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "capabilities",
+      "security",
+      "contracts",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "confidence": 1,
+    "probabilities": {
+      "standard": 0,
+      "elevated": 1
+    },
+    "expectedPasses": 2.87,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ],
+    "latencyMs": 244
+  }
+}
