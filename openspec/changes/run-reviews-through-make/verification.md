@@ -125,6 +125,15 @@ Fail-before: the new test was run against the scripts of `1fa1376d` (log `/priva
 - **Reconciliation.** The only delta, `specs/review-process/spec.md`, adds three requirements, "Review command", "Review route gate", and "Reviewer environment", and modifies, removes, or renames none. Between `bbce0e81` and `7efc48d3`, dev changed the living specs `control-plane-wire-contracts`, `delivery-planning`, `evidence-store`, `execution-wire-contracts`, `git-workspace-port`, `product-ports`, and `sdlc-wire-contracts`, but not `review-process`, and no living spec has a requirement of the three names, so the delta stays unchanged. Its requirement statements have 487, 334, and 275 characters. `npm run openspec -- validate run-reviews-through-make --strict` passed. A trial archive in a scratch copy of the merged tree applied `+ 3, ~ 0, - 0, → 0` to `review-process`, and `openspec validate --all --strict` passed 71 of 71; the copy was deleted.
 - **`make verify`** on `7b6b0c53` (tree `2e526aa4`), full profile, exit 0, stamp written: tests 3208, pass 3193, fail 0, skipped 15; coverage 99.45% lines, 92.67% branches, 99.07% functions; 0 breaking changes of each of the five contract documents against the merge base `7efc48d3`. `make record` wrote "Generated checks" from its log.
 
+### Return review
+
+Worker step 10 asks reviewer A to review the resolved diff and the reconciliation. The pass schema has no form for such a review, so, as for earlier returned changes, `passes.jsonl` records it as the next pass, pass 4, role A.
+
+- **Reviewer:** A, Codex CLI, `codex gpt-6.1-sol#medium`, run through `make review CHANGE=run-reviews-through-make PASS=4 ROLE=A ...` on `11625431`, session `01a182e4-da5c-7bb0-a534-e4111c5ee1a1`. `make review` printed `model: gpt-6.1-sol`, `effort: medium`, and `sandbox: read-only`, each `(reported)`, and exited 0.
+- **Scope:** the merge resolution of the `Makefile` in `d48339a0`; that the restore `f95ae3c6` equals the tree of `32ed0205`; the compatibility of dev's changes with this change; the reconciliation of the `review-process` delta with the living specs of dev `7efc48d3`; and the "Dev merge" records above.
+- **Snapshot:** `2190ec4c0a24a2ac6502fc287fda1f0644c1e9505bc4c489f86243170128784a` before and after the pass.
+- **Result:** Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl` line 4; no findings lines. The reviewer verified that both `Makefile` targets, `review` and `contract-breaking-changes`, and their arguments survive the merge and that GNU Make 4.4.1 does not expand the arguments; that the restore matches `32ed0205`; that dev's changes introduce no incompatibility; that the delta adds only the three unique requirements; and that the recorded verification matches the `make verify` log of the dev merge. It also ran the comment rule, `npm run openspec -- validate run-reviews-through-make --strict`, and `make record-check`, all passing.
+
 ## Limitations
 
 - The tests stub the reviewer CLIs; a CLI that needs another variable fails its first run, which is no pass. Passes 1 and 3 checked the Codex row and pass 2 the Claude Code row against the real CLIs through `make review`; the Antigravity and OpenCode rows stay unverified through `make review`.
@@ -134,7 +143,5 @@ Fail-before: the new test was run against the scripts of `1fa1376d` (log `/priva
 
 ## Remaining gates
 
-- Review is complete after three passes; the pass 3 fix is unreviewed.
-- The return review by reviewer A of the merge resolution and the reconciliation, then the archive again (worker step 10).
-- The Antigravity and OpenCode allowlists stay unverified against their real CLIs until a first `make review` run of each.
-- Integration into dev by the coordinator (single pull request)
+- The Antigravity and OpenCode allowlists and model confirmation stay unverified against their real CLIs until a first `make review` run of each.
+- Integration into dev by the coordinator (single pull request).
