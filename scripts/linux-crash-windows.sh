@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Runs the G2 crash windows in the privileged Linux test image against the
-# services of services.sh run; usage: linux-crash-windows.sh IMAGE [ARGS]
+# Runs G2 test files, the crash windows by default, in the privileged Linux
+# test image against services.sh run; usage: linux-crash-windows.sh IMAGE [ARGS]
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
-  echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_ARGS...]" >&2
+  echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_OPTIONS...] [-- TEST_FILES...]" >&2
   exit 2
 fi
 if [ -z "${TASKELITH_SERVICES_SECRETS:-}" ]; then
@@ -20,6 +20,7 @@ options=(
   --rm --init --privileged --cgroupns=private --network host --volume /tmp
   --volume "$repository:/repo:ro" --volume "$TASKELITH_SERVICES_SECRETS:/secrets:ro"
   --env TASKELITH_POSTGRES_URL --env TASKELITH_NATS_URL --env TASKELITH_SERVICES_SECRETS=/secrets
+  --env TASKELITH_TOXIPROXY_URL --env TASKELITH_POSTGRES_PROXY_URL --env TASKELITH_NATS_PROXY_URL
   --env TASKELITH_SCENARIO_COMMIT="$(git -C "$repository" rev-parse HEAD)"
 )
 if [ -n "${TASKELITH_TEST_SEED:-}" ]; then options+=(--env TASKELITH_TEST_SEED); fi

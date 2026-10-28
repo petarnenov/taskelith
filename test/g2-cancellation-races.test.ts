@@ -8,6 +8,7 @@ import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
 import { processesNaming } from './g2-scenarios/leftover-processes.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
+import { CANCEL_SIGNAL, assertContained } from './g2-scenarios/scenario-launch.ts';
 import { SCENARIO_LIMITS, type ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import {
   assertExitedOnce,
@@ -59,15 +60,23 @@ async function assertNeverLaunched(installation: ScenarioInstallation, worker: S
   return executed;
 }
 
-// The attempt ended cancelled; a started process (held by c, e, f) ended
-// by the cancel's SIGTERM, and no scripted process of the worker remains.
-async function assertCancelled(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string): Promise<string> {
+// Where the cancel landed: after a proven start, or where the process may
+// not have started yet (before the start, or racing the spawn).
+type CancelPoint = 'after-start' | 'start-open';
+
+// The attempt ended cancelled; a started process ended by the cancel's
+// signal, and no scripted process of the worker remains.
+async function assertCancelled(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string, point: CancelPoint): Promise<string> {
   await installation.ended(taskId);
   const outcome = (await installation.task(taskId)).attempts[0]!.outcome!;
   assert.equal(outcome.cancelled, true, `the attempt ended cancelled: ${JSON.stringify(outcome)}`);
-  if (outcome.kind === 'exited') assert.deepEqual(outcome.status, { kind: 'signal', signal: 'SIGTERM' });
+  if (point === 'after-start') {
+    assert.equal(outcome.kind, 'exited', `a started process ends exited: ${JSON.stringify(outcome)}`);
+    assert.equal(outcome.kind === 'exited' && outcome.startProven, true, 'the start is proven');
+  }
+  if (outcome.kind === 'exited') assert.deepEqual(outcome.status, { kind: 'signal', signal: CANCEL_SIGNAL });
   await waitFor(() => scriptedProcesses(worker).length === 0, 10_000, 'no scripted process remains');
-  return outcome.kind === 'exited' ? 'exited by SIGTERM' : outcome.kind;
+  return outcome.kind === 'exited' ? `exited by ${CANCEL_SIGNAL}` : outcome.kind;
 }
 
 describe('cancellation races', SCENARIO_HOST, () => {
@@ -116,7 +125,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         if (holdAnswer) {
           await waitFor(() => journalOf(worker).cancellations.length === 1, 20_000, 'the worker journals the cancellation');
           gate.open();
-          const how = await assertCancelled(installation, worker, 'task-b');
+          const how = await assertCancelled(installation, worker, 'task-b', 'start-open');
           assert.equal(journaledUnder(worker, cancelled.assignmentId).at(-1)?.state, 'not-started');
           assert.ok(journaledUnder(worker, cancelled.assignmentId).every(({ recordWritten }) => !recordWritten), 'no W4');
           const [grant] = grantsUnder(await installation.task('task-b'), cancelled.assignmentId);
@@ -161,6 +170,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         const latest = () => journaledUnder(worker, cancelled.assignmentId).at(-1);
         const reached = afterStart ? () => latest()?.state === 'started' : () => latest()?.recordWritten === true;
         await waitFor(reached, 20_000, afterStart ? 'the start' : 'W4');
+        if (afterStart) assertContained(worker.containmentParent, scriptedPids(worker));
         await cancelAssignment(installation, cancelled.assignmentId);
         const atCancel = latest()!;
         assert.equal(atCancel.recordWritten, true, 'the cancel lands after W4');
@@ -168,7 +178,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         assert.equal(started, afterStart, `the cancel lands ${afterStart ? 'after' : 'before'} the start: ${atCancel.state}`);
         await waitFor(() => journalOf(worker).cancellations.length === 1, 20_000, 'the worker journals the cancellation');
         supervisorHeld.open();
-        const how = await assertCancelled(installation, worker, 'task-c');
+        const how = await assertCancelled(installation, worker, 'task-c', afterStart ? 'after-start' : 'start-open');
         return `cancelled after ${afterStart ? 'the start' : 'W4, before the start'} (journal state ${atCancel.state ?? 'none'}): ${how}`;
       } finally {
         supervisorHeld.open();
@@ -237,7 +247,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
           transport: (transport) => interceptAck(transport, CANCELLATION, (ack) => { acknowledged += 1; ack(); }),
         });
         await worker.start();
-        const how = await assertCancelled(installation, worker, 'task-e');
+        const how = await assertCancelled(installation, worker, 'task-e', 'after-start');
         await waitFor(() => acknowledged === 1, 20_000, 'the redelivered cancellation is acknowledged');
         const { cancellations } = journalOf(worker);
         assert.equal(cancellations.length, 1, 'the cancellation is journaled once');
@@ -331,6 +341,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       try {
         await installation.submitTask('task-h');
         await waitFor(async () => (await startedExecutions(installation, 'task-h')) === 1, 20_000, 'the authorized start');
+        assertContained(worker.containmentParent, scriptedPids(worker));
         const forged = forgeStartUnderOwningGrant(worker, await installation.task('task-h'));
         await waitFor(async () => (await cancellationsTo(installation, worker)).length === 1, 20_000, 'the cancellation of the unauthorized start');
         assert.deepEqual((await cancellationsTo(installation, worker))[0]!.executionId, forged, 'it names only that execution');
@@ -351,7 +362,7 @@ const RACE_WINDOW_MILLISECONDS = 25;
 // A round ends with its task: granted, the revoked grant is cancelled
 // before or after the spawn; otherwise a released run ends it elsewhere.
 async function settleRace(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string, answer: string): Promise<string> {
-  if (answer === 'granted') return `granted then revoked, ${await assertCancelled(installation, worker, taskId)}`;
+  if (answer === 'granted') return `granted then revoked, ${await assertCancelled(installation, worker, taskId, 'start-open')}`;
   worker.releaseScriptedProcesses();
   await assertExitedOnce(installation, taskId);
   return `${answer}, ran under a later assignment`;
@@ -388,4 +399,8 @@ function pressureChanges(worker: ScenarioWorker): string[] {
 
 function scriptedProcesses(worker: ScenarioWorker) {
   return processesNaming(worker.dataRoot).filter(({ commandLine }) => commandLine.includes('setTimeout'));
+}
+
+function scriptedPids(worker: ScenarioWorker): number[] {
+  return scriptedProcesses(worker).map(({ pid }) => pid);
 }

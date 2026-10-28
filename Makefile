@@ -24,7 +24,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
-	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
+	test services-up services-down verify-linux-cgroup verify-linux-crash-windows verify-linux-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -119,6 +119,16 @@ verify-linux-crash-windows:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-crash-windows \
 		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
 		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
+
+# Opt-in G2 races, stale generations, and partitions through the Linux
+# cgroup supervisor (privileged, host network); FILES and PATTERN select.
+G2_SCENARIO_FILES := test/g2-cancellation-races.test.ts test/g2-stale-generations.test.ts test/g2-partition.test.ts
+verify-linux-g2-scenarios:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-g2-scenarios \
+		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
+		-- $(or $(FILES),$(G2_SCENARIO_FILES))
 
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.

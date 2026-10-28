@@ -1,0 +1,101 @@
+{
+  "change": "complete-g2-native-acceptance-rows",
+  "generatedAt": "2026-10-28T00:09:07.055Z",
+  "devCommit": "3f23516a2e4ef8724f38e5c9c67267225f40ff16",
+  "query": {
+    "capabilities": [
+      "native-worker-acceptance",
+      "worker-supervisor",
+      "execution-supervisor",
+      "g2-failure-scenarios",
+      "worker-platform-foundation"
+    ],
+    "files": [],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 7
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 7
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "naming",
+        "count": 5
+      },
+      {
+        "category": "concurrency-race",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 2
+      },
+      {
+        "category": "scope",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 312,
+        "inChecklist": 168
+      },
+      "mediumOrWorse": {
+        "findings": 120,
+        "inChecklist": 35
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 61
+      },
+      {
+        "category": "docs",
+        "count": 46
+      },
+      {
+        "category": "spec-wording",
+        "count": 29
+      },
+      {
+        "category": "stale-citation",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 11
+      },
+      {
+        "category": "contract-drift",
+        "count": 9
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 184,
+        "inChecklist": 184
+      },
+      "mediumOrWorse": {
+        "findings": 30,
+        "inChecklist": 30
+      }
+    }
+  }
+}
