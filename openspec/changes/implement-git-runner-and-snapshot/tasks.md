@@ -26,5 +26,6 @@
 
 ## 5. Review and archive
 
+- [x] 4.4 Fix the findings of review pass 1 with fail-before tests, amend contract sections 2, 3, 6, and 7, and modify the living requirements "Git directory safety" and "Git configuration scope"
 - [ ] 5.1 Review passes with reviewers A and B, recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
 - [ ] 5.2 Archive the change in the last commit of the branch
