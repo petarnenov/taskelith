@@ -69,15 +69,19 @@ A generation SHALL start only under an active bound attempt; the first SHALL be 
 - **THEN** the generation is ended and reconciled
 
 ### Requirement: Turn identity and idempotency
-A submitted turn SHALL keep its `TurnId`, idempotency key, author, text, and position for good; a key SHALL be unique per session, a repeat with the same text SHALL return the existing turn unchanged in any state, a repeat with other text SHALL fail with `conflict`, and a `TurnId` already in the timeline SHALL fail with `conflict`.
+A submitted turn SHALL keep its `TurnId`, idempotency key, author, text, and position for good; a key SHALL be unique per session, a repeat with the same author and text SHALL return the existing turn unchanged in any state, a repeat with another author or text SHALL fail with `conflict`, and a `TurnId` already in the timeline SHALL fail with `conflict`.
 
 #### Scenario: Retried submission
-- **WHEN** a turn is submitted again with the same idempotency key and text
+- **WHEN** a turn is submitted again with the same idempotency key, author, and text
 - **THEN** the existing turn is returned and the timeline has no new turn
 
 #### Scenario: Key reused with other text
 - **WHEN** a submission repeats an idempotency key with different text
 - **THEN** it fails with `conflict` and the timeline is unchanged
+
+#### Scenario: Key reused by another author
+- **WHEN** a submission repeats an idempotency key with the same text from another author
+- **THEN** it fails with `conflict`
 
 #### Scenario: Turn order
 - **WHEN** three turns are submitted

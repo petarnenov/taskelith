@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { parseIdentifier } from '@taskelith/kernel';
 import {
   MAX_HARNESS_TEXT_LENGTH,
   TURN_STATES,
@@ -27,6 +28,8 @@ import {
   turnId,
   turnKey,
 } from './session-fixtures.ts';
+
+const OTHER_AUTHOR = value(parseIdentifier('PrincipalId', 'person-2'));
 
 function submission(name: string, text = `text of ${name}`) {
   return { turnId: turnId(name), key: turnKey(`key-${name}`), author: AUTHOR, text };
@@ -70,6 +73,12 @@ test('a key reused with other text fails with conflict', () => {
   const session = submitted(runningSession(), 'turn-1');
   const reused = { ...submission('turn-1', 'other text'), turnId: turnId('turn-2') };
   assert.equal(failed(submitTurn(session, reused)).code, 'conflict');
+});
+
+test('a key reused by another author fails with conflict', () => {
+  const session = submitted(runningSession(), 'turn-1');
+  const byOther = { ...submission('turn-1'), turnId: turnId('turn-2'), author: OTHER_AUTHOR };
+  assert.equal(failed(submitTurn(session, byOther)).code, 'conflict');
 });
 
 test('a turn ID already in the timeline fails with conflict', () => {

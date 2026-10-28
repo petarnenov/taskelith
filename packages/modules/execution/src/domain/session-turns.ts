@@ -27,7 +27,7 @@ export function submitTurn(session: Session, submission: TurnSubmission): Result
   if (!isTextWithin(submission.text, 1, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got turn text out of bounds');
   const same = session.turns.find((turn) => turn.key === submission.key);
   if (same !== undefined) {
-    if (same.text !== submission.text) return sessionFailure('conflict', session, `holds key ${submission.key} with other text`);
+    if (!isRetryOf(same, submission)) return sessionFailure('conflict', session, `holds key ${submission.key} with other input`);
     return ok(Object.freeze({ session, turn: same, effect: 'duplicate' }));
   }
   if (findTurn(session, submission).turn !== undefined) return sessionFailure('conflict', session, `holds turn ${submission.turnId}`);
@@ -77,6 +77,11 @@ export function reconcileTurns(turns: readonly Turn[], generation: SessionGenera
   return Object.freeze(turns.map((turn) => (
     isRunningIn(turn, generation) ? Object.freeze({ ...turn, state: 'outcome-unknown' as const, generation }) : turn
   )));
+}
+
+// Product ports contract, section 2 rule 7: a retry repeats the input.
+function isRetryOf(turn: Turn, submission: TurnSubmission): boolean {
+  return turn.text === submission.text && turn.author === submission.author;
 }
 
 function hasRunningTurn(session: Session): boolean {

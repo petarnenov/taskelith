@@ -27,7 +27,7 @@ The domain is pure: it reads no clock, random source, file, or network, and it s
 | --- | --- |
 | `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, an answer of the wrong kind for its request, or an answer from the wrong responder |
 | `not-found` | An unknown attempt, generation, turn, request, or handoff, or a request that is `expired` or `unresolved` |
-| `conflict` | An attempt of another task, an attempt the session already bound or that another session of the task holds, another native session ID, a repeated idempotency key with other text, a repeated turn ID, a request key repeated with other content, a second outcome, a second response, a second handoff, a handoff taken twice, or taken by the same session or by a session of another task |
+| `conflict` | An attempt of another task, an attempt the session already bound or that another session of the task holds, another native session ID, a repeated idempotency key with another author or text, a repeated turn ID, a request key repeated with other content, a second outcome, a second response, a second handoff, a handoff taken twice, or taken by the same session or by a session of another task |
 | `precondition-failed` | Every other state the change does not allow: a bound attempt that has not ended, a generation that is not the next one or not running, no active bound attempt, a stopped session, a turn that is not the next deliverable one, a turn that is not running in the named generation, a response for an attempt or ownership generation that is not the active bound one, a delivery report for a request that is not answered or whose delivery is no longer pending, or a handoff before the stop or while a generation runs |
 
 ## 3. Sessions, attempts, and generations
@@ -69,7 +69,7 @@ A generation counts the session's native processes (agent harness port contract 
 `submitTurn(session, submission)` records a user turn from its `TurnId`, its `IdempotencyKey`, its author (`PrincipalId`), and its text, and returns the session, the turn, and the effect, `recorded` or `duplicate`. In order:
 
 1. Text outside its bound fails with `invalid`.
-2. A key the session holds returns that turn with the effect `duplicate`, whatever its state, when the text is equal; with other text it fails with `conflict`. A retry never creates another turn.
+2. A key the session holds returns that turn with the effect `duplicate`, whatever its state, when the author and the text are equal; with another author or text it fails with `conflict` ([product ports contract](product-ports.md) section 2 rule 7). A retry never creates another turn.
 3. A `TurnId` the session holds fails with `conflict`.
 4. A stopped session fails with `precondition-failed`.
 
