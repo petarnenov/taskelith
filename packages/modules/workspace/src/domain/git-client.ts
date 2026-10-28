@@ -15,6 +15,36 @@ export const GIT_CLIENT_PINS = Object.freeze({
   darwin: Object.freeze({ path: '/usr/bin/git', version: 'git version 2.50.1 (Apple Git-155)' }),
 });
 
+// The environment the adapter builds for every Git process (section 7).
+export const GIT_BUILT_ENVIRONMENT = Object.freeze({
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_TERMINAL_PROMPT: '0',
+});
+
+// Command-scope settings of every Git process, in this order; a process
+// that reaches the remote adds `http.extraHeader` last.
+export const GIT_COMMAND_SCOPE_SETTINGS: readonly (readonly [string, string])[] = Object.freeze([
+  Object.freeze(['core.hooksPath', '/dev/null'] as const),
+  Object.freeze(['credential.helper', ''] as const),
+  Object.freeze(['diff.ignoreSubmodules', 'all'] as const),
+  Object.freeze(['status.submoduleSummary', 'false'] as const),
+  Object.freeze(['submodule.recurse', 'false'] as const),
+  Object.freeze(['fetch.recurseSubmodules', 'false'] as const),
+  Object.freeze(['push.recurseSubmodules', 'no'] as const),
+]);
+
+export const GIT_CREDENTIAL_SETTING = 'http.extraHeader';
+
+// The settings as command-scope environment; the header value is the
+// credential's whole Authorization value, never an argument.
+export function gitConfigEnvironment(authorization?: string): Record<string, string> {
+  const header: [string, string][] = authorization === undefined ? [] : [[GIT_CREDENTIAL_SETTING, `Authorization: ${authorization}`]];
+  const settings = [...GIT_COMMAND_SCOPE_SETTINGS, ...header];
+  const pairs = settings.flatMap(([key, value], index) => [[`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value]]);
+  return { ...GIT_BUILT_ENVIRONMENT, GIT_CONFIG_COUNT: String(settings.length), ...Object.fromEntries(pairs) };
+}
+
 // Exact comparison: a newer, older, or patched build is refused.
 export function checkGitClient(pin: GitClientPin, reportedVersion: string): Result<void> {
   if (reportedVersion.trim() === pin.version) return ok(undefined);

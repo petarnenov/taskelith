@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { WORKSPACE_CONFORMANCE } from '@taskelith/workspace';
+import { WORKSPACE_CONFORMANCE, type WorkspaceFixture } from '@taskelith/workspace';
 import { createFixture, type DoubleDefects } from './temp-dir-workspaces.ts';
 
 for (const conformance of WORKSPACE_CONFORMANCE) {
@@ -47,7 +47,7 @@ const HAND_OFF = 'hands the checkout to the execution and takes it back without 
 const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested';
 const ONE_HAND_OFF = 'holds one handed-off workspace at a time where executions share a separate account';
 const CONCURRENT_HAND_OFF = 'lets one of two concurrent hand-offs through where executions share a separate account';
-const GIT_PROCESSES = 'runs Git in an environment it builds, with no secret in an argument';
+const GIT_PROCESSES = 'runs Git in an environment it builds, with no credential in an argument';
 const PLANTED_SETTINGS = 'writes the repository configuration anew, so settings the agent planted never act';
 
 const EVERY_CASE = WORKSPACE_CONFORMANCE.map(({ name }) => name);
@@ -82,9 +82,15 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['pushes a head that does not descend from the leased one', { ignoresAncestry: true }, [PUSH, NOT_FAST_FORWARD]],
   ['pushes with a lease that names no expected head', { pushesWithBareLease: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, PLANTED_SETTINGS]],
   ['forgets its hand-offs across a restart', { forgetsHandOffsOnRestart: true }, [HANDED_OFF]],
-  ['passes the secret in a Git argument', { passesSecretInArguments: true }, [GIT_PROCESSES]],
+  ['passes the secret in a Git argument', { passesSecretInArguments: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, GIT_PROCESSES, PLANTED_SETTINGS]],
+  ['passes the Authorization header in a Git argument', { passesHeaderInArguments: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, GIT_PROCESSES, PLANTED_SETTINGS]],
   ['runs Git in the inherited environment', { inheritsEnvironment: true }, [GIT_PROCESSES]],
+  ['inherits a global configuration file', { inheritsGlobalConfig: true }, [GIT_PROCESSES]],
+  ['inherits command-scope settings beside its own', { inheritsConfigPairs: true }, [GIT_PROCESSES]],
+  ['cancels the atomic push with a later option', { cancelsAtomic: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, PLANTED_SETTINGS]],
+  ['cancels the lease with a later option', { cancelsLease: true }, [REMOTE_MOVED, NOT_FAST_FORWARD, PLANTED_SETTINGS]],
   ['keeps the repository settings the agent planted', { keepsPlantedSettings: true }, [PLANTED_SETTINGS]],
+  ['uses the planted settings, then rewrites the configuration', { rewritesConfigAfterGit: true }, [PLANTED_SETTINGS]],
   ['snapshots a tree that holds a gitlink', { snapshotsGitlink: true }, [GITLINK]],
   ['clones from a remote that is not HTTPS', { acceptsInsecureRemote: true }, [REJECT]],
   ['cannot reach the remote for any prepare', { refusesEveryPrepare: true }, EVERY_CASE.filter((name) => name !== DIGEST)],
@@ -93,5 +99,27 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
 for (const [name, defects, failing] of DEFECTS) {
   test(`a provider that ${name} fails the suite`, async () => {
     assert.deepEqual(await failingCases(defects), failing);
+  });
+}
+
+// Every form of the fixture's credentials, built independently of the suite.
+function credentialForms(fixture: WorkspaceFixture): string[] {
+  const { read, write, foreign } = fixture.credentials;
+  return [read, write, foreign].flatMap(({ secret, authorization }) => [secret, authorization, authorization.split(' ')[1]!]);
+}
+
+const LEAKING_DEFECTS: readonly DoubleDefects[] = [{ passesSecretInArguments: true }, { passesHeaderInArguments: true }, { storesSecret: true }];
+
+for (const defects of LEAKING_DEFECTS) {
+  test(`a finding never repeats the credential it found (${Object.keys(defects)[0]})`, async () => {
+    for (const conformance of WORKSPACE_CONFORMANCE) {
+      const { fixture, dispose } = await createFixture(defects);
+      try {
+        const problems = (await conformance.check(fixture)).join('\n');
+        for (const form of credentialForms(fixture)) assert.ok(!problems.includes(form), `${conformance.name} repeats a credential`);
+      } finally {
+        await dispose();
+      }
+    }
   });
 }

@@ -6,7 +6,7 @@ import { HEAD_SNAPSHOT_CONTENT_TYPE } from '../domain/snapshot-archive.js';
 import {
   WORKSPACE_LAYOUT,
   taskBranchName,
-  taskBranchPushOptions,
+  taskBranchPushArguments,
   workspaceDirectoryName,
   type HeadSnapshot,
   type TreeEntry,
@@ -15,7 +15,8 @@ import {
   type WorkspaceStatus,
   type WorkspaceTarget,
 } from '../domain/workspace.js';
-import type { GitProcessObservation, WorkspaceFixture } from './workspace-fixture.js';
+import { gitProcessProblems, holdsSensitive, operationOf, pushArgumentProblems, sensitiveValues } from './git-process-checks.js';
+import type { WorkspaceFixture } from './workspace-fixture.js';
 import type { PrepareWorkspace } from './workspace-provider.js';
 
 // The shared suite of the workspace port (contract section 12).
@@ -115,8 +116,10 @@ async function pushedHead(problems: string[], fixture: WorkspaceFixture, file: s
 }
 
 function secretsIn(text: string, credentials: readonly WorkspaceCredential[]): string[] {
-  return credentials.filter((credential) => text.includes(credential.secret)).map((credential) => credential.credentialId);
+  return credentials.filter((credential) => holdsSensitive(text, sensitiveValues([credential]))).map((credential) => credential.credentialId);
 }
+
+const fixtureSensitive = ({ credentials }: WorkspaceFixture) => sensitiveValues([credentials.read, credentials.write, credentials.foreign]);
 
 function sameHead(problems: string[], label: string, actual: CodeHeadIdentity | undefined, expected: CodeHeadIdentity) {
   if (actual === undefined || !isSameCodeHead(actual, expected)) problems.push(`${label}: expected the same code head`);
@@ -341,20 +344,16 @@ const HEAD_STATE: readonly ConformanceCase<WorkspaceFixture>[] = [
   },
 ];
 
-// The one push since `since`: atomic, leased on the expected head, to the
-// binding's remote, and never forced (contract section 8).
+// The one push since `since`: exactly the leased push of contract
+// section 8 to the binding's remote, so no option can cancel the lease.
 async function expectLeasedPush(problems: string[], fixture: WorkspaceFixture, since: number, expected: string | null) {
-  const pushes = (await fixture.gitProcesses()).slice(since).filter(({ argv }) => argv.includes('push'));
+  const pushes = (await fixture.gitProcesses()).slice(since).filter(({ argv }) => operationOf(argv) === 'push');
   if (pushes.length !== 1) {
     problems.push(`push processes: expected 1, got ${pushes.length}`);
     return;
   }
-  const { argv } = pushes[0]!;
-  const options = taskBranchPushOptions(taskBranch(fixture), expected);
-  for (const option of options) if (!argv.includes(option)) problems.push(`push without ${option}`);
-  const forcing = argv.filter((arg) => arg === '-f' || arg.startsWith('+') || (arg.startsWith('--force') && !options.includes(arg)));
-  expectSame(problems, 'forcing push arguments', forcing, []);
-  expectSame(problems, 'push to the binding remote', argv.includes(fixture.binding.remote), true);
+  const arguments_ = taskBranchPushArguments(taskBranch(fixture), expected, fixture.binding.remote);
+  problems.push(...pushArgumentProblems(pushes[0]!, arguments_, fixtureSensitive(fixture)));
 }
 
 const PUSHES: readonly ConformanceCase<WorkspaceFixture>[] = [
@@ -712,10 +711,6 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
   },
 ];
 
-// Environment variables that every Git process of the adapter must have,
-// and those it must not inherit (contract section 7).
-const REQUIRED_GIT_ENVIRONMENT = ['GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_COUNT'];
-const inheritedGitEnvironment = (key: string) => key === 'SUDO_UID' || key === 'GIT_CONFIG_PARAMETERS' || key.startsWith('GIT_TRACE');
 // Repository settings an agent plants; none may act on the adapter's Git.
 const PLANTED_SETTINGS = [
   ['core.hooksPath', '/planted/hooks'],
@@ -726,21 +721,9 @@ const PLANTED_SETTINGS = [
   ['url.https://planted.example/.insteadOf', 'https://'],
 ] as const;
 
-function gitProcessProblems(process: GitProcessObservation, secrets: readonly string[]): string[] {
-  const label = `Git process ${process.argv.slice(1).join(' ')}`;
-  const problems: string[] = [];
-  if (!Number.isSafeInteger(process.pid) || process.pid <= 0) problems.push(`${label}: no process identifier`);
-  const missing = REQUIRED_GIT_ENVIRONMENT.filter((key) => !process.environmentKeys.includes(key));
-  expectSame(problems, `${label}: missing environment`, missing, []);
-  expectSame(problems, `${label}: inherited environment`, process.environmentKeys.filter(inheritedGitEnvironment), []);
-  const leaked = secrets.filter((secret) => process.argv.some((arg) => arg.includes(secret)));
-  if (leaked.length > 0) problems.push(`${label}: a secret in an argument`);
-  return problems;
-}
-
 const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
   {
-    name: 'runs Git in an environment it builds, with no secret in an argument',
+    name: 'runs Git in an environment it builds, with no credential in an argument',
     async check(fixture) {
       const problems: string[] = [];
       const { provider, credentials } = fixture;
@@ -752,9 +735,10 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       value(problems, 'push', await provider.push({ attemptId: FIRST, credential: credentials.write, expectedRemoteHead: null }));
       const processes = await fixture.gitProcesses();
       if (processes.length === 0) return [...problems, 'no Git process was observed'];
-      const secrets = [credentials.read, credentials.write, credentials.foreign].map(({ secret }) => secret);
-      for (const process of processes) problems.push(...gitProcessProblems(process, secrets));
-      const remote = processes.filter(({ argv }) => argv.includes(fixture.binding.remote));
+      const sensitive = fixtureSensitive(fixture);
+      const reachesRemote = (argv: readonly string[]) => argv.includes(fixture.binding.remote);
+      for (const process of processes) problems.push(...gitProcessProblems(process, reachesRemote(process.argv), sensitive));
+      const remote = processes.filter(({ argv }) => reachesRemote(argv));
       expectSame(problems, 'Git processes that reach the binding remote', remote.length >= 3, true);
       return problems;
     },
@@ -774,8 +758,10 @@ const GIT_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       const pushed = value(problems, 'push', await provider.push({ attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null }));
       if (pushed === undefined) return problems;
       expectSame(problems, 'planted settings left', (await fixture.gitConfig(FIRST)).includes('planted'), false);
-      const planted = (await fixture.gitProcesses()).slice(since).filter(({ argv }) => argv.some((arg) => arg.includes('planted')));
-      expectSame(problems, 'Git processes that use a planted setting', planted.length, 0);
+      // A setting acts if a process starts with it, even if it is gone later.
+      const planted = (await fixture.gitProcesses()).slice(since).filter(({ argv, repositoryConfig }) =>
+        argv.some((arg) => arg.includes('planted')) || (repositoryConfig ?? '').includes('planted'));
+      expectSame(problems, 'Git processes that started with a planted setting', planted.length, 0);
       await expectLeasedPush(problems, fixture, since, null);
       expectSame(problems, 'remote task branch', await fixture.remoteHead(taskBranch(fixture)), pushed.commit);
       return problems;

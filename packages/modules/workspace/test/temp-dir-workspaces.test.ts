@@ -8,8 +8,8 @@ import { promisify } from 'node:util';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
-import { WORKSPACE_LAYOUT, WORKSPACE_MODES, type PrepareWorkspace, type WorkspaceFixture } from '@taskelith/workspace';
-import { CheckBarrier, createFixture, type TempDirWorkspaces } from './temp-dir-workspaces.ts';
+import { WORKSPACE_LAYOUT, WORKSPACE_MODES, encodeHeadSnapshot, type PrepareWorkspace, type WorkspaceFixture } from '@taskelith/workspace';
+import { CheckBarrier, createFixture, decodeTar, type TempDirWorkspaces } from './temp-dir-workspaces.ts';
 
 // The double's own modes and records, which the suite cannot see through
 // the port; the Linux checks with real accounts belong to item 16.
@@ -218,3 +218,32 @@ test('racing hand-offs whose listing fails reject with its error and race again 
     await dispose();
   }
 });
+
+test('planted settings are valid Git configuration with sections and subsections', () => withFixture(async (fixture, provider) => {
+  must(await provider.prepare(request(fixture)));
+  await fixture.plantGitSetting(FIRST, 'core.hooksPath', '/planted/hooks');
+  await fixture.plantGitSetting(FIRST, 'url.https://planted.example/.insteadOf', 'https://');
+  const file = join(must(await provider.checkoutOf(FIRST)), '.git', 'config');
+  const { stdout } = await promisify(execFile)('git', ['config', '--file', file, '--list']);
+  assert.deepEqual(stdout.trim().split('\n'), [
+    'core.repositoryformatversion=0', 'core.hookspath=/planted/hooks', 'url.https://planted.example/.insteadof=https://',
+  ]);
+}));
+
+test('the snapshot reader takes pax records by length, so a path may hold a newline', () => {
+  const path = `${'long/'.repeat(25)}line\nbreak.txt`;
+  const archive = encodeHeadSnapshot({ [path]: { type: 'file', mode: '100644', content: Uint8Array.of(1) } });
+  assert.ok(archive.ok);
+  assert.deepEqual(Object.keys(decodeTar(archive.value)), [path]);
+});
+
+test('the snapshot reader and the working tree keep a file named __proto__', () => withFixture(async (fixture, provider) => {
+  const archive = encodeHeadSnapshot({ ['__proto__']: { type: 'file', mode: '100644', content: Uint8Array.of(1) } });
+  assert.ok(archive.ok);
+  assert.deepEqual(Object.keys(decodeTar(archive.value)), ['__proto__']);
+  must(await provider.prepare(request(fixture)));
+  await fixture.writeFile(FIRST, '__proto__', 'proto\n');
+  await fixture.commitAll(FIRST, 'proto');
+  const snapshot = must(await provider.snapshot(FIRST));
+  assert.deepEqual(Object.keys(await fixture.readSnapshot(snapshot.content)).sort(), ['.gitignore', 'README.md', '__proto__']);
+}));

@@ -42,6 +42,7 @@ export const WORKSPACE_NAME_RULES = Object.freeze({
 // characters, supplied by the adapter; a name keeps its first 32.
 export type IdentifierDigest = (identifier: string) => string;
 
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const OUTSIDE_NAME_CHARACTERS = /[^A-Za-z0-9_-]/gu;
 const LEADING_SEPARATORS = /^[_-]+/;
 
@@ -69,6 +70,7 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'gitlink-in-tree',
   'insecure-remote',
   'git-client-mismatch',
+  'non-utf8-path',
 ] as const);
 
 export type WorkspaceFailureReason = (typeof WORKSPACE_FAILURE_REASONS)[number];
@@ -85,7 +87,11 @@ export type GitTreeEntry = TreeEntry | { readonly type: 'gitlink'; readonly comm
 
 // The run credential of the SCM port, passed per remote operation and
 // never stored in the workspace (contract section 7).
-export type WorkspaceCredential = Pick<RunCredential, 'credentialId' | 'secret' | 'repositories' | 'permissions'>;
+export type WorkspaceCredential = Pick<RunCredential, 'credentialId' | 'secret' | 'repositories' | 'permissions'> & {
+  // The whole Authorization header value, formed by the SCM plugin's
+  // credential binding; as secret as `secret` itself.
+  readonly authorization: string;
+};
 
 export type RemoteAccess = 'read-code' | 'write-code';
 
@@ -159,6 +165,29 @@ export function checkRemoteTransport(remote: string, policy: RemoteTransportPoli
 // absent branch when none is expected (contract section 8).
 export function taskBranchPushOptions(branch: string, expectedRemoteHead: string | null): readonly string[] {
   return ['--atomic', `--force-with-lease=refs/heads/${branch}:${expectedRemoteHead ?? ''}`];
+}
+
+// The whole push command after `git`: options, remote, and one refspec.
+export function taskBranchPushArguments(branch: string, expectedRemoteHead: string | null, remote: string): readonly string[] {
+  return ['push', ...taskBranchPushOptions(branch, expectedRemoteHead), remote, `HEAD:refs/heads/${branch}`];
+}
+
+// A path or link target as Git stores it, refused unless valid UTF-8.
+export function decodeGitPath(bytes: Uint8Array): Result<string> {
+  try {
+    return ok(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes));
+  } catch {
+    return nonUtf8Path();
+  }
+}
+
+// A string that UTF-8 can carry exactly: no lone surrogate.
+export function isUtf8Text(text: string): boolean {
+  return !LONE_SURROGATE.test(text);
+}
+
+export function nonUtf8Path(): Result<never> {
+  return workspaceFailure('precondition-failed', 'non-utf8-path', 'a tree path or link target is not valid UTF-8');
 }
 
 // The reclaim program's containment, under the worker's containment parent.

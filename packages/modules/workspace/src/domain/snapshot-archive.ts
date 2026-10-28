@@ -1,5 +1,5 @@
 import { ok, type Result } from '@taskelith/kernel';
-import { workspaceFailure, type GitTreeEntry, type TreeEntry } from './workspace.js';
+import { isUtf8Text, nonUtf8Path, workspaceFailure, type GitTreeEntry, type TreeEntry } from './workspace.js';
 
 // Taskelith's own tar of a tree (contract section 10): byte-identical for
 // equal trees, whatever Git version or workspace produced the entries.
@@ -12,8 +12,10 @@ const PAX_HEADER_NAME = 'PaxHeader';
 const utf8 = (text: string) => new TextEncoder().encode(text);
 
 // Files and links only, in byte order of their UTF-8 paths, without
-// directory entries; a tree that holds a gitlink is refused.
+// directory entries; a gitlink or text that is not UTF-8 is refused.
 export function encodeHeadSnapshot(tree: Readonly<Record<string, GitTreeEntry>>): Result<Uint8Array> {
+  const texts = Object.entries(tree).flatMap(([path, entry]) => (entry.type === 'link' ? [path, entry.target] : [path]));
+  if (!texts.every(isUtf8Text)) return nonUtf8Path();
   const entries = Object.entries(tree).map(([path, entry]) => ({ path: utf8(path), entry }));
   const gitlink = entries.find(({ entry }) => entry.type === 'gitlink');
   if (gitlink !== undefined) {

@@ -11,12 +11,17 @@ export interface FixtureCredentials {
   readonly foreign: WorkspaceCredential;
 }
 
-// One Git process that the adapter started, as the fixture observed it:
-// the names of its environment only, never their values.
+// What an observation shows in place of a value that holds a credential.
+export const REDACTED_VALUE = '<redacted>';
+
+// One Git process that the adapter started, as the fixture observed it at
+// its start; environment values that hold a credential are redacted.
 export interface GitProcessObservation {
   readonly argv: readonly string[];
   readonly pid: number;
-  readonly environmentKeys: readonly string[];
+  readonly environment: Readonly<Record<string, string>>;
+  // The checkout's `.git/config` as the process found it; null without one.
+  readonly repositoryConfig: string | null;
 }
 
 // What an adapter's test supplies, fresh for each case (contract section 12).
@@ -79,7 +84,8 @@ export interface WorkspaceFixture {
   commitGitlink(attemptId: AttemptId, path: string): Promise<void>;
   // Every Git process the adapter started so far, in start order.
   gitProcesses(): Promise<readonly GitProcessObservation[]>;
-  // Adds `key = value` to the checkout's `.git/config`, as an agent can.
+  // Adds the setting to the checkout's `.git/config` as `git config` does,
+  // as an agent can.
   plantGitSetting(attemptId: AttemptId, key: string, value: string): Promise<void>;
   // The checkout's `.git/config` as it is on disk.
   gitConfig(attemptId: AttemptId): Promise<string>;

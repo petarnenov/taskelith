@@ -85,3 +85,15 @@ test('a tree that holds a gitlink is refused', () => {
   assert.deepEqual(archive.error.details, { reason: 'gitlink-in-tree' });
   assert.match(archive.error.message, /vendor\/module/);
 });
+
+test('a path or link target that UTF-8 cannot carry is refused', () => {
+  const trees: Record<string, GitTreeEntry>[] = [
+    { 'lone\uD800.txt': { type: 'file', mode: '100644', content: text('x') } },
+    { link: { type: 'link', target: 'lone\uDC00' } },
+  ];
+  for (const tree of trees) {
+    const archive = encodeHeadSnapshot(tree);
+    assert.ok(!archive.ok);
+    assert.deepEqual(archive.error.details, { reason: 'non-utf8-path' });
+  }
+});
