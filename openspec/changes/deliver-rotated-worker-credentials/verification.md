@@ -168,7 +168,7 @@ The L1 fail-before run restored `credential-rotation.ts` of `db40b1b9`, rebuilt 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `23774b9a3da579ca6c37c4f2a5da55d8521a0298`; tests 3368, pass 3353, fail 0, skipped 15; all files 99.45% lines, 92.61% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `2a4679ba0ca1a291254fcad2404f3767392c133e`; tests 3369, pass 3354, fail 0, skipped 15; all files 99.45% lines, 92.62% branches, 99.07% functions.
 - `npm run openspec -- validate deliver-rotated-worker-credentials --strict`: passed, `Change 'deliver-rotated-worker-credentials' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 76 file(s); every pass summary file is valid: 56 file(s); every route file is valid: 12 file(s).`.
 - Spec diff against the merge base `1234e540009a` with `origin/dev`: no change under `openspec/specs`.
@@ -179,6 +179,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f` | 0 | 2 | 3 | 0 |
 | 2 | B | `claude claude-opus-5-5#high` | `b988b3f4-7dc5-41bb-831b-8a3deb380f2e` | 0 | 0 | 1 | 10 |
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a18374-c2a8-7410-bc4f-b538fbacc7cd` | 0 | 0 | 0 | 2 |
+| merge-reconciliation 1 | A | `codex gpt-6.1-sol#medium` | `01a18388-216a-7f03-9ef8-ad645c82c77a` | 0 | 0 | 1 | 1 |
 <!-- make record: end -->
 
 ## Limitations
