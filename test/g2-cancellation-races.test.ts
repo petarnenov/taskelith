@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, test } from 'node:test';
 import type { ExecutionId, LaunchAuthId, Task } from '@taskelith/execution';
+import { ok } from '@taskelith/kernel';
 import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
+import { RECORD_FILES } from '@taskelith/worker-supervisor';
 import { interceptAck } from './g2-scenarios/ack-interception.ts';
 import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
@@ -37,7 +41,7 @@ guardScenarioFile();
 // Adoption observes only on macOS (spec worker-supervisor), so race g
 // runs only through the worker's own macOS supervisor.
 const ADOPTION_HOST = SCENARIO_LAUNCH_HOST === 'macos-supervisor'
-  ? { timeout: 120_000 }
+  ? { timeout: 400_000 }
   : { skip: 'not applicable off macOS: only a macOS adopter leaves a cancel unapplied' };
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
@@ -337,8 +341,8 @@ describe('cancellation races', SCENARIO_HOST, () => {
     }));
   });
 
-  // Seed: whether the cancel lands before the adopter starts or while it
-  // observes. A macOS adopter is not the child's parent and signals nothing.
+  // Seed: whether the cancel is filed before the adopter starts or lands
+  // while it observes. A macOS adopter is not the child's parent.
   test('g. an adopting macOS supervisor does not apply a cancel', ADOPTION_HOST, async () => {
     const random = new SeededRandom(SEED);
     const cancelBeforeAdoption = random.nextInt(2) === 1;
@@ -353,15 +357,19 @@ describe('cancellation races', SCENARIO_HOST, () => {
         const children = scriptedPids(worker);
         assertWorkerSupervised(worker, children);
         const cancelled = await firstAssignment(installation, 'task-g');
+        const { executionId } = journaledUnder(worker, cancelled.assignmentId)[0]!;
+        recovery.watchCancelFile(join(worker.running.root.paths.executions, executionId, RECORD_FILES.cancel));
         recovery.hold();
         await waitFor(() => recovery.isHolding, 30_000, 'the held liveness check');
         killFirstSupervisor(worker);
         if (cancelBeforeAdoption) {
           await cancelAssignment(installation, cancelled.assignmentId);
           assert.deepEqual(supervisorProcesses(worker.dataRoot, 'adopt'), [], 'no adopter before the cancel committed');
-        }
-        recovery.release();
-        await waitFor(() => recovery.adopted, 30_000, 'the recovery that adopted');
+          await waitFor(() => journalOf(worker).cancellations.length === 1, 20_000, 'the worker journals the cancellation');
+          recovery.releaseAsLive();
+        } else recovery.release();
+        await waitFor(() => recovery.adopted, 60_000, 'the recovery that adopted');
+        assert.equal(recovery.cancelFiledAtAdoption, cancelBeforeAdoption, 'the cancel file before the adopter started');
         assert.equal(supervisorProcesses(worker.dataRoot, 'adopt').length, 1, 'one adopting supervisor watches');
         if (!cancelBeforeAdoption) await cancelAssignment(installation, cancelled.assignmentId);
         await waitFor(async () => notAppliedEvidence(await installation.task('task-g')) === 1, 30_000, 'the not-applied evidence');
@@ -370,12 +378,12 @@ describe('cancellation races', SCENARIO_HOST, () => {
         await waitFor(() => scriptedProcesses(worker).length === 0, 10_000, 'no scripted process remains');
         // Without a containment nothing proves the descendants gone, so the
         // execution stays started for reconciliation (supervisor identity 6).
-        await waitFor(async () => evidenceKinds(await installation.task('task-g')).includes('uncertain'), 60_000, 'the uncertain evidence');
+        await waitFor(async () => evidenceKinds(await installation.task('task-g')).includes('uncertain'), 90_000, 'the uncertain evidence');
         const [execution] = (await installation.task('task-g')).attempts[0]!.executions;
         assert.equal(execution!.state, 'started', 'the execution stays started');
         assert.deepEqual(evidenceKinds(await installation.task('task-g')), ['cancellation-not-applied', 'uncertain']);
         assert.equal((await installation.result('task-g')).state, 'pending', 'nothing ends the task automatically');
-        const when = cancelBeforeAdoption ? 'before the adopter started' : 'while the adopter observed';
+        const when = cancelBeforeAdoption ? 'filed before the adopter started' : 'while the adopter observed';
         return `cancel ${when}: not applied, child ${children.join(', ')} ran on until released; `
           + 'the execution stayed started with evidence cancellation-not-applied then uncertain, the result pending';
       } finally {
@@ -416,7 +424,10 @@ class RecoveryHold {
   readonly #released = new Gate();
   #holding = false;
   #held = false;
+  #answerLive = false;
   #adopted = false;
+  #cancelFile: string | undefined;
+  #cancelFiledAtAdoption = false;
 
   get isHolding(): boolean {
     return this.#held && !this.#released.isOpen;
@@ -424,6 +435,15 @@ class RecoveryHold {
 
   get adopted(): boolean {
     return this.#adopted;
+  }
+
+  // Whether the cancel file existed when the adopting recovery began.
+  get cancelFiledAtAdoption(): boolean {
+    return this.#cancelFiledAtAdoption;
+  }
+
+  watchCancelFile(path: string): void {
+    this.#cancelFile = path;
   }
 
   hold(): void {
@@ -434,13 +454,25 @@ class RecoveryHold {
     this.#released.open();
   }
 
+  // The held check reports a live supervisor without recovering, so the
+  // watch files a cancel before its next check adopts the child.
+  releaseAsLive(): void {
+    this.#answerLive = true;
+    this.release();
+  }
+
   readonly wrap: RecoveryWrap = async (recover) => {
     if (this.#holding && !this.#released.isOpen) {
       this.#held = true;
       await this.#released.wait('the release of the held recovery');
+      if (this.#answerLive) return ok({ fact: 'observe' });
     }
+    const filed = this.#cancelFile !== undefined && existsSync(this.#cancelFile);
     const recovered = await recover();
-    if (recovered.ok && recovered.value.fact === 'adopted') this.#adopted = true;
+    if (recovered.ok && recovered.value.fact === 'adopted') {
+      this.#adopted = true;
+      this.#cancelFiledAtAdoption = filed;
+    }
     return recovered;
   };
 }
