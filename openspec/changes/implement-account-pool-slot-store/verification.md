@@ -94,6 +94,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   4. Low, duplication, recorded as category `naming`, two terms for one concept, because the category vocabulary has no `duplication` (`packages/adapters/control-plane-store/src/slot-credential-key.ts`): `SLOT_CREDENTIAL_KEY_LENGTH` and `SLOT_CREDENTIAL_KEY_BYTES` of `@taskelith/secrets` name one value. Neither adapter depends on the other, and a dependency between two adapters would break the hexagonal layout, so the constants stay apart and `7bf905e3` adds `apps/control-plane/test/slot-credential-key-length.test.ts` in the composition root, which depends on both, asserting that they are equal; with `SLOT_CREDENTIAL_KEY_LENGTH` set to 16 it failed (tests 1, pass 0, fail 1). Design decision 6 says so (`f2b3594d`).
 - After the fixes: `npm run build`, then `node --experimental-strip-types --test packages/modules/scheduling/test/*.test.ts` gave tests 168, pass 168, fail 0, and the new composition test passed; `npm run openspec -- validate implement-account-pool-slot-store --strict` valid; `make findings ARGS="validate"` valid. The `make verify` of the fixed tree is under "Generated checks".
 - Pass 2 reported only Low findings, so the review ends without pass 3 (governance "Review sequence"). Its fixes are unreviewed; the coordinator checks them as solution architect before the archive: `bff4d185`, `7bf905e3`, and `f2b3594d`.
+- Architect check (Niki, 2026-10-29): bff4d185, f2b3594d, 7bf905e3 passed
 
 ## Limitations
 
@@ -105,6 +106,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Architect check by the coordinator of the unreviewed pass 2 fixes `bff4d185`, `7bf905e3`, and `f2b3594d`; passes 1 and 2 ran, and pass 3 does not run, because pass 2 reported only Low findings ("Independent review").
-- Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
