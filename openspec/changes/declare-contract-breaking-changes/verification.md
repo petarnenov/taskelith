@@ -153,8 +153,17 @@ Unreviewed fixes: pass 2 reported only Low findings, so under the governance rul
 - **Contracts.** Dev added `packages/contracts/documents/control-plane.openapi.json` (0.1.0) to `CONTRACT_DOCUMENTS` in `scripts/generate-contracts.ts`; the declarations reader takes its known paths from that list and the schema has no path enum, so no change was needed. The other four documents keep their versions. `make contract-breaking-changes` against the new merge base `964f0b57` and with `BASE=24d25938`: 0 breaking changes of each document (control-plane absent at `24d25938`), empty `declarations`; `make contract-compatibility`: `Contract documents have no undeclared breaking change.`
 - **`make verify`** on `dbd174b1` (tree `cc0b3ef3`), full profile, exit 0, stamp written: tests 3134, pass 3119, fail 0, skipped 15; coverage 99.40% lines, 92.68% branches, 99.07% functions; 0 breaking changes of each document against the merge base `964f0b57`. `make record` wrote "Generated checks" from its log.
 
+### Return review
+
+Worker step 10 asks reviewer A to review the resolved diff and the reconciliation. The pass schema has no form for such a review, so, as for earlier returned changes, `passes.jsonl` records it as the next pass, pass 3, role A.
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, session `01a18279-341f-7f43-bb98-15c42049b8dd`.
+- **Revision reviewed:** `ad75b07e`.
+- **Scope:** the merge resolution of the `Makefile` in `0fdc4cfd`; that the restore `22218409` equals the tree before the archive `98db2f4e`; the reconciliation of the `sdlc-wire-contracts` delta with the living specs of dev `964f0b57`; the handling of `packages/contracts/documents/control-plane.openapi.json`; and the "Dev merge" records above.
+- **Snapshot:** before and after the pass identical.
+- **Result:** Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl` line 3; no findings lines. The reviewer ran its own checks: the 26 tests of `test/check-contract-compatibility.test.ts` (26 pass) and the comment rule (pass).
+
 ## Remaining gates
 
-- Review by reviewer A of the merge resolution and the reconciliation.
 - Archive again.
 - Integration into dev by the coordinator (single pull request).
