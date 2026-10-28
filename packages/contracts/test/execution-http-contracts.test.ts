@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { checkHttpSchema, type HttpComponents, type HttpOperations, type SchemaViolations } from '@taskelith/contracts';
-import { DELEGATION_OUTCOMES, EXECUTION_EVIDENCE_KINDS, LAUNCH_REJECTION_REASONS } from '@taskelith/execution';
+import {
+  DELEGATION_OUTCOMES, EXECUTION_EVIDENCE_KINDS, LAUNCH_REJECTION_REASONS, retentionEndsAt, type EvidenceRecord,
+} from '@taskelith/execution';
 import { SCM_PERMISSIONS } from '@taskelith/integrations/port';
 import type { Result } from '@taskelith/kernel';
 
@@ -11,6 +13,7 @@ type SecurityRequirement = Record<string, string[]>;
 
 interface Operation {
   readonly operationId: string;
+  readonly description?: string;
   readonly security: SecurityRequirement[];
   readonly parameters?: { readonly name: string; readonly in: string; readonly required?: boolean }[];
   readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
@@ -170,6 +173,22 @@ test('evidence retirement refuses a record within its retention with a typed 422
   assert.deepEqual(responseSchema('retireEvidence', '422'), { $ref: '#/components/schemas/RetentionRefusal' });
   assert.ok(checkHttpSchema('RetentionRefusal', retained).ok);
   assert.ok(violations(checkHttpSchema('RetentionRefusal', refusal('role-required'))).some((text) => text.includes('/details/reason')));
+  assert.ok(violations(checkHttpSchema('RetentionRefusal', refusal('retention-not-elapsed'))).some((text) => text.includes('retainedUntil')));
+  const undated = { ...retained, details: { ...retained.details, retainedUntil: 'not-a-date' } };
+  assert.ok(violations(checkHttpSchema('RetentionRefusal', undated)).some((text) => text.includes('/details/retainedUntil')));
+});
+
+test('the retention counts from the publication, not the capture', () => {
+  // Only the stamps that the retention could read; the rest is irrelevant.
+  const record = { capturedAt: '2025-09-23T10:00:00.000Z', publishedAt: '2026-09-28T10:00:00.000Z' } as unknown as EvidenceRecord;
+  const ends = retentionEndsAt(record);
+
+  assert.ok(ends.ok);
+  assert.equal(ends.value, '2027-09-28T10:00:00.000Z');
+  for (const text of [operation('retireEvidence').description!, (SCHEMAS.RetentionRefusal as { description: string }).description]) {
+    assert.match(text, /365 days .* publication \(`publishedAt`\)/);
+    assert.doesNotMatch(text, /capture/);
+  }
 });
 
 test('a delegation result is pending or the child outcome with its summary', () => {
@@ -188,7 +207,7 @@ test('a delegation result is pending or the child outcome with its summary', () 
   assert.ok(violations(checkHttpSchema('DelegationResult', { ...ended, outcome: 'admitted' })).length > 0);
 });
 
-test('the reconciliation queue pages by identifier with at most 100 items', () => {
+test('the reconciliation queue pages by a composite position with at most 100 items', () => {
   const unknown: HttpComponents['schemas']['UnknownExecution'] = {
     projectId: 'p1', runId: 'run-1', taskId: 'task-1', attemptId: 'attempt-1', ownershipGeneration: 2, executionId: 'execution-1',
     workerId: 'worker-1', state: 'started', evidence: [{ kind: 'uncertain', observedAt: AT }],
@@ -197,20 +216,27 @@ test('the reconciliation queue pages by identifier with at most 100 items', () =
     workerId: 'worker-1', journalId: 'journal-1', observationId: 'observation-1', containment: 'cgroup taskelith/unknown', processCount: 2, recordedAt: AT,
   };
 
-  for (const [id, page, items] of [['listUnknownExecutions', 'UnknownExecutionPage', 'executions'], ['listUnrecordedProcesses', 'UnrecordedProcessPage', 'processes']] as const) {
+  const pages = [
+    ['listUnknownExecutions', 'UnknownExecutionPage', 'executions', 'UnknownExecutionCursor', ['afterTaskId', 'afterExecutionId']],
+    ['listUnrecordedProcesses', 'UnrecordedProcessPage', 'processes', 'UnrecordedProcessCursor', ['afterWorkerId', 'afterObservationId']],
+  ] as const;
+
+  for (const [id, page, items, cursor, after] of pages) {
     const schema = SCHEMAS[page] as { required: string[]; properties: Record<string, { maxItems?: number; $ref?: string }> };
+    const query = operation(id).parameters!.filter(({ in: place }) => place === 'query');
     assert.deepEqual(responseSchema(id, '200'), { $ref: `#/components/schemas/${page}` });
     assert.equal(schema.properties[items]!.maxItems, 100, id);
-    assert.equal(schema.properties.next!.$ref, '#/components/schemas/Identifier', id);
+    assert.equal(schema.properties.next!.$ref, `#/components/schemas/${cursor}`, id);
     assert.deepEqual(schema.required, [items], id);
-    assert.ok(operation(id).parameters!.some(({ name, required }) => name === 'after' && required === false), id);
+    assert.deepEqual(query.filter(({ name }) => name.startsWith('after')).map(({ name, required }) => [name, required]), after.map((name) => [name, false]), id);
   }
   assert.ok(operation('listUnknownExecutions').parameters!.some(({ name, required }) => name === 'projectId' && required === true));
-  assert.ok(checkHttpSchema('UnknownExecutionPage', { executions: [unknown], next: 'execution-1' }).ok);
+  assert.ok(checkHttpSchema('UnknownExecutionPage', { executions: [unknown], next: { taskId: 'task-1', executionId: 'execution-1' } }).ok);
+  assert.ok(violations(checkHttpSchema('UnknownExecutionPage', { executions: [unknown], next: 'execution-1' })).some((text) => text.includes('/next')));
   assert.ok(violations(checkHttpSchema('UnknownExecutionPage', { executions: Array(101).fill(unknown) })).length > 0);
   assert.ok(violations(checkHttpSchema('UnknownExecution', { ...unknown, state: 'exited' })).some((text) => text.includes('/state')));
   assert.ok(violations(checkHttpSchema('UnknownExecution', { ...unknown, evidence: [] })).some((text) => text.includes('/evidence')));
-  assert.ok(checkHttpSchema('UnrecordedProcessPage', { processes: [process] }).ok);
+  assert.ok(checkHttpSchema('UnrecordedProcessPage', { processes: [process], next: { workerId: 'worker-1', observationId: 'observation-1' } }).ok);
   assert.ok(violations(checkHttpSchema('UnrecordedProcess', { ...process, projectId: 'p1' })).some((text) => text.includes('projectId')));
 });
 
@@ -283,4 +309,33 @@ test('every SCM credential issue and fetch re-checks the bound remote with the b
   for (const id of ['issueRunScmCredential', 'fetchRunScmCredential']) assert.deepEqual(responseSchema(id, '422'), { $ref: '#/components/schemas/ScmCredentialRefusal' }, id);
   for (const reason of reasons) assert.ok(checkHttpSchema('ScmCredentialRefusal', refusal(reason)).ok, reason);
   assert.ok(violations(checkHttpSchema('ScmCredentialRefusal', { ...refusal('remote-origin-mismatch'), code: 'forbidden' })).some((text) => text.includes('/code')));
+});
+
+test('a page boundary between equal identifiers keeps its position', () => {
+  const executions = ['task-1', 'task-2'].map((taskId) => ({
+    projectId: 'p1', runId: 'run-1', taskId, attemptId: `${taskId}-attempt`, ownershipGeneration: 1, executionId: 'execution-1',
+    workerId: 'worker-1', state: 'started', evidence: [{ kind: 'uncertain', observedAt: AT }],
+  }));
+  const processes = ['worker-1', 'worker-2'].map((workerId) => ({
+    workerId, journalId: 'journal-1', observationId: 'observation-1', containment: 'cgroup taskelith/unknown', processCount: 1, recordedAt: AT,
+  }));
+
+  assert.ok(checkHttpSchema('UnknownExecutionPage', { executions: [executions[0]], next: { taskId: 'task-1', executionId: 'execution-1' } }).ok);
+  assert.ok(checkHttpSchema('UnknownExecutionPage', { executions: [executions[1]] }).ok);
+  assert.ok(checkHttpSchema('UnrecordedProcessPage', { processes: [processes[0]], next: { workerId: 'worker-1', observationId: 'observation-1' } }).ok);
+  assert.ok(violations(checkHttpSchema('UnknownExecutionCursor', { executionId: 'execution-1' })).some((text) => text.includes('taskId')));
+  assert.ok(violations(checkHttpSchema('UnrecordedProcessCursor', { observationId: 'observation-1' })).some((text) => text.includes('workerId')));
+});
+
+test('an unknown execution keeps all its evidence, not only an unapplied cancellation', () => {
+  const unknown = {
+    projectId: 'p1', runId: 'run-1', taskId: 'task-1', attemptId: 'attempt-1', ownershipGeneration: 2, executionId: 'execution-1',
+    workerId: 'worker-1', state: 'started', evidence: [{ kind: 'uncertain', observedAt: AT }],
+  };
+  const notApplied = { kind: 'cancellation-not-applied', observedAt: AT };
+  const others = EXECUTION_EVIDENCE_KINDS.filter((kind) => kind !== 'cancellation-not-applied');
+
+  assert.ok(checkHttpSchema('UnknownExecution', { ...unknown, evidence: Array(65).fill({ kind: 'uncertain', observedAt: AT }) }).ok);
+  for (const kind of others) assert.ok(checkHttpSchema('UnknownExecution', { ...unknown, evidence: [notApplied, { kind, observedAt: AT }] }).ok, kind);
+  assert.ok(violations(checkHttpSchema('UnknownExecution', { ...unknown, evidence: [notApplied, notApplied] })).some((text) => text.includes('/evidence')));
 });

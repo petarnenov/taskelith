@@ -613,7 +613,7 @@
       "delete": {
         "operationId": "retireEvidence",
         "summary": "Retire an evidence record after its minimum retention",
-        "description": "A `project-maintainer` on the record's project removes the record once 365 days have passed since its capture, then its content once no record refers to the digest (G2 `implement-evidence-store` decision Q2).",
+        "description": "A `project-maintainer` on the record's project removes the record once 365 days have passed since its publication (`publishedAt`), then its content once no record refers to the digest (G2 `implement-evidence-store` decision Q2).",
         "security": [
           {
             "browserSession": [],
@@ -1088,10 +1088,19 @@
             }
           },
           {
-            "name": "after",
+            "name": "afterTaskId",
             "in": "query",
             "required": false,
-            "description": "Read the items after this identifier.",
+            "description": "The task of the position to read after. With `afterExecutionId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "afterExecutionId",
+            "in": "query",
+            "required": false,
+            "description": "The execution of the position to read after. With `afterTaskId`, read the items after that position; one without the other answers 400.",
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
@@ -1186,10 +1195,19 @@
         ],
         "parameters": [
           {
-            "name": "after",
+            "name": "afterWorkerId",
             "in": "query",
             "required": false,
-            "description": "Read the items after this identifier.",
+            "description": "The worker of the position to read after. With `afterObservationId`, read the items after that position; one without the other answers 400.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "afterObservationId",
+            "in": "query",
+            "required": false,
+            "description": "The observation of the position to read after. With `afterWorkerId`, read the items after that position; one without the other answers 400.",
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
@@ -1549,7 +1567,7 @@
       "post": {
         "operationId": "issueRunScmCredential",
         "summary": "Obtain the current per-run SCM credential of a run",
-        "description": "The worker that holds an attempt of a task of the run obtains the run's current SCM credential version, which the control plane issues when the run has none. Every call first re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
+        "description": "The worker that holds an attempt of a task of the run obtains the run's current SCM credential version, which the control plane issues when the run has none; a repeat with no refresh between returns the same version, and one after a refresh the refreshed version. Every call first re-checks the bound remote URL against the SCM integration's current allowed origin. The response is never cached, and a log never holds its body.",
         "security": [
           {
             "workerCredential": []
@@ -3355,7 +3373,7 @@
       "RetentionRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `retireEvidence`: the record's minimum retention of 365 days after its capture has not passed; `details.retainedUntil` names the end of the retention.",
+        "description": "Status 422 of `retireEvidence`: the record's minimum retention of 365 days after its publication (`publishedAt`) has not passed; `details.retainedUntil` names the end of the retention.",
         "required": [
           "code",
           "message",
@@ -3372,12 +3390,17 @@
           "details": {
             "type": "object",
             "required": [
-              "reason"
+              "reason",
+              "retainedUntil"
             ],
             "properties": {
               "reason": {
                 "type": "string",
                 "const": "retention-not-elapsed"
+              },
+              "retainedUntil": {
+                "$ref": "#/components/schemas/Instant",
+                "description": "The end of the retention, 365 days after `publishedAt` (`retentionEndsAt`)."
               }
             },
             "additionalProperties": {
@@ -3538,7 +3561,6 @@
           "evidence": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 64,
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -3554,6 +3576,20 @@
                   "$ref": "#/components/schemas/Instant"
                 }
               }
+            },
+            "description": "Every evidence entry of the execution, unbounded as `withEvidence` keeps it; at least one is of a kind other than `cancellation-not-applied` (`isUnknownExecution`).",
+            "contains": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "not": {
+                    "const": "cancellation-not-applied"
+                  }
+                }
+              }
             }
           }
         }
@@ -3561,7 +3597,7 @@
       "UnknownExecutionPage": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Unknown executions of a project in execution identifier order.",
+        "description": "Unknown executions of a project in the order of `UnknownExecutionCursor`.",
         "required": [
           "executions"
         ],
@@ -3574,8 +3610,25 @@
             }
           },
           "next": {
-            "$ref": "#/components/schemas/Identifier",
-            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+            "$ref": "#/components/schemas/UnknownExecutionCursor",
+            "description": "The position of the page's last item, whose fields the caller passes as `afterTaskId` and `afterExecutionId`; absent on the last page."
+          }
+        }
+      },
+      "UnknownExecutionCursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A position in the unknown executions of a project: an execution identifier is unique only within its task, so the order is by task identifier, then execution identifier, in code-unit order.",
+        "required": [
+          "taskId",
+          "executionId"
+        ],
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
           }
         }
       },
@@ -3618,7 +3671,7 @@
       "UnrecordedProcessPage": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Unrecorded processes in observation identifier order.",
+        "description": "Unrecorded processes in the order of `UnrecordedProcessCursor`.",
         "required": [
           "processes"
         ],
@@ -3631,8 +3684,25 @@
             }
           },
           "next": {
-            "$ref": "#/components/schemas/Identifier",
-            "description": "The identifier to pass as `after` for the next page; absent on the last page."
+            "$ref": "#/components/schemas/UnrecordedProcessCursor",
+            "description": "The position of the page's last item, whose fields the caller passes as `afterWorkerId` and `afterObservationId`; absent on the last page."
+          }
+        }
+      },
+      "UnrecordedProcessCursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A position in the unrecorded processes: an observation identifier is unique only per worker (`unrecorded_processes` key), so the order is by worker identifier, then observation identifier, in code-unit order.",
+        "required": [
+          "workerId",
+          "observationId"
+        ],
+        "properties": {
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "observationId": {
+            "$ref": "#/components/schemas/Identifier"
           }
         }
       },
@@ -3882,7 +3952,7 @@
       "ScmCredentialRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `issueRunScmCredential` and `fetchRunScmCredential`, checked in this order: the ownership reasons of launch authorization contract section 9; the project has no repository binding; the bound remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the SCM integration's current allowed origin; then, for a fetch, the version's secret has ended. Nothing is issued or revealed.",
+        "description": "Status 422 of `issueRunScmCredential` and `fetchRunScmCredential`, checked in this order: the ownership reasons of launch authorization contract section 9; the project has no repository binding; the bound remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the SCM integration's current allowed origin; then the version's secret has ended: for a fetch, the named version by a refresh or a revocation, and for an issue, the run's current version by a revocation. Nothing is issued or revealed.",
         "required": [
           "code",
           "message",
