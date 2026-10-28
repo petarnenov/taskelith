@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ReclaimContainment } from './hand-off-record.js';
 import { RECLAIM_PROGRAM_MAIN } from './reclaim-program-main.js';
-import { RECLAIM_GO, type ExecutionAccount } from './reclaim-program.js';
+import { RECLAIM_EXIT, RECLAIM_GO, type ExecutionAccount } from './reclaim-program.js';
 
-export type ReclaimOutcome = 'succeeded' | 'failed';
+// `abandoned`: the program got no `go` in its window and changed nothing.
+export type ReclaimOutcome = 'succeeded' | 'failed' | 'abandoned';
 
 // A started reclaim program that changes nothing before `go`.
 export interface LaunchedReclaim {
@@ -51,7 +52,7 @@ interface StartedProgram {
 function startProgram(program: ReclaimProgram, args: readonly string[]): Promise<Result<StartedProgram>> {
   return new Promise((started) => {
     const child = spawn(program.executable, [...program.args, ...args], { env: PROGRAM_ENVIRONMENT, stdio: ['pipe', 'ignore', 'ignore'], detached: true });
-    const exited = new Promise<ReclaimOutcome>((done) => child.once('close', (code) => done(code === 0 ? 'succeeded' : 'failed')));
+    const exited = new Promise<ReclaimOutcome>((done) => child.once('close', (code) => done(outcomeOf(code))));
     child.stdin.on('error', () => {});
     child.once('error', (error) => started(err(failure('unavailable', `cannot start the reclaim program: ${error.message}`))));
     child.once('spawn', () => started(ok({
@@ -63,6 +64,11 @@ function startProgram(program: ReclaimProgram, args: readonly string[]): Promise
       abandon: () => void child.stdin.end(),
     })));
   });
+}
+
+function outcomeOf(code: number | null): ReclaimOutcome {
+  if (code === RECLAIM_EXIT.done) return 'succeeded';
+  return code === RECLAIM_EXIT.abandoned ? 'abandoned' : 'failed';
 }
 
 export interface LinuxReclaimHostOptions {

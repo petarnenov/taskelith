@@ -8,6 +8,7 @@ import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
   ProcessGroupReclaimHost,
+  RECLAIM_PROGRAM_MAIN,
   parseHandOffRecord,
   type GitWorkspaceCrashPoint,
   type LaunchedReclaim,
@@ -217,6 +218,40 @@ test('a reclaim program that survives a crash holds the workspace until it is pr
     assert.deepEqual(await restarted.handedOff(), []);
   }, { reclaimHost: host, reclaimProofBoundMs: SHORT_BOUND_MS }).finally(() => rm(holdDirectory, { recursive: true, force: true }));
 });
+
+// Its first program misses a short window before the adapter can send
+// `go`; later ones get the default window.
+function lateGoHost(): ReclaimHost {
+  const late = new ProcessGroupReclaimHost({ executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '50'] });
+  const host = simulatedSeparateAccount();
+  let launches = 0;
+  return {
+    ...host,
+    launch: async (checkout, containmentName) => {
+      launches += 1;
+      if (launches > 1) return host.launch(checkout, containmentName);
+      const launched = await late.launch(checkout, containmentName);
+      if (launched.ok) await waitUntilEmpty(late, launched.value.containment);
+      return launched;
+    },
+  };
+}
+
+test('a program that misses its window for go fails the reclaim as unavailable and a retry reclaims', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.handOff(FIRST));
+  await writeFile(join(git.checkout(FIRST), 'agent-file'), 'text');
+  await chmod(join(git.checkout(FIRST), 'agent-file'), 0o600);
+  const missed = failed(await git.local.reclaim(FIRST));
+  assert.equal(missed.code, 'unavailable');
+  assert.equal(missed.details.reason, undefined);
+  assert.equal((await readRecord(git))?.reclaimFailed, false);
+  assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o600, 'the program changed nothing');
+  assert.deepEqual(await git.local.handedOff(), [FIRST]);
+  value(await git.local.reclaim(FIRST));
+  assert.equal(await modeOf(join(git.checkout(FIRST), 'agent-file')), 0o660);
+  assert.deepEqual(await git.local.handedOff(), []);
+}, { reclaimHost: lateGoHost() }));
 
 test('a launch that fails leaves the workspace handed off with its record', () => {
   const missing: ReclaimHost = simulatedSeparateAccount(new ProcessGroupReclaimHost({ executable: '/nonexistent/program', args: [] }));

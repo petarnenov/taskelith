@@ -5,4 +5,5 @@ import { runReclaimProgram } from './reclaim-program.js';
 // section 3); it reports through its exit code only.
 export const RECLAIM_PROGRAM_MAIN = fileURLToPath(import.meta.url);
 
-if (import.meta.main) process.exitCode = await runReclaimProgram(process.argv.slice(2), process.stdin);
+// Exits at once, so an input still open after the window keeps it no longer.
+if (import.meta.main) process.exit(await runReclaimProgram(process.argv.slice(2), process.stdin));

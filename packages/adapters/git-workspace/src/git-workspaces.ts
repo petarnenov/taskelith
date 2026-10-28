@@ -317,6 +317,7 @@ export class GitWorkspaces implements WorkspaceProvider {
     const outcome = await exited;
     this.#crashPoints.reach('WS8.after');
     if (outcome === 'succeeded') return this.#provenEmpty({ containment, reclaimFailed: false });
+    if (outcome === 'abandoned') return goTooLate();
     const failed = await writeHandOffRecord(path, { containment, reclaimFailed: true });
     return failed.ok ? reclaimFailed() : failed;
   }
@@ -707,6 +708,11 @@ function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
 
 function reclaimFailed(): Result<never> {
   return workspaceFailure('precondition-failed', 'reclaim-failed', 'the reclaim program failed; the workspace stays handed off');
+}
+
+// The program changed nothing; the record stays, and a retry may succeed.
+function goTooLate(): Result<never> {
+  return err(failure('unavailable', 'the reclaim program got no go within its window'));
 }
 
 // No reason of section 9 fits; the worker reports it for reconciliation.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
   LinuxReclaimHost,
+  RECLAIM_PROGRAM_MAIN,
   credentialForms,
   parseHandOffRecord,
   sha256IdentifierDigest,
@@ -26,7 +27,7 @@ import {
   taskBranchName,
   type PrepareWorkspace,
 } from '@taskelith/workspace';
-import { CountingHost, createGitFixture, runProcess, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
+import { CountingHost, createGitFixture, launchedByDeadWorker, runProcess, type GitFixture, type GitFixtureOptions } from './git-fixture.ts';
 
 // Contract section 13, "Linux tests": in the worker image as root with
 // SETUID, SETGID, and KILL, the execution group, and umask 0007.
@@ -231,6 +232,33 @@ test('a failed or killed reclaim program keeps the workspace handed off and neve
     assert.equal(reasonOf(await git.local.reclaim(FIRST)), 'reclaim-failed');
     await rm(hold);
   }, { reclaimHost: linuxHost(testProgram('hold', hold)) });
+});
+
+async function untilEmpty(cgroupName: string): Promise<void> {
+  for (let polls = 0; polls < 200; polls += 1) {
+    if (!(await readFile(join(CONTAINMENT_PARENT, cgroupName, 'cgroup.events'), 'utf8')).includes('populated 1')) return;
+    await delay(50);
+  }
+  throw new Error(`${cgroupName} still holds a process`);
+}
+
+test('a reclaim program without go in its window or with a dead worker empties its cgroup unchanged', async () => {
+  const checkout = await mkdtemp(join(holds, 'checkout-'));
+  await writeFile(join(checkout, 'file'), 'text');
+  await chmod(join(checkout, 'file'), 0o600);
+  const windowed = new LinuxReclaimHost({
+    containmentParent: CONTAINMENT_PARENT, executionAccount: EXECUTION,
+    program: { executable: process.execPath, args: [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '500'] },
+  });
+  const late = value(await windowed.launch(checkout, 'reclaim-late-go'));
+  await untilPopulated('reclaim-late-go');
+  assert.deepEqual((await processesOf('reclaim-late-go')).map(({ uid }) => uid), [EXECUTION.uid]);
+  await untilEmpty('reclaim-late-go');
+  const orphaned = await launchedByDeadWorker([checkout, 'reclaim-dead-worker', CONTAINMENT_PARENT, String(EXECUTION.uid)]);
+  await untilEmpty('reclaim-dead-worker');
+  assert.equal((await readFile(join(checkout, 'file'), 'utf8')), 'text');
+  assert.equal((await stat(join(checkout, 'file'))).mode & 0o7777, 0o600);
+  for (const containment of [late.containment, orphaned]) await windowed.release(containment);
 });
 
 test('a reclaim program that runs after the exit keeps the one slot of the worker held', async () => {

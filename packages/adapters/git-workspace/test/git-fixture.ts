@@ -3,6 +3,7 @@ import { chmod, chown, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink,
 import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import {
@@ -366,6 +367,24 @@ export class ManualGitTimer {
 export function credential(credentialId: string, repositories: string[], permissions: string[], secret = `secret-of-${credentialId}`): WorkspaceCredential {
   const authorization = `Basic ${Buffer.from(`x-access-token:${secret}`).toString('base64')}`;
   return { credentialId, secret, authorization, repositories, permissions };
+}
+
+const RECLAIM_LAUNCHER = fileURLToPath(new URL('./reclaim-launcher.ts', import.meta.url));
+
+// Launches the fixed reclaim program from a process of its own, which then
+// dies by SIGKILL before `go`; returns the program's containment.
+export async function launchedByDeadWorker(args: readonly string[]): Promise<ReclaimContainment> {
+  const launcher = spawn(process.execPath, ['--experimental-strip-types', RECLAIM_LAUNCHER, ...args], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const closed = new Promise((done) => launcher.once('close', done));
+  let printed = '';
+  for await (const chunk of launcher.stdout) {
+    printed += String(chunk);
+    if (printed.includes('\n')) break;
+  }
+  launcher.kill('SIGKILL');
+  await closed;
+  if (!printed.includes('\n')) throw new Error('the launcher printed no containment');
+  return JSON.parse(printed) as ReclaimContainment;
 }
 
 // Counts the programs another host starts and keeps their containments.

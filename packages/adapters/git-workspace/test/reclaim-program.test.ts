@@ -11,6 +11,7 @@ import {
   ProcessGroupReclaimHost,
   RECLAIM_EXIT,
   RECLAIM_GO,
+  RECLAIM_GO_BOUND_MS,
   RECLAIM_PROGRAM_MAIN,
   normalizeCheckout,
   parseReclaimArguments,
@@ -18,6 +19,7 @@ import {
   runReclaimProgram,
   sharedMode,
 } from '@taskelith/git-workspace';
+import { launchedByDeadWorker } from './git-fixture.ts';
 
 async function withDirectory(run: (directory: string) => Promise<void>): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-reclaim-'));
@@ -33,24 +35,26 @@ const modeOf = async (path: string) => (await lstat(path)).mode & 0o7777;
 const ACCOUNT = { uid: 10003, gid: 10003 };
 
 test('the reclaim arguments name an absolute checkout and, together, a containment', () => {
-  assert.deepEqual(value(parseReclaimArguments(['--checkout', '/w/checkout'])), { checkout: '/w/checkout' });
+  assert.deepEqual(value(parseReclaimArguments(['--checkout', '/w/checkout'])), { checkout: '/w/checkout', goWithinMs: RECLAIM_GO_BOUND_MS });
+  assert.deepEqual(value(parseReclaimArguments(['--go-within-ms', '250', '--checkout', '/w/checkout'])), { checkout: '/w/checkout', goWithinMs: 250 });
   assert.deepEqual(value(parseReclaimArguments(['--checkout', '/w/c', '--cgroup', '/sys/fs/cgroup/x/reclaim-a', '--uid', '10003', '--gid', '10003'])), {
-    checkout: '/w/c', containment: { cgroup: '/sys/fs/cgroup/x/reclaim-a', account: ACCOUNT },
+    checkout: '/w/c', goWithinMs: RECLAIM_GO_BOUND_MS, containment: { cgroup: '/sys/fs/cgroup/x/reclaim-a', account: ACCOUNT },
   });
   for (const argv of [[], ['--checkout'], ['--checkout', 'relative'], ['--checkout', '/c', '--checkout', '/d'], ['--other', '/c'],
     ['--checkout', '/c', '--cgroup', '/g'], ['--checkout', '/c', '--cgroup', 'g', '--uid', '1', '--gid', '1'],
-    ['--checkout', '/c', '--cgroup', '/g', '--uid', '0', '--gid', '1'], ['--checkout', '/c', '--cgroup', '/g', '--uid', 'x', '--gid', '1']]) {
+    ['--checkout', '/c', '--cgroup', '/g', '--uid', '0', '--gid', '1'], ['--checkout', '/c', '--cgroup', '/g', '--uid', 'x', '--gid', '1'],
+    ['--checkout', '/c', '--go-within-ms', '0'], ['--checkout', '/c', '--go-within-ms', '1.5'], ['--checkout', '/c', '--go-within-ms', 'x']]) {
     assert.equal(failed(parseReclaimArguments(argv)).code, 'invalid', argv.join(' '));
   }
 });
 
 test('the program waits for go and changes nothing without it', async () => {
   const goes = new PassThrough();
-  const going = receivedGo(goes);
+  const going = receivedGo(goes, RECLAIM_GO_BOUND_MS);
   goes.end(RECLAIM_GO);
   assert.equal(await going, true);
   const ends = new PassThrough();
-  const ending = receivedGo(ends);
+  const ending = receivedGo(ends, RECLAIM_GO_BOUND_MS);
   ends.end('g');
   assert.equal(await ending, false);
   await withDirectory(async (checkout) => {
@@ -70,6 +74,31 @@ test('the program waits for go and changes nothing without it', async () => {
     assert.equal(await runReclaimProgram(['--checkout', join(checkout, 'missing')], missing), RECLAIM_EXIT.failed);
   });
 });
+
+test('a program that gets no go within its window exits without a change', () => withDirectory(async (checkout) => {
+  await writeFile(join(checkout, 'file'), 'text');
+  await chmod(join(checkout, 'file'), 0o600);
+  const started = Date.now();
+  assert.equal(await runReclaimProgram(['--checkout', checkout, '--go-within-ms', '100'], new PassThrough()), RECLAIM_EXIT.abandoned);
+  assert.ok(Date.now() - started >= 90, 'the program waits for its window');
+  const child = spawn(process.execPath, [RECLAIM_PROGRAM_MAIN, '--checkout', checkout, '--go-within-ms', '200'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  assert.equal(await new Promise((done) => child.once('close', done)), RECLAIM_EXIT.abandoned, 'an open input keeps it no longer');
+  child.stdin.destroy();
+  assert.equal(await modeOf(join(checkout, 'file')), 0o600);
+}));
+
+test('a program whose worker dies before go exits without a change', () => withDirectory(async (checkout) => {
+  await writeFile(join(checkout, 'file'), 'text');
+  await chmod(join(checkout, 'file'), 0o600);
+  const host = new ProcessGroupReclaimHost();
+  const containment = await launchedByDeadWorker([checkout]);
+  let polls = 0;
+  while (await host.populated(containment)) {
+    assert.ok((polls += 1) < 100, 'the program outlives its worker');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(await modeOf(join(checkout, 'file')), 0o600);
+}));
 
 test('a mode is shared with the group and executable only if the owner could execute', () => {
   assert.deepEqual([0o644, 0o4755, 0o100, 0o010, 0o000].map(sharedMode), [0o660, 0o770, 0o770, 0o660, 0o660]);

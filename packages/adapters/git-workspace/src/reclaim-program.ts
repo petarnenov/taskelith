@@ -12,6 +12,8 @@ export interface ExecutionAccount {
 
 export interface ReclaimArguments {
   readonly checkout: string;
+  // How long the program waits for `go` before it exits without a change.
+  readonly goWithinMs: number;
   // The cgroup to enter as root before switching to `account`; Linux only.
   readonly containment?: { readonly cgroup: string; readonly account: ExecutionAccount };
 }
@@ -23,6 +25,9 @@ export const RECLAIM_GO = 'go\n';
 // Exit codes: 0 done, 1 failed, 2 usage, 3 abandoned before `go`.
 export const RECLAIM_EXIT = Object.freeze({ done: 0, failed: 1, usage: 2, abandoned: 3 });
 
+// The window for `go` (contract section 3); `--go-within-ms` sets another.
+export const RECLAIM_GO_BOUND_MS = 60_000;
+
 const DIRECTORY_MODE = 0o2770;
 const COPY_PREFIX = '.taskelith-reclaim-';
 
@@ -30,20 +35,25 @@ export function parseReclaimArguments(argv: readonly string[]): Result<ReclaimAr
   const options = new Map<string, string>();
   for (let index = 0; index < argv.length; index += 2) {
     const [flag, text] = [argv[index]!, argv[index + 1]];
-    if (!['--checkout', '--cgroup', '--uid', '--gid'].includes(flag) || text === undefined || options.has(flag)) return usage();
+    if (!RECLAIM_FLAGS.includes(flag) || text === undefined || options.has(flag)) return usage();
     options.set(flag, text);
   }
   const checkout = options.get('--checkout');
-  if (checkout === undefined || !checkout.startsWith('/')) return usage();
+  const goWithinMs = Number(options.get('--go-within-ms') ?? RECLAIM_GO_BOUND_MS);
+  if (checkout === undefined || !checkout.startsWith('/') || !isPositiveInteger(goWithinMs)) return usage();
   const [cgroup, uid, gid] = ['--cgroup', '--uid', '--gid'].map((flag) => options.get(flag));
-  if (cgroup === undefined && uid === undefined && gid === undefined) return ok({ checkout });
+  if (cgroup === undefined && uid === undefined && gid === undefined) return ok({ checkout, goWithinMs });
   const account = { uid: Number(uid), gid: Number(gid) };
-  const valid = cgroup?.startsWith('/') && [account.uid, account.gid].every((value) => Number.isSafeInteger(value) && value > 0);
-  return valid ? ok({ checkout, containment: { cgroup: cgroup!, account } }) : usage();
+  const valid = cgroup?.startsWith('/') && [account.uid, account.gid].every(isPositiveInteger);
+  return valid ? ok({ checkout, goWithinMs, containment: { cgroup: cgroup!, account } }) : usage();
 }
 
+const RECLAIM_FLAGS = ['--checkout', '--cgroup', '--uid', '--gid', '--go-within-ms'];
+
+const isPositiveInteger = (value: number) => Number.isSafeInteger(value) && value > 0;
+
 function usage(): Result<never> {
-  return err(failure('invalid', 'usage: reclaim --checkout PATH [--cgroup PATH --uid N --gid N]'));
+  return err(failure('invalid', 'usage: reclaim --checkout PATH [--cgroup PATH --uid N --gid N] [--go-within-ms N]'));
 }
 
 // As root: joins the cgroup, then drops to the account for good, without
@@ -55,17 +65,23 @@ export function enterReclaimContainment({ cgroup, account }: { cgroup: string; a
   process.setuid!(account.uid);
 }
 
-// True once the input carries `go`; false at its end without it.
-export function receivedGo(input: NodeJS.ReadableStream): Promise<boolean> {
+// True once the input carries `go`; false at its end without it, which a
+// dead worker causes, or once `withinMs` passes.
+export function receivedGo(input: NodeJS.ReadableStream, withinMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     let received = '';
+    const settle = (go: boolean) => {
+      clearTimeout(deadline);
+      resolve(go);
+    };
+    const deadline = setTimeout(() => settle(false), withinMs);
     input.setEncoding('utf8');
     input.on('data', (chunk: string) => {
       received += chunk;
-      if (received.startsWith(RECLAIM_GO)) resolve(true);
+      if (received.startsWith(RECLAIM_GO)) settle(true);
     });
-    input.on('end', () => resolve(received.startsWith(RECLAIM_GO)));
-    input.on('error', () => resolve(false));
+    input.on('end', () => settle(received.startsWith(RECLAIM_GO)));
+    input.on('error', () => settle(false));
   });
 }
 
@@ -74,7 +90,7 @@ export async function runReclaimProgram(argv: readonly string[], input: NodeJS.R
   if (!parsed.ok) return RECLAIM_EXIT.usage;
   try {
     if (parsed.value.containment !== undefined) enterReclaimContainment(parsed.value.containment);
-    if (!(await receivedGo(input))) return RECLAIM_EXIT.abandoned;
+    if (!(await receivedGo(input, parsed.value.goWithinMs))) return RECLAIM_EXIT.abandoned;
     await normalizeCheckout(parsed.value.checkout, process.getuid!());
     return RECLAIM_EXIT.done;
   } catch {

@@ -8,7 +8,7 @@ const [mode, hold, ...rest] = process.argv.slice(2);
 const parsed = parseReclaimArguments(rest);
 if (!parsed.ok || parsed.value.containment === undefined) process.exit(2);
 enterReclaimContainment(parsed.value.containment);
-if (!(await receivedGo(process.stdin))) process.exit(3);
+if (!(await receivedGo(process.stdin, parsed.value.goWithinMs))) process.exit(3);
 if (mode === 'fail') process.exit(1);
 while (existsSync(hold!)) await delay(50);
 await normalizeCheckout(parsed.value.checkout, process.getuid!());
