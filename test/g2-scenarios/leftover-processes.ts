@@ -15,7 +15,12 @@ export function processesNaming(marker: string): NamedProcess[] {
 
 function procProcesses(): NamedProcess[] {
   return readdirSync('/proc').filter((entry) => /^\d+$/.test(entry))
-    .map((entry) => ({ pid: Number(entry), commandLine: commandLine(entry) }));
+    .map((entry) => ({ pid: Number(entry), commandLine: procCommandLine(commandLine(entry)) }));
+}
+
+// /proc ends each argument with NUL; ps separates them with spaces.
+export function procCommandLine(cmdline: string): string {
+  return cmdline.replaceAll('\0', ' ');
 }
 
 // macOS has no /proc; ps prints each process's whole argument list.

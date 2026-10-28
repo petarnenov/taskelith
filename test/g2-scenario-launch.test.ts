@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after, before, describe } from 'node:test';
 import { SUPERVISOR_MAIN } from '@taskelith/worker-supervisor';
-import { parsePsListing } from './g2-scenarios/leftover-processes.ts';
+import { parsePsListing, procCommandLine } from './g2-scenarios/leftover-processes.ts';
 import {
   assertMacosSupervised, cancelSignalOf, isContainmentOf, launchHostOf, macosLaunchFromEnvironment,
 } from './g2-scenarios/scenario-launch.ts';
@@ -55,6 +55,10 @@ test('a ps listing gives each process its whole command line', () => {
   ]);
 });
 
+test('a /proc command line reads as ps prints it', () => {
+  assert.equal(procCommandLine('node\0/dist/supervisor-main.js\0adopt\0/tmp/w/e\0'), 'node /dist/supervisor-main.js adopt /tmp/w/e ');
+});
+
 // One line, as ps lists it: a parent named PROGRAM over a data root with
 // a held child naming the root too; it prints the child's process ID.
 const PARENT_SCRIPT = [
@@ -66,22 +70,29 @@ const PARENT_SCRIPT = [
 
 interface HeldFamily {
   readonly parent: ChildProcess;
-  readonly child: number;
+  child: number;
 }
 
-async function heldFamily(program: string, dataRoot: string): Promise<HeldFamily> {
-  const parent = spawn(process.execPath, ['-e', PARENT_SCRIPT, program, 'launch', join(dataRoot, 'executions', 'e')], {
+// A parent that exits before it prints fails the start, not the run.
+async function heldFamily(families: HeldFamily[], program: string, dataRoot: string, mode = 'launch'): Promise<HeldFamily> {
+  const parent = spawn(process.execPath, ['-e', PARENT_SCRIPT, program, mode, join(dataRoot, 'executions', 'e')], {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  const [line] = await once(parent.stdout!, 'data') as [Buffer];
-  return { parent, child: Number(line.toString().trim()) };
+  const family = { parent, child: 0 };
+  families.push(family);
+  const printed = once(parent.stdout!, 'data') as Promise<[Buffer]>;
+  const exited = once(parent, 'exit').then(() => undefined);
+  const output = await Promise.race([printed, exited]);
+  if (output === undefined) throw new Error(`the parent of ${program} exited before it printed`);
+  family.child = Number(output[0].toString().trim());
+  return family;
 }
 
 function heldOrphan(dataRoot: string): ChildProcess {
   return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(dataRoot, 'orphan')], { stdio: 'ignore' });
 }
 
-describe('the macOS guard', () => {
+describe('the macOS guard', { timeout: 30_000 }, () => {
   const marker = randomBytes(6).toString('hex');
   const ownRoot = join(tmpdir(), `taskelith-guard-${marker}-own`);
   const families: HeldFamily[] = [];
@@ -89,19 +100,23 @@ describe('the macOS guard', () => {
   let own: HeldFamily;
   let testSide: HeldFamily;
   let otherWorker: HeldFamily;
-  const rejected = /not of a supervisor of/;
+  let sharedPrefix: HeldFamily;
+  let adopter: HeldFamily;
+  const rejected = /not of a launch supervisor of/;
 
   before(async () => {
-    own = await heldFamily(SUPERVISOR_MAIN, ownRoot);
-    testSide = await heldFamily(join(ownRoot, 'test-side-parent.js'), ownRoot);
-    otherWorker = await heldFamily(SUPERVISOR_MAIN, join(tmpdir(), `taskelith-guard-${marker}-other`));
-    families.push(own, testSide, otherWorker);
+    own = await heldFamily(families, SUPERVISOR_MAIN, ownRoot);
+    testSide = await heldFamily(families, join(ownRoot, 'test-side-parent.js'), ownRoot);
+    otherWorker = await heldFamily(families, SUPERVISOR_MAIN, join(tmpdir(), `taskelith-guard-${marker}-other`));
+    sharedPrefix = await heldFamily(families, SUPERVISOR_MAIN, `${ownRoot}2`);
+    adopter = await heldFamily(families, SUPERVISOR_MAIN, ownRoot, 'adopt');
     orphan = heldOrphan(ownRoot);
   });
 
   after(() => {
     for (const { parent, child } of families) {
       parent.kill('SIGKILL');
+      if (child === 0) continue;
       try { process.kill(child, 'SIGKILL'); } catch { /* already gone */ }
     }
     orphan?.kill('SIGKILL');
@@ -117,6 +132,14 @@ describe('the macOS guard', () => {
 
   test('rejects a child of a supervisor of another worker', () => {
     assert.throws(() => assertMacosSupervised(ownRoot, [otherWorker.child]), rejected);
+  });
+
+  test('rejects a child of a supervisor of a data root it prefixes', () => {
+    assert.throws(() => assertMacosSupervised(ownRoot, [sharedPrefix.child]), rejected);
+  });
+
+  test('rejects a child of an adopting supervisor of the worker', () => {
+    assert.throws(() => assertMacosSupervised(ownRoot, [adopter.child]), rejected);
   });
 
   test('rejects a child of the test process', () => {

@@ -67,13 +67,13 @@ export function assertWorkerSupervised(worker: SupervisedWorker, pids: readonly 
   else assertContained(worker.containmentParent, pids);
 }
 
-// A parent that is no supervisor naming DATAROOT fails it: a test-side
-// parent, or a supervisor of another worker.
+// A parent that is no launching supervisor of DATAROOT fails it: a
+// test-side parent, an adopter, or a supervisor of another worker.
 export function assertMacosSupervised(dataRoot: string, pids: readonly number[]): void {
-  const supervisors = new Set(supervisorProcesses(dataRoot).map(({ pid }) => pid));
+  const supervisors = new Set(supervisorProcesses(dataRoot, 'launch').map(({ pid }) => pid));
   for (const pid of pids) {
     const parent = parentOf(pid);
-    assert.ok(supervisors.has(parent), `process ${pid} is a child of ${parent}, not of a supervisor of ${dataRoot}`);
+    assert.ok(supervisors.has(parent), `process ${pid} is a child of ${parent}, not of a launch supervisor of ${dataRoot}`);
   }
 }
 
@@ -85,7 +85,7 @@ function parentOf(pid: number): number {
 // execution directories lie below DATAROOT.
 export function supervisorProcesses(dataRoot: string, mode?: SupervisorMode): NamedProcess[] {
   const program = mode === undefined ? SUPERVISOR_MAIN : `${SUPERVISOR_MAIN} ${mode} `;
-  return processesNaming(dataRoot).filter(({ commandLine }) => commandLine.includes(program));
+  return processesNaming(`${dataRoot}/`).filter(({ commandLine }) => commandLine.includes(program));
 }
 
 function assertContained(workerParent: string | undefined, pids: readonly number[]): void {
