@@ -307,10 +307,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 3 | A | `claude claude-fable-5-1#medium` | `284b2a33-2961-4c24-9735-98f6a99f9b3a` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
+## Coordinator decisions and follow-ups
+
+- On 2026-10-28 the coordinator decided not to wait for the merge of `fix-make-argument-expansion` from dev before the archive, which it had instructed earlier: this host runs GNU Make 4.3, on which `make verify` and `make record` pass, and integration runs on the coordinator's iMac with make 3.81. The gate is withdrawn; `fix-make-argument-expansion` was still not on dev at `f3a53f17`.
+- Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) ran on 2026-10-28 ("Live shadow evaluation").
+- Outside this change: a later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
+
 ## Remaining gates
 
-- Owner hard floor, confirmed: on 2026-10-28 the owner confirmed in the coordinator's session, relayed verbatim by the coordinator, the TypeSafe account, the acceptance of the Master Customer Agreement with its paid credits (8.2), and the consent to send the structured features (`design.md` "Owner actions" and "Decisions" 6). The coordinator installed `JEV_MAF_LAB` on this worker's host; its presence was checked by name only. The live offline evaluation (`tasks.md` 2.10) ran on 2026-10-28 ("Live shadow evaluation").
-- A later governance change that the owner approves before the elevated efforts may apply (`design.md` "Decisions" 1).
-- The merge of `fix-make-argument-expansion` from dev before the archive, as the coordinator instructed; it is not yet on dev at `f3a53f17`.
 - The archive (`tasks.md` 4.3).
 - Integration into dev by the coordinator (single pull request).
