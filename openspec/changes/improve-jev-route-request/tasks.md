@@ -21,10 +21,10 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `route.json` from `make findings ARGS="route --change improve-jev-route-request"`, committed unedited
-- [ ] 4.2 The credential's value absent from `route.json` and every log
-- [ ] 4.3 `npm run openspec -- validate improve-jev-route-request --strict` and `make verify`
-- [ ] 4.4 Record `verification.md`
+- [x] 4.1 `route.json` from `make findings ARGS="route --change improve-jev-route-request"`, committed unedited
+- [x] 4.2 The credential's value absent from `route.json` and every log
+- [x] 4.3 `npm run openspec -- validate improve-jev-route-request --strict` and `make verify`
+- [x] 4.4 Record `verification.md`
 
 ## 5. Review and archive
 
