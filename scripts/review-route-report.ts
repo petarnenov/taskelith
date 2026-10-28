@@ -1,5 +1,5 @@
 import { reviewerKey, type Reviewer } from './review-findings.ts';
-import type { ShadowDecision, ShadowFailure, Tier, Trigger } from './review-route.ts';
+import { isThirdPassAnswer, type ShadowDecision, type ShadowFailure, type Tier, type Trigger } from './review-route.ts';
 import {
   formatOutcomeFigures,
   formatRoutingFigures,
@@ -26,7 +26,9 @@ export interface RoutedReview {
   readonly summaries: readonly ReviewedLine[] | undefined;
 }
 
+// thirdPass is P(third); elevated is P(elevated) of the tier request.
 export type ShadowRow =
+  | { readonly status: 'answered'; readonly tier: Tier; readonly thirdPass: number }
   | { readonly status: 'answered'; readonly tier: Tier; readonly elevated: number }
   | { readonly status: 'failed'; readonly reason: ShadowFailure }
   | { readonly status: 'skipped' };
@@ -90,6 +92,7 @@ function reviewerOfPass({ findings, summaries }: RoutedReview, pass: number): st
 }
 
 function shadowRow(shadow: ShadowDecision): ShadowRow {
+  if (isThirdPassAnswer(shadow)) return { status: 'answered', tier: shadow.tier, thirdPass: shadow.thirdPassProbability };
   if (shadow.status === 'answered') return { status: 'answered', tier: shadow.tier, elevated: shadow.probabilities.elevated };
   if (shadow.status === 'failed') return { status: 'failed', reason: shadow.reason };
   return { status: 'skipped' };
@@ -129,6 +132,7 @@ function formatRow(row: RoutingRow): string {
 }
 
 function formatShadow(shadow: ShadowRow): string {
+  if ('thirdPass' in shadow) return `${shadow.tier} (P(third) ${shadow.thirdPass.toFixed(2)})`;
   if (shadow.status === 'answered') return `${shadow.tier} (P(elevated) ${shadow.elevated.toFixed(2)})`;
   if (shadow.status === 'failed') return `failed (${shadow.reason})`;
   return 'skipped';

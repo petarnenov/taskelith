@@ -1,0 +1,101 @@
+{
+  "change": "improve-jev-route-request",
+  "generatedAt": "2026-10-28T16:38:07.599Z",
+  "devCommit": "1234e540009aa623ed24c5a278de2fdf81f5aaf0",
+  "query": {
+    "capabilities": [
+      "review-process"
+    ],
+    "files": [
+      "scripts/review-route-jev.ts",
+      "scripts/review-route*.ts",
+      "test/review-route*"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "error-handling",
+        "count": 17
+      },
+      {
+        "category": "docs",
+        "count": 7
+      },
+      {
+        "category": "redaction",
+        "count": 7
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 5
+      },
+      {
+        "category": "naming",
+        "count": 4
+      },
+      {
+        "category": "process",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 597,
+        "inChecklist": 491
+      },
+      "mediumOrWorse": {
+        "findings": 270,
+        "inChecklist": 224
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 100
+      },
+      {
+        "category": "spec-wording",
+        "count": 68
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 36
+      },
+      {
+        "category": "contract-drift",
+        "count": 17
+      },
+      {
+        "category": "process",
+        "count": 17
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 309,
+        "inChecklist": 305
+      },
+      "mediumOrWorse": {
+        "findings": 56,
+        "inChecklist": 54
+      }
+    }
+  }
+}

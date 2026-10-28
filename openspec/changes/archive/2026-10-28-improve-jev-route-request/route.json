@@ -1,0 +1,86 @@
+{
+  "change": "improve-jev-route-request",
+  "generatedAt": "2026-10-28T16:53:09.073Z",
+  "devCommit": "1234e540009aa623ed24c5a278de2fdf81f5aaf0",
+  "headCommit": "4e5738a1900bdb05c7e0414fbca3e4d7aa7059c7",
+  "features": {
+    "linesChanged": 1090,
+    "filesChanged": 22,
+    "capabilities": [
+      "review-process"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 11,
+      "thirdPassShare": 0.6363636363636364,
+      "mediumOrWorsePerChange": 4.7272727272727275
+    }
+  },
+  "rule": {
+    "version": 1,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.8,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      }
+    ],
+    "latencyMs": 267
+  }
+}

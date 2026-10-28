@@ -16,6 +16,18 @@ const ANSWERED: ShadowDecision = {
   status: 'answered',
   model: 'jev-1.14.0',
   tier: 'elevated',
+  thirdPassProbability: 0.62,
+  threshold: 0.4,
+  passes: passPlans('elevated', QUIET_FEATURES),
+  latencyMs: 250,
+};
+
+// The shape of archived records routed before the third pass question.
+const LEGACY_ANSWERED: ShadowDecision = {
+  router: 'jev',
+  status: 'answered',
+  model: 'jev-1.14.0',
+  tier: 'elevated',
   confidence: 0.62,
   probabilities: { standard: 0.19, elevated: 0.81 },
   expectedPasses: 2.4,
@@ -38,9 +50,9 @@ function record(overrides: Partial<RouteRecord> = {}): RouteRecord {
 
 const roundTrip = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
-test('records with an answered, a failed, and a skipped shadow are valid', () => {
+test('records with an answered, a legacy, a failed, and a skipped shadow are valid', () => {
   const failed: ShadowDecision = { router: 'jev', status: 'failed', reason: 'rate-limited', httpStatus: 429, latencyMs: 40 };
-  for (const shadow of [ANSWERED, failed, SKIPPED_SHADOW]) {
+  for (const shadow of [ANSWERED, LEGACY_ANSWERED, failed, SKIPPED_SHADOW]) {
     assert.deepEqual(routeRecordProblems(roundTrip(record({ shadow })), 'route-me', checkSchema), []);
   }
 });
@@ -57,8 +69,25 @@ test('free text in the shadow fails the schema', () => {
 });
 
 test('a probability above 1 fails the schema', () => {
-  const shadow = { ...ANSWERED, probabilities: { standard: 0, elevated: 1.5 } };
+  for (const shadow of [{ ...ANSWERED, thirdPassProbability: 1.5 }, { ...LEGACY_ANSWERED, probabilities: { standard: 0, elevated: 1.5 } }]) {
+    assert.ok(routeRecordProblems(roundTrip(record({ shadow })), 'route-me', checkSchema).length > 0);
+  }
+});
+
+test('an answer that mixes both question shapes fails the schema', () => {
+  const shadow = { ...LEGACY_ANSWERED, thirdPassProbability: 0.62, threshold: 0.4 };
   assert.ok(routeRecordProblems(roundTrip(record({ shadow })), 'route-me', checkSchema).length > 0);
+});
+
+test('a shadow tier that its probability and threshold do not give is inconsistent', () => {
+  const shadow = { ...ANSWERED, thirdPassProbability: 0.39 };
+  assert.deepEqual(routeRecordProblems(roundTrip(record({ shadow })), 'route-me', checkSchema), [
+    'shadow tier elevated does not match P(third) 0.39 at threshold 0.4',
+  ]);
+  const standard = { ...ANSWERED, tier: 'standard' as const, thirdPassProbability: 0.4, passes: passPlans('standard', QUIET_FEATURES) };
+  assert.deepEqual(routeRecordProblems(roundTrip(record({ shadow: standard })), 'route-me', checkSchema), [
+    'shadow tier standard does not match P(third) 0.4 at threshold 0.4',
+  ]);
 });
 
 test('a standard tier with a fired trigger is inconsistent', () => {
@@ -116,7 +145,9 @@ test('the summary names the tier, triggers, plans, and the shadow agreement', ()
   assert.match(summary, /^route: elevated \(lines\), rule version 1$/m);
   assert.match(summary, /^pass 1, reviewer A: codex gpt-6\.1-sol#high$/m);
   assert.match(summary, /^pass 2, reviewer B: claude claude-opus-5-5#xhigh$/m);
-  assert.match(summary, /^shadow: jev-1\.14\.0 elevated \(0\.81\), would assign codex gpt-6\.1-sol#high, claude claude-opus-5-5#xhigh; agrees with the rule$/m);
+  assert.match(summary, /^shadow: jev-1\.14\.0 elevated \(P\(third\) 0\.62, threshold 0\.4\), would assign codex gpt-6\.1-sol#high, claude claude-opus-5-5#xhigh; agrees with the rule$/m);
+  const legacy = formatRouteSummary(record({ features: elevated, rule: ruleDecision(elevated), shadow: LEGACY_ANSWERED }));
+  assert.match(legacy, /^shadow: jev-1\.14\.0 elevated \(0\.81\), would assign/m);
   assert.match(summary, /Recommendation only/);
 });
 

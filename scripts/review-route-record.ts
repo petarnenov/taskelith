@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { reviewerKey, secretLikeStrings, type Problem, type SchemaCheck } from './review-findings.ts';
 import {
+  isThirdPassAnswer,
+  tierAt,
   versionedPassPlans,
   type PassPlans,
   type RouteFeatures,
@@ -69,8 +71,17 @@ function ruleProblems({ rule, features }: RouteRecord): string[] {
 function shadowProblems({ shadow, features, rule }: RouteRecord): string[] {
   if (shadow.status !== 'answered') return [];
   const expected = versionedPassPlans(rule.version, shadow.tier, features);
-  if (expected === undefined || isDeepStrictEqual(shadow.passes, expected)) return [];
-  return [`shadow passes are not the reviewer table's for tier ${shadow.tier}`];
+  const passProblems = expected === undefined || isDeepStrictEqual(shadow.passes, expected)
+    ? []
+    : [`shadow passes are not the reviewer table's for tier ${shadow.tier}`];
+  return [...passProblems, ...thresholdProblems(shadow)];
+}
+
+function thresholdProblems(shadow: ShadowDecision): string[] {
+  if (!isThirdPassAnswer(shadow)) return [];
+  const { thirdPassProbability, threshold, tier } = shadow;
+  if (tierAt(thirdPassProbability, threshold) === tier) return [];
+  return [`shadow tier ${tier} does not match P(third) ${thirdPassProbability} at threshold ${threshold}`];
 }
 
 // A change directory and its route.json, if any.
@@ -124,7 +135,9 @@ function shadowSummary(shadow: ShadowDecision, rule: RuleDecision): string {
   if (shadow.status === 'skipped') return 'skipped';
   if (shadow.status === 'failed') return `failed (${shadow.reason}); the rule decided alone`;
   const agreement = shadow.tier === rule.tier ? 'agrees with the rule' : 'disagrees with the rule';
-  const probability = shadow.probabilities[shadow.tier].toFixed(2);
+  const probability = isThirdPassAnswer(shadow)
+    ? `P(third) ${shadow.thirdPassProbability.toFixed(2)}, threshold ${shadow.threshold}`
+    : shadow.probabilities[shadow.tier].toFixed(2);
   return `${shadow.model} ${shadow.tier} (${probability}), would assign ${planKeys(shadow.passes)}; ${agreement}`;
 }
 
