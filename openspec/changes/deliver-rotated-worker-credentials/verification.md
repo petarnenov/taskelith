@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. The review has not run yet: passes 1, 2, and 3 are pending, and `findings.jsonl` and `passes.jsonl` are empty.
+Date: 2026-10-28. The author's self-check, the checks, and the fail-before evidence are recorded below. Review pass 1 ran and its five findings are fixed (section "Review"); pass 2 and the conditional pass 3 are pending.
 
 ## Scope and source
 
@@ -65,7 +65,27 @@ Before pass 1, `a67e3ac7` merged `origin/dev` at `7efc48d3` (pull requests #394 
 
 ## Review
 
-The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol` with effort `medium`, for passes 1 and 3 (pass 3 conditional), and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. `route.json` recommends the efforts `high` and `xhigh`, which only governance can authorize; the coordinator confirmed that the reviews run at the brief's efforts until the owner authorizes routed effort. No pass has run.
+The coordinator assigned reviewer A, Codex CLI `gpt-6.1-sol` with effort `medium`, for passes 1 and 3 (pass 3 conditional), and reviewer B, Claude Code `claude-opus-5-5` with effort `high`, for pass 2. `route.json` recommends the efforts `high` and `xhigh`, which only governance can authorize; the coordinator confirmed that the reviews run at the brief's efforts until the owner authorizes routed effort.
+
+### Pass 1
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, effort `medium`, session `01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f`, as the coordinator relayed the result.
+- **Reviewed range:** `7efc48d3...c64ed5e4`.
+- **Snapshot:** identical before and after the pass, `39a57c703190bb094d060e3b555cd634f028f3d527d984b3a5ed5698a36d3255`.
+- **Counts:** Critical 0, High 2, Medium 3, Low 0, as in `passes.jsonl`; each finding is a line of `findings.jsonl`, all `fixed`.
+
+Each finding was checked against the code before its fix and is real. Each fail-before run mutated the fixed code back, rebuilt the package with `tsc -b`, and ran the named tests with `--test-timeout=30000`; after each run the file was restored with `git checkout --`, rebuilt, and the same tests passed (fail 0).
+
+| Finding | Resolution | Commit | Mutation | Result under mutation |
+| --- | --- | --- | --- | --- |
+| F1 High, `credential-rotation.ts:51` (fleet domain): a first renewal ignored the deadline, so before the sweep the old bearer renewed and escaped the revocation at the cap | `FleetRegistry.renew` takes the service's `Clock` and reads it after the row lock; `renewalStep` refuses a first renewal at or after the deadline as `forbidden`, reason `rotation-expired`, which the service answers as 401 `worker-not-authorized`; the sweep then revokes the worker | `350c535a` | (a) the deadline check removed; (b) the service passes a clock fixed before the registry call; (c) the PostgreSQL registry reads the clock before its row lock | (a) 3 fail: `fleet.test.ts` "a first renewal after the deadline is refused before the sweep, which then revokes the worker" and "a renewal whose registry write waits past the deadline is refused", in-memory conformance "a first renewal at the deadline is forbidden and leaves the rotation to the sweep"; (b) 1 fail, the second test; (c) 1 fail, `fleet-conformance.integration.test.ts` "a renewal that waits for the row lock until past the deadline is refused", run against `make services-up` |
+| F2 High, `apps/worker/src/credential-rotation.ts:101`: a notice for the generation after an unconfirmed adoption was acknowledged and dropped | The notice for the next generation is stored as `pending.<N+2>` before the acknowledgement also while an adoption is unconfirmed; a finished confirmation continues the driver, which renews the stored generation with the adopted bearer | `bd066a06` | (a) the old `previous !== undefined` condition restored; (b) the driver idles after a confirmation | `credential-rotation.test.ts` "a next notice while a confirmation answer was lost is stored, then renewed after that confirmation": (a) 1 fail; (b) not ok, timed out after 30000 ms (cancelled) |
+| F3 Medium, `credential-rotation.ts:62` (fleet domain): a confirmation after the deadline and before the sweep was recorded as confirmed | `confirmationStep` first applies `predecessorExpiryStep` at the time read after the lock, writing `worker-credential.rotation-expired` with reason `unconfirmed`, and the confirmation is then a repeat | `350c535a` | the expiry step skipped | 2 fail: `fleet.test.ts` "a confirmation after the deadline expires the predecessor as unconfirmed, before or after the sweep" and in-memory conformance "a confirmation past the deadline expires the predecessor as unconfirmed, in either order with the sweep" |
+| F4 Medium, `enrollment-service.ts:180`: a repeated confirmation answered `revocationsPublished: true` without publishing | Every confirmation publishes the recorded revocations and reports that result | `ced43fa0` | the old `confirmed.value ? publish : true` restored | 1 fail: `fleet.test.ts` "a repeated confirmation retries a revocation publication that failed" |
+| F5 Medium, `credential-rotation-files.ts:87`: a crash after the identity dropped the predecessor left its files and the pending file for good | `removeSupersededGeneration` removes the files of the generation before the current one and the current one's pending file when the identity keeps no predecessor; `finishAdoption` calls it after the identity replacement and `CredentialRotation.open` at every start | `cf21ed73` | (a) `open` skips the removal; (b) `removeSupersededGeneration` removes nothing | (a) 1 fail: `credential-rotation.test.ts` "a start after a crash in the removal of the confirmed predecessor removes its files", which recreates the crash after the identity replacement and two partial removals; (b) 2 fail: that test and `credential-rotation-files.test.ts` "only a confirmed generation has its predecessor and its pending file removed; the next pending file stays" |
+
+- **Follow-on fixes.** The two PostgreSQL sweep tests whose helper renewed exactly at a deadline equal to the request time renew 1 ms before the deadline (`29e2ba49`); a port comment over two lines was shortened (`25db37ee`).
+- **Contracts and specs** (`e3432b30`). The execution OpenAPI document stays 0.7.0: only the descriptions of the renewal's 401, the confirmation's 200, and `CredentialConfirmation` change, since a late first renewal answers the existing 401. `make contract-compatibility` reports 0 breaking changes for `execution.openapi.json` against `7efc48d330b4`, the AsyncAPI document's 3 declared ones unchanged, and "Contract documents have no undeclared breaking change." The installation contract (section 6 renewal, confirmation, and retry; section 10 rotation), the worker journal contract's retention row, the design, and the deltas `installation-enrollment` (scenarios "First renewal after the deadline", "Repeated confirmation after a failed publication", "Confirmation after the deadline"; the confirmation requirement), `worker-runtime` (scenarios "Notice before the confirmation finished", "Crash during the removal of the predecessor's files"; the start requirement), and `worker-journal-adapter` (scenario "Crash after the identity dropped the predecessor") state the new rules.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -88,6 +108,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review passes 1, 2, and 3 (conditional) and their fixes.
+- Independent review pass 2 and the conditional pass 3, and their fixes.
 - Archive under worker step 7.
 - Integration into dev by the coordinator (single pull request).

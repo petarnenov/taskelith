@@ -1,0 +1,1 @@
+{"change": "deliver-rotated-worker-credentials", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a182e0-3ecb-7ed3-b5e8-edd9da50ea9f", "counts": {"critical": 0, "high": 2, "medium": 3, "low": 0}}
