@@ -60,7 +60,7 @@ Before the change both test files fail to load, because the scripts do not exist
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `89dee68664759f2078cdacd1b853cc689c0106aa`; tests 3087, pass 3063, fail 0, skipped 24; all files 99.38% lines, 92.69% branches, 99.07% functions.
+- `make verify`: passed, profile full, tree `015bc576bc005edf891d45ab889c25559239e251`; tests 3092, pass 3068, fail 0, skipped 24; all files 99.38% lines, 92.68% branches, 99.07% functions.
 - `npm run openspec -- validate run-reviews-through-make --strict`: passed, `Change 'run-reviews-through-make' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 67 file(s); every pass summary file is valid: 47 file(s); every route file is valid: 3 file(s).`.
 - Spec diff against the merge base `bbce0e81d8e6` with `origin/dev`: no change under `openspec/specs`.
@@ -69,6 +69,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a18274-85fd-71a3-8252-b8b91a1849f0` | 0 | 1 | 5 | 2 |
+| 2 | B | `claude claude-opus-5-5#high` | `2f11e6b9-fc18-4544-9e6e-b937951ef46d` | 0 | 0 | 1 | 12 |
 <!-- make record: end -->
 
 ## Review
