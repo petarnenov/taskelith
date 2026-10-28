@@ -1,6 +1,6 @@
 # Verification: extend-execution-http-contracts
 
-Status: developed and verified by the author; review pass 1 done and its findings fixed; pass 2 pending, and pass 3 if governance "Conditional third pass" requires it; not archived.
+Status: developed and verified by the author; review passes 1 and 2 done and their findings fixed; pass 3 by reviewer A pending, which governance "Conditional third pass" requires; not archived.
 
 ## Scope and source
 
@@ -20,6 +20,8 @@ Status: developed and verified by the author; review pass 1 done and its finding
 - `041ef537` `docs: record the first slot credential delivery in the verification record` and `12e41374` `docs: record the verification of the first slot credential delivery` change only this record; `12e41374` is the head that review pass 1 reviewed.
 - `9bd16222` `chore: fix review pass 1 findings of the execution HTTP contracts` (document, contract page sections 8.2, 8.4, 8.6, and 8.7, design decisions 5, 7, and 10, the spec delta, and five tests).
 - The commit `docs: record review pass 1 of the execution HTTP contracts` adds `passes.jsonl`, `findings.jsonl`, and the pass 1 section; the `make verify` run of pass 1's fixes checks its tree, and the commit after it records that run. The earlier `make verify` runs below checked older trees and stay as history.
+- `a872b982` `chore: fix review pass 2 findings of the execution HTTP contracts` (document, contract page sections 8.1, 8.2, 8.5, 8.6, 8.7, and 9, account pool sections 7, 7.3, 8, and 8.1, design decisions 4, 5, 7, 8, 9, and 10, the proposal, the `execution-wire-contracts` delta, the new `evidence-store` delta, and the tests).
+- The commit `docs: record review pass 2 of the execution HTTP contracts` adds the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the pass 2 section, and the record fixes of findings 17 to 20; the `make verify` run of pass 2's fixes checks its tree, and the commit after it records that run.
 
 ## Environment
 
@@ -27,12 +29,12 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 
 ## Author self-check
 
-- **Scope.** `execution.openapi.json` from 0.5.0 to 0.6.0. Changed: `readEvidence` and `downloadEvidence` (browser session or operator bearer, `AuthenticationFailure` on 401, 404 for a principal without a role on the record's project). Added: `retireEvidence`, `readDelegationResult`, `listUnknownExecutions`, `listUnrecordedProcesses`, `readmitTask`, `fetchSlotCredential`, `issueRunScmCredential`, and `fetchRunScmCredential`; the schemes `browserSession` and `csrfToken`; and the schemas `AuthenticationFailure`, `AccessDenial`, `CsrfRejection`, `ExternalId`, `RemoteUrl` (copied unchanged from the control-plane document), `RetentionRefusal`, `DelegationResultOutcome`, `DelegationSummary`, `DelegationResult`, `ExecutionEvidenceKind`, `UnknownExecution`, `UnknownExecutionPage`, `UnrecordedProcess`, `UnrecordedProcessPage`, `Readmission`, `ReadmissionRefusal`, `RevealedSlotCredential`, `SlotCredentialDelivery`, `SlotCredentialRefusal`, `ScmPermission`, `ScmCredentialRequest`, `RevealedScmSecret`, `ScmAuthorization`, `ScmCredentialDelivery`, and `ScmCredentialRefusal`. No other document changed.
+- **Scope.** `execution.openapi.json` from 0.5.0 to 0.6.0. Changed: `readEvidence` and `downloadEvidence` (browser session or operator bearer, `AuthenticationFailure` on 401, 404 for a principal without a role on the record's project). Added: `retireEvidence`, `readDelegationResult`, `listUnknownExecutions`, `listUnrecordedProcesses`, `readmitTask`, `fetchSlotCredential`, `issueRunScmCredential`, and `fetchRunScmCredential`; the schemes `browserSession` and `csrfToken`; and the schemas `AuthenticationFailure`, `AccessDenial`, `CsrfRejection`, `ExternalId`, `RemoteUrl` (copied unchanged from the control-plane document), `RetentionRefusal`, `DelegationResultOutcome`, `DelegationSummary`, `DelegationResult`, `ExecutionEvidenceKind`, `UnknownExecution`, `UnknownExecutionPage`, `UnknownExecutionCursor`, `UnrecordedProcess`, `UnrecordedProcessPage`, `UnrecordedProcessCursor`, `Readmission`, `ReadmissionRefusal`, `RevealedSlotCredential`, `SlotCredentialDelivery`, `SlotCredentialRefusal`, `ScmPermission`, `ScmCredentialRequest`, `RevealedScmSecret`, `ScmAuthorization`, `ScmCredentialDelivery`, and `ScmCredentialRefusal`. No other document changed.
 - **Architect decisions before pass 1.** `fetchSlotCredential` is the first slot credential delivery and every re-delivery, scoped to the reservation of the execution's attempt and the slot, with no credential in `LaunchGrant`; the requirement "Slot credential delivery" gained the scenarios "First fetch after the launch authorization", "Later fetch re-delivers the version", and "Slot outside the reservation", and "Per-project evidence reads" the scenario "Reader without a role"; a test checks that only `fetchSlotCredential` delivers a slot credential and that `LaunchGrant` reaches none.
 - **Version.** The brief named 0.4.0 to 0.5.0; `dev` already carries 0.5.0 from `bf25c6d5` (G3 sub-change 26b), so the change takes 0.6.0 (design decision 2).
 - **Breaking change.** With the document left at 0.5.0, `make contract-compatibility` reported `packages/contracts/documents/execution.openapi.json: 0 breaking change(s) against ff7ab7a0622d.`: oasdiff compares schemas, not authorization. The narrowing of the evidence reads is still declared by the minor version and stated in the contract page section 8.2. At `ff7ab7a0` there is no `packages/contracts/breaking-changes.json`; when the coming `declare-contract-breaking-changes` change lands in `dev` before the handoff, the branch merges `dev` and adds the entry with `make contract-breaking-changes`.
 - **Shared vocabulary.** A test compares the reused schemes and schemas with the control-plane document; the generator, which refuses one name with two definitions, generated the bundle (`node --experimental-strip-types scripts/generate-contracts.ts`).
-- **Domain vocabularies.** `DelegationResultOutcome`, `ExecutionEvidenceKind`, and `ScmPermission` equal `DELEGATION_OUTCOMES`, `EXECUTION_EVIDENCE_KINDS`, and `SCM_PERMISSIONS`; the ownership reasons of both credential refusals are `quarantined` or members of `LAUNCH_REJECTION_REASONS`; the remote reasons of `ScmCredentialRefusal` equal those of `BindingRefusal` without `merge-method-undeclared`, in its order.
+- **Domain vocabularies.** `DelegationResultOutcome`, `ExecutionEvidenceKind`, and `ScmPermission` equal `DELEGATION_OUTCOMES`, `EXECUTION_EVIDENCE_KINDS`, and `SCM_PERMISSIONS`; the first six reasons of both credential refusals, `quarantined` to `attempt-not-launchable`, are the first six of `LAUNCH_REJECTION_REASONS` in their order (a deep equality since pass 2); the remote reasons of `ScmCredentialRefusal` equal those of `BindingRefusal` without `merge-method-undeclared`, in its order.
 - **Fail-before.** With the `ff7ab7a0` document and the new tests, `the execution document is OpenAPI 3.1.0 at version 0.6.0 with the 9c operations` fails with `actual: '0.5.0'`.
 - **Citations.** `bf25c6d5` is the 0.5.0 bump; the other citations name sections or symbols, checked against the files at `ff7ab7a0`.
 - **Evidence check.** Every result below was copied from the output of the command named beside it, on the state named beside it.
@@ -54,6 +56,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 | Same | `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | Every checked link conforms; every comment is within the rule; every active OpenSpec change archives into strictly valid specs; `tsc` exit 0 |
 | Same, after `npm run build` | `node --experimental-strip-types --test packages/contracts/test/*.test.ts` | 72 tests, all passed |
 | Same | Spec delta requirement body lengths, in characters | Execution HTTP operations 496, G3 execution operations 448, Per-project evidence reads 328, Evidence retirement 321, Delegation result read 369, Reconciliation queue reads 318, Task re-admission 326, Slot credential delivery 461, Per-run SCM credential delivery 384, Remote re-check at SCM credential delivery 388, Credential deliveries never kept 255 |
+| After `2f97c01e` | `make verify`, third run (log `eehc-verify-3.log` in the session scratchpad) | No result: stopped during `make test` (`make: *** [Makefile:42: verify] Terminated`) when the architect's decisions of 2026-10-28 changed the tree for `f50c7010`; not a failure of a check |
 | `041ef537`, clean tree | `make verify`, fourth run (log `eehc-verify-4.log` in the session scratchpad) | Passed at the first attempt, stamp written; 3119 tests, 3057 passed, 0 failed, 62 skipped; generated part below |
 | This record | `make record CHANGE=extend-execution-http-contracts LOG=<log>`; `make record-check CHANGE=extend-execution-http-contracts` | Generated part rewritten for the fourth run; `the generated part matches the tree` |
 
@@ -86,6 +89,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ### Pass 1
 
 - Reviewer A: Codex CLI, model `gpt-6.1-sol`, variant `medium`, session `01a18262-f3c8-7d62-8ea3-5f9432d7c185`, read-only, on `12e41374` (diff `ff7ab7a0...12e41374`); the snapshot was unchanged by the review.
+- Invocation: `env -u JEV_MAF_LAB codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, the Codex CLI (gpt-6.1-sol) row of the [agent task protocol](/docs/agent-task-protocol.md). Model confirmation: the output header of Codex v0.163.0 showed `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only`, and the session ID above (recorded in pass 2, finding 19).
 - Result: Critical 0, High 1, Medium 6, Low 1, each claim checked against its source before the fix, all fixed in `9bd16222` and recorded in `findings.jsonl`.
   1. High, retention counted from the capture: it counts from `publishedAt`, as `retentionEndsAt` and the evidence-store specification do (contract page section 8.2, design decision 5, scenario "Old capture published recently").
   2. Medium, `details.retainedUntil` untyped and optional: `RetentionRefusal` requires it as an `Instant`.
@@ -109,14 +113,56 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 The fixes change contracts, not only records, and pass 1 found a High finding, so pass 2 by reviewer B is required, and pass 3 by reviewer A if governance "Conditional third pass" requires it after pass 2.
 
+### Pass 2
+
+- Reviewer B: Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, session `e3dce30b-4b91-4e67-9d93-938b72c7ae27`, on `e31e6481` over the diff `ff7ab7a0...e31e6481`; the snapshot before and after the review was `8678f2b8b4fd81af5cfb2a170e76419d7965c057ecc0ae748b6ed432e4c3e3a1`, unchanged. It confirmed that the eight pass 1 fixes resolve their findings.
+- Invocation: `env -u JEV_MAF_LAB claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, the Claude Code (claude-opus-5-5) row of the [agent task protocol](/docs/agent-task-protocol.md). Model confirmation: the last `"type":"result"` line of the log has `claude-opus-5-5` as the only model in `modelUsage`, subtype `success`, and the session ID above.
+- Result: Critical 0, High 0, Medium 10, Low 10, each verified against the sources before the fix, none declined, all fixed and recorded in `findings.jsonl` with `missedBy` pass 1, role A; the reviewer reports that pass 1 missed all 20. Findings 1 to 16 are fixed in `a872b982`, 17 to 20 in the commit that records this pass.
+  1. Medium, contract-drift: an `evidence-store` delta modifies "Evidence reads" and "Evidence retention" (session, project roles, 404, `retireEvidence`, 422, `details.retainedUntil`); the proposal names the capability.
+  2. Medium, contract-drift: the coordinator's choice, 404 for a principal without a role on the task's project, was conditioned by the architect on 9a and 9b using the same rule. They do not: 9a checks the role on the project named in the path first and answers 403 `role-required` (control-plane section 2), and 9b decision 7 reads an item only after the role. So `readmitTask` follows 9a: a required `projectId` query parameter, the role checked before the task is read, and 403 whether the task exists or not; the read-before-role rule stays only on the evidence path (design decisions 4 and 8, contract page sections 8.1, 8.2, and 8.5, scenario "Principal without a role on the project").
+  3. Medium, spec-wording: the remote re-check runs after the ownership checks in the requirement and both descriptions; scenario "Ownership before the binding".
+  4. Medium, contract-drift: account pool section 7's condition stays: an `authorized` execution with no earlier delivery needs its grant unexpired and not `revoked`, found from the execution with no new parameter, or gets `execution-conflict`; for an execution that had a delivery, section 7.3's ownership checks stand in (account pool section 7, design decision 9, requirement "Slot credential delivery checks").
+  5. Medium, concurrency-race: a download whose record was retired between its reads answers 404; scenario "Download during retirement".
+  6. Medium, error-handling: a removed record answers 204 even when its content's removal fails, left to a sweep of unreferenced digests, an obligation on item 10; scenario "Content removal fails".
+  7. Medium, concurrency-race: the first SCM credential issue is serialized per run, the loser returning the winner's version; scenario "Concurrent first issues".
+  8. Medium, contract-drift: `Readmission` requires `readmissionId` (product ports section 2, rule 7); scenarios "Concurrent re-admissions" (different keys) and "Repeated re-admission".
+  9. Medium, contract-drift: the automatic re-admission includes the task whose launch grant a product writer revoked (G3 plan row 44); the example left `readmitTask`'s description; design decision 8 corrected.
+  10. Medium, error-handling: an unknown attempt, execution, or run is 422 `assignment-not-active` after the installation and worker checks, as `rejectUnknownAssignment`; `fetchSlotCredential` and `issueRunScmCredential` have no 404.
+  11. Low: the execution is found by `attemptId` and `executionId` together.
+  12. Low: account pool section 7.3 names the wire reason `delivery-not-admitted`.
+  13. Low, redaction: a refusal names only the reason and identifiers, never the remote URL or a secret.
+  14. Low: obligation on item 44 to bound or condense an unknown execution's evidence; no schema bound.
+  15. Low: an expired version answers `credential-ended` for an issue and a fetch.
+  16. Low: the cursor test is named for what it checks, and the ownership reasons equal the first six `LAUNCH_REJECTION_REASONS` in order.
+  17. Low, evidence-mismatch: the third `make verify` run is recorded.
+  18. Low: the self-check scope names both cursor schemas.
+  19. Low, process: pass 1 records its invocation and model confirmation.
+  20. Low, process: "Remaining gates" names the breaking-change entry.
+- Outside the findings, as the reviewer noted: account pool sections 8 and 8.1 now name the refusals that section 7.3's order gives, `removed` for a drained attempt, whose removal cancels nothing, and `attempt-not-launchable` after a revocation, which cancels the attempt.
+- Fix checks, on the working tree of `a872b982`:
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate extend-execution-http-contracts --strict` | `Change 'extend-execution-http-contracts' is valid` |
+| `npm run verify:links`; `npm run verify:archive`; `npm run verify:comments`; `npx tsc -p tsconfig.check.json` | Every checked link conforms; every active OpenSpec change archives into strictly valid specs; every comment is within the comment length rule; `tsc` exit 0 |
+| `node --experimental-strip-types --test packages/contracts/test/*.test.ts`, after `npm run build` | 76 tests, all passed |
+| Fail-before: `execution-http-contracts.test.ts` with the document of `e31e6481`, after `npm run build` | tests 19, pass 17, fail 2: `a re-admission names its project, key, and generation and is refused with a typed reason`, `an unknown execution or run of a worker is a typed refusal, not a 404`; restored, 19 of 19 pass |
+| Spec delta requirement body lengths, in characters | `execution-wire-contracts`: Execution HTTP operations 496 (unchanged since `764de1d8`), G3 execution operations 448, Per-project evidence reads 425, Evidence retirement 469, Delegation result read 369, Reconciliation queue reads 402, Task re-admission 449, Slot credential delivery 340, Slot credential delivery checks 474, Per-run SCM credential delivery 476, Remote re-check at SCM credential delivery 480, Credential deliveries never kept 255; `evidence-store`: Evidence reads 357, Evidence retention 375 |
+| `make findings ARGS="validate"` | `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).` |
+
+The pass 2 fixes change the document, contracts, and tests, not only records and documentation, so governance "Conditional third pass" requires pass 3 by reviewer A.
+
 ## Remaining gates
 
-- Review pass 2 by reviewer B, and pass 3 by reviewer A if required, with their fixes and records.
+- Review pass 3 by reviewer A, which governance "Conditional third pass" requires, with its fixes and records.
+- The breaking-change entry of design decision 2: if `declare-contract-breaking-changes` lands in `dev` before the handoff, merge `dev`, add the narrowing of the evidence reads with `make contract-breaking-changes`, and record the check.
 - Archive on the branch under worker step 7.
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-ups
 
-- G3 item 12: `fetchSlotCredential` for the first delivery and every re-delivery (design decision 9), with no credential in `LaunchGrant`.
+- G3 item 12: `fetchSlotCredential` for the first delivery and every re-delivery (design decision 9), with no credential in `LaunchGrant`, the grant check of an `authorized` execution's first delivery, and a record of the executions that had a delivery.
+- G3 item 10: the sweep of evidence content that no record refers to, and the 404 of a download whose record was retired meanwhile.
+- G3 item 44: `readmitTask` with `projectId` and `readmissionId`, the automatic re-admission of a revoked launch grant, and a domain bound on an unknown execution's evidence.
 - G3 sub-change 9d: the refresh notice carries `runId`, `credentialId`, and `version`, which `fetchRunScmCredential` takes, with no SCM credential operation of its own, and the response command reuses `DelegationResult`, `DelegationResultOutcome`, and `DelegationSummary` unchanged (contract page section 9).
 - The control-plane wire contracts section 9 lists what other sub-changes own; 9b updated it in parallel, and this change leaves that page to 9b and points to the execution page from the G3 plan row 9.
