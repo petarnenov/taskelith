@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,7 @@ import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
+  GitWorkspaces,
   OperationChains,
   ProcessGroupReclaimHost,
   RECLAIM_PROGRAM_MAIN,
@@ -491,6 +492,48 @@ test('a hand-off record that cannot be read fails the operations without guessin
   assert.equal(failed(await git.local.reclaim(FIRST)).code, 'internal');
   assert.deepEqual(await git.local.handedOff(), [FIRST]);
   assert.equal(failed(await git.local.reclaim(SECOND)).code, 'not-found');
+}));
+
+const HANDED_OFF_RECORD = { containment: null, reclaimFailed: false };
+
+test('the hand-off records are read from disk, also by a restarted adapter', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.prepare(request(git, SECOND)));
+  assert.deepEqual(await git.local.handOffRecords(), []);
+  value(await git.local.handOff(FIRST));
+  value(await git.local.handOff(SECOND));
+  const failedRecord = { containment: { kind: 'cgroup', name: 'reclaim-attempt-2' }, reclaimFailed: true };
+  await writeFile(recordPath(git, SECOND), JSON.stringify(failedRecord));
+  const expected = [{ attemptId: FIRST, record: HANDED_OFF_RECORD }, { attemptId: SECOND, record: failedRecord }];
+  assert.deepEqual(await git.local.handOffRecords(), expected);
+  assert.deepEqual(await git.reopen().handOffRecords(), expected);
+}));
+
+test('a malformed or unreadable hand-off record rejects the read of the records', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.handOff(FIRST));
+  await writeFile(recordPath(git), '{"containment":');
+  await assert.rejects(git.local.handOffRecords(), /is malformed/);
+  await rm(recordPath(git));
+  await mkdir(recordPath(git));
+  await assert.rejects(git.local.handOffRecords(), { code: 'EISDIR' });
+}));
+
+test('a hand-off record removed between the listing and its read is left out', () => withFixture(async (git) => {
+  value(await git.local.prepare(request(git)));
+  value(await git.local.prepare(request(git, SECOND)));
+  value(await git.local.handOff(FIRST));
+  value(await git.local.handOff(SECOND));
+  // Removes a listed record before the records are read, as a reclaim may.
+  class Vanishing extends GitWorkspaces {
+    override async handedOff() {
+      const listed = await super.handedOff();
+      await rm(recordPath(git, FIRST));
+      return listed;
+    }
+  }
+  const vanishing = new Vanishing({ dataRoot: git.dataRoot, client: git.client, remoteTransport: 'https-or-loopback-http', reclaimHost: new ProcessGroupReclaimHost() });
+  assert.deepEqual(await vanishing.handOffRecords(), [{ attemptId: SECOND, record: HANDED_OFF_RECORD }]);
 }));
 
 test('a hand-off record parses only its own shapes', () => {
