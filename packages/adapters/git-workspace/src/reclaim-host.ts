@@ -50,15 +50,22 @@ interface StartedProgram {
   abandon(): void;
 }
 
+interface ProgramStart {
+  readonly started: Result<StartedProgram>;
+  // Resolves once the program has exited, also after a failed start.
+  readonly exited: Promise<ReclaimOutcome>;
+}
+
 // How long `launch` waits for the ready signal (contract section 3).
 export const RECLAIM_READY_BOUND_MS = 60_000;
 
 // In a process group of its own; started once it signals that it is
 // ready, so a spawned program never counts before it is contained.
-function startProgram(program: ReclaimProgram, args: readonly string[], readyBoundMs: number): Promise<Result<StartedProgram>> {
-  return new Promise((started) => {
+function startProgram(program: ReclaimProgram, args: readonly string[], readyBoundMs: number): Promise<ProgramStart> {
+  return new Promise((resolve) => {
     const child = spawn(program.executable, [...program.args, ...args], { env: PROGRAM_ENVIRONMENT, stdio: ['pipe', 'pipe', 'ignore'], detached: true });
     const exited = new Promise<ReclaimOutcome>((done) => child.once('close', (code) => done(outcomeOf(code))));
+    const started = (result: Result<StartedProgram>) => resolve({ started: result, exited });
     const abandon = () => void child.stdin.end();
     child.stdin.on('error', () => {});
     child.once('error', (error) => started(err(failure('unavailable', `cannot start the reclaim program: ${error.message}`))));
@@ -143,9 +150,11 @@ export class LinuxReclaimHost implements ReclaimHost {
     });
     const { uid, gid } = this.executionAccount;
     const args = ['--checkout', checkout, '--cgroup', cgroup, '--uid', String(uid), '--gid', String(gid)];
-    const started = await startProgram(this.#program, args, this.#readyBoundMs);
+    const { started, exited } = await startProgram(this.#program, args, this.#readyBoundMs);
     if (started.ok) return ok({ ...started.value, containment: { kind: 'cgroup', name: containmentName } });
     await removeIfEmpty(cgroup);
+    // A program still in its cgroup frees it on exit; a fault keeps it.
+    void exited.then(() => removeIfEmpty(cgroup)).catch(() => {});
     return started;
   }
 
@@ -194,7 +203,7 @@ export class ProcessGroupReclaimHost implements ReclaimHost {
   }
 
   async launch(checkout: string): Promise<Result<LaunchedReclaim>> {
-    const started = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
+    const { started } = await startProgram(this.#program, ['--checkout', checkout], this.#readyBoundMs);
     return started.ok ? ok({ ...started.value, containment: { kind: 'process-group', id: started.value.pid } }) : started;
   }
 

@@ -56,6 +56,7 @@ export {
   type ReclaimArguments,
 } from './reclaim-program.js';
 export { RECLAIM_PROGRAM_MAIN } from './reclaim-program-main.js';
+export { OperationChains, PROCESS_OPERATION_CHAINS } from './operation-chains.js';
 export { objectName, parseCommitParents, parseCommitTree, parseTreeObject, type GitObjectType, type TreeObjectEntry } from './git-objects.js';
 export { indexInfo, indexMatchesTree, parseIndexEntries, type IndexEntry } from './index-entries.js';
 export { entryAt, isPresent } from './presence.js';

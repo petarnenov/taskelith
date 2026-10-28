@@ -3,12 +3,12 @@ import { chmod, lstat, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 import { ok } from '@taskelith/kernel';
 import { CrashPoints, failed, id, value } from '@taskelith/testing';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import {
+  OperationChains,
   ProcessGroupReclaimHost,
   RECLAIM_PROGRAM_MAIN,
   parseHandOffRecord,
@@ -390,24 +390,39 @@ class GatedReleaseHost implements ReclaimHost {
   }
 }
 
+// Signals when work of `path` arrives while other work of it runs or waits.
+class ObservedChains extends OperationChains {
+  readonly queuedBehindAnother = signal();
+  path = '';
+
+  override run<T>(path: string, work: () => Promise<T>): Promise<T> {
+    if (path === this.path && this.busy(path)) this.queuedBehindAnother.resolve();
+    return super.run(path, work);
+  }
+}
+
 test('a hand-off that meets a running reclaim of its workspace waits until the reclaim is done', { timeout: 20_000 }, () => {
   const host = new GatedReleaseHost();
+  const chains = new ObservedChains();
   return withFixture(async (git) => {
+    chains.path = join(git.checkout(FIRST), '..');
     value(await git.local.prepare(request(git)));
     value(await git.local.handOff(FIRST));
     const reclaiming = git.local.reclaim(FIRST);
     host.reclaimed = reclaiming;
     await host.releasing.promise;
     const handing = git.local.handOff(FIRST);
-    // Unserialized, the hand-off polls the containment now; serialized it
-    // does nothing, which only a bound can show.
-    await Promise.race([host.polledDuringRelease.promise, delay(1_000)]);
+    const met = await Promise.race([
+      chains.queuedBehindAnother.promise.then(() => 'queued'),
+      host.polledDuringRelease.promise.then(() => 'polled during the release'),
+    ]);
+    assert.equal(met, 'queued');
     host.openRelease();
     value(await reclaiming);
     value(await handing);
     assert.deepEqual(await git.local.handedOff(), [FIRST]);
     assert.equal(await modeOf(git.checkout(FIRST)), WORKSPACE_MODES.checkoutHandedOff);
-  }, { reclaimHost: host });
+  }, { reclaimHost: host, operationChains: chains });
 });
 
 test('two adapters of one process hand off two workspaces one at a time', () => withFixture(async (git) => {

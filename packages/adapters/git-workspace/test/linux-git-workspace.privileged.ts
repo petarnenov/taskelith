@@ -311,6 +311,40 @@ async function fifoIn(directory: string, name: string): Promise<string> {
 
 // A FIFO read waits for a program; a regressed one must fail, not hang.
 const FIFO_TEST_BOUND_MS = 60_000;
+const FIFO_PEER_BOUND_MS = 20_000;
+
+// Opens a FIFO in a shell that the bound kills, so a missing peer fails
+// the test and leaves no blocked FIFO open in this process.
+function throughFifo(script: string, path: string, boundMs: number): Promise<string> {
+  return new Promise((done, fail) => {
+    const shell = spawn('/bin/sh', ['-c', script, 'fifo', path], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const output: Buffer[] = [];
+    const bound = setTimeout(() => shell.kill('SIGKILL'), boundMs);
+    shell.stdout.on('data', (chunk: Buffer) => output.push(chunk));
+    shell.once('error', fail);
+    shell.once('close', (code) => {
+      clearTimeout(bound);
+      if (code === 0) done(Buffer.concat(output).toString('utf8'));
+      else fail(new Error(`the FIFO ${path} had no peer within ${boundMs} ms`));
+    });
+  });
+}
+
+// The processes whose command line names `path`.
+async function processesNaming(path: string): Promise<readonly string[]> {
+  const pids = (await readdir('/proc')).filter((entry) => /^\d+$/.test(entry));
+  const lines = await Promise.all(pids.map((pid) => readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '')));
+  return pids.filter((_, index) => lines[index]!.split('\0').includes(path));
+}
+
+const readFifo = (path: string, boundMs = FIFO_PEER_BOUND_MS) => throughFifo('exec cat "$1"', path, boundMs);
+const writeFifo = (path: string) => throughFifo('printf x > "$1"', path, FIFO_PEER_BOUND_MS);
+
+test('a FIFO read without a writer fails at its bound and leaves no reader', { timeout: FIFO_TEST_BOUND_MS }, async () => {
+  const lonely = await fifoIn(holds, 'lonely');
+  await assert.rejects(readFifo(lonely, 600), /had no peer within 600 ms/);
+  assert.deepEqual(await processesNaming(lonely), [], 'no reader of the FIFO is left');
+});
 
 // Runs a program behind a root shell that writes its exit code into the
 // FIFO `status`, so a test reads the code even of an orphaned program.
@@ -329,12 +363,12 @@ test('a reclaim program without go in its window or with a dead worker exits aba
   const windowed = linuxHost(reporting(lateStatus, [RECLAIM_PROGRAM_MAIN, '--go-within-ms', '3000']));
   const late = value(await windowed.launch(checkout, 'reclaim-late-go'));
   assert.deepEqual((await processesOf('reclaim-late-go')).map(({ identity, cgroup }) => [identity, cgroup]), [[EXECUTION_IDENTITY, inContainment('reclaim-late-go')]]);
-  assert.equal(await readFile(lateStatus, 'utf8'), `${RECLAIM_EXIT.abandoned}\n`);
+  assert.equal(await readFifo(lateStatus), `${RECLAIM_EXIT.abandoned}\n`);
   assert.equal(await populatedNow('reclaim-late-go'), false);
   const deadStatus = await fifoIn(holds, 'status-dead');
   const program = reporting(deadStatus, [RECLAIM_PROGRAM_MAIN]);
   const orphaned = await launchedByDeadWorker([checkout, 'reclaim-dead-worker', CONTAINMENT_PARENT, String(EXECUTION.uid), JSON.stringify(program)]);
-  assert.equal(await readFile(deadStatus, 'utf8'), `${RECLAIM_EXIT.abandoned}\n`);
+  assert.equal(await readFifo(deadStatus), `${RECLAIM_EXIT.abandoned}\n`);
   assert.equal(await populatedNow('reclaim-dead-worker'), false);
   assert.equal(await agentSucceeds(checkout, 'cat file'), 'text');
   assert.equal(await modeOf(file), 0o600);
@@ -352,9 +386,9 @@ test('a Linux launch resolves only once its program is in its cgroup as the exec
   const launching = held.launch(checkout, 'reclaim-held').finally(() => {
     settled = true;
   });
-  await readFile(arrived);
+  await readFifo(arrived);
   const [settledWhileHeld, processesWhileHeld] = [settled, await processesOf('reclaim-held')];
-  await writeFile(release, 'x');
+  await writeFifo(release);
   const launched = value(await launching);
   assert.deepEqual((await processesOf('reclaim-held')).map(({ identity, cgroup }) => [identity, cgroup]), [[EXECUTION_IDENTITY, inContainment('reclaim-held')]]);
   assert.equal(await launched.go(), 'succeeded');
@@ -376,6 +410,28 @@ test('a launch that fails or is not ready within its bound frees its empty cgrou
   });
   assert.match(failed(await silent.launch('/nonexistent', 'reclaim-silent')).message, /not ready within its bound/);
   assert.equal(await containmentExists('reclaim-silent'), false);
+});
+
+async function untilNoContainment(name: string): Promise<void> {
+  for (let polls = 0; polls < 200; polls += 1) {
+    if (!(await containmentExists(name))) return;
+    await delay(50);
+  }
+  throw new Error(`${name} was never freed`);
+}
+
+test('a program in its cgroup that is not ready frees the cgroup once it exits', { timeout: FIFO_TEST_BOUND_MS }, async () => {
+  const hold = await holdFile();
+  const script = 'hold="$1"; shift; while [ "$1" != --cgroup ]; do shift; done; echo $$ > "$2/cgroup.procs"; '
+    + 'cat > /dev/null; while [ -e "$hold" ]; do sleep 0.05; done';
+  const silent = new LinuxReclaimHost({
+    containmentParent: CONTAINMENT_PARENT, executionAccount: EXECUTION, readyBoundMs: SHORT_BOUND_MS,
+    program: { executable: '/bin/sh', args: ['-c', script, 'reclaim', hold] },
+  });
+  assert.match(failed(await silent.launch('/nonexistent', 'reclaim-entered')).message, /not ready within its bound/);
+  assert.equal(await populatedNow('reclaim-entered'), true, 'the abandoned program is still in its cgroup');
+  await rm(hold);
+  await untilNoContainment('reclaim-entered');
 });
 
 test('a reclaim program that runs after the exit keeps the one slot of the worker held', async () => {

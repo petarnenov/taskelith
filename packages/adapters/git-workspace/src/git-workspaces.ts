@@ -50,6 +50,7 @@ import { parsePorcelainStatus, type PorcelainStatus } from './porcelain-status.j
 import { isPresent } from './presence.js';
 import { resetRepositoryFiles, type ObjectFormat } from './repository-config.js';
 import { parseBatchObjects, readHeadTree, readVerified, snapshotTree, type ListedEntry, type ObjectRead } from './tree-listing.js';
+import { PROCESS_OPERATION_CHAINS, type OperationChains } from './operation-chains.js';
 import type { LaunchedReclaim, ReclaimHost, ReclaimOutcome } from './reclaim-host.js';
 import { readWorkspaceRecord, writeWorkspaceRecord, type WorkspaceRecord } from './workspace-record.js';
 
@@ -71,6 +72,8 @@ export interface GitWorkspacesOptions {
   readonly reclaimProofBoundMs?: number;
   // How long a program may run after `go`; `RECLAIM_RUN_BOUND_MS` by default.
   readonly reclaimRunBoundMs?: number;
+  // `PROCESS_OPERATION_CHAINS` unless a test observes its own.
+  readonly operationChains?: OperationChains;
 }
 
 // The bound of the proof that a recorded containment is empty, and the
@@ -151,6 +154,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   readonly #reclaimHost: ReclaimHost;
   readonly #proofBoundMs: number;
   readonly #runBoundMs: number;
+  readonly #chains: OperationChains;
 
   constructor(options: GitWorkspacesOptions) {
     this.#root = join(options.dataRoot, WORKSPACE_LAYOUT.root);
@@ -161,6 +165,7 @@ export class GitWorkspaces implements WorkspaceProvider {
     this.#reclaimHost = options.reclaimHost;
     this.#proofBoundMs = options.reclaimProofBoundMs ?? RECLAIM_PROOF_BOUND_MS;
     this.#runBoundMs = options.reclaimRunBoundMs ?? RECLAIM_RUN_BOUND_MS;
+    this.#chains = options.operationChains ?? PROCESS_OPERATION_CHAINS;
   }
 
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
@@ -230,7 +235,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   // root chain inside them is taken last, so no two chains wait in a cycle.
   #inWorkspaceChain(attemptId: AttemptId, work: () => Promise<Result<void>>): Promise<Result<void>> {
     const directory = join(this.#root, workspaceDirectoryName(attemptId, sha256IdentifierDigest));
-    return inChain(directory, () => failingFileSystemAsUnavailable(work));
+    return this.#chains.run(directory, () => failingFileSystemAsUnavailable(work));
   }
 
   // Listed attempts whose hand-off record exists, read from the records,
@@ -246,7 +251,7 @@ export class GitWorkspaces implements WorkspaceProvider {
   async #handOff(attemptId: AttemptId): Promise<Result<void>> {
     const recorded = await this.#recorded(attemptId);
     if (!recorded.ok) return recorded;
-    const marked = await inChain(this.#root, () => this.#recordHandOff(attemptId));
+    const marked = await this.#chains.run(this.#root, () => this.#recordHandOff(attemptId));
     if (!marked.ok) return marked;
     if (this.#reclaimHost.executionAccount === null) return ok(undefined);
     this.#crashPoints.reach('WS6.before');
@@ -712,20 +717,6 @@ export class GitWorkspaces implements WorkspaceProvider {
       return output.ok ? parseBatchObjects(output.value, names, type) : output;
     };
   }
-}
-
-// One chain per path of the process: per workspace root, so a hand-off
-// checks for another and records its own at once, and per workspace.
-const chains = new Map<string, Promise<unknown>>();
-
-function inChain<T>(path: string, work: () => Promise<T>): Promise<T> {
-  const run = (chains.get(path) ?? Promise.resolve()).then(work, work);
-  const release = () => {
-    if (chains.get(path) === run) chains.delete(path);
-  };
-  chains.set(path, run);
-  void run.then(release, release);
-  return run;
 }
 
 // The program's outcome, or `overran` once `boundMs` passes without one.

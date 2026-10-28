@@ -17,6 +17,7 @@ import {
   type ExecutionAccount,
   type GitTimer,
   type GitWorkspaceCrashPoint,
+  type OperationChains,
   type ReclaimContainment,
   type ReclaimHost,
   type ReclaimProgram,
@@ -515,6 +516,7 @@ export interface GitFixtureOptions {
   readonly reclaimHost?: ReclaimHost;
   readonly reclaimProofBoundMs?: number;
   readonly reclaimRunBoundMs?: number;
+  readonly operationChains?: OperationChains;
   // The directory the scratch directory goes into; `tmpdir()` by default.
   readonly scratchParent?: string;
   // Gives the data root, `worker/`, and the workspace root this group and
@@ -585,9 +587,9 @@ export async function createGitFixture(options: GitFixtureOptions = {}): Promise
   const grants = new Map<string, readonly Grant[]>([[credentials.read.authorization, ['read']], [credentials.write.authorization, ['read', 'write']]]);
   const remote = await SmartHttpRemote.start(served, grants);
   const others: SmartHttpRemote[] = [];
-  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimRunBoundMs, reclaimHost = new ProcessGroupReclaimHost() } = options;
+  const { gitTimeLimitMs, reclaimProofBoundMs, reclaimRunBoundMs, operationChains, reclaimHost = new ProcessGroupReclaimHost() } = options;
   const reopen = (crashPoints: CrashPointHook = NO_CRASH_POINTS) => new GitWorkspaces({
-    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs, reclaimRunBoundMs,
+    dataRoot, client, remoteTransport: 'https-or-loopback-http', crashPoints, gitTimeLimitMs, reclaimHost, reclaimProofBoundMs, reclaimRunBoundMs, operationChains,
   });
   const local = reopen(options.crashPoints);
   const binding: RepositoryBinding = { repository, remote: remote.url('acme/project.git'), baseBranch: BASE_BRANCH };
