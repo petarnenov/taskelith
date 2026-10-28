@@ -50,14 +50,14 @@ macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64 (2020 Intel iMac), APFS boot data vo
 
 ## Checks
 
-`make verify` ran on the clean committed tree of `ea4911c1` (tree `8bbbbe4d`), the records commit after the review pass 2 fixes, with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2662, 2655 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.49%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows `ea4911c1`, and it changes only this file.
+`make verify` ran on the clean committed tree of `88caa1ed` (tree `b4a81102`), the records commit of review pass 3, with Node.js 24.22.1: exit 0, profile full, stamp written. Tests: 2662, 2655 pass, 0 fail, 7 skipped; on macOS the three G2 scenario files skip as before. Coverage of all files: lines 99.36%, branches 92.50%, functions 99.06%. `make record` wrote the generated part below from that log, and `make record-check` passed. Only the records commit that writes this paragraph and the generated part follows `88caa1ed`, and it changes only this file.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8bbbbe4dde8315c31eb1e5e2bfd98843677cfd18`; tests 2662, pass 2655, fail 0, skipped 7; all files 99.36% lines, 92.49% branches, 99.06% functions.
+- `make verify`: passed, profile full, tree `b4a811028644145343cc6ef3026407fbce00e6d1`; tests 2662, pass 2655, fail 0, skipped 7; all files 99.36% lines, 92.50% branches, 99.06% functions.
 - `npm run openspec -- validate complete-g2-native-acceptance-rows-macos --strict`: passed, `Change 'complete-g2-native-acceptance-rows-macos' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 61 file(s); every pass summary file is valid: 41 file(s).`.
 - Spec diff against the merge base `f6696995dce0` with `origin/dev`: no change under `openspec/specs`.
@@ -67,6 +67,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6.1-sol#medium` | `01a181b7-647f-7d90-abe6-9892355ab6ca` | 0 | 0 | 2 | 2 |
 | 2 | B | `claude claude-opus-5-5#high` | `d58a9021-a9a3-40ca-8b5d-d7e096f085bb` | 0 | 0 | 2 | 8 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a18218-6ab9-7f51-947a-b77e78096f84` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Review
