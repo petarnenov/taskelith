@@ -108,6 +108,34 @@ Not part of this change's scope; recorded at the coordinator's request.
 
 The two G2 scenario proofs that `complete-g2-native-acceptance-rows` added ran on the hosted runner for the first time in this run. Its `results.jsonl` artifact was not downloaded for this record.
 
+## Review pass 1 fixes
+
+Review pass 1 (reviewer A, at `d750d2c2`) reported 8 Medium and 3 Low findings; the coordinator recorded them and ruled on the credential header. The code and tests are in `63dba2ae`, the contract and change documents in `ef499b94`.
+
+Coordinator ruling A, option (b), done the cheap way: the SCM plugin's credential binding supplies the complete, already encoded `Authorization` value (`WorkspaceCredential.authorization`); the adapter only places it into `http.extraHeader` through the environment (`gitConfigEnvironment`) and treats the whole value as a secret everywhere. The GitHub plugin forms `Basic` and the base64 of `x-access-token:<secret>`; the contract names the form plugin-owned, with GitHub as its first instance. No Forgejo work. Contract sections 7 and 8 and design D3 and D4 state it, and section 8 states both the ancestry check and the exact lease form.
+
+| Finding | Severity | Fix | Evidence |
+|---|---|---|---|
+| 1 push options can be cancelled | M | the suite compares the whole push argument list with `taskBranchPushArguments`, at most `-C <dir>` before `push` | variants `cancelsAtomic`, `cancelsLease` fail remote-moved, not-fast-forward, planted settings |
+| 2 redaction of every credential form | M | `sensitiveValues`: secret, `authorization`, the part after the scheme, and base64 of each | variant `passesHeaderInArguments` fails four cases |
+| 3 labels echo arguments | M | `processLabel` names the pid and a safe subcommand; arguments are redacted before formatting | three tests that no finding holds the credential; they failed 3 of 3 with a label that echoed the arguments |
+| 4 environment names prove nothing | M | the fixture reports values, redacted; the suite checks `GIT_BUILT_ENVIRONMENT`, the exact settings, and no foreign `GIT_*` | variants `inheritsGlobalConfig`, `inheritsConfigPairs` fail the Git process case |
+| 5 `plantGitSetting` wrote invalid config | M | the double plants through `git config --file <config> --add` | a test lists the file with the real `git config --file <f> --list` |
+| 6 planted settings that acted | M | each process carries `.git/config` as it found it; the case fails on any planted value there | variant `rewritesConfigAfterGit` fails the planted settings case |
+| 7 non-UTF-8 paths | M | refused with `precondition-failed`, reason `non-utf8-path` (`decodeGitPath`, `encodeHeadSnapshot`) | domain and archive unit tests |
+| 8 Git process identity | M | MODIFIED "Git process identity" with the Linux and macOS distinction, 488 characters | strict validation |
+| 9 `handedOff` errors | L | section 9 lists `handedOff` beside `list` and `sweep` and defines its disk errors | contract review |
+| 10 pax split by length | L | the double's reader takes each pax record by its recorded length | a newline path test; it failed with the old reader |
+| 11 `__proto__` file | L | the reader and working tree use objects without a prototype | a `__proto__` test; it failed with the old code |
+
+New defective variants: `passesHeaderInArguments`, `inheritsGlobalConfig`, `inheritsConfigPairs`, `cancelsAtomic`, `cancelsLease`, `rewritesConfigAfterGit` (sixteen in this change).
+
+Checks at the working tree of `ef499b94`:
+
+- `npm run openspec -- validate align-git-workspace-adapter-contract --strict`: valid.
+- `make findings ARGS="validate"`: 57 findings files and 37 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; tests 2535, pass 2488, fail 0, skipped 47; all files 99.32% lines, 92.60% branches, 98.98% functions; `git-process-checks.js` 100/93.48/100, `workspace-conformance.js` 99.62/87.74/100, `snapshot-archive.js` 100/95.65/100; comment length rule passed.
+
 ## Remaining gates
 
 - Review passes 1 to 3 (tasks 4.2 to 4.4) and the archive (task 5.1).
@@ -115,8 +143,8 @@ The two G2 scenario proofs that `complete-g2-native-acceptance-rows` added ran o
 
 ## Follow-ups for 16b to 16e
 
-- 16b: the adapter's local operations through `encodeHeadSnapshot`, the crash points `WS1` to `WS4`, the pinned client gate at the composition, the rewrite of `.git/config`, and a decision on tree paths that are not valid UTF-8 (refused with a named reason, or written as raw bytes through pax with `hdrcharset`).
-- 16c: `readRemoteHead` and the leased push with the ancestry check before the push, the `http.extraHeader` transport, and a local Git server over `http://127.0.0.1` composed with `https-or-loopback-http`; the fixture hooks observe the real Git processes (for example through a wrapper at the pinned path that records argv, pid, and environment names).
+- 16b: the adapter's local operations through `encodeHeadSnapshot`, the crash points `WS1` to `WS4`, the pinned client gate at the composition, the rewrite of `.git/config`, and the `non-utf8-path` refusal of Git's path bytes through `decodeGitPath`.
+- 16c: `readRemoteHead` and the leased push with the ancestry check before the push, the `http.extraHeader` transport of the plugin-formed `authorization` value, and a local Git server over `http://127.0.0.1` composed with `https-or-loopback-http`; the fixture hooks observe the real Git processes (for example through a wrapper at the pinned path that records argv, pid, the environment with credential values redacted, and `.git/config` at the start).
 - 16d: the hand-off and reclaim with `WS5` to `WS10`, the reclaim containment and its bound, the scan exclusion, the Linux tests of contract section 13 in the worker image with the package `git=1:2.43.0-1ubuntu7.4` checked at build time.
 - 16e: the worker settings' refusal with `TASKELITH_WORKER_SLOTS` above `1`, the held slot counted through `handedOff`, the execution group wiring, `fs.protected_hardlinks`, `reclaim-failed` handling, the tool manifest, and the macOS composition with the reclaim program in its own process group.
 - Item 38: the delegated-child half of the "One handed-off workspace" test.
