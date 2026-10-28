@@ -1,0 +1,104 @@
+{
+  "change": "wire-git-workspace-into-worker",
+  "generatedAt": "2026-10-28T19:06:21.903Z",
+  "devCommit": "f68d4f7637fb3929b82459ddfabd59e50d748d20",
+  "query": {
+    "capabilities": [
+      "git-workspace-port",
+      "worker-runtime",
+      "resource-admission"
+    ],
+    "files": [
+      "packages/adapters/git-workspace/**",
+      "packages/modules/workspace/**",
+      "apps/worker/**",
+      "docs/contracts/git-workspace.md"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 35
+      },
+      {
+        "category": "contract-drift",
+        "count": 31
+      },
+      {
+        "category": "spec-wording",
+        "count": 20
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 15
+      },
+      {
+        "category": "redaction",
+        "count": 13
+      },
+      {
+        "category": "docs",
+        "count": 11
+      },
+      {
+        "category": "test-flakiness",
+        "count": 7
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 668,
+        "inChecklist": 553
+      },
+      "mediumOrWorse": {
+        "findings": 307,
+        "inChecklist": 263
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 106
+      },
+      {
+        "category": "spec-wording",
+        "count": 78
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 41
+      },
+      {
+        "category": "contract-drift",
+        "count": 19
+      },
+      {
+        "category": "process",
+        "count": 19
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 336,
+        "inChecklist": 330
+      },
+      "mediumOrWorse": {
+        "findings": 61,
+        "inChecklist": 59
+      }
+    }
+  }
+}
