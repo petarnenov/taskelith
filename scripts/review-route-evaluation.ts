@@ -314,7 +314,7 @@ export function formatEvaluationSummary(summary: EvaluationSummary): string {
   const excluded = summary.excluded.map(({ change, reason }) => `${change} (${reason})`).join(', ');
   return [
     `Route evaluation of ${summary.changes} archived change(s) as of ${summary.at}, in merge order.`,
-    `Features of the revision that pass 1 reviewed; ${summary.approximate} approximate from the merged diff.`,
+    `Features of the revision named by the branch's first "pass 1" commit; ${summary.approximate} approximate from the merged diff.`,
     `Excluded: ${excluded === '' ? 'none' : excluded}.`,
     formatOutcomeFigures('All', groups.all.all),
     ...formatRoutingFigures(groups.all),
