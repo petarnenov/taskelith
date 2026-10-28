@@ -52,6 +52,8 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 | Same | `npm run verify:links`; `npm run verify:comments`; `npm run verify:archive`; `npx tsc -p tsconfig.check.json` | Every checked link conforms; every comment is within the rule; every active OpenSpec change archives into strictly valid specs; `tsc` exit 0 |
 | Same, after `npm run build` | `node --experimental-strip-types --test packages/contracts/test/*.test.ts` | 72 tests, all passed |
 | Same | Spec delta requirement body lengths, in characters | Execution HTTP operations 496, G3 execution operations 448, Per-project evidence reads 328, Evidence retirement 321, Delegation result read 369, Reconciliation queue reads 318, Task re-admission 326, Slot credential delivery 461, Per-run SCM credential delivery 384, Remote re-check at SCM credential delivery 388, Credential deliveries never kept 255 |
+| `041ef537`, clean tree | `make verify`, fourth run (log `eehc-verify-4.log` in the session scratchpad) | Passed at the first attempt, stamp written; 3119 tests, 3057 passed, 0 failed, 62 skipped; generated part below |
+| This record | `make record CHANGE=extend-execution-http-contracts LOG=<log>`; `make record-check CHANGE=extend-execution-http-contracts` | Generated part rewritten for the fourth run; `the generated part matches the tree` |
 
 ## Limitations
 
@@ -65,7 +67,7 @@ Native Ubuntu Linux host (the worker's), x86_64; Node.js and npm from `.nvmrc`; 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `0f3f6c0f5db45bdde3cab100fcfe57a359c4f459`; tests 3118, pass 3056, fail 0, skipped 62; all files 99.38% lines, 92.78% branches, 99.02% functions.
+- `make verify`: passed, profile full, tree `f6879a5f7479d974e09411d16fe05bcf4246068f`; tests 3119, pass 3057, fail 0, skipped 62; all files 99.38% lines, 92.80% branches, 99.02% functions.
 - `npm run openspec -- validate extend-execution-http-contracts --strict`: passed, `Change 'extend-execution-http-contracts' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 68 file(s); every pass summary file is valid: 48 file(s); every route file is valid: 4 file(s).`.
 - Spec diff against the merge base `ff7ab7a0622d` with `origin/dev`: no change under `openspec/specs`.
