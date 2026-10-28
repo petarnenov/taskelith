@@ -18,6 +18,16 @@ export class RunService {
     this.#registry = registry;
   }
 
+  // The run's project, or undefined for an unknown or invalid identifier.
+  projectOf(runIdText: string): Promise<Result<string | undefined>> {
+    const runId = parseIdentifier('RunId', runIdText);
+    if (!runId.ok) return Promise.resolve(ok(undefined));
+    return this.#store.transaction(async (tx) => {
+      const envelope = await tx.catalog.envelope(runId.value);
+      return envelope.ok ? ok(envelope.value?.projectId) : envelope;
+    });
+  }
+
   async createRun(request: CreateRunRequest): Promise<Result<RunView>> {
     const binding = parseWorkflowRunBinding(request.binding);
     if (!binding.ok) return binding;

@@ -1,14 +1,27 @@
+import {
+  g2BridgeRequirement,
+  type AccessRequirement,
+  type LiveSession,
+  type LoginAttempt,
+  type PrincipalId,
+  type SessionAnswer,
+} from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
 import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
+import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import { redactSecrets } from '@taskelith/secrets';
 import type { DelegationService } from '../application/delegation-service.js';
 import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
+import { viewOf as viewOfSession } from '@taskelith/access';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Upload } from './api-server.js';
+import { ruleOf } from './access-requirements.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
+import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
 
 export const QUARANTINE_PAGE = 100;
 export const QUARANTINE_REASON_LENGTH = 512;
@@ -19,7 +32,17 @@ export interface ApiServices {
   readonly tasks: TaskService;
   readonly evidence: EvidenceService;
   readonly delegations: DelegationService;
-  readonly operator: { authenticate(secret: string): Promise<Result<void>> };
+  // The principal of the operator bearer, the first installation-owner.
+  readonly operator: { authenticate(secret: string): Promise<Result<PrincipalId>> };
+  readonly sessions: {
+    authenticate(sessionId: string): Promise<Result<LiveSession>>;
+    read(sessionId: undefined): Promise<Result<SessionAnswer>>;
+    logIn(live: LiveSession, attempt: LoginAttempt): Promise<Result<SessionAnswer>>;
+    logOut(live: LiveSession): Promise<Result<void>>;
+  };
+  readonly authorization: { authorize(principalId: PrincipalId, requirement: AccessRequirement): Promise<Result<void>> };
+  // The project of a run, for the role check of the run's operations.
+  readonly runProjects: { projectOf(runId: string): Promise<Result<string | undefined>> };
   readonly enrollment: {
     enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
     authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>>;
@@ -33,6 +56,7 @@ export interface ApiServices {
     records(fromSequence?: number, limit?: number): Promise<Result<readonly QuarantineRecord[]>>;
     redrive(sequence: number): Promise<Result<string | null>>;
   };
+  readonly logger?: Logger;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -44,7 +68,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#services = services;
   }
 
-  authenticateOperator(secret: string): Promise<Result<void>> {
+  authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
     return this.#services.operator.authenticate(secret);
   }
 
@@ -52,7 +76,21 @@ export class ControlPlaneApi implements ApiHandlers {
     return this.#services.enrollment.authenticateWorkerBearer(secret);
   }
 
+  authenticateSession(sessionId: string): Promise<Result<LiveSession>> {
+    return this.#services.sessions.authenticate(sessionId);
+  }
+
+  authorize(principalId: PrincipalId, requirement: AccessRequirement): Promise<Result<void>> {
+    return this.#services.authorization.authorize(principalId, requirement);
+  }
+
   async handle(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>> {
+    const authorized = await this.#authorizeResource(operationId, request);
+    if (!authorized.ok) return authorized;
+    return this.#dispatch(operationId, request, bearer);
+  }
+
+  async #dispatch(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>> {
     const [first = '', second = ''] = request.parameters;
     switch (operationId) {
       case 'createRun':
@@ -71,6 +109,12 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#services.evidence.read(first);
       case 'downloadEvidence':
         return this.#download(first);
+      case 'readSession':
+        return this.#readSession(request);
+      case 'logIn':
+        return this.#logIn(request);
+      case 'logOut':
+        return this.#logOut(request);
       case 'readInstallationCa':
         return ok({ certificate: this.#services.installationCa });
       case 'enrollWorker':
@@ -84,6 +128,53 @@ export class ControlPlaneApi implements ApiHandlers {
       default:
         return err(failure('internal', `operation ${operationId} has no handler`));
     }
+  }
+
+  // A `resource-project` operation: its resource's project first, then the
+  // role, under the temporary G2 bridge (Q5) that item 11 retires.
+  async #authorizeResource(operationId: string, request: ApiRequest): Promise<Result<void>> {
+    const rule = ruleOf(operationId);
+    if (rule.kind !== 'resource-project') return ok(undefined);
+    if (request.principalId === undefined) return err(failure('internal', `${operationId} reached its handler without a principal`));
+    const projectId = await this.#resourceProject(operationId, request);
+    if (!projectId.ok) return projectId;
+    return this.#services.authorization.authorize(request.principalId, g2BridgeRequirement(projectId.value, rule.role));
+  }
+
+  // The project, or undefined for an unknown resource, which is denied to
+  // every caller but the owner, so that no other learns it is unknown.
+  async #resourceProject(operationId: string, request: ApiRequest): Promise<Result<string | undefined>> {
+    const [first = ''] = request.parameters;
+    if (operationId === 'createRun') return ok((request.body as HttpSchemas['CreateRunRequest']).projectId);
+    if (operationId !== 'readEvidence' && operationId !== 'downloadEvidence') return this.#services.runProjects.projectOf(first);
+    const record = await this.#services.evidence.read(first);
+    if (record.ok) return ok(record.value.projectId);
+    return record.error.code === 'not-found' || record.error.code === 'invalid' ? ok(undefined) : record;
+  }
+
+  async #readSession(request: ApiRequest): Promise<Result<StatusAnswer>> {
+    if (request.session !== undefined) return ok(sessionAnswer({ view: viewOfSession(request.session) }));
+    const started = await this.#services.sessions.read(undefined);
+    return started.ok ? ok(sessionAnswer(started.value)) : started;
+  }
+
+  async #logIn(request: ApiRequest): Promise<Result<StatusAnswer>> {
+    if (request.session === undefined) return err(failure('internal', 'logIn reached its handler without a session'));
+    const { loginName, password } = request.body as HttpSchemas['LoginRequest'];
+    const sourceAddress = request.sourceAddress ?? 'unknown';
+    const loggedIn = await this.#services.sessions.logIn(request.session, { loginName, password, sourceAddress });
+    if (loggedIn.ok) return ok(sessionAnswer(loggedIn.value));
+    if (loggedIn.error.details.reason === 'login-failed') {
+      const logger = this.#services.logger ?? SILENT_LOGGER;
+      logger.warn('access.login.failed', { loginName: redactSecrets(loginName), sourceAddress: redactSecrets(sourceAddress) });
+    }
+    return loggedIn;
+  }
+
+  async #logOut(request: ApiRequest): Promise<Result<StatusAnswer>> {
+    if (request.session === undefined) return err(failure('internal', 'logOut reached its handler without a session'));
+    const ended = await this.#services.sessions.logOut(request.session);
+    return ended.ok ? ok(new StatusAnswer(204, undefined, { 'set-cookie': expiredSessionCookie() })) : ended;
   }
 
   async #enroll(tokenSecret: string, body: HttpSchemas['EnrollmentRequest']): Promise<Result<HttpSchemas['Enrollment']>> {
@@ -145,6 +236,11 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!redriven.ok) return redriven;
     return ok(redriven.value === null ? { sequence } : { sequence, messageId: redriven.value });
   }
+}
+
+// The session state, with a Set-Cookie header for a new identifier.
+function sessionAnswer({ view, cookie }: SessionAnswer): StatusAnswer {
+  return new StatusAnswer(200, view, cookie === undefined ? {} : { 'set-cookie': sessionSetCookie(cookie) });
 }
 
 function recordView(record: QuarantineRecord): HttpSchemas['QuarantineRecord'] {

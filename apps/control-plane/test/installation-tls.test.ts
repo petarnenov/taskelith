@@ -180,6 +180,8 @@ test('a certificate with another key, an unparsable one, or an expired one is re
 const handlers: ApiHandlers = {
   authenticateOperator: async () => err(failure('forbidden', 'no operator')),
   authenticateWorker: async () => err(failure('forbidden', 'no worker')),
+  authenticateSession: async () => err(failure('forbidden', 'no session')),
+  authorize: async () => err(failure('forbidden', 'no role')),
   handle: async () => err(failure('internal', 'unused')),
 };
 
