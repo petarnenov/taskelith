@@ -29,6 +29,7 @@ export const NEEDS_YOU_KINDS = Object.freeze([
   'spec-approval',
   'escalation',
   'reconciliation',
+  'delivery-acknowledgement',
 ] as const);
 
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
@@ -97,7 +98,9 @@ export type NeedsYouAnswer =
       readonly decision: 'resolve-execution' | 'acknowledge-process';
       readonly evidence: EvidenceReference;
       readonly reason: string;
-    };
+    }
+  // Records that a person saw an uncertain delivery; it resends nothing.
+  | { readonly kind: 'delivery-acknowledgement'; readonly decision: 'acknowledge' };
 
 export interface NeedsYouResolution {
   readonly resolvedBy: PrincipalId;
