@@ -16,6 +16,8 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13a, developed by a briefed s
 - `e422b1d8` `chore: cut redacted session text to its bound after redaction` (finding M1 as the architect answered, with its tests, design decision 6, and the session-turn-model delta).
 - `373982ae` `docs: record review pass 2 findings of the implement session timeline change`, then `make record` and this record.
 - `e355e01f` and `87f1e9af` (the Low findings of review pass 3), then the pass 3 records, design decision 6's amendment of answer M1, `make record`, and this record.
+- `54ac0c9d` names 13b as the owner of the digest key's creation and the service wiring (the architect check's amendment of `e355e01f`); the commit after it records the check and the finding's resolution.
+- `490219df` merges `origin/dev` `f882c0ac` (12a `implement-account-pool-slot-store`, #410, with its migration `1792932900000_account-pool`, answer Q7). The conflicts were in shared lists only, resolved by keeping both sides: the exports of `@taskelith/secrets` and `@taskelith/control-plane-store`, the repositories of `PostgresTransaction`, the tables of `test-database.ts`, the migration lists and tables of `migrations.integration.test.ts` (account pool before session timeline, by number), and `docs/g3-plan.md` rows 12 (dev's) and 13 (this change's). The merge changes none of this change's requirements, contracts, or implementation; `make verify` below runs on the merged tree.
 
 ## Environment
 
@@ -132,7 +134,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Merge of `origin/dev` before the archive, with Pepi's 12a migration `1792932900000` (answer Q7)
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
 - Follow-ups 13b (the HTTP operations of control-plane section 9, output redaction across chunks, the native request source, `refused` on the wire, the digest key's creation, and the service wiring) and 13c (the worker messages of 9d)
