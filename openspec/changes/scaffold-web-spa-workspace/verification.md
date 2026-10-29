@@ -21,6 +21,7 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - `docs: record the coordinator's answers before pass 1 of scaffold-web-spa-workspace`: the verbatim answers in the design, the register's same-minor patch rule for `react-router@8.5.1` and "Used from 28b" for Router, Query, and Mantine (answers 1 and 2), and this record. The register is not an input of the dependency inventory, so `npm run verify:dependencies` still passed with no regeneration.
 - `2da8970a` `docs: route the scaffold-web-spa-workspace change again after the pre-pass-1 changes` (`route.json`, unedited, at head `f6370c12`): `f926cc4c` and the register edit of `f6370c12` changed the diff outside the change directory after the route of `7a436fbc`, so under worker step 4 that route was deleted and the change routed again. The result is unchanged: "route: elevated (lines, files, capabilities, size), rule version 2", pass 1 `codex gpt-6-astra#high`, pass 2 `claude claude-opus-5-5#xhigh`, pass 3 `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.83) and agrees; recommendation only. `git fetch origin` before routing showed `origin/dev` at `2250f3f7`.
 - `docs: record the make verify of scaffold-web-spa-workspace after the pre-pass-1 changes`, the `make record` of the third `make verify` (log `verify-28a-3.log` in the session scratchpad); its result is in "Generated checks".
+- Review pass 1 fixes: `8942c89a` `chore: catch IP, single-label, and userinfo origins in the web bundle check`, `98e910ad` `chore: close environment-read and source-escape gaps in the web boundary check`, `b37a950e` `chore: require the OpenAPI-required options of the typed web fetch`, and `f534859b` `docs: align the CSRF requirement, register links, and lockfile count of scaffold-web-spa-workspace`; then the pass 1 record and the `make record` of the fourth `make verify` (log `verify-28a-4.log` in the session scratchpad). `route.json` is not routed again after review fixes.
 
 ## Environment
 
@@ -34,7 +35,7 @@ macOS 26.6.2 on x86_64; Node.js 24.22.1 (`.nvmrc`) and npm 12.2.1 (the `Makefile
 - Wire: no change; `git diff 115c16c4 HEAD -- packages/contracts` is empty. The generated types cover the 39 paths of `control-plane.openapi.json` only.
 - Secrecy: no CA, key, certificate, secret, or token is in the repository, the bundle, the tests, or a log. `scripts/web-dev.sh` writes the CA copy and the development key to a temporary directory and deletes it on exit; the bundle check refuses PEM blocks; the secret fixtures of `test/check-web-bundle.test.ts` are assembled at run time from fragments, so no secret shape is tracked; the fetch tests use the fixture strings `csrf-fixture` and `fixture-password`.
 - Hexagonal and boundaries: SPA source imports no workspace package, Node built-in, or server SDK, and reads only `import.meta.env.MODE`; `npm run check:boundaries` passed.
-- Spec deltas: `workspace-packages` modifies "Workspace package layout" (435 characters), keeping its four scenarios unchanged and adding "Browser application", and adds "Browser application contract" (369) and "Browser application build and test" (351); `engineering-principles` modifies "Code coverage threshold" (433), keeping its three scenarios and adding "Untested browser application module"; `product-ui` adds "Web SPA control-plane client" (372), "Web SPA development server" (425), and "Web SPA bundle boundary" (381). None is removed. "Workspace package contract" (478 characters) is not modified: the layout requirement routes the browser application to its own requirements.
+- Spec deltas: `workspace-packages` modifies "Workspace package layout" (435 characters), keeping its four scenarios unchanged and adding "Browser application", and adds "Browser application contract" (369) and "Browser application build and test" (351); `engineering-principles` modifies "Code coverage threshold" (433), keeping its three scenarios and adding "Untested browser application module"; `product-ui` adds "Web SPA control-plane client" (398, 372 before review pass 1), "Web SPA development server" (425), and "Web SPA bundle boundary" (413, 381 before review pass 1). None is removed. "Workspace package contract" (478 characters) is not modified: the layout requirement routes the browser application to its own requirements.
 - Comments: `npm run verify:comments` passes. It does not check `.tsx` files; under the coordinator's answer 6 every comment in the tracked `apps/web` `.tsx` files was checked by hand on `f926cc4c`: the only one, in `apps/web/src/App.tsx`, is one line of 68 characters, so nothing needed a fix.
 
 ## Fail-before
@@ -53,6 +54,10 @@ Each behavior was broken in place on `e73ff2e3`, unless its entry names another 
 - External font (`fb-28a-bundle-font.log`): a Google Fonts stylesheet link added to `apps/web/index.html` and the SPA rebuilt; the real-dist bundle test fails with `index.html: references the external origin of https://fonts.googleapis.com/css2?family=IBM+Plex+Sans`. The other secret, environment, and origin shapes are unit-tested on fixtures.
 - Development files in the dist (`fb-28a-dist-excludes.log`), on `92c01f55` with the new test of `f926cc4c`: an import of `CONTROL_PLANE_ORIGIN` from `dev-server.ts` added to `apps/web/src/main.tsx` and the SPA rebuilt with `vite build`, then `apps/web/test/client.test.ts` copied into a new `apps/web/public/` and rebuilt; the test "the built web SPA holds neither dev-server.ts nor a web test" fails both times (tests 1, pass 0, fail 1), first with `the dist holds https://127.0.0.1:8443 of dev-server.ts`, then with the unexpected file `client.test.ts`, and passes after the restore and a rebuild.
 - Exact URL allowlist (`fb-28a-allowlist-exact.log`): `scripts/check-web-bundle.ts` of `92c01f55`, a set of URLs without reasons, with the test file of `f926cc4c`; `test/check-web-bundle.test.ts`: tests 16, pass 15, fail 1, "every allowed URL is an exact string with a one-line reason".
+- Review pass 1, finding 1 (`fb-28a-P1-1-url-origins.log`): the new test with the pattern of `000b25ad`; `test/check-web-bundle.test.ts` "an IP, single-label, or userinfo origin fails the check" fails, `https://127.0.0.1:8443/x` unreported.
+- Review pass 1, finding 2 (`fb-28a-P1-2-env-evasions.log`): the new test with the rule of `000b25ad`; it fails on `import.meta["env"].VITE_TOKEN`, no violation.
+- Review pass 1, finding 3 (`fb-28a-P1-3-web-source-escape.log`): the new test with the rules of `000b25ad`; `checkWorkspaceBoundaries` returns no violation for the `../bridge` chain.
+- Review pass 1, finding 4 (`fb-28a-P1-4-required-options.log`): the new client test with the types of `000b25ad`; `tsc -p apps/web/tsconfig.tooling.json` exits 2 with five unused `@ts-expect-error` directives (TS2578).
 
 ## Image size
 
@@ -103,7 +108,21 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 - Pass 2: reviewer B `claude claude-fable-5-1#medium`, by owner decision 2026-10-29 (governance v9, on `dev` as #415 `2250f3f7` after this change's route was recorded).
 - Pass 3, only after a pass 2 with a Medium or worse finding: reviewer A `codex gpt-6.1-sol#medium`.
 
-`route.json` recommends `claude-opus-5-5#xhigh` for pass 2 and `high` for passes 1 and 3; every pass runs at `medium` because routed effort is not authorized, and the coordinator confirmed this plan and the recorded mismatch (answer 7). No pass has run yet.
+`route.json` recommends `claude-opus-5-5#xhigh` for pass 2 and `high` for passes 1 and 3; every pass runs at `medium` because routed effort is not authorized, and the coordinator confirmed this plan and the recorded mismatch (answer 7).
+
+### Pass 1
+
+- Reviewer A: Codex CLI, model `gpt-6-astra`, reasoning effort `medium`, sandbox read-only, session `01a18644-4836-70c0-939b-9650724bcf08`, on `000b25ad` (diff against the merge base `115c16c4`). The worktree snapshot before the review was `31ae2078f6b8772a80a8a6126164d7fa819d19bf84dace33c95d3908f1834911`; no snapshot after it was stored, and the worktree was clean at `000b25ad` when the fix round started.
+- Invocation (from `make review`): `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/scaffold-web-spa-workspace -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-10-29T06:06:23.344Z. Model confirmation: `model: gpt-6-astra (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`, printed by `make review`, which also printed "route: recommends effort high; the authorized medium applies (policy version 8)".
+- Result: Critical 0, High 0, Medium 4, Low 3, matching the pass 1 line of `passes.jsonl`; all seven fixed and recorded in `findings.jsonl`. The reviewer ran neither `make verify` nor an installation check.
+  1. Medium, contract-drift (`scripts/check-web-bundle.ts:40`): the URL pattern needed a DNS name with an alphabetic top-level domain, so `https://127.0.0.1:8443/x`, `https://[::1]:8443/x`, `https://localhost:8443/x`, and `https://user:pass@evil.example/x` passed. Fixed in `8942c89a`: any host after `//`, with optional userinfo and port.
+  2. Medium, redaction (`scripts/check-boundaries.ts:278`): only a direct `import.meta.env` property access was seen, so `import.meta["env"]`, `(import.meta).env`, aliases, and destructuring passed. Fixed in `98e910ad`: web source may use `import.meta` only as the object of a static member other than `env`, or as exactly `import.meta.env.MODE`.
+  3. Medium, contract-drift (`scripts/check-boundaries.ts:250`): `apps/web/src/main.ts` could import `../bridge`, which re-exported `@taskelith/access`, without a violation. Fixed in `98e910ad`: web source may import by relative path only inside `apps/web/src/`, which the requirement "Web SPA bundle boundary" now states.
+  4. Medium, contract-drift (`apps/web/src/api/client.ts:21`): path, query, body, and the options argument were always optional. Fixed in `b37a950e`: each is required exactly when the generated operation requires it (design, decision 5).
+  5. Low, spec-wording (`specs/product-ui/spec.md:4`): the requirement demanded the CSRF header on every request other than GET. Fixed in `f534859b`: the token is sent while it is known, with the scenario "Request other than GET without a known token".
+  6. Low, process (`docs/dependencies.md:143`, `:144`): unpinned evidence links. Fixed in `f534859b`: release tags `v16.3.3`, `v10.4.2`, and `v14.6.8`, and the exact npm version pages of `@types/react` and `@types/react-dom` 19.3.0.
+  7. Low, evidence-mismatch (`proposal.md:28`): 128 packages against 153 entries. Fixed in `f534859b`: 153 lockfile entries.
+- Fail-before of the new tests: the entries "Review pass 1" in "Fail-before". Findings 5 to 7 change records only.
 
 ## Limitations
 
@@ -117,6 +136,6 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 ## Remaining gates
 
 - `make web-dev` was not run against a real installation (see "Development server"); 28c or the first installation run closes this gate (coordinator answer 5).
-- Independent review passes 1 to 3 as governance requires, and the architect check of any unreviewed fixes by the coordinator.
+- Independent review pass 2, and pass 3 if pass 2 reports a Medium or worse finding, and the architect check of any unreviewed fixes by the coordinator.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).

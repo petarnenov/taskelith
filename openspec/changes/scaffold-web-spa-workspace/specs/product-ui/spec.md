@@ -23,7 +23,7 @@ The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve i
 - **THEN** the server listens on `localhost` only, and a request outside `/app/` reaches the control plane over TLS verified against the installation CA
 
 ### Requirement: Web SPA bundle boundary
-`make verify` SHALL fail when SPA source under `apps/web/src/` imports a Node built-in, a server SDK, or any `@taskelith/` workspace package, or reads `import.meta.env` other than `MODE`, and when the built bundle holds a secret shape, an environment value, or a URL of an external origin other than a fixed list of XML namespace names and error documentation links in its scripts.
+`make verify` SHALL fail when SPA source under `apps/web/src/` imports a Node built-in, a server SDK, any `@taskelith/` workspace package, or a file outside `apps/web/src/`, or reads `import.meta.env` other than `MODE`, and when the built bundle holds a secret shape, an environment value, or a URL of an external origin other than a fixed list of XML namespace names and error documentation links in its scripts.
 
 #### Scenario: External font
 - **WHEN** the built bundle references a font or stylesheet on an external origin
