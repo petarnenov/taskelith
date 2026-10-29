@@ -16,11 +16,11 @@ The SPA SHALL call the control plane through a typed fetch over the types that `
 - **THEN** `make verify` fails and names the stale file
 
 ### Requirement: Web SPA development server
-The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve it over HTTPS on `localhost` only and proxy every path outside `/app/` to the control plane's browser endpoint, trusting only the installation CA; the CA copy and the server's TLS key SHALL live outside the repository and the bundle. Until the control plane serves the SPA, the docs SHALL state that the development server is its only way to run.
+The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve it over HTTPS on `localhost` only and proxy every path outside `/app/` to the browser endpoint of the local composition, which serves a certificate of the installation CA, trusting only that CA; the CA copy and the server's TLS key SHALL live outside the repository and the bundle. Until the control plane serves the SPA, the docs SHALL state that the development server is its only way to run.
 
 #### Scenario: Development server reach
 - **WHEN** `make web-dev` starts
-- **THEN** the server listens on `localhost` only, and a request outside `/app/` reaches the control plane over TLS verified against the installation CA
+- **THEN** the server listens on `localhost` only, and a request outside `/app/` reaches the local composition's control plane over TLS verified against the installation CA
 
 ### Requirement: Web SPA bundle boundary
 `make verify` SHALL fail when SPA source under `apps/web/src/` imports a Node built-in, a server SDK, any `@taskelith/` workspace package, or a file outside `apps/web/src/`, or reads `import.meta.env` other than `MODE`, and when the built bundle holds a secret shape, an environment value, or a URL of an external origin other than a fixed list of XML namespace names and error documentation links in its scripts.
