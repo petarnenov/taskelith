@@ -31,7 +31,7 @@ export const EXIT_USAGE = 2;
 export const EXIT_ROUTED = 3;
 export const EXIT_REVIEWER_FAILED = 4;
 // The "Policy version" line of docs/governance.md; a test keeps them equal.
-export const GOVERNANCE_POLICY_VERSION = 8;
+export const GOVERNANCE_POLICY_VERSION = 9;
 
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;

@@ -94,7 +94,7 @@ test('a standard tier with a fired trigger is inconsistent', () => {
   const rule = { ...ruleDecision(QUIET_FEATURES), triggers: ['lines' as const] };
   assert.deepEqual(routeRecordProblems(roundTrip(record({ rule })), 'route-me', checkSchema), [
     'rule tier standard does not match 1 fired trigger(s)',
-    'rule triggers are not those of rule version 2 for the features',
+    'rule triggers are not those of rule version 3 for the features',
   ]);
 });
 
@@ -102,7 +102,7 @@ test('rule triggers that the features do not fire are inconsistent', () => {
   const features = featuresWith({ linesChanged: 4099 });
   const rule = ruleDecision(QUIET_FEATURES);
   assert.deepEqual(routeRecordProblems(roundTrip(record({ features, rule })), 'route-me', checkSchema), [
-    'rule triggers are not those of rule version 2 for the features',
+    'rule triggers are not those of rule version 3 for the features',
   ]);
 });
 
@@ -121,9 +121,9 @@ test('shadow passes outside the reviewer table are inconsistent', () => {
 });
 
 test('a rule version without a reviewer table is reported', () => {
-  const rule = { ...ruleDecision(QUIET_FEATURES), version: 3 };
+  const rule = { ...ruleDecision(QUIET_FEATURES), version: 4 };
   assert.deepEqual(routeRecordProblems(roundTrip(record({ rule })), 'route-me', checkSchema), [
-    'rule version 3 has no reviewer table',
+    'rule version 4 has no reviewer table',
   ]);
 });
 
@@ -160,11 +160,11 @@ test('a secret-like value is reported without printing it', () => {
 test('the summary names the tier, triggers, plans, and the shadow agreement', () => {
   const elevated = featuresWith({ linesChanged: 420 });
   const summary = formatRouteSummary(record({ features: elevated, rule: ruleDecision(elevated) }));
-  assert.match(summary, /^route: elevated \(lines\), rule version 2$/m);
+  assert.match(summary, /^route: elevated \(lines\), rule version 3$/m);
   assert.match(summary, /^pass 1, reviewer A: codex gpt-6-astra#high$/m);
-  assert.match(summary, /^pass 2, reviewer B: claude claude-opus-5-5#xhigh$/m);
+  assert.match(summary, /^pass 2, reviewer B: claude claude-fable-5-1#high$/m);
   assert.match(summary, /^pass 3, reviewer A: codex gpt-6\.1-sol#high, only after a pass 2 with a Medium or worse finding$/m);
-  assert.match(summary, /^shadow: jev-1\.14\.0 elevated \(P\(third\) 0\.62, threshold 0\.4\), would assign codex gpt-6-astra#high, claude claude-opus-5-5#xhigh, codex gpt-6\.1-sol#high; agrees with the rule$/m);
+  assert.match(summary, /^shadow: jev-1\.14\.0 elevated \(P\(third\) 0\.62, threshold 0\.4\), would assign codex gpt-6-astra#high, claude claude-fable-5-1#high, codex gpt-6\.1-sol#high; agrees with the rule$/m);
   const legacy = formatRouteSummary(record({ features: elevated, rule: ruleDecision(elevated), shadow: LEGACY_ANSWERED }));
   assert.match(legacy, /^shadow: jev-1\.14\.0 elevated \(0\.81\), would assign/m);
   assert.match(summary, /Recommendation only/);
