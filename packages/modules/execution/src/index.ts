@@ -409,6 +409,21 @@ export type { EvidenceRecords } from './ports/evidence-records.js';
 export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
+export {
+  DeliveredSlotCredential,
+  SLOT_CREDENTIAL_REFUSAL_REASONS,
+  type DeliveredSlotCredentialFields,
+  type DeliveredSlotId,
+  type SlotCredentialFetch,
+  type SlotCredentialRefusal,
+  type SlotCredentialRefusalReason,
+} from './domain/slot-credential-delivery.js';
+export type {
+  RunSlotCredentialRequest,
+  RunSlotCredentials,
+  SlotCredentialAnswer,
+  SlotCredentialClient,
+} from './ports/slot-credential-client.js';
 export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
 export {
   ANSWERING_ROLES,

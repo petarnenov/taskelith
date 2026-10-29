@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import { performance } from 'node:perf_hooks';
+import type { TLSSocket } from 'node:tls';
 import { csrfTokenMatches, unauthenticated, type AccessRequirement, type LiveSession, type PrincipalId } from '@taskelith/access';
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import type { WorkerPrincipal } from '@taskelith/fleet';
@@ -159,6 +160,9 @@ async function answerRoute(
   url: URL,
   correlationId: CorrelationId,
 ): Promise<ApiResponse> {
+  if (route.confidential && !isOverTls(request)) {
+    return failureResponse(500, failure('internal', `${route.operationId} is answered only over TLS`));
+  }
   const bearer = bearerToken(request) ?? '';
   const caller = await authenticate(handlers, route, request);
   if (!caller.ok) return refusal(caller.error);
@@ -193,6 +197,11 @@ async function authorizeCaller(handlers: ApiHandlers, caller: Caller, requiremen
   if (authorized.ok) return undefined;
   if (authorized.error.code === 'forbidden') return failureResponse(403, authorized.error);
   return failureResponse(503, failure('unavailable', 'the roles cannot be read'));
+}
+
+// Account pool contract section 7.2: a credential travels only over TLS.
+function isOverTls(request: IncomingMessage): boolean {
+  return (request.socket as Partial<TLSSocket>).encrypted === true;
 }
 
 function csrfHeader(request: IncomingMessage): string | undefined {

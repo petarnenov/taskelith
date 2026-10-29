@@ -65,9 +65,9 @@ export function postForm(target: HttpTarget, path: string, bearer: string, form:
   return send(target, path, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
 }
 
-// One GET without a credential.
-export function getJson(target: HttpTarget, path: string): Promise<Result<HttpAnswer>> {
-  return send(target, path, { method: 'GET', headers: {} });
+// One GET, with a bearer when the operation takes one.
+export function getJson(target: HttpTarget, path: string, bearer?: string): Promise<Result<HttpAnswer>> {
+  return send(target, path, { method: 'GET', headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` } });
 }
 
 type Exchange = Pick<HttpInit, 'method' | 'headers' | 'body'>;
@@ -134,8 +134,11 @@ export function statusFailure(operation: string, answer: HttpAnswer): Failure {
   const text = typeof message === 'string' && message !== '' ? `: ${sanitizeFailureText(message)}` : '';
   const found: Record<string, string> = { status: String(answer.status) };
   if (typeof details?.reason === 'string') found.reason = sanitizeFailureText(details.reason);
-  const code = STATUS_CODES.get(answer.status) ?? 'internal';
-  return failure(code, `${operation} answered ${answer.status}${text}`, found);
+  return failure(statusFailureCode(answer.status), `${operation} answered ${answer.status}${text}`, found);
+}
+
+export function statusFailureCode(status: number): FailureCode {
+  return STATUS_CODES.get(status) ?? 'internal';
 }
 
 // A base without a trailing slash would drop its last path segment.

@@ -20,6 +20,8 @@ export interface RouteDefinition {
   readonly query?: readonly string[];
   // The body reaches a `writeOnly` schema, so no failure names its values.
   readonly writeOnlyBody?: true;
+  // The response carries a secret, so it is answered only over TLS.
+  readonly confidential?: true;
   // The schema every success body is validated against before it leaves,
   // `binary` for exact bytes, or `empty` for a success without a body.
   readonly response: (keyof HttpSchemas & string) | 'binary' | 'empty';
@@ -90,6 +92,11 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'DelegationOutcome', success: 200,
     statuses: { ...COMMON, forbidden: 403, conflict: 409, 'not-found': 422, 'precondition-failed': 422 },
     reasons: { 'worker-not-authorized': 401 },
+  },
+  {
+    operationId: 'fetchSlotCredential', method: 'GET', pattern: new RegExp(`^/executions/${SEGMENT}/slot-credentials/${SEGMENT}$`),
+    security: ['workerCredential'], query: ['attemptId', 'ownershipGeneration', 'recoveryEpoch'], confidential: true,
+    response: 'SlotCredentialDelivery', success: 200, statuses: { ...COMMON, 'precondition-failed': 422 },
   },
   {
     operationId: 'readEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}$`),

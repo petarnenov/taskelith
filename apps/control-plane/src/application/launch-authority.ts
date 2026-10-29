@@ -157,7 +157,7 @@ function isSameOperation(recorded: LaunchRequest, request: LaunchRequest): boole
 
 // The worker as the deciding transaction reads it: enrolled, unrevoked, at
 // its current generation, and under a journal not retired (decision 7).
-async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<boolean>> {
+export async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<boolean>> {
   const worker = await tx.fleet.worker(principal.workerId);
   if (!worker.ok) return worker;
   if (worker.value === undefined) return ok(false);

@@ -6,6 +6,7 @@ import type { HarnessPluginId } from '@taskelith/execution';
 import { PostgresDatabase, PostgresSlotCredentials, type SlotCredentialCipher } from '@taskelith/postgres';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
+  SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE,
   SLOT_CREDENTIALS_CONFORMANCE,
   SlotSecret,
   StaticAdmittedDeliveries,
@@ -33,6 +34,14 @@ const credentials = (sealer = cipher()) => new PostgresSlotCredentials((work) =>
 for (const conformance of ACCOUNT_SLOTS_CONFORMANCE) {
   test(`PostgreSQL account slots: ${conformance.name}`, async () => {
     const result = await database.transaction(async (tx) => ({ ok: true, value: await conformance.check(tx.accountSlots) }));
+    assert.deepEqual(result, { ok: true, value: [] });
+  });
+}
+
+// Each case runs in one transaction, as the delivery transaction does.
+for (const conformance of SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE) {
+  test(`PostgreSQL slot credential deliveries: ${conformance.name}`, async () => {
+    const result = await database.transaction(async (tx) => ({ ok: true, value: await conformance.check(tx.slotCredentialDeliveries) }));
     assert.deepEqual(result, { ok: true, value: [] });
   });
 }

@@ -58,6 +58,12 @@ export { RetrySchedule, type BackoffTiming } from './application/retry-schedule.
 export type { EvidenceView } from './application/evidence-view.js';
 export { LaunchAuthority, type LaunchAuthoritySettings } from './application/launch-authority.js';
 export { RunService } from './application/run-service.js';
+export {
+  SlotCredentialDeliveryService,
+  type RevealedSlotDelivery,
+  type SlotCredentialDeliveryPorts,
+  type SlotCredentialFetchRequest,
+} from './application/slot-credential-delivery.js';
 export { admissionIdOf, SDLC_EVENTS_SUBJECT } from './application/task-creation.js';
 export { TaskService } from './application/task-service.js';
 export { WorkflowRegistry, type KnownWorkflow } from './application/workflow-registry.js';

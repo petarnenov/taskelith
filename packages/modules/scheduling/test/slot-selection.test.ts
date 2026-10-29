@@ -183,7 +183,9 @@ const POOL_FILES = [
   'src/ports/account-pool.ts', 'src/ports/account-pool-conformance.ts', 'src/adapters/in-memory-account-pool.ts',
   'src/domain/session-slot-selection.ts', 'src/domain/slot-cooldown.ts', 'src/application/add-account-slot.ts',
   'src/application/slot-selection-in-transaction.ts', 'src/application/apply-slot-limit.ts',
+  'src/domain/slot-credential-delivery.ts', 'src/ports/slot-credential-deliveries.ts', 'src/ports/slot-credential-deliveries-conformance.ts',
   'test/account-pool.test.ts', 'test/slot-selection.test.ts', 'test/slot-placement.test.ts', 'test/slot-cooldown.test.ts',
+  'test/slot-credential-delivery.test.ts',
 ];
 
 test('the account pool code and tests name no harness or vendor', () => {
