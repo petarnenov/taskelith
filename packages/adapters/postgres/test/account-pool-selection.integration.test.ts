@@ -177,9 +177,13 @@ test('two limits racing on one slot keep the later reported reset', async () => 
     signal: { ...LIMIT, resetsAt: resets[index]! }, defaultCooldown: DEFAULT_COOLDOWN,
   }))));
   assert.ok(applied.every((result) => result.ok));
-  assert.ok(racers.some((racer) => racer.attempts() >= 2), 'neither limit was retried');
   const stored = await storedSlot('slot-1');
   assert.deepEqual([stored.cooldown_until?.toISOString(), stored.cooldown_source], [resets[1], 'reported-reset']);
+  // The later reset written second makes revision 5; written first, the
+  // earlier one's retry keeps it and writes nothing, so revision 4.
+  const second = stored.revision === 5 ? 1 : 0;
+  assert.equal(stored.revision, second === 1 ? 5 : 4);
+  assert.ok(racers[second]!.attempts() >= 2, 'the limit that committed second was not retried');
 });
 
 // Minutes from the host clock, far enough ahead of the database clock.
