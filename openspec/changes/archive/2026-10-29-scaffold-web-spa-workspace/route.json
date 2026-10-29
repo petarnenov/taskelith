@@ -1,0 +1,108 @@
+{
+  "change": "scaffold-web-spa-workspace",
+  "generatedAt": "2026-10-29T05:58:57.852Z",
+  "devCommit": "115c16c41016ae5f45dee6609558a9299ef8b165",
+  "headCommit": "f6370c129a7a89715cf2b309dd56f17f2a08fece",
+  "features": {
+    "linesChanged": 30250,
+    "filesChanged": 37,
+    "capabilities": [
+      "engineering-principles",
+      "product-ui",
+      "workspace-packages"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M-L",
+    "capabilityHistory": {
+      "changes": 2,
+      "thirdPassShare": 0.5,
+      "mediumOrWorsePerChange": 3
+    }
+  },
+  "rule": {
+    "version": 2,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "capabilities",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.83,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 264
+  }
+}
