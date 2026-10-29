@@ -62,6 +62,8 @@ Each new behavioral test ran failing against a mutant of the code it protects (s
 
 Route (`route.json`, rule version 2): elevated (lines, files, capabilities, security, contracts); pass 1 reviewer A codex gpt-6-astra#high, pass 2 reviewer B claude claude-opus-5-5#xhigh, pass 3 reviewer A codex gpt-6.1-sol#high only after a pass 2 with a Medium or worse finding; the shadow model agrees. The route's efforts above standard are a recommendation that needs governance authorization.
 
+The route was generated under rule version 2, before governance v9 (owner decision, 2026-10-29), which set pass 2 to role B, claude `claude-fable-5-1` at variant medium. Pass 2 ran with that reviewer, `claude claude-fable-5-1#medium`, so the route's pass 2 recommendation `claude-opus-5-5#xhigh` was superseded; `route.json` is unedited. Pass 3 is `codex gpt-6.1-sol#medium`, because pass 2 reported a Medium finding.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -102,13 +104,14 @@ Checks on the merged head `95cf15ea`, tree `af2e8866`: `make verify` passed on i
 ## Independent review
 
 - Pass 1: reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7ed3-a7fc-7bfad5397e36`: 0 Critical, 3 High, 2 Medium, 3 Low. Findings 1, 2, and 4 to 8 fixed; finding 3 declined by coordinator decision (section "Review pass 1 fixes").
-- Pass 2: not started.
+- Pass 2: reviewer B, claude claude-fable-5-1, variant medium (governance v9), session `6228fa04-9305-4f73-865b-2b98a44e9e7c`: 0 Critical, 0 High, 1 Medium, 2 Low, all fixed (section "Review pass 2 fixes").
+- Pass 3: reviewer A, codex gpt-6.1-sol, variant medium, owed because pass 2 reported a Medium finding; not started.
 
 ## Limitations
 
 - A block whose end marker never comes stays dropped up to its turn's end, so text after an unterminated key is over-redacted (answer Q1 accepts losing text over leaking).
 - `recordTurnAcceptanceUnknown` releases nothing: it takes only a queued turn, which holds no output and so no tail, and makes it `outcome-unknown`, after which an outcome for it is refused (design, decision 3).
-- A turn whose output ends, without whitespace, in a form that may be a cut secret, such as `SUCCESS`, `tkop`, or a URL with a port, has that run recorded as one marker (design, decision 1).
+- A turn whose output ends, without whitespace, in a form that may be a cut secret, such as `SUCCESS`, `tkop`, or a URL with a port, has that run recorded as one marker (design, decision 1). So does a URL's bare host at a turn's end, such as `see https://example.com`, stored as `see https://[redacted]`, since it cannot be told from a user name cut before its `@` (review pass 2, finding 1).
 - Output that 13a and 13b stored redacted per chunk is served as stored; no installation holds it, and a promotion must not carry 13a or 13b without 13d (design, "Legacy output").
 - The output route tests are in `agent-session-routes.test.ts`, which holds the role fixtures, not in a new file (design, "Test plan").
 - The restart test reads the output and every stored byte; it does not read `readCardSessions` separately, which holds no output text.
