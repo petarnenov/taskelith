@@ -144,21 +144,18 @@ test('the board and inbox enumerations are the product ports vocabularies', () =
   assert.deepEqual(reconciliation, [...RECONCILIATION_REASONS]);
 });
 
-// The wire gains the domain's `refused` with item 13b's HTTP operations.
-const WIRE_TURN_STATES = TURN_STATES.filter((state) => state !== 'refused');
-
 test('the session enumerations and bounds are the session timeline vocabularies', () => {
   const inputText = (name: string, kind: string) => (SCHEMAS[name] as { oneOf: { properties: Record<string, Json> }[] }).oneOf
     .find(({ properties }) => properties.kind!.const === kind)!.properties.text;
 
-  assert.deepEqual(enumOf('TurnState'), [...WIRE_TURN_STATES]);
+  assert.deepEqual(enumOf('TurnState'), [...TURN_STATES]);
   assert.deepEqual(enumOf('TurnOutcome'), [...TURN_OUTCOMES]);
   assert.deepEqual(enumOf('HarnessFailure'), [...HARNESS_FAILURES]);
   assert.deepEqual(enumOf('NativeRequestState'), [...REQUEST_STATES]);
   assert.deepEqual(enumOf('DeliveryState'), [...DELIVERY_STATES]);
   assert.deepEqual(enumOf('PermissionDecision'), [...PERMISSION_DECISIONS]);
   assert.deepEqual(enumOf('DelegationResultOutcome'), [...DELEGATION_OUTCOMES]);
-  assert.deepEqual([...variantValues('Turn', 'state')].sort(), [...WIRE_TURN_STATES, 'ended'].sort());
+  assert.deepEqual([...variantValues('Turn', 'state')].sort(), [...TURN_STATES, 'ended'].sort());
   assert.equal((SCHEMAS.TurnText as { maxLength: number }).maxLength, MAX_HARNESS_TEXT_LENGTH);
   assert.equal((SCHEMAS.HarnessText as { maxLength: number }).maxLength, MAX_HARNESS_TEXT_LENGTH);
   assert.equal((SCHEMAS.InputAnswerText as { maxLength: number }).maxLength, MAX_INPUT_ANSWER_BYTES);

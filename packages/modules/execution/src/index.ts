@@ -49,6 +49,7 @@ export {
   FIRST_SESSION_GENERATION,
   parseRecoveryEpoch,
   parseSessionGeneration,
+  parseTurnId,
   type AssignmentId,
   type AttemptId,
   type ExecutionId,
@@ -477,15 +478,45 @@ export {
   type WorkerJournal,
 } from './ports/worker-journal.js';
 export {
+  ALREADY_ANSWERED,
+  ATTEMPT_NOT_CURRENT,
+  ITEM_CLOSED,
   KEY_REUSED,
+  SESSION_STOPPED,
   SessionTimelineService,
+  type CardSessionPage,
+  type OutputBounds,
   type ResponseCommand,
   type SessionTimelineDependencies,
   type SessionView,
   type SubmittedTurn,
   type TurnCommand,
 } from './application/session-timeline-service.js';
-export { InMemorySessionTimelineStore } from './adapters/in-memory-session-timeline-store.js';
+export { InMemorySessionTimelineStore, InMemoryTaskLineage } from './adapters/in-memory-session-timeline-store.js';
+export {
+  SCOPES_LINEAGE,
+  SESSION_SCOPES_CONFORMANCE,
+  type LineageRun,
+  type LineageTask,
+  type ScopesLineage,
+  type SessionScopesFixture,
+} from './ports/session-scopes-conformance.js';
+export { BEFORE_ANY_EVENT } from './adapters/before-event-positions.js';
+export {
+  NativeRequestSource,
+  SOURCE_PAGE_SIZE,
+  type NativeRequestSourceDependencies,
+} from './application/native-request-source.js';
+export type { SessionScope, SessionScopes, ViewPositions } from './ports/session-scopes.js';
+export {
+  SESSION_ITEM_KINDS,
+  type ScopedInboxItem,
+  type SessionAuditEvent,
+  type SessionAuditRecords,
+  type SessionInboxItem,
+  type SessionInboxItems,
+  type SessionItemKind,
+} from './ports/session-inbox-items.js';
 export type { InputDigest, SessionTextRedactor, TurnIdSource } from './ports/session-input.js';
 export { SESSION_TIMELINE_STORE_CONFORMANCE } from './ports/session-timeline-conformance.js';
 export type {

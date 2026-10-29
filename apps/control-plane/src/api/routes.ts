@@ -34,6 +34,9 @@ export interface RouteDefinition {
 
 const SEGMENT = '([^/]+)';
 const COMMON: Partial<Record<FailureCode, number>> = { invalid: 400, forbidden: 401, unavailable: 503, internal: 500 };
+const SESSION_PATH = `^/projects/${SEGMENT}/agent-sessions/${SEGMENT}`;
+const SESSION_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
+const SESSION_COMMAND: Partial<Record<FailureCode, number>> = { ...SESSION_READ, conflict: 409, 'precondition-failed': 422 };
 
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
@@ -104,6 +107,33 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'redriveQuarantined', method: 'POST', pattern: /^\/quarantine\/([0-9]+)\/redrive$/, security: ['operatorToken'],
     response: 'Redrive', success: 200,
     statuses: { ...COMMON, 'not-found': 404, 'precondition-failed': 409 },
+  },
+  // Control-plane wire contracts section 9; `readAgentSessionOutput` waits
+  // for output redacted across chunks (13d).
+  {
+    operationId: 'listAgentSessions', method: 'GET', pattern: new RegExp(`^/projects/${SEGMENT}/cards/${SEGMENT}/agent-sessions$`),
+    security: ['browserSession', 'operatorToken'], query: ['after'], response: 'AgentSessionPage', success: 200, statuses: SESSION_READ,
+  },
+  {
+    operationId: 'readAgentSession', method: 'GET', pattern: new RegExp(`${SESSION_PATH}$`),
+    security: ['browserSession', 'operatorToken'], response: 'AgentSessionView', success: 200, statuses: SESSION_READ,
+  },
+  {
+    operationId: 'listAgentSessionTurns', method: 'GET', pattern: new RegExp(`${SESSION_PATH}/turns$`),
+    security: ['browserSession', 'operatorToken'], query: ['after'], response: 'TurnPage', success: 200, statuses: SESSION_READ,
+  },
+  {
+    operationId: 'submitTurn', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/turns$`), security: ['browserSession', 'operatorToken'],
+    body: 'TurnSubmission', response: 'TurnSubmitted', success: 201, statuses: SESSION_COMMAND,
+  },
+  {
+    operationId: 'listAgentSessionRequests', method: 'GET', pattern: new RegExp(`${SESSION_PATH}/requests$`),
+    security: ['browserSession', 'operatorToken'], query: ['after'], response: 'NativeRequestPage', success: 200, statuses: SESSION_READ,
+  },
+  {
+    operationId: 'respondToNativeRequest', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/responses$`),
+    security: ['browserSession', 'operatorToken'], body: 'NativeResponseSubmission', response: 'NativeRequest', success: 200,
+    statuses: SESSION_COMMAND,
   },
   {
     operationId: 'readSession', method: 'GET', pattern: /^\/session$/, security: ['browserSession', 'none'], browserOnly: true,

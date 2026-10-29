@@ -294,6 +294,15 @@ describe('operator credential', () => {
   });
 });
 
+describe('agent sessions', () => {
+  test('an unknown session of a project answers the operator its own 404', async () => {
+    const answer = await call('GET', '/projects/project-1/agent-sessions/session-none', { bearer: operator });
+    assert.deepEqual([answer.status, answer.body.code], [404, 'not-found']);
+    assert.equal(answer.body.message, 'no agent session of the project has this identifier');
+    assert.ok(checkHttpSchema('Failure', answer.body).ok);
+  });
+});
+
 describe('runs and tasks', () => {
   test('a run is created once; a retry returns it, and another binding is 409', async () => {
     const unknown = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-0', projectId: 'project-1', binding: { ...BINDING, workflowDigest: `sha256:${'cd'.repeat(32)}` } } });

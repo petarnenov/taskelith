@@ -1,5 +1,5 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { EvidenceReference } from '@taskelith/sdlc';
+import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import type { Clock, EvidenceReference } from '@taskelith/sdlc';
 import { truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
@@ -46,8 +46,10 @@ import {
   recordTurnRefused,
   submitTurn,
 } from '../domain/session-turns.js';
-import { MAX_INPUT_ANSWER_BYTES } from '../ports/needs-you.js';
+import { MAX_INPUT_ANSWER_BYTES, type NeedsYouItemId } from '../ports/needs-you.js';
+import type { ScopedInboxItem } from '../ports/session-inbox-items.js';
 import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
+import type { SessionScope } from '../ports/session-scopes.js';
 import type {
   HeldKey,
   IdempotencyRecord,
@@ -55,17 +57,28 @@ import type {
   SessionTimelineTransaction,
   StoredSession,
 } from '../ports/session-timeline-store.js';
+import { itemChanges, type ItemChange } from './session-item-changes.js';
 
+// `clock` and `itemIds` stamp the native request items that each change
+// opens or settles in its own transaction.
 export interface SessionTimelineDependencies {
   readonly store: SessionTimelineStore;
   readonly digest: InputDigest;
   readonly redactor: SessionTextRedactor;
   readonly turnIds: TurnIdSource;
+  readonly clock: Clock;
+  readonly itemIds: { next(): NeedsYouItemId };
 }
 
-// A session as the service shows it: its output stays in the store until
-// item 13b redacts output across chunks (coordinator answer Q5).
-export type SessionView = Omit<Session, 'output'>;
+// A session as the service shows it: its output entries stay in the store
+// until 13d redacts output across chunks; only the window's bounds show.
+export type SessionView = Omit<Session, 'output'> & { readonly outputWindow: OutputBounds };
+
+export interface OutputBounds {
+  readonly lastPosition: number;
+  // Absent while the window holds no entry.
+  readonly earliestRetained?: number;
+}
 
 export interface TurnCommand {
   readonly key: IdempotencyKey;
@@ -78,6 +91,12 @@ export interface ResponseCommand {
   readonly response: ResponseSubmission;
 }
 
+export interface CardSessionPage {
+  readonly sessions: readonly SessionView[];
+  // Whether the card has sessions after the page's last one.
+  readonly more: boolean;
+}
+
 export interface SubmittedTurn {
   readonly session: SessionView;
   readonly turn: Turn;
@@ -85,6 +104,11 @@ export interface SubmittedTurn {
 }
 
 export const KEY_REUSED = 'idempotency-key-reused';
+// The reasons of the wire (control-plane wire contracts, section 9).
+export const ALREADY_ANSWERED = 'already-answered';
+export const ATTEMPT_NOT_CURRENT = 'attempt-not-current';
+export const SESSION_STOPPED = 'session-stopped';
+export const ITEM_CLOSED = 'item-closed';
 const TURN_SCOPE = 'turn';
 
 type Change = (session: Session) => Result<Session>;
@@ -96,12 +120,16 @@ export class SessionTimelineService {
   readonly #digest: InputDigest;
   readonly #redactor: SessionTextRedactor;
   readonly #turnIds: TurnIdSource;
+  readonly #clock: Clock;
+  readonly #itemIds: { next(): NeedsYouItemId };
 
   constructor(dependencies: SessionTimelineDependencies) {
     this.#store = dependencies.store;
     this.#digest = dependencies.digest;
     this.#redactor = dependencies.redactor;
     this.#turnIds = dependencies.turnIds;
+    this.#clock = dependencies.clock;
+    this.#itemIds = dependencies.itemIds;
   }
 
   openSession(start: SessionStart): Promise<Result<SessionView>> {
@@ -119,7 +147,7 @@ export class SessionTimelineService {
       if (!stored.ok) return stored;
       const taskSessions = await tx.sessions.listByTask(stored.value.session.taskId);
       if (!taskSessions.ok) return taskSessions;
-      return written(tx, stored.value, bindAttempt(stored.value.session, binding, taskSessions.value));
+      return this.#written(tx, stored.value, bindAttempt(stored.value.session, binding, taskSessions.value));
     });
   }
 
@@ -150,11 +178,11 @@ export class SessionTimelineService {
       if (prior.value !== undefined) return repeatedTurn(stored.value.session, prior.value, digest);
       const text = this.#redacted(command.text);
       const submitted = submitTurn(stored.value.session, { turnId: this.#turnIds.next(), key: command.key, author: command.author, text });
-      if (!submitted.ok) return submitted;
+      if (!submitted.ok) return withReason(submitted.error, TURN_REASONS);
       const key = { scope: TURN_SCOPE, key: command.key, digest, outcome: submitted.value.turn.id };
       const recorded = await tx.idempotency.record(sessionId, key);
       if (!recorded.ok) return recorded;
-      const replaced = await written(tx, stored.value, ok(submitted.value.session));
+      const replaced = await this.#written(tx, stored.value, ok(submitted.value.session));
       return replaced.ok ? ok(Object.freeze({ ...submitted.value, session: replaced.value })) : replaced;
     });
   }
@@ -194,7 +222,7 @@ export class SessionTimelineService {
       const recorded = recordRequest(stored.value.session, redacted);
       if (!recorded.ok) return recorded;
       const held = await tx.idempotency.record(sessionId, { scope, key, digest, outcome: recording.turnId });
-      return held.ok ? written(tx, stored.value, recorded) : held;
+      return held.ok ? this.#written(tx, stored.value, recorded) : held;
     });
   }
 
@@ -215,12 +243,42 @@ export class SessionTimelineService {
       if (prior.value !== undefined) {
         return prior.value.digest === digest ? requestOf(stored.value.session, request) : keyReused(sessionId, command.key);
       }
-      const consumed = consumeResponse(stored.value.session, { ...command.response, answer: this.#redactedAnswer(answer) });
+      const consumed = await this.#consumed(tx, stored.value, command.response);
       if (!consumed.ok) return consumed;
       const recorded = await tx.idempotency.record(sessionId, { scope, key: command.key, digest });
-      if (!recorded.ok) return recorded;
-      const replaced = await written(tx, stored.value, consumed);
-      return replaced.ok ? requestOf(consumed.value, request) : replaced;
+      return recorded.ok ? requestOf(consumed.value, request) : recorded;
+    });
+  }
+
+  // Consumes a new response through the domain and writes its session.
+  async #consumed(tx: SessionTimelineTransaction, stored: StoredSession, response: ResponseSubmission): Promise<Result<SessionView>> {
+    const consumed = consumeResponse(stored.session, { ...response, answer: this.#redactedAnswer(response.answer) });
+    if (!consumed.ok) return withReason(consumed.error, RESPONSE_REASONS);
+    return this.#written(tx, stored, consumed);
+  }
+
+  // An inbox answer of a request's item (wire contracts, section 8): its key
+  // is scoped to the item, and the item's state is read in its transaction.
+  answerItem(itemId: NeedsYouItemId, command: ResponseCommand): Promise<Result<ScopedInboxItem>> {
+    const { answer } = command.response;
+    if (!isAnswerWithinServiceBounds(answer)) return Promise.resolve(err(failure('invalid', `item ${itemId} got an answer out of bounds`)));
+    const scope = itemKeyScope(itemId);
+    const digest = this.#digest.digest(responseInput(command.response));
+    return this.#store.transaction(async (tx) => {
+      const scoped = await itemOf(tx, itemId);
+      if (!scoped.ok) return scoped;
+      const { sessionId } = scoped.value.item;
+      const prior = await tx.idempotency.find(sessionId, scope, command.key);
+      if (!prior.ok) return prior;
+      if (prior.value !== undefined) return prior.value.digest === digest ? scoped : keyReused(sessionId, command.key);
+      const open = openItem(scoped.value);
+      if (!open.ok) return open;
+      const stored = await storedSession(tx, sessionId);
+      if (!stored.ok) return stored;
+      const consumed = await this.#consumed(tx, stored.value, command.response);
+      if (!consumed.ok) return consumed.error.code === 'not-found' ? itemClosed(itemId) : consumed;
+      const recorded = await tx.idempotency.record(sessionId, { scope, key: command.key, digest });
+      return recorded.ok ? itemOf(tx, itemId) : recorded;
     });
   }
 
@@ -228,7 +286,7 @@ export class SessionTimelineService {
     return this.#change(sessionId, (session) => recordDeliveryReport(session, key, report));
   }
 
-  // Each chunk is redacted alone until item 13b holds a tail across chunks.
+  // Each chunk is redacted alone until 13d holds a tail across chunks.
   appendOutput(sessionId: SessionId, output: OutputAppend): Promise<Result<SessionView>> {
     if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got output text out of bounds`, { session: sessionId })));
@@ -251,12 +309,28 @@ export class SessionTimelineService {
       if (!taker.ok) return taker;
       const stopped = await storedSession(tx, stoppedId);
       if (!stopped.ok) return stopped;
-      return written(tx, stopped.value, takeHandoff(stopped.value.session, taker.value.session));
+      return this.#written(tx, stopped.value, takeHandoff(stopped.value.session, taker.value.session));
     });
   }
 
   readSession(sessionId: SessionId): Promise<Result<SessionView>> {
     return this.#read(sessionId, viewOf);
+  }
+
+  // The card's sessions after `after`, listed and read in one transaction,
+  // so that the page shows one state (wire contracts, sections 8 and 9).
+  readCardSessions(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<CardSessionPage>> {
+    return this.#store.transaction(async (tx) => {
+      const listed = await tx.scopes.listByCard(scope, after, limit + 1);
+      if (!listed.ok) return listed;
+      const views: SessionView[] = [];
+      for (const sessionId of listed.value.slice(0, limit)) {
+        const stored = await storedSession(tx, sessionId);
+        if (!stored.ok) return stored;
+        views.push(viewOf(stored.value.session));
+      }
+      return ok(Object.freeze({ sessions: Object.freeze(views), more: listed.value.length > limit }));
+    });
   }
 
   nextDeliverableTurn(sessionId: SessionId): Promise<Result<Turn | undefined>> {
@@ -274,7 +348,7 @@ export class SessionTimelineService {
   #change(sessionId: SessionId, change: Change): Promise<Result<SessionView>> {
     return this.#store.transaction(async (tx) => {
       const stored = await storedSession(tx, sessionId);
-      return stored.ok ? written(tx, stored.value, change(stored.value.session)) : stored;
+      return stored.ok ? this.#written(tx, stored.value, change(stored.value.session)) : stored;
     });
   }
 
@@ -283,6 +357,35 @@ export class SessionTimelineService {
       const stored = await storedSession(tx, sessionId);
       return stored.ok ? ok(read(stored.value.session)) : stored;
     });
+  }
+
+  // Writes the changed session and, in the same transaction, the items its
+  // requests open or settle; an unchanged session writes nothing.
+  async #written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
+    if (!changed.ok) return changed;
+    if (changed.value === stored.session) return ok(viewOf(changed.value));
+    const replaced = await tx.sessions.replace(stored, changed.value);
+    if (!replaced.ok) return replaced;
+    for (const item of itemChanges(stored.session, changed.value, this.#clock.now())) {
+      const applied = await this.#applyItemChange(tx, changed.value, item);
+      if (!applied.ok) return applied;
+    }
+    return ok(viewOf(changed.value));
+  }
+
+  async #applyItemChange(tx: SessionTimelineTransaction, session: Session, item: ItemChange): Promise<Result<void>> {
+    if (item.change === 'open') {
+      const { kind, request, attemptId, attemptGeneration } = item;
+      return tx.items.add({
+        id: this.#itemIds.next(), kind, sessionId: session.id, taskId: session.taskId, request, createdAt: this.#clock.now(), state: 'open',
+        ...(attemptId === undefined ? {} : { attemptId }), ...(attemptGeneration === undefined ? {} : { attemptGeneration }),
+      });
+    }
+    const open = await tx.items.find(session.id, item.kind, item.request);
+    if (!open.ok) return open;
+    if (open.value === undefined) return err(failure('internal', `session ${session.id} lost the item of a request`, { session: session.id }));
+    const { state: _state, ...fields } = open.value;
+    return tx.items.settle({ ...fields, ...item.state });
   }
 
   // Redaction may lengthen a text past its bound, so only its tail is cut,
@@ -310,13 +413,16 @@ async function storedSession(tx: SessionTimelineTransaction, sessionId: SessionI
   return ok(stored.value);
 }
 
-// Writes the changed session; a repeat that the domain answered with the
-// unchanged session writes nothing.
-async function written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
-  if (!changed.ok) return changed;
-  if (changed.value === stored.session) return ok(viewOf(changed.value));
-  const replaced = await tx.sessions.replace(stored, changed.value);
-  return replaced.ok ? ok(viewOf(changed.value)) : replaced;
+// On these paths each failure code has one meaning, which the wire names.
+const TURN_REASONS: Partial<Record<FailureCode, string>> = Object.freeze({ 'precondition-failed': SESSION_STOPPED });
+const RESPONSE_REASONS: Partial<Record<FailureCode, string>> = Object.freeze({
+  conflict: ALREADY_ANSWERED, 'precondition-failed': ATTEMPT_NOT_CURRENT,
+});
+
+function withReason(failed: Failure, reasons: Partial<Record<FailureCode, string>>): Result<never> {
+  const reason = reasons[failed.code];
+  if (reason === undefined || failed.details.reason !== undefined) return err(failed);
+  return err(failure(failed.code, failed.message, { ...failed.details, reason }));
 }
 
 function repeatedTurn(session: Session, prior: IdempotencyRecord, digest: string): Result<SubmittedTurn> {
@@ -332,7 +438,28 @@ function repeatedRequest(session: Session, prior: IdempotencyRecord, digest: str
   return err(failure('conflict', `session ${session.id} holds another request under this key`, { session: session.id }));
 }
 
-function requestOf(session: Session, key: RequestKey): Result<NativeRequest> {
+async function itemOf(tx: SessionTimelineTransaction, itemId: NeedsYouItemId): Promise<Result<ScopedInboxItem>> {
+  const scoped = await tx.items.get(itemId);
+  if (!scoped.ok) return scoped;
+  return scoped.value === undefined ? err(failure('not-found', `no inbox item ${itemId}`)) : ok(scoped.value);
+}
+
+// A resolved item was answered first; a closed one takes no answer.
+function openItem({ item }: ScopedInboxItem): Result<void> {
+  if (item.state === 'resolved') return err(failure('conflict', `item ${item.id} is resolved`, { reason: ALREADY_ANSWERED }));
+  return item.state === 'closed' ? itemClosed(item.id) : ok(undefined);
+}
+
+export function itemClosed(itemId: NeedsYouItemId): Result<never> {
+  return err(failure('precondition-failed', `item ${itemId} is closed`, { reason: ITEM_CLOSED }));
+}
+
+// An inbox answer's key is scoped to its item (wire contracts, section 8).
+export function itemKeyScope(itemId: NeedsYouItemId): string {
+  return `item:${itemId}`;
+}
+
+function requestOf(session: Pick<Session, 'id' | 'requests'>, key: RequestKey): Result<NativeRequest> {
   const request = session.requests.find((candidate) => isSameRequestKey(candidate.key, key));
   if (request === undefined) return err(failure('internal', `session ${session.id} lost the request of a response key`));
   return ok(request);
@@ -343,8 +470,10 @@ function keyReused(sessionId: SessionId, key: HeldKey): Result<never> {
 }
 
 function viewOf(session: Session): SessionView {
-  const { output: _output, ...view } = session;
-  return Object.freeze(view);
+  const { output, ...view } = session;
+  const earliest = output.entries[0]?.position;
+  const outputWindow = Object.freeze({ lastPosition: output.lastPosition, ...(earliest === undefined ? {} : { earliestRetained: earliest }) });
+  return Object.freeze({ ...view, outputWindow });
 }
 
 // An input answer is also bounded in UTF-8 bytes (MAX_INPUT_ANSWER_BYTES).

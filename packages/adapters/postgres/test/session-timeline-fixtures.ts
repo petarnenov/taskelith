@@ -1,8 +1,13 @@
+import { AssertionError } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
+  BEFORE_ANY_EVENT,
+  NativeRequestSource,
   SessionTimelineService,
   parseSessionGeneration,
+  parseTurnId,
   type IdempotencyKey,
+  type NeedsYouSourceId,
   type RequestKey,
   type RequestRecording,
   type ResponseCommand,
@@ -14,7 +19,7 @@ import {
   type TurnCommand,
   type TurnId,
 } from '@taskelith/execution';
-import { parseIdentifier } from '@taskelith/kernel';
+import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
 import { PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { HmacInputDigest, SecretTextRedactor } from '@taskelith/secrets';
@@ -62,12 +67,21 @@ export function allow(name: string, native = 'request-1', decision: 'allow' | 'd
 }
 
 // The service as a control plane runs it, with a fixed digest key and
-// random turn IDs, as each process mints its own.
+// random turn and item IDs, as each process mints its own.
 export function timelineService(store: SessionTimelineStore): SessionTimelineService {
   return new SessionTimelineService({
     store, digest: value(HmacInputDigest.fromKey(DIGEST_KEY)), redactor: new SecretTextRedactor(),
-    turnIds: { next: () => turnId(randomUUID()) },
+    turnIds: { next: () => value(parseTurnId(`t${randomUUID().replaceAll('-', '')}`)) },
+    clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
+    itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
   });
+}
+
+// The native request source over the store, as the composition builds it.
+export function requestSource(store: SessionTimelineStore, timeline: SessionTimelineService = timelineService(store)): NativeRequestSource {
+  const digest = value(HmacInputDigest.fromKey(DIGEST_KEY));
+  const clock = { now: () => value(instantFromEpochMilliseconds(Date.now())) };
+  return new NativeRequestSource({ id: 'native-requests' as NeedsYouSourceId, store, timeline, digest, clock, positions: BEFORE_ANY_EVENT });
 }
 
 export function postgresService(database: PostgresDatabase): SessionTimelineService {
@@ -90,32 +104,61 @@ export async function sessionWithOpenRequest(service: SessionTimelineService): P
   return submitted.turn.id;
 }
 
-// Parties wait until all have arrived; no timer decides an order.
+// Parties wait until all have arrived; no timer decides an order. A party
+// left waiting fails by assertion after `timeoutMs` instead of hanging.
 export class Barrier {
   readonly #waiting: (() => void)[] = [];
+  readonly #parties: number;
+  readonly #timeoutMs: number;
   #remaining: number;
 
-  constructor(parties: number) {
+  constructor(parties: number, timeoutMs = 20_000) {
+    this.#parties = parties;
+    this.#timeoutMs = timeoutMs;
     this.#remaining = parties;
   }
 
   arrive(): Promise<void> {
     this.#remaining -= 1;
-    const arrived = new Promise<void>((resolve) => this.#waiting.push(resolve));
+    const arrived = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(this.#incomplete()), this.#timeoutMs);
+      this.#waiting.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
     if (this.#remaining === 0) for (const release of this.#waiting) release();
     return arrived;
+  }
+
+  #incomplete(): AssertionError {
+    const arrived = this.#parties - this.#remaining;
+    return new AssertionError({ message: `only ${arrived} of ${this.#parties} parties reached the barrier within ${this.#timeoutMs} ms` });
   }
 }
 
 // Each transaction of the first attempt waits at the barrier after its first
 // session read, so every party has read before any writes.
 export function barrierStore(store: SessionTimelineStore, barrier: Barrier): SessionTimelineStore {
+  return firstReadStore(store, () => barrier.arrive());
+}
+
+// As barrierStore, then waits for `leader` to settle, so the leader's party
+// commits first and this one writes after it, whatever the scheduling.
+export function trailingBarrierStore(store: SessionTimelineStore, barrier: Barrier, leader: () => Promise<unknown>): SessionTimelineStore {
+  return firstReadStore(store, async () => {
+    await barrier.arrive();
+    await leader();
+  });
+}
+
+function firstReadStore(store: SessionTimelineStore, onFirstRead: () => Promise<void>): SessionTimelineStore {
   let arrived = false;
   return {
     transaction: (work) => store.transaction((tx) => work(gated(tx, async () => {
       if (arrived) return;
       arrived = true;
-      await barrier.arrive();
+      await onFirstRead();
     }))),
   };
 }
@@ -123,6 +166,9 @@ export function barrierStore(store: SessionTimelineStore, barrier: Barrier): Ses
 function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): SessionTimelineTransaction {
   return {
     idempotency: tx.idempotency,
+    items: tx.items,
+    audit: tx.audit,
+    scopes: tx.scopes,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);

@@ -1,0 +1,110 @@
+{
+  "change": "serve-session-timeline-over-http",
+  "generatedAt": "2026-10-29T01:56:52.554Z",
+  "devCommit": "dc2ae98b379dbc721df0ae88f05446cbc18b8059",
+  "headCommit": "66551df703025f36df572113226f3ece9c2dc0c4",
+  "features": {
+    "linesChanged": 2372,
+    "filesChanged": 44,
+    "capabilities": [
+      "control-plane-api",
+      "control-plane-wire-contracts",
+      "postgres-state",
+      "session-turn-model"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M-L",
+    "capabilityHistory": {
+      "changes": 9,
+      "thirdPassShare": 1,
+      "mediumOrWorsePerChange": 9.777777777777779
+    }
+  },
+  "rule": {
+    "version": 2,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "capabilities",
+      "contracts",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.89,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-opus-5-5",
+          "variant": "xhigh"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ],
+    "latencyMs": 320
+  }
+}

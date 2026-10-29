@@ -1,0 +1,108 @@
+{
+  "change": "serve-session-timeline-over-http",
+  "generatedAt": "2026-10-29T00:55:09.869Z",
+  "devCommit": "19c15d6912907bcf5bb651ea03cdcc703e21594b",
+  "query": {
+    "capabilities": [
+      "session-turn-model",
+      "postgres-state",
+      "control-plane-wire-contracts",
+      "control-plane-api"
+    ],
+    "files": [
+      "packages/modules/execution/**",
+      "packages/adapters/postgres/**",
+      "packages/adapters/control-plane-store/**",
+      "apps/control-plane/**",
+      "packages/contracts/**",
+      "docs/contracts/session-timeline.md",
+      "docs/contracts/control-plane-wire-contracts.md"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 55
+      },
+      {
+        "category": "docs",
+        "count": 20
+      },
+      {
+        "category": "error-handling",
+        "count": 20
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 19
+      },
+      {
+        "category": "spec-wording",
+        "count": 17
+      },
+      {
+        "category": "naming",
+        "count": 16
+      },
+      {
+        "category": "concurrency-race",
+        "count": 11
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 715,
+        "inChecklist": 603
+      },
+      "mediumOrWorse": {
+        "findings": 338,
+        "inChecklist": 277
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 112
+      },
+      {
+        "category": "spec-wording",
+        "count": 84
+      },
+      {
+        "category": "docs",
+        "count": 63
+      },
+      {
+        "category": "stale-citation",
+        "count": 43
+      },
+      {
+        "category": "contract-drift",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 20
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 358,
+        "inChecklist": 351
+      },
+      "mediumOrWorse": {
+        "findings": 62,
+        "inChecklist": 62
+      }
+    }
+  }
+}
