@@ -54,7 +54,7 @@ The control plane SHALL answer `fetchSlotCredential` on a connection without TLS
 - **THEN** the client's refusal or failure has a local message, the status, and a listed reason only
 
 ### Requirement: Run slot credential port on the worker
-The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the host forgets the run, its ownership generation, or its recovery epoch, or a call names another, uses no delivery that arrives after that, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
+The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the host forgets the run, its ownership generation, or its recovery epoch, or a call moves past it, uses no delivery that arrives after that, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
 
 #### Scenario: Held per run
 - **WHEN** the harness host obtains a run's credential twice and then forgets the run
@@ -65,8 +65,12 @@ The worker SHALL obtain a run's slot credential only through `RunSlotCredentials
 - **THEN** the deliveries of the old epoch are forgotten at once, and the next call fetches with the current epoch
 
 #### Scenario: New ownership generation
-- **WHEN** the harness host forgets an attempt's ownership generation, or a call names a new one
+- **WHEN** the harness host forgets an attempt's ownership generation, or a call names a later one
 - **THEN** the attempt's deliveries of the old generation are forgotten and the next call fetches again
+
+#### Scenario: Call of an older generation
+- **WHEN** a call names an older ownership generation than one held or fetched for its attempt
+- **THEN** the call fails with `conflict`, and the later generation's delivery stays held or in flight
 
 #### Scenario: Delivery after the end
 - **WHEN** the run, its ownership generation, or its recovery epoch ends while its fetch is in flight

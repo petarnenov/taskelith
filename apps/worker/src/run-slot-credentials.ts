@@ -51,7 +51,9 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
 
   async obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>> {
     const recoveryEpoch = this.#recoveryEpoch();
-    this.#forgetStale(run, recoveryEpoch);
+    this.#forgetWhere((scope) => scope.recoveryEpoch !== recoveryEpoch);
+    if (this.#knowsLaterGeneration(run)) return err(failure('conflict', 'a later ownership generation of the attempt holds or fetches its slot credential'));
+    this.#forgetEarlierGenerations(run);
     const key = heldKey(run);
     const held = this.#held.get(key);
     if (held !== undefined) return ok(Object.freeze({ kind: 'delivered', credential: held.credential }));
@@ -77,11 +79,16 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
     this.#forgetWhere((scope) => scope.recoveryEpoch === recoveryEpoch);
   }
 
-  // A call that reads another epoch, or another generation of its attempt,
-  // also ends what the host has not forgotten yet.
-  #forgetStale(run: RunSlotCredentialRequest, recoveryEpoch: RecoveryEpoch): void {
-    this.#forgetWhere((scope) => scope.recoveryEpoch !== recoveryEpoch
-      || (scope.attemptId === run.attemptId && scope.ownershipGeneration !== run.ownershipGeneration));
+  // A call of a superseded generation is stale itself and ends nothing.
+  #knowsLaterGeneration(run: RunSlotCredentialRequest): boolean {
+    const fetching = [...this.#pending].filter((pending) => !pending.ended).map((pending) => pending.scope);
+    const scopes = [...this.#held.values(), ...fetching];
+    return scopes.some((scope) => scope.attemptId === run.attemptId && scope.ownershipGeneration > run.ownershipGeneration);
+  }
+
+  // A call of a later generation ends what the host has not forgotten yet.
+  #forgetEarlierGenerations(run: RunSlotCredentialRequest): void {
+    this.#forgetWhere((scope) => scope.attemptId === run.attemptId && scope.ownershipGeneration < run.ownershipGeneration);
   }
 
   #forgetWhere(ended: EndedScope): void {

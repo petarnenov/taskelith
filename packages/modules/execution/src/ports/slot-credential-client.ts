@@ -26,8 +26,8 @@ export interface RunSlotCredentialRequest {
   readonly slotId: DeliveredSlotId;
 }
 
-// The harness host's only source of a run's slot credential (item 18); each
-// forget ends the held and the fetching deliveries of what ended.
+// The host's slot credential source (item 18); a forget ends what ended, and
+// an obtain of an older generation fails with conflict and ends nothing.
 export interface RunSlotCredentials {
   obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>>;
   forgetRun(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void;

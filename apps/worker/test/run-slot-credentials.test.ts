@@ -69,14 +69,34 @@ test('a new recovery epoch forgets every held delivery, of other runs too', asyn
   assert.deepEqual(client.fetched.map((fetched) => fetched.recoveryEpoch), [1, 1, 2, 2]);
 });
 
+const NEXT = { ...RUN, ownershipGeneration: 3 } as RunSlotCredentialRequest;
+
 test('a new ownership generation of an attempt forgets its held deliveries', async () => {
-  const NEXT = { ...RUN, ownershipGeneration: 3 } as RunSlotCredentialRequest;
-  const client = scripted([ok(delivery()), ok(delivery(RUN.executionId, 'fixture-generation-3-token')), ok(delivery())]);
+  const client = scripted([ok(delivery()), ok(delivery(RUN.executionId, 'fixture-generation-3-token'))]);
   const runs = source(client);
   value(await runs.obtain(RUN));
   assert.equal(revealed(await runs.obtain(NEXT)), 'fixture-generation-3-token', 'generation 2 delivery is not reused');
-  assert.equal(revealed(await runs.obtain(RUN)), SECRET, 'generation 2 fetches again');
-  assert.deepEqual(client.fetched.map((fetched) => fetched.ownershipGeneration), [2, 3, 2]);
+  assert.deepEqual(client.fetched.map((fetched) => fetched.ownershipGeneration), [2, 3]);
+});
+
+test('a call of an older generation fails with conflict and keeps the held later delivery', async () => {
+  const client = scripted([ok(delivery(RUN.executionId, 'fixture-generation-3-token')), ok(delivery())]);
+  const runs = source(client);
+  value(await runs.obtain(NEXT));
+  assert.equal(failed(await runs.obtain(RUN)).code, 'conflict');
+  assert.equal(revealed(await runs.obtain(NEXT)), 'fixture-generation-3-token', 'generation 3 is still held');
+  assert.deepEqual(client.fetched.map((fetched) => fetched.ownershipGeneration), [3]);
+});
+
+test('a call of an older generation leaves the fetch of a later one in flight', async () => {
+  const client = controlled();
+  const runs = source(client);
+  const later = runs.obtain(NEXT);
+  const older = runs.obtain(RUN);
+  client.answer(ok(delivery(RUN.executionId, 'fixture-generation-3-token')));
+  assert.equal(revealed(await later), 'fixture-generation-3-token');
+  assert.equal(failed(await older).code, 'conflict');
+  assert.equal(client.fetched.length, 1);
 });
 
 test('another execution never gets a held credential of another run', async () => {
