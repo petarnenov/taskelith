@@ -484,6 +484,7 @@ export {
   KEY_REUSED,
   SESSION_STOPPED,
   SessionTimelineService,
+  type CardSessionPage,
   type OutputBounds,
   type ResponseCommand,
   type SessionTimelineDependencies,

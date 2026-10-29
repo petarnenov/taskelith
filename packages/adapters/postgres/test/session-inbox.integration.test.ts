@@ -109,6 +109,28 @@ function itemBarrierStore(store: SessionTimelineStore, barrier: Barrier): Sessio
   return { transaction: (work) => store.transaction((tx) => work(gated(tx))) };
 }
 
+// The first transaction waits at the barrier after it listed a card's
+// sessions, before it reads any of them.
+function listingBarrierStore(store: SessionTimelineStore, barrier: Barrier): SessionTimelineStore {
+  let arrived = false;
+  const gated = (tx: SessionTimelineTransaction): SessionTimelineTransaction => ({
+    ...tx,
+    scopes: {
+      scopeOf: (sessionId) => tx.scopes.scopeOf(sessionId),
+      isCard: (projectId, runId) => tx.scopes.isCard(projectId, runId),
+      listByCard: async (...args) => {
+        const listed = await tx.scopes.listByCard(...args);
+        if (!arrived) {
+          arrived = true;
+          await barrier.arrive();
+        }
+        return listed;
+      },
+    },
+  });
+  return { transaction: (work) => store.transaction((tx) => work(gated(tx))) };
+}
+
 // An answered permission request whose generation ended, so its delivery
 // is uncertain and its acknowledgement item is open.
 async function uncertainDelivery(): Promise<string> {
@@ -129,6 +151,23 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
       assert.deepEqual(await conformance.check({ scopes, store: new PostgresSessionTimelineStore(database) }), []);
     });
   }
+
+  test('a card\'s page is one state: a session added and a turn submitted after its listing show in neither', async () => {
+    await sessionWithOpenRequest(service);
+    const barrier = new Barrier(2);
+    const reader = timelineService(listingBarrierStore(new PostgresSessionTimelineStore(database), barrier));
+    const [page] = await Promise.all([
+      reader.readCardSessions(CARD, undefined, 10),
+      (async () => {
+        value(await service.openSession({ id: id('SessionId', 'session-0') as SessionId, taskId: TASK, harness: HARNESS }));
+        value(await service.submitTurn(SESSION, turn('key-2')));
+        await barrier.arrive();
+      })(),
+    ]);
+    const shown = (result: typeof page) => value(result).sessions.map((session) => [session.id, session.turns.length]);
+    assert.deepEqual(shown(page), [[SESSION, 1]]);
+    assert.deepEqual(shown(await service.readCardSessions(CARD, undefined, 10)), [['session-0', 0], [SESSION, 2]]);
+  });
 
   test('open items list by the project of their session with its card, and an item of another project is not listed', async () => {
     await sessionWithOpenRequest(service);

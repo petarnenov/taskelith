@@ -49,6 +49,7 @@ import {
 import { MAX_INPUT_ANSWER_BYTES, type NeedsYouItemId } from '../ports/needs-you.js';
 import type { ScopedInboxItem } from '../ports/session-inbox-items.js';
 import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
+import type { SessionScope } from '../ports/session-scopes.js';
 import type {
   HeldKey,
   IdempotencyRecord,
@@ -88,6 +89,12 @@ export interface TurnCommand {
 export interface ResponseCommand {
   readonly key: IdempotencyKey;
   readonly response: ResponseSubmission;
+}
+
+export interface CardSessionPage {
+  readonly sessions: readonly SessionView[];
+  // Whether the card has sessions after the page's last one.
+  readonly more: boolean;
 }
 
 export interface SubmittedTurn {
@@ -310,16 +317,19 @@ export class SessionTimelineService {
     return this.#read(sessionId, viewOf);
   }
 
-  // The sessions in one transaction, in the order given.
-  readSessions(sessionIds: readonly SessionId[]): Promise<Result<readonly SessionView[]>> {
+  // The card's sessions after `after`, listed and read in one transaction,
+  // so that the page shows one state (wire contracts, sections 8 and 9).
+  readCardSessions(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<CardSessionPage>> {
     return this.#store.transaction(async (tx) => {
+      const listed = await tx.scopes.listByCard(scope, after, limit + 1);
+      if (!listed.ok) return listed;
       const views: SessionView[] = [];
-      for (const sessionId of sessionIds) {
+      for (const sessionId of listed.value.slice(0, limit)) {
         const stored = await storedSession(tx, sessionId);
         if (!stored.ok) return stored;
         views.push(viewOf(stored.value.session));
       }
-      return ok(Object.freeze(views));
+      return ok(Object.freeze({ sessions: Object.freeze(views), more: listed.value.length > limit }));
     });
   }
 

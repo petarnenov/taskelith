@@ -17,7 +17,7 @@ export const AGENT_SESSION_PAGE = 100;
 
 // What the agent session operations reach (wire contracts, section 9).
 export interface AgentSessionOperations {
-  readonly timeline: Pick<SessionTimelineService, 'readSession' | 'readSessions' | 'submitTurn' | 'consumeResponse'>;
+  readonly timeline: Pick<SessionTimelineService, 'readSession' | 'readCardSessions' | 'submitTurn' | 'consumeResponse'>;
   readonly scopes: SessionScopes;
   readonly positions: ViewPositions;
   readonly clock: Clock;
@@ -47,13 +47,11 @@ export class AgentSessionApi {
     if (!scope.ok) return scope;
     const stamp = await this.#stamp();
     if (!stamp.ok) return stamp;
-    const ids = await this.#operations.scopes.listByCard(scope.value, after.value, AGENT_SESSION_PAGE + 1);
-    if (!ids.ok) return ids;
-    const page = ids.value.slice(0, AGENT_SESSION_PAGE);
-    const sessions = await this.#operations.timeline.readSessions(page);
-    if (!sessions.ok) return sessions;
-    const next = ids.value.length > AGENT_SESSION_PAGE ? { next: page.at(-1)! } : {};
-    return ok({ ...stamp.value, sessions: sessions.value.map((session) => agentSessionBody(session, scope.value)), ...next });
+    const page = await this.#operations.timeline.readCardSessions(scope.value, after.value, AGENT_SESSION_PAGE);
+    if (!page.ok) return page;
+    const { sessions, more } = page.value;
+    const next = more ? { next: sessions.at(-1)!.id } : {};
+    return ok({ ...stamp.value, sessions: sessions.map((session) => agentSessionBody(session, scope.value)), ...next });
   }
 
   async readAgentSession(request: ApiRequest): Promise<Result<Wire<'AgentSessionView'>>> {

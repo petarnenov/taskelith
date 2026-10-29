@@ -278,13 +278,18 @@ test('an acknowledgement resolves its item once, audited, and sends no response,
   assert.deepEqual(value(await subject.service.readSession(SESSION)), before);
 });
 
-test('readSessions reads sessions in the order given, with the output window\'s bounds and no entry', async () => {
+test('readCardSessions reads a card\'s sessions in code-unit order, with the output window\'s bounds, no entry, and more', async () => {
   const subject = timeline();
   await withOpenRequest(subject);
   value(await subject.service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'output' }));
+  value(await subject.service.openSession({ id: id('SessionId', 'Session-0'), taskId: TASK, harness: HARNESS }));
   value(await subject.service.openSession({ id: OTHER_SESSION, taskId: CHILD_TASK, harness: HARNESS }));
-  const views = value(await subject.service.readSessions([OTHER_SESSION, SESSION]));
-  assert.deepEqual(views.map((view) => [view.id, view.outputWindow]), [[OTHER_SESSION, { lastPosition: 0 }], [SESSION, { lastPosition: 1, earliestRetained: 1 }]]);
-  assert.equal(JSON.stringify(views).includes('"output"'), false);
-  assert.equal(failed(await subject.service.readSessions([SESSION, id('SessionId', 'session-9')])).code, 'not-found');
+  const all = value(await subject.service.readCardSessions(CARD, undefined, 10));
+  assert.deepEqual(all.sessions.map((view) => [view.id, view.outputWindow]), [['Session-0', { lastPosition: 0 }], [SESSION, { lastPosition: 1, earliestRetained: 1 }]]);
+  assert.equal(all.more, false);
+  assert.equal(JSON.stringify(all).includes('"output"'), false);
+  const first = value(await subject.service.readCardSessions(CARD, undefined, 1));
+  assert.deepEqual([first.sessions.map((view) => view.id), first.more], [['Session-0'], true]);
+  const rest = value(await subject.service.readCardSessions(CARD, id('SessionId', 'Session-0'), 1));
+  assert.deepEqual([rest.sessions.map((view) => view.id), rest.more], [[SESSION], false]);
 });
