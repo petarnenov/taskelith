@@ -65,7 +65,7 @@ export interface GenerationStart {
   readonly nativeSessionId: NativeSessionId;
 }
 
-export const TURN_STATES = Object.freeze(['queued', 'delivered', 'ended', 'outcome-unknown'] as const);
+export const TURN_STATES = Object.freeze(['queued', 'delivered', 'ended', 'outcome-unknown', 'refused'] as const);
 
 export type TurnState = (typeof TURN_STATES)[number];
 
@@ -93,7 +93,7 @@ export interface TurnIdentity {
 export type TurnProgress =
   | { readonly state: 'queued' }
   | { readonly state: 'delivered'; readonly generation: SessionGeneration }
-  | { readonly state: 'outcome-unknown'; readonly generation: SessionGeneration }
+  | { readonly state: 'outcome-unknown' | 'refused'; readonly generation: SessionGeneration }
   | {
     readonly state: 'ended';
     readonly generation: SessionGeneration;
@@ -110,6 +110,12 @@ export interface TurnSubmitted {
 }
 
 export interface TurnDelivery {
+  readonly turnId: TurnId;
+  readonly generation: SessionGeneration;
+}
+
+// The host's report on the turn it sent for a generation (sections 4.4, 4.5).
+export interface TurnReport {
   readonly turnId: TurnId;
   readonly generation: SessionGeneration;
 }

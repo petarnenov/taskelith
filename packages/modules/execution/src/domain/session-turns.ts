@@ -18,6 +18,7 @@ import {
   type TurnAuthor,
   type TurnDelivery,
   type TurnEnd,
+  type TurnReport,
   type TurnSubmission,
   type TurnSubmitted,
 } from './session-records.js';
@@ -42,9 +43,11 @@ export function submitTurn(session: Session, submission: TurnSubmission): Result
   return ok(Object.freeze({ session: withChanges(session, { turns: appended(session.turns, turn) }), turn, effect: 'recorded' }));
 }
 
-// The earliest queued turn, when the session can deliver a turn now.
+// The earliest queued turn, when the session can deliver a turn now; a turn
+// of unknown acceptance may still run in its generation (section 4.4).
 export function nextDeliverableTurn(session: Session): Turn | undefined {
-  if (isStopped(session) || runningGeneration(session) === undefined || hasRunningTurn(session)) return undefined;
+  const running = runningGeneration(session);
+  if (isStopped(session) || running === undefined || hasRunningTurn(session, running.generation)) return undefined;
   return session.turns.find((turn) => turn.state === 'queued');
 }
 
@@ -67,7 +70,7 @@ export function recordTurnOutcome(session: Session, end: TurnEnd): Result<Sessio
   }
   const { index, turn } = findTurn(session, end);
   if (turn === undefined) return sessionFailure('not-found', session, `has no turn ${end.turnId}`);
-  if (turn.state === 'ended' || turn.state === 'outcome-unknown') return sessionFailure('conflict', session, `ended turn ${turn.id}`);
+  if (isFinal(turn)) return sessionFailure('conflict', session, `ended turn ${turn.id}`);
   if (!isRunningIn(turn, end.generation)) {
     return sessionFailure('precondition-failed', session, `does not run turn ${turn.id} in generation ${end.generation}`);
   }
@@ -75,6 +78,16 @@ export function recordTurnOutcome(session: Session, end: TurnEnd): Result<Sessio
   const changes = { turns: replaced(session.turns, index, ended), requests: expireRequestsOf(session.requests, turn.id) };
   const stops = end.outcome === 'account-limit-reached' && !isStopped(session);
   return ok(withChanges(session, stops ? { ...changes, limit: UNTIMED_LIMIT } : changes));
+}
+
+// The host cannot tell whether the port accepted the turn (section 4.4).
+export function recordTurnAcceptanceUnknown(session: Session, report: TurnReport): Result<Session> {
+  return recordFinalReport(session, report, 'outcome-unknown');
+}
+
+// The plugin refused the turn as `invalid`, so it never ran (section 4.5).
+export function recordTurnRefused(session: Session, report: TurnReport): Result<Session> {
+  return recordFinalReport(session, report, 'refused');
 }
 
 // A generation's end leaves its delivered turns outcome-unknown (section 6).
@@ -107,8 +120,29 @@ function isSameAuthor(left: TurnAuthor, right: TurnAuthor): boolean {
   return right.kind === 'host' && isSameRequestKey(left.delegationRequest, right.delegationRequest);
 }
 
-function hasRunningTurn(session: Session): boolean {
-  return session.turns.some((turn) => turn.state === 'delivered');
+function hasRunningTurn(session: Session, running: SessionGeneration): boolean {
+  return session.turns.some((turn) => turn.state === 'delivered' || (turn.state === 'outcome-unknown' && turn.generation === running));
+}
+
+function isFinal(turn: Turn): boolean {
+  return turn.state === 'ended' || turn.state === 'outcome-unknown' || turn.state === 'refused';
+}
+
+// Both reports take only the earliest queued turn, also after its generation
+// ended or the session stopped; the same state again is a repeat.
+function recordFinalReport(session: Session, report: TurnReport, state: 'outcome-unknown' | 'refused'): Result<Session> {
+  const { index, turn } = findTurn(session, report);
+  if (turn === undefined) return sessionFailure('not-found', session, `has no turn ${report.turnId}`);
+  if (!session.generations.some((run) => run.generation === report.generation)) {
+    return sessionFailure('not-found', session, `has no generation ${report.generation}`);
+  }
+  if (turn.state === state) return ok(session);
+  if (turn.state !== 'queued') return sessionFailure('conflict', session, `holds turn ${turn.id} as ${turn.state}`);
+  if (session.turns.find((candidate) => candidate.state === 'queued')?.id !== turn.id) {
+    return sessionFailure('precondition-failed', session, `holds an earlier queued turn than ${turn.id}`);
+  }
+  const reported: Turn = { ...turn, state, generation: report.generation };
+  return ok(withChanges(session, { turns: replaced(session.turns, index, reported) }));
 }
 
 function findTurn(session: Session, named: { readonly turnId: Turn['id'] }): { index: number; turn: Turn | undefined } {
