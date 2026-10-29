@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Least-loaded selection with cooldown
-A new session SHALL reserve in one transaction with its run resources the eligible slot (allowed for the project, healthy, not in cooldown, below its concurrency limit) with the fewest active sessions; ties SHALL go to the lowest usage fraction if every tied slot reports within its derived window, otherwise or then to the least recently used slot. A rate or usage limit SHALL cool a slot until its reported reset, capped at 7 days, or for a bounded default.
+A new session SHALL reserve, in the same transaction as its other run resources, the eligible slot (allowed for the project, healthy, not in cooldown, below its concurrency limit) with the fewest active sessions; ties SHALL go to the lowest usage fraction only when every tied slot has a report within its derived window, and otherwise or then to the least recently used slot. A slot SHALL enter cooldown on a reported rate or usage limit until its reset, capped at 7 days, or a bounded default.
 
 #### Scenario: Fewest active sessions
 - **WHEN** eligible slots have 2, 0, and 1 active sessions
