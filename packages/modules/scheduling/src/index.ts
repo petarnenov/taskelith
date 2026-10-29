@@ -180,7 +180,6 @@ export {
   decidePlacement,
   type AttemptStanding,
   type ChargeStanding,
-  type CredentialStanding,
   type PlacementDecision,
   type PlacementSnapshot,
   type QuotaStanding,
@@ -239,5 +238,31 @@ export {
   type SlotSelection,
 } from './domain/slot-selection.js';
 export { SlotSecret } from './domain/slot-secret.js';
-export type { AccountSlots, SlotCredentials } from './ports/account-pool.js';
+export {
+  SLOT_DELIVERIES,
+  type AccountSlots,
+  type AdmittedDeliveries,
+  type AdmittedDelivery,
+  type SlotCredentials,
+  type SlotDelivery,
+} from './ports/account-pool.js';
+export {
+  InMemoryAccountSlots,
+  InMemorySlotCredentials,
+  StaticAdmittedDeliveries,
+  type AdmittedPair,
+} from './adapters/in-memory-account-pool.js';
+export {
+  leastLoaded,
+  selectNewSessionSlot,
+  slotIneligibility,
+  type NewSessionPool,
+  type SlotStanding,
+} from './domain/least-loaded-selection.js';
+export { selectSlotInTransaction } from './application/slot-selection-in-transaction.js';
+export {
+  addAccountSlot,
+  type AccountSlotCommandPorts,
+  type AddAccountSlotInput,
+} from './application/add-account-slot.js';
 export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';

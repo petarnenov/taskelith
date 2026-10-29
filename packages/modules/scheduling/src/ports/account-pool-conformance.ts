@@ -144,6 +144,21 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       return problems;
     },
   },
+  {
+    name: 'counts the slots of a harness that are not removed, in every project',
+    async check(slots: AccountSlots) {
+      const problems: string[] = [];
+      expectSame(problems, 'none', await slots.countNotRemoved(HARNESS), 0);
+      for (const stored of POOL_FIXTURES) expectSuccess(problems, `add ${stored.id}`, await slots.add(stored));
+      // Every fixture of the harness but the removed one, revoked included.
+      expectSame(problems, 'harness', await slots.countNotRemoved(HARNESS), 6);
+      expectSame(problems, 'other harness', await slots.countNotRemoved(OTHER_HARNESS), 1);
+      const revoked = POOL_FIXTURES[5]!;
+      expectSuccess(problems, 'remove', await slots.replace(next(revoked, { state: 'removed' }), revoked.revision));
+      expectSame(problems, 'after a removal', await slots.countNotRemoved(HARNESS), 5);
+      return problems;
+    },
+  },
 ]);
 
 const secret = (text: string) => must(SlotSecret.of(text));

@@ -1,6 +1,6 @@
 import type { HarnessPluginId } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
-import type { AccountSlot, SlotCredentialVersion } from '../domain/account-slot.js';
+import type { AccountSlot, SlotCredentialVersion, SubscriptionMechanismId } from '../domain/account-slot.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
 import type { SlotSecret } from '../domain/slot-secret.js';
 
@@ -15,6 +15,27 @@ export interface AccountSlots {
   // Compare-and-set: `not-found`, then `invalid` for a bad revision step,
   // harness change, or slot leaving removed, then `conflict` (section 6.1).
   replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>>;
+  // Slots of the harness in any project that are not removed, for the slot
+  // limit of an admitted pair (contract section 7.1).
+  countNotRemoved(harnessId: HarnessPluginId): Promise<number>;
+}
+
+// Contract section 7.1: the one delivery this contract defines.
+export const SLOT_DELIVERIES = Object.freeze(['subscription-token'] as const);
+
+export type SlotDelivery = (typeof SLOT_DELIVERIES)[number];
+
+// An admitted pair of harness plugin and mechanism, with its optional limit
+// on the harness's slots that are not removed.
+export interface AdmittedDelivery {
+  readonly delivery: SlotDelivery;
+  readonly slotLimit?: number;
+}
+
+// The admitted pairs, kept by the control plane outside the pool, which
+// reads them and never the plugin (contract section 7.1).
+export interface AdmittedDeliveries {
+  find(harnessId: HarnessPluginId, mechanismId: SubscriptionMechanismId): Promise<AdmittedDelivery | undefined>;
 }
 
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;

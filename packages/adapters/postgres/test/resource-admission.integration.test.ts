@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, mock, test } from 'node:test';
 import type { Result } from '@taskelith/kernel';
-import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
+import {
+  endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type HarnessPluginId, type Task, type WorkerId,
+} from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { releaseInTransaction, supersedeUngrantedInTransaction } from '@taskelith/scheduling';
 import {
@@ -11,8 +13,13 @@ import {
   acceptAssignment,
   admitDelegation,
   parseResourceRequest,
+  parseAccountSlot,
+  parseSlotCredentialVersion,
+  type AccountSlot,
   type PlacementOutcome,
   type PlacementRequest,
+  type SlotRequest,
+  type SubscriptionMechanismId,
   type ProjectId,
   type RunId,
   type TaskLineageLink,
@@ -23,6 +30,7 @@ import { CrashPoints, SimulatedCrash, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, retriedTask, seedWorker, usedAdmission } from './capacity-fixtures.ts';
 import { checkMessageSchema } from '@taskelith/contracts';
 import { AT, assignment } from './fixtures.ts';
+import { gatedStore, rendezvous } from './gated-transactions.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -79,7 +87,6 @@ function placement(task: Task, name: string, overrides: Partial<PlacementRequest
     ownershipGeneration: task.ownershipGeneration,
     workerId: WORKER,
     requested: REQUESTED,
-    providerCredentials: [],
     ...overrides,
   };
 }
@@ -215,18 +222,56 @@ test('an automatic retry needs a certain, released earlier attempt and stays wit
   assert.deepEqual((await query<{ count: number }>(url, 'SELECT count(*)::int AS count FROM capacity_charges WHERE automatic_retry'))[0], { count: 2 });
 });
 
-test('a provider credential at its concurrency limit makes the attempt wait', async () => {
-  const credential = id('ProviderCredentialId', 'credential-1');
-  const others = await Promise.all(['task-2', 'task-3', 'task-4', 'task-5'].map((name) => rootTask(name)));
+const HARNESS = id('HarnessPluginId', 'harness-1') as HarnessPluginId;
+const SLOT_REQUEST: SlotRequest = { projectId: PROJECT, kind: 'new-session', harnessId: HARNESS, whenNoSlot: 'wait' };
+
+async function addSlot(name: string, concurrencyLimit: number): Promise<AccountSlot> {
+  const slot = value(parseAccountSlot({
+    id: id('ProviderCredentialId', name), harnessId: HARNESS, mechanismId: id('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
+    credentialVersion: value(parseSlotCredentialVersion(1)), allowedProjects: [PROJECT], concurrencyLimit,
+    state: 'active', health: 'healthy', revision: 1,
+  }));
+  value(await database.transaction((tx) => tx.accountSlots.add(slot)));
+  return slot;
+}
+
+async function slotPlacementSetup(names: readonly string[]): Promise<{ tasks: Task[]; workers: WorkerId[] }> {
+  const tasks = await Promise.all(names.map((name) => rootTask(name)));
   const workers = ['worker-2', 'worker-3'].map((name) => id('WorkerId', name) as WorkerId);
   for (const extra of workers) await seedWorker(url, worker(extra));
   await query(url, "INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', $1, 10), ('run', $2, 10)", [PROJECT, ROOT_LINK.runId]);
-  for (const [index, other] of others.entries()) {
-    const target = [WORKER, ...workers][Math.floor(index / 2)]!;
-    assert.equal(kind(await service.reserve(placement(other, `credential-${index}`, { workerId: target, providerCredentials: [credential] }))), 'placed');
-  }
-  const task = await rootTask('task-1');
-  assert.equal(kind(await service.reserve(placement(task, 'a', { workerId: workers[1]!, providerCredentials: [credential] }))), 'waiting:provider-concurrency-exhausted');
+  return { tasks, workers: [WORKER, ...workers] };
+}
+
+test('a slot admits exactly its own concurrency limit, and each reservation records it', async () => {
+  const slot = await addSlot('slot-1', 2);
+  const { tasks: [first, second, third], workers } = await slotPlacementSetup(['task-1', 'task-2', 'task-3']);
+  const reserve = (task: Task, name: string, workerId: WorkerId) => service.reserve(placement(task, name, { workerId, slotRequest: SLOT_REQUEST }));
+  assert.equal(kind(await reserve(first!, 'a', workers[0]!)), 'placed');
+  assert.equal(kind(await reserve(second!, 'b', workers[0]!)), 'placed');
+  assert.equal(kind(await reserve(third!, 'c', workers[1]!)), 'waiting:provider-concurrency-exhausted');
+  const held = await query<{ provider_credentials: string[] }>(url, "SELECT provider_credentials FROM assignments WHERE reservation_state = 'held'");
+  assert.deepEqual(held.map((row) => row.provider_credentials), [[slot.id], [slot.id]]);
+  const [stored] = await query<{ revision: number; reserved: boolean }>(url,
+    'SELECT revision, last_reserved_at IS NOT NULL AS reserved FROM account_slots WHERE slot_id = $1', [slot.id]);
+  assert.deepEqual(stored, { revision: 3, reserved: true });
+});
+
+test('two placements racing for the last unit of a slot reserve it at most once', async () => {
+  const slot = await addSlot('slot-1', 1);
+  const { tasks, workers } = await slotPlacementSetup(['task-1', 'task-2']);
+  // Both first attempts read the free unit before either reserves it.
+  const read = { member: 'ledger', method: 'heldForCredential', arrive: rendezvous(2) } as const;
+  const racers = tasks.map(() => gatedStore(database, read));
+  const racing = await Promise.all(tasks.map((task, index) => new ResourceAdmissionService(racers[index]!.store, NO_WAIT).reserve(
+    placement(task, `race-${index}`, { workerId: workers[index]!, slotRequest: SLOT_REQUEST }),
+  )));
+  assert.deepEqual(racing.map(kind).sort(), ['placed', 'waiting:provider-concurrency-exhausted']);
+  const waiting = racing.findIndex((result) => kind(result) !== 'placed');
+  assert.ok(racers[waiting]!.attempts() >= 2, 'the waiting placement was not retried');
+  const [held] = await query<{ count: number }>(url,
+    "SELECT count(*)::int AS count FROM assignments WHERE reservation_state = 'held' AND $1 = ANY (provider_credentials)", [slot.id]);
+  assert.deepEqual(held, { count: 1 });
 });
 
 test('cancelling an assignment without a grant ends it, releases, and tells the worker; a new placement charges nothing', async () => {

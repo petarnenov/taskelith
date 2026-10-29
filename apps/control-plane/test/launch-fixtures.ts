@@ -72,7 +72,6 @@ export async function placedTask(store: PostgresDatabase, task: string, workerId
     assignmentId, reservationId: id('ReservationId', `${task}-reservation`), commandId: id('EventId', `${task}-offer`),
     correlationId: id('CorrelationId', 'c-1'), taskId, attemptId, ownershipGeneration: claimed.ownershipGeneration,
     workerId, requested: value(parseResourceRequest({ cpuMillicores: 500, memoryMebibytes: 512, hardControls: [] })),
-    providerCredentials: [],
   };
   const outcome = value(await new ResourceAdmissionService(store, { pause: async () => {}, draw: () => 0 }).reserveWithRetry(placement));
   assert.equal(outcome.kind, 'placed');

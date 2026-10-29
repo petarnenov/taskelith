@@ -19,3 +19,4 @@ export { NodeSecrets, RandomIdentifiers } from './node-secrets.js';
 export { formatPhc, parsePhc, PHC_LIMITS, type Argon2idParameters, type PhcHash } from './phc.js';
 export { REDACTED, redactFailure, redactSecrets, scrubEnvironment } from './scrub.js';
 export { SecretTextRedactor } from './secret-text-redactor.js';
+export { AesGcmSlotCredentialCipher, SLOT_CREDENTIAL_KEY_BYTES, type SealedText } from './slot-credential-cipher.js';

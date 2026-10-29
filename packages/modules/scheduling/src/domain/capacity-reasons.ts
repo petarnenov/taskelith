@@ -1,3 +1,5 @@
+import type { SlotRejectingReason } from './slot-selection.js';
+
 // Contract section 11: waiting leaves the task queued, rejecting ends its
 // admission to capacity, and standing changes nothing.
 export const WAITING_REASONS = Object.freeze([
@@ -37,7 +39,9 @@ export const FLEET_REASONS = Object.freeze([
 export type WaitingReason = (typeof WAITING_REASONS)[number];
 export type RejectingReason = (typeof REJECTING_REASONS)[number];
 export type StandingReason = (typeof STANDING_REASONS)[number];
-export type CapacityReason = WaitingReason | RejectingReason | StandingReason;
+// The pool's reasons reject too, but stay off the board and the wire until
+// sub-change 12d adds them there (account pool contract section 11).
+export type CapacityReason = WaitingReason | RejectingReason | StandingReason | SlotRejectingReason;
 
 export type ReasonOutcome = 'waiting' | 'rejected' | 'standing';
 
@@ -51,7 +55,7 @@ export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
 }
 
 export function isRejectingReason(reason: CapacityReason): reason is RejectingReason {
-  return reasonOutcome(reason) === 'rejected';
+  return (REJECTING_REASONS as readonly string[]).includes(reason);
 }
 
 export function triesNextCandidate(reason: CapacityReason): boolean {

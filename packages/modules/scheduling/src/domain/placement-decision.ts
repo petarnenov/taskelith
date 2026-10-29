@@ -1,5 +1,6 @@
 import type { HardControl, ResourceRequest } from './capacity-reservation.js';
 import type { CapacityReason } from './capacity-reasons.js';
+import type { SlotSelection } from './slot-selection.js';
 import {
   MAX_ATTEMPT_CPU_MILLICORES,
   MAX_ATTEMPT_MEMORY_MEBIBYTES,
@@ -15,14 +16,9 @@ export interface PlacementSnapshot {
   readonly worker: WorkerStanding | undefined;
   readonly request: ResourceRequest;
   readonly quotas: readonly QuotaStanding[];
-  // One standing per provider credential the request holds; none in G2.
-  readonly credentials: readonly CredentialStanding[];
+  // The account pool's selection; absent for an attempt without a slot.
+  readonly slot?: SlotSelection;
   readonly charge: ChargeStanding;
-}
-
-export interface CredentialStanding {
-  readonly limit: number;
-  readonly held: number;
 }
 
 export interface AttemptStanding {
@@ -61,7 +57,7 @@ const FITS: PlacementDecision = Object.freeze({ fits: true });
 // spend limit, a size above the ceiling) is rejected before worker checks.
 export function decidePlacement(snapshot: PlacementSnapshot): PlacementDecision {
   const reason = installationReason(snapshot) ?? attemptReason(snapshot) ?? requestReason(snapshot.request)
-    ?? workerReason(snapshot) ?? quotaReason(snapshot.quotas) ?? credentialReason(snapshot.credentials)
+    ?? workerReason(snapshot) ?? quotaReason(snapshot.quotas) ?? slotReason(snapshot.slot)
     ?? chargeReason(snapshot.charge);
   return reason === undefined ? FITS : Object.freeze({ fits: false, reason });
 }
@@ -100,8 +96,9 @@ function quotaReason(quotas: readonly QuotaStanding[]): Reason {
   return full.kind === 'project' ? 'project-quota-exhausted' : 'run-quota-exhausted';
 }
 
-function credentialReason(credentials: readonly CredentialStanding[]): Reason {
-  return credentials.some((credential) => credential.held + 1 > credential.limit) ? 'provider-concurrency-exhausted' : undefined;
+// The credential step: the selection checked each slot's own limit.
+function slotReason(selection: SlotSelection | undefined): Reason {
+  return selection === undefined || selection.outcome === 'reserved' ? undefined : selection.reason;
 }
 
 function chargeReason(charge: ChargeStanding): Reason {

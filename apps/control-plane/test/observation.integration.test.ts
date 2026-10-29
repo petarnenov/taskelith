@@ -198,7 +198,7 @@ async function placedAs(taskId: string, assignmentId: string): Promise<Placed> {
     return placeInTransaction(tx, {
       commandId: `offer-${taskId}` as EventId, correlationId: CORRELATION, assignmentId: assignmentId as AssignmentId,
       reservationId: `reservation-${taskId}` as ReservationId, taskId: taskId as TaskId, attemptId, ownershipGeneration,
-      workerId: WORKER as WorkerId, requested: DEFAULT_ATTEMPT_REQUEST, providerCredentials: [],
+      workerId: WORKER as WorkerId, requested: DEFAULT_ATTEMPT_REQUEST,
     });
   }));
   assert.equal(outcome.kind, 'placed');

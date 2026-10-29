@@ -16,6 +16,7 @@ import {
   type WorkerId,
 } from '@taskelith/execution';
 import {
+  InMemoryAccountSlots,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
   InMemoryInstallationGuard,
@@ -94,6 +95,7 @@ async function transactionWith(task: Task, admission: TaskAdmission): Promise<Ca
     installation: new InMemoryInstallationGuard(false),
     quotas: new InMemoryQuotaSettings(),
     ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage),
+    accountSlots: new InMemoryAccountSlots(),
     now: async () => AT,
   };
 }
@@ -109,7 +111,6 @@ function retryRequest(task: Task): PlacementRequest {
     ownershipGeneration: task.ownershipGeneration,
     workerId: WORKER,
     requested: value(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: [] })),
-    providerCredentials: [],
     automaticRetryOf: EARLIER,
   };
 }
