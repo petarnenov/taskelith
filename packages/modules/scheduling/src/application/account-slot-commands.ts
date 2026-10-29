@@ -35,11 +35,11 @@ export interface SlotRevocationStore {
 
 // The end command of a holder's assignment, derived from it so that a rerun
 // sends the same one, and bounded for every valid assignment identifier.
-export type RevocationCommandIds = (assignmentId: AssignmentId) => EventId;
+export type RevocationCommandIdFor = (assignmentId: AssignmentId) => EventId;
 
 export interface SlotRevocationPorts {
   readonly store: SlotRevocationStore;
-  readonly commandIdFor: RevocationCommandIds;
+  readonly commandIdFor: RevocationCommandIdFor;
 }
 
 export interface SlotCredentialCommandPorts {

@@ -294,7 +294,7 @@ export {
   revokeAccountSlot,
   rotateSlotCredential,
   updateAccountSlot,
-  type RevocationCommandIds,
+  type RevocationCommandIdFor,
   type RevokeAccountSlotInput,
   type RotateSlotCredentialInput,
   type SlotCredentialCommandPorts,
