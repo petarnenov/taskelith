@@ -59,6 +59,7 @@ Each new behavioral test ran failing against a mutant of the code it protects (s
 | `make verify` | `af46ab57`, tree `de12ea7f` (log `13d-verify-1.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3982, suites 49, pass 3935, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.78 % functions; "Contract documents have no undeclared breaking change." The first run on the same tree (log `13d-verify-1-flake.log`) failed only at the timing-bound test "a bound with a leading zero is read in base 10" of `test/installation-script.test.ts`, outside this change ("ended after 9.061s, before 10") |
 | `openspec validate redact-session-output-across-chunks --strict` | `af46ab57` | Valid |
 | Archive in a scratch copy of `openspec/` | `af46ab57` | Totals + 10, ~ 3, - 1 (session-turn-model + 7, ~ 1, - 1; control-plane-api + 1, ~ 1; control-plane-wire-contracts + 1, ~ 1; postgres-state + 1); `openspec validate --specs --strict` then passed 71 of 71 items |
+| `make verify` after the architect check and the dev merge | `76e49b0b`, tree `4d11c630` (log `13d-verify-final.log` in the session scratchpad) | Passed, profile full, stamp written: tests 4108, suites 49, pass 4061, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.67 % branches, 98.83 % functions; "Contract documents have no undeclared breaking change." It ran as `env -u NODE_ENV make verify`. The first run on the same tree (log `13d-verify-final-node-env-development.log`), with the host shell's `NODE_ENV=development`, failed only at "the built web SPA holds no secret shape, environment value, or external origin" of `test/check-web-bundle.test.ts`, which #417 brought from `dev` and this change does not touch: Vite built React in development mode, whose bundle names `react.dev` links (tests 4108, pass 4060, fail 1) |
 | Focused runs | `7b91f27c` | `migrations.integration.test.ts`, `session-output-tail.integration.test.ts`, and `session-timeline-crash.integration.test.ts`: 55 of 55; earlier on `f92cec63`: execution 92, the secrets redactor 32, PostgreSQL 82 and 4 |
 
 ### Route
@@ -72,10 +73,10 @@ The route was generated under rule version 2, before governance v9 (owner decisi
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `97d91e208c2b7e52294f7489708906cb6720e982`; tests 4069, pass 4022, fail 0, skipped 47; all files 99.36% lines, 92.67% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `4d11c630be677a0eee69e14117a28861b246feb7`; tests 4108, pass 4061, fail 0, skipped 47; all files 99.36% lines, 92.67% branches, 98.83% functions.
 - `npm run openspec -- validate redact-session-output-across-chunks --strict`: passed, `Change 'redact-session-output-across-chunks' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 93 file(s); every pass summary file is valid: 73 file(s); every route file is valid: 28 file(s).`.
-- Spec diff against the merge base `22ad068c08cc` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 94 file(s); every pass summary file is valid: 74 file(s); every route file is valid: 29 file(s).`.
+- Spec diff against the merge base `0f8d3db90a1a` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |

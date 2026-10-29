@@ -18,5 +18,5 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review passes in order until one reports only Low findings or none, at most three: pass 1 reviewer A, pass 2 reviewer B, and pass 3 reviewer A only when the governance rule asks for it, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
-- [ ] 4.2 Merge `origin/dev` right before the archive, and archive the change in the last commit of the branch
+- [x] 4.1 Review passes in order until one reports only Low findings or none, at most three: pass 1 reviewer A, pass 2 reviewer B, and pass 3 reviewer A only when the governance rule asks for it, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
+- [x] 4.2 Merge `origin/dev` right before the archive, and archive the change in the last commit of the branch
