@@ -88,7 +88,7 @@ Each behavior was broken in place on `e73ff2e3`, unless its entry names another 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `4d683c9de87763a0af8a4f5b0e3390fca145b2fe`; tests 3927, pass 3918, fail 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `4d07525955231da5aec7e640a445984054b1544d`; tests 3929, pass 3920, fail 0, skipped 9; all files 99.38% lines, 92.55% branches, 98.84% functions.
 - `npm run openspec -- validate scaffold-web-spa-workspace --strict`: passed, `Change 'scaffold-web-spa-workspace' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
