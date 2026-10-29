@@ -149,6 +149,7 @@ Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0a
 - Result: Critical 0, High 0, Medium 0, Low 1, matching the pass 4 line of `passes.jsonl`; recorded in `findings.jsonl` as `fixed-unreviewed`.
   1. Low, stale-citation (`verification.md`, "Revision"): `f882c0ac` was still called the branch's merge base with `origin/dev`, which the merge `775d6218` moved to `19c15d69`. Fixed in `3919e645`: the revision names `f882c0ac` as the original base and the brief's checklist base and `19c15d69` as the current merge base; the route note above, the only other place with that wording, names `f882c0ac` as the original base. Other mentions of `f882c0ac` cite it as the base of their own time, such as pass 3's diff and the merge base of the archive commit, and stay.
 - Pass 4 reported only a Low finding, so no further pass runs. Unreviewed fix for the coordinator's architect check (governance "Architect check of unreviewed fixes"): `3919e645`, a record-only change.
+- Architect check (Niki, 2026-10-29): 3919e645 passed
 
 ## Limitations
 
@@ -161,6 +162,4 @@ Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0a
 
 ## Remaining gates
 
-- Architect check by the coordinator (Niki) of the unreviewed pass 4 fix `3919e645`.
-- Archive again as the last commit of the branch (task 4.3), with its archive checks.
 - Integration into dev by the coordinator (single pull request).
