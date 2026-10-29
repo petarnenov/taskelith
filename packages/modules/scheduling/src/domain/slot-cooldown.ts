@@ -7,9 +7,10 @@ declare const defaultCooldownBrand: unique symbol;
 // section 5; its caller keeps the setting.
 export type DefaultCooldownMinutes = number & { readonly [defaultCooldownBrand]: true };
 
-// A plugin's limit report, with the reset time only when it reports one.
+// A plugin's limit report, with the reset time only when it reports one;
+// in epoch milliseconds, which hold a reset beyond the range of Instant.
 export interface SlotLimitReport {
-  readonly resetsAt?: Instant;
+  readonly resetsAtEpochMilliseconds?: number;
 }
 
 // Covers weekly provider limits; a far reported reset locks no slot longer.
@@ -32,16 +33,21 @@ export function cooldownAfterLimit(
   return stored !== undefined && Date.parse(stored.until) >= Date.parse(reported.until) ? stored : reported;
 }
 
-function reportedCooldown({ resetsAt }: SlotLimitReport, now: Instant, defaultMinutes: DefaultCooldownMinutes): SlotCooldown {
-  if (resetsAt !== undefined && Date.parse(resetsAt) > Date.parse(now)) {
-    const cap = minutesAfter(now, SLOT_REPORTED_RESET_MAXIMUM_MINUTES);
-    return Object.freeze({ until: Date.parse(resetsAt) > Date.parse(cap) ? cap : resetsAt, source: 'reported-reset' });
+function reportedCooldown(report: SlotLimitReport, now: Instant, defaultMinutes: DefaultCooldownMinutes): SlotCooldown {
+  const resetsAt = report.resetsAtEpochMilliseconds;
+  if (resetsAt !== undefined && resetsAt > Date.parse(now)) {
+    const cap = millisecondsAfter(now, SLOT_REPORTED_RESET_MAXIMUM_MINUTES);
+    return Object.freeze({ until: instantAt(Math.min(resetsAt, cap)), source: 'reported-reset' });
   }
-  return Object.freeze({ until: minutesAfter(now, defaultMinutes), source: 'default' });
+  return Object.freeze({ until: instantAt(millisecondsAfter(now, defaultMinutes)), source: 'default' });
 }
 
-function minutesAfter(now: Instant, minutes: number): Instant {
-  const until = instantFromEpochMilliseconds(Date.parse(now) + minutes * MILLISECONDS_PER_MINUTE);
-  if (!until.ok) throw new Error(until.error.message);
-  return until.value;
+function millisecondsAfter(now: Instant, minutes: number): number {
+  return Date.parse(now) + minutes * MILLISECONDS_PER_MINUTE;
+}
+
+function instantAt(epochMilliseconds: number): Instant {
+  const instant = instantFromEpochMilliseconds(epochMilliseconds);
+  if (!instant.ok) throw new Error(instant.error.message);
+  return instant.value;
 }

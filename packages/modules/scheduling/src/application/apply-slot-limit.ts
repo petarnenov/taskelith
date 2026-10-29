@@ -1,5 +1,5 @@
 import type { AssignmentId, HarnessEvent } from '@taskelith/execution';
-import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { parseAccountSlot, type AccountSlot } from '../domain/account-slot.js';
 import type { ProviderCredentialId } from '../domain/capacity-reservation.js';
 import { cooldownAfterLimit, type DefaultCooldownMinutes, type SlotLimitReport } from '../domain/slot-cooldown.js';
@@ -74,8 +74,8 @@ async function reservedSlotOf(tx: SlotSignalTransaction, assignmentId: Assignmen
 // rounded up, so the cooldown never ends before it.
 function limitReport({ resetsAt }: HarnessLimitSignal): Result<SlotLimitReport> {
   if (resetsAt === undefined) return ok(Object.freeze({}));
+  const parsed = Date.parse(resetsAt);
+  if (Number.isNaN(parsed)) return err(failure('invalid', 'the reset time of the limit is not an instant', { resetsAt }));
   const submillisecond = /[1-9]/.test(/\.\d{3}(\d*)Z$/.exec(resetsAt)?.[1] ?? '');
-  const instant = instantFromEpochMilliseconds(Date.parse(resetsAt) + (submillisecond ? 1 : 0));
-  if (!instant.ok) return err(failure('invalid', 'the reset time of the limit is not an instant', { resetsAt }));
-  return ok(Object.freeze({ resetsAt: instant.value }));
+  return ok(Object.freeze({ resetsAtEpochMilliseconds: parsed + (submillisecond ? 1 : 0) }));
 }

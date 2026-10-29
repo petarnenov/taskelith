@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
-import type { AssignmentId, HarnessPluginId } from '@taskelith/execution';
+import {
+  parseHarnessEvent,
+  type AssignmentId,
+  type HarnessPluginId,
+  type ParsedAgentHarnessCapabilities,
+} from '@taskelith/execution';
 import { parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
@@ -21,6 +26,7 @@ import {
   type AccountSlot,
   type HarnessLimitSignal,
   type SlotCooldown,
+  type SlotLimitReport,
   type SlotSignalTransaction,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
@@ -40,6 +46,7 @@ const ASSIGNMENT = id('AssignmentId', 'assignment-1') as AssignmentId;
 const LIMIT: HarnessLimitSignal = { kind: 'account-signal', signal: 'limit' };
 const limitUntil = (resetsAt: string): HarnessLimitSignal => ({ ...LIMIT, resetsAt });
 const reported = (until: Instant): SlotCooldown => ({ until, source: 'reported-reset' });
+const resetAt = (instant: Instant): SlotLimitReport => ({ resetsAtEpochMilliseconds: Date.parse(instant) });
 
 test('the default cooldown is a whole number of minutes from 1 to 1440', () => {
   for (const minutes of [1, 60, 1440]) assert.equal(value(parseDefaultCooldownMinutes(minutes)), minutes);
@@ -47,27 +54,27 @@ test('the default cooldown is a whole number of minutes from 1 to 1440', () => {
 });
 
 test('a limit cools until its reported reset after now, otherwise for the default', () => {
-  assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt: LATER }, NOW, SIXTY), reported(LATER));
+  assert.deepEqual(cooldownAfterLimit(undefined, resetAt(LATER), NOW, SIXTY), reported(LATER));
   assert.deepEqual(cooldownAfterLimit(undefined, {}, NOW, SIXTY), { until: IN_ONE_HOUR, source: 'default' });
   for (const resetsAt of [NOW, EARLIER]) {
-    assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt }, NOW, SIXTY), { until: IN_ONE_HOUR, source: 'default' }, resetsAt);
+    assert.deepEqual(cooldownAfterLimit(undefined, resetAt(resetsAt), NOW, SIXTY), { until: IN_ONE_HOUR, source: 'default' }, resetsAt);
   }
 });
 
 test('a later limit extends a cooldown and never shortens it', () => {
   const stored = reported(LATER);
-  assert.deepEqual(cooldownAfterLimit(stored, { resetsAt: LATEST }, NOW, SIXTY), reported(LATEST));
+  assert.deepEqual(cooldownAfterLimit(stored, resetAt(LATEST), NOW, SIXTY), reported(LATEST));
   assert.equal(cooldownAfterLimit(stored, {}, NOW, SIXTY), stored);
-  assert.equal(cooldownAfterLimit(stored, { resetsAt: LATER }, NOW, SIXTY), stored);
+  assert.equal(cooldownAfterLimit(stored, resetAt(LATER), NOW, SIXTY), stored);
   const ended = reported(EARLIER);
   assert.deepEqual(cooldownAfterLimit(ended, {}, NOW, SIXTY), { until: IN_ONE_HOUR, source: 'default' });
 });
 
 test('a reported reset is capped at seven days after now', () => {
   assert.equal(SLOT_REPORTED_RESET_MAXIMUM_MINUTES, 10_080);
-  assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt: IN_SEVEN_DAYS }, NOW, SIXTY), reported(IN_SEVEN_DAYS));
+  assert.deepEqual(cooldownAfterLimit(undefined, resetAt(IN_SEVEN_DAYS), NOW, SIXTY), reported(IN_SEVEN_DAYS));
   for (const resetsAt of [at('2026-11-05T10:00:00.001Z'), at('2027-10-29T10:00:00.000Z')]) {
-    assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt }, NOW, SIXTY), reported(IN_SEVEN_DAYS), resetsAt);
+    assert.deepEqual(cooldownAfterLimit(undefined, resetAt(resetsAt), NOW, SIXTY), reported(IN_SEVEN_DAYS), resetsAt);
   }
 });
 
@@ -184,6 +191,18 @@ test('a limit past the cap cools the slot for seven days', async () => {
   const { tx } = await signalFixture();
   const cooled = value(await apply(tx, limitUntil('2026-11-12T10:00:00Z')));
   assert.deepEqual(cooled.cooldown, reported(IN_SEVEN_DAYS));
+});
+
+const RESET_SIGNALS: ParsedAgentHarnessCapabilities = {
+  supported: [], subscriptionMechanisms: [], accountSignals: ['limit', 'reset-time'], binaries: [],
+};
+
+test('the latest reset that the port accepts is capped at seven days, not refused', async () => {
+  const raw = { kind: 'account-signal', signal: 'limit', resetsAt: '9999-12-31T23:59:59.999999999Z' };
+  const signal = value(parseHarnessEvent(raw, RESET_SIGNALS));
+  assert.ok(signal.kind === 'account-signal' && signal.signal === 'limit');
+  const { tx } = await signalFixture();
+  assert.deepEqual(value(await apply(tx, signal)).cooldown, reported(IN_SEVEN_DAYS));
 });
 
 test('a limit for a removed slot is accepted and writes nothing', async () => {
