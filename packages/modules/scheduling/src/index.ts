@@ -296,3 +296,4 @@ export {
   type SlotDeliveryRequest,
 } from './domain/slot-credential-delivery.js';
 export type { SlotCredentialDeliveries } from './ports/slot-credential-deliveries.js';
+export { SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE } from './ports/slot-credential-deliveries-conformance.js';

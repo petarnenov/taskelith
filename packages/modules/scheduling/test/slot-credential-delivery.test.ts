@@ -4,6 +4,7 @@ import type { Attempt, Execution, ExecutionId, LaunchGrant, RecoveryEpoch, Task,
 import { parseInstant, type Instant } from '@taskelith/kernel';
 import {
   InMemorySlotCredentialDeliveries,
+  SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE,
   checkDeliveredSlot,
   checkSlotDeliveryOwnership,
   nextDeliveryRecord,
@@ -12,12 +13,13 @@ import {
   type AccountSlot,
   type Assignment,
   type ProviderCredentialId,
+  type SlotCredentialDeliveries,
   type SlotDeliveryOwnership,
   type SlotDeliveryRecord,
   type SlotDeliveryRequest,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
-import type { OwnershipGeneration, TaskId } from '@taskelith/sdlc';
+import type { ConformanceCase, OwnershipGeneration, TaskId } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
 
 const at = (text: string): Instant => value(parseInstant(text));
@@ -154,4 +156,55 @@ test('a delivery record counts deliveries and keeps its first time and version',
   assert.equal(await records.find(first.taskId, id('ExecutionId', 'execution-9') as ExecutionId, SLOT), undefined);
   assert.deepEqual((await records.listByExecution(first.taskId, EXECUTION)).map((record) => record.slotId), [SLOT, OTHER_SLOT]);
   assert.doesNotMatch(JSON.stringify(second), /secret|token/i, 'a record holds identifiers, a version, and times only');
+});
+
+for (const conformance of SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE) {
+  test(`in-memory slot credential deliveries: ${conformance.name}`, async () => {
+    assert.deepEqual(await conformance.check(new InMemorySlotCredentialDeliveries()), []);
+  });
+}
+
+// Keeps the first record of an execution and slot.
+class FirstKeepingDeliveries extends InMemorySlotCredentialDeliveries {
+  override async record(delivery: SlotDeliveryRecord): Promise<void> {
+    if ((await this.find(delivery.taskId, delivery.executionId, delivery.slotId)) === undefined) await super.record(delivery);
+  }
+}
+
+// Orders the slots of an execution by locale, not by code point.
+class LocaleOrderedDeliveries extends InMemorySlotCredentialDeliveries {
+  override async listByExecution(taskId: TaskId, executionId: ExecutionId): Promise<readonly SlotDeliveryRecord[]> {
+    return [...await super.listByExecution(taskId, executionId)].sort((left, right) => left.slotId.localeCompare(right.slotId));
+  }
+}
+
+// Keys records by execution and slot only, so tasks share them.
+class TaskBlindDeliveries implements SlotCredentialDeliveries {
+  readonly #records = new Map<string, SlotDeliveryRecord>();
+
+  async find(_taskId: TaskId, executionId: ExecutionId, slotId: ProviderCredentialId): Promise<SlotDeliveryRecord | undefined> {
+    return this.#records.get(`${executionId}\n${slotId}`);
+  }
+
+  async listByExecution(_taskId: TaskId, executionId: ExecutionId): Promise<readonly SlotDeliveryRecord[]> {
+    return [...this.#records.values()].filter((stored) => stored.executionId === executionId)
+      .sort((left, right) => (left.slotId < right.slotId ? -1 : 1));
+  }
+
+  async record(delivery: SlotDeliveryRecord): Promise<void> {
+    this.#records.set(`${delivery.executionId}\n${delivery.slotId}`, delivery);
+  }
+}
+
+async function failingCases<Port>(cases: readonly ConformanceCase<Port>[], port: () => Port): Promise<string[]> {
+  const failing: string[] = [];
+  for (const conformance of cases) if ((await conformance.check(port())).length > 0) failing.push(conformance.name);
+  return failing;
+}
+
+test('the delivery record suite rejects an adapter that breaks replacement, order, or the composite key', async () => {
+  const [byKey, replaces, ordered] = SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE.map((conformance) => conformance.name);
+  assert.deepEqual(await failingCases(SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE, () => new FirstKeepingDeliveries()), [replaces]);
+  assert.deepEqual(await failingCases(SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE, () => new LocaleOrderedDeliveries()), [ordered]);
+  assert.deepEqual(await failingCases(SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE, () => new TaskBlindDeliveries()), [byKey, ordered]);
 });
