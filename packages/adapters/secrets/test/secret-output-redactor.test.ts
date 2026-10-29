@@ -34,6 +34,7 @@ const CREDS = [
 // that must never be stored; an empty user information has none.
 const SHAPES: readonly { name: string; text: string; secret: string; parts?: readonly string[] }[] = [
   { name: 'URL user information', text: 'clone https://bot:hunter2pass@example.com/repo now', secret: 'bot:hunter2pass' },
+  { name: 'URL user name', text: 'clone https://user@example.com/repo now', secret: 'user' },
   { name: 'empty URL user information', text: 'clone https://@example.com/repo now', secret: '' },
   ...['PRIVATE KEY', 'EC PRIVATE KEY', 'ENCRYPTED PRIVATE KEY'].map((type) => ({
     name: `PEM ${type}`, text: `key:\n${pem(type)}\nend`, secret: pem(type), parts: pem(type).split('\n').slice(1, -1),
@@ -91,12 +92,26 @@ test('a turn that ends in a cut JWT, issued secret, seed, or URL user informatio
   const ends = [
     ['token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiO', 'token '], ['a x.y.eyJa.b', 'a x.y.'], ['token tkop', 'token '], ['id tkwk_abc', 'id '],
     [`seed ${seed.slice(0, 20)}`, 'seed '], ['clone https://bot:hunter', 'clone https://'], ['clone https://bot:', 'clone https://'],
+    ['clone https://bot', 'clone https://'],
   ];
   for (const [text, kept] of ends) assert.equal(turnOutput([text!]), `${kept}${REDACTED}`, text);
 });
 
-test('a turn that ends in a word, a host, or a closed JWT keeps or redacts it as the whole text does', () => {
-  for (const text of ['done', 'see https://example.com', 'eyJ0.eyJ1.c2ln', 'SO', 'tok']) {
+test('a turn that ends in a cut URL user name, split at every offset, stores it as one marker', () => {
+  const text = 'clone https://bot';
+  for (let cut = 0; cut <= text.length; cut += 1) {
+    assert.equal(turnOutput([text.slice(0, cut), text.slice(cut)]), `clone https://${REDACTED}`, `cut ${cut}`);
+  }
+});
+
+// A host at a turn's end may be a user name cut before its `@`, so it is
+// redacted too: over-redaction accepted (13d design, decision 1).
+test('a turn that ends in a host redacts it as a possible user name', () => {
+  assert.equal(turnOutput(['see https://example.com']), `see https://${REDACTED}`);
+});
+
+test('a turn that ends in a word, a URL with a path, or a closed JWT keeps or redacts it as the whole text does', () => {
+  for (const text of ['done', 'eyJ0.eyJ1.c2ln', 'SO', 'tok', 'see https://example.com/']) {
     assert.equal(turnOutput([text]), redactSecrets(text), text);
   }
 });

@@ -35,7 +35,8 @@ const TOKEN_CHARACTER = /[A-Za-z0-9_-]/;
 const ISSUED_AT_END = new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})(?:_[A-Za-z0-9_-]*)?$`);
 const SEED_AT_END = /S[OAU][A-Z2-7]{1,55}$/;
 const SCHEME_CHARACTER = /[A-Za-z0-9+.-]/;
-const USERINFO_SO_FAR = /^[^/?#@]*:[^/?#@]*$/;
+// A host and a user name cut before its `@` look alike, so both match.
+const USERINFO_SO_FAR = /^[^/?#@]+$/;
 
 type BlockKind = 'pem' | 'creds';
 
@@ -248,7 +249,7 @@ function seedStart(run: string): number | undefined {
   return found(run.search(SEED_AT_END));
 }
 
-// URL user information before its `@`; the scheme is kept.
+// URL user information, or a host, after the scheme; the scheme is kept.
 function userinfoStart(run: string): number | undefined {
   const scheme = run.lastIndexOf('://');
   if (scheme < 1 || !SCHEME_CHARACTER.test(run[scheme - 1]!)) return undefined;
