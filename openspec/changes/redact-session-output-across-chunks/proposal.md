@@ -9,7 +9,7 @@ G3 item 13 ([G3 plan](/docs/g3-plan.md) row 13), sub-change 13d. The archived 13
 - At rest: the held tail is stored only as AES-256-GCM ciphertext under the 12a cipher, with the session, the turn, and the tail's version as authenticated data, under a new key `control-plane/session-output-tail.key` that `init` creates when missing (answer Q2).
 - Entries: released text longer than `MAX_HARNESS_TEXT_LENGTH` becomes several entries split on whole characters, instead of the 13a cut (answer Q4).
 - Read: `SessionTimelineService.readOutput` pages the retained window in one transaction, and the control plane serves `readAgentSessionOutput` (wire contracts section 9) with the project role checks and the 404 rule of 13b.
-- Storage: migration `1792933200000_session-output-tail.sql` adds the sealed tail table.
+- Storage: migration `1792933400000_session-output-tail.sql` adds the sealed tail table.
 - Contracts: wire contracts section 7 holds a turn's output as one text (answer Q3) and states the release, the bound, and the sealing; the installation contract lists the new key file.
 
 ## Capabilities

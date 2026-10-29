@@ -7,7 +7,7 @@
 ## 2. Implementation and tests
 
 - [x] 2.1 The hold rule and the over-bound markers of answer Q1 in `@taskelith/secrets` behind `SessionOutputRedactor`, with every split of every known shape across two and three chunks failing first against per-chunk redaction
-- [x] 2.2 The tail store port, its in-memory and PostgreSQL adapters, migration `1792933200000`, and the conformance and down migration tests
+- [x] 2.2 The tail store port, its in-memory and PostgreSQL adapters, migration `1792933400000`, and the conformance and down migration tests
 - [x] 2.3 The tail sealed with the 12a AES-256-GCM cipher (answer Q2), the key file `session-output-tail.key` created by `init` and required at the start, with key, tamper, and at-rest tests, and the installation contract row
 - [x] 2.4 The service: append with the hold and the bound, release at the turn's end (answer Q3), entry splitting (answer Q4), and `readOutput`, with bound, release, crash, and race tests
 - [x] 2.5 The `readAgentSessionOutput` route with its scope, mapping, and page tests, and the wire contracts section 7 amendment

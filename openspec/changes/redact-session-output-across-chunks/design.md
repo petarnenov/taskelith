@@ -2,7 +2,7 @@
 
 ## Context
 
-G3 item 13, sub-change 13d (coordinator brief, Niki, 2026-10-29; archived 13b `serve-session-timeline-over-http`, decision 3 and answers Q1, Q6, Q8, and Q9). Scope: output redacted across chunks with a held tail, so that no byte of a secret split across chunks is stored or served; the tail bounded by `MAX_HARNESS_TEXT_LENGTH`; the section 7 amendment; after the answers, the tail sealed at rest under a new key file and the over-bound rule of answer Q1; the `readAgentSessionOutput` route; migration `1792933200000`. Out of scope: credentials revealed to a run (13c, from 12c's delivery record), 13c's worker messages, and the event stream (item 14).
+G3 item 13, sub-change 13d (coordinator brief, Niki, 2026-10-29; archived 13b `serve-session-timeline-over-http`, decision 3 and answers Q1, Q6, Q8, and Q9). Scope: output redacted across chunks with a held tail, so that no byte of a secret split across chunks is stored or served; the tail bounded by `MAX_HARNESS_TEXT_LENGTH`; the section 7 amendment; after the answers, the tail sealed at rest under a new key file and the over-bound rule of answer Q1; the `readAgentSessionOutput` route; migration `1792933400000`. Out of scope: credentials revealed to a run (13c, from 12c's delivery record), 13c's worker messages, and the event stream (item 14).
 
 What the study found at `3009329f`:
 
@@ -60,7 +60,7 @@ The released text, up to the bound plus a chunk plus what redaction adds, can ex
 
 Wire contracts section 7, "Output across chunks", now holds a turn's output, not a generation's, as one text (answer Q3), states the release before the turn's outcome or its generation's end, the bound with the marker rule of answer Q1, and the tail sealed at rest (answer Q2). The installation contract's control-plane namespace table gains `session-output-tail.key` (answer Q2).
 
-Migration `1792933200000_session-output-tail.sql` (13b answer Q8): `agent_session_output_tails (session_id text PRIMARY KEY REFERENCES agent_sessions, turn_id text NOT NULL, generation bigint NOT NULL CHECK (generation >= 1), version bigint NOT NULL CHECK (version >= 1), nonce bytea NOT NULL, sealed bytea NOT NULL)`; the down migration drops it and keeps 13a's and 13b's tables. The `postgres-state` delta adds the table requirement.
+Migration `1792933400000_session-output-tail.sql` (13b answer Q8, renumbered as the last section records): `agent_session_output_tails (session_id text PRIMARY KEY REFERENCES agent_sessions, turn_id text NOT NULL, generation bigint NOT NULL CHECK (generation >= 1), version bigint NOT NULL CHECK (version >= 1), nonce bytea NOT NULL, sealed bytea NOT NULL)`; the down migration drops it and keeps 13a's and 13b's tables. The `postgres-state` delta adds the table requirement.
 
 ## Test plan
 
@@ -113,3 +113,10 @@ The coordinator's answers (architect, Niki, 2026-10-29), recorded verbatim:
 > Q4 Split, accepted.
 >
 > Proceed to code.
+
+## Migration renumber
+
+Architect decision (Niki, 2026-10-29): the migration moves from
+`1792933200000` (13b answer Q8) to `1792933400000`. 12c landed on `dev` as
+#414 with `1792933300000_slot-credential-deliveries.sql`, migrations must
+stay ascending in merge order, and `1792933500000` onward belongs to 12d.
