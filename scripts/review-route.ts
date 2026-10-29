@@ -160,7 +160,7 @@ export interface ReviewRouter<Decision, Input = RouteFeatures> {
 
 // The version of the rule's thresholds and of its reviewer table. A change
 // of either bumps it; older ones stay, so archived records stay valid.
-export const RULE_VERSION = 2;
+export const RULE_VERSION = 3;
 
 type ReviewerModel = Pick<Reviewer, 'harness' | 'model'>;
 
@@ -189,6 +189,7 @@ const THRESHOLDS_V1: TriggerThresholds = { linesChanged: 400, filesChanged: 18, 
 const TRIGGER_THRESHOLDS: ReadonlyMap<number, TriggerThresholds> = new Map([
   [1, THRESHOLDS_V1],
   [2, THRESHOLDS_V1],
+  [3, THRESHOLDS_V1],
 ]);
 
 // Undefined for an unknown rule version.
@@ -215,9 +216,18 @@ const REVIEWER_TABLE_V2: ReviewerTable = [
   { pass: 3, role: 'A', reviewer: SOL, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
 ];
 
+// Version 3: fable reviews pass 2 since 2026-10-29; opus keeps it for a
+// change with external facts. elevated is unauthorized.
+const REVIEWER_TABLE_V3: ReviewerTable = [
+  { pass: 1, role: 'A', reviewer: ASTRA, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 2, role: 'B', reviewer: FABLE, networkedReviewer: OPUS, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 3, role: 'A', reviewer: SOL, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+];
+
 const REVIEWER_TABLES: ReadonlyMap<number, ReviewerTable> = new Map([
   [1, REVIEWER_TABLE_V1],
   [2, REVIEWER_TABLE_V2],
+  [3, REVIEWER_TABLE_V3],
 ]);
 
 type PlanFeatures = Pick<RouteFeatures, 'externalFacts'>;
