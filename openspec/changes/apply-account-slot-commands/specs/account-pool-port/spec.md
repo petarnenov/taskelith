@@ -57,6 +57,17 @@ The sweep SHALL list the stored versions older than a grace age of at least one 
 - **WHEN** the listing is asked for versions stored before an instant earlier than every store
 - **THEN** it is empty
 
+### Requirement: Add-slot deadline
+The add-slot command SHALL measure on its process's monotonic clock the time from before it stores its version to the end of its `add` transaction's work and, past half the sweep's least grace age, SHALL roll that transaction back, discard its version, and fail with `unavailable`, so that the sweep discards no version of an add that commits.
+
+#### Scenario: Slow add
+- **WHEN** more than half the least grace age passes between an add's store and the end of its transaction
+- **THEN** no slot is added, its version is discarded, and the add fails with `unavailable`
+
+#### Scenario: Add at the deadline
+- **WHEN** exactly half the least grace age passes between an add's store and the end of its transaction
+- **THEN** the slot is added with its version
+
 ## MODIFIED Requirements
 
 ### Requirement: Run slot credential port on the worker

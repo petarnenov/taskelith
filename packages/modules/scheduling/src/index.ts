@@ -284,6 +284,7 @@ export {
   type SlotSignalTransaction,
 } from './application/apply-slot-limit.js';
 export {
+  ADD_SLOT_DEADLINE_MILLISECONDS,
   addAccountSlot,
   type AccountSlotCommandPorts,
   type AddAccountSlotInput,
