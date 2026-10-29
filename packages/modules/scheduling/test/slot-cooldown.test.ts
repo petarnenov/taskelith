@@ -3,6 +3,7 @@ import test from 'node:test';
 import { inspect } from 'node:util';
 import {
   parseHarnessEvent,
+  type AssignmentExecutions,
   type AssignmentId,
   type HarnessPluginId,
   type ParsedAgentHarnessCapabilities,
@@ -19,10 +20,12 @@ import {
   applySlotLimitInTransaction,
   cooldownAfterLimit,
   createAssignment,
+  endAssignment,
   parseAccountSlot,
   parseDefaultCooldownMinutes,
   parseResourceRequest,
   parseSlotCredentialVersion,
+  releaseAfterTerminalFact,
   type AccountSlot,
   type HarnessLimitSignal,
   type SlotCooldown,
@@ -191,10 +194,27 @@ test('a limit for an unknown assignment, a reservation without one slot, or a ba
   assert.equal(value(await slots.get(SLOT)).revision, 1);
 });
 
-test('a limit cools a revoked slot, which a reinstatement then keeps', async () => {
+test('a limit cools a revoked slot', async () => {
   const { tx } = await signalFixture(undefined, slotRecord({ state: 'revoked' }));
   const cooled = value(await apply(tx));
   assert.deepEqual([cooled.state, cooled.cooldown], ['revoked', { until: IN_ONE_HOUR, source: 'default' }]);
+});
+
+test('a limit for a released reservation cools its slot', async () => {
+  const running: AssignmentExecutions = { granted: true, nonTerminal: true };
+  const terminal: AssignmentExecutions = { granted: true, nonTerminal: false };
+  const held = reservation(['slot-1']);
+  const ended = value(endAssignment(held, held.generation, 'attempt-ended', running, NOW));
+  const released = value(releaseAfterTerminalFact(ended, ended.generation, terminal, NOW));
+  assert.equal(released.reservation.state, 'released');
+  const assignments = new InMemoryAssignmentRepository();
+  value(await assignments.add(released));
+  const slots = new InMemoryAccountSlots();
+  value(await slots.add(slotRecord()));
+  const tx: SlotSignalTransaction = { assignments, accountSlots: slots, now: async () => NOW };
+  const cooled = value(await apply(tx, limitUntil('2026-10-29T11:30:00Z')));
+  assert.deepEqual([cooled.cooldown, cooled.revision], [reported(LATER), 2]);
+  assert.deepEqual(value(await slots.get(SLOT)), cooled);
 });
 
 test('a limit past the cap cools the slot for seven days', async () => {
