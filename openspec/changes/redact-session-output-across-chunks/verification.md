@@ -69,7 +69,7 @@ The route was generated under rule version 2, before governance v9 (owner decisi
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `af2e8866f090f809ba37e4fb7af68cab819ed7c2`; tests 4010, pass 3963, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.82% functions.
+- `make verify`: passed, profile full, tree `8def72537a8fe7579908c918bb38f7ca1d05ca11`; tests 4016, pass 3969, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.82% functions.
 - `npm run openspec -- validate redact-session-output-across-chunks --strict`: passed, `Change 'redact-session-output-across-chunks' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 92 file(s); every pass summary file is valid: 72 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `2250f3f7f140` with `origin/dev`: no change under `openspec/specs`.
@@ -78,6 +78,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18605-e9aa-7ed3-a7fc-7bfad5397e36` | 0 | 3 | 2 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `6228fa04-9305-4f73-865b-2b98a44e9e7c` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Review pass 1 fixes
@@ -100,6 +101,24 @@ Pass 1 (reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7e
 Focused runs on `fbd08669` before the merge: `secret-output-redactor.test.ts` 53 of 53; `session-output-tail.integration.test.ts` and `session-timeline-crash.integration.test.ts` 24 of 24; `agent-session-routes.test.ts`, the execution `session-output-tail.test.ts`, and the secrets tests 118 of 118.
 
 Checks on the merged head `95cf15ea`, tree `af2e8866`: `make verify` passed on its first run, profile full, stamp written (log `13d-verify-2.log` in the session scratchpad): tests 4010, suites 49, pass 3963, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.82 % functions; "Contract documents have no undeclared breaking change." `openspec validate redact-session-output-across-chunks --strict`: valid. `make findings ARGS="validate"`: valid.
+
+## Review pass 2 fixes
+
+Pass 2 (reviewer B, claude claude-fable-5-1, variant medium, governance v9, session `6228fa04-9305-4f73-865b-2b98a44e9e7c`) reported 0 Critical, 0 High, 1 Medium, and 2 Low findings (`findings.jsonl`), recorded in `fe9d5712`.
+
+- `9226c682` `chore: redact a URL user name cut before its at sign at a turn's end` (finding 1).
+- `ce591623` `chore: keep the held output tail version monotonic within a turn` (finding 2).
+- `3ef33459` `docs: apply review pass 2 fixes to the redact session output across chunks design and verification` (findings 1 and 2 in `design.md` decisions 1 and 3, finding 3 in this record).
+
+| Finding | Fix | Fail-before |
+| --- | --- | --- |
+| 1 (Medium) | At a turn's end and on recovery, a trailing run after a URL's `://` that holds no `/`, `?`, `#`, or `@` is taken as possible user information and recorded as `scheme://[redacted]`, also without a `:`. A bare host at a turn's end is over-redacted the same way (design, decision 1; "Limitations"). New shape `https://user@example.com/repo` in `SHAPES`; the case `clone https://bot` split at every offset of two chunks and in the cut-forms test. The test that kept `see https://example.com` as `redactSecrets` of it now expects `see https://[redacted]`, because a host and a user name cut before its `@` cannot be told apart at a turn's end; the kept case became `see https://example.com/`, a URL with a path | The new and changed tests on the redactor of `fe9d5712`, before the fix: 4 of 58 failed in `secret-output-redactor.test.ts`, the URL user name shape's turn end at any offset, the cut-forms test, the `clone https://bot` split, and the bare host |
+| 2 (Low) | A tail emptied within its turn keeps its row and seals an empty tail under the next version; only the release at the turn's end deletes the row, and a new turn has other authenticated data. The execution unit test and the PostgreSQL crash test that expected no row after a mid-turn release now expect the kept row | Before the fix on PostgreSQL: the new test "a turn that holds, releases, and holds again seals the new tail under a greater version" failed with "version 1 after 1", and the race test, which now asserts the final version 4 of the serial order, failed with no row |
+| 3 (Low) | Section "Route" names the reviewer that ran and the superseded route recommendation; "Independent review" records pass 2 and the owed pass 3 | Records only |
+
+Focused runs after the fixes: `secret-output-redactor.test.ts` 58 of 58; `session-output-tail.integration.test.ts` and `session-timeline-crash.integration.test.ts` 25 of 25; together with the execution tests, `agent-session-routes.test.ts`, the PostgreSQL session timeline tests, and the secrets tests, 513 of 513.
+
+Checks on `3ef33459`, tree `8def7253`: `make verify` passed, profile full, stamp written (log `13d-verify-3.log` in the session scratchpad): tests 4016, suites 49, pass 3969, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.82 % functions; "Contract documents have no undeclared breaking change." The first run on the same tree (log `13d-verify-3-flake.log`) failed only at the timing-bound test "e. a crash between W1 and the ack of a cancellation is applied once after redelivery" of `test/g2-cancellation-races.test.ts`, outside this change ("the start not met within 20000 ms"); it passed in the rerun. `make findings ARGS="validate"`: valid.
 
 ## Independent review
 
