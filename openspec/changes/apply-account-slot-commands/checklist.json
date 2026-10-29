@@ -1,0 +1,107 @@
+{
+  "change": "apply-account-slot-commands",
+  "generatedAt": "2026-10-29T04:48:00.541Z",
+  "devCommit": "115c16c41016ae5f45dee6609558a9299ef8b165",
+  "query": {
+    "capabilities": [
+      "account-pool-port",
+      "harness-account-pools",
+      "control-plane-access",
+      "worker-runtime"
+    ],
+    "files": [
+      "packages/modules/scheduling/**",
+      "packages/adapters/postgres/**",
+      "apps/control-plane/**",
+      "apps/worker/**",
+      "docs/contracts/account-pool.md",
+      "openapi/**"
+    ],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 40
+      },
+      {
+        "category": "docs",
+        "count": 25
+      },
+      {
+        "category": "error-handling",
+        "count": 23
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 21
+      },
+      {
+        "category": "naming",
+        "count": 20
+      },
+      {
+        "category": "spec-wording",
+        "count": 13
+      },
+      {
+        "category": "concurrency-race",
+        "count": 12
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 746,
+        "inChecklist": 627
+      },
+      "mediumOrWorse": {
+        "findings": 356,
+        "inChecklist": 290
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 117
+      },
+      {
+        "category": "spec-wording",
+        "count": 87
+      },
+      {
+        "category": "docs",
+        "count": 66
+      },
+      {
+        "category": "stale-citation",
+        "count": 46
+      },
+      {
+        "category": "contract-drift",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 20
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 372,
+        "inChecklist": 365
+      },
+      "mediumOrWorse": {
+        "findings": 62,
+        "inChecklist": 62
+      }
+    }
+  }
+}
