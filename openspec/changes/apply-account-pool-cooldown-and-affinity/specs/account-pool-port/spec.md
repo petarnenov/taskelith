@@ -52,11 +52,19 @@
 - **THEN** one reserves that slot, the other is retried and waits, and the limited harness's other slot is not written
 
 ### Requirement: Limit signal applied to the reserving slot
-`applySlotLimitInTransaction` SHALL apply a plugin's parsed `limit` event, in the caller's SERIALIZABLE capacity transaction, by compare-and-set to the one slot that the named assignment's reservation records: a cooldown until the reported reset when it is after the database time, else for the caller's default of 1 to 1440 minutes, never shortening the stored one, rereading the slot after a lost compare-and-set.
+`applySlotLimitInTransaction` SHALL apply a plugin's parsed `limit` event in the caller's SERIALIZABLE capacity transaction, by compare-and-set, to the one slot that the assignment's reservation records: a cooldown until the reported reset after the database time, capped at 7 days after it, else for the caller's default of 1 to 1440 minutes, never shortening the stored one; it SHALL accept a limit for a removed slot without a write.
 
 #### Scenario: Reported reset
 - **WHEN** a limit with a reset time one and a half hours after the database time is applied
 - **THEN** the slot cools down until that time with the source `reported-reset`
+
+#### Scenario: Reported reset past the cap
+- **WHEN** a limit with a reset time 14 days after the database time is applied
+- **THEN** the slot cools down until 7 days after the database time with the source `reported-reset`
+
+#### Scenario: Removed slot
+- **WHEN** a limit names an assignment whose reservation records a removed slot
+- **THEN** it succeeds and returns the slot unchanged, and no slot is written
 
 #### Scenario: Reset time not in the future
 - **WHEN** a limit without a reset time, or with one at or before the database time, is applied with a default of 60 minutes

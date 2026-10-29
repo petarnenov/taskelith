@@ -7,10 +7,10 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
 - `@taskelith/scheduling`:
   - `selectSlotInTransaction` selects all three request kinds. A `resumed-session` request reads its own stored slot in any state and selects it with `selectResumedSessionSlot` (contract section 4.3); an `after-limit` request reads the pools of its alternative harnesses in order, never one of the limited harness, and its limited slot, and selects with `selectAfterLimitSlot` (section 4.4). A request that names another harness for its stored slot is `invalid` (section 4.1). The refusal of 12a and its two tests are replaced.
   - `least-loaded-selection.ts` exports the helpers that the three selections share: `eligibleStandings`, `reservedSlot`, `slotWait`, and `earliestCooldownEnd`.
-  - `slot-cooldown.ts`: `parseDefaultCooldownMinutes` (1 to 1440 minutes) and `cooldownAfterLimit`, the cooldown rule of section 5.
-  - `applySlotLimitInTransaction`: applies a plugin's parsed `limit` event to the one slot that an assignment's reservation records, by compare-and-set, rereading after a lost one, up to `SLOT_LIMIT_APPLICATIONS` (3) applications.
+  - `slot-cooldown.ts`: `parseDefaultCooldownMinutes` (1 to 1440 minutes) and `cooldownAfterLimit`, the cooldown rule of section 5, with a reported reset capped at `SLOT_REPORTED_RESET_MAXIMUM_MINUTES`, 10080 minutes (7 days), after the database time.
+  - `applySlotLimitInTransaction`: applies a plugin's parsed `limit` event to the one slot that an assignment's reservation records, by compare-and-set, rereading after a lost one, up to `SLOT_LIMIT_APPLICATIONS` (3) applications, and then returns a retryable `conflict`; a limit for a `removed` slot is accepted as a no-op, with no write.
 - `@taskelith/postgres` tests: `account-pool-selection.integration.test.ts` with four gated races on PostgreSQL.
-- Documents: account pool contract status, section 11, and a new section 12; `docs/g3-plan.md` row 12 names 12b.
+- Documents: account pool contract status, sections 5 and 11, and a new section 12; `docs/g3-plan.md` row 12 names 12b and the follow-up 12e.
 
 ## Capabilities
 
@@ -26,5 +26,5 @@ Private packages only; no new third-party dependency. No wire document changes: 
 
 ## Follow-ups
 
-- The design's open coordinator questions Q1 to Q6: usage reports and authentication failures, the store of the default cooldown, the key of a signal, late signals and withdrawn slots, an unbounded reported reset, and the bound on rereads.
-- 12c and 12d as the account pool contract section 11 assigns them; item 18 relays a session's `limit` event with its assignment.
+- 12e `apply-account-pool-load-and-health-signals` (coordinator's answer Q1): usage reports, the `unhealthy` health of an authentication failure, and their section 9 tests; key rotation becomes 12f if 12d splits it off.
+- 12c and 12d as the account pool contract section 11 assigns them; 12d's composition supplies the default cooldown from the control-plane installation settings (answer Q2); item 18 relays a session's `limit` event with the attempt's `AssignmentId` (answer Q3).

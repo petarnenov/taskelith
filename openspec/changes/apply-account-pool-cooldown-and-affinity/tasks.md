@@ -1,7 +1,7 @@
 ## 1. Change
 
 - [x] 1.1 Create the change, save the brief's `checklist.json`, and add the empty `findings.jsonl` and `passes.jsonl`
-- [ ] 1.2 Record the coordinator's answers to the open questions Q1 to Q6 of the design and apply them
+- [x] 1.2 Record the coordinator's answers to the open questions Q1 to Q6 of the design and apply them
 
 ## 2. Implementation and tests
 
