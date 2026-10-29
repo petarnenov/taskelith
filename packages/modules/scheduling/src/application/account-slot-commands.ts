@@ -1,5 +1,5 @@
-import { executionsUnderAssignment } from '@taskelith/execution';
-import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
+import { executionsUnderAssignment, type AssignmentId } from '@taskelith/execution';
+import { err, failure, ok, type CorrelationId, type EventId, type Result } from '@taskelith/kernel';
 import { parseAccountSlot, type AccountSlot, type SlotCredentialVersion } from '../domain/account-slot.js';
 import type { Assignment } from '../domain/assignment.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
@@ -33,6 +33,15 @@ export interface SlotRevocationStore {
   transaction<Value>(work: (transaction: InvalidationTransaction) => Promise<Result<Value>>): Promise<Result<Value>>;
 }
 
+// The end command of a holder's assignment, derived from it so that a rerun
+// sends the same one, and bounded for every valid assignment identifier.
+export type RevocationCommandIds = (assignmentId: AssignmentId) => EventId;
+
+export interface SlotRevocationPorts {
+  readonly store: SlotRevocationStore;
+  readonly commandIdFor: RevocationCommandIds;
+}
+
 export interface SlotCredentialCommandPorts {
   readonly store: CapacityStore;
   readonly credentials: SlotCredentials;
@@ -56,14 +65,15 @@ export function updateAccountSlot(store: CapacityStore, input: UpdateAccountSlot
 
 // Section 8.1: the slot leaves its pools and every attempt that holds it is
 // cancelled in the same transaction; a revoked slot is answered unchanged.
-export function revokeAccountSlot(store: SlotRevocationStore, input: RevokeAccountSlotInput): Promise<Result<AccountSlot>> {
-  return store.transaction(async (tx) => {
+export function revokeAccountSlot(ports: SlotRevocationPorts, input: RevokeAccountSlotInput): Promise<Result<AccountSlot>> {
+  return ports.store.transaction(async (tx) => {
     const stored = await commandSlot(tx, input.id);
     if (!stored.ok || stored.value.state === 'revoked') return stored;
     const revoked = await replaceSlot(tx, stored.value, { state: 'revoked' });
     if (!revoked.ok) return revoked;
     for (const holder of await tx.assignments.listHeldForCredential(input.id)) {
-      const cancelled = await cancelHolder(tx, holder, input.correlationId);
+      const identity = { commandId: ports.commandIdFor(holder.id), correlationId: input.correlationId };
+      const cancelled = await cancelHolder(tx, holder, identity);
       if (!cancelled.ok) return cancelled;
     }
     return revoked;
@@ -123,24 +133,22 @@ function sameSettings(stored: AccountSlot, { allowedProjects, concurrencyLimit }
 
 // An attempt whose execution can run keeps its reservation until that
 // execution's terminal fact; any other attempt is released now.
-async function cancelHolder(tx: InvalidationTransaction, holder: Assignment, correlationId: CorrelationId): Promise<Result<void>> {
+async function cancelHolder(tx: InvalidationTransaction, holder: Assignment, identity: CommandIdentity): Promise<Result<void>> {
   const task = await tx.tasks.get(holder.reservation.scope.taskId);
   if (!task.ok) return task;
   if (executionsUnderAssignment(task.value, holder.id).nonTerminal) {
     const predicate = { kind: 'assignment', assignmentId: holder.id } as const;
-    const invalidated = await invalidateLaunches(tx, { predicate, reason: 'attempt-not-launchable', correlationId });
+    const invalidated = await invalidateLaunches(tx, { predicate, reason: 'attempt-not-launchable', correlationId: identity.correlationId });
     return invalidated.ok ? ok(undefined) : invalidated;
   }
   if (holder.state === 'ended') return ok(undefined);
-  const commandId = revocationCommandId(holder);
-  if (!commandId.ok) return commandId;
-  const cancelled = await cancelInTransaction(tx, { assignmentId: holder.id, commandId: commandId.value, correlationId });
+  const cancelled = await cancelInTransaction(tx, { assignmentId: holder.id, ...identity });
   return cancelled.ok ? ok(undefined) : cancelled;
 }
 
-// Derived from the assignment, so a rerun sends the same command.
-function revocationCommandId(holder: Assignment) {
-  return parseIdentifier('EventId', `${holder.id}.slot-revoked`);
+interface CommandIdentity {
+  readonly commandId: EventId;
+  readonly correlationId: CorrelationId;
 }
 
 // Section 8.1: only a revoked slot is rotated; its version and revision are

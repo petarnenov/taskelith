@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { inspect } from 'node:util';
 import { after, beforeEach, test } from 'node:test';
 import { ok, err, failure, type Result } from '@taskelith/kernel';
@@ -89,7 +89,9 @@ function placement(task: Task, index: number): PlacementRequest {
 }
 
 const reserve = (store: CapacityStore, task: Task, index: number) => new ResourceAdmissionService(store, NO_WAIT).reserve(placement(task, index));
-const revoke = (store: GatedTransactions) => revokeAccountSlot(store, { id: SLOT, correlationId: CORRELATION });
+// A bounded digest of the assignment, as the composition derives it.
+const commandIdFor = (assignmentId: AssignmentId) => id('EventId', `slot-revoked.${createHash('sha256').update(assignmentId).digest('hex')}`);
+const revoke = (store: GatedTransactions) => revokeAccountSlot({ store, commandIdFor }, { id: SLOT, correlationId: CORRELATION });
 
 function kind(result: Result<PlacementOutcome>): string {
   const outcome = value(result);

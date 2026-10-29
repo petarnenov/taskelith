@@ -294,9 +294,11 @@ export {
   revokeAccountSlot,
   rotateSlotCredential,
   updateAccountSlot,
+  type RevocationCommandIds,
   type RevokeAccountSlotInput,
   type RotateSlotCredentialInput,
   type SlotCredentialCommandPorts,
+  type SlotRevocationPorts,
   type SlotRevocationStore,
   type UpdateAccountSlotInput,
 } from './application/account-slot-commands.js';

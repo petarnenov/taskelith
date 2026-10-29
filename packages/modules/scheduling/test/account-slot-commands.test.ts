@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { inspect } from 'node:util';
 import {
@@ -13,7 +14,7 @@ import {
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
-import { instantFromEpochMilliseconds, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { MAX_IDENTIFIER_LENGTH, instantFromEpochMilliseconds, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
   InMemoryAccountSlots,
@@ -44,6 +45,7 @@ import {
   type ProviderCredentialId,
   type ReservationId,
   type SlotCredentialVersion,
+  type SlotRevocationPorts,
   type SlotRevocationStore,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
@@ -67,6 +69,7 @@ const HARNESS = id('HarnessPluginId', 'harness-1') as HarnessPluginId;
 const SLOT = id('ProviderCredentialId', 'slot-1') as ProviderCredentialId;
 const UNKNOWN = id('ProviderCredentialId', 'slot-unknown') as ProviderCredentialId;
 const ATTEMPT = id('AttemptId', 'attempt-1') as AttemptId;
+const ASSIGNMENT = id('AssignmentId', 'assignment-1') as AssignmentId;
 const CORRELATION = id('CorrelationId', 'correlation-revoke');
 // Fixture values, never real credentials.
 const OLD_TEXT = 'fixture-old-slot-token';
@@ -151,14 +154,23 @@ async function withSlot(overrides: Partial<AccountSlot> = {}): Promise<Fixture> 
   return made;
 }
 
+// A bounded digest of the assignment, as the composition derives it.
+function revocationEventId(assignmentId: AssignmentId): string {
+  return `slot-revoked.${createHash('sha256').update(assignmentId).digest('hex')}`;
+}
+
+function revocation(store: SlotRevocationStore): SlotRevocationPorts {
+  return { store, commandIdFor: (assignmentId) => id('EventId', revocationEventId(assignmentId)) };
+}
+
 async function stored(slots: InMemoryAccountSlots): Promise<AccountSlot> {
   return value(await slots.get(SLOT));
 }
 
 // A placement of the fixture's attempt that holds the slot.
-async function holdSlot({ tx, task }: Fixture): Promise<void> {
+async function holdSlot({ tx, task }: Fixture, assignmentId = ASSIGNMENT): Promise<void> {
   const placed = value(await placeInTransaction(tx, {
-    assignmentId: id('AssignmentId', 'assignment-1') as AssignmentId, reservationId: id('ReservationId', 'reservation-1') as ReservationId,
+    assignmentId, reservationId: id('ReservationId', 'reservation-1') as ReservationId,
     commandId: id('EventId', 'offer-1'), correlationId: id('CorrelationId', 'correlation-1'), taskId: task.id, attemptId: ATTEMPT,
     ownershipGeneration: task.ownershipGeneration, workerId: id('WorkerId', 'worker-1') as WorkerId,
     requested: value(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: [] })),
@@ -195,27 +207,33 @@ test('an update is invalid without a change or with a bad value, a conflict on a
 
 test('a revocation takes the slot out of its pools, and a repeat changes nothing', async () => {
   const { store, slots } = await withSlot();
-  const revoked = value(await revokeAccountSlot(store, { id: SLOT, correlationId: CORRELATION }));
+  const revoked = value(await revokeAccountSlot(revocation(store), { id: SLOT, correlationId: CORRELATION }));
   assert.deepEqual([revoked.state, revoked.revision], ['revoked', 2]);
   assert.deepEqual(await slots.pool(PROJECT, HARNESS), []);
-  const repeated = value(await revokeAccountSlot(store, { id: SLOT, correlationId: CORRELATION }));
+  const repeated = value(await revokeAccountSlot(revocation(store), { id: SLOT, correlationId: CORRELATION }));
   assert.deepEqual(repeated, revoked);
-  assert.equal(failed(await revokeAccountSlot(store, { id: UNKNOWN, correlationId: CORRELATION })).code, 'not-found');
+  assert.equal(failed(await revokeAccountSlot(revocation(store), { id: UNKNOWN, correlationId: CORRELATION })).code, 'not-found');
   const removed = await withSlot({ state: 'removed' });
-  assert.equal(failed(await revokeAccountSlot(removed.store, { id: SLOT, correlationId: CORRELATION })).code, 'not-found');
+  assert.equal(failed(await revokeAccountSlot(revocation(removed.store), { id: SLOT, correlationId: CORRELATION })).code, 'not-found');
 });
 
-test('a revocation releases the reservation of an attempt without a launch and ends its assignment', async () => {
-  const made = await withSlot();
-  await holdSlot(made);
-  assert.equal(await made.tx.ledger.heldForCredential(SLOT), 1);
-  value(await revokeAccountSlot(made.store, { id: SLOT, correlationId: CORRELATION }));
-  assert.equal(await made.tx.ledger.heldForCredential(SLOT), 0);
-  const assignment = value(await made.tx.assignments.get(id('AssignmentId', 'assignment-1') as AssignmentId));
-  assert.deepEqual([assignment.state, assignment.end?.reason, assignment.reservation.state], ['ended', 'cancelled', 'released']);
-  const ends = made.outbox.messages.filter((message) => message.metadata.eventType === 'execution.assignment.end');
-  assert.deepEqual(ends.map((message) => message.metadata.eventId), ['assignment-1.slot-revoked']);
-});
+
+for (const [name, assignmentId] of [
+  ['', ASSIGNMENT],
+  [' of the longest identifier', id('AssignmentId', 'a'.repeat(MAX_IDENTIFIER_LENGTH)) as AssignmentId],
+] as const) {
+  test(`a revocation releases the reservation of an attempt without a launch and ends its assignment${name}`, async () => {
+    const made = await withSlot();
+    await holdSlot(made, assignmentId);
+    assert.equal(await made.tx.ledger.heldForCredential(SLOT), 1);
+    value(await revokeAccountSlot(revocation(made.store), { id: SLOT, correlationId: CORRELATION }));
+    assert.equal(await made.tx.ledger.heldForCredential(SLOT), 0);
+    const assignment = value(await made.tx.assignments.get(assignmentId));
+    assert.deepEqual([assignment.state, assignment.end?.reason, assignment.reservation.state], ['ended', 'cancelled', 'released']);
+    const ends = made.outbox.messages.filter((message) => message.metadata.eventType === 'execution.assignment.end');
+    assert.deepEqual(ends.map((message) => message.metadata.eventId), [revocationEventId(assignmentId)]);
+  });
+}
 
 test('a reinstatement returns the slot with its health and cooldown, and a repeat changes nothing', async () => {
   const cooldown = { until: value(parseInstant('2026-10-29T12:00:00.000Z')), source: 'default' as const };
