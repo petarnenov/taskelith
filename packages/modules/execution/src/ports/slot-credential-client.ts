@@ -26,8 +26,8 @@ export interface RunSlotCredentialRequest {
   readonly slotId: DeliveredSlotId;
 }
 
-// The host's slot credential source (item 18); a forget ends what ended, and
-// an obtain of an older generation fails with conflict and ends nothing.
+// The host's slot credential source (item 18); a forget ends what ended. An
+// obtain older than a held or fetching generation fails with conflict.
 export interface RunSlotCredentials {
   obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>>;
   forgetRun(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void;
