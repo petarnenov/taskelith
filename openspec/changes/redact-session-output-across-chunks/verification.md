@@ -15,6 +15,7 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13d, developed by a briefed s
 - The commit after `af46ab57`: `make record` and this record, the head that review pass 1 reads.
 - `d60b7d56`: the coordinator's architect check ("Independent review", "Architect check").
 - `git fetch origin` after `d60b7d56`: `origin/dev` was still `22ad068c` (#416), merged in `44523562`, so no merge commit and no change to this change's inputs.
+- `8f300ca8` merges `origin/dev` `0f8d3db9` (#417, `scaffold-web-spa-workspace`, item 28a) after `bccd8363`, without conflicts. Dev changed the living specs `engineering-principles`, `product-ui`, and `workspace-packages` only, none of this change's four capabilities, and no file of this change's implementation, tests, or migration, so its evidence holds.
 
 ## Environment
 
