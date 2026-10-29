@@ -53,7 +53,7 @@ test('ensuring the key creates it owner-only when it is missing, and keeps it on
   assert.equal(value(file.read()).length, 32);
 });
 
-test('ensuring the key keeps an existing key of the wrong size, which the digest still refuses', () => {
+test('ensuring the key keeps an existing key of the wrong size unchanged, and its nine bytes read back', () => {
   const { file, path } = keyFile();
   const stored = JSON.stringify({ format: 1, key: Buffer.from('short-key').toString('base64') });
   writeFileSync(path, stored, { mode: 0o600 });
