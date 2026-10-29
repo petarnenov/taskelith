@@ -34,6 +34,7 @@ const leaf = value(await issuer.issueServerCertificate(authority, {
 
 const sink = new InMemoryLogSink();
 const asked: Array<{ principal: WorkerPrincipal; request: SlotCredentialFetchRequest }> = [];
+let bearerReads = 0;
 let answer: () => Result<RevealedSlotDelivery> = () => err(failure('internal', 'unset'));
 let configured = true;
 
@@ -45,7 +46,12 @@ function services(): ApiServices {
     },
   };
   return {
-    enrollment: { authenticateWorkerBearer: async (secret: string) => (secret === BEARER ? ok(PRINCIPAL) : err(failure('forbidden', 'unknown bearer'))) },
+    enrollment: {
+      authenticateWorkerBearer: async (secret: string) => {
+        bearerReads += 1;
+        return secret === BEARER ? ok(PRINCIPAL) : err(failure('forbidden', 'unknown bearer'));
+      },
+    },
     get slotCredentials() {
       return configured ? slotCredentials : undefined;
     },
@@ -73,6 +79,7 @@ after(async () => {
 });
 beforeEach(() => {
   asked.length = 0;
+  bearerReads = 0;
   configured = true;
 });
 
@@ -158,4 +165,5 @@ test('a request over plain HTTP is refused before its bearer is read, so no cred
   assert.equal(answered.status, 500);
   assert.doesNotMatch(answered.text, new RegExp(SECRET));
   assert.deepEqual(asked, []);
+  assert.equal(bearerReads, 0, 'the bearer was not authenticated');
 });
