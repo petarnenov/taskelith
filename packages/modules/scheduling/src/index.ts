@@ -305,6 +305,7 @@ export {
 export {
   SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS,
   sweepSlotCredentials,
+  type SlotCredentialSweep,
   type SlotCredentialSweepPorts,
 } from './application/sweep-slot-credentials.js';
 export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';

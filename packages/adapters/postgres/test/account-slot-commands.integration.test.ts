@@ -238,7 +238,7 @@ test('the sweep discards only versions older than its grace age by the database 
   await store.store(orphan, sentinel());
   await query(url, "UPDATE slot_credentials SET stored_at = now() - interval '61 minutes' WHERE NOT (slot_id = 'slot-orphan' AND version = 2)");
   await query(url, "UPDATE slot_credentials SET stored_at = now() - interval '59 minutes' WHERE slot_id = 'slot-orphan' AND version = 2");
-  assert.equal(value(await sweepSlotCredentials({ store: database, credentials: store })), 2);
+  assert.deepEqual(value(await sweepSlotCredentials({ store: database, credentials: store })), { sweptSlots: [SLOT, orphan], failedSlots: [] });
   assert.deepEqual(await storedVersions(SLOT), [2, 3]);
   assert.deepEqual(await storedVersions(orphan), [2], 'the orphan version within the grace age stays');
 });

@@ -13,12 +13,18 @@ export interface SlotCredentialSweepPorts {
   readonly credentials: SlotCredentials;
 }
 
+// The listed slots by outcome; a failed slot is swept again next time.
+export interface SlotCredentialSweep {
+  readonly sweptSlots: readonly ProviderCredentialId[];
+  readonly failedSlots: readonly ProviderCredentialId[];
+}
+
 // Section 8.1: versions older than the grace age are swept per slot by the
-// record that names the slot; answers how many slots it swept.
+// record that names the slot.
 export async function sweepSlotCredentials(
   ports: SlotCredentialSweepPorts,
   graceMilliseconds = SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS,
-): Promise<Result<number>> {
+): Promise<Result<SlotCredentialSweep>> {
   if (!Number.isSafeInteger(graceMilliseconds) || graceMilliseconds < SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS) {
     return err(failure('invalid', `the sweep grace age must be at least ${SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS} ms`));
   }
@@ -26,13 +32,24 @@ export async function sweepSlotCredentials(
   if (!now.ok) return now;
   const storedBefore = instantFromEpochMilliseconds(Date.parse(now.value) - graceMilliseconds);
   if (!storedBefore.ok) return storedBefore;
-  const bySlot = groupBySlot(await ports.credentials.listStored(storedBefore.value));
-  for (const [slotId, versions] of bySlot) {
+  const sweep = { sweptSlots: [] as ProviderCredentialId[], failedSlots: [] as ProviderCredentialId[] };
+  for (const [slotId, versions] of groupBySlot(await ports.credentials.listStored(storedBefore.value))) {
     const record = await ports.store.transaction((tx) => namingRecord(tx.accountSlots.get(slotId)));
     if (!record.ok) return record;
-    await sweepSlot(ports.credentials, slotId, versions, record.value);
+    const swept = await settled(() => sweepSlot(ports.credentials, slotId, versions, record.value));
+    (swept ? sweep.sweptSlots : sweep.failedSlots).push(slotId);
   }
-  return ok(bySlot.size);
+  return ok(sweep);
+}
+
+// Whether the work settled; a rejection leaves the slot to the next sweep.
+async function settled(work: () => Promise<void>): Promise<boolean> {
+  try {
+    await work();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // A slot without a record loses its listed versions only, so a version

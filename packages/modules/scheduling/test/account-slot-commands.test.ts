@@ -287,7 +287,7 @@ test('a removal whose destroy fails still succeeds, and the sweep destroys the c
   assert.deepEqual(credentials.storedVersions(SLOT), [1]);
   credentials.rejectDestroy = false;
   const sweepStore = storeAt(store, minutesAfter(AT, 61));
-  assert.equal(value(await sweepSlotCredentials({ store: sweepStore, credentials })), 1);
+  assert.deepEqual(value(await sweepSlotCredentials({ store: sweepStore, credentials })), { sweptSlots: [SLOT], failedSlots: [] });
   assert.deepEqual(credentials.storedVersions(SLOT), []);
 });
 
@@ -436,19 +436,41 @@ test('the sweep keeps versions younger than its grace age and refuses a grace ag
   await credentials.store(orphan, secret(OLD_TEXT));
   clock.now = minutesAfter(AT, 30);
   await credentials.store(orphan, secret(NEW_TEXT));
-  assert.equal(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 59)), credentials })), 0);
+  assert.deepEqual(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 59)), credentials })), { sweptSlots: [], failedSlots: [] });
   assert.deepEqual(credentials.storedVersions(orphan), [1, 2]);
-  assert.equal(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 61)), credentials })), 1);
+  assert.deepEqual(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 61)), credentials })), { sweptSlots: [orphan], failedSlots: [] });
   assert.deepEqual(credentials.storedVersions(orphan), [2], 'the version within the grace age stays');
   const short = await sweepSlotCredentials({ store, credentials }, SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS - 1);
   assert.equal(failed(short).code, 'invalid');
   assert.equal(SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS, 3_600_000);
 });
 
+class UnreachableSlotDiscard extends InMemorySlotCredentials {
+  readonly #unreachable: ProviderCredentialId;
+  constructor(unreachable: ProviderCredentialId) {
+    super(() => AT);
+    this.#unreachable = unreachable;
+  }
+  override async discard(slotId: ProviderCredentialId, discarded: SlotCredentialVersion): Promise<void> {
+    if (slotId === this.#unreachable) throw new Error('store unreachable');
+    return super.discard(slotId, discarded);
+  }
+}
+
+test('a slot whose sweep fails is reported, and the sweep goes on with the next slots', async () => {
+  const { store } = await fixture();
+  const [first, second] = ['slot-a', 'slot-b'].map((name) => id('ProviderCredentialId', name) as ProviderCredentialId);
+  const credentials = new UnreachableSlotDiscard(first!);
+  for (const slotId of [first!, second!]) await credentials.store(slotId, secret(OLD_TEXT));
+  const swept = value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 61)), credentials }));
+  assert.deepEqual(swept, { sweptSlots: [second], failedSlots: [first] });
+  assert.deepEqual([credentials.storedVersions(first!), credentials.storedVersions(second!)], [[1], []]);
+});
+
 test('the sweep discards versions below the named one and keeps the named and higher versions', async () => {
   const { store } = await withSlot({ state: 'revoked', credentialVersion: version(2) });
   const credentials = new InMemorySlotCredentials(() => AT);
   for (const text of ['fixture-v1', 'fixture-v2', 'fixture-v3']) await credentials.store(SLOT, secret(text));
-  assert.equal(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 120)), credentials })), 1);
+  assert.deepEqual(value(await sweepSlotCredentials({ store: storeAt(store, minutesAfter(AT, 120)), credentials })), { sweptSlots: [SLOT], failedSlots: [] });
   assert.deepEqual(credentials.storedVersions(SLOT), [2, 3]);
 });
