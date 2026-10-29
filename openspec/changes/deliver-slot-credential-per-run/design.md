@@ -51,3 +51,4 @@ Applied:
 - A reveal that fails after the commit leaves a delivery record (Q1); 13c assumes the worst and redacts by a value that the run never received, which hides nothing it should show.
 - Until 13c, the session output redactor redacts known shapes only (Q1).
 - The browser endpoint still serves the worker routes other than `fetchSlotCredential` (review pass 2, finding 3); 12d decides whether to narrow that.
+- An obtain with an older recovery epoch still forgets current-epoch scopes (`#forgetWhere` on epoch `!==`), unlike the generation rule; within one worker process the epoch only rises, so the cost is a refetch, not a leak. A follow-up for 12d (architect check note, Niki).

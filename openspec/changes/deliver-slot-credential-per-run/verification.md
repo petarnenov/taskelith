@@ -137,6 +137,7 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
   - Finding 5 (`fb-12c-L5-reassigned.log`): with the assignment checks of `checkSlotDeliveryOwnership` removed: the reassignment test failed, `internal` instead of `assignment-not-active`.
 - After the fixes: `npm run build`, then the changed test files gave tests 62, pass 62, fail 0 (under "Checks"); `npm run verify:comments` and `npm run check:boundaries` passed; `npm run openspec -- validate deliver-slot-credential-per-run --strict` valid; `npm run verify:archive` passed; `make findings ARGS="validate"` valid. The `make verify` of the fixed tree is under "Generated checks".
 - Unreviewed fixes for the architect check by the coordinator Niki before the archive: `d930ca88` with `da5541fe`, `e95d3218`, `b34192d2`, `6122df5e`, `42ef6091`, `e7ae1ce9`, `eb1f66f3`, and the records commit that follows them.
+- Architect check (Niki, 2026-10-29): e95d3218, d930ca88, da5541fe, 42ef6091, b34192d2, e7ae1ce9, 6122df5e, eb1f66f3 passed (971d3797, f5f7047b records). Niki's non-blocking note, a follow-up for 12d (under "Limitations"): an obtain with an older recovery epoch still forgets current-epoch scopes (`#forgetWhere` on epoch `!==`), unlike the generation rule; within one worker process the epoch only rises, so the cost is a refetch, not a leak.
 
 ## Limitations
 
@@ -146,11 +147,11 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 - No harness host calls `forgetRun`, `forgetOwnershipGeneration`, or `forgetRecoveryEpoch` yet (item 18); the tests call them directly, and the in-flight cases resolve controlled promises in one process.
 - The worker refuses a call of an older ownership generation only while it holds or fetches a later one of the attempt; after the host forgot the later generation, such a call fetches, and the control plane refuses it with `stale-ownership-generation` (pass 2 finding 4).
 - The browser endpoint still serves the worker routes other than `fetchSlotCredential`; 12d decides whether to narrow that (pass 2 finding 3).
+- An obtain with an older recovery epoch still forgets current-epoch scopes (`#forgetWhere` on epoch `!==`), unlike the generation rule; within one worker process the epoch only rises, so the cost is a refetch, not a leak. A follow-up for 12d (architect check note, Niki).
 - The gated race runs one interleaving: the first attempt of each racer waits after its read for the other, so both read no record and one retries.
 
 ## Remaining gates
 
-- The architect check by the coordinator Niki of the seven unreviewed pass 2 fixes and their records, listed under "Pass 2". The review itself has ended: pass 2 was Low-only, so no pass 3 runs.
 - A merge of the current `dev` into the branch before the archive, if `dev` has moved (`origin/dev` was at `dc2ae98b` at the last fetch).
 - Archive, in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
