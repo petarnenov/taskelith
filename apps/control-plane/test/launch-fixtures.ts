@@ -13,7 +13,7 @@ import {
 } from '@taskelith/execution';
 import { ok } from '@taskelith/kernel';
 import type { PostgresDatabase } from '@taskelith/postgres';
-import { ResourceAdmissionService, parseResourceRequest, type PlacementRequest } from '@taskelith/scheduling';
+import { ResourceAdmissionService, parseResourceRequest, type PlacementRequest, type SlotRequest } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
 
@@ -49,8 +49,9 @@ export async function createLaunchRun(store: PostgresDatabase): Promise<void> {
   value(await new RunService(store, LAUNCH_WORKFLOWS).createRun({ runId: 'run-1', projectId: 'project-1', binding: BINDING }));
 }
 
-// A submitted planning task whose first attempt is placed on the worker.
-export async function placedTask(store: PostgresDatabase, task: string, workerId: WorkerId): Promise<Placed> {
+// A submitted planning task whose first attempt is placed on the worker,
+// with the slot that its slot request selects, if any.
+export async function placedTask(store: PostgresDatabase, task: string, workerId: WorkerId, slotRequest?: SlotRequest): Promise<Placed> {
   const submitted = value(await new TaskService(store).submitTask('run-1', { taskId: task, kind: 'planning', stageId: 'specs', artifacts: [SPEC] }, id('CorrelationId', 'c-1')));
   const taskId = submitted.taskId as TaskId;
   const attemptId = id('AttemptId', `${task}-attempt`) as AttemptId;
@@ -72,6 +73,7 @@ export async function placedTask(store: PostgresDatabase, task: string, workerId
     assignmentId, reservationId: id('ReservationId', `${task}-reservation`), commandId: id('EventId', `${task}-offer`),
     correlationId: id('CorrelationId', 'c-1'), taskId, attemptId, ownershipGeneration: claimed.ownershipGeneration,
     workerId, requested: value(parseResourceRequest({ cpuMillicores: 500, memoryMebibytes: 512, hardControls: [] })),
+    ...(slotRequest === undefined ? {} : { slotRequest }),
   };
   const outcome = value(await new ResourceAdmissionService(store, { pause: async () => {}, draw: () => 0 }).reserveWithRetry(placement));
   assert.equal(outcome.kind, 'placed');

@@ -31,6 +31,7 @@ import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reco
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
 import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
+import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
 
@@ -73,6 +74,7 @@ export class PostgresTransaction {
   readonly accountSlots: PostgresAccountSlots;
   // Encrypted rows only; PostgresSlotCredentials commits each change alone.
   readonly slotCredentialRecords: PostgresSlotCredentialRecords;
+  readonly slotCredentialDeliveries: PostgresSlotCredentialDeliveries;
   readonly sessionTimeline: PostgresSessionTimelineTransaction;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
@@ -115,6 +117,7 @@ export class PostgresTransaction {
     this.workerAdmissions = new PostgresWorkerAdmissions(session);
     this.accountSlots = new PostgresAccountSlots(session);
     this.slotCredentialRecords = new PostgresSlotCredentialRecords(session);
+    this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
     this.sessionTimeline = new PostgresSessionTimelineTransaction(session);
     this.outboxLookup = this.outbox;
   }

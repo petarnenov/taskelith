@@ -65,3 +65,4 @@ export {
   type WorkspaceHost,
 } from './workspace-composition.js';
 export { RECLAIM_FAILED_EVENT, WorkspaceSlots, type WorkspaceSlotsOptions } from './workspace-slots.js';
+export { FetchedRunSlotCredentials, type RunSlotCredentialsOptions } from './run-slot-credentials.js';

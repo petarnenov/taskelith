@@ -19,6 +19,7 @@ import type {
   PlacementOutcomeRecords,
   PlacementQueue,
   PlacementRotation,
+  SlotCredentialDeliveries,
   WorkerReports,
 } from '@taskelith/scheduling';
 import type {
@@ -53,6 +54,7 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly unrecordedProcesses: UnrecordedProcesses;
   readonly reconciliation: ReconciliationQueue;
   readonly workerAdmissions: WorkerAdmissions;
+  readonly slotCredentialDeliveries: SlotCredentialDeliveries;
 }
 
 // An enrolled worker as the transaction reads it, revoked or not, and the

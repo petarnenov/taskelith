@@ -1,5 +1,6 @@
-import type { HarnessPluginId } from '@taskelith/execution';
+import type { ExecutionId, HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import type { TaskId } from '@taskelith/sdlc';
 import {
   FIRST_SLOT_REVISION,
   parseSlotCredentialVersion,
@@ -9,7 +10,9 @@ import {
 } from '../domain/account-slot.js';
 import { byCodeUnits } from '../domain/code-unit-order.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
+import type { SlotDeliveryRecord } from '../domain/slot-credential-delivery.js';
 import type { SlotSecret } from '../domain/slot-secret.js';
+import type { SlotCredentialDeliveries } from '../ports/slot-credential-deliveries.js';
 import type { AccountSlots, AdmittedDeliveries, AdmittedDelivery, SlotCredentials } from '../ports/account-pool.js';
 
 // Test doubles of the account pool ports, with the rules their suites check.
@@ -121,4 +124,26 @@ export class StaticAdmittedDeliveries implements AdmittedDeliveries {
     const pair = this.#pairs.find((candidate) => candidate.harnessId === harnessId && candidate.mechanismId === mechanismId);
     return pair === undefined ? undefined : { delivery: pair.delivery, ...(pair.slotLimit === undefined ? {} : { slotLimit: pair.slotLimit }) };
   }
+}
+
+// Delivery records by task, execution, and slot, as the table keys them.
+export class InMemorySlotCredentialDeliveries implements SlotCredentialDeliveries {
+  readonly #records = new Map<string, SlotDeliveryRecord>();
+
+  async find(taskId: TaskId, executionId: ExecutionId, slotId: ProviderCredentialId): Promise<SlotDeliveryRecord | undefined> {
+    return this.#records.get(deliveryKey(taskId, executionId, slotId));
+  }
+
+  async listByExecution(taskId: TaskId, executionId: ExecutionId): Promise<readonly SlotDeliveryRecord[]> {
+    const records = [...this.#records.values()].filter((record) => record.taskId === taskId && record.executionId === executionId);
+    return Object.freeze(records.sort((left, right) => byCodeUnits(left.slotId, right.slotId)));
+  }
+
+  async record(delivery: SlotDeliveryRecord): Promise<void> {
+    this.#records.set(deliveryKey(delivery.taskId, delivery.executionId, delivery.slotId), delivery);
+  }
+}
+
+function deliveryKey(taskId: TaskId, executionId: ExecutionId, slotId: ProviderCredentialId): string {
+  return JSON.stringify([taskId, executionId, slotId]);
 }
