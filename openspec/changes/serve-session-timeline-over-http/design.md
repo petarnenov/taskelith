@@ -101,7 +101,7 @@ Measured against the brief's M-L, with 13a as the yardstick (about 1,300 lines o
 
 | Part | Source | Tests |
 | --- | --- | --- |
-| Seven routes, handlers, wire mapping, reasons, `SessionScopes` with its join, `ViewPositions`, `refused` on the wire, turn identifiers | about 900 | about 1,200 |
+| Six routes, handlers, wire mapping, reasons, `SessionScopes` with its join, `ViewPositions`, `refused` on the wire, turn identifiers | about 900 | about 1,200 |
 | Native request source with its item table and migration, written in the timeline transactions | about 500 | about 650 |
 | Key at bootstrap, composition, plan row | about 120 | about 150 |
 | Span-reporting rules, held tail with its table and migration, release before each turn and generation end, entry splitting, output read | about 750 | about 1,000 |
