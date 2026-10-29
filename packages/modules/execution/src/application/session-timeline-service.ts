@@ -286,7 +286,7 @@ export class SessionTimelineService {
     return this.#change(sessionId, (session) => recordDeliveryReport(session, key, report));
   }
 
-  // Each chunk is redacted alone until item 13b holds a tail across chunks.
+  // Each chunk is redacted alone until 13d holds a tail across chunks.
   appendOutput(sessionId: SessionId, output: OutputAppend): Promise<Result<SessionView>> {
     if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got output text out of bounds`, { session: sessionId })));
