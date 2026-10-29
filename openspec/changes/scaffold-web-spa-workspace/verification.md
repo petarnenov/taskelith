@@ -25,6 +25,7 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - Review pass 2 fixes: `9e165642` `chore: type undocumented web fetch statuses as unknown and read empty JSON answers`, `b384b1f9` `chore: stop make web-dev with a clear message without a project or OpenSSL 3`, and `1e887c32` `docs: align register versions, the user-event note, and the dev proxy CA condition of scaffold-web-spa-workspace`; then the pass 2 record and the `make record` of the fifth `make verify` (log `verify-28a-5.log` in the session scratchpad).
 - Review pass 3 fixes, unreviewed (no pass follows pass 3): `c1d0f379` `chore: catch percent-encoded, Unicode, and escaped origins in the web bundle check` and `f7186f8c` `docs: record the invocation and model confirmation of review pass 2 of scaffold-web-spa-workspace`; then the pass 3 record and the `make record` of the sixth `make verify` (log `verify-28a-6.log` in the session scratchpad).
 - `docs: record the architect check of the scaffold web spa workspace fixes` (this record): the coordinator's architect check of the unreviewed fixes under "Pass 3", and the follow-up note for 28c in the design.
+- `92aafe09`, the merge of `origin/dev` at `22ad068c` (#416, 12d A) without conflicts: `docs/g3-plan.md`, the only file both sides changed, merged automatically (dev changed row 12, this branch row 28). It changes the Scheduling module, the PostgreSQL adapter, the worker's slot credentials, governance, the review scripts, and their tests, and no file of this change; the dependency inventory and the generated web API types stayed current. Then `docs: record the merge of dev into scaffold-web-spa-workspace` and the `make record` of the passing seventh `make verify` on its tree (log `verify-28a-7.log` in the session scratchpad).
 
 ## Environment
 
@@ -99,10 +100,10 @@ Each behavior was broken in place on `e73ff2e3`, unless its entry names another 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a9e5e849dc707ad80ac3efa9bcbaee23a90b609c`; tests 3937, pass 3928, fail 0, skipped 9; all files 99.38% lines, 92.55% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `875e5c52fb27f06b88406eba309c4bd43a712ab8`; tests 3978, pass 3969, fail 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.85% functions.
 - `npm run openspec -- validate scaffold-web-spa-workspace --strict`: passed, `Change 'scaffold-web-spa-workspace' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
-- Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 93 file(s); every pass summary file is valid: 73 file(s); every route file is valid: 28 file(s).`.
+- Spec diff against the merge base `22ad068c08cc` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
