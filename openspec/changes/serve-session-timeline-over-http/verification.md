@@ -134,7 +134,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Reviewer B: Claude Code, model `claude-opus-5-5`, effort `medium`, permission mode `plan` with `Edit`, `Write`, and `NotebookEdit` disallowed, session `0de0fcc9-aba0-41a9-b3f7-8dbb4c10c750`, on `30663d59` (diff `dc2ae98b..30663d59`). The worktree snapshot before and after the review was `453dbce204f6384f8da69d4c994fdbb9eafe398ad30e5daa85152dced328217f`, equal.
 - Invocation (from `make review`): `claude -p --model claude-opus-5-5 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, environment `PATH HOME USER LANG TERM`, started 2026-10-29T02:57:36.665Z. Model confirmation: `model: claude-opus-5-5 (reported)`, printed by `make review` from the reviewer's log. The brief names pass 2 reviewer B `claude claude-opus-5-5#medium`; `make review` printed "route: recommends effort xhigh; the authorized medium applies (policy version 8)", so the route's `#xhigh` stayed a recommendation.
-- Result: Critical 0, High 0, Medium 0, Low 8, matching the pass 2 line of `passes.jsonl`. The reviewer found every pass 1 finding fixed without a new behavioral defect. Since the pass has only Low findings, the review ends (governance, policy version 8): all eight are fixed without another review and recorded in `findings.jsonl` as `fixed-unreviewed`. These fixes are unreviewed, pending the coordinator's architect check.
+- Result: Critical 0, High 0, Medium 0, Low 8, matching the pass 2 line of `passes.jsonl`. The reviewer found every pass 1 finding fixed without a new behavioral defect. Since the pass has only Low findings, the review ends (governance, policy version 8): all eight are fixed without another review and recorded in `findings.jsonl` as `fixed-unreviewed`. These fixes are unreviewed by a reviewer; the coordinator's architect check passed them ("Architect check"); no pass 3 runs.
   1. Low, evidence-mismatch (this record, "Checks", the scratch archive row): the archive was recorded at `8dca7e3a`, before `66c1e841` changed three deltas. Fixed in `73a934e3`: run again at `0e8db953`, 8 requirements added and 71 of 71 specs valid (`13b-p2-archive.log`).
   2. Low, evidence-mismatch (this record, "Checks", the strict validation row): recorded at `3409a9b9`, before `66c1e841`. Fixed in `73a934e3`: valid at `0e8db953` (`13b-p2-validate.log`).
   3. Low, stale-citation (this record, pass 1 finding 7): it cited `native-request-source.ts:110` as well, while `findings.jsonl` cites only the crash test. Fixed in `73a934e3`.
@@ -144,6 +144,10 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   7. Low, test-coverage, recorded as missing-fail-before-test, the closest listed category (`agent-session-routes.test.ts`): no check of `output.earliestRetained` or of the 400 of an input answer over its bound. Fixed in `a1d596ec`: two route tests, the bound one over the character and the UTF-8 byte bound.
   8. Low, performance, recorded as contract-drift, the closest listed category (`1792933100000_session-inbox-items.sql:15`): the partial index of open items had the default collation, unlike the `COLLATE "C"` order of `listOpen`. Fixed in `0e8db953`: the index is on `item_id COLLATE "C"`; the down migration test still passes.
 - Fail-before: "Fail-before of the pass 2 fixes" below. Findings 1 to 4 change records only.
+
+### Architect check
+
+Architect check (Niki, 2026-10-29): 778649a0, b52c1057, a1d596ec, 0f2b0fcb, 0e8db953, 73a934e3 passed (cb8f4fc0/b8408961 records); category mapping test-coverage to missing-fail-before-test and performance to contract-drift accepted
 
 ### Route
 
@@ -161,7 +165,6 @@ Route (`route.json`, rule version 2): elevated; pass 1 reviewer A codex gpt-6-as
 
 ## Remaining gates
 
-- The coordinator's architect check of the eight unreviewed pass 2 fixes (`fixed-unreviewed`); no pass 3, since pass 2 reported Low findings only (governance, policy version 8)
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
 - Follow-ups 13c (the worker messages, and the run's revealed credentials in the session output redactor, answer Q9) and 13d `redact-session-output-across-chunks` (output redaction across chunks with a held tail and the `readAgentSessionOutput` route, migration `1792933200000`)
