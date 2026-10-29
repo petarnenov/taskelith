@@ -17,6 +17,8 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - `68de6c09` `chore: regenerate the dependency inventory for the web test scripts`: `make dependency-inventory` changed only that hash in `docs/dependencies/licenses.json`; no dependency changed, so the additions stay in `ff6a7795`.
 - `7a436fbc` `docs: route the scaffold-web-spa-workspace change again after the inventory regeneration` (`route.json`, unedited, at head `68de6c09`): the regeneration changed the diff outside the change directory, so under worker step 4 the first route was deleted and the change routed again. "route: elevated (lines, files, capabilities, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.81) and agrees; recommendation only. The route's pass 2 reviewer differs from the brief's `claude claude-fable-5-1#medium`, and its efforts are above the brief's; the brief's reviewers stand unless the coordinator decides otherwise. `git fetch origin` before routing showed `origin/dev` at `2250f3f7` (#415, `assign-fable-to-review-pass-2`), which this branch has not merged.
 - `docs: record the make verify of scaffold-web-spa-workspace`, the `make record` of the passing second `make verify` on the tree of `7a436fbc` (log `verify-28a-2.log` in the session scratchpad). The web workspace's own Vitest coverage in that run: tests 17, pass 17; statements 100% (30/30), branches 100% (24/24), functions 100% (9/9), lines 100% (24/24); `Every product module is in the coverage report.`
+- `f926cc4c` `chore: give each allowed web bundle URL a reason and test that the dist holds no development file`, under the coordinator's answers before pass 1 (design, "Coordinator decisions before pass 1"): `ALLOWED_URLS` becomes a map from each exact URL to its one-line reason (answer 4), and a new test over the real dist refuses any file other than `index.html` and the hashed `assets/index-*` scripts and stylesheets and any literal that only `dev-server.ts` or a web test holds (answer 3).
+- `docs: record the coordinator's answers before pass 1 of scaffold-web-spa-workspace`: the verbatim answers in the design, the register's same-minor patch rule for `react-router@8.5.1` and "Used from 28b" for Router, Query, and Mantine (answers 1 and 2), and this record. The register is not an input of the dependency inventory, so `npm run verify:dependencies` still passed with no regeneration.
 
 ## Environment
 
@@ -31,11 +33,11 @@ macOS 26.6.2 on x86_64; Node.js 24.22.1 (`.nvmrc`) and npm 12.2.1 (the `Makefile
 - Secrecy: no CA, key, certificate, secret, or token is in the repository, the bundle, the tests, or a log. `scripts/web-dev.sh` writes the CA copy and the development key to a temporary directory and deletes it on exit; the bundle check refuses PEM blocks; the secret fixtures of `test/check-web-bundle.test.ts` are assembled at run time from fragments, so no secret shape is tracked; the fetch tests use the fixture strings `csrf-fixture` and `fixture-password`.
 - Hexagonal and boundaries: SPA source imports no workspace package, Node built-in, or server SDK, and reads only `import.meta.env.MODE`; `npm run check:boundaries` passed.
 - Spec deltas: `workspace-packages` modifies "Workspace package layout" (435 characters), keeping its four scenarios unchanged and adding "Browser application", and adds "Browser application contract" (369) and "Browser application build and test" (351); `engineering-principles` modifies "Code coverage threshold" (433), keeping its three scenarios and adding "Untested browser application module"; `product-ui` adds "Web SPA control-plane client" (372), "Web SPA development server" (425), and "Web SPA bundle boundary" (381). None is removed. "Workspace package contract" (478 characters) is not modified: the layout requirement routes the browser application to its own requirements.
-- Comments: `npm run verify:comments` passes. It does not check `.tsx` files; the two `.tsx` source files hold one one-line comment.
+- Comments: `npm run verify:comments` passes. It does not check `.tsx` files; under the coordinator's answer 6 every comment in the tracked `apps/web` `.tsx` files was checked by hand on `f926cc4c`: the only one, in `apps/web/src/App.tsx`, is one line of 68 characters, so nothing needed a fix.
 
 ## Fail-before
 
-Each behavior was broken in place on `e73ff2e3`, its tests run, and the file restored with `git checkout`; the logs, each with its diff and command, are in the session scratchpad.
+Each behavior was broken in place on `e73ff2e3`, unless its entry names another revision, its tests run, and the file restored with `git checkout`; the logs, each with its diff and command, are in the session scratchpad.
 
 - Browser application contract and build (`fb-28a-build-contract.log`): `scripts/build-workspaces.ts` checks every workspace against the package contract, as at the base. `test/browser-application.test.ts`: tests 7, pass 4, fail 3; the fixture builds fail on the package contract (`exports must be only the root entry ...`, `tsconfig.json is missing`) instead of running the build script or naming the dependency problems.
 - Coverage scope (`fb-28a-coverage-scope.log`): no browser application report read. `test/check-coverage-scope.test.ts`: tests 9, pass 7, fail 2; the untested `.tsx` module and the missing report are not reported.
@@ -47,6 +49,8 @@ Each behavior was broken in place on `e73ff2e3`, its tests run, and the file res
 - Generated types with comments (`fb-28a-types-comments.log`): the generator returns `openapi-typescript`'s output unprinted; `test/generate-web-api-types.test.ts`: tests 4, pass 2, fail 2 (the committed file no longer matches, and the description comments are back).
 - Type drift (`fb-28a-types-drift.log`): one operation changed in the committed `apps/web/src/generated/control-plane.ts`; `npm run verify:web-api-types` exits 1 naming the stale file, and the drift test fails.
 - External font (`fb-28a-bundle-font.log`): a Google Fonts stylesheet link added to `apps/web/index.html` and the SPA rebuilt; the real-dist bundle test fails with `index.html: references the external origin of https://fonts.googleapis.com/css2?family=IBM+Plex+Sans`. The other secret, environment, and origin shapes are unit-tested on fixtures.
+- Development files in the dist (`fb-28a-dist-excludes.log`), on `92c01f55` with the new test of `f926cc4c`: an import of `CONTROL_PLANE_ORIGIN` from `dev-server.ts` added to `apps/web/src/main.tsx` and the SPA rebuilt with `vite build`, then `apps/web/test/client.test.ts` copied into a new `apps/web/public/` and rebuilt; the test "the built web SPA holds neither dev-server.ts nor a web test" fails both times (tests 1, pass 0, fail 1), first with `the dist holds https://127.0.0.1:8443 of dev-server.ts`, then with the unexpected file `client.test.ts`, and passes after the restore and a rebuild.
+- Exact URL allowlist (`fb-28a-allowlist-exact.log`): `scripts/check-web-bundle.ts` of `92c01f55`, a set of URLs without reasons, with the test file of `f926cc4c`; `test/check-web-bundle.test.ts`: tests 16, pass 15, fail 1, "every allowed URL is an exact string with a one-line reason".
 
 ## Image size
 
@@ -73,6 +77,8 @@ Each behavior was broken in place on `e73ff2e3`, its tests run, and the file res
 | `npm run verify:comments` | records working tree | `Every comment is within the comment length rule.` |
 | `npm run check:boundaries` | `e73ff2e3` | `Workspace and hexagonal boundary checks passed.` |
 | `npm run verify:dependencies` | `ff6a7795` | `Verified 918 package paths; 70 with license coverage gaps (all reviewed; 4 declaration-only)` |
+| `node --experimental-strip-types --test test/check-web-bundle.test.ts` over the rebuilt dist | `f926cc4c` | tests 16, pass 16, fail 0 |
+| `npx tsc -p tsconfig.check.json --noEmit`, `npm run check:boundaries`, `npm run verify:dependencies` | `f926cc4c` | no type error; `Workspace and hexagonal boundary checks passed.`; `Verified 918 package paths; 70 with license coverage gaps (all reviewed; 4 declaration-only)` |
 | `npm run openspec -- validate scaffold-web-spa-workspace --strict` | records working tree | `Change 'scaffold-web-spa-workspace' is valid` |
 
 <!-- make record: begin -->
@@ -89,7 +95,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to reviewer B `claude claude-fable-5-1#medium`, and pass 3, only after a pass 2 with a Medium or worse finding, to reviewer A `codex gpt-6.1-sol#medium`, at most three passes and stopping at a Low-only pass (governance v9). No pass has run yet.
+Review plan (governance v9, at most three passes, stopping at a pass that reports only Low findings or none):
+
+- Pass 1: reviewer A `codex gpt-6-astra#medium`.
+- Pass 2: reviewer B `claude claude-fable-5-1#medium`, by owner decision 2026-10-29 (governance v9, on `dev` as #415 `2250f3f7` after this change's route was recorded).
+- Pass 3, only after a pass 2 with a Medium or worse finding: reviewer A `codex gpt-6.1-sol#medium`.
+
+`route.json` recommends `claude-opus-5-5#xhigh` for pass 2 and `high` for passes 1 and 3; every pass runs at `medium` because routed effort is not authorized, and the coordinator confirmed this plan and the recorded mismatch (answer 7). No pass has run yet.
 
 ## Limitations
 
@@ -97,11 +109,12 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 - `dev-server.ts` and `scripts/web-dev.sh` have no automated test against a running control plane; the unit tests cover the bind address, the strict port, the proxy pattern, and the CA-only agent.
 - The fetch does not validate answer bodies against the document, and it covers JSON operations only; the SSE stream and the terminal WebSocket belong to later items.
 - React Router, TanStack Query, and most of Mantine are installed but unused until 28b (design, decision 8).
-- `npm run verify:comments` does not check `.tsx` files; the comment rule's file list in `AGENTS.md` does not name them.
+- `npm run verify:comments` does not check `.tsx` files; the comment rule's file list in `AGENTS.md` does not name them. The coordinator proposes to the owner extending the rule to `.tsx` and `.jsx` as a separate follow-up (answer 6).
 - The bundle URL allowlist is exact, so an upgrade that changes a React or Mantine error link needs a reviewed list change.
 
 ## Remaining gates
 
+- `make web-dev` was not run against a real installation (see "Development server"); 28c or the first installation run closes this gate (coordinator answer 5).
 - Independent review passes 1 to 3 as governance requires, and the architect check of any unreviewed fixes by the coordinator.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
