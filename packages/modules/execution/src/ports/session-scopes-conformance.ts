@@ -26,9 +26,8 @@ export interface ScopesLineage {
   readonly tasks: readonly LineageTask[];
 }
 
-// The lineage each adapter seeds before every case: alpha's card `run-alpha`
-// holds `task-1` and its delegated child `task-child`, run in `run-child`;
-// alpha's card `run-empty` has no task, and `run-beta` is beta's card.
+// Seeded before every case: alpha's card `run-alpha` with `task-1` and its
+// child `task-child` in `run-child`, empty `run-empty`, and beta's `run-beta`.
 export const SCOPES_LINEAGE: ScopesLineage = Object.freeze({
   runs: Object.freeze([
     { runId: 'run-alpha', projectId: 'alpha' }, { runId: 'run-child', projectId: 'alpha' },

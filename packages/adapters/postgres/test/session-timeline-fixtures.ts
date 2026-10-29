@@ -1,3 +1,4 @@
+import { AssertionError } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
   SessionTimelineService,
@@ -93,20 +94,36 @@ export async function sessionWithOpenRequest(service: SessionTimelineService): P
   return submitted.turn.id;
 }
 
-// Parties wait until all have arrived; no timer decides an order.
+// Parties wait until all have arrived; no timer decides an order. A party
+// left waiting fails by assertion after `timeoutMs` instead of hanging.
 export class Barrier {
   readonly #waiting: (() => void)[] = [];
+  readonly #parties: number;
+  readonly #timeoutMs: number;
   #remaining: number;
 
-  constructor(parties: number) {
+  constructor(parties: number, timeoutMs = 20_000) {
+    this.#parties = parties;
+    this.#timeoutMs = timeoutMs;
     this.#remaining = parties;
   }
 
   arrive(): Promise<void> {
     this.#remaining -= 1;
-    const arrived = new Promise<void>((resolve) => this.#waiting.push(resolve));
+    const arrived = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(this.#incomplete()), this.#timeoutMs);
+      this.#waiting.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
     if (this.#remaining === 0) for (const release of this.#waiting) release();
     return arrived;
+  }
+
+  #incomplete(): AssertionError {
+    const arrived = this.#parties - this.#remaining;
+    return new AssertionError({ message: `only ${arrived} of ${this.#parties} parties reached the barrier within ${this.#timeoutMs} ms` });
   }
 }
 

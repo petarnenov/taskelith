@@ -77,27 +77,31 @@ async function itemRows(): Promise<{ item_id: string; kind: string; state: strin
   return query(url, 'SELECT item_id, kind, state FROM session_inbox_items ORDER BY kind, native_request_id');
 }
 
+// The ID of the open request's item, which recording the request opened.
+async function openItemId(): Promise<string> {
+  const [row] = await itemRows();
+  assert.ok(row !== undefined, 'the recorded permission request opened no item');
+  return row.item_id;
+}
+
 async function auditRows(): Promise<number> {
   const [row] = await query<{ events: number }>(url, 'SELECT count(*)::int AS events FROM session_audit_events');
   return row!.events;
 }
 
-// Each transaction of the first attempt waits at the barrier after its first
-// item read, so every party has read the item before any writes.
-function itemBarrierStore(store: SessionTimelineStore, barrier: Barrier): SessionTimelineStore {
+// The writing transaction of an acknowledgement reads the item, then its
+// key. Its first attempt waits at the barrier after that key read, so both
+// parties have read the open item in their writing transactions before
+// either writes; `keyReads` counts the attempts.
+function acknowledgementBarrierStore(store: SessionTimelineStore, barrier: Barrier, keyReads: { count: number }): SessionTimelineStore {
   let arrived = false;
   const gated = (tx: SessionTimelineTransaction): SessionTimelineTransaction => ({
     ...tx,
-    sessions: tx.sessions,
-    idempotency: tx.idempotency,
-    audit: tx.audit,
-    items: {
-      find: (...args) => tx.items.find(...args),
-      add: (item) => tx.items.add(item),
-      settle: (item) => tx.items.settle(item),
-      listOpen: (...args) => tx.items.listOpen(...args),
-      get: async (itemId) => {
-        const read = await tx.items.get(itemId);
+    idempotency: {
+      record: (sessionId, record) => tx.idempotency.record(sessionId, record),
+      find: async (...args) => {
+        const read = await tx.idempotency.find(...args);
+        keyReads.count += 1;
         if (!arrived) {
           arrived = true;
           await barrier.arrive();
@@ -137,7 +141,9 @@ async function uncertainDelivery(): Promise<string> {
   await sessionWithOpenRequest(service);
   value(await service.consumeResponse(SESSION, allow('answer-1')));
   value(await service.endGeneration(SESSION, generation(1)));
-  return (await itemRows()).find((row) => row.kind === 'delivery-acknowledgement')!.item_id;
+  const row = (await itemRows()).find((candidate) => candidate.kind === 'delivery-acknowledgement');
+  assert.ok(row !== undefined, 'the uncertain delivery opened no acknowledgement item');
+  return row.item_id;
 }
 
 test.describe('session inbox items on PostgreSQL', { concurrency: false }, () => {
@@ -187,14 +193,14 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
 
   test('a response racing an inbox answer of one request consumes one, the other fails already-answered, and the item resolves once', async () => {
     await sessionWithOpenRequest(service);
-    const [itemId] = (await itemRows()).map((row) => row.item_id);
+    const itemId = await openItemId();
     const barrier = new Barrier(2);
     const responder = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier));
     const inboxStore = barrierStore(new PostgresSessionTimelineStore(database), barrier);
     const inbox = source(inboxStore, timelineService(inboxStore));
     const results = await Promise.all([
       responder.consumeResponse(SESSION, allow('answer-1')),
-      inbox.answer(answer(itemId!, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
+      inbox.answer(answer(itemId, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
     ]);
     assert.deepEqual(results.map((result) => result.ok).sort(), [false, true]);
     const loser = failed(results.find((result) => !result.ok)!);
@@ -206,31 +212,31 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
   test('one key used by a response and then an inbox answer, or the reverse, answers the second already-answered', async () => {
     const permission = (decision: string) => ({ kind: 'permission-request', decision });
     await sessionWithOpenRequest(service);
-    const [itemId] = (await itemRows()).map((row) => row.item_id);
+    const itemId = await openItemId();
     value(await service.consumeResponse(SESSION, allow('shared-1')));
     for (const decision of ['allow', 'deny']) {
-      const second = failed(await source(new PostgresSessionTimelineStore(database)).answer(answer(itemId!, 'shared-1', permission(decision))));
+      const second = failed(await source(new PostgresSessionTimelineStore(database)).answer(answer(itemId, 'shared-1', permission(decision))));
       assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED], decision);
     }
     await truncateAll(url);
     await lineage();
     await sessionWithOpenRequest(service);
-    const [answeredId] = (await itemRows()).map((row) => row.item_id);
-    value(await source(new PostgresSessionTimelineStore(database)).answer(answer(answeredId!, 'shared-1', permission('allow'))));
+    const answeredId = await openItemId();
+    value(await source(new PostgresSessionTimelineStore(database)).answer(answer(answeredId, 'shared-1', permission('allow'))));
     const second = failed(await service.consumeResponse(SESSION, allow('shared-1')));
     assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED]);
   });
 
   test('a standing rule racing an inbox answer: the rule closes the item and the answer fails item-closed, or the rule fails', async () => {
     await sessionWithOpenRequest(service);
-    const [itemId] = (await itemRows()).map((row) => row.item_id);
+    const itemId = await openItemId();
     const barrier = new Barrier(2);
     const rule = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier));
     const inboxStore = barrierStore(new PostgresSessionTimelineStore(database), barrier);
     const ruled = allow('rule-1');
     const [byRule, byInbox] = await Promise.all([
       rule.consumeResponse(SESSION, { ...ruled, response: { ...ruled.response, responder: { kind: 'standing-rule', ruleId: id('StandingRuleId', 'rule-1') } } }),
-      source(inboxStore, timelineService(inboxStore)).answer(answer(itemId!, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
+      source(inboxStore, timelineService(inboxStore)).answer(answer(itemId, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
     ]);
     const loser = failed(byRule.ok ? byInbox : byRule);
     const expected = byRule.ok ? ['precondition-failed', ITEM_CLOSED, 'closed'] : ['conflict', ALREADY_ANSWERED, 'resolved'];
@@ -240,11 +246,13 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
   test('two acknowledgements of one item under two keys resolve it once with one audit event, and the other fails already-answered', async () => {
     const itemId = await uncertainDelivery();
     const barrier = new Barrier(2);
+    const keyReads = { count: 0 };
     const racers = [PERSON, OTHER_PERSON].map((person, index) => {
-      const store = itemBarrierStore(new PostgresSessionTimelineStore(database), barrier);
+      const store = acknowledgementBarrierStore(new PostgresSessionTimelineStore(database), barrier, keyReads);
       return source(store).answer(answer(itemId, `ack-${index}`, ACKNOWLEDGE, person));
     });
     const results = await Promise.all(racers);
+    assert.equal(keyReads.count, 3, 'the loser\'s writing transaction overlapped the winner\'s and was retried once');
     assert.deepEqual(results.map((result) => result.ok).sort(), [false, true]);
     assert.deepEqual(failed(results.find((result) => !result.ok)!).details.reason, ALREADY_ANSWERED);
     assert.equal(await auditRows(), 1);
