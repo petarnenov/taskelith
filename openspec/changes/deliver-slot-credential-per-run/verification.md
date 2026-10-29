@@ -15,6 +15,8 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12c, developed by a briefed s
 - `d11dbf28` `chore: forget a held slot credential on a new ownership generation or recovery epoch` (the coordinator's answers Q7 and Q4): `FetchedRunSlotCredentials` keeps each held delivery's ownership generation and recovery epoch and drops the stale ones before it looks for a held one; the worker test gains one test each for the run's end, a new recovery epoch, and a new ownership generation; the API test of the `503` without a delivery service stands alone and checks the body's `unavailable` code.
 - `docs: apply the coordinator's answers to the deliver-slot-credential-per-run design`: the design records the answers Q1 to Q8 verbatim; the spec delta modifies "Confidential credential transport" (Q3) and adds the generation and epoch scenarios to "Run slot credential port on the worker" (Q7); account pool contract sections 7.2, 7.3, 11, and 13 and `docs/g3-plan.md` row 12 follow; the proposal, the task list, and this record.
 - `docs: route the deliver-slot-credential-per-run change again after the coordinator's answers` (`route.json`, unedited, at head `8c1a7af9`): `d11dbf28` and the docs commit change the diff outside the change directory (the worker, its port, the API and worker tests, the account pool contract, and the plan), so under worker step 4 the route of `f0fb9f6c` was stale; it was deleted and the change routed again. "route: elevated (lines, files, security, contracts), rule version 2", features 1706 lines and 38 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.75) and agrees; recommendation only. `git fetch origin` showed `origin/dev` still at `dc2ae98b`.
+- `9821fee0` `docs: record the second route of deliver-slot-credential-per-run` (this record).
+- `docs: record the second make verify of deliver-slot-credential-per-run`, the `make record` of a passing `make verify` on the tree of `9821fee0` (log `verify-12c-2.log` in the session scratchpad, one run).
 
 ## Environment
 
@@ -60,7 +62,7 @@ Each behavior was broken in place on `8ddb3800`, the build and the tests run, an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `29a994ff783bef263fad563c4481cd44e906972e`; tests 3812, pass 3803, fail 0, skipped 9; all files 99.39% lines, 92.73% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `654e16a32ef260fcc5d10fdb4ea3338e32bdb1a8`; tests 3815, pass 3806, fail 0, skipped 9; all files 99.39% lines, 92.72% branches, 98.85% functions.
 - `npm run openspec -- validate deliver-slot-credential-per-run --strict`: passed, `Change 'deliver-slot-credential-per-run' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s).`.
 - Spec diff against the merge base `dc2ae98b379d` with `origin/dev`: no change under `openspec/specs`.
