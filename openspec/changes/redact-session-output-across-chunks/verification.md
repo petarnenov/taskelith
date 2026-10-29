@@ -69,7 +69,7 @@ The route was generated under rule version 2, before governance v9 (owner decisi
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8def72537a8fe7579908c918bb38f7ca1d05ca11`; tests 4016, pass 3969, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.82% functions.
+- `make verify`: passed, profile full, tree `eedce09049ce9e1acd0cd1e21e765ffb601a5120`; tests 4026, pass 3979, fail 0, skipped 47; all files 99.35% lines, 92.68% branches, 98.82% functions.
 - `npm run openspec -- validate redact-session-output-across-chunks --strict`: passed, `Change 'redact-session-output-across-chunks' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 92 file(s); every pass summary file is valid: 72 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `2250f3f7f140` with `origin/dev`: no change under `openspec/specs`.
@@ -79,6 +79,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18605-e9aa-7ed3-a7fc-7bfad5397e36` | 0 | 3 | 2 | 3 |
 | 2 | B | `claude claude-fable-5-1#medium` | `6228fa04-9305-4f73-865b-2b98a44e9e7c` | 0 | 0 | 1 | 2 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1863d-e42e-7ec3-9ba0-5c524705441c` | 0 | 1 | 1 | 2 |
 <!-- make record: end -->
 
 ## Review pass 1 fixes
@@ -125,7 +126,7 @@ Checks on `3ef33459`, tree `8def7253`: `make verify` passed, profile full, stamp
 Pass 3 (reviewer A, codex gpt-6.1-sol, variant medium, session `01a1863d-e42e-7ec3-9ba0-5c524705441c`) reported 0 Critical, 1 High, 1 Medium, and 2 Low findings (`findings.jsonl`), recorded in `5769e27c`. Pass 3 is the last pass under the cap of three, so these fixes are unreviewed: they wait for the coordinator's architect check, and their findings carry the outcome `fixed-unreviewed`.
 
 - `cbf69b2d` `chore: keep a cut key's context in an overflowing .creds block and redact a trailing shape head at a turn's end` (findings 1, 2, and 4).
-- The commit after `cbf69b2d`: `design.md` decisions 1 and 2, the `session-turn-model` delta, and this record (findings 1 to 3).
+- `d874c49e` `docs: apply review pass 3 fixes to the redact session output across chunks design, spec, and verification`: `design.md` decisions 1 and 2, the `session-turn-model` delta, and this record (findings 1 to 3).
 
 | Finding | Fix | Fail-before |
 | --- | --- | --- |
@@ -135,6 +136,8 @@ Pass 3 (reviewer A, codex gpt-6.1-sol, variant medium, session `01a1863d-e42e-7e
 | 4 (Low) | Both comments state 196,606 bytes: `node -e "console.log(Buffer.byteLength('€'.repeat(65_535) + '\n'))"` printed `196606`, and 10 MiB over 196,606 bytes is 53.3, so 54 entries still pass the window | Comments only; no behavior to test |
 
 Logs `13d-p3-*.log` and the scripts `13d-p3/pg-tap.sh` and `13d-pg.sh` are in the session scratchpad, outside the tree; each mutant was applied to `secret-output-redactor.ts`, run after a rebuild, and the fixed source restored and rebuilt. Each run failed by assertion, none by a timeout.
+
+Checks on `d874c49e`, tree `eedce090`: `make verify` passed on its first run, profile full, stamp written (log `13d-verify-4.log` in the session scratchpad, outside the tree): tests 4026, suites 49, pass 3979, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.68 % branches, 98.82 % functions; "Contract documents have no undeclared breaking change." `openspec validate redact-session-output-across-chunks --strict`: valid. `make findings ARGS="validate"`: valid. The findings of pass 3 carry `fixed-unreviewed` until the coordinator's architect check.
 
 The earlier record of 25 of 25 for the two PostgreSQL files holds: run alone at `cbf69b2d`, `session-output-tail.integration.test.ts` passed 10 of 10, one of them the new restart test, and `session-timeline-crash.integration.test.ts` 16 of 16 (log `13d-p3-pg-separate.log`), so before the fix the two held 9 and 16.
 
