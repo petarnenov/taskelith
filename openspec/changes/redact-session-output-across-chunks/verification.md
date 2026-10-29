@@ -69,10 +69,10 @@ The route was generated under rule version 2, before governance v9 (owner decisi
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7e16e4884cc77c481bed202c2368339d5584cf0a`; tests 4027, pass 3980, fail 0, skipped 47; all files 99.35% lines, 92.71% branches, 98.82% functions.
+- `make verify`: passed, profile full, tree `97d91e208c2b7e52294f7489708906cb6720e982`; tests 4069, pass 4022, fail 0, skipped 47; all files 99.36% lines, 92.67% branches, 98.83% functions.
 - `npm run openspec -- validate redact-session-output-across-chunks --strict`: passed, `Change 'redact-session-output-across-chunks' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 92 file(s); every pass summary file is valid: 72 file(s); every route file is valid: 27 file(s).`.
-- Spec diff against the merge base `2250f3f7f140` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 93 file(s); every pass summary file is valid: 73 file(s); every route file is valid: 28 file(s).`.
+- Spec diff against the merge base `22ad068c08cc` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -163,6 +163,8 @@ The owner did not accept the risk of declining pass 3 finding 2. The coordinator
 The nested-block tests of pass 3 finding 1 ran at a bound of 64, now refused, so they run at 256 (`MIN_OUTPUT_BOUND`), and the long type grew from 41 to 233 characters, so that a long-typed begin or end marker, 260 or 258 characters, still passes the bound while it is cut, as 68 or 66 did at 64. They keep their strength: with the finding 1 fix reverted (log `13d-arch-mutant-f1-scaled.log`), 2 of 68 redactor tests fail, the same two as at bound 64. The redactor test file takes about 21 s instead of 9 s.
 
 Checks on `ee04cd5f`, tree `7e16e488`: `make verify` passed, profile full, stamp written (log `13d-verify-5.log` in the session scratchpad, outside the tree): tests 4027, suites 49, pass 3980, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.71 % branches, 98.82 % functions; "Contract documents have no undeclared breaking change." The first run on the same tree (log `13d-verify-5-flake.log`) failed only at the timing-bound test "value redaction takes linear time on long runs" of `packages/adapters/secrets/test/secrets.test.ts`, which this change does not touch ("\"a b\" repeated took 201 ms"); run alone three times it passed (log `13d-verify-5-linear-alone.log`), and it passed in the rerun. An earlier run on `efec667d`, before `53570d62`, passed (log `13d-verify-5a.log`). `openspec validate redact-session-output-across-chunks --strict`: valid. `make findings ARGS="validate"`: valid.
+
+`44523562` merges `origin/dev` `22ad068c` (#416, `apply-account-slot-commands`, migration `1792933500000_slot-credential-stored-at.sql`, above this change's `1792933400000`). Conflicts: `docs/g3-plan.md`, row 12 taken from `dev` and row 13 keeping this change's promotion guard; `migrations.integration.test.ts`, every list the union in ascending order, `SESSION_OUTPUT_TAIL` before `SLOT_CREDENTIAL_STORED_AT`. Checks on `44523562`, tree `97d91e20`: `make verify` passed on its first run, profile full, stamp written (log `13d-verify-6.log` in the session scratchpad, outside the tree): tests 4069, suites 49, pass 4022, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.67 % branches, 98.83 % functions; "Contract documents have no undeclared breaking change." `openspec validate redact-session-output-across-chunks --strict`: valid. `make findings ARGS="validate"`: valid.
 
 ## Independent review
 
