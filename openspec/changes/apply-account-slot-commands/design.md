@@ -56,6 +56,21 @@ The coordinator Niki (architect) answered on 2026-10-29; these decisions are rec
 - **Deviation 3 accepted: revocation and re-delivery are serial.** The race of a revocation and a re-delivery commits in the order delivery, then revocation (decision 8). This is accepted because the revocation then cancels the holding assignment and revokes its grants, so a credential delivered earlier stops with the run. The race test that asserts this serial outcome stays.
 - **Deviation 4 accepted: the control-plane test double.** The test double `counted` of `apps/control-plane/test/slot-credential-delivery.integration.test.ts` implements `SlotCredentials.listStored`, the only control-plane file this change touches.
 
+## Coordinator decision M2
+
+The coordinator Niki (architect) decided on review pass 1, finding 2, on 2026-10-29, verbatim:
+
+> option (a), plus a cheap guard, so that the window is bounded and not just documented.
+> - The add takes a deadline of half the grace age: it measures, on the monotonic clock in its own process, the time from storing its version to the commit of its capacity transaction. If that exceeds the deadline, the add aborts, destroys its own stored version, and answers a retryable failure. The sweep (grace ≥ 1 h) therefore never meets a version of a live add, except under a clock fault, which is the residual risk to record.
+> - Amend §6.2 (:154) to say "close the race for any add that commits within half the grace age; a slower add aborts". Add a fail-before test with an injected clock.
+> - If the guard grows beyond about 30 lines, keep (a) with only the wording, record the residual risk in Limitations, and create a follow-up note for B instead. Tell me which you chose.
+> The fix is unreviewed, so send me its commit for the architect check together with the pass 2 fixes.
+> H1 noted: I will put the SlotRevocationPorts/commandIdFor wiring (SHA-256 like worker-revocation.ts) in B's brief for Zaki.
+
+The guard fits in 16 added production lines, so A applies it. `AccountSlotCommandPorts.monotonicMilliseconds` is the injected clock. The add reads it before its `store` and again as the last step of its `add` transaction's work, the latest point at which it can still roll back; past `ADD_SLOT_DEADLINE_MILLISECONDS`, half of `SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS`, it answers `unavailable` with the reason `add-deadline-exceeded`, so the transaction rolls back, and then discards its own version with `discard`, not `destroy`, which would also destroy a concurrent store for the slot. A rerun after a serialization failure checks again. The commit after the check, and a clock fault, stay outside the bound ([verification](verification.md), "Limitations").
+
+Follow-up for B: the composition passes the process's monotonic clock, for example `performance.now`, as `monotonicMilliseconds`; the Scheduling package has no Node.js types and no clock of its own.
+
 ## Risks
 
 - The commands and the sweep are not wired: B adds the routes and the sweep loop.

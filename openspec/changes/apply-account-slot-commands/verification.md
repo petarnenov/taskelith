@@ -16,7 +16,8 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12d A, developed by a briefed
 - `0b0c1066` `docs: route the apply-account-slot-commands change again` (`route.json`, unedited). The contract edit changed the tree outside the change's directory, so the routed commit `94e23088` no longer matched `HEAD`, and worker step 4 says: "if that run's fixes change the diff, delete `route.json`, route again, and record why in `verification.md`" (protocol "Route gate" would otherwise route at pass 1). The new record routes `f9093de0` with the same features, tier, and plan as before.
 - `docs: record the review plan of apply-account-slot-commands` and `docs: record the make verify of apply-account-slot-commands again`, the `make record` of a passing `make verify` on the tree of the review plan commit (log `verify-12dA-2.log` in the session scratchpad).
 - Pass 1 fixes: `7995b967` `chore: derive the slot revocation command id through a bounded port` (finding 1) and `1866701d` `test: cover the rotation interleavings and the removal of a reserved slot` (findings 3 and 4), then `docs: record review pass 1 of apply-account-slot-commands` (these records and design decisions 3 and 8) and the `make record` of a passing `make verify` on its tree (log `verify-12dA-3.log` in the session scratchpad). `route.json` is not regenerated after review fixes.
-- Governance v9 (`assign-fable-to-review-pass-2`, #415, `2250f3f7`) landed on `dev` after this change's route was first recorded; it is not merged into this branch.
+- Governance v9 (`assign-fable-to-review-pass-2`, #415, `2250f3f7`) landed on `dev` after this change's route was recorded; the route is not run again, and v9 reaches this branch with the merge below.
+- Pass 2 fixes, all unreviewed: `566776ce` (finding 4), `9c483f74` (findings 3 and 5), `285df9d1` (finding 5), `b6ab9ee2` (finding 1), `ef812f11` (finding 2), and, in its own commit, `6817cffb`, the add deadline of coordinator decision M2 (finding 6 and pass 1 finding 2); then `docs: record review pass 2 of apply-account-slot-commands`.
 
 ## Environment
 
@@ -78,7 +79,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1 ran; the review continues with pass 2. Review plan, each pass invoked with `env -u JEV_MAF_LAB`:
+Passes 1 and 2 ran, and pass 2 reported only Low findings, so the review ended after pass 2 and its fixes are unreviewed (governance "Architect check of unreviewed fixes"). Review plan, each pass invoked with `env -u JEV_MAF_LAB`:
 
 - Pass 1: `codex gpt-6-astra#medium` (A).
 - Pass 2: `claude claude-fable-5-1#medium` (B), by the owner decision of 2026-10-29 (governance v9, landed on `dev` as #415 `2250f3f7` after this change's route was recorded).
@@ -104,18 +105,38 @@ Pass 1 ran; the review continues with pass 2. Review plan, each pass invoked wit
 - After the fixes: the checks under "Checks"; `npm run verify:comments`, `npm run check:boundaries`, `npm run openspec -- validate apply-account-slot-commands --strict`, and `make findings ARGS="validate"` passed. The `make verify` of the fixed tree is under "Generated checks".
 - Pass 1 found High and Medium findings and the fixes change code and tests, so pass 2 by reviewer B is required.
 
+### Pass 2
+
+- Reviewer B: Claude Code, model `claude-fable-5-1`, effort `medium`, session `eb578367-67a9-4d49-952b-6f6459c7ba09`. The coordinator ran the pass and handed over its report; the branch head at the hand-over was `0ba4dca7`, clean.
+- The reviewer differs from `route.json`, which recommends `claude claude-opus-5-5#xhigh` for pass 2: owner decision 2026-10-29 (governance v9).
+- Result: Critical 0, High 0, Medium 0, Low 6, matching the pass 2 line of `passes.jsonl`. The pass is Low-only, so no pass 3 runs; every finding is fixed without another review (`fixed-unreviewed` in `findings.jsonl`). The reviewer confirmed the pass 1 fixes of findings 1, 3, and 4 and found finding 2 honestly recorded as open.
+  1. Low, evidence-mismatch (`repositories.ts:261`): `listHeldForCredential` used `$1 = ANY (provider_credentials)`, which the partial GIN index `assignments_held_by_credential` cannot serve, and the design called the sequential scan unavoidable. Fixed in `b6ab9ee2`: the read uses `provider_credentials @> ARRAY[$1::text]`, as `heldForCredential` does, and the design risk says so. Unreviewed.
+  2. Low, contract-drift (`account-slot-commands.ts:139`): a holder with a non-terminal execution was invalidated and its assignment kept its state, while contract section 8.1 said the revocation cancels the assignment, and the PostgreSQL test read the state without asserting it. Fixed in `ef812f11` by the reviewer's second option, the wording: ending the assignment in the revocation would make the re-delivery check of section 7.3 refuse with `assignment-not-active` before the `attempt-not-launchable` that section 8.1 requires, so section 8.1 and design decision 3 now say that the assignment keeps its state and held reservation until the transaction of the execution's terminal fact ends it with `attempt-ended`; the test asserts the unchanged state. Unreviewed.
+  3. Low, error-handling (`sweep-slot-credentials.ts:29`): a rejecting `discard`, `destroy`, or `discardOlderThan` for one slot rejected the whole sweep and skipped every later slot. Fixed in `9c483f74`: each slot's work is settled on its own, and the sweep answers `SlotCredentialSweep`, its `sweptSlots` and `failedSlots`. Unreviewed.
+  4. Low, contract-drift (`account-slot-commands.ts:128`): `sameSettings` compared the allowed projects by position, so a repeat in another order advanced the revision against Q2's idempotent repeat. Fixed in `566776ce`: the projects compare as sorted lists. Unreviewed.
+  5. Low, naming (`account-slot-commands.ts:38`, `sweep-slot-credentials.ts:35`): the function type `RevocationCommandIds` had a plural name, and the sweep answered an unnamed count that included slots where nothing was discarded. Fixed in `285df9d1` (`RevocationCommandIdFor`) and, for the sweep's answer, in `9c483f74`. Unreviewed.
+  6. Low, contract-drift (`account-pool.md:154`): section 6.2 said the listed pairs close the add race, which holds only within the grace age. Fixed in `6817cffb` with the coordinator's decision M2 (below). Unreviewed.
+- Coordinator decision M2 on pass 1 finding 2 (Niki, architect, 2026-10-29), recorded verbatim in the [design](design.md): the add-slot command takes a deadline of half the grace age. Applied as the guard, not the wording-only fallback, in its own commit `6817cffb` (`add-account-slot.ts` in `packages/modules/scheduling`, outside the files this change touched before but in the Scheduling module that A owns and not in `apps/control-plane`): 16 added and 1 changed production lines in `add-account-slot.ts` and `index.ts`. `AccountSlotCommandPorts` takes `monotonicMilliseconds`, the injected clock; the add reads it before its `store` and again at the end of its `add` transaction's work, and past `ADD_SLOT_DEADLINE_MILLISECONDS` (half of `SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS`, 1,800,000) it answers `unavailable` with the reason `add-deadline-exceeded`, which rolls the transaction back, and then discards its own version. Contract section 6.2 says the pairs close the race for any add that commits within half the grace age and that a slower add aborts; the spec delta adds the requirement "Add-slot deadline". Pass 1 finding 2 is `fixed-unreviewed`. Unreviewed.
+- Fail-before. Each log is in the session scratchpad.
+  - Finding 4 (`fb-12dA-P2-L4-project-order.log`): the new in-memory test against the source of `0ba4dca7`: tests 1, pass 0, fail 1; the revision was 2, not 1.
+  - Finding 3 (`fb-12dA-P2-L3-sweep-goes-on.log`): the new in-memory test against the source of `566776ce`: tests 1, pass 0, fail 1; the sweep rejected with the unreachable store's error.
+  - Finding 2 (`fb-12dA-P2-L2-assignment-state.log`): a mutant that cancels every holder through `cancelInTransaction`, with the new assertion: tests 1, pass 0, fail 1; the assignment was `ended`, not `offered`. The grant, cancellation, and reservation assertions passed under the mutant, so only the new assertion tells the two designs apart.
+  - Finding 1 (`fb-12dA-P2-L1-index-plan.log`): no test; the fix changes only a query plan, which a test on a nearly empty table cannot observe. The log holds the plans of both predicates on a throwaway migrated database with `enable_seqscan` off and the other secondary indexes of `assignments` dropped: the old predicate scans the whole partial index with a filter, and the new one has the index condition `provider_credentials @> '{slot-1}'::text[]`. The PostgreSQL command and conformance tests pass after the fix.
+  - Finding 5: a rename and the named answer of finding 3, covered by the tests of finding 3; no fail-before run.
+  - M2 guard (`fb-12dA-P2-M2-add-deadline.log`): the guard without its deadline check, the constant and port field kept so that the tests run: the in-memory and the PostgreSQL deadline tests, tests 2, pass 0, fail 2; both adds committed. Each test drives the injected clock past the deadline when the capacity transaction starts; the in-memory test also adds at exactly the deadline.
+- After the fixes: the Scheduling tests and the PostgreSQL account pool and command tests (tests 260, pass 260, fail 0), the PostgreSQL command and conformance tests (tests 86, pass 86, fail 0), `npx tsc -p tsconfig.check.json --noEmit`, `npm run openspec -- validate apply-account-slot-commands --strict`, and `make findings ARGS="validate"` passed. The `make verify` of the merged tree is under "Generated checks".
+
 ## Limitations
 
 - Nothing calls the commands or the sweep outside tests: B adds the HTTP operations and the sweep loop.
 - The re-delivery race forms no serialization cycle, so PostgreSQL commits both transactions in the order delivery, revocation, without a retry; in the observed runs the delivery committed with one attempt each. The test asserts that serial outcome and asserts a retry only in the branch where the delivery is refused ([design](design.md), decision 8).
 - The races run one interleaving each: the first attempt of each racer waits after its read for the other.
-- Review pass 1, finding 2, is open: an add-slot command that stays between its store and its `add` commit longer than the grace age can commit a record naming a version that the sweep has listed as unnamed and then discards. Closing it needs a claim that the add transaction and the sweep both see; contract section 6.2 keeps `SlotCredentials` outside `CapacityTransaction`, and Q4 and accepted deviation 1 chose the grace age, so the fix waits for the coordinator. Contract section 6.2 still says the pairs close the add race; they close it only within the grace age.
+- The add deadline of decision M2 bounds the add race by the process's monotonic clock, which the sweep's database clock does not share. A clock fault, a monotonic clock that stops or runs slow by more than half the grace age, or a commit that takes longer than the remaining half after the check at the end of the transaction's work, can still let an add commit a version that the sweep has listed as unnamed and then discards. No test covers a clock fault.
+- Nothing injects the add's monotonic clock outside tests; B's composition passes it, for example `performance.now`.
 - The test's re-delivery transaction repeats the checks and the record of `SlotCredentialDeliveryService` with the Scheduling functions, because this change touches no control-plane source.
 
 ## Remaining gates
 
-- The coordinator's decision on review pass 1, finding 2.
-- Independent review passes 2 and 3 as governance requires.
-- Architect check by the coordinator of any unreviewed fixes.
+- Architect check by the coordinator of the unreviewed fixes: every commit after `0ba4dca7`, the merge of `origin/dev` included.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
