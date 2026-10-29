@@ -38,6 +38,15 @@ Before the test changes, the route and review tests against the changed scripts 
 - `npm run openspec -- validate assign-fable-to-review-pass-2 --strict`: `Change 'assign-fable-to-review-pass-2' is valid`.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `dbaf699765779ef81348390ce3c6da06fff38656`; tests 3899, pass 3890, fail 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.84% functions.
+- `npm run openspec -- validate assign-fable-to-review-pass-2 --strict`: passed, `Change 'assign-fable-to-review-pass-2' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 26 file(s).`.
+- Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Review
