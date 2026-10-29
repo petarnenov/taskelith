@@ -34,6 +34,9 @@ const CREDS_CONTEXT = `${credsBegin}\n`;
 const TOKEN_CHARACTER = /[A-Za-z0-9_-]/;
 const ISSUED_AT_END = new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})(?:_[A-Za-z0-9_-]*)?$`);
 const SEED_AT_END = /S[OAU][A-Z2-7]{1,55}$/;
+// The heads of the shapes matched without a word boundary before them.
+const SHAPE_HEADS = ['eyJ', ...Object.values(SECRET_PREFIXES), 'SO', 'SA', 'SU'];
+const HEAD_PREFIXES = SHAPE_HEADS.flatMap((head) => Array.from(head, (_, end) => head.slice(0, end + 1)));
 const SCHEME_CHARACTER = /[A-Za-z0-9+.-]/;
 // A host and a user name cut before its `@` look alike, so both match.
 const USERINFO_SO_FAR = /^[^/?#@]+$/;
@@ -137,8 +140,8 @@ function pendingBegin(partial: string, bound: number): HeldOutput {
   return { text: partial.length <= bound ? partial : PEM_CONTEXT, continuation: 'block' };
 }
 
-// The contexts of the blocks open at the text's end, then a suffix that
-// may start a marker ending the inner block or opening a key inside it.
+// The open blocks' contexts and a partial marker; past the bound, a partial
+// in a `.creds` block counts as a key's begin, and in a key it is dropped.
 function blockContext(text: string, blocks: readonly BlockSpan[], bound: number): HeldOutput {
   const pem = blocks.find((block) => block.open && block.kind === 'pem');
   const creds = blocks.find((block) => block.open && block.kind === 'creds');
@@ -146,7 +149,8 @@ function blockContext(text: string, blocks: readonly BlockSpan[], bound: number)
   const inner = (pem ?? creds)!;
   const start = partialStart(text, pem === undefined ? CREDS_INNER_PARTIALS : PEM_END_PARTIALS, inner.bodyStart);
   const suffix = start === undefined ? '' : text.slice(start);
-  return { text: context + (context.length + suffix.length <= bound ? suffix : ''), continuation: 'block' };
+  if (context.length + suffix.length <= bound) return { text: context + suffix, continuation: 'block' };
+  return { text: pem === undefined ? context + PEM_CONTEXT : context, continuation: 'block' };
 }
 
 // The end of the blocks chained from the text's start, and whether open.
@@ -225,8 +229,14 @@ function pemPartial(head: string): Partial {
 function withoutInterruptedSecret(text: string): string {
   const runFrom = runStart(text, text.length);
   const run = text.slice(runFrom);
-  const starts = [jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
+  const starts = [headStart(run), jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
   return starts.length === 0 ? text : text.slice(0, runFrom + Math.min(...starts)) + REDACTED;
+}
+
+// The longest suffix of the run that is a non-empty prefix of a head.
+function headStart(run: string): number | undefined {
+  const lengths = HEAD_PREFIXES.filter((prefix) => run.endsWith(prefix)).map((prefix) => prefix.length);
+  return lengths.length === 0 ? undefined : run.length - Math.max(...lengths);
 }
 
 // A JWT cut short holds at most two dots after its `eyJ`.

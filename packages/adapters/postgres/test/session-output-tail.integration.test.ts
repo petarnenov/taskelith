@@ -122,6 +122,17 @@ for (const block of BLOCKS) {
   });
 }
 
+test('a key begun inside a .creds block whose context passes the bound still ends only at its own end marker after a restart', async () => {
+  const turnId = await sessionWithOpenRequest(service);
+  const chunks = [`${CREDS_BEGIN}\n${'x'.repeat(65_500)}`, 'x'.repeat(100), `-----BEGIN ${'A'.repeat(65_500)}`];
+  for (const chunk of chunks) value(await append(service, turnId, chunk));
+  await restarted(async (timeline) => {
+    value(await append(timeline, turnId, ` PRIVATE KEY-----\n${CREDS_END}\nLEAK_BODY\n${PEM_END}\n${CREDS_END}\nafter\n`));
+    assert.deepEqual(await texts(timeline), ['[redacted]', '\nafter\n']);
+  });
+  assert.equal((await storedOutput()).includes('LEAK_BODY'), false);
+});
+
 test('a held tail whose ciphertext was changed in the database fails the next append with internal and records nothing', async () => {
   const turnId = await sessionWithOpenRequest(service);
   value(await append(service, turnId, HALF_JWT_CHUNK));

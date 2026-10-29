@@ -434,7 +434,7 @@ test('readAgentSessionOutput answers cursor-expired with the earliest retained p
   for (let index = 1; index <= 101; index += 1) value(await append(writing, `line ${index}\n`));
   const first = await call('GET', outputPath('s-trimmed'), VERA);
   assert.equal(first.body.next, 100);
-  // Each chunk releases one entry of 196,608 bytes; 54 pass the 10 MiB window.
+  // Each chunk releases one entry of 196,606 bytes; 54 pass the 10 MiB window.
   for (let index = 0; index < 54; index += 1) value(await append(writing, `${'\u20ac'.repeat(65_535)}\n`));
   const earliest = value(await timeline.readSession(writing.sessionId)).outputWindow.earliestRetained;
   assert.ok(earliest !== undefined && earliest > 101, 'the window trimmed past the cursor');

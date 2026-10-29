@@ -158,7 +158,7 @@ test('readOutput pages the retained entries after a cursor, with more while entr
 test('readOutput answers cursor-expired with the earliest retained position for a cursor the window left', async () => {
   const { service } = timeline();
   await runningTurn(service);
-  // Each entry holds 196,608 bytes, so 54 of them pass the 10 MiB window.
+  // Each entry holds 196,606 bytes, so 54 of them pass the 10 MiB window.
   for (let index = 0; index < 54; index += 1) value(await append(service, `${'€'.repeat(MAX_HARNESS_TEXT_LENGTH - 1)}\n`));
   assert.deepEqual(value(await service.readOutput(SESSION, 0, 100)), { kind: 'cursor-expired', earliestRetained: 2 });
 });
