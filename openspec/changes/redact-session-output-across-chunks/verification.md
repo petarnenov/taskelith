@@ -67,16 +67,42 @@ Route (`route.json`, rule version 2): elevated (lines, files, capabilities, secu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `de12ea7f94d443ef1ab33a5358c5587142da34dd`; tests 3982, pass 3935, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.78% functions.
+- `make verify`: passed, profile full, tree `af2e8866f090f809ba37e4fb7af68cab819ed7c2`; tests 4010, pass 3963, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.82% functions.
 - `npm run openspec -- validate redact-session-output-across-chunks --strict`: passed, `Change 'redact-session-output-across-chunks' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
-- Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 92 file(s); every pass summary file is valid: 72 file(s); every route file is valid: 27 file(s).`.
+- Spec diff against the merge base `2250f3f7f140` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a18605-e9aa-7ed3-a7fc-7bfad5397e36` | 0 | 3 | 2 | 3 |
 <!-- make record: end -->
+
+## Review pass 1 fixes
+
+Pass 1 (reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7ed3-a7fc-7bfad5397e36`) reported 0 Critical, 3 High, 2 Medium, and 3 Low findings (`findings.jsonl`).
+
+- `20a5cb3a` `chore: end a cut output block only at its own end marker and redact an interrupted secret at a turn's end` (findings 1, 2, and 5).
+- `fbd08669` `docs: apply review pass 1 fixes to the redact session output across chunks design, specs, and contracts` (findings 3 to 8 in the records: the legacy output limit and promotion guard of finding 3, the MODIFIED `Event payloads and session text` delta, the scenario's bound condition, the corrected limit, `checkOutputTurn`, and wire contracts section 7).
+- `95cf15ea` merges `origin/dev` `2250f3f7` (#415, governance v9) without conflicts; `route.json` was not regenerated.
+
+| Finding | Fix | Fail-before |
+| --- | --- | --- |
+| 1 (High) | A cut block keeps the begin markers of its open blocks as a never-released context in the sealed tail, so each later chunk is read after them and the block ends only at the end marker of its own kind; a begin marker cut after a space is kept until it completes | Against the redactor of `c03aafaf` (the fix's source file reverted, packages rebuilt): the `.creds` and PEM foreign end marker tests, the key inside a `.creds` block, both cut begin marker tests, and the restored-JSON test failed in `secret-output-redactor.test.ts`, and both PostgreSQL restart tests "a .creds block / PEM key cut at the bound ends after a restart only at its own end marker" failed |
+| 2 (High) | The final release records an open block, and an interrupted JWT, issued secret, NKey seed, or URL user information ending the held run, as one marker | Same revert: 9 of the "turn that ends at any offset" tests (URL, three issued, three seeds, `.creds`, JWT) and the cut-forms test failed; on PostgreSQL the recovery test with the 30-character JWT prefix and both new crash tests failed (the prefix was released verbatim) |
+| 3 (High) | Declined by coordinator decision (a): no release holds 13a or 13b output; design "Legacy output" and `docs/g3-plan.md` row 13 hold the promotion guard | No code change |
+| 4 (Medium) | MODIFIED delta of `Event payloads and session text`, the boundary at the turn | Archive in a scratch copy: + 10, ~ 4, - 1; `openspec validate --specs --strict` passed 71 of 71 |
+| 5 (Medium) | PostgreSQL restart tests of a run's and of both blocks' continuation, and crash tests of a generation end that releases a tail at `SessionTimelineCommit.before` and `.after` | Mutant "continuation lost" (the tail sealed with continuation `none`): the run and both block restart tests failed (3). Mutant "release not atomic" (the tail cleared in its own transaction): the `.after` crash test failed (the tail gone, no release, the generation not ended) |
+| 6 to 8 (Low) | Scenario bound condition; the `recordTurnAcceptanceUnknown` limit; `checkOutputTurn` | Records only |
+
+Focused runs on `fbd08669` before the merge: `secret-output-redactor.test.ts` 53 of 53; `session-output-tail.integration.test.ts` and `session-timeline-crash.integration.test.ts` 24 of 24; `agent-session-routes.test.ts`, the execution `session-output-tail.test.ts`, and the secrets tests 118 of 118.
+
+Checks on the merged head `95cf15ea`, tree `af2e8866`: `make verify` passed on its first run, profile full, stamp written (log `13d-verify-2.log` in the session scratchpad): tests 4010, suites 49, pass 3963, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.82 % functions; "Contract documents have no undeclared breaking change." `openspec validate redact-session-output-across-chunks --strict`: valid. `make findings ARGS="validate"`: valid.
 
 ## Independent review
 
-Not started.
+- Pass 1: reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7ed3-a7fc-7bfad5397e36`: 0 Critical, 3 High, 2 Medium, 3 Low. Findings 1, 2, and 4 to 8 fixed; finding 3 declined by coordinator decision (section "Review pass 1 fixes").
+- Pass 2: not started.
 
 ## Limitations
 
