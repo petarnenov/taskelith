@@ -121,7 +121,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   2. Low, evidence-mismatch (this record, "Author self-check"): the longest requirement was named "Durable session timeline service" at 494 characters, which pass 2 had cut to 415. Fixed in `87f1e9af`: "Session timeline tables", 417, then the service at 415, with 494 as its length at `c87d0653`.
 - Pass 3 reported only Low findings, so the review ends: both are fixed without another review, outcome `fixed-unreviewed`, and both fixes are unreviewed; the architect check below covers them. They change records and documentation only, so no new behavioral test.
 - The architect amended answer M1 (Niki, 2026-10-29), recorded in design decision 6: UTF-16 code units, matching the domain's bound, and the input answer's byte bound checked before redaction too.
-- Architect check (Niki, 2026-10-29): e355e01f (as amended), 87f1e9af, 79fcf2c3 passed
+- Architect check (Niki, 2026-10-29): e355e01f (as amended), 87f1e9af, c6ff25b1 (misreported as 79fcf2c3 at the archive) passed
 - The amendment: "change the wording to name the owner" of `e355e01f`; the key's creation and the service wiring are assigned to 13b, which `docs/contracts/installation-and-enrollment.md`, `proposal.md`, and `design.md` now say.
 
 ## Limitations

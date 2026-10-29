@@ -19,11 +19,18 @@ export class SessionInputDigestKeyFile {
     return this.#namespace.create(SESSION_INPUT_DIGEST_KEY_FILE, { key: randomBytes(KEY_BYTES).toString('base64') });
   }
 
+  // Creates the key when it is missing and keeps an existing one, whatever
+  // it holds, so a rerun never replaces it (coordinator answer Q7 of 13b).
+  ensure(): Result<void> {
+    const created = this.create();
+    return created.ok || created.error.code === 'conflict' ? ok(undefined) : created;
+  }
+
   // The stored bytes, whatever their number; the digest checks the size.
   read(): Result<Uint8Array> {
     const stored = this.#namespace.read(SESSION_INPUT_DIGEST_KEY_FILE);
     if (!stored.ok) return stored;
-    if (stored.value === undefined) return refused('is missing');
+    if (stored.value === undefined) return refused('is missing; run init');
     const { key } = stored.value;
     if (typeof key !== 'string') return refused('has no key');
     const bytes = Buffer.from(key, 'base64');

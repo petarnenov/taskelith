@@ -15,7 +15,8 @@ const TABLES = [
   'launch_rejections', 'current_revisions', 'delegation_requests', 'producer_cursors', 'inventory_requests', 'inventory_report_parts',
   'unrecorded_processes', 'placement_rotation', 'placement_outcomes', 'worker_self_check_results',
   'principals', 'installation_roles', 'operator_principal', 'project_roles', 'browser_sessions', 'access_audit_events',
-  'agent_sessions', 'agent_session_output', 'agent_session_attempts', 'session_idempotency_keys',
+  'agent_sessions', 'agent_session_output', 'agent_session_attempts', 'session_idempotency_keys', 'session_inbox_items',
+  'session_audit_events',
   'account_slots', 'slot_credentials', 'slot_credential_counters', 'slot_credential_deliveries',
 ];
 let created = 0;

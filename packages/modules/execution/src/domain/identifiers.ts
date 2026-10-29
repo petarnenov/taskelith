@@ -18,6 +18,15 @@ export type TurnId = Identifier<'TurnId'>;
 // The harness's own session handle, opaque to Taskelith.
 export type NativeSessionId = Identifier<'NativeSessionId'>;
 
+const TURN_ID = /^t[0-9a-f]{32}$/;
+
+// A TurnId as the control plane mints it: `t` and 32 lowercase hexadecimal
+// digits (control-plane wire contracts, section 6).
+export function parseTurnId(text: string): Result<TurnId> {
+  if (!TURN_ID.test(text)) return err(failure('invalid', 'TurnId must be t and 32 lowercase hexadecimal digits'));
+  return ok(text as TurnId);
+}
+
 declare const recoveryEpochBrand: unique symbol;
 
 // The installation-wide launch fence that only a disaster recovery procedure

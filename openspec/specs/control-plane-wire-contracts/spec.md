@@ -379,3 +379,10 @@ A terminal frame SHALL be one JSON text message with at most 4,096 characters of
 #### Scenario: Oversized input
 - **WHEN** a client sends `terminal.input` with 4,097 characters
 - **THEN** the frame is invalid and the control plane closes the connection with `invalid-frame`
+
+### Requirement: Refused turns on the wire
+The wire `TurnState` SHALL include `refused`, and a refused turn SHALL appear in `Turn` with the generation it was sent for, so that the wire states equal the domain's `TURN_STATES`.
+
+#### Scenario: Turn refused by the plugin
+- **WHEN** a client lists the turns of a session whose turn the harness plugin refused
+- **THEN** the turn has state `refused` and its generation, and matches `Turn`

@@ -13,7 +13,7 @@ import {
 } from '@taskelith/access';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import { ControlPlaneNamespace, FileInstallationRecord } from '@taskelith/control-plane-store';
+import { ControlPlaneNamespace, FileInstallationRecord, SessionInputDigestKeyFile } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
 import {
   EnrollmentService,
@@ -147,6 +147,9 @@ export class Administration {
     const record = await new FileInstallationRecord(this.#namespace).read();
     if (!record.ok) return record;
     const installed = record.value !== undefined;
+    // Also on a rerun, so an installation initialized without one gets it.
+    const digestKey = new SessionInputDigestKeyFile(this.#namespace).ensure();
+    if (!digestKey.ok) return digestKey;
     const trust = ensureBrokerTrust(this.#namespace, installed, this.#epochSeconds());
     if (!trust.ok) return trust;
     const authority = await ensureInstallationAuthority(this.#namespace, installed, this.#issuer, this.#clock.now());
@@ -270,8 +273,12 @@ export class Administration {
     return new CommittingWorkerAdmissions(this.#database).workers();
   }
 
-  // The service's database, operator credential, and verified installation,
+  // The service's files, database, operator credential, and installation,
   // which the control-plane composition root shares with these commands.
+  get namespace(): ControlPlaneNamespace {
+    return this.#namespace;
+  }
+
   get database(): PostgresDatabase {
     return this.#database;
   }

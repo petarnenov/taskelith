@@ -1,0 +1,2 @@
+{"change": "serve-session-timeline-over-http", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18567-6319-7b40-99eb-6c3869e945bc", "counts": {"critical": 0, "high": 0, "medium": 8, "low": 5}}
+{"change": "serve-session-timeline-over-http", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "medium"}, "session": "0de0fcc9-aba0-41a9-b3f7-8dbb4c10c750", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 8}}

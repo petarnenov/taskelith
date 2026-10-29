@@ -85,7 +85,7 @@ export { requestStartInventories } from './composition/start-inventory-requests.
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
 export { RotationNoticingFleetRegistry } from './composition/rotation-noticing-fleet-registry.js';
-export { startSessionTimelineService } from './composition/session-timeline.js';
+export { mintTurnId, NATIVE_REQUEST_SOURCE_ID, startAgentSessionServices, type AgentSessionServices } from './composition/session-timeline.js';
 export {
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,

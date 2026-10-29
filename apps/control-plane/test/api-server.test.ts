@@ -160,7 +160,7 @@ test('every response closes its connection, so no idle socket is reused', async 
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never, agentSessions: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never,
     enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
@@ -243,7 +243,7 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
-    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never, agentSessions: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
     enrollment: { enroll: undefined as never, renew: undefined as never, confirm: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
@@ -375,7 +375,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   ];
   let next = 0;
   const api = new ControlPlaneApi({
-    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never, agentSessions: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
@@ -423,7 +423,7 @@ test('a refused renewal is logged with its worker, generation, code, and reason,
 test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {
   const received: unknown[] = [];
   const api = new ControlPlaneApi({
-    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never, agentSessions: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async (_principal, values) => {
@@ -473,7 +473,7 @@ test('an undecided launch operation is 503, never 500', async () => {
 test('a delegation while the database is down is 503 with a Failure', async () => {
   const down = { transaction: async () => err(failure('unavailable', 'the database is down')) } as unknown as ControlPlaneStore;
   const api = new ControlPlaneApi({
-    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never,
+    sessions: undefined as never, authorization: undefined as never, runProjects: undefined as never, agentSessions: undefined as never,
     installationCa: undefined as never, runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
     quarantine: undefined as never, launches: undefined as never, delegations: new DelegationService(down),
   });

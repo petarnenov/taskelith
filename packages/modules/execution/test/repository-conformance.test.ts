@@ -11,9 +11,12 @@ import {
   InMemoryTaskRepository,
   PRODUCER_CURSORS_CONFORMANCE,
   RECONCILIATION_QUEUE_CONFORMANCE,
+  SCOPES_LINEAGE,
+  SESSION_SCOPES_CONFORMANCE,
   SESSION_TIMELINE_STORE_CONFORMANCE,
   InMemoryReconciliationQueue,
   InMemorySessionTimelineStore,
+  InMemoryTaskLineage,
   InMemoryUnrecordedProcesses,
   TASK_REPOSITORY_CONFORMANCE,
 } from '@taskelith/execution';
@@ -38,3 +41,7 @@ runSuite('in-memory reconciliation queue', RECONCILIATION_QUEUE_CONFORMANCE, () 
   return { tasks, processes, queue: new InMemoryReconciliationQueue(() => tasks.all(), processes) };
 });
 runSuite('in-memory session timeline', SESSION_TIMELINE_STORE_CONFORMANCE, () => new InMemorySessionTimelineStore());
+runSuite('in-memory session scopes', SESSION_SCOPES_CONFORMANCE, () => {
+  const store = new InMemorySessionTimelineStore(new InMemoryTaskLineage(SCOPES_LINEAGE));
+  return { scopes: store, store };
+});

@@ -24,6 +24,7 @@ import type { RunService } from '../application/run-service.js';
 import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../application/slot-credential-delivery.js';
 import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
+import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
@@ -73,15 +74,19 @@ export interface ApiServices {
     redrive(sequence: number): Promise<Result<string | null>>;
   };
   readonly logger?: Logger;
+  // The agent sessions of section 9, apart from the login `sessions`.
+  readonly agentSessions: AgentSessionOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
 // shapes to and from the modules' own.
 export class ControlPlaneApi implements ApiHandlers {
   readonly #services: ApiServices;
+  readonly #agentSessions: AgentSessionApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
+    this.#agentSessions = new AgentSessionApi(services.agentSessions);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -157,6 +162,18 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#listQuarantine(request.query);
       case 'redriveQuarantined':
         return this.#redrive(first);
+      case 'listAgentSessions':
+        return this.#agentSessions.listAgentSessions(request);
+      case 'readAgentSession':
+        return this.#agentSessions.readAgentSession(request);
+      case 'listAgentSessionTurns':
+        return this.#agentSessions.listAgentSessionTurns(request);
+      case 'listAgentSessionRequests':
+        return this.#agentSessions.listAgentSessionRequests(request);
+      case 'submitTurn':
+        return this.#agentSessions.submitTurn(request);
+      case 'respondToNativeRequest':
+        return this.#agentSessions.respondToNativeRequest(request);
       default:
         return err(failure('internal', `operation ${operationId} has no handler`));
     }
