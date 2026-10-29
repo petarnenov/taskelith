@@ -13,6 +13,8 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13d, developed by a briefed s
 - `7b91f27c` `chore: renumber the session output tail migration after the slot credential deliveries`: the architect decision of Niki (2026-10-29, `design.md`, "Migration renumber") moves the migration from `1792933200000` to `1792933400000`, so the migrations stay ascending in merge order. No reference to `1792933200000` remains outside the archived 13b record, which states the earlier plan, and the renumber note of `design.md`. `git fetch origin && git merge origin/dev` after it: "Already up to date".
 - `af46ab57` routed the change on the merged and renumbered head (`route.json` unedited).
 - The commit after `af46ab57`: `make record` and this record, the head that review pass 1 reads.
+- `d60b7d56`: the coordinator's architect check ("Independent review", "Architect check").
+- `git fetch origin` after `d60b7d56`: `origin/dev` was still `22ad068c` (#416), merged in `44523562`, so no merge commit and no change to this change's inputs.
 
 ## Environment
 
