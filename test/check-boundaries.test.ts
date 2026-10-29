@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkWorkspaceBoundaries } from '../scripts/check-boundaries.ts';
+import { checkWorkspaceBoundaries, webEnvironmentViolations } from '../scripts/check-boundaries.ts';
 
 test('current repository passes workspace boundary checks', () => {
   assert.deepEqual(checkWorkspaceBoundaries(process.cwd()), []);
@@ -189,6 +189,7 @@ test('boundary checker resolves workspace package names and guards package encap
       ['kernel/src/dynamic.ts', 'kernel cannot import workspace package "@taskelith/execution"'],
       ['kernel/src/dynamic.ts', 'kernel cannot import workspace package "@taskelith/postgres"'],
       ['apps/web/src/installed.ts', 'reaches installed or built code'],
+      ['apps/web/src/installed.ts', 'web SPA source cannot import "../../../node_modules/@taskelith/sdlc/dist/index.js" outside apps/web/src'],
       ['execution/src/compiled.ts', 'relative import "../../sdlc/dist/application/service.js" reaches installed or built code'],
       ['execution/src/compiled.ts', 'relative import "../../sdlc/dist/application/service.js" crosses into another package'],
       ['execution/src/compiled.ts', 'cross-module import into "sdlc"'],
@@ -444,6 +445,41 @@ test('web SPA source imports no workspace package and reads no environment value
       assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
     }
     assert.equal(violations.length, expected.length, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('web SPA source reaches import.meta.env through no bracket, parenthesis, alias, or destructuring', () => {
+  const evasions: readonly [string, string][] = [
+    ['import.meta["env"].VITE_TOKEN', 'import.meta["env"]'],
+    ['(import.meta).env.VITE_TOKEN', '(import.meta)'],
+    ['(import.meta.env).MODE', '(import.meta.env)'],
+    ['(() => { const { env } = import.meta; return env; })()', '{ env } = import.meta'],
+    ['(() => { const meta = import.meta; return meta.env; })()', 'meta = import.meta'],
+  ];
+  for (const [read, shown] of evasions) {
+    const violations = webEnvironmentViolations('apps/web/src/env.ts', `export const x = ${read};\n`);
+    assert.equal(violations.length, 1, `${read}: ${violations.join('\n')}`);
+    assert(violations[0]!.includes(shown), `${read}: ${violations[0]}`);
+  }
+  const allowed = 'export const m = import.meta.env.MODE;\nexport const u = import.meta.url;\n';
+  assert.deepEqual(webEnvironmentViolations('apps/web/src/env.ts', allowed), []);
+});
+
+test('web SPA source imports no file outside apps/web/src', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/modules/*', 'apps/*'] }));
+    for (const [dir, name] of [['packages/modules/access', '@taskelith/access'], ['apps/web', '@taskelith/web']]) {
+      mkdirSync(join(root, dir!, 'src'), { recursive: true });
+      writeFileSync(join(root, dir!, 'package.json'), JSON.stringify({ name }));
+    }
+    writeFileSync(join(root, 'apps/web/src/main.ts'), "import { grant } from '../bridge';\nexport const g = grant;\n");
+    writeFileSync(join(root, 'apps/web/bridge.ts'), "export { grant } from '@taskelith/access';\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), [
+      'apps/web/src/main.ts: web SPA source cannot import "../bridge" outside apps/web/src (R03)',
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
