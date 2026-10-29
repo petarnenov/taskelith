@@ -130,6 +130,15 @@ Passes 1 and 2 ran, and pass 2 reported only Low findings, so the review ended a
 - After the fixes: the Scheduling tests and the PostgreSQL account pool and command tests (tests 260, pass 260, fail 0), the PostgreSQL command and conformance tests (tests 86, pass 86, fail 0), `npx tsc -p tsconfig.check.json --noEmit`, `npm run openspec -- validate apply-account-slot-commands --strict`, and `make findings ARGS="validate"` passed. The `make verify` of the merged tree is under "Generated checks".
 - Architect check (Niki, 2026-10-29), verbatim: "12d A architect check (Niki, 2026-10-29): passed for 6817cffb, b6ab9ee2, ef812f11, 9c483f74, 566776ce, 285df9d1 and the merge 635ef25c. 6817cffb: the deadline is derived from the minimum grace (half), checked as the last step inside the transaction, rolls back and discards only its own version, and its failure is retryable. Accepted. The residual risk recorded in Limitations is accepted. ef812f11: the contract change is accepted. Revoke still cancels the attempt (revokes grants, writes the outbox cancel) as an invalidating writer, and keeps the assignment until the terminal fact so that re-delivery refuses with attempt-not-launchable. This is consistent with §7.3 and §8.1. b6ab9ee2 with EXPLAIN as evidence, and L3–L5, are fine."
 
+## Archive
+
+- After ticking every task, `npm run openspec -- archive apply-account-slot-commands --yes` on `e3dc5f48` moved the change to `openspec/changes/archive/2026-10-29-apply-account-slot-commands/` and applied the delta to `openspec/specs/account-pool-port/spec.md`: 4 added, 1 modified. Before it, `git fetch origin` showed `origin/dev` at `2250f3f7`, already merged; `git merge --no-commit --no-ff origin/dev` reported "Already up to date". The checked state is the tree of the archive commit, the working tree the checks below ran on.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `change/2026-10-29-apply-account-slot-commands` passed; the 14 failures of the 266 items are other, older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/account-pool-port/spec.md`, 74 insertions and 2 deletions: the four added requirements "Slot commands besides adding", "Credential sweep with a grace age", "Stored credential listing", and "Add-slot deadline", and the modified "Run slot credential port on the worker", as the delta intends. Every requirement of the living spec is at most 500 characters; the longest is 494.
+- The moved change has its `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` passed: 92 findings files, 72 pass summary files, 27 route files.
+- `make verify` on the uncommitted archive tree: passed, profile full, no stamp written (uncommitted working tree); tests 3939, pass 3930, fail 0, cancelled 0, skipped 9; all files 99.38% lines, 92.53% branches, 98.85% functions.
+
 ## Limitations
 
 - Nothing calls the commands or the sweep outside tests: B adds the HTTP operations and the sweep loop.
