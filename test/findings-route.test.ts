@@ -18,7 +18,7 @@ import { featuresWith, QUIET_FEATURES } from './review-route-fake.ts';
 const FINDINGS_SCRIPT = 'scripts/findings.ts';
 const ARCHIVE = 'openspec/changes/archive';
 const STANDARD_A = { harness: 'codex', model: 'gpt-6-astra', variant: 'medium' };
-const STANDARD_B = { harness: 'claude', model: 'claude-opus-5-5', variant: 'medium' };
+const STANDARD_B = { harness: 'claude', model: 'claude-fable-5-1', variant: 'medium' };
 const ELEVATED_FEATURES = featuresWith({ linesChanged: 420 });
 
 function routeRecord(change: string, overrides: Record<string, unknown> = {}, features = QUIET_FEATURES): string {
@@ -162,7 +162,7 @@ test('validate reports each invalid route.json by file', () => {
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-20-renamed/route.json: change "other-change" is not its directory's change "renamed"`)), result.stderr);
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-21-broken/route.json: not valid JSON`)), result.stderr);
   assert.ok(lines.some((line) => line.startsWith(`${ARCHIVE}/2026-10-22-extra/route.json: / must NOT have additional properties`)), result.stderr);
-  assert.ok(lines.some((line) => line.startsWith('openspec/changes/active-change/route.json: rule triggers are not those of rule version 2')), result.stderr);
+  assert.ok(lines.some((line) => line.startsWith('openspec/changes/active-change/route.json: rule triggers are not those of rule version 3')), result.stderr);
   assert.match(lines.at(-1)!, /^Review findings: 5 problem\(s\); the formats are .*docs\/review-findings\/route\.schema\.json/);
 });
 
@@ -223,8 +223,8 @@ test('effect adds a routing row per archived change with route.json', () => {
     change: 'quiet',
     rule: { tier: 'standard', triggers: [] },
     shadow: { status: 'failed', reason: 'timeout' },
-    route: { pass1: 'codex gpt-6-astra#medium', pass2: 'claude claude-opus-5-5#medium' },
-    reviewers: { pass1: 'codex gpt-6-astra#medium', pass2: 'claude claude-opus-5-5#medium' },
+    route: { pass1: 'codex gpt-6-astra#medium', pass2: 'claude claude-fable-5-1#medium' },
+    reviewers: { pass1: 'codex gpt-6-astra#medium', pass2: 'claude claude-fable-5-1#medium' },
     followedRoute: true,
     passesNeeded: 2,
     thirdPass: false,
@@ -269,9 +269,9 @@ test('effect prints the routing section after the checklist effect', () => {
   const text = result.stdout;
   assert.ok(text.indexOf('Checklist effect') < text.indexOf('Routing over archived changes'), text);
   assert.match(text, /^Routing over archived changes with route\.json: 3 change\(s\); 1 archived change\(s\) without one are excluded\.$/m);
-  assert.match(text, /^ {2}quiet: rule standard \(no trigger\), shadow failed \(timeout\); pass 1 codex gpt-6-astra#medium, pass 2 claude claude-opus-5-5#medium, followed the route; passes 2, no third pass; pass 1 C0 H0 M1 L0, pass 2 C0 H0 M1 L0$/m);
+  assert.match(text, /^ {2}quiet: rule standard \(no trigger\), shadow failed \(timeout\); pass 1 codex gpt-6-astra#medium, pass 2 claude claude-fable-5-1#medium, followed the route; passes 2, no third pass; pass 1 C0 H0 M1 L0, pass 2 C0 H0 M1 L0$/m);
   const large = '  large: rule elevated (lines), shadow elevated (P(elevated) 0.80); pass 1 codex gpt-6-astra#medium, '
-    + 'pass 2 claude claude-opus-5-5#medium, not the route (codex gpt-6-astra#high, claude claude-opus-5-5#xhigh); passes 3, third pass;';
+    + 'pass 2 claude claude-fable-5-1#medium, not the route (codex gpt-6-astra#high, claude claude-fable-5-1#high); passes 3, third pass;';
   assert.ok(text.split('\n').some((line) => line.startsWith(large)), text);
   assert.match(text, /^ {2}unreviewed: rule standard \(no trigger\), shadow skipped; no recorded pass; passes 1, no third pass;/m);
   assert.match(text, /^ {2}rule elevated: 1 change\(s\), third pass 1 \(100%\)/m);
