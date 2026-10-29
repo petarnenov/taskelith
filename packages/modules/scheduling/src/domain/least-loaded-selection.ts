@@ -33,13 +33,23 @@ export function slotIneligibility(standing: SlotStanding, projectId: ProjectId, 
 // Contract sections 4.2, 4.5, and 4.6 for a `new-session` request; it
 // changes no slot, whatever its outcome.
 export function selectNewSessionSlot(pool: NewSessionPool, now: Instant): SlotSelection {
-  const eligible = pool.standings.filter((standing) => slotIneligibility(standing, pool.projectId, now) === undefined);
-  const chosen = leastLoaded(eligible, now);
-  if (chosen !== undefined) return Object.freeze({ outcome: 'reserved', slot: Object.freeze({ harnessId: chosen.harnessId, slotId: chosen.id }) });
+  const chosen = leastLoaded(eligibleStandings(pool.standings, pool.projectId, now), now);
+  if (chosen !== undefined) return reservedSlot(chosen);
   if (pool.whenNoSlot === 'reject') return Object.freeze({ outcome: 'rejected', reason: 'no-eligible-slot' });
-  const earliestCooldownEnd = earliestCooldown(pool, now);
+  return slotWait(earliestCooldownEnd(pool.standings, pool.projectId, now));
+}
+
+export function eligibleStandings(standings: readonly SlotStanding[], projectId: ProjectId, now: Instant): readonly SlotStanding[] {
+  return standings.filter((standing) => slotIneligibility(standing, projectId, now) === undefined);
+}
+
+export function reservedSlot(slot: AccountSlot): SlotSelection {
+  return Object.freeze({ outcome: 'reserved', slot: Object.freeze({ harnessId: slot.harnessId, slotId: slot.id }) });
+}
+
+export function slotWait(earliestCooldown: Instant | undefined): SlotSelection {
   return Object.freeze({
-    outcome: 'waiting', reason: SLOT_WAITING_REASON, ...(earliestCooldownEnd === undefined ? {} : { earliestCooldownEnd }),
+    outcome: 'waiting', reason: SLOT_WAITING_REASON, ...(earliestCooldown === undefined ? {} : { earliestCooldownEnd: earliestCooldown }),
   });
 }
 
@@ -76,8 +86,8 @@ function isCoolingDown(slot: AccountSlot, now: Instant): boolean {
   return slot.cooldown !== undefined && Date.parse(slot.cooldown.until) > Date.parse(now);
 }
 
-// The earliest end among the slots whose only obstacle is a cooldown so far.
-function earliestCooldown(pool: NewSessionPool, now: Instant): Instant | undefined {
-  const cooling = pool.standings.filter((standing) => slotIneligibility(standing, pool.projectId, now) === 'cooling-down');
+// The earliest end among the slots whose first obstacle is their cooldown.
+export function earliestCooldownEnd(standings: readonly SlotStanding[], projectId: ProjectId, now: Instant): Instant | undefined {
+  const cooling = standings.filter((standing) => slotIneligibility(standing, projectId, now) === 'cooling-down');
   return cooling.map(({ slot }) => slot.cooldown!.until).sort((left, right) => Date.parse(left) - Date.parse(right))[0];
 }
