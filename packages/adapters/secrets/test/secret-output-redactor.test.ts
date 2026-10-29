@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAccount, createOperator, createUser } from '@nats-io/nkeys';
-import { NodeSecrets, REDACTED, SecretOutputRedactor, redactSecrets } from '@taskelith/secrets';
+import { MIN_OUTPUT_BOUND, NodeSecrets, REDACTED, SecretOutputRedactor, redactSecrets } from '@taskelith/secrets';
 
 const BOUND = 65_536;
 const redactor = new SecretOutputRedactor();
@@ -260,9 +260,9 @@ test('a .creds begin marker cut inside a key whose end marker passes the bound c
 });
 
 // Nested blocks whose bodies hold only q, z, j, w, and the heads of shapes;
-// a long type passes the small bound while its marker is cut.
-const SMALL_BOUND = 64;
-const LONG_TYPE = `${'A'.repeat(40)} `;
+// a long type passes the smallest bound while its marker is cut.
+const SMALL_BOUND = MIN_OUTPUT_BOUND;
+const LONG_TYPE = `${'A'.repeat(232)} `;
 const NESTED = [
   { name: 'a key inside a .creds block', text: `a\n${CREDS_BEGIN}\nqzjw\n${pemBegin('EC ')}\nqzjw eyJqzjw\n${CREDS_END}\ntkop_qzjw\n${pemEnd('EC ')}\nqzjw\n${CREDS_END}\nok\n` },
   { name: 'a long-typed key inside a .creds block', text: `a\n${CREDS_BEGIN}\nqzjw\n${pemBegin(LONG_TYPE)}\nqzjw\n${CREDS_END}\neyJqzjw\n${pemEnd('')}\nqzjw\n${CREDS_END}\nok\n` },
@@ -287,3 +287,11 @@ for (const nested of NESTED) {
     }
   });
 }
+
+test('a bound below the minimum is refused, and the smallest allowed bound keeps a .creds block cut in its begin marker', () => {
+  const chunks = [`a ${CREDS_BEGIN.slice(0, 12)}`, `${CREDS_BEGIN.slice(12)}\nqzjw\n${pemEnd('')}\nLEAKqzjw\n${CREDS_END}\nok\n`];
+  assert.throws(() => redactor.split(NOTHING, 'ok\n', MIN_OUTPUT_BOUND - 1), RangeError);
+  assert.throws(() => turnOutput(chunks, 8), RangeError);
+  assert.equal(MIN_OUTPUT_BOUND, 256);
+  assert.equal(turnOutput(chunks, MIN_OUTPUT_BOUND), `a ${REDACTED}\nok\n`);
+});

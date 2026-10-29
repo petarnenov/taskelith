@@ -55,12 +55,17 @@ const BEGIN_PARTIALS: readonly Partial[] = [pemPartial(PEM_BEGIN_HEAD), literalP
 const PEM_END_PARTIALS: readonly Partial[] = [pemPartial(PEM_END_HEAD)];
 const CREDS_INNER_PARTIALS: readonly Partial[] = [literalPartial(credsEnd), pemPartial(PEM_BEGIN_HEAD)];
 
+// The smallest bound `split` takes: below it, a cut begin marker may not
+// fit, so a block could be taken as one of another kind and end early.
+export const MIN_OUTPUT_BOUND = 256;
+
 // The Execution module's SessionOutputRedactor port over redactSecrets
 // (control-plane wire contracts, section 7; 13d design decisions 1 and 2).
 export class SecretOutputRedactor {
   // Releases, redacted, the text before the hold point; a held part past
   // `bound` becomes one marker, and its continuation is dropped.
   split(held: HeldOutput, chunk: string, bound: number): OutputSplit {
+    if (bound < MIN_OUTPUT_BOUND) throw new RangeError(`The held output bound must be at least ${MIN_OUTPUT_BOUND}.`);
     const pending = held.text + chunk;
     const resumed = held.continuation === 'none' ? { rest: pending } : afterContinuation(pending, held, bound);
     if ('held' in resumed) return { released: '', held: resumed.held };

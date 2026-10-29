@@ -19,6 +19,6 @@ export { NodeSecrets, RandomIdentifiers } from './node-secrets.js';
 export { OUTPUT_TAIL_KEY_BYTES, outputTailCipher } from './output-tail-cipher.js';
 export { formatPhc, parsePhc, PHC_LIMITS, type Argon2idParameters, type PhcHash } from './phc.js';
 export { REDACTED, redactFailure, redactSecrets, scrubEnvironment } from './scrub.js';
-export { SecretOutputRedactor } from './secret-output-redactor.js';
+export { MIN_OUTPUT_BOUND, SecretOutputRedactor } from './secret-output-redactor.js';
 export { SecretTextRedactor } from './secret-text-redactor.js';
 export { AesGcmSlotCredentialCipher, SLOT_CREDENTIAL_KEY_BYTES, type SealedText } from './slot-credential-cipher.js';

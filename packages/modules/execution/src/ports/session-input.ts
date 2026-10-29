@@ -36,6 +36,7 @@ export interface OutputSplit {
 // Redacts a turn's output as one text (control-plane wire contracts,
 // section 7): `split` holds back what could still be or start a secret.
 export interface SessionOutputRedactor {
+  // Refuses, with a RangeError, a `bound` below 256 code units.
   split(held: HeldOutput, chunk: string, bound: number): OutputSplit;
   // The redacted text of a held tail at its turn's end.
   release(held: HeldOutput): string;
