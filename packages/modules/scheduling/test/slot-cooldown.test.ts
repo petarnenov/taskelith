@@ -13,7 +13,7 @@ import {
   InMemoryAccountSlots,
   InMemoryAssignmentRepository,
   InMemorySlotCredentials,
-  SLOT_LIMIT_APPLICATIONS,
+  SLOT_LIMIT_REREADS,
   SLOT_REPORTED_RESET_MAXIMUM_MINUTES,
   SlotSecret,
   applySlotLimitInTransaction,
@@ -128,22 +128,22 @@ test('a reset inside a millisecond rounds up, so the cooldown never ends before 
   assert.equal(value(await apply(exact.tx, limitUntil('2026-10-29T11:30:00.123000000Z'))).cooldown?.until, '2026-10-29T11:30:00.123Z');
 });
 
-// Moves the slot on before the first or every replace, as a concurrent
-// writer would.
+// Moves the slot on before each of its first contended replaces, as a
+// concurrent writer would.
 class InterleavedSlots extends InMemoryAccountSlots {
   writes = 0;
   readonly #interleave: (stored: AccountSlot) => AccountSlot;
-  readonly #replaces: 'first' | 'every';
+  readonly #contendedWrites: number;
 
-  constructor(interleave: (stored: AccountSlot) => AccountSlot, replaces: 'first' | 'every' = 'first') {
+  constructor(interleave: (stored: AccountSlot) => AccountSlot, contendedWrites = 1) {
     super();
     this.#interleave = interleave;
-    this.#replaces = replaces;
+    this.#contendedWrites = contendedWrites;
   }
 
   override async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
     this.writes += 1;
-    if (this.writes === 1 || this.#replaces === 'every') this.write(this.#interleave(value(await this.get(slot.id))));
+    if (this.writes <= this.#contendedWrites) this.write(this.#interleave(value(await this.get(slot.id))));
     return super.replace(slot, expectedRevision);
   }
 }
@@ -159,12 +159,22 @@ test('a lost compare-and-set rereads the slot and keeps a longer cooldown writte
   assert.deepEqual([extended.cooldown, extended.revision, shorter.writes], [reported(LATER), 3, 2]);
 });
 
-test('a limit that keeps losing its compare-and-set returns the conflict after its applications', async () => {
-  const contended = new InterleavedSlots((stored) => ({ ...stored, revision: stored.revision + 1 }), 'every');
+const movedOn = (stored: AccountSlot): AccountSlot => ({ ...stored, revision: stored.revision + 1 });
+
+test('a limit that loses three compare-and-sets applies after its third reread', async () => {
+  const contended = new InterleavedSlots(movedOn, 3);
+  const { tx } = await signalFixture(contended);
+  const applied = value(await apply(tx));
+  assert.deepEqual([applied.cooldown, applied.revision, contended.writes], [{ until: IN_ONE_HOUR, source: 'default' }, 5, 4]);
+});
+
+test('a limit that keeps losing its compare-and-set returns the conflict after three rereads', async () => {
+  const contended = new InterleavedSlots(movedOn, Number.POSITIVE_INFINITY);
   const { tx } = await signalFixture(contended);
   const applied = await apply(tx);
   assert.equal(!applied.ok && applied.error.code, 'conflict');
-  assert.equal(contended.writes, SLOT_LIMIT_APPLICATIONS);
+  assert.equal(SLOT_LIMIT_REREADS, 3);
+  assert.equal(contended.writes, 1 + SLOT_LIMIT_REREADS);
 });
 
 test('a limit for an unknown assignment, a reservation without one slot, or a bad reset changes nothing', async () => {

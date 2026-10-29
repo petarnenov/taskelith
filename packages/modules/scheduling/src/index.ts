@@ -274,7 +274,7 @@ export {
   type SlotLimitReport,
 } from './domain/slot-cooldown.js';
 export {
-  SLOT_LIMIT_APPLICATIONS,
+  SLOT_LIMIT_REREADS,
   applySlotLimitInTransaction,
   type HarnessLimitSignal,
   type SlotLimitInput,

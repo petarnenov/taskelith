@@ -18,8 +18,8 @@ export interface SlotLimitInput {
 // What applying a limit reads and writes, inside a capacity transaction.
 export type SlotSignalTransaction = Pick<CapacityTransaction, 'assignments' | 'accountSlots' | 'now'>;
 
-// Applications of one limit before a lost compare-and-set is returned.
-export const SLOT_LIMIT_APPLICATIONS = 3;
+// Rereads after a lost compare-and-set before the conflict is returned.
+export const SLOT_LIMIT_REREADS = 3;
 
 // Contract section 5: the limit cools the slot that the reservation names,
 // by compare-and-set, rereading the slot after a lost one.
@@ -30,7 +30,7 @@ export async function applySlotLimitInTransaction(tx: SlotSignalTransaction, inp
   if (!slotId.ok) return slotId;
   const limit: AppliedLimit = { slotId: slotId.value, report: report.value, now: await tx.now(), defaultCooldown: input.defaultCooldown };
   let applied = await applyLimit(tx, limit);
-  for (let application = 1; application < SLOT_LIMIT_APPLICATIONS && isLostCompareAndSet(applied); application++) {
+  for (let reread = 1; reread <= SLOT_LIMIT_REREADS && isLostCompareAndSet(applied); reread++) {
     applied = await applyLimit(tx, limit);
   }
   return applied;
