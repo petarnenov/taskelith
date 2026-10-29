@@ -258,7 +258,7 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
   }
 
   listHeldForCredential(credentialId: ProviderCredentialId): Promise<readonly Assignment[]> {
-    return this.#store.list("reservation_state = 'held' AND $1 = ANY (provider_credentials)", [credentialId]);
+    return this.#store.list("reservation_state = 'held' AND provider_credentials @> ARRAY[$1::text]", [credentialId]);
   }
 
   async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {

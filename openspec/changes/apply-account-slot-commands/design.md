@@ -59,4 +59,4 @@ The coordinator Niki (architect) answered on 2026-10-29; these decisions are rec
 ## Risks
 
 - The commands and the sweep are not wired: B adds the routes and the sweep loop.
-- The revocation reads the held reservations of one slot by a sequential scan of `assignments` with an array test; the table is small in G3.
+- The revocation reads the held reservations of one slot with the containment test `provider_credentials @> ARRAY[$1::text]`, which the partial GIN index `assignments_held_by_credential` serves, as the capacity ledger's `heldForCredential` does (review pass 2, finding 1).
