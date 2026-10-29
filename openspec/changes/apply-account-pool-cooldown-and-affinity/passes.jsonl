@@ -1,0 +1,1 @@
+{"change": "apply-account-pool-cooldown-and-affinity", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18510-402e-7b52-9114-917ef75705ab", "counts": {"critical": 0, "high": 0, "medium": 3, "low": 1}}
