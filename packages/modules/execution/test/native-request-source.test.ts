@@ -29,6 +29,7 @@ import {
   AUTHOR,
   CHILD_TASK,
   FIRST_ATTEMPT,
+  FLIPPING_CIPHER,
   HARNESS,
   NATIVE,
   OTHER_SESSION,
@@ -41,6 +42,7 @@ import {
   generation,
   permissionRequest,
   requestKey,
+  trailingRunRedactor,
   turnId,
   turnKey,
 } from './session-fixtures.ts';
@@ -63,7 +65,8 @@ function timeline() {
   const store = new InMemorySessionTimelineStore(lineage);
   const digest = { digest: (input: string) => `digest:${input}` };
   const service = new SessionTimelineService({
-    store, digest, redactor: { redact: (text: string) => text }, turnIds: sequentialIds('TurnId', 'turn'), clock,
+    store, digest, redactor: { redact: (text: string) => text }, outputRedactor: trailingRunRedactor((text) => text), tailCipher: FLIPPING_CIPHER,
+    turnIds: sequentialIds('TurnId', 'turn'), clock,
     itemIds: sequentialIds('NeedsYouItemId', 'item'),
   });
   const source = new NativeRequestSource({
@@ -281,7 +284,7 @@ test('an acknowledgement resolves its item once, audited, and sends no response,
 test('readCardSessions reads a card\'s sessions in code-unit order, with the output window\'s bounds, no entry, and more', async () => {
   const subject = timeline();
   await withOpenRequest(subject);
-  value(await subject.service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'output' }));
+  value(await subject.service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'output\n' }));
   value(await subject.service.openSession({ id: id('SessionId', 'Session-0'), taskId: TASK, harness: HARNESS }));
   value(await subject.service.openSession({ id: OTHER_SESSION, taskId: CHILD_TASK, harness: HARNESS }));
   const all = value(await subject.service.readCardSessions(CARD, undefined, 10));

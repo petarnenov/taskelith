@@ -22,7 +22,7 @@ import {
 import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
 import { PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
-import { HmacInputDigest, SecretTextRedactor } from '@taskelith/secrets';
+import { HmacInputDigest, SecretOutputRedactor, SecretTextRedactor, outputTailCipher } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 
 export const SESSION = value(parseIdentifier('SessionId', 'session-1')) as SessionId;
@@ -40,6 +40,10 @@ export const OTHER_URL = 'https://bot:other-pass@example.com/repo';
 export const PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-1')) };
 export const OTHER_PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-2')) };
 const DIGEST_KEY = Buffer.alloc(32, 0x5a);
+export const TAIL_KEY = Buffer.alloc(32, 0x3c);
+// A JWT assembled from its parts, and the first chunk that holds its half.
+export const JWT = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ3b3JrZXItMSJ9', 'c2lnbmVkLWJ5LXRoZS1jb250cm9sLXBsYW5l'].join('.');
+export const HALF_JWT_CHUNK = `token ${JWT.slice(0, 30)}`;
 
 export const generation = (number: number): SessionGeneration => value(parseSessionGeneration(number));
 export const key = (text: string): IdempotencyKey => value(parseIdentifier('IdempotencyKey', text));
@@ -71,6 +75,7 @@ export function allow(name: string, native = 'request-1', decision: 'allow' | 'd
 export function timelineService(store: SessionTimelineStore): SessionTimelineService {
   return new SessionTimelineService({
     store, digest: value(HmacInputDigest.fromKey(DIGEST_KEY)), redactor: new SecretTextRedactor(),
+    outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(TAIL_KEY)),
     turnIds: { next: () => value(parseTurnId(`t${randomUUID().replaceAll('-', '')}`)) },
     clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
     itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
@@ -169,6 +174,7 @@ function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): 
     items: tx.items,
     audit: tx.audit,
     scopes: tx.scopes,
+    tails: tx.tails,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);

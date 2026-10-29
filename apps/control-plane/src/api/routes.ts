@@ -108,8 +108,7 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'Redrive', success: 200,
     statuses: { ...COMMON, 'not-found': 404, 'precondition-failed': 409 },
   },
-  // Control-plane wire contracts section 9; `readAgentSessionOutput` waits
-  // for output redacted across chunks (13d).
+  // Control-plane wire contracts section 9.
   {
     operationId: 'listAgentSessions', method: 'GET', pattern: new RegExp(`^/projects/${SEGMENT}/cards/${SEGMENT}/agent-sessions$`),
     security: ['browserSession', 'operatorToken'], query: ['after'], response: 'AgentSessionPage', success: 200, statuses: SESSION_READ,
@@ -121,6 +120,10 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'listAgentSessionTurns', method: 'GET', pattern: new RegExp(`${SESSION_PATH}/turns$`),
     security: ['browserSession', 'operatorToken'], query: ['after'], response: 'TurnPage', success: 200, statuses: SESSION_READ,
+  },
+  {
+    operationId: 'readAgentSessionOutput', method: 'GET', pattern: new RegExp(`${SESSION_PATH}/output$`),
+    security: ['browserSession', 'operatorToken'], query: ['after'], response: 'OutputRead', success: 200, statuses: SESSION_READ,
   },
   {
     operationId: 'submitTurn', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/turns$`), security: ['browserSession', 'operatorToken'],

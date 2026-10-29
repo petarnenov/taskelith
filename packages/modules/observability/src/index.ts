@@ -33,6 +33,7 @@ export {
   redactUrlUserinfoEvenEmpty,
   redactWith,
   replaceSpans,
+  SECRET_BLOCK_MARKERS,
   SECRET_SHAPE_RULES,
   textRule,
   TOKEN_SHAPE_RULES,

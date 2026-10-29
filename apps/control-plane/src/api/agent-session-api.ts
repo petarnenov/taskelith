@@ -11,13 +11,13 @@ import type {
 import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import { StatusAnswer, type ApiRequest } from './api-server.js';
-import { agentSessionBody, nativeRequestBody, parseTimelineCursor, responseCommandOf, turnBody } from './agent-session-wire.js';
+import { agentSessionBody, nativeRequestBody, outputEntryBody, parseTimelineCursor, responseCommandOf, turnBody } from './agent-session-wire.js';
 
 export const AGENT_SESSION_PAGE = 100;
 
 // What the agent session operations reach (wire contracts, section 9).
 export interface AgentSessionOperations {
-  readonly timeline: Pick<SessionTimelineService, 'readSession' | 'readCardSessions' | 'submitTurn' | 'consumeResponse'>;
+  readonly timeline: Pick<SessionTimelineService, 'readSession' | 'readCardSessions' | 'readOutput' | 'submitTurn' | 'consumeResponse'>;
   readonly scopes: SessionScopes;
   readonly positions: ViewPositions;
   readonly clock: Clock;
@@ -82,6 +82,25 @@ export class AgentSessionApi {
     const page = requests.slice(0, AGENT_SESSION_PAGE);
     const bodies = page.map((native, index) => nativeRequestBody(native, after.value + index + 1));
     return ok({ ...stamp, requests: bodies, ...nextPosition(requests.length, after.value + page.length) });
+  }
+
+  // Only released, redacted output; `next` while more entries remain, and
+  // the earliest retained position for a cursor that left the window.
+  async readAgentSessionOutput(request: ApiRequest): Promise<Result<Wire<'OutputRead'>>> {
+    const after = parseTimelineCursor(request.query.get('after'));
+    if (!after.ok) return after;
+    const sessionId = await this.#scopedSession(request);
+    if (!sessionId.ok) return sessionId;
+    const stamp = await this.#stamp();
+    if (!stamp.ok) return stamp;
+    const read = await this.#operations.timeline.readOutput(sessionId.value, after.value, AGENT_SESSION_PAGE);
+    if (!read.ok) return read.error.code === 'not-found' ? err(unknownSession()) : read;
+    if (read.value.kind === 'cursor-expired') {
+      return ok({ result: 'cursor-expired', ...stamp.value, earliestRetained: read.value.earliestRetained });
+    }
+    const { entries, more } = read.value;
+    const next = more ? { next: entries.at(-1)!.position } : {};
+    return ok({ result: 'entries', ...stamp.value, entries: entries.map(outputEntryBody), ...next });
   }
 
   // The caller is the turn's author, and the control plane mints its ID.

@@ -111,18 +111,22 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.match(operatorSecret, /^tkop_/);
   assert.equal(brokerServerConfig, join(dataRoot, 'control-plane', 'nats-authority.conf'));
   assert.equal(installationCa, join(dataRoot, 'control-plane', 'installation-ca.pem'));
-  for (const name of ['installation-authority', 'installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem', 'session-input-digest.key']) {
+  for (const name of ['installation-authority', 'installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem', 'session-input-digest.key', 'session-output-tail.key']) {
     assert.equal(statSync(join(dataRoot, 'control-plane', name)).mode & 0o777, 0o600, name);
   }
   assert.equal(new X509Certificate(controlPlaneFile('api-certificate.pem')).checkHost('localhost'), 'localhost');
   const digestKey = controlPlaneFile('session-input-digest.key');
-  assert.ok(!JSON.stringify(initialized.output).includes(JSON.parse(digestKey).key), 'the output holds no key');
+  const tailKey = controlPlaneFile('session-output-tail.key');
+  for (const key of [digestKey, tailKey]) assert.ok(!JSON.stringify(initialized.output).includes(JSON.parse(key).key), 'the output holds no key');
   const again = await admin(['init', ...ADMIN]);
   assert.equal((again.output.error as { code: string }).code, 'conflict', 'a second initialization fails');
   assert.equal(controlPlaneFile('session-input-digest.key'), digestKey, 'a rerun keeps the key');
+  assert.equal(controlPlaneFile('session-output-tail.key'), tailKey, 'a rerun keeps the tail key');
   rmSync(join(dataRoot, 'control-plane', 'session-input-digest.key'));
+  rmSync(join(dataRoot, 'control-plane', 'session-output-tail.key'));
   assert.equal((await admin(['init', ...ADMIN])).status, 1, 'a third initialization fails too');
   assert.equal(statSync(join(dataRoot, 'control-plane', 'session-input-digest.key')).mode & 0o777, 0o600, 'a rerun creates a missing key');
+  assert.equal(statSync(join(dataRoot, 'control-plane', 'session-output-tail.key')).mode & 0o777, 0o600, 'a rerun creates a missing tail key');
   const ownerTrail = await rows(database, 'SELECT * FROM access_audit_events ORDER BY position') as Array<Record<string, unknown>>;
   assert.deepEqual(ownerTrail.map((event) => [event.kind, event.actor]), [
     ['access.owner-created', 'root@control-plane-1'], ['access.owner-bootstrap-refused', 'root@control-plane-1'],

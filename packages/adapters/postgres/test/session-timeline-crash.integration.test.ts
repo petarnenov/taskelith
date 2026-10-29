@@ -4,6 +4,7 @@ import { after, beforeEach, test } from 'node:test';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { ScenarioProcess, crashEnvironment, failed, uncoveredEnvironment, value } from '@taskelith/testing';
 import {
+  JWT,
   NATIVE,
   SESSION,
   allow,
@@ -251,4 +252,28 @@ test('an acknowledgement killed after its commit keeps its resolution, audit eve
   assert.deepEqual(await acknowledgement(), { item: RESOLVED, audits: 1, keys: 1 });
   assert.equal(stepResult(await runStep('acknowledge')).value?.state, 'resolved');
   assert.deepEqual(await acknowledgement(), { item: RESOLVED, audits: 1, keys: 1 });
+});
+
+// The output entries' texts and whether a tail row is held.
+async function outputState(): Promise<{ entries: string[]; tail: boolean }> {
+  const entries = await query<{ record: string }>(url, 'SELECT record FROM agent_session_output ORDER BY position');
+  const tails = await query(url, 'SELECT 1 FROM agent_session_output_tails');
+  return { entries: entries.map((row) => (JSON.parse(row.record) as { text: string }).text), tail: tails.length === 1 };
+}
+
+test('an append that holds half a JWT killed before its commit leaves no entry and no tail, and the rerun holds it', async () => {
+  await deliveredTurn();
+  assert.deepEqual(await runStep('append-half', 'SessionTimelineCommit.before'), KILLED);
+  assert.deepEqual(await outputState(), { entries: [], tail: false });
+  assert.equal(stepResult(await runStep('append-half')).ok, true);
+  assert.deepEqual(await outputState(), { entries: ['token '], tail: true });
+});
+
+test('an append that holds half a JWT killed after its commit keeps its entry and sealed tail, and the next chunk records it redacted', async () => {
+  await deliveredTurn();
+  assert.deepEqual(await runStep('append-half', 'SessionTimelineCommit.after'), KILLED);
+  assert.deepEqual(await outputState(), { entries: ['token '], tail: true });
+  const turnId = value(await service.readSession(SESSION)).turns[0]!.id;
+  value(await service.appendOutput(SESSION, { turnId, generation: generation(1), text: `${JWT.slice(30)} done\n` }));
+  assert.deepEqual(await outputState(), { entries: ['token ', '[redacted] done\n'], tail: false });
 });

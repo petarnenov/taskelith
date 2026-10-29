@@ -13,7 +13,7 @@ import {
 } from '@taskelith/access';
 import { X509CertificateIssuer } from '@taskelith/certificates';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import { ControlPlaneNamespace, FileInstallationRecord, SessionInputDigestKeyFile } from '@taskelith/control-plane-store';
+import { ControlPlaneNamespace, FileInstallationRecord, SessionInputDigestKeyFile, SessionOutputTailKeyFile } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
 import {
   EnrollmentService,
@@ -150,6 +150,8 @@ export class Administration {
     // Also on a rerun, so an installation initialized without one gets it.
     const digestKey = new SessionInputDigestKeyFile(this.#namespace).ensure();
     if (!digestKey.ok) return digestKey;
+    const tailKey = new SessionOutputTailKeyFile(this.#namespace).ensure();
+    if (!tailKey.ok) return tailKey;
     const trust = ensureBrokerTrust(this.#namespace, installed, this.#epochSeconds());
     if (!trust.ok) return trust;
     const authority = await ensureInstallationAuthority(this.#namespace, installed, this.#issuer, this.#clock.now());

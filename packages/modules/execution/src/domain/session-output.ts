@@ -3,7 +3,9 @@ import { utf8Length } from './bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from './harness-values.js';
 import {
   isLiveTurn,
+  isRunningIn,
   isTextWithin,
+  runningGeneration,
   sessionFailure,
   withChanges,
   type OutputAppend,
@@ -11,6 +13,7 @@ import {
   type OutputRead,
   type OutputWindow,
   type Session,
+  type Turn,
 } from './session-records.js';
 
 // The live stream bound per active attempt (operational targets, section 2).
@@ -20,15 +23,29 @@ export const OUTPUT_RETENTION_BYTES = 10 * 1024 * 1024;
 // that no longer fit the retained window (contract, section 7).
 export function appendOutput(session: Session, output: OutputAppend): Result<Session> {
   if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got output text out of bounds');
+  const live = checkOutputTurn(session, output);
+  if (!live.ok) return live;
+  if (output.text === '') return ok(session);
+  const position = session.output.lastPosition + 1;
+  const entry: OutputEntry = Object.freeze({ turnId: output.turnId, generation: output.generation, text: output.text, position });
+  return ok(withChanges(session, { output: withinBound([...session.output.entries, entry], session.output.retainedBytes, entry) }));
+}
+
+// Output is taken only for a known turn that runs in the given generation.
+export function checkOutputTurn(session: Session, output: Omit<OutputAppend, 'text'>): Result<void> {
   const turn = session.turns.find((candidate) => candidate.id === output.turnId);
   if (turn === undefined) return sessionFailure('not-found', session, `has no turn ${output.turnId}`);
   if (!isLiveTurn(session, turn, output.generation)) {
     return sessionFailure('precondition-failed', session, `does not run turn ${turn.id} in generation ${output.generation}`);
   }
-  if (output.text === '') return ok(session);
-  const position = session.output.lastPosition + 1;
-  const entry: OutputEntry = Object.freeze({ turnId: output.turnId, generation: output.generation, text: output.text, position });
-  return ok(withChanges(session, { output: withinBound([...session.output.entries, entry], session.output.retainedBytes, entry) }));
+  return ok(undefined);
+}
+
+// The delivered turn of the running generation, the one turn that takes
+// output now.
+export function liveTurnOf(session: Session): Turn | undefined {
+  const running = runningGeneration(session);
+  return running === undefined ? undefined : session.turns.find((turn) => isRunningIn(turn, running.generation));
 }
 
 export function readOutputAfter(session: Session, cursor: number): Result<OutputRead> {

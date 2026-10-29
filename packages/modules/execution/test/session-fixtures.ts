@@ -13,12 +13,14 @@ import {
   type IdempotencyKey,
   type NativeRequestId,
   type NativeSessionId,
+  type OutputTailCipher,
   type RequestKey,
   type RequestRecording,
   type ResponseSubmission,
   type Session,
   type SessionGeneration,
   type SessionId,
+  type SessionOutputRedactor,
   type TurnAuthor,
   type TurnId,
 } from '@taskelith/execution';
@@ -105,3 +107,35 @@ export function allow(native = 'request-1', at = 1): ResponseSubmission {
     ownershipGeneration: OWNERSHIP,
   };
 }
+
+// Holds the trailing run of non-whitespace characters and releases the
+// text before it through `redact`; the adapter's own tests cover shapes.
+export function trailingRunRedactor(redact: (text: string) => string): SessionOutputRedactor {
+  return {
+    split(held, chunk) {
+      const text = held.text + chunk;
+      let hold = text.length;
+      while (hold > 0 && !/\s/.test(text[hold - 1]!)) hold -= 1;
+      return { released: redact(text.slice(0, hold)), held: { text: text.slice(hold), continuation: 'none' } };
+    },
+    release: (held) => redact(held.text),
+  };
+}
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const flipped = (bytes: Uint8Array) => bytes.map((byte) => byte ^ 0x5a);
+
+// A reversible stand-in for AES-256-GCM that opens only for its context and
+// stores no plaintext byte; the secrets adapter's tests cover the cipher.
+export const FLIPPING_CIPHER: OutputTailCipher = {
+  seal: (text, context) => ({ nonce: Uint8Array.of(7), sealed: flipped(encoder.encode(JSON.stringify([context, text]))) }),
+  open({ sealed }, context) {
+    try {
+      const [sealedFor, text] = JSON.parse(decoder.decode(flipped(sealed))) as [string, string];
+      return sealedFor === context ? text : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+};

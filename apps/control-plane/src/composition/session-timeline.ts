@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { SessionInputDigestKeyFile, type ControlPlaneNamespace } from '@taskelith/control-plane-store';
+import { SessionInputDigestKeyFile, SessionOutputTailKeyFile, type ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import {
   BEFORE_ANY_EVENT,
   NativeRequestSource,
@@ -14,7 +14,7 @@ import {
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { PostgresSessionScopes, PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
 import type { Clock } from '@taskelith/sdlc';
-import { HmacInputDigest, SecretTextRedactor } from '@taskelith/secrets';
+import { HmacInputDigest, SecretOutputRedactor, SecretTextRedactor, outputTailCipher } from '@taskelith/secrets';
 
 export const NATIVE_REQUEST_SOURCE_ID = 'native-requests' as NeedsYouSourceId;
 
@@ -28,16 +28,21 @@ export interface AgentSessionServices {
   readonly source: NativeRequestSource;
 }
 
-// The session timeline over PostgreSQL; a missing or malformed digest key
-// refuses the start (coordinator answer Q4 of 13a).
+// The session timeline over PostgreSQL; a missing or malformed digest or
+// tail key refuses the start (answer Q4 of 13a, answer Q2 of 13d).
 export function startAgentSessionServices(namespace: ControlPlaneNamespace, database: PostgresDatabase, clock: Clock): Result<AgentSessionServices> {
   const key = new SessionInputDigestKeyFile(namespace).read();
   if (!key.ok) return key;
   const digest = HmacInputDigest.fromKey(key.value);
   if (!digest.ok) return digest;
+  const tailKey = new SessionOutputTailKeyFile(namespace).read();
+  if (!tailKey.ok) return tailKey;
+  const tailCipher = outputTailCipher(tailKey.value);
+  if (!tailCipher.ok) return tailCipher;
   const store = new PostgresSessionTimelineStore(database);
   const timeline = new SessionTimelineService({
-    store, digest: digest.value, redactor: new SecretTextRedactor(), turnIds: { next: mintTurnId }, clock, itemIds: { next: mintItemId },
+    store, digest: digest.value, redactor: new SecretTextRedactor(), outputRedactor: new SecretOutputRedactor(), tailCipher: tailCipher.value,
+    turnIds: { next: mintTurnId }, clock, itemIds: { next: mintItemId },
   });
   const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions: BEFORE_ANY_EVENT });
   return ok({ timeline, scopes: new PostgresSessionScopes(database), positions: BEFORE_ANY_EVENT, clock, source });
