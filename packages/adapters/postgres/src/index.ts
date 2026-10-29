@@ -7,6 +7,7 @@ export {
   type SlotCredentialCipher,
   type SlotCredentialTransactions,
 } from './account-pool-repositories.js';
+export { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
 export { PostgresAccessStore, PostgresAccessTransaction } from './access-repositories.js';
 export {
   CommittingAdmissionRepository,

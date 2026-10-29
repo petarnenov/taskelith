@@ -65,9 +65,9 @@ export function postForm(target: HttpTarget, path: string, bearer: string, form:
   return send(target, path, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
 }
 
-// One GET without a credential.
-export function getJson(target: HttpTarget, path: string): Promise<Result<HttpAnswer>> {
-  return send(target, path, { method: 'GET', headers: {} });
+// One GET, with a bearer when the operation takes one.
+export function getJson(target: HttpTarget, path: string, bearer?: string): Promise<Result<HttpAnswer>> {
+  return send(target, path, { method: 'GET', headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` } });
 }
 
 type Exchange = Pick<HttpInit, 'method' | 'headers' | 'body'>;

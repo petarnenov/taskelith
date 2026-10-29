@@ -21,10 +21,12 @@ import { redactSecrets } from '@taskelith/secrets';
 import type { DelegationService } from '../application/delegation-service.js';
 import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
+import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../application/slot-credential-delivery.js';
 import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
 import { ruleOf } from './access-requirements.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
+import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
 import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
 
 export const QUARANTINE_PAGE = 100;
@@ -58,6 +60,11 @@ export interface ApiServices {
   };
   readonly launches: {
     authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
+  };
+  // Slot credential delivery; absent until the composition has the key and
+  // the admitted pairs (sub-change 12d), and then answered 503.
+  readonly slotCredentials?: {
+    fetch(principal: WorkerPrincipal, request: SlotCredentialFetchRequest): Promise<Result<RevealedSlotDelivery>>;
   };
   // The public installation CA certificate, read and checked at start.
   readonly installationCa: string;
@@ -144,6 +151,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#confirm(request);
       case 'authorizeLaunch':
         return this.#authorizeLaunch(request);
+      case 'fetchSlotCredential':
+        return this.#fetchSlotCredential(request);
       case 'listQuarantine':
         return this.#listQuarantine(request.query);
       case 'redriveQuarantined':
@@ -260,6 +269,16 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!values.ok) return values;
     const outcome = await this.#services.launches.authorize(request.worker, values.value);
     return outcome.ok ? ok(launchOutcomeBody(outcome.value)) : outcome;
+  }
+
+  async #fetchSlotCredential({ worker, parameters, query }: ApiRequest): Promise<Result<HttpSchemas['SlotCredentialDelivery']>> {
+    if (worker === undefined) return err(failure('internal', 'fetchSlotCredential reached its handler without a worker'));
+    const values = parseSlotCredentialFetch(parameters, query);
+    if (!values.ok) return values;
+    const deliveries = this.#services.slotCredentials;
+    if (deliveries === undefined) return err(failure('unavailable', 'slot credential delivery is not configured'));
+    const delivered = await deliveries.fetch(worker, values.value);
+    return delivered.ok ? ok(slotCredentialBody(delivered.value)) : delivered;
   }
 
   async #publish({ worker, body }: ApiRequest): Promise<Result<StatusAnswer>> {

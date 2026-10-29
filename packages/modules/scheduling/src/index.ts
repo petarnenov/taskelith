@@ -249,6 +249,7 @@ export {
 export {
   InMemoryAccountSlots,
   InMemorySlotCredentials,
+  InMemorySlotCredentialDeliveries,
   StaticAdmittedDeliveries,
   type AdmittedPair,
 } from './adapters/in-memory-account-pool.js';
@@ -286,3 +287,12 @@ export {
   type AddAccountSlotInput,
 } from './application/add-account-slot.js';
 export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';
+export {
+  checkDeliveredSlot,
+  checkSlotDeliveryOwnership,
+  nextDeliveryRecord,
+  type SlotDeliveryOwnership,
+  type SlotDeliveryRecord,
+  type SlotDeliveryRequest,
+} from './domain/slot-credential-delivery.js';
+export type { SlotCredentialDeliveries } from './ports/slot-credential-deliveries.js';

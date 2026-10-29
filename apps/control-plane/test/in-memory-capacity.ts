@@ -12,6 +12,7 @@ import { ok } from '@taskelith/kernel';
 import { InMemoryOutbox } from '@taskelith/sdlc';
 import {
   InMemoryAccountSlots,
+  InMemorySlotCredentialDeliveries,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
   InMemoryDelegationRequests,
@@ -51,6 +52,7 @@ export function inMemoryCapacity(
     quotas: new InMemoryQuotaSettings(),
     ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage),
     accountSlots: new InMemoryAccountSlots(),
+    slotCredentialDeliveries: new InMemorySlotCredentialDeliveries(),
     placements: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()),
     rotation: new InMemoryPlacementRotation(),
     placementOutcomes: new InMemoryPlacementOutcomeRecords(),
