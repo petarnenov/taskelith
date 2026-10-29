@@ -270,6 +270,15 @@ test('readAgentSession shows the card, attempt, generation, positions, limit, an
   assert.deepEqual((stopped.body.session as { limit: unknown }).limit, {});
 });
 
+test('readAgentSession shows the retained output from its earliest position to its last', async () => {
+  const writing = await runningSession('s-output');
+  for (const text of ['first output', 'second output']) {
+    value(await timeline.appendOutput(writing.sessionId, { turnId: writing.turnId, generation: GENERATION, text }));
+  }
+  const read = await call('GET', sessionPath('s-output'), VERA);
+  assert.deepEqual([read.status, (read.body.session as { output: unknown }).output], [200, { lastPosition: 2, earliestRetained: 1 }]);
+});
+
 test('submitTurn records a turn under a minted identifier, repeats it, and refuses a reused key, a stopped session, and an empty text', async () => {
   const submitting = await runningSession('s-submit');
   const path = `${sessionPath('s-submit')}/turns`;
@@ -311,6 +320,17 @@ test('respondToNativeRequest answers with the request and its position, repeats 
   assert.deepEqual([second.status, (second.body.details as Record<string, string>).reason], [409, 'already-answered']);
   const input = await call('POST', path, OTTO, ownResponse('respond-3', 'request-2', { kind: 'input', text: 'an answer' }));
   assert.deepEqual([input.status, input.body.position, input.body.answer], [200, 2, { kind: 'input', text: 'an answer' }]);
+});
+
+test('respondToNativeRequest refuses an input answer over its character or byte bound with 400 and answers nothing', async () => {
+  const asking = await askingSession('s-bound');
+  const path = `${sessionPath('s-bound')}/responses`;
+  const inputOf = (key: string, text: string) => responseBody(key, 'request-2', { kind: 'input', text }, 'attempt-s-bound');
+  for (const [key, text] of [['bound-1', 'a'.repeat(65_537)], ['bound-2', '\u00e9'.repeat(32_769)]] as const) {
+    const refused = await call('POST', path, OTTO, inputOf(key, text));
+    assert.deepEqual([refused.status, refused.body.code], [400, 'invalid'], key);
+  }
+  assert.equal(value(await timeline.readSession(asking.sessionId)).requests[1]!.state, 'open');
 });
 
 test('an expired request answers 404 and is never answered', async () => {
