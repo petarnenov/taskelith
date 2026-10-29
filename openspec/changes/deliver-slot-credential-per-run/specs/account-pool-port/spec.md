@@ -42,12 +42,33 @@ The control plane SHALL answer `fetchSlotCredential` on a connection without TLS
 - **THEN** it returns a failure that holds no credential
 
 ### Requirement: Run slot credential port on the worker
-The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the harness host forgets the run, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
+The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the run ends or the attempt's ownership generation or the worker's recovery epoch changes, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
 
 #### Scenario: Held per run
 - **WHEN** the harness host obtains a run's credential twice and then forgets the run
 - **THEN** the first call fetches it, the second returns the held one, and the next call after forgetting fetches again
 
+#### Scenario: New recovery epoch
+- **WHEN** the worker's recovery epoch changes while it holds deliveries
+- **THEN** it forgets every held delivery, and the next call for a run fetches with the new epoch
+
+#### Scenario: New ownership generation
+- **WHEN** a run's attempt is obtained with a new ownership generation
+- **THEN** the attempt's held deliveries are forgotten and the call fetches again
+
 #### Scenario: Refusal not held
 - **WHEN** a fetch is refused or fails
 - **THEN** nothing is held, and the log names the execution, attempt, slot, and reason or code only
+
+## MODIFIED Requirements
+
+### Requirement: Confidential credential transport
+A slot credential SHALL be delivered only in the control plane's API response to the worker and only over the TLS of G3 item 26, to a remote worker and to a worker co-located with the control plane on its host alike, never over plain HTTP and never in a broker message.
+
+#### Scenario: Remote worker before TLS
+- **WHEN** a remote worker launches an attempt and the installation has no TLS for the worker's connection
+- **THEN** no slot credential is sent to it
+
+#### Scenario: Co-located worker without TLS
+- **WHEN** a worker co-located with the control plane on its host fetches a slot credential over plain HTTP
+- **THEN** no slot credential is sent to it

@@ -7,10 +7,10 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
 - `@taskelith/execution`: `DeliveredSlotCredential`, a delivered credential whose string, JSON, and inspection forms are `[redacted]`; the refusal reasons of a delivery; the client port `SlotCredentialClient`; and `RunSlotCredentials`, the port through which the harness host obtains and forgets a run's credential.
 - `@taskelith/scheduling`: the pure checks `checkSlotDeliveryOwnership` and `checkDeliveredSlot` in the order of contract section 7.3, with the first delivery's grant check of wire section 8.6; `SlotDeliveryRecord` and `nextDeliveryRecord`; the port `SlotCredentialDeliveries` and its in-memory double.
 - `@taskelith/postgres`: migration `1792933300000_slot-credential-deliveries.sql` and `PostgresSlotCredentialDeliveries`, the `slotCredentialDeliveries` member of the capacity transaction.
-- `@taskelith/control-plane`: `SlotCredentialDeliveryService`, which checks and records a delivery in one `SERIALIZABLE` transaction and reveals the credential only after it commits; the route `fetchSlotCredential` of `execution.openapi.json` 0.8.0, which answers over TLS only and `503` until a delivery service is configured.
+- `@taskelith/control-plane`: `SlotCredentialDeliveryService`, which checks and records a delivery in one `SERIALIZABLE` transaction and reveals the credential only after it commits; the route `fetchSlotCredential` of `execution.openapi.json` 0.8.0, which answers over TLS only, to a co-located worker too, and `503` until a delivery service is configured.
 - `@taskelith/worker-control-plane-client`: `HttpSlotCredentialClient`, which fetches over HTTPS only and checks the answer's schema and binding.
-- `@taskelith/worker`: `FetchedRunSlotCredentials`, which implements `RunSlotCredentials`, holding one delivery per run in memory until the run is forgotten.
-- Documents: account pool contract status and a new section 13; `docs/g3-plan.md` row 12 names 12c.
+- `@taskelith/worker`: `FetchedRunSlotCredentials`, which implements `RunSlotCredentials`, holding one delivery per run in memory until the run ends or the attempt's ownership generation or the worker's recovery epoch changes.
+- Documents: account pool contract status, sections 7.2 (TLS for a co-located worker too), 7.3, and 11, and a new section 13; execution wire contracts section 9; `docs/g3-plan.md` row 12 names 12c.
 
 ## Capabilities
 
@@ -18,7 +18,7 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
 
 ### Modified Capabilities
 
-- `account-pool-port`: adds "Slot credential delivery service", "Slot credential delivery record", "Slot credential delivery over TLS only", and "Run slot credential port on the worker". No requirement is modified or removed.
+- `account-pool-port`: adds "Slot credential delivery service", "Slot credential delivery record", "Slot credential delivery over TLS only", and "Run slot credential port on the worker"; modifies "Confidential credential transport", which drops the plain-HTTP allowance for a worker co-located with the control plane (coordinator's answer Q3). No requirement is removed.
 
 ## Impact
 
@@ -28,5 +28,5 @@ Private packages only; no new third-party dependency. No wire document changes: 
 
 - 12d wires `SlotCredentialDeliveryService` with `PostgresSlotCredentials` and the admitted pairs into the control plane's composition.
 - Item 18: the harness host obtains the run's credential through `RunSlotCredentials`, injects it, redacts the run by its value, and forgets it when the run ends.
-- 13c redacts a run by the deliveries that `SlotCredentialDeliveries.listByExecution` names.
-- The coordinator questions Q1 to Q8 of the design.
+- 13c wires the run's revealed credentials from the deliveries that `SlotCredentialDeliveries.listByExecution` names into the session output redactor (design, Q1).
+- 12d, or 12f if split: key rotation defines a change of a slot's credential version during a run and its typed outcome; until then 12c answers it `internal` (design, Q2).

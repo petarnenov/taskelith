@@ -9,25 +9,44 @@ G3 item 12 implements the account pool contract (`docs/contracts/account-pool.md
 3. **Reveal after commit.** One `SERIALIZABLE` transaction reads, checks, and writes the delivery record; the service calls `SlotCredentials.reveal` for the slot's `credentialVersion` only after it commits (section 7). A failing check writes nothing and reveals nothing. A reveal that throws is `unavailable` and names only the slot.
 4. **Delivery record.** `slot_credential_deliveries` keeps one row per task, execution, and slot: the attempt and worker of the latest delivery, the credential version, the first and latest delivery times, and the count, never the credential. It is written in the check transaction, before the reveal, so every revealed credential has a record. `listByExecution` gives the deliveries of one execution in slot order, for 13c.
 5. **Races.** Two first fetches for one execution and slot both read no record; the upsert of the second to commit conflicts with the first, PostgreSQL fails it with a serialization failure, and the transaction is retried, reads the first record, and counts the second delivery. A test gates the first attempt of each racer after its read and asserts that one of them retried.
-6. **Transport.** The route is marked confidential, and the API server answers a confidential route on a connection without TLS with `500` `internal` before it reads the bearer, so a credential never leaves over plain HTTP. Every response already carries `Cache-Control: no-store`. The client refuses a base URL that is not `https:` and sends nothing.
+6. **Transport.** The route is marked confidential, and the API server answers a confidential route on a connection without TLS with `500` `internal` before it reads the bearer, so a credential never leaves over plain HTTP, to a co-located worker neither (Q3). Every response already carries `Cache-Control: no-store`. The client refuses a base URL that is not `https:` and sends nothing.
 7. **Redaction.** `DeliveredSlotCredential` (worker) and `SlotSecret` (control plane) return `[redacted]` from `toString`, `toJSON`, and inspection; only `reveal` returns the text. In the control plane only `slotCredentialBody` puts it into a response body. A client failure names the violation count or the status, never the body; a refusal's message is sanitized. The worker's logs name identifiers and the reason or code only.
-8. **Worker.** `FetchedRunSlotCredentials` fetches through `SlotCredentialClient` with the worker's current recovery epoch, holds one delivery per attempt, execution, and slot in memory, gives the held one back to later calls for the same run, and drops the run's deliveries on `forget`. A refusal or failure is held by nothing, so the next call fetches again.
+8. **Worker.** `FetchedRunSlotCredentials` fetches through `SlotCredentialClient` with the worker's current recovery epoch, holds one delivery per attempt, execution, and slot in memory, gives the held one back to later calls for the same run, and drops the run's deliveries on `forget`, when the run ends. Each held delivery keeps the ownership generation and recovery epoch of its fetch: a call that reads another recovery epoch drops every held delivery, and a call for an attempt with another ownership generation drops that attempt's deliveries, before it looks for a held one (Q7). A refusal or failure is held by nothing, so the next call fetches again.
 9. **Not wired.** `ApiServices.slotCredentials` is optional and the composition passes none, because 12d supplies the key, `PostgresSlotCredentials`, and the admitted pairs; until then the route answers `503` `unavailable`.
 
-## Open coordinator questions
+## Coordinator answers
 
-Each question takes the most conservative option until the coordinator answers.
+The coordinator Niki (architect) answered the questions Q1 to Q8 that this design asked on 2026-10-29. The answers, verbatim:
 
-- **Q1. Delivery record shape and key.** The brief cites the coordinator's answer Q9 to Zaki for the record's shape; it was not found in the repository (the only Q9 found, in the archived 13a design, is about who opens a session) and no other branch holds it. The record is per task, execution, and slot, without the credential, as decision 4 describes, and is written before the reveal, so a reveal that fails after the commit leaves a record of a delivery that sent nothing. Does it match the answer, and should 13c read it by `listByExecution`?
-- **Q2. A changed credential version.** A rotation switches a slot's version only while no held reservation names it (section 8.1), so a delivery's slot cannot name another version than the execution's earlier delivery. If it does, the delivery is `internal` (`500`) and reveals nothing, rather than delivering the new version. Is that right?
-- **Q3. Plain HTTP to a co-located worker.** Section 7.2 also allows a worker co-located with the control plane on its host. The route refuses every connection without TLS, and the client every base URL that is not HTTPS, so a co-located worker without TLS gets no credential. Should that allowance be implemented, and how would the control plane recognize a co-located worker?
-- **Q4. Composition.** The service is not wired (decision 9) and the route answers `503` until 12d wires it. Confirm that 12d owns that wiring.
-- **Q5. Inconsistent state after the checks.** A reservation that names a slot that is not stored, and a version that `reveal` does not find after the commit (for example a removal that destroyed it), are `internal` (`500`) failures that name only the slot. Should either be a typed refusal instead, for example `removed`?
-- **Q6. "Earlier delivery" for the grant check.** The first delivery to an `authorized` execution needs a live grant. "First" is decided per execution and slot, so an execution whose reservation names two slots needs a live grant for the first fetch of each. Is per execution and slot the intended scope?
-- **Q7. Proof that the worker holds the reservation.** The worker is the bearer's principal, which `isCurrentWorker` checks for enrollment, revocation, and generation; it names the attempt, the ownership generation, and the recovery epoch, and the execution must belong to its unended assignment of that attempt, whose held reservation names the slot. The worker holds a delivery for its run until the harness host forgets it, and does not fetch again before. Is that sufficient proof, and is holding per run right for item 18?
-- **Q8. Worker logs.** A refused or failed fetch is logged as `worker.slot-delivery.refused` or `worker.slot-delivery.failed` with the execution, attempt, slot, and reason or code. Item 18 decides what the run does after a refusal (section 7.3: it discards the run's text). Confirm the event names.
+> Q1 The text (my answer Q9 to Zaki on 13b's design): "Credentials revealed to a run: redact known shapes only for now, as a stated limit. Owner of the fix: 13c wires the run's revealed credentials (from 12c's per-run delivery record) into the session output redactor; note that obligation for 12c/13c in the design." Your record (task, execution, slot; attempt, worker, credential version, first/last time, count; listByExecution) is accepted, written before reveal, so a failed reveal leaves it: correct, since 13c must assume the worst.
+>
+> Q2 Keep internal 500 with nothing revealed for now, and note it for 12d: key rotation (12d, or 12f if split) defines the mid-run version change and its typed outcome.
+>
+> Q3 TLS-only, and amend the living requirement "Confidential credential transport" in this change (MODIFIED) and contract section 7.2: item 26 gives every installation its certificate authority, so a co-located worker uses TLS too. One less plain-HTTP path for a secret.
+>
+> Q4 Accepted: 12d wires it; the 503 without wiring stays, with a test.
+>
+> Q5 Accepted: an invariant break, internal.
+>
+> Q6 Accepted.
+>
+> Q7 Accepted, plus: the worker forgets the credential at the run's end and on a generation or epoch change, with tests for each.
+>
+> Q8 Accepted.
+
+The questions, in short: Q1, the delivery record's shape and key, and whether 13c reads it by `listByExecution`; Q2, a slot whose credential version differs from the execution's earlier delivery; Q3, the plain-HTTP allowance of contract section 7.2 for a co-located worker; Q4, who wires the service into the composition; Q5, a missing slot or version after the checks; Q6, the scope of "first delivery" for the grant check; Q7, the worker's proof that it holds the reservation and its holding per run; Q8, the worker's log event names.
+
+Applied:
+
+- **Q1.** The record's shape (decision 4) stays. Obligation for 12c and 13c: 13c wires the run's revealed credentials from 12c's delivery record into the session output redactor, which until then redacts known shapes only, as a stated limit; contract section 13 states it.
+- **Q2.** A changed version stays `internal` (`500`) with nothing revealed. Key rotation (12d, or 12f if split) defines the version change during a run and its typed outcome; contract sections 11 and 13 and the proposal's follow-ups state it.
+- **Q3.** TLS-only (decision 6). The spec delta modifies the living requirement "Confidential credential transport" to TLS for a co-located worker too, and contract section 7.2 says why: item 26 gives every installation its certificate authority.
+- **Q4.** 12d wires the service (decision 9); the API test `without a delivery service, as before 12d wires one, the route answers 503 unavailable` asserts the `503`.
+- **Q5, Q6, Q8.** Accepted as designed; nothing changes.
+- **Q7.** Accepted, plus the worker forgets a held credential at the run's end and on a change of the ownership generation or the recovery epoch (decision 8), with a test for each.
 
 ## Risks
 
 - Until 12d wires the service, nothing delivers a credential, and until item 18 nothing calls `RunSlotCredentials`; the paths run only in tests.
-- A reveal that fails after the commit leaves a delivery record (Q1); 13c redacts by a value that the run never received, which hides nothing it should show.
+- A reveal that fails after the commit leaves a delivery record (Q1); 13c assumes the worst and redacts by a value that the run never received, which hides nothing it should show.
+- Until 13c, the session output redactor redacts known shapes only (Q1).
