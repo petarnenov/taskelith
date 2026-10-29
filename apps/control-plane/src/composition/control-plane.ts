@@ -187,9 +187,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
   });
-  // The session operations are served on the browser endpoint only.
+  // The session operations are served on the browser endpoint only, and a
+  // secret only on the worker endpoint, under the installation CA.
   const workerRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.browserOnly) });
-  const browserRequests = createApiRequestListener(api, { logger });
+  const browserRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.confidential) });
   const servers = [createTlsApiServer(workerRequests, tls.value.worker), createTlsApiServer(browserRequests, tls.value.browser)];
   const closeApi = once(async () => {
     await Promise.all(servers.map((server) => close(server)));

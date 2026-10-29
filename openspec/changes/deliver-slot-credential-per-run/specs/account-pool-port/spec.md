@@ -45,6 +45,10 @@ The control plane SHALL answer `fetchSlotCredential` on a connection without TLS
 - **WHEN** a worker sends `fetchSlotCredential` over plain HTTP
 - **THEN** the answer is `500` and no delivery is made
 
+#### Scenario: Browser endpoint
+- **WHEN** a request for `fetchSlotCredential` reaches the browser endpoint
+- **THEN** no route answers it, the answer is `404`, and no delivery is made
+
 #### Scenario: Delivery for another execution
 - **WHEN** the client receives a delivery that names another execution or slot than its request
 - **THEN** it returns a failure that holds no credential

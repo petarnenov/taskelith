@@ -3,6 +3,7 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { request as httpsRequest } from 'node:https';
 import { connect, type PeerCertificate } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
@@ -201,6 +202,18 @@ function presented(port: number, ca: string, minVersion: 'TLSv1' | 'TLSv1.2' = '
   });
 }
 
+// The status of a GET on `port` without a credential, trusting `ca`.
+function statusOf(port: number, ca: string, path: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest({ host: '127.0.0.1', port, path, ca }, (response) => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    request.once('error', reject);
+    request.end();
+  });
+}
+
 describe('TLS listeners', () => {
   test('the worker API presents the installation certificate over HTTPS', async () => {
     const certificate = await presented(running.api.port, installationCa);
@@ -222,6 +235,12 @@ describe('TLS listeners', () => {
     const certificate = await presented(running.browser.port, operatorAuthority.certificatePem);
     assert.equal(certificate.subject.CN, 'Operator browser');
     await assert.rejects(presented(running.browser.port, installationCa));
+  });
+
+  test('the browser endpoint serves no confidential route, such as a slot credential fetch', async () => {
+    const path = '/executions/execution-1/slot-credentials/slot-1?attemptId=attempt-1&ownershipGeneration=1&recoveryEpoch=1';
+    assert.equal(await statusOf(running.api.port, installationCa, path), 401, 'the worker endpoint serves it');
+    assert.equal(await statusOf(running.browser.port, operatorAuthority.certificatePem, path), 404);
   });
 
   test('a plain HTTP request and TLS 1.1 get no API answer', async () => {
