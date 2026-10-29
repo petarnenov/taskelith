@@ -62,7 +62,7 @@ Each behavior was broken in place on `755e916c` (the code of `45bd8e04`), the bu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e28da1f6d343308385975531ca7e93dd9db9183c`; tests 3927, pass 3918, fail 0, skipped 9; all files 99.38% lines, 92.51% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `05357fdea4faf7c9f1f82422d0b569bb51a4e93d`; tests 3927, pass 3918, fail 0, skipped 9; all files 99.38% lines, 92.52% branches, 98.85% functions.
 - `npm run openspec -- validate apply-account-slot-commands --strict`: passed, `Change 'apply-account-slot-commands' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
