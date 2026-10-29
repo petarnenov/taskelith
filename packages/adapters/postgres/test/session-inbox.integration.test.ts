@@ -2,36 +2,31 @@ import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import {
   ALREADY_ANSWERED,
-  BEFORE_ANY_EVENT,
   ITEM_CLOSED,
-  NativeRequestSource,
   SCOPES_LINEAGE,
   SESSION_SCOPES_CONFORMANCE,
   type IdempotencyKey,
   type NeedsYouItemId,
-  type NeedsYouSourceId,
   type PrincipalId,
   type SessionId,
   type SessionScope,
-  type SessionTimelineService,
   type SessionTimelineStore,
   type SessionTimelineTransaction,
 } from '@taskelith/execution';
-import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
+import { parseIdentifier } from '@taskelith/kernel';
 import { PostgresDatabase, PostgresSessionScopes, PostgresSessionTimelineStore } from '@taskelith/postgres';
 import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
-import { HmacInputDigest } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
 import {
   Barrier,
   HARNESS,
-  OTHER_SESSION,
   SESSION,
   TASK,
   allow,
   barrierStore,
   generation,
   postgresService,
+  requestSource,
   sessionWithOpenRequest,
   timelineService,
   turn,
@@ -63,11 +58,7 @@ async function lineage(): Promise<void> {
   }
 }
 
-function source(store: SessionTimelineStore, timeline: SessionTimelineService = timelineService(store)): NativeRequestSource {
-  const digest = value(HmacInputDigest.fromKey(Buffer.alloc(32, 0x5a)));
-  const clock = { now: () => value(instantFromEpochMilliseconds(Date.now())) };
-  return new NativeRequestSource({ id: 'native-requests' as NeedsYouSourceId, store, timeline, digest, clock, positions: BEFORE_ANY_EVENT });
-}
+const source = requestSource;
 
 const answer = (itemId: string, key: string, given: object, responder: PrincipalId = PERSON) => ({
   itemId: itemId as NeedsYouItemId, responder, answer: given as never, idempotencyKey: id('IdempotencyKey', key) as IdempotencyKey,

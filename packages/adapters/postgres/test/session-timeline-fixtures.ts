@@ -1,10 +1,13 @@
 import { AssertionError } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
+  BEFORE_ANY_EVENT,
+  NativeRequestSource,
   SessionTimelineService,
   parseSessionGeneration,
   parseTurnId,
   type IdempotencyKey,
+  type NeedsYouSourceId,
   type RequestKey,
   type RequestRecording,
   type ResponseCommand,
@@ -72,6 +75,13 @@ export function timelineService(store: SessionTimelineStore): SessionTimelineSer
     clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
     itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
   });
+}
+
+// The native request source over the store, as the composition builds it.
+export function requestSource(store: SessionTimelineStore, timeline: SessionTimelineService = timelineService(store)): NativeRequestSource {
+  const digest = value(HmacInputDigest.fromKey(DIGEST_KEY));
+  const clock = { now: () => value(instantFromEpochMilliseconds(Date.now())) };
+  return new NativeRequestSource({ id: 'native-requests' as NeedsYouSourceId, store, timeline, digest, clock, positions: BEFORE_ANY_EVENT });
 }
 
 export function postgresService(database: PostgresDatabase): SessionTimelineService {
