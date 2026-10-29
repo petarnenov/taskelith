@@ -110,12 +110,12 @@ export class SlotCredentialDeliveryService {
     return refused === undefined ? slot : err(refusalFailure(refused));
   }
 
-  // A store that cannot be reached reveals nothing and is `unavailable`.
+  // Every failure gets a local message with the slot only, as an adapter's
+  // diagnostic may hold the credential.
   async #reveal(slot: AccountSlot): Promise<Result<SlotSecret>> {
     try {
       const revealed = await this.#ports.credentials.reveal(slot.id, slot.credentialVersion);
-      if (revealed.ok || revealed.error.code !== 'not-found') return revealed;
-      return err(failure('internal', `the credential version of slot ${slot.id} is not stored`, { slot: slot.id }));
+      return revealed.ok ? revealed : err(revealFailure(slot, revealed.error));
     } catch {
       return err(failure('unavailable', `the credential of slot ${slot.id} cannot be read`, { slot: slot.id }));
     }
@@ -125,6 +125,13 @@ export class SlotCredentialDeliveryService {
 async function taskOf(tx: ControlPlaneTransaction, taskId: Task['id']): Promise<Result<Task> | undefined> {
   const task = await tx.tasks.get(taskId);
   return !task.ok && task.error.code === 'not-found' ? undefined : task;
+}
+
+function revealFailure(slot: AccountSlot, refused: Failure): Failure {
+  const details = { slot: slot.id };
+  if (refused.code === 'not-found') return failure('internal', `the credential version of slot ${slot.id} is not stored`, details);
+  if (refused.code === 'unavailable') return failure('unavailable', `the credential of slot ${slot.id} cannot be read`, details);
+  return failure('internal', `the credential of slot ${slot.id} cannot be revealed`, details);
 }
 
 // The wire's typed refusal: 422 with the reason (wire contracts section 8.6).

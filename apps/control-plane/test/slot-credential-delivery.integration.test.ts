@@ -12,7 +12,7 @@ import {
 } from '@taskelith/control-plane';
 import type { HarnessPluginId, LaunchGrant, LaunchOutcome, RecoveryEpoch } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type WorkerPrincipal } from '@taskelith/fleet';
-import { ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { connectTransport, ensureStreams, JetStreamPublisher, OutboxPublisher, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 import { PostgresDatabase, PostgresOutboxRelay, PostgresSlotCredentials, migrate } from '@taskelith/postgres';
 import {
@@ -72,9 +72,11 @@ const stored = new PostgresSlotCredentials((work) => database.transaction(work),
 const fleet = new LaunchRevokingFleetRegistry(database);
 const authority = launchAuthority(database);
 let reveals = 0;
+const storedReveal: SlotCredentials['reveal'] = (slotId, version) => stored.reveal(slotId, version);
+let revealing = storedReveal;
 const counted: SlotCredentials = {
   store: (slotId, secret) => stored.store(slotId, secret),
-  reveal: (slotId, version) => { reveals += 1; return stored.reveal(slotId, version); },
+  reveal: (slotId, version) => { reveals += 1; return revealing(slotId, version); },
   discard: (slotId, version) => stored.discard(slotId, version),
   discardOlderThan: (slotId, version) => stored.discardOlderThan(slotId, version),
   destroy: (slotId) => stored.destroy(slotId),
@@ -98,6 +100,7 @@ beforeEach(async () => {
   await createLaunchRun(database);
   for (const slotId of [SLOT, OTHER_SLOT]) await addSlot(slotId);
   reveals = 0;
+  revealing = storedReveal;
 });
 
 async function addSlot(slotId: ProviderCredentialId): Promise<void> {
@@ -197,6 +200,60 @@ test('a slot that names another version than the earlier delivery reveals nothin
   const refused = failed(await service().fetch(PRINCIPAL, fetch));
   assert.equal(refused.code, 'internal');
   assert.equal(reveals, 1);
+});
+
+test('the delivery record is committed when the credential is revealed', async () => {
+  const { fetch } = await launched();
+  const seen: Array<Record<string, unknown>[]> = [];
+  revealing = async (slotId, version) => {
+    seen.push(await deliveries());
+    return storedReveal(slotId, version);
+  };
+  value(await service().fetch(PRINCIPAL, fetch));
+  assert.deepEqual(seen.map((rows) => rows.map((row) => row.deliveries)), [[1]], 'another connection saw the record at the reveal');
+});
+
+test('a delivery whose transaction does not commit reveals nothing and leaves no record', async () => {
+  const { fetch } = await launched();
+  const uncommitted: ControlPlaneStore = {
+    transaction: (work) => database.transaction(async (tx) => {
+      const done = await work(tx);
+      return done.ok ? err(failure('unavailable', 'the commit failed')) : done;
+    }),
+    readCommitted: (work) => database.readCommitted(work),
+  };
+  assert.equal(failed(await service(uncommitted).fetch(PRINCIPAL, fetch)).code, 'unavailable');
+  assert.deepEqual([reveals, await deliveries()], [0, []]);
+});
+
+test('a failed reveal leaves the committed record, and a retry delivers and counts again', async () => {
+  const { grant, fetch } = await launched();
+  revealing = async () => { throw new Error('the key store is down'); };
+  assert.equal(failed(await service().fetch(PRINCIPAL, fetch)).code, 'unavailable');
+  assert.deepEqual((await deliveries()).map((row) => row.deliveries), [1], 'the record stays, as if revealed (Q1)');
+  revealing = storedReveal;
+  await expire(grant);
+  assert.equal(value(await service().fetch(PRINCIPAL, fetch)).credential.reveal(), `${SECRET}-${fetch.slotId}`);
+  assert.deepEqual((await deliveries()).map((row) => row.deliveries), [2]);
+});
+
+test('no failure of the credential store reaches the answer with its diagnostic', async () => {
+  const { fetch } = await launched();
+  const leaked = `${SECRET}-diagnostic`;
+  const failures: Array<[string, SlotCredentials['reveal'], string]> = [
+    ['thrown', async () => { throw new Error(leaked); }, 'unavailable'],
+    ...(['invalid', 'conflict', 'forbidden', 'precondition-failed', 'internal'] as const).map((code): [string, SlotCredentials['reveal'], string] =>
+      [code, async () => err(failure(code, leaked, { reason: leaked, cause: leaked })), 'internal']),
+    ['unavailable', async () => err(failure('unavailable', leaked, { cause: leaked })), 'unavailable'],
+    ['not-found', async () => err(failure('not-found', leaked, { cause: leaked })), 'internal'],
+  ];
+  for (const [label, reveal, code] of failures) {
+    revealing = reveal;
+    const refused = failed(await service().fetch(PRINCIPAL, fetch));
+    assert.doesNotMatch(JSON.stringify(refused), new RegExp(SECRET), label);
+    assert.equal(refused.code, code, label);
+    assert.deepEqual(refused.details, { slot: fetch.slotId }, label);
+  }
 });
 
 // Each racer's first attempt waits after reading the delivery record until
