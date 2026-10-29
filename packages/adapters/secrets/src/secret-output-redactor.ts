@@ -31,9 +31,13 @@ const MARKER_DASHES = 12;
 const PEM_CONTEXT = `${PEM_BEGIN_HEAD}PRIVATE KEY-----\n`;
 const CREDS_CONTEXT = `${credsBegin}\n`;
 
+// A token boundary is the turn's start or a character outside this class,
+// the boundary before a run in the whole-text rule redactJwts.
 const TOKEN_CHARACTER = /[A-Za-z0-9_-]/;
 const ISSUED_AT_END = new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})(?:_[A-Za-z0-9_-]*)?$`);
 const SEED_AT_END = /S[OAU][A-Z2-7]{1,55}$/;
+const SHAPE_HEADS = ['eyJ', ...Object.values(SECRET_PREFIXES), 'SO', 'SA', 'SU'];
+const HEAD_PREFIXES = new Set(SHAPE_HEADS.flatMap((head) => Array.from(head, (_, end) => head.slice(0, end + 1))));
 const SCHEME_CHARACTER = /[A-Za-z0-9+.-]/;
 // A host and a user name cut before its `@` look alike, so both match.
 const USERINFO_SO_FAR = /^[^/?#@]+$/;
@@ -231,8 +235,15 @@ function pemPartial(head: string): Partial {
 function withoutInterruptedSecret(text: string): string {
   const runFrom = runStart(text, text.length);
   const run = text.slice(runFrom);
-  const starts = [jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
+  const starts = [headStart(run), jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
   return starts.length === 0 ? text : text.slice(0, runFrom + Math.min(...starts)) + REDACTED;
+}
+
+// A word from a token boundary that a shape's head begins with; glued to a
+// word, as in `done` or `OSO`, it is kept.
+function headStart(run: string): number | undefined {
+  const start = suffixStart(run, TOKEN_CHARACTER);
+  return HEAD_PREFIXES.has(run.slice(start)) ? start : undefined;
 }
 
 // A JWT cut short holds at most two dots after its `eyJ`.

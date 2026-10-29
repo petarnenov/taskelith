@@ -60,6 +60,8 @@ function assertNoPart(stored: string, secret: string, label: string): void {
 // A cut match of each shape from its whole head on, so a run that ends in
 // one may be a cut secret; and URL user information after its scheme.
 const SHAPE_BEGINNINGS = [/^eyJ[\w-]*(?:\.[\w-]*){0,2}$/, /^tk(?:op|en|wk)(?:_[\w-]*)?$/, /^S[OAU][A-Z2-7]{1,55}$/];
+// A non-empty prefix of a shape's head after a token boundary.
+const HEAD_PREFIX_AT_END = /(?<![\w-])(?:e|ey|eyJ|t|tk|tko|tkop|tke|tken|tkw|tkwk|S|SO|SA|SU)$/;
 const USERINFO_SO_FAR = /[\w+.-]:\/\/([^\s/?#@]+)$/;
 const BLOCKS = [
   { begin: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/, end: /-----END [A-Z0-9 ]*PRIVATE KEY-----/ },
@@ -82,6 +84,8 @@ function expectedTurnEnd(text: string): string {
     .filter((start) => SHAPE_BEGINNINGS.some((beginning) => beginning.test(whole.slice(start))));
   const userinfo = USERINFO_SO_FAR.exec(whole.slice(runFrom));
   if (userinfo !== null) starts.push(whole.length - userinfo[1]!.length);
+  const head = HEAD_PREFIX_AT_END.exec(whole);
+  if (head !== null) starts.push(head.index);
   return starts.length === 0 ? whole : whole.slice(0, Math.min(...starts)) + REDACTED;
 }
 
@@ -141,18 +145,44 @@ test('a turn that ends in a host redacts it as a possible user name', () => {
 });
 
 test('a turn that ends in a word, a URL with a path, or a closed JWT keeps or redacts it as the whole text does', () => {
-  for (const text of ['done', 'eyJ0.eyJ1.c2ln', 'SO', 'tok', 'see https://example.com/']) {
+  for (const text of ['done', 'eyJ0.eyJ1.c2ln', 'OSO', 'tok', 'see https://example.com/']) {
     assert.equal(turnOutput([text]), redactSecrets(text), text);
   }
 });
 
-// A head cut short holds no secret material, so it is kept: an ordinary
-// turn's end stays intact (13d design, decision 1).
-test('a turn that ends in done, ey, tko, or another prefix shorter than a shape\'s head releases it verbatim', () => {
-  for (const text of ['done', 'ey', 'tko', 'e', 't', 'tk', 'tke', 'tkw', 'S', 'SO', 'SA', 'SU']) {
-    assert.equal(turnOutput([`a ${text}`]), `a ${text}`, text);
-    assert.equal(turnOutput([`a ${text.slice(0, 1)}`, text.slice(1)]), `a ${text}`, `${text} in two chunks`);
+const HEAD_PREFIXES = ['e', 'ey', 'eyJ', 't', 'tk', 'tko', 'tkop', 'tke', 'tken', 'tkw', 'tkwk', 'S', 'SO', 'SA', 'SU'];
+// The separators a token boundary follows; '' is the turn's start.
+const SEPARATORS = ['', ' ', '\n', '"', "'", '=', ':', ',', '(', '[', '{'];
+
+// Over-redaction accepted only from a token boundary (13d design, decision 1).
+test('a turn that ends in a prefix of a shape\'s head after a token boundary stores it as one marker, in one or two chunks', () => {
+  for (const separator of SEPARATORS) {
+    const before = separator === '' ? '' : `x${separator}`;
+    for (const head of HEAD_PREFIXES) {
+      const label = JSON.stringify(before + head);
+      assert.equal(turnOutput([before + head]), before + REDACTED, label);
+      assert.equal(turnOutput([before, head]), before + REDACTED, `${label} in two chunks`);
+    }
   }
+});
+
+// A whole JWT or issued secret head is a cut secret even when glued.
+const GLUED_KEPT = HEAD_PREFIXES.filter((prefix) => !['eyJ', 'tkop', 'tken', 'tkwk'].includes(prefix));
+
+test('a head prefix short of a JWT or issued secret head glued to a word character is released verbatim, in one or two chunks', () => {
+  for (const separator of SEPARATORS) {
+    for (const head of GLUED_KEPT) {
+      const text = `x${separator}w${head}`;
+      assert.equal(turnOutput([text]), text, JSON.stringify(text));
+      assert.equal(turnOutput([`x${separator}w`, head]), text, `${JSON.stringify(text)} in two chunks`);
+    }
+  }
+});
+
+test('a turn that ends in done, she, test, or OSO keeps it, and in " ey", token=tko, "SO, or only e stores a marker', () => {
+  for (const text of ['done', 'she', 'test', 'OSO', 'a done']) assert.equal(turnOutput([text]), text, text);
+  const ends = [[' ey', ` ${REDACTED}`], ['token=tko', `token=${REDACTED}`], ['"SO', `"${REDACTED}`], ['e', REDACTED]];
+  for (const [text, stored] of ends) assert.equal(turnOutput([text!]), stored, text);
 });
 
 test('a turn that ends in a shape\'s whole head stores it as one marker', () => {
