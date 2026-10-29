@@ -509,6 +509,18 @@ test('the session inbox down migration removes its tables and keeps the session 
   assert.deepEqual(tables.map((row) => row.table_name), ['agent_sessions']);
 });
 
+test('the open session inbox items index serves their listing in code-unit order without a sort', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url)).ok, true);
+  const indexPlanner = new URL(url);
+  indexPlanner.searchParams.set('options', '-c enable_seqscan=off -c enable_bitmapscan=off -c enable_sort=off');
+  const plan = await query<{ 'QUERY PLAN': string }>(indexPlanner, `EXPLAIN SELECT item_id FROM session_inbox_items
+    WHERE state = 'open' ORDER BY item_id COLLATE "C" LIMIT 10`);
+  const steps = plan.map((row) => row['QUERY PLAN']).join('\n');
+  assert.match(steps, /Index (Only )?Scan using session_inbox_items_open/);
+  assert.doesNotMatch(steps, /Sort/);
+});
+
 test('the session timeline down migration removes the session timeline tables', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url)).ok, true);

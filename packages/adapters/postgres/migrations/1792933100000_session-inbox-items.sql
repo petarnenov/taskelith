@@ -12,7 +12,7 @@ CREATE TABLE session_inbox_items (
   record text NOT NULL,
   UNIQUE (session_id, generation, native_request_id, kind)
 );
-CREATE INDEX session_inbox_items_open ON session_inbox_items (item_id) WHERE state = 'open';
+CREATE INDEX session_inbox_items_open ON session_inbox_items (item_id COLLATE "C") WHERE state = 'open';
 
 -- Who acknowledged an uncertain delivery; rows never change.
 CREATE TABLE session_audit_events (
