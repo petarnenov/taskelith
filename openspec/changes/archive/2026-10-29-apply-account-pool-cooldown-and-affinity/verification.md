@@ -163,3 +163,15 @@ Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0a
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the apply account pool cooldown and affinity change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive apply-account-pool-cooldown-and-affinity --yes` on `be137d32`, with every task of `tasks.md` ticked (4.3 ticked after the archive), and only this section was added afterward. `origin/dev` was `19c15d69`, already merged.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-29-apply-account-pool-cooldown-and-affinity` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `19c15d69`) | Only this change's deltas: `account-pool-port` (1 requirement removed, "New-session selection in the placement transaction"; 4 added) and `harness-account-pools` (1 modified, "Least-loaded selection with cooldown"), 75 insertions and 6 deletions; each delta requirement appears verbatim in its living spec, and no requirement of either spec exceeds 500 characters (longest 495) |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 88 file(s); every pass summary file is valid: 68 file(s); every route file is valid: 24 file(s).` |
+| `make verify` on the archive working tree (log `verify-12b-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3781 tests, 3772 passed, 0 failed, 9 skipped; all files 99.41% lines, 92.76% branches, 98.84% functions |

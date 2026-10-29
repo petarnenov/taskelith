@@ -29,7 +29,7 @@ Taskelith SHALL manage harness accounts as slots, each bound to exactly one harn
 - **THEN** the configuration is rejected
 
 ### Requirement: Least-loaded selection with cooldown
-A new session SHALL reserve, in the same transaction as its other run resources, the eligible slot (allowed for the project, healthy, not in cooldown, below its concurrency limit) with the fewest active sessions; ties SHALL go to the lowest usage fraction only when every tied slot has a report within its derived window, and otherwise or then to the least recently used slot. A slot SHALL enter cooldown on a reported rate or usage limit until the reported reset time or a bounded default.
+A new session SHALL reserve, in the same transaction as its other run resources, the eligible slot (allowed for the project, healthy, not in cooldown, below its concurrency limit) with the fewest active sessions; ties SHALL go to the lowest usage fraction only when every tied slot has a report within its derived window, and otherwise or then to the least recently used slot. A slot SHALL enter cooldown on a reported rate or usage limit until its reset, capped at 7 days, or a bounded default.
 
 #### Scenario: Fewest active sessions
 - **WHEN** eligible slots have 2, 0, and 1 active sessions
@@ -48,8 +48,12 @@ A new session SHALL reserve, in the same transaction as its other run resources,
 - **THEN** the least recently used of the two is reserved
 
 #### Scenario: Limit with reset time
-- **WHEN** a plugin reports a usage limit for a slot with a reset time
+- **WHEN** a plugin reports a usage limit for a slot with a reset time within 7 days
 - **THEN** the slot receives no new sessions until that time
+
+#### Scenario: Limit with reset time past the cap
+- **WHEN** a plugin reports a usage limit for a slot with a reset time 14 days later
+- **THEN** the slot receives no new sessions for 7 days and is eligible again after them
 
 #### Scenario: Limit without reset time
 - **WHEN** a plugin reports a rate limit without a reset time
