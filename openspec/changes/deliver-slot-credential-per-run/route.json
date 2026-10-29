@@ -1,10 +1,10 @@
 {
   "change": "deliver-slot-credential-per-run",
-  "generatedAt": "2026-10-29T02:19:58.508Z",
+  "generatedAt": "2026-10-29T02:33:14.061Z",
   "devCommit": "dc2ae98b379dbc721df0ae88f05446cbc18b8059",
-  "headCommit": "f109b4ad1315da76d21c8015584018f2d3ddc1c6",
+  "headCommit": "8c1a7af96c8c9708f0fcf96c3634cb229870bc41",
   "features": {
-    "linesChanged": 1646,
+    "linesChanged": 1706,
     "filesChanged": 38,
     "capabilities": [
       "account-pool-port"
@@ -70,7 +70,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.73,
+    "thirdPassProbability": 0.75,
     "threshold": 0.4,
     "passes": [
       {
@@ -101,6 +101,6 @@
         }
       }
     ],
-    "latencyMs": 301
+    "latencyMs": 267
   }
 }
