@@ -168,6 +168,17 @@ Route (`route.json`, rule version 2): elevated; pass 1 reviewer A codex gpt-6-as
 
 ## Remaining gates
 
-- Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
 - Follow-ups 13c (the worker messages, and the run's revealed credentials in the session output redactor, answer Q9) and 13d `redact-session-output-across-chunks` (output redaction across chunks with a held tail and the `readAgentSessionOutput` route, migration `1792933200000`)
+
+## Archive
+
+Checked state: the tree of the archive commit `docs: archive the serve session timeline over http change`, the last commit of the branch, on top of `543a4ff2`; the checks ran on the uncommitted archive tree, which differs from the committed one only by this section.
+
+- `npm run openspec -- archive serve-session-timeline-over-http --yes`: archived as `2026-10-29-serve-session-timeline-over-http`; totals + 8, ~ 0, - 0 (control-plane-api 5, control-plane-wire-contracts 1, postgres-state 1, session-turn-model 1).
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `make verify` (log `13b-verify-archive.log` in the session scratchpad): passed, profile full, no stamp since the tree was uncommitted: tests 3859, pass 3812, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.78 % functions.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-29-serve-session-timeline-over-http` passed; the 14 failures of the 263 items are other, older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's eight added requirements, 4 files, 108 insertions.
+- The moved change has `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json`.
+- `make findings ARGS="validate"`: "Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s)."
