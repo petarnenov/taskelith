@@ -415,7 +415,7 @@ The coordinator SHALL assign each new change the reviewer of each pass that the 
 
 #### Scenario: Assigned reviewers available
 - **WHEN** a new change without external facts is assigned and the reviewers that the assignment names are available
-- **THEN** pass 1 is `codex gpt-6-astra#medium`, pass 2 `claude claude-opus-5-5#medium`, and pass 3 `codex gpt-6.1-sol#medium`
+- **THEN** pass 1 is `codex gpt-6-astra#medium`, pass 2 `claude claude-fable-5-1#medium`, and pass 3 `codex gpt-6.1-sol#medium`
 
 #### Scenario: Change that needs network access
 - **WHEN** a new change's review depends on external facts, so it needs network access
@@ -468,7 +468,7 @@ The rule router SHALL be deterministic and, since rule version 2, SHALL recommen
 
 #### Scenario: Large change
 - **WHEN** a change without external facts changes 420 lines in 6 files of one capability
-- **THEN** the rule recommends `elevated` with trigger `lines`, pass 1 `codex gpt-6-astra#high`, pass 2 `claude claude-opus-5-5#xhigh`, and pass 3 `codex gpt-6.1-sol#high`
+- **THEN** the rule recommends `elevated` with trigger `lines`, pass 1 `codex gpt-6-astra#high`, pass 2 `claude claude-fable-5-1#high`, and pass 3 `codex gpt-6.1-sol#high`
 
 #### Scenario: Small change with external facts
 - **WHEN** a change whose `design.md` has an "External facts" section changes 40 lines and fires no trigger
@@ -477,6 +477,10 @@ The rule router SHALL be deterministic and, since rule version 2, SHALL recommen
 #### Scenario: Same input, same decision
 - **WHEN** the rule router routes the same features twice
 - **THEN** both decisions are equal
+
+#### Scenario: Record of rule version 2
+- **WHEN** an archived `route.json` of rule version 2 is validated
+- **THEN** its pass plans are checked against the version 2 table, with pass 2 `claude claude-opus-5-5`
 
 ### Requirement: Shadow routing
 The shadow router SHALL ask TypeSafe AI's Jev model one `noul` question, whether the change will need review pass 3, with criteria taken from the review sequence stop rule, never from the rule router's triggers. Its probability P(third), the threshold 0.4, the tier that P(third) maps to, `elevated` at or above the threshold and `standard` below it, and that tier's pass plans SHALL be recorded beside the rule's and SHALL NOT change the rule's recommendation.
