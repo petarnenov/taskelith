@@ -93,3 +93,49 @@ test('includes every workspace package and ignores directories that are not pack
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function browserWorkspace(sources: Record<string, string>, report?: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-coverage-scope-'));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
+  mkdirSync(join(root, 'apps/web/src/generated'), { recursive: true });
+  writeFileSync(join(root, 'apps/web/package.json'), '{}');
+  for (const [source, text] of Object.entries(sources)) writeFileSync(join(root, 'apps/web', source), text);
+  if (report !== undefined) {
+    mkdirSync(join(root, 'apps/web/coverage'));
+    writeFileSync(join(root, 'apps/web/coverage/lcov.info'), report);
+  }
+  return root;
+}
+
+const BROWSER_SOURCES = {
+  'src/App.tsx': 'export function App() { return <main />; }\n',
+  'src/client.ts': 'export const send = () => 1;\n',
+  'src/generated/types.ts': 'export interface paths { "/x": unknown }\n',
+};
+
+test("reads a browser application's sources from its own Vitest report", () => {
+  const root = browserWorkspace(BROWSER_SOURCES, 'SF:src/App.tsx\nend_of_record\nSF:src/client.ts\nend_of_record\n');
+  try {
+    assert.deepEqual(missingFromCoverage(root, ''), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reports a browser module, .tsx included, that its Vitest report lacks', () => {
+  const root = browserWorkspace(BROWSER_SOURCES, 'SF:src/client.ts\nend_of_record\n');
+  try {
+    assert.deepEqual(missingFromCoverage(root, ''), ['apps/web/src/App.tsx']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reports every browser module with runtime code when the Vitest report is missing', () => {
+  const root = browserWorkspace(BROWSER_SOURCES);
+  try {
+    assert.deepEqual(missingFromCoverage(root, ''), ['apps/web/src/App.tsx', 'apps/web/src/client.ts']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

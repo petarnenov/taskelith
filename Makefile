@@ -32,7 +32,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review progress progress-refresh \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-git-workspace verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
-	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
+	installation-stop installation-enroll web-build web-dev web-test installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
 	scenario-worker-lifecycle scenario-native-worker-lifecycle native-acceptance
@@ -53,6 +53,7 @@ verify-checks: toolchain
 	npm run verify:comments
 	npm run verify:private-keys
 	npm run verify:findings
+	npm run verify:web-api-types
 	$(if $(filter docs-only,$(VERIFY_PROFILE)),@echo "make verify: docs-only profile skips make test",$(MAKE) --no-print-directory test)
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
@@ -182,6 +183,21 @@ linux-test-suites:
 	docker run --rm --network none --user 2000:2000 --volume /tmp --volume "$(CURDIR):/repo:ro" --workdir /repo \
 		--entrypoint node $(LINUX_CGROUP_IMAGE) --experimental-strip-types --test \
 		$(if $(PATTERN),--test-name-pattern='$(PATTERN)') $(SUITES)
+
+# Builds the web SPA into apps/web/dist and checks the bundle's boundary;
+# make verify builds it as part of npm run build.
+web-build:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c \
+		'npm run build --workspace=@taskelith/web && node --experimental-strip-types scripts/check-web-bundle.ts'
+
+# Runs the web SPA's Vitest tests with coverage; npm test runs them too.
+web-test:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run test --workspace=@taskelith/web
+
+# Development only: the SPA on https://localhost:5173/app/, proxied to the
+# running installation's control plane; G3 item 28c serves the built SPA.
+web-dev:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/web-dev.sh $(INSTALLATION)
 
 # Minimal local installation (docs/local-installation.md); the targets after
 # this build need TASKELITH_POSTGRES_PASSWORD. Builds both images.
