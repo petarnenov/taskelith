@@ -41,9 +41,8 @@ interface AnsweredItem {
   readonly request: AnswerRequest;
 }
 
-// The inbox source of native requests (control-plane wire contracts,
-// sections 8 and 8.1): the timeline opens and settles its items, and an
-// answer reaches the request through the timeline's own consumption.
+// The inbox source of native requests (wire contracts 8 and 8.1); an
+// answer reaches its request through the timeline's own consumption.
 export class NativeRequestSource implements NeedsYouSource {
   readonly id: NeedsYouSourceId;
   readonly kinds = SESSION_ITEM_KINDS;

@@ -28,9 +28,8 @@ export interface ScopedInboxItem {
   readonly scope?: SessionScope;
 }
 
-// The items of one session timeline transaction. `add` is `conflict` for a
-// taken ID or a request that has an item of the kind; `settle` writes the
-// resolution or closure of an open item, and is `conflict` for any other.
+// `add` is `conflict` for a taken ID or a request with an item of the kind;
+// `settle` settles an open item, and is `conflict` for any other.
 export interface SessionInboxItems {
   find(sessionId: SessionId, kind: SessionItemKind, request: RequestKey): Promise<Result<SessionInboxItem | undefined>>;
   get(id: NeedsYouItemId): Promise<Result<ScopedInboxItem | undefined>>;
