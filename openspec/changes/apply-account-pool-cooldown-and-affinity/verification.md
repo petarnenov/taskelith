@@ -86,7 +86,7 @@ Not yet run. The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, 
 
 ## Remaining gates
 
-- Review passes 1 and 2, and pass 3 if pass 2 reports a Medium or worse finding.
+- Review pass 1; pass 2 only if pass 1 reports a Medium or worse finding, and pass 3 only if pass 2 does.
 - The coordinator's architect check of any unreviewed fixes.
 - The archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
