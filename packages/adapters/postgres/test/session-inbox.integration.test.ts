@@ -89,10 +89,8 @@ async function auditRows(): Promise<number> {
   return row!.events;
 }
 
-// The writing transaction of an acknowledgement reads the item, then its
-// key. Its first attempt waits at the barrier after that key read, so both
-// parties have read the open item in their writing transactions before
-// either writes; `keyReads` counts the attempts.
+// An acknowledgement's first writing attempt waits at the barrier after it
+// read the item and the key; `keyReads` counts the writing attempts.
 function acknowledgementBarrierStore(store: SessionTimelineStore, barrier: Barrier, keyReads: { count: number }): SessionTimelineStore {
   let arrived = false;
   const gated = (tx: SessionTimelineTransaction): SessionTimelineTransaction => ({
