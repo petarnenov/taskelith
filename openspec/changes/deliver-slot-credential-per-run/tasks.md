@@ -9,6 +9,7 @@
 - [x] 2.2 `SlotCredentialDeliveryService` and the TLS-only route `fetchSlotCredential`
 - [x] 2.3 `HttpSlotCredentialClient` and the worker's `RunSlotCredentials` implementation
 - [x] 2.4 Tests: checks, record, refusals, the gated PostgreSQL race, redaction on every new output path, no credential in the database or on NATS, and their fail-before runs
+- [x] 2.5 Fix the six findings of review pass 1, each with tests that fail before the fix
 
 ## 3. Records and checks
 

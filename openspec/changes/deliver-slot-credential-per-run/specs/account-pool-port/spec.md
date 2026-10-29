@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Slot credential delivery service
-The control plane SHALL check a worker's slot credential fetch in one serializable transaction in the order of the account pool contract section 7.3, a first delivery to an authorized execution also needing an unexpired, unrevoked grant, and SHALL reveal the credential only after that transaction commits; a failing check SHALL reveal nothing and answer its typed reason.
+The control plane SHALL check a worker's slot credential fetch in one serializable transaction in the order of the account pool contract section 7.3, a first delivery to an authorized execution also needing an unexpired, unrevoked grant, and SHALL reveal the credential only after that transaction commits; a failing check SHALL reveal nothing and answer its typed reason, and a failed reveal SHALL answer a local message that names only the slot.
 
 #### Scenario: First delivery after the launch authorization
 - **WHEN** the worker that holds an attempt's reservation fetches the slot credential for its authorized execution with a live grant
@@ -19,8 +19,16 @@ The control plane SHALL check a worker's slot credential fetch in one serializab
 - **WHEN** an authorized execution without an earlier delivery fetches the credential after its grant expired
 - **THEN** the fetch is refused with `execution-conflict` and nothing is revealed or recorded
 
+#### Scenario: Failed reveal
+- **WHEN** the credential store throws or returns a failure whose text holds the credential
+- **THEN** the answer is `unavailable` or `internal` with a local message and the slot only
+
 ### Requirement: Slot credential delivery record
 Each delivery SHALL be recorded, in its check transaction and before the reveal, per task, execution, and slot with the attempt, worker, credential version, first and latest delivery times, and count, and SHALL never hold the credential; no database row, outbox entry, or broker message SHALL hold a delivered credential; two racing first fetches SHALL both be recorded by retry.
+
+#### Scenario: Record before the reveal
+- **WHEN** the reveal fails after the check transaction committed, or that transaction does not commit
+- **THEN** the record stays and a retry delivers and counts again, or nothing is revealed or recorded
 
 #### Scenario: Racing first fetches
 - **WHEN** two first fetches for one execution and slot race on PostgreSQL
@@ -31,7 +39,7 @@ Each delivery SHALL be recorded, in its check transaction and before the reveal,
 - **THEN** no database table and no stream message holds the credential text
 
 ### Requirement: Slot credential delivery over TLS only
-The control plane SHALL answer `fetchSlotCredential` on a connection without TLS with an internal failure before it reads the bearer, and every answer SHALL carry `Cache-Control: no-store`; the worker's client SHALL send no fetch to a base URL that is not HTTPS and SHALL use no delivery whose schema fails or that names another execution or slot.
+The control plane SHALL answer `fetchSlotCredential` on a connection without TLS with an internal failure before it reads the bearer, and every answer SHALL carry `Cache-Control: no-store`; the worker's client SHALL send no fetch to a base URL that is not HTTPS SHALL use no delivery whose schema fails or that names another execution or slot, and SHALL repeat no server text in a refusal or failure.
 
 #### Scenario: Plain HTTP request
 - **WHEN** a worker sends `fetchSlotCredential` over plain HTTP
@@ -41,20 +49,28 @@ The control plane SHALL answer `fetchSlotCredential` on a connection without TLS
 - **WHEN** the client receives a delivery that names another execution or slot than its request
 - **THEN** it returns a failure that holds no credential
 
+#### Scenario: Server text in a refusal or failure
+- **WHEN** an error answer holds any text in its message or details, or a reason outside the contract's list
+- **THEN** the client's refusal or failure has a local message, the status, and a listed reason only
+
 ### Requirement: Run slot credential port on the worker
-The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the run ends or the attempt's ownership generation or the worker's recovery epoch changes, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
+The worker SHALL obtain a run's slot credential only through `RunSlotCredentials`, which fetches it with the current recovery epoch, holds it only in memory for that run until the host forgets the run, its ownership generation, or its recovery epoch, or a call names another, uses no delivery that arrives after that, gives it to no other execution, and logs a refusal or failure by identifiers and reason only; no string, JSON, or inspection form of a held credential SHALL show its text.
 
 #### Scenario: Held per run
 - **WHEN** the harness host obtains a run's credential twice and then forgets the run
 - **THEN** the first call fetches it, the second returns the held one, and the next call after forgetting fetches again
 
 #### Scenario: New recovery epoch
-- **WHEN** the worker's recovery epoch changes while it holds deliveries
-- **THEN** it forgets every held delivery, and the next call for a run fetches with the new epoch
+- **WHEN** the harness host forgets a recovery epoch, or a call reads a new one, while deliveries are held
+- **THEN** the deliveries of the old epoch are forgotten at once, and the next call fetches with the current epoch
 
 #### Scenario: New ownership generation
-- **WHEN** a run's attempt is obtained with a new ownership generation
-- **THEN** the attempt's held deliveries are forgotten and the call fetches again
+- **WHEN** the harness host forgets an attempt's ownership generation, or a call names a new one
+- **THEN** the attempt's deliveries of the old generation are forgotten and the next call fetches again
+
+#### Scenario: Delivery after the end
+- **WHEN** the run, its ownership generation, or its recovery epoch ends while its fetch is in flight
+- **THEN** the arriving credential is neither returned nor held, the call fails with `conflict`, and the next call fetches again
 
 #### Scenario: Refusal not held
 - **WHEN** a fetch is refused or fails
