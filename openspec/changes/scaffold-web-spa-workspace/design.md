@@ -74,3 +74,7 @@ Pepi asked seven questions after the records round; the coordinator answered the
 - The bundle URL allowlist is exact, so a React or Mantine upgrade that changes an error link fails the check until the list is reviewed.
 - `dev-server.ts` and `scripts/web-dev.sh` have no test against a running installation; the unit tests cover the bind address, the proxy pattern, and the CA agent, and the server was started once by hand with a throwaway certificate (verification).
 - jsdom lacks `matchMedia`, which `test/setup.ts` stubs; no UI test uses a timing bound.
+
+## Follow-ups
+
+- 28c (`serve-web-spa-from-control-plane`): decide whether the worker image should carry `apps/web/dist`; the coordinator's architect check of 2026-10-29 records this as a follow-up note for 28c, not a change in 28a.

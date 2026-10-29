@@ -24,6 +24,7 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - Review pass 1 fixes: `8942c89a` `chore: catch IP, single-label, and userinfo origins in the web bundle check`, `98e910ad` `chore: close environment-read and source-escape gaps in the web boundary check`, `b37a950e` `chore: require the OpenAPI-required options of the typed web fetch`, and `f534859b` `docs: align the CSRF requirement, register links, and lockfile count of scaffold-web-spa-workspace`; then the pass 1 record and the `make record` of the fourth `make verify` (log `verify-28a-4.log` in the session scratchpad). `route.json` is not routed again after review fixes.
 - Review pass 2 fixes: `9e165642` `chore: type undocumented web fetch statuses as unknown and read empty JSON answers`, `b384b1f9` `chore: stop make web-dev with a clear message without a project or OpenSSL 3`, and `1e887c32` `docs: align register versions, the user-event note, and the dev proxy CA condition of scaffold-web-spa-workspace`; then the pass 2 record and the `make record` of the fifth `make verify` (log `verify-28a-5.log` in the session scratchpad).
 - Review pass 3 fixes, unreviewed (no pass follows pass 3): `c1d0f379` `chore: catch percent-encoded, Unicode, and escaped origins in the web bundle check` and `f7186f8c` `docs: record the invocation and model confirmation of review pass 2 of scaffold-web-spa-workspace`; then the pass 3 record and the `make record` of the sixth `make verify` (log `verify-28a-6.log` in the session scratchpad).
+- `docs: record the architect check of the scaffold web spa workspace fixes` (this record): the coordinator's architect check of the unreviewed fixes under "Pass 3", and the follow-up note for 28c in the design.
 
 ## Environment
 
@@ -159,7 +160,7 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
   1. Medium, contract-drift (`scripts/check-web-bundle.ts:42`): `https://%65vil.example/x`, `https://例え.テスト/x`, and `href="https:&#47;&#47;fonts.googleapis.com/..."` passed. Fixed in `c1d0f379`, unreviewed: a host label may hold percent escapes and non-ASCII characters, and each file is also checked as its syntax decodes it, markup through character references, scripts through `\u`, `\x`, and punctuation escapes, and style sheets through CSS escapes; a new scenario "Escaped external URL" states it. `missedBy` pass 2, which reviewed the same pattern.
   2. Low, process (`verification.md:137`): the pass 2 record said only "run with `make review`". Fixed in `f7186f8c`, unreviewed: the pass 2 section records the invocation and the model confirmation from the saved `make review` output.
 - Fail-before of the new tests: the entry "Review pass 3" in "Fail-before". Finding 2 changes records only.
-- Architect check of the unreviewed fixes `c1d0f379` and `f7186f8c` by the coordinator: pending.
+- Architect check (Niki, 2026-10-29), verbatim: "28a architect check (Niki, 2026-10-29): passed for c1d0f379, f7186f8c, ab71f1ab and 25865557. c1d0f379: decoding per syntax plus a host label that accepts % and non-ASCII is the right shape. Both judgment calls are accepted: letter escapes stay undecoded, as recorded in Limitations, and no URL parser is added, since anything outside the exact allowlist fails. f7186f8c is fine. The worker image carrying apps/web/dist: record it as a follow-up note for 28c, not in 28a." The follow-up note for 28c is in the [design](design.md), "Follow-ups".
 
 ## Limitations
 
@@ -175,6 +176,5 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 ## Remaining gates
 
 - `make web-dev` was not run against a real installation (see "Development server"); 28c or the first installation run closes this gate (coordinator answer 5).
-- The coordinator's architect check of the unreviewed commits after `cb1dc3a3`, the pass 3 fixes `c1d0f379` and `f7186f8c` and their records (governance "Architect check of unreviewed fixes").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
