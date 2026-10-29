@@ -1,0 +1,1 @@
+{"change": "serve-session-timeline-over-http", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18567-6319-7b40-99eb-6c3869e945bc", "counts": {"critical": 0, "high": 0, "medium": 8, "low": 5}}
