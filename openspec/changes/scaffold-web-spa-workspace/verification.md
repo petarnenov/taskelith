@@ -23,6 +23,7 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - `docs: record the make verify of scaffold-web-spa-workspace after the pre-pass-1 changes`, the `make record` of the third `make verify` (log `verify-28a-3.log` in the session scratchpad); its result is in "Generated checks".
 - Review pass 1 fixes: `8942c89a` `chore: catch IP, single-label, and userinfo origins in the web bundle check`, `98e910ad` `chore: close environment-read and source-escape gaps in the web boundary check`, `b37a950e` `chore: require the OpenAPI-required options of the typed web fetch`, and `f534859b` `docs: align the CSRF requirement, register links, and lockfile count of scaffold-web-spa-workspace`; then the pass 1 record and the `make record` of the fourth `make verify` (log `verify-28a-4.log` in the session scratchpad). `route.json` is not routed again after review fixes.
 - Review pass 2 fixes: `9e165642` `chore: type undocumented web fetch statuses as unknown and read empty JSON answers`, `b384b1f9` `chore: stop make web-dev with a clear message without a project or OpenSSL 3`, and `1e887c32` `docs: align register versions, the user-event note, and the dev proxy CA condition of scaffold-web-spa-workspace`; then the pass 2 record and the `make record` of the fifth `make verify` (log `verify-28a-5.log` in the session scratchpad).
+- Review pass 3 fixes, unreviewed (no pass follows pass 3): `c1d0f379` `chore: catch percent-encoded, Unicode, and escaped origins in the web bundle check` and `f7186f8c` `docs: record the invocation and model confirmation of review pass 2 of scaffold-web-spa-workspace`; then the pass 3 record and the `make record` of the sixth `make verify` (log `verify-28a-6.log` in the session scratchpad).
 
 ## Environment
 
@@ -61,6 +62,7 @@ Each behavior was broken in place on `e73ff2e3`, unless its entry names another 
 - Review pass 2, finding 1 (`fb-28a-P2-1-web-dev-openssl.log`): the new `test/web-dev-script.test.ts`, with stub `openssl` and `docker`, against the script of `9e165642`: tests 3, pass 1, fail 2; without a project the script prints `$1: unbound variable`, and with `LibreSSL 3.3.6` it names no version and goes on to the installation.
 - Review pass 2, finding 2 (`fb-28a-P2-2-client-results.log`): the new client tests with the client of `1d598d68`: the Vitest run, tests 13, pass 10, fail 3 (the empty JSON answer throws, and `hasStatus` is missing); `tsc -p apps/web/tsconfig.tooling.json` exits 2 with the missing export and two unused `@ts-expect-error` directives (TS2578).
 - Review pass 1, finding 4 (`fb-28a-P1-4-required-options.log`): the new client test with the types of `000b25ad`; `tsc -p apps/web/tsconfig.tooling.json` exits 2 with five unused `@ts-expect-error` directives (TS2578).
+- Review pass 3, finding 1 (`fb-28a-P3-1-url-decoding.log`): the two new tests with `scripts/check-web-bundle.ts` of `cb1dc3a3`: tests 2, pass 0, fail 2; `https://%65vil.example/x` and every escaped form of `https://fonts.googleapis.com/css` are unreported.
 
 ## Image size
 
@@ -148,6 +150,16 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 - Fail-before of the new tests: the entries "Review pass 2" in "Fail-before". Findings 3 to 6 change documentation and records only.
 - Pass 3, reviewer A `codex gpt-6.1-sol#medium`, follows because this pass reported a Medium finding.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox read-only, session `01a1866a-e28a-7a93-9cf6-525f052d286c`, on `cb1dc3a3` (diff against the merge base `115c16c4`). Worktree snapshots by the method of pass 1: before the review `52a2d6564a7c2e03e0782e9fc4094f7be1302baf870a30f6e00645e9abd1f933`, after it the same value, so the review changed no file.
+- Invocation (from `make review`): `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/scaffold-web-spa-workspace -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-10-29T06:48:33.214Z. Model confirmation: `model: gpt-6.1-sol (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`, printed by `make review`, which also printed "route: recommends effort high; the authorized medium applies (policy version 8)".
+- Result: Critical 0, High 0, Medium 1, Low 1, matching the pass 3 line of `passes.jsonl`; both fixed and recorded in `findings.jsonl`. The reviewer confirmed the 13 fixes of passes 1 and 2 and ran the drift, type, inventory, comment, boundary, and bundle checks, but not `make verify`; the fixture test of `test/check-web-bundle.test.ts` failed only because the read-only sandbox forbids `mkdtemp`, which is no finding.
+  1. Medium, contract-drift (`scripts/check-web-bundle.ts:42`): `https://%65vil.example/x`, `https://例え.テスト/x`, and `href="https:&#47;&#47;fonts.googleapis.com/..."` passed. Fixed in `c1d0f379`, unreviewed: a host label may hold percent escapes and non-ASCII characters, and each file is also checked as its syntax decodes it, markup through character references, scripts through `\u`, `\x`, and punctuation escapes, and style sheets through CSS escapes; a new scenario "Escaped external URL" states it. `missedBy` pass 2, which reviewed the same pattern.
+  2. Low, process (`verification.md:137`): the pass 2 record said only "run with `make review`". Fixed in `f7186f8c`, unreviewed: the pass 2 section records the invocation and the model confirmation from the saved `make review` output.
+- Fail-before of the new tests: the entry "Review pass 3" in "Fail-before". Finding 2 changes records only.
+- Architect check of the unreviewed fixes `c1d0f379` and `f7186f8c` by the coordinator: pending.
+
 ## Limitations
 
 - The SPA is not served by the control plane until 28c; `make web-dev` is its only way to run, and it was not run against an installation (see "Development server").
@@ -156,11 +168,12 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 - The fetch does not validate answer bodies against the document, and it covers JSON operations only; the SSE stream and the terminal WebSocket belong to later items.
 - React Router, TanStack Query, and most of Mantine are installed but unused until 28b (design, decision 8).
 - `npm run verify:comments` does not check `.tsx` files; the comment rule's file list in `AGENTS.md` does not name them. The coordinator proposes to the owner extending the rule to `.tsx` and `.jsx` as a separate follow-up (answer 6).
+- The bundle check's script decoding leaves a letter escape such as `\e` as it is, because in a regular expression it names a class such as `\s`; the minifier writes string literals without one.
 - The bundle URL allowlist is exact, so an upgrade that changes a React or Mantine error link needs a reviewed list change.
 
 ## Remaining gates
 
 - `make web-dev` was not run against a real installation (see "Development server"); 28c or the first installation run closes this gate (coordinator answer 5).
-- Independent review pass 3 (`codex gpt-6.1-sol#medium`), which follows the Medium finding of pass 2, and the architect check of any unreviewed fixes by the coordinator.
+- The coordinator's architect check of the unreviewed commits after `cb1dc3a3`, the pass 3 fixes `c1d0f379` and `f7186f8c` and their records (governance "Architect check of unreviewed fixes").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
