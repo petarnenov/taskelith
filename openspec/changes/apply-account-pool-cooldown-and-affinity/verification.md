@@ -76,10 +76,10 @@ The gated PostgreSQL races are new tests, so their evidence is also a contrast: 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f0fbbb915637464eebc491cdb48c1f121a9a675d`; tests 3679, pass 3670, fail 0, skipped 9; all files 99.42% lines, 92.78% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `2bf7b66343f149c3194ad4dcff1b41a8f3990a07`; tests 3781, pass 3772, fail 0, skipped 9; all files 99.41% lines, 92.75% branches, 98.84% functions.
 - `npm run openspec -- validate apply-account-pool-cooldown-and-affinity --strict`: passed, `Change 'apply-account-pool-cooldown-and-affinity' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 87 file(s); every pass summary file is valid: 67 file(s); every route file is valid: 23 file(s).`.
-- Spec diff against the merge base `f882c0ac665f` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 88 file(s); every pass summary file is valid: 68 file(s); every route file is valid: 24 file(s).`.
+- Spec diff against the merge base `19c15d691290` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
