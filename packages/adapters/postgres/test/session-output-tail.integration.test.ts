@@ -145,5 +145,20 @@ test('two concurrent appends that only hold commit as one serial order, each chu
   const read = value(await service.readOutput(SESSION, 0, 100));
   const joined = read.kind === 'entries' ? read.entries.map((entry) => entry.text).join('') : '';
   assert.ok(['x token1en2\n', 'x token2en1\n'].includes(joined), joined);
-  assert.deepEqual(await query(url, 'SELECT 1 FROM agent_session_output_tails'), []);
+  assert.deepEqual(await tailVersions(), [4]);
+});
+
+async function tailVersions(): Promise<number[]> {
+  const rows = await query<{ version: string }>(url, 'SELECT version FROM agent_session_output_tails');
+  return rows.map((row) => Number(row.version));
+}
+
+test('a turn that holds, releases, and holds again seals the new tail under a greater version', async () => {
+  const turnId = await sessionWithOpenRequest(service);
+  value(await append(service, turnId, 'a tok'));
+  const [held] = await tailVersions();
+  value(await append(service, turnId, 'en\n'));
+  value(await append(service, turnId, 'b tok'));
+  const [heldAgain] = await tailVersions();
+  assert.ok(heldAgain! > held!, `version ${heldAgain} after ${held}`);
 });

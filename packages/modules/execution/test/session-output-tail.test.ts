@@ -67,7 +67,7 @@ test('a held tail is recorded by no entry and stored only sealed, and the next c
   assert.equal(Buffer.from(tail.sealed).includes('SEC'), false, 'the stored tail holds no plaintext');
   value(await append(service, 'RET more\n'));
   assert.deepEqual(await entries(store), [[TURN, 'key '], [TURN, '[redacted] more\n']]);
-  assert.equal(await storedTail(store), undefined);
+  assert.equal((await storedTail(store))?.version, 2, 'the emptied tail keeps its row and version');
 });
 
 test('each write of a tail takes the next version, and a chunk that releases nothing still writes it', async () => {

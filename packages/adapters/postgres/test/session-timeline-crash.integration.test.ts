@@ -276,7 +276,7 @@ test('an append that holds half a JWT killed after its commit keeps its entry an
   assert.deepEqual(await outputState(), { entries: ['token '], tail: true });
   const turnId = value(await service.readSession(SESSION)).turns[0]!.id;
   value(await service.appendOutput(SESSION, { turnId, generation: generation(1), text: `${JWT.slice(30)} done\n` }));
-  assert.deepEqual(await outputState(), { entries: ['token ', '[redacted] done\n'], tail: false });
+  assert.deepEqual(await outputState(), { entries: ['token ', '[redacted] done\n'], tail: true });
 });
 
 // Generation 1's delivered turn with half a JWT held in its tail.

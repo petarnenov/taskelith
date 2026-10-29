@@ -39,10 +39,10 @@ export class SealedOutputTails {
     return ok(Object.freeze({ turnId, generation, version, held }));
   }
 
-  // Writes the tail under the next version, or clears it when it holds
-  // nothing; each version seals under its own authenticated data.
+  // Seals the tail under the next version; an emptied tail keeps its row,
+  // so no version, and no authenticated data, repeats within a turn.
   async write(tx: SessionTimelineTransaction, sessionId: SessionId, owner: TailOwner, held: HeldOutput, previous?: OpenedTail): Promise<Result<void>> {
-    if (isEmpty(held)) return previous === undefined ? ok(undefined) : tx.tails.clear(sessionId);
+    if (isEmpty(held) && previous === undefined) return ok(undefined);
     const version = (previous?.version ?? 0) + 1;
     const plain = JSON.stringify({ text: held.text, continuation: held.continuation });
     const { nonce, sealed } = this.#cipher.seal(plain, tailContext(sessionId, owner.turnId, version));
