@@ -6,7 +6,7 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed s
 
 ## Revision
 
-- Base: `dev` `f882c0ac` (the brief's checklist base and the branch's merge base with `origin/dev`); `git fetch origin` before routing showed `origin/dev` still at `f882c0ac`.
+- Base: `dev` `f882c0ac`, the original base and the brief's checklist base; `git fetch origin` before routing showed `origin/dev` still at `f882c0ac`. Since the merge `775d6218` of `origin/dev` ("Return and reconciliation"), the branch's merge base with `origin/dev` is `19c15d69`.
 - `2c2c462c` `chore: start the apply-account-pool-cooldown-and-affinity change` (the brief's `checklist.json`, saved `--at f882c0ac665f46cdb766d18f20bfdf81bed9fadd --size M`, unedited; empty `findings.jsonl` and `passes.jsonl`).
 - `d50099da` `chore: select resumed-session and after-limit slots and cool a slot on a limit signal`.
 - `63d7acae` `docs: record the account pool cooldown and affinity design, spec delta, and contract updates`.
@@ -138,7 +138,7 @@ The coordinator (Niki) returned the archived branch, head `46b81c21` (the archiv
 3. `git diff f882c0ac 19c15d69 -- openspec/specs` changes only `postgres-state` and `session-turn-model`, and no file of `account-pool-port` or `harness-account-pools` (`git diff --quiet f882c0ac 19c15d69 -- openspec/specs/account-pool-port openspec/specs/harness-account-pools` exits 0). The requirements that the deltas remove ("New-session selection in the placement transaction") and modify ("Least-loaded selection with cooldown") are therefore unchanged on `dev`, so neither delta needed reconciliation and both are unchanged; `dev`'s edits to the other specs stay as `dev` wrote them, since the merged `openspec/specs` equals `19c15d69`'s.
 4. `make verify` of the merged tree: "Generated checks".
 
-Route: `route.json` stays as routed on `8b78cd74` for the merge base `f882c0ac`. The route gate of `make review` runs only before pass 1 ("Later passes never route"), and the reconciliation review is pass 4, so the gate does not refuse it and the change is not routed again. As for earlier returns, the pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 4, role A.
+Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0ac`. The route gate of `make review` runs only before pass 1 ("Later passes never route"), and the reconciliation review is pass 4, so the gate does not refuse it and the change is not routed again. As for earlier returns, the pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 4, role A.
 
 ## Limitations
 
