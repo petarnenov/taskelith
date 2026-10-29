@@ -19,6 +19,7 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12d A, developed by a briefed
 - Governance v9 (`assign-fable-to-review-pass-2`, #415, `2250f3f7`) landed on `dev` after this change's route was recorded; the route is not run again, and v9 reaches this branch with the merge below.
 - Pass 2 fixes, all unreviewed: `566776ce` (finding 4), `9c483f74` (findings 3 and 5), `285df9d1` (finding 5), `b6ab9ee2` (finding 1), `ef812f11` (finding 2), and, in its own commit, `6817cffb`, the add deadline of coordinator decision M2 (finding 6 and pass 1 finding 2); then `docs: record review pass 2 of apply-account-slot-commands`.
 - `635ef25c`, the merge of `origin/dev` at `2250f3f7` (#415, governance v9) without conflicts, as the coordinator asked before the handoff; it changes governance, the review scripts and their tests, and no file of this change. Unreviewed, for the architect check. Then `docs: record the merge of dev into apply-account-slot-commands` and the `make record` of a passing `make verify` on its tree (log `verify-12dA-4.log` in the session scratchpad).
+- `docs: record the architect check of the apply account slot commands fixes` (this record): the coordinator's architect check of the unreviewed fixes and the merge, under "Pass 2".
 
 ## Environment
 
@@ -127,6 +128,7 @@ Passes 1 and 2 ran, and pass 2 reported only Low findings, so the review ended a
   - Finding 5: a rename and the named answer of finding 3, covered by the tests of finding 3; no fail-before run.
   - M2 guard (`fb-12dA-P2-M2-add-deadline.log`): the guard without its deadline check, the constant and port field kept so that the tests run: the in-memory and the PostgreSQL deadline tests, tests 2, pass 0, fail 2; both adds committed. Each test drives the injected clock past the deadline when the capacity transaction starts; the in-memory test also adds at exactly the deadline.
 - After the fixes: the Scheduling tests and the PostgreSQL account pool and command tests (tests 260, pass 260, fail 0), the PostgreSQL command and conformance tests (tests 86, pass 86, fail 0), `npx tsc -p tsconfig.check.json --noEmit`, `npm run openspec -- validate apply-account-slot-commands --strict`, and `make findings ARGS="validate"` passed. The `make verify` of the merged tree is under "Generated checks".
+- Architect check (Niki, 2026-10-29), verbatim: "12d A architect check (Niki, 2026-10-29): passed for 6817cffb, b6ab9ee2, ef812f11, 9c483f74, 566776ce, 285df9d1 and the merge 635ef25c. 6817cffb: the deadline is derived from the minimum grace (half), checked as the last step inside the transaction, rolls back and discards only its own version, and its failure is retryable. Accepted. The residual risk recorded in Limitations is accepted. ef812f11: the contract change is accepted. Revoke still cancels the attempt (revokes grants, writes the outbox cancel) as an invalidating writer, and keeps the assignment until the terminal fact so that re-delivery refuses with attempt-not-launchable. This is consistent with §7.3 and §8.1. b6ab9ee2 with EXPLAIN as evidence, and L3–L5, are fine."
 
 ## Limitations
 
@@ -139,6 +141,4 @@ Passes 1 and 2 ran, and pass 2 reported only Low findings, so the review ended a
 
 ## Remaining gates
 
-- Architect check by the coordinator of the unreviewed fixes: every commit after `0ba4dca7`, the merge of `origin/dev` included.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
