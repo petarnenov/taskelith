@@ -125,10 +125,15 @@ async function replaceSlot(tx: CapacityTransaction, stored: AccountSlot, changes
   return replaced.ok ? next : replaced;
 }
 
+// The allowed projects are a set, so their order is no change.
 function sameSettings(stored: AccountSlot, { allowedProjects, concurrencyLimit }: Pick<AccountSlot, 'allowedProjects' | 'concurrencyLimit'>): boolean {
-  const sameProjects = allowedProjects.length === stored.allowedProjects.length
-    && allowedProjects.every((projectId, index) => projectId === stored.allowedProjects[index]);
+  const [requested, current] = [sortedProjects(allowedProjects), sortedProjects(stored.allowedProjects)];
+  const sameProjects = requested.length === current.length && requested.every((projectId, index) => projectId === current[index]);
   return sameProjects && concurrencyLimit === stored.concurrencyLimit;
+}
+
+function sortedProjects(projects: readonly ProjectId[]): readonly ProjectId[] {
+  return [...projects].sort();
 }
 
 // An attempt whose execution can run keeps its reservation until that

@@ -195,6 +195,13 @@ test('an update to the stored settings changes nothing and answers the current r
   assert.equal((await stored(slots)).revision, 1);
 });
 
+test('an update naming the stored projects in another order changes nothing', async () => {
+  const { store, slots } = await withSlot({ allowedProjects: [PROJECT, OTHER_PROJECT] });
+  const repeated = value(await updateAccountSlot(store, { id: SLOT, allowedProjects: [OTHER_PROJECT, PROJECT] }));
+  assert.deepEqual([repeated.allowedProjects, repeated.revision], [[PROJECT, OTHER_PROJECT], 1]);
+  assert.equal((await stored(slots)).revision, 1);
+});
+
 test('an update is invalid without a change or with a bad value, a conflict on a revoked slot, and not found on a removed or unknown one', async () => {
   const { store } = await withSlot();
   assert.equal(failed(await updateAccountSlot(store, { id: SLOT })).code, 'invalid');
