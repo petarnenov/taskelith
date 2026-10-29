@@ -11,6 +11,7 @@ import type {
   SessionInboxItems,
   SessionItemKind,
 } from '../ports/session-inbox-items.js';
+import type { LineageRun, LineageTask, ScopesLineage } from '../ports/session-scopes-conformance.js';
 import type { SessionScope, SessionScopes } from '../ports/session-scopes.js';
 import type {
   HeldKey,
@@ -22,8 +23,39 @@ import type {
   StoredSession,
 } from '../ports/session-timeline-store.js';
 
-// The project and card of a task, as Scheduling's task lineage holds them.
-export type TaskScopes = (taskId: TaskId) => SessionScope | undefined;
+// Scheduling's runs and task lineage in memory, read by the rules of the
+// PostgreSQL scopes (product ports, section 3.3).
+export class InMemoryTaskLineage {
+  readonly #runs: LineageRun[];
+  readonly #tasks: LineageTask[];
+
+  constructor(lineage: ScopesLineage = { runs: [], tasks: [] }) {
+    this.#runs = [...lineage.runs];
+    this.#tasks = [...lineage.tasks];
+  }
+
+  addRun(run: LineageRun): void {
+    this.#runs.push(run);
+  }
+
+  addTask(task: LineageTask): void {
+    this.#tasks.push(task);
+  }
+
+  // The task's project and the run of its lineage root.
+  scopeOfTask(taskId: TaskId): SessionScope | undefined {
+    const task = this.#tasks.find((candidate) => candidate.taskId === taskId);
+    const root = this.#tasks.find((candidate) => candidate.taskId === task?.rootTaskId);
+    if (task === undefined || root === undefined) return undefined;
+    return Object.freeze({ projectId: task.projectId as ProjectId, runId: root.runId as WorkflowRunId });
+  }
+
+  // A run of the project that holds no delegated child task.
+  isCard(projectId: ProjectId, runId: WorkflowRunId): boolean {
+    const known = this.#runs.some((run) => run.runId === runId && run.projectId === projectId);
+    return known && !this.#tasks.some((task) => task.runId === runId && task.depth > 0);
+  }
+}
 
 interface State {
   readonly sessions: Map<SessionId, StoredSession>;
@@ -41,22 +73,23 @@ function copy(state: State): State {
 }
 
 // One transaction at a time over a copy of the state, which replaces the
-// state only when the work answers ok. Its scopes come from `taskScopes`.
+// state only when the work answers ok. Its scopes come from `lineage`.
 export class InMemorySessionTimelineStore implements SessionTimelineStore, SessionScopes {
   #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [] };
   #queue: Promise<unknown> = Promise.resolve();
-  readonly #taskScopes: TaskScopes;
+  readonly #lineage: InMemoryTaskLineage;
 
-  constructor(taskScopes: TaskScopes = () => undefined) {
-    this.#taskScopes = taskScopes;
+  constructor(lineage: InMemoryTaskLineage = new InMemoryTaskLineage()) {
+    this.#lineage = lineage;
   }
 
   transaction<Value>(work: (tx: SessionTimelineTransaction) => Promise<Result<Value>>): Promise<Result<Value>> {
     const run = async (): Promise<Result<Value>> => {
       const draft = copy(this.#state);
+      const scopes = new MemorySessionScopes(draft, this.#lineage);
       const result = await work({
         sessions: new MemorySessionRecords(draft), idempotency: new MemoryIdempotencyRecords(draft),
-        items: new MemorySessionInboxItems(draft, (sessionId) => this.#scopeIn(draft, sessionId)), audit: new MemoryAuditRecords(draft),
+        items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes,
       });
       if (result.ok) this.#state = draft;
       return result;
@@ -71,25 +104,40 @@ export class InMemorySessionTimelineStore implements SessionTimelineStore, Sessi
     return Object.freeze([...this.#state.audit]);
   }
 
+  scopeOf(sessionId: SessionId): Promise<Result<SessionScope | undefined>> {
+    return new MemorySessionScopes(this.#state, this.#lineage).scopeOf(sessionId);
+  }
+
+  isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<Result<boolean>> {
+    return new MemorySessionScopes(this.#state, this.#lineage).isCard(projectId, runId);
+  }
+
+  listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>> {
+    return new MemorySessionScopes(this.#state, this.#lineage).listByCard(scope, after, limit);
+  }
+}
+
+class MemorySessionScopes implements SessionScopes {
+  constructor(private readonly state: State, private readonly lineage: InMemoryTaskLineage) {}
+
   async scopeOf(sessionId: SessionId): Promise<Result<SessionScope | undefined>> {
-    return ok(this.#scopeIn(this.#state, sessionId));
+    return ok(this.scopeIn(sessionId));
   }
 
   async isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<Result<boolean>> {
-    const scopes = [...this.#state.sessions.values()].map((stored) => this.#taskScopes(stored.session.taskId));
-    return ok(scopes.some((scope) => scope?.projectId === projectId && scope.runId === runId));
+    return ok(this.lineage.isCard(projectId, runId));
   }
 
   async listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>> {
-    const ids = [...this.#state.sessions.keys()]
-      .filter((id) => isSameScope(this.#scopeIn(this.#state, id), scope) && (after === undefined || compareCodeUnits(id, after) > 0))
+    const ids = [...this.state.sessions.keys()]
+      .filter((id) => isSameScope(this.scopeIn(id), scope) && (after === undefined || compareCodeUnits(id, after) > 0))
       .sort(compareCodeUnits);
     return ok(Object.freeze(ids.slice(0, limit)));
   }
 
-  #scopeIn(state: State, sessionId: SessionId): SessionScope | undefined {
-    const stored = state.sessions.get(sessionId);
-    return stored === undefined ? undefined : this.#taskScopes(stored.session.taskId);
+  scopeIn(sessionId: SessionId): SessionScope | undefined {
+    const stored = this.state.sessions.get(sessionId);
+    return stored === undefined ? undefined : this.lineage.scopeOfTask(stored.session.taskId);
   }
 }
 
@@ -143,7 +191,7 @@ class MemoryIdempotencyRecords implements IdempotencyRecords {
 }
 
 class MemorySessionInboxItems implements SessionInboxItems {
-  constructor(private readonly state: State, private readonly scopeOf: (sessionId: SessionId) => SessionScope | undefined) {}
+  constructor(private readonly state: State, private readonly scopes: MemorySessionScopes) {}
 
   async find(sessionId: SessionId, kind: SessionItemKind, request: RequestKey): Promise<Result<SessionInboxItem | undefined>> {
     return ok([...this.state.items.values()].find((item) => isItemOf(item, sessionId, kind, request)));
@@ -177,7 +225,7 @@ class MemorySessionInboxItems implements SessionInboxItems {
   }
 
   #scoped(item: SessionInboxItem): ScopedInboxItem {
-    const scope = this.scopeOf(item.sessionId);
+    const scope = this.scopes.scopeIn(item.sessionId);
     return Object.freeze(scope === undefined ? { item } : { item, scope });
   }
 }

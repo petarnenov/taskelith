@@ -7,6 +7,7 @@ import {
   BEFORE_ANY_EVENT,
   ITEM_CLOSED,
   InMemorySessionTimelineStore,
+  InMemoryTaskLineage,
   KEY_REUSED,
   NativeRequestSource,
   SESSION_STOPPED,
@@ -52,11 +53,14 @@ const CARD: SessionScope = { projectId: PROJECT, runId: id('RunId', 'run-alpha')
 const OTHER_CARD: SessionScope = { projectId: id('ProjectId', 'beta') as ProjectId, runId: id('RunId', 'run-beta') as WorkflowRunId };
 const OTHER_PRINCIPAL = id('PrincipalId', 'person-2');
 
-// TASK belongs to CARD, CHILD_TASK to OTHER_CARD, and no other task has a
-// lineage.
+// TASK is the root task of CARD, CHILD_TASK of OTHER_CARD, and no other
+// task has a lineage.
 function timeline() {
-  const scopes = new Map<TaskId, SessionScope>([[TASK, CARD], [CHILD_TASK, OTHER_CARD]]);
-  const store = new InMemorySessionTimelineStore((taskId) => scopes.get(taskId));
+  const lineage = new InMemoryTaskLineage({
+    runs: [CARD, OTHER_CARD],
+    tasks: ([[TASK, CARD], [CHILD_TASK, OTHER_CARD]] as const).map(([taskId, card]) => ({ taskId, rootTaskId: taskId, depth: 0, ...card })),
+  });
+  const store = new InMemorySessionTimelineStore(lineage);
   const digest = { digest: (input: string) => `digest:${input}` };
   const service = new SessionTimelineService({
     store, digest, redactor: { redact: (text: string) => text }, turnIds: sequentialIds('TurnId', 'turn'), clock,
@@ -283,17 +287,4 @@ test('readSessions reads sessions in the order given, with the output window\'s 
   assert.deepEqual(views.map((view) => [view.id, view.outputWindow]), [[OTHER_SESSION, { lastPosition: 0 }], [SESSION, { lastPosition: 1, earliestRetained: 1 }]]);
   assert.equal(JSON.stringify(views).includes('"output"'), false);
   assert.equal(failed(await subject.service.readSessions([SESSION, id('SessionId', 'session-9')])).code, 'not-found');
-});
-
-test('the in-memory scopes follow the task lineage: scope, card, and the card\'s sessions in code-unit order', async () => {
-  const subject = timeline();
-  await withOpenRequest(subject);
-  value(await subject.service.openSession({ id: id('SessionId', 'Session-0'), taskId: TASK, harness: HARNESS }));
-  value(await subject.service.openSession({ id: OTHER_SESSION, taskId: CHILD_TASK, harness: HARNESS }));
-  assert.deepEqual(value(await subject.store.scopeOf(SESSION)), CARD);
-  assert.equal(value(await subject.store.scopeOf(id('SessionId', 'session-9'))), undefined);
-  assert.deepEqual([value(await subject.store.isCard(CARD.projectId, CARD.runId)), value(await subject.store.isCard(PROJECT, OTHER_CARD.runId))], [true, false]);
-  assert.deepEqual(value(await subject.store.listByCard(CARD, undefined, 10)), ['Session-0', SESSION]);
-  assert.deepEqual(value(await subject.store.listByCard(CARD, id('SessionId', 'Session-0'), 10)), [SESSION]);
-  assert.deepEqual(value(await subject.store.listByCard(CARD, undefined, 1)), ['Session-0']);
 });

@@ -491,7 +491,15 @@ export {
   type SubmittedTurn,
   type TurnCommand,
 } from './application/session-timeline-service.js';
-export { InMemorySessionTimelineStore, type TaskScopes } from './adapters/in-memory-session-timeline-store.js';
+export { InMemorySessionTimelineStore, InMemoryTaskLineage } from './adapters/in-memory-session-timeline-store.js';
+export {
+  SCOPES_LINEAGE,
+  SESSION_SCOPES_CONFORMANCE,
+  type LineageRun,
+  type LineageTask,
+  type ScopesLineage,
+  type SessionScopesFixture,
+} from './ports/session-scopes-conformance.js';
 export { BEFORE_ANY_EVENT } from './adapters/before-event-positions.js';
 export {
   NativeRequestSource,

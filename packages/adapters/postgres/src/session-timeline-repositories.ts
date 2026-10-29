@@ -71,15 +71,15 @@ export class PostgresSessionScopes implements SessionScopes {
   }
 
   scopeOf(sessionId: SessionId): Promise<Result<SessionScope | undefined>> {
-    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.scopeOf(sessionId)));
+    return this.#database.readOnly((tx) => tx.sessionTimeline.scopes.scopeOf(sessionId));
   }
 
   isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<Result<boolean>> {
-    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.isCard(projectId, runId)));
+    return this.#database.readOnly((tx) => tx.sessionTimeline.scopes.isCard(projectId, runId));
   }
 
   listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>> {
-    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.listByCard(scope, after, limit)));
+    return this.#database.readOnly((tx) => tx.sessionTimeline.scopes.listByCard(scope, after, limit));
   }
 }
 
@@ -94,38 +94,39 @@ interface ScopeRow {
   readonly run_id: string;
 }
 
-export class PostgresSessionScopeReads {
+// The scopes read within one session timeline transaction.
+export class PostgresSessionScopeReads implements SessionScopes {
   readonly #session: Session;
 
   constructor(session: Session) {
     this.#session = session;
   }
 
-  async scopeOf(sessionId: SessionId): Promise<SessionScope | undefined> {
+  async scopeOf(sessionId: SessionId): Promise<Result<SessionScope | undefined>> {
     const { rows } = await this.#session.query<ScopeRow>(
       `SELECT lineage.project_id, root.run_id FROM ${SCOPED_SESSIONS} WHERE agent_sessions.session_id = $1`, [sessionId],
     );
-    return rows[0] === undefined ? undefined : scopeOfRow(rows[0]);
+    return ok(rows[0] === undefined ? undefined : scopeOfRow(rows[0]));
   }
 
   // A root run of the project that holds no delegated child task.
-  async isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<boolean> {
+  async isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<Result<boolean>> {
     const { rows } = await this.#session.query<{ card: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM workflow_runs WHERE id = $1 AND project_id = $2)
          AND NOT EXISTS (SELECT 1 FROM task_lineage WHERE run_id = $1 AND depth > 0) AS card`,
       [runId, projectId],
     );
-    return rows[0]?.card === true;
+    return ok(rows[0]?.card === true);
   }
 
-  async listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<readonly SessionId[]> {
+  async listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>> {
     const { rows } = await this.#session.query<{ session_id: string }>(
       `SELECT agent_sessions.session_id FROM ${SCOPED_SESSIONS}
        WHERE lineage.project_id = $1 AND root.run_id = $2 AND ($3::text IS NULL OR agent_sessions.session_id COLLATE "C" > $3)
        ORDER BY agent_sessions.session_id COLLATE "C" LIMIT $4`,
       [scope.projectId, scope.runId, after ?? null, limit],
     );
-    return Object.freeze(rows.map((row) => row.session_id as SessionId));
+    return ok(Object.freeze(rows.map((row) => row.session_id as SessionId)));
   }
 }
 

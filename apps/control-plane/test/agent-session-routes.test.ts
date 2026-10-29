@@ -13,6 +13,7 @@ import { ControlPlaneApi, createApiServer, mintTurnId, type ApiServices } from '
 import {
   BEFORE_ANY_EVENT,
   InMemorySessionTimelineStore,
+  InMemoryTaskLineage,
   SessionTimelineService,
   parseSessionGeneration,
   type SessionId,
@@ -48,9 +49,14 @@ for (const [loginName, projectId, role] of [
 
 const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
 const scope = (projectId: string, runId: string): SessionScope => ({ projectId: id('ProjectId', projectId) as ProjectId, runId: id('RunId', runId) as WorkflowRunId });
-// Tasks of the card `run-alpha` of project alpha, and of `run-beta` of beta.
-const TASK_SCOPES = new Map<string, SessionScope>();
-const timelineStore = new InMemorySessionTimelineStore((taskId) => TASK_SCOPES.get(taskId));
+// The cards `run-alpha` and `run-paged` of project alpha, and `run-beta` of
+// beta; each session's task is a root task of its card.
+const LINEAGE = new InMemoryTaskLineage({
+  runs: [{ runId: 'run-alpha', projectId: 'alpha' }, { runId: 'run-paged', projectId: 'alpha' }, { runId: 'run-beta', projectId: 'beta' }],
+  tasks: [],
+});
+const rootTask = (taskId: TaskId, at: SessionScope) => LINEAGE.addTask({ taskId, rootTaskId: taskId, depth: 0, ...at });
+const timelineStore = new InMemorySessionTimelineStore(LINEAGE);
 const timeline = new SessionTimelineService({
   store: timelineStore, digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
   turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
@@ -74,7 +80,7 @@ const PERSON = { kind: 'principal' as const, principalId: id('PrincipalId', 'per
 // running the delivered turn of key `key-1`.
 async function runningSession(name: string, at: SessionScope = scope('alpha', 'run-alpha')): Promise<{ sessionId: SessionId; turnId: TurnId }> {
   const taskId = id('TaskId', `task-${name}`) as TaskId;
-  TASK_SCOPES.set(taskId, at);
+  rootTask(taskId, at);
   const sessionId = id('SessionId', name);
   value(await timeline.openSession({ id: sessionId, taskId, harness: id('HarnessPluginId', 'harness-a') }));
   value(await timeline.bindAttempt(sessionId, { attemptId: id('AttemptId', `attempt-${name}`), taskId, ownershipGeneration: OWNERSHIP }));
@@ -230,7 +236,7 @@ test('listAgentSessions pages a card\'s sessions in identifier order with a next
   const card = scope('alpha', 'run-paged');
   for (let index = 0; index < 101; index += 1) {
     const taskId = id('TaskId', `task-paged-${index}`) as TaskId;
-    TASK_SCOPES.set(taskId, card);
+    rootTask(taskId, card);
     value(await timeline.openSession({ id: id('SessionId', `paged-${String(index).padStart(3, '0')}`), taskId, harness: id('HarnessPluginId', 'harness-a') }));
   }
   const first = await call('GET', '/projects/alpha/cards/run-paged/agent-sessions', VERA);

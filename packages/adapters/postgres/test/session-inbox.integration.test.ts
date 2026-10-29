@@ -5,6 +5,8 @@ import {
   BEFORE_ANY_EVENT,
   ITEM_CLOSED,
   NativeRequestSource,
+  SCOPES_LINEAGE,
+  SESSION_SCOPES_CONFORMANCE,
   type IdempotencyKey,
   type NeedsYouItemId,
   type NeedsYouSourceId,
@@ -49,14 +51,16 @@ const PERSON = id('PrincipalId', 'person-1') as PrincipalId;
 const OTHER_PERSON = id('PrincipalId', 'person-2') as PrincipalId;
 const ACKNOWLEDGE = { kind: 'delivery-acknowledgement' as const, decision: 'acknowledge' as const };
 
-// TASK is a root task of `run-alpha` in project alpha; `task-child` is its
-// delegated child in the child run `run-child`; `run-beta` is beta's.
+// The runs and task lineage of SCOPES_LINEAGE, in which TASK is the root
+// task of alpha's card `run-alpha`.
 async function lineage(): Promise<void> {
-  await query(url, `INSERT INTO workflow_runs (id, generation, record, project_id, created_at) VALUES
-    ('run-alpha', 1, '{}', 'alpha', now()), ('run-child', 1, '{}', 'alpha', now()), ('run-beta', 1, '{}', 'beta', now())`);
-  await query(url, `INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id) VALUES
-    ('task-1', NULL, 'task-1', 0, 'alpha', 'run-alpha'), ('task-child', 'task-1', 'task-1', 1, 'alpha', 'run-child'),
-    ('task-beta', NULL, 'task-beta', 0, 'beta', 'run-beta')`);
+  for (const run of SCOPES_LINEAGE.runs) {
+    await query(url, "INSERT INTO workflow_runs (id, generation, record, project_id, created_at) VALUES ($1, 1, '{}', $2, now())", [run.runId, run.projectId]);
+  }
+  for (const task of SCOPES_LINEAGE.tasks) {
+    await query(url, `INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [task.taskId, task.parentTaskId ?? null, task.rootTaskId, task.depth, task.projectId, task.runId]);
+  }
 }
 
 function source(store: SessionTimelineStore, timeline: SessionTimelineService = timelineService(store)): NativeRequestSource {
@@ -120,32 +124,11 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
     await lineage();
   });
 
-  test('a session\'s scope is its task\'s project and its lineage root\'s run, also for a delegated child task', async () => {
-    value(await service.openSession({ id: SESSION, taskId: TASK, harness: HARNESS }));
-    value(await service.openSession({ id: OTHER_SESSION, taskId: id('TaskId', 'task-child') as never, harness: HARNESS }));
-    value(await service.openSession({ id: id('SessionId', 'session-orphan'), taskId: id('TaskId', 'task-none') as never, harness: HARNESS }));
-    assert.deepEqual(value(await scopes.scopeOf(SESSION)), CARD);
-    assert.deepEqual(value(await scopes.scopeOf(OTHER_SESSION)), CARD);
-    assert.equal(value(await scopes.scopeOf(id('SessionId', 'session-orphan'))), undefined);
-    assert.equal(value(await scopes.scopeOf(id('SessionId', 'session-9'))), undefined);
-  });
-
-  test('a card is a root run of the project: a child run, a run of another project, and an unknown run are none', async () => {
-    const isCard = async (project: string, run: string) => value(await scopes.isCard(id('ProjectId', project) as ProjectId, id('RunId', run) as WorkflowRunId));
-    assert.deepEqual(
-      [await isCard('alpha', 'run-alpha'), await isCard('alpha', 'run-child'), await isCard('alpha', 'run-beta'), await isCard('alpha', 'run-none')],
-      [true, false, false, false],
-    );
-  });
-
-  test('a card lists the sessions of its tasks and of their delegated children in code-unit order, after a key, to a limit', async () => {
-    for (const [name, task] of [['session-b', 'task-1'], ['Session-c', 'task-child'], ['session-a', 'task-1'], ['session-z', 'task-beta']] as const) {
-      value(await service.openSession({ id: id('SessionId', name), taskId: id('TaskId', task) as never, harness: HARNESS }));
-    }
-    assert.deepEqual(value(await scopes.listByCard(CARD, undefined, 10)), ['Session-c', 'session-a', 'session-b']);
-    assert.deepEqual(value(await scopes.listByCard(CARD, id('SessionId', 'session-a') as SessionId, 10)), ['session-b']);
-    assert.deepEqual(value(await scopes.listByCard(CARD, undefined, 2)), ['Session-c', 'session-a']);
-  });
+  for (const conformance of SESSION_SCOPES_CONFORMANCE) {
+    test(`PostgreSQL session scopes: ${conformance.name}`, async () => {
+      assert.deepEqual(await conformance.check({ scopes, store: new PostgresSessionTimelineStore(database) }), []);
+    });
+  }
 
   test('open items list by the project of their session with its card, and an item of another project is not listed', async () => {
     await sessionWithOpenRequest(service);

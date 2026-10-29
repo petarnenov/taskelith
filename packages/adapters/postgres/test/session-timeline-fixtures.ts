@@ -128,6 +128,7 @@ function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): 
     idempotency: tx.idempotency,
     items: tx.items,
     audit: tx.audit,
+    scopes: tx.scopes,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);
