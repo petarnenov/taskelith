@@ -267,6 +267,7 @@ export {
   type ResumedSessionSlot,
 } from './domain/session-slot-selection.js';
 export {
+  SLOT_REPORTED_RESET_MAXIMUM_MINUTES,
   cooldownAfterLimit,
   parseDefaultCooldownMinutes,
   type DefaultCooldownMinutes,

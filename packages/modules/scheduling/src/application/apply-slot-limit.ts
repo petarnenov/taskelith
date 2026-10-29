@@ -43,10 +43,11 @@ interface AppliedLimit {
   readonly defaultCooldown: DefaultCooldownMinutes;
 }
 
-// An unchanged cooldown writes nothing, so the revision stays.
+// A removed slot or an unchanged cooldown writes nothing, so the revision
+// stays; a removed slot accepts the limit as a no-op.
 async function applyLimit(tx: SlotSignalTransaction, { slotId, report, now, defaultCooldown }: AppliedLimit): Promise<Result<AccountSlot>> {
   const stored = await tx.accountSlots.get(slotId);
-  if (!stored.ok) return stored;
+  if (!stored.ok || stored.value.state === 'removed') return stored;
   const cooldown = cooldownAfterLimit(stored.value.cooldown, report, now, defaultCooldown);
   if (cooldown === stored.value.cooldown) return ok(stored.value);
   const cooled = parseAccountSlot({ ...stored.value, cooldown, revision: stored.value.revision + 1 });

@@ -9,6 +9,7 @@ import {
   InMemoryAssignmentRepository,
   InMemorySlotCredentials,
   SLOT_LIMIT_APPLICATIONS,
+  SLOT_REPORTED_RESET_MAXIMUM_MINUTES,
   SlotSecret,
   applySlotLimitInTransaction,
   cooldownAfterLimit,
@@ -32,6 +33,7 @@ const EARLIER = at('2026-10-29T09:30:00.000Z');
 const IN_ONE_HOUR = at('2026-10-29T11:00:00.000Z');
 const LATER = at('2026-10-29T11:30:00.000Z');
 const LATEST = at('2026-10-29T12:00:00.000Z');
+const IN_SEVEN_DAYS = at('2026-11-05T10:00:00.000Z');
 const SIXTY = value(parseDefaultCooldownMinutes(60));
 const SLOT = id('ProviderCredentialId', 'slot-1');
 const ASSIGNMENT = id('AssignmentId', 'assignment-1') as AssignmentId;
@@ -59,6 +61,14 @@ test('a later limit extends a cooldown and never shortens it', () => {
   assert.equal(cooldownAfterLimit(stored, { resetsAt: LATER }, NOW, SIXTY), stored);
   const ended = reported(EARLIER);
   assert.deepEqual(cooldownAfterLimit(ended, {}, NOW, SIXTY), { until: IN_ONE_HOUR, source: 'default' });
+});
+
+test('a reported reset is capped at seven days after now', () => {
+  assert.equal(SLOT_REPORTED_RESET_MAXIMUM_MINUTES, 10_080);
+  assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt: IN_SEVEN_DAYS }, NOW, SIXTY), reported(IN_SEVEN_DAYS));
+  for (const resetsAt of [at('2026-11-05T10:00:00.001Z'), at('2027-10-29T10:00:00.000Z')]) {
+    assert.deepEqual(cooldownAfterLimit(undefined, { resetsAt }, NOW, SIXTY), reported(IN_SEVEN_DAYS), resetsAt);
+  }
 });
 
 function slotRecord(overrides: Partial<AccountSlot> = {}): AccountSlot {
@@ -168,6 +178,19 @@ test('a limit cools a revoked slot, which a reinstatement then keeps', async () 
   const { tx } = await signalFixture(undefined, slotRecord({ state: 'revoked' }));
   const cooled = value(await apply(tx));
   assert.deepEqual([cooled.state, cooled.cooldown], ['revoked', { until: IN_ONE_HOUR, source: 'default' }]);
+});
+
+test('a limit past the cap cools the slot for seven days', async () => {
+  const { tx } = await signalFixture();
+  const cooled = value(await apply(tx, limitUntil('2026-11-12T10:00:00Z')));
+  assert.deepEqual(cooled.cooldown, reported(IN_SEVEN_DAYS));
+});
+
+test('a limit for a removed slot is accepted and writes nothing', async () => {
+  const removed = slotRecord({ state: 'removed' });
+  const { tx, slots } = await signalFixture(undefined, removed);
+  assert.deepEqual(value(await apply(tx, limitUntil('2026-10-29T11:30:00Z'))), removed);
+  assert.deepEqual(value(await slots.get(SLOT)), removed);
 });
 
 test('a limit and its outcomes hold no slot credential', async () => {

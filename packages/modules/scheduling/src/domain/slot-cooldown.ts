@@ -12,6 +12,9 @@ export interface SlotLimitReport {
   readonly resetsAt?: Instant;
 }
 
+// Covers weekly provider limits; a far reported reset locks no slot longer.
+export const SLOT_REPORTED_RESET_MAXIMUM_MINUTES = 10_080;
+
 const MILLISECONDS_PER_MINUTE = 60_000;
 
 export function parseDefaultCooldownMinutes(minutes: number): Result<DefaultCooldownMinutes> {
@@ -20,8 +23,8 @@ export function parseDefaultCooldownMinutes(minutes: number): Result<DefaultCool
   return err(failure('invalid', `the default cooldown must be a whole number of minutes from ${minimum} to ${maximum}`));
 }
 
-// Contract section 5: a reported reset after `now`, else the default; a
-// later limit extends the stored cooldown and never shortens it.
+// Contract section 5: a reported reset after `now`, capped, else the
+// default; a later limit extends the stored cooldown, never shortens it.
 export function cooldownAfterLimit(
   stored: SlotCooldown | undefined, report: SlotLimitReport, now: Instant, defaultMinutes: DefaultCooldownMinutes,
 ): SlotCooldown {
@@ -30,8 +33,15 @@ export function cooldownAfterLimit(
 }
 
 function reportedCooldown({ resetsAt }: SlotLimitReport, now: Instant, defaultMinutes: DefaultCooldownMinutes): SlotCooldown {
-  if (resetsAt !== undefined && Date.parse(resetsAt) > Date.parse(now)) return Object.freeze({ until: resetsAt, source: 'reported-reset' });
-  const until = instantFromEpochMilliseconds(Date.parse(now) + defaultMinutes * MILLISECONDS_PER_MINUTE);
+  if (resetsAt !== undefined && Date.parse(resetsAt) > Date.parse(now)) {
+    const cap = minutesAfter(now, SLOT_REPORTED_RESET_MAXIMUM_MINUTES);
+    return Object.freeze({ until: Date.parse(resetsAt) > Date.parse(cap) ? cap : resetsAt, source: 'reported-reset' });
+  }
+  return Object.freeze({ until: minutesAfter(now, defaultMinutes), source: 'default' });
+}
+
+function minutesAfter(now: Instant, minutes: number): Instant {
+  const until = instantFromEpochMilliseconds(Date.parse(now) + minutes * MILLISECONDS_PER_MINUTE);
   if (!until.ok) throw new Error(until.error.message);
-  return Object.freeze({ until: until.value, source: 'default' });
+  return until.value;
 }
