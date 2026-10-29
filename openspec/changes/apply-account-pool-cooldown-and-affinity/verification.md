@@ -31,6 +31,7 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed s
 - `9df9f7a2` `docs: count the pass 1 fail-before tests of apply-account-pool-cooldown-and-affinity correctly` (pass 2, finding 5).
 - `c5b10300` `docs: record review pass 2 of apply-account-pool-cooldown-and-affinity and its fixes`, with `passes.jsonl` and `findings.jsonl`, the tree that `make verify` ran on, and `41fbcd38` `docs: record the make verify of apply-account-pool-cooldown-and-affinity after review pass 2`, the commit of `make record`; review pass 3 ran on `41fbcd38`.
 - This record's update after pass 3, `docs: record review pass 3 of apply-account-pool-cooldown-and-affinity`, with `passes.jsonl` and `tasks.md`.
+- `46b81c21` `docs: archive the apply account pool cooldown and affinity change`, the first archive commit; the coordinator returned the branch, and `205b4e5e` (revert) and `775d6218` (merge of `dev`) followed ("Return and reconciliation").
 
 ## Environment
 
@@ -128,6 +129,17 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 - Result: Critical 0, High 0, Medium 0, Low 0, matching the pass 3 line of `passes.jsonl`; `findings.jsonl` gets no line.
 - Pass 3 reported no finding, so the review ends. Every fix was reviewed by a later pass: the pass 1 fixes by pass 2 and the pass 2 fixes by pass 3, so no fix is unreviewed and no architect check of unreviewed fixes is needed (governance "Architect check of unreviewed fixes").
 
+## Return and reconciliation
+
+The coordinator (Niki) returned the archived branch, head `46b81c21` (the archive commit), after its integration merge of `origin/dev` `19c15d69` (#411, 13a `implement-session-timeline`) conflicted in `docs/g3-plan.md`, a file other than the dependency inventory. The coordinator's integration worktree is not part of this branch, so the branch carries no coordinator merge. Under worker step 10:
+
+1. `205b4e5e` `docs: restore the active apply account pool cooldown and affinity change to merge dev` reverted the archive commit `46b81c21` (`git revert --no-commit`), which restored `openspec/changes/apply-account-pool-cooldown-and-affinity/`, the living `account-pool-port` and `harness-account-pools` specs from before the archive, the open task 4.3, and this record without its "Archive" section.
+2. The base is `git merge-base 46b81c21 origin/dev`, `f882c0ac`. `git fetch origin` showed `origin/dev` still at `19c15d69`, the head the coordinator merged. The merge `775d6218` of `origin/dev` `19c15d69` conflicted only in `docs/g3-plan.md`, where both sides changed adjacent table rows: this branch row 12 (12b named `apply-account-pool-cooldown-and-affinity` with account pool contract section 12, the possible split of 12d renamed from 12e to 12f, and the new 12e `apply-account-pool-load-and-health-signals`), and `dev` row 13 (sub-changes 13a, 13b, and 13c). The resolution keeps both: row 12 as in `46b81c21` and row 13 as in `19c15d69`, so the merged file differs from `46b81c21` only in row 13 and from `19c15d69` only in row 12. No other file conflicted. The only file that both sides changed since `f882c0ac` is `docs/g3-plan.md`; `dev` changed the session timeline (`packages/modules/execution`, `packages/adapters/postgres`, `packages/adapters/control-plane-store`, `apps/control-plane`) and this branch `packages/modules/scheduling`, the account pool PostgreSQL integration test, and `docs/contracts/account-pool.md`, so no merged file needed a semantic fix; the `make verify` of the merged tree is under "Generated checks".
+3. `git diff f882c0ac 19c15d69 -- openspec/specs` changes only `postgres-state` and `session-turn-model`, and no file of `account-pool-port` or `harness-account-pools` (`git diff --quiet f882c0ac 19c15d69 -- openspec/specs/account-pool-port openspec/specs/harness-account-pools` exits 0). The requirements that the deltas remove ("New-session selection in the placement transaction") and modify ("Least-loaded selection with cooldown") are therefore unchanged on `dev`, so neither delta needed reconciliation and both are unchanged; `dev`'s edits to the other specs stay as `dev` wrote them, since the merged `openspec/specs` equals `19c15d69`'s.
+4. `make verify` of the merged tree: "Generated checks".
+
+Route: `route.json` stays as routed on `8b78cd74` for the merge base `f882c0ac`. The route gate of `make review` runs only before pass 1 ("Later passes never route"), and the reconciliation review is pass 4, so the gate does not refuse it and the change is not routed again. As for earlier returns, the pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 4, role A.
+
 ## Limitations
 
 - Nothing calls the new paths outside tests: the control plane's placement service passes no slot request (12d), and no relay applies a session's `limit` event (item 18).
@@ -139,4 +151,6 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 
 ## Remaining gates
 
+- Review of the return by reviewer A of pass 1, `codex gpt-6-astra#medium`, as pass 4: the conflict resolution in the merge `775d6218` against its parents and the reconciliation result above, recorded in `passes.jsonl`, `findings.jsonl`, and this record.
+- Archive again as the last commit of the branch (task 4.3), with its archive checks.
 - Integration into dev by the coordinator (single pull request).
