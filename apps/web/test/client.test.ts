@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createApiClient, CSRF_HEADER } from '../src/api/client';
+import { createApiClient, CSRF_HEADER, type RequestOptions } from '../src/api/client';
 
 const TOKEN = 'csrf-fixture';
 
@@ -73,6 +73,30 @@ describe('createApiClient', () => {
     const { send } = recordingFetch();
     const request = createApiClient({ csrfToken: () => TOKEN, fetch: send });
     await expect(request('get', '/projects/{projectId}', {} as never)).rejects.toThrow('Missing path parameter projectId');
+  });
+
+  it('refuses at compile time a call without a required body or parameter', async () => {
+    const { calls, send } = recordingFetch();
+    const request = createApiClient({ csrfToken: () => TOKEN, fetch: send });
+    // @ts-expect-error logIn requires its JSON body.
+    await request('post', '/session');
+    // @ts-expect-error logIn requires its JSON body.
+    await request('post', '/session', {});
+    // @ts-expect-error readProject requires the projectId path parameter.
+    await expect(request('get', '/projects/{projectId}')).rejects.toThrow('projectId');
+    // @ts-expect-error readProject requires the projectId path parameter.
+    await expect(request('get', '/projects/{projectId}', {})).rejects.toThrow('projectId');
+    await request('get', '/projects');
+    expect(calls.map((call) => call.url)).toEqual(['/session', '/session', '/projects']);
+  });
+
+  it('requires a required query and keeps an optional one optional', () => {
+    type Required = { parameters: { query: { after: string } } };
+    type Optional = { parameters: { query?: { after?: string } } };
+    // @ts-expect-error the query is required.
+    const missing: RequestOptions<Required> = {};
+    const omitted: RequestOptions<Optional> = {};
+    expect([missing, omitted]).toEqual([{}, {}]);
   });
 
   it('reads no body from an answer that is not JSON', async () => {
