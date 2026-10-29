@@ -30,7 +30,7 @@ export class SessionInputDigestKeyFile {
   read(): Result<Uint8Array> {
     const stored = this.#namespace.read(SESSION_INPUT_DIGEST_KEY_FILE);
     if (!stored.ok) return stored;
-    if (stored.value === undefined) return refused('is missing');
+    if (stored.value === undefined) return refused('is missing; run init');
     const { key } = stored.value;
     if (typeof key !== 'string') return refused('has no key');
     const bytes = Buffer.from(key, 'base64');

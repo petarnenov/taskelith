@@ -36,10 +36,10 @@ test('the session timeline service starts with the installation digest key', () 
   assert.ok(value(startAgentSessionServices(space, unusedDatabase(), CLOCK)));
 });
 
-test('a missing digest key refuses the service start', () => {
+test('a missing digest key refuses the service start and names init, which creates it', () => {
   const refused = failed(startAgentSessionServices(namespace(), unusedDatabase(), CLOCK));
   assert.equal(refused.code, 'precondition-failed');
-  assert.match(refused.message, /session-input-digest\.key is missing/);
+  assert.equal(refused.message, 'session-input-digest.key is missing; run init');
 });
 
 test('a digest key of the wrong size refuses the service start with a reason that holds no key byte', () => {
