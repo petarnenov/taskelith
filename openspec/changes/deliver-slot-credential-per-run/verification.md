@@ -183,9 +183,8 @@ Route: `route.json` stays as committed in `feb182e9` for the original base `dc2a
 - Result: Critical 0, High 0, Medium 0, Low 1, matching the pass 3 line of `passes.jsonl`; recorded in `findings.jsonl` as `fixed-unreviewed`.
   1. Low, evidence-mismatch (`verification.md`, "Author self-check", "Wire"): the claim that `git diff dc2ae98b -- packages/contracts` is empty was no longer true, since the merge brings `dev`'s changes to four contract files. Fixed in `26538568`: the self-check cites `git diff 3009329f HEAD -- packages/contracts`, which is empty, states that 12c itself changes no wire contract, and names the changes since `dc2ae98b` as 13b's, inherited from `dev`. No other claim of this record diffs the branch head against `dc2ae98b`: "Dependencies" holds against both bases (`git diff dc2ae98b HEAD -- package.json package-lock.json` is empty, and so is the same diff from `3009329f`), and the other mentions of `dc2ae98b` cite it as the base of their own time, such as the route records, the fetches before the return, the first "Merge of dev", and the reconciliation's diff of `dev`'s specs, and stay.
 - Pass 3 reported only a Low finding, so no further pass runs. Unreviewed fix for the coordinator's architect check (governance "Architect check of unreviewed fixes"): `26538568`, a record-only change.
+- Architect check (Niki, 2026-10-29): 26538568 passed
 
 ## Remaining gates
 
-- Architect check by the coordinator of the unreviewed fix `26538568`.
-- Archive again as the last commit of the branch (task 4.3).
 - Integration into dev by the coordinator (single pull request).
