@@ -8,7 +8,7 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
   - `selectSlotInTransaction` selects all three request kinds. A `resumed-session` request reads its own stored slot in any state and selects it with `selectResumedSessionSlot` (contract section 4.3); an `after-limit` request reads the pools of its alternative harnesses in order, never one of the limited harness, and its limited slot, and selects with `selectAfterLimitSlot` (section 4.4). A request that names another harness for its stored slot is `invalid` (section 4.1). The refusal of 12a and its two tests are replaced.
   - `least-loaded-selection.ts` exports the helpers that the three selections share: `eligibleStandings`, `reservedSlot`, `slotWait`, and `earliestCooldownEnd`.
   - `slot-cooldown.ts`: `parseDefaultCooldownMinutes` (1 to 1440 minutes) and `cooldownAfterLimit`, the cooldown rule of section 5, with a reported reset capped at `SLOT_REPORTED_RESET_MAXIMUM_MINUTES`, 10080 minutes (7 days), after the database time.
-  - `applySlotLimitInTransaction`: applies a plugin's parsed `limit` event to the one slot that an assignment's reservation records, by compare-and-set, rereading after a lost one, up to `SLOT_LIMIT_APPLICATIONS` (3) applications, and then returns a retryable `conflict`; a limit for a `removed` slot is accepted as a no-op, with no write.
+  - `applySlotLimitInTransaction`: applies a plugin's parsed `limit` event to the one slot that an assignment's reservation records, by compare-and-set, rereading after a lost one up to `SLOT_LIMIT_REREADS` (3) times, and then returns a retryable `conflict`; a reset beyond the range of `Instant` is capped like any other; a limit for a `removed` slot is accepted as a no-op, with no write.
 - `@taskelith/postgres` tests: `account-pool-selection.integration.test.ts` with four gated races on PostgreSQL.
 - Documents: account pool contract status, sections 5 and 11, and a new section 12; `docs/g3-plan.md` row 12 names 12b and the follow-up 12e.
 
@@ -19,6 +19,7 @@ G3 item 12 (`implement-account-pool`, `docs/g3-plan.md`, row 12) implements the 
 ### Modified Capabilities
 
 - `account-pool-port`: removes "New-session selection in the placement transaction", whose refusal of the other kinds ends, and adds "Slot request in the placement transaction", which keeps the rest of it with its other two scenarios, "Resumed-session selection in the placement transaction", "After-limit selection in the placement transaction", and "Limit signal applied to the reserving slot". OpenSpec refuses a modified requirement that drops a scenario, so the requirement is removed and added under a new name.
+- `harness-account-pools`: modifies "Least-loaded selection with cooldown", whose cooldown lasts until a reported reset capped at 7 days; its scenario "Limit with reset time" names a reset within the cap, and "Limit with reset time past the cap" is added.
 
 ## Impact
 
