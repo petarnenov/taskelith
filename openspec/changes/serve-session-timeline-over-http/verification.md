@@ -19,6 +19,8 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13b, developed by a briefed s
 - `30663d59`: `make record` and this record's pass 1 sections, the head that review pass 2 read.
 - The pass 2 fixes ("Independent review", pass 2): `778649a0`, `b52c1057` (also the installation contract row of the key), `a1d596ec`, `0f2b0fcb`, `0e8db953` (the migration `1792933100000`, not yet integrated, changed in place), `73a934e3` (this record), and `cb8f4fc0` (`passes.jsonl` and `findings.jsonl`). None changes a requirement or the wire contract document.
 - The commit after `cb8f4fc0`: `make record` and this record's pass 2 sections.
+- `2210c573`: the coordinator's architect check ("Architect check").
+- `git fetch origin && git merge origin/dev` after `2210c573`: "Already up to date"; `origin/dev` was still `dc2ae98b` (#412), merged in `b11ec645`, so no merge commit and no change to this change's inputs.
 
 ## Environment
 
