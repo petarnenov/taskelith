@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed subagent of the worker session Pepi for the coordinator Niki (architect), from `dev` `f882c0ac` (#410, 12a): the `resumed-session` and `after-limit` selection inside the placement transaction (account pool contract sections 4.3, 4.4, and 4.7), which replaces 12a's refusal of those kinds, and the cooldown of a slot from a harness plugin's `limit` signal (section 5; agent harness port contract section 4.1), with gated races on PostgreSQL ([design](design.md), decisions 1 to 11). The coordinator Niki answered the design's questions Q1 to Q6 on 2026-10-29; the design records the answers verbatim, and the change applies them. Review pass 1 reported three Medium findings and one Low, and review pass 2 one Medium and four Low, all fixed ("Independent review").
+G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed subagent of the worker session Pepi for the coordinator Niki (architect), from `dev` `f882c0ac` (#410, 12a): the `resumed-session` and `after-limit` selection inside the placement transaction (account pool contract sections 4.3, 4.4, and 4.7), which replaces 12a's refusal of those kinds, and the cooldown of a slot from a harness plugin's `limit` signal (section 5; agent harness port contract section 4.1), with gated races on PostgreSQL ([design](design.md), decisions 1 to 11). The coordinator Niki answered the design's questions Q1 to Q6 on 2026-10-29; the design records the answers verbatim, and the change applies them. Review pass 1 reported three Medium findings and one Low, and review pass 2 one Medium and four Low, all fixed; review pass 3 reported none ("Independent review").
 
 ## Revision
 
@@ -29,7 +29,8 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed s
 - `4d4cae91` `docs: bound the rereads of a lost slot change in account pool contract section 5` (pass 2, finding 3).
 - `ad6858a4` `docs: keep the old wording of the harness-account-pools cooldown requirement beside its cap and name the released-reservation test` (pass 2, finding 4, and design answer Q4 for finding 1).
 - `9df9f7a2` `docs: count the pass 1 fail-before tests of apply-account-pool-cooldown-and-affinity correctly` (pass 2, finding 5).
-- This record's update after pass 2, `docs: record review pass 2 of apply-account-pool-cooldown-and-affinity and its fixes`, with `passes.jsonl` and `findings.jsonl`, the tree that `make verify` ran on, and then the commit of `make record`.
+- `c5b10300` `docs: record review pass 2 of apply-account-pool-cooldown-and-affinity and its fixes`, with `passes.jsonl` and `findings.jsonl`, the tree that `make verify` ran on, and `41fbcd38` `docs: record the make verify of apply-account-pool-cooldown-and-affinity after review pass 2`, the commit of `make record`; review pass 3 ran on `41fbcd38`.
+- This record's update after pass 3, `docs: record review pass 3 of apply-account-pool-cooldown-and-affinity`, with `passes.jsonl` and `tasks.md`.
 
 ## Environment
 
@@ -84,6 +85,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18510-402e-7b52-9114-917ef75705ab` | 0 | 0 | 3 | 1 |
 | 2 | B | `claude claude-opus-5-5#medium` | `8da6580e-b177-4fe6-9480-ec023c03b621` | 0 | 0 | 1 | 4 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1852d-7bad-7072-afb8-f2d09fedda7f` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -118,6 +120,14 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 - After the fixes: `npm run build`, then `node --experimental-strip-types --test packages/modules/scheduling/test/slot-cooldown.test.ts` gave tests 16, pass 16, fail 0, and over `packages/modules/scheduling/test/*.test.ts` tests 193, pass 193, fail 0; `npm run verify:comments` passed; `npm run openspec -- validate apply-account-pool-cooldown-and-affinity --strict` valid; `npm run verify:archive` passed; `make findings ARGS="validate"` valid. The `make verify` of the fixed tree is under "Generated checks".
 - Pass 2 found a Medium finding, so pass 3 by reviewer A reviews these fixes.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox read-only, session `01a1852d-7bad-7072-afb8-f2d09fedda7f`, on `41fbcd38`. The worktree snapshot before and after the review was `bcb887605125f511614db1a46922cad88f403c9c002c07c110d6c216ed995625`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/apply-account-pool-cooldown-and-affinity -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-10-29T01:01:52.689Z. Model confirmation: `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only` in the Codex log header, as `make review` printed them. `make review` printed "route: recommends effort high; the authorized medium applies (policy version 8)".
+- Check of the pass 2 fixes: the reviewer reviewed the whole diff against the merge base `f882c0ac` and confirmed all five pass 2 fixes correct and complete and their records accurate, and found no regression from them. It ran the 193 Scheduling tests (all passed), the strict OpenSpec validation, `npm run verify:comments`, `make record-check`, and `git diff --check`, all passing; it reviewed the PostgreSQL races statically and against the recorded evidence, without running them.
+- Result: Critical 0, High 0, Medium 0, Low 0, matching the pass 3 line of `passes.jsonl`; `findings.jsonl` gets no line.
+- Pass 3 reported no finding, so the review ends. Every fix was reviewed by a later pass: the pass 1 fixes by pass 2 and the pass 2 fixes by pass 3, so no fix is unreviewed and no architect check of unreviewed fixes is needed (governance "Architect check of unreviewed fixes").
+
 ## Limitations
 
 - Nothing calls the new paths outside tests: the control plane's placement service passes no slot request (12d), and no relay applies a session's `limit` event (item 18).
@@ -129,7 +139,4 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A `codex gpt-6.1-sol#medium`, required because pass 2 reported a Medium finding.
-- The coordinator's architect check of any unreviewed fixes.
-- The archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
