@@ -226,7 +226,7 @@ For a run or task resource found by its own identifier, a caller without the req
 - **THEN** the answer is 400 and the worker's credentials are unchanged
 
 ### Requirement: Agent session operations served
-The control plane SHALL serve the agent session operations of control-plane wire contracts section 9, except `readAgentSessionOutput` until 13d, with the session cookie or the operator bearer, checking the section 3 role on the path's project before the body, and SHALL answer a session or card of another project with the same 404 as an unknown one.
+The control plane SHALL serve the agent session operations of control-plane wire contracts section 9 with the session cookie or the operator bearer, checking the section 3 role on the path's project before the body, and SHALL answer a session or card of another project with the same 404 as an unknown one.
 
 #### Scenario: Viewer submits a turn
 - **WHEN** a `project-viewer` of the project calls `submitTurn` with a valid body
@@ -243,6 +243,10 @@ The control plane SHALL serve the agent session operations of control-plane wire
 #### Scenario: Card page in one state
 - **WHEN** a session is added to a card and another changes while `listAgentSessions` reads the card
 - **THEN** the page lists and shows the sessions as one transaction read them
+
+#### Scenario: Output of another project
+- **WHEN** a member of project A calls `readAgentSessionOutput` for a session of project B through a path of project A
+- **THEN** the answer is the 404 that an unknown session gets, and no output is read
 
 ### Requirement: Wire reasons of session refusals
 The control plane SHALL answer a stopped session's turn with 422 `session-stopped`, a response to an answered request with another key with 409 `already-answered`, and a response for an attempt that is not the active bound one with 422 `attempt-not-current`.
@@ -283,3 +287,10 @@ Installation initialization SHALL create `control-plane/session-input-digest.key
 #### Scenario: Existing key of the wrong size
 - **WHEN** initialization finds a key of the wrong size
 - **THEN** it keeps the key, and the service start still refuses it
+
+### Requirement: Session output tail key at initialization
+Installation initialization SHALL create `control-plane/session-output-tail.key` with mode `0600` through the control-plane namespace when it is missing, also on a rerun, SHALL never overwrite an existing key, and SHALL never log or output it.
+
+#### Scenario: Rerun with a lost tail key
+- **WHEN** initialization runs again on an installation with a tail key, and again after the key is lost
+- **THEN** the first rerun keeps the key's bytes, and the second creates a new key with mode `0600`

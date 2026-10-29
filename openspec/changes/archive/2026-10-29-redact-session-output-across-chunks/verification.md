@@ -200,5 +200,16 @@ Architect check (Niki, coordinator, 2026-10-29): 7591eb47, 970ab77e, the merge 4
 
 ## Remaining gates
 
-- Merge `origin/dev` right before the archive, and the archive
 - Integration into dev by the coordinator (single pull request)
+
+## Archive
+
+Checked state: the tree of the archive commit `docs: archive the redact session output across chunks change`, the last commit of the branch, on top of `20da9765`; the checks ran on the uncommitted archive tree, which differs from the committed one only by this section. `origin/dev` was still `0f8d3db9`, merged in `8f300ca8`.
+
+- `npm run openspec -- archive redact-session-output-across-chunks --yes`: archived as `2026-10-29-redact-session-output-across-chunks`; totals + 10, ~ 4, - 1 (control-plane-api + 1, ~ 1; control-plane-wire-contracts + 1, ~ 2; postgres-state + 1; session-turn-model + 7, ~ 1, - 1). The scratch archive at `af46ab57` counted ~ 3; a later fix modified one more wire contracts requirement.
+- `npm run openspec -- validate --all --strict --no-interactive`: 71 passed, 0 failed.
+- `env -u NODE_ENV make verify` (log `13d-verify-archive.log` in the session scratchpad): passed, profile full, no stamp since the tree was uncommitted: tests 4108, pass 4061, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.65 % branches, 98.83 % functions.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-29-redact-session-output-across-chunks` passed; the 14 failures of the 268 items are other, older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's deltas, 4 files, 118 insertions, 11 deletions.
+- The moved change has `findings.jsonl` (15 findings), `passes.jsonl` (3 passes), `checklist.json`, and `route.json`.
+- `make findings ARGS="validate"`: "Every findings file is valid: 94 file(s); every pass summary file is valid: 74 file(s); every route file is valid: 29 file(s)."
