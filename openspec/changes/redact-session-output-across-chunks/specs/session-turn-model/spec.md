@@ -53,7 +53,7 @@ The service SHALL refuse to start when the output tail key file is missing or it
 - **THEN** the service does not start, and the reason names only the size
 
 ### Requirement: Held tail released at its turn's end
-The service SHALL release a held tail, redacted, with an open block, and the trailing run's earliest suffix that may still be a secret of a known shape, down to one character of a shape's head, as one marker, as entries of its own turn in the transaction of any change that ends the turn, such as its outcome, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
+The service SHALL release a held tail, redacted, with an open block, or the trailing run's earliest suffix that may be a secret cut after its shape's whole head, as one marker, and a shorter prefix of a head verbatim, as entries of its own turn in the transaction of any change that ends the turn, such as its outcome, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
 
 #### Scenario: Generation ends with a tail
 - **WHEN** a generation ends while its turn holds a tail with half a secret
@@ -64,8 +64,8 @@ The service SHALL release a held tail, redacted, with an open block, and the tra
 - **THEN** the JWT is recorded as one marker, and no stored entry holds any part of it
 
 #### Scenario: Turn ends in a shape's head
-- **WHEN** a turn's output ends without whitespace in a non-empty prefix of a shape's head, such as `e`, `tko`, or `SO`
-- **THEN** that prefix is recorded as one marker, while a run one character past every head, such as `tkopz`, is kept
+- **WHEN** a turn's output ends without whitespace in a prefix shorter than a shape's head, such as `done`, `ey`, or `tko`
+- **THEN** it is released verbatim, since it holds no secret material and the held tail is per turn, while a whole head, such as `eyJ` or `tkop`, is recorded as one marker
 
 ### Requirement: Released output split into entries
 The service SHALL record released text longer than `MAX_HARNESS_TEXT_LENGTH` as consecutive entries of at most that many code units, split on whole characters, losing none of it.
