@@ -81,6 +81,13 @@ test('a font or other request to an external origin fails the check', () => {
   assert.deepEqual(textProblems('assets/a.js', 'fetch("//cdn.example.com/x.js")'), ['assets/a.js: references the external origin of //cdn.example.com/x.js']);
 });
 
+test('an IP, single-label, or userinfo origin fails the check', () => {
+  const origins = ['https://127.0.0.1:8443/x', 'https://[::1]:8443/x', 'https://localhost:8443/x', 'https://user:pass@evil.example/x', '//10.0.0.1/x'];
+  for (const url of origins) {
+    assert.deepEqual(textProblems('assets/a.js', `fetch("${url}")`), [`assets/a.js: references the external origin of ${url}`]);
+  }
+});
+
 test('only the listed namespace names and error links pass, and only in scripts', () => {
   assert.deepEqual(textProblems('assets/a.js', 'ns="http://www.w3.org/2000/svg";u=`https://react.dev/errors/`+e'), []);
   assert.deepEqual(textProblems('assets/a.js', 'fetch("https://react.dev/errors/x")'), ['assets/a.js: references the external origin of https://react.dev/errors/x']);

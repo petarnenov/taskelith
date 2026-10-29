@@ -37,7 +37,9 @@ export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
   ['https://mantine.dev/theming/colors/#primary-color', 'Mantine links its invalid primary color error message to it.'],
 ]);
 
-const URL_PATTERN = /(?:\b[a-z][a-z0-9+.-]*:)?\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?::\d+)?[^\s"'`<>()\\]*/g;
+// Any host after `//`: a DNS name, a single label, IPv4, or [IPv6], with
+// optional userinfo and port.
+const URL_PATTERN = /(?:\b[a-z][a-z0-9+.-]*:)?\/\/(?:[^\s/?#@"'`<>()\\]+@)?(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)(?::\d+)?[^\s"'`<>()\\]*/g;
 const CHECKED_EXTENSIONS = new Set(['.html', '.js', '.css', '.map', '.json', '.svg', '.txt']);
 
 export function webBundleProblems(dist: string): string[] {
