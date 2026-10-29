@@ -143,15 +143,6 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 
 - Before the archive, `git fetch origin` and `git merge origin/dev` on `330f7e49`: `origin/dev` is at `dc2ae98b`, the branch's merge base, so the merge was "Already up to date", with no conflict and no merge commit. `openspec/specs/account-pool-port/spec.md` last changed in `978072b3`, inside the base, so the delta still matches `dev`'s requirement text: "Confidential credential transport" exists as the MODIFIED delta expects, and none of the four ADDED requirements exists yet.
 
-## Archive
-
-- After ticking every task, `npm run openspec -- archive deliver-slot-credential-per-run --yes` on `6ad8385c` moved the change to `openspec/changes/archive/2026-10-29-deliver-slot-credential-per-run/` and applied the delta to `openspec/specs/account-pool-port/spec.md`: 4 added, 1 modified. The checked state is the tree of the archive commit, the working tree the checks below ran on.
-- `npm run openspec -- validate --all --strict --no-interactive`: 71 passed, 0 failed.
-- `npm run openspec -- validate --archived --no-interactive`: this change's line `change/2026-10-29-deliver-slot-credential-per-run` passed.
-- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/account-pool-port/spec.md`, 89 insertions and 1 deletion: the four added requirements "Slot credential delivery service", "Slot credential delivery record", "Slot credential delivery over TLS only", and "Run slot credential port on the worker", and the modified "Confidential credential transport" with its scenario "Co-located worker without TLS", as the delta intends. Every requirement of the living spec is at most 500 characters; the longest is 494, and the new ones are 447, 379, 401, 489, and 269.
-- The moved change has its `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` passed: 89 findings files, 69 pass summary files, 25 route files.
-- `make verify` on the uncommitted archive tree: passed, profile full, no stamp written (uncommitted working tree); tests 3839, pass 3830, fail 0, skipped 9; all files 99.40% lines, 92.75% branches, 98.86% functions.
-
 ## Limitations
 
 - Nothing calls the new paths outside tests: the composition passes no delivery service (12d), and no harness host calls `RunSlotCredentials` (item 18).
