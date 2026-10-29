@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   SessionTimelineService,
   parseSessionGeneration,
+  parseTurnId,
   type IdempotencyKey,
   type RequestKey,
   type RequestRecording,
@@ -14,7 +15,7 @@ import {
   type TurnCommand,
   type TurnId,
 } from '@taskelith/execution';
-import { parseIdentifier } from '@taskelith/kernel';
+import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
 import { PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { HmacInputDigest, SecretTextRedactor } from '@taskelith/secrets';
@@ -62,11 +63,13 @@ export function allow(name: string, native = 'request-1', decision: 'allow' | 'd
 }
 
 // The service as a control plane runs it, with a fixed digest key and
-// random turn IDs, as each process mints its own.
+// random turn and item IDs, as each process mints its own.
 export function timelineService(store: SessionTimelineStore): SessionTimelineService {
   return new SessionTimelineService({
     store, digest: value(HmacInputDigest.fromKey(DIGEST_KEY)), redactor: new SecretTextRedactor(),
-    turnIds: { next: () => turnId(randomUUID()) },
+    turnIds: { next: () => value(parseTurnId(`t${randomUUID().replaceAll('-', '')}`)) },
+    clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
+    itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
   });
 }
 
@@ -123,6 +126,8 @@ export function barrierStore(store: SessionTimelineStore, barrier: Barrier): Ses
 function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): SessionTimelineTransaction {
   return {
     idempotency: tx.idempotency,
+    items: tx.items,
+    audit: tx.audit,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);

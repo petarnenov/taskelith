@@ -42,3 +42,22 @@ test('a key file whose key is not base64 is refused without its content in the r
   assert.equal(JSON.stringify(refused).includes('sentinel'), false);
   assert.equal(readFileSync(path, 'utf8').includes('sentinel'), true);
 });
+
+test('ensuring the key creates it owner-only when it is missing, and keeps it on every later call', () => {
+  const { file, path } = keyFile();
+  value(file.ensure());
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+  const created = readFileSync(path);
+  value(file.ensure());
+  assert.deepEqual(readFileSync(path), created);
+  assert.equal(value(file.read()).length, 32);
+});
+
+test('ensuring the key keeps an existing key of the wrong size, which the digest still refuses', () => {
+  const { file, path } = keyFile();
+  const stored = JSON.stringify({ format: 1, key: Buffer.from('short-key').toString('base64') });
+  writeFileSync(path, stored, { mode: 0o600 });
+  value(file.ensure());
+  assert.equal(readFileSync(path, 'utf8'), stored);
+  assert.equal(value(file.read()).length, 9);
+});

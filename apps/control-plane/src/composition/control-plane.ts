@@ -54,6 +54,7 @@ import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-re
 import { repairCommandConsumers } from './command-consumer-repair.js';
 import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
+import { startAgentSessionServices } from './session-timeline.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -171,6 +172,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     ...(settings.sessionLifetime === undefined ? {} : { lifetime: settings.sessionLifetime }),
   });
   const runs = new RunService(database, workflows);
+  const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
+  if (!agentSessions.ok) return agentSessions;
   const api = new ControlPlaneApi({
     runs,
     tasks: new TaskService(database),
@@ -186,6 +189,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     installationCa: installationCa.value,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
+    agentSessions: agentSessions.value,
   });
   // The session operations are served on the browser endpoint only.
   const workerRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.browserOnly) });

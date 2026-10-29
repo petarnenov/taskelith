@@ -1,5 +1,5 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { EvidenceReference } from '@taskelith/sdlc';
+import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import type { Clock, EvidenceReference } from '@taskelith/sdlc';
 import { truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
@@ -46,7 +46,7 @@ import {
   recordTurnRefused,
   submitTurn,
 } from '../domain/session-turns.js';
-import { MAX_INPUT_ANSWER_BYTES } from '../ports/needs-you.js';
+import { MAX_INPUT_ANSWER_BYTES, type NeedsYouItemId } from '../ports/needs-you.js';
 import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
 import type {
   HeldKey,
@@ -55,17 +55,28 @@ import type {
   SessionTimelineTransaction,
   StoredSession,
 } from '../ports/session-timeline-store.js';
+import { itemChanges, type ItemChange } from './session-item-changes.js';
 
+// `clock` and `itemIds` stamp the native request items that each change
+// opens or settles in its own transaction.
 export interface SessionTimelineDependencies {
   readonly store: SessionTimelineStore;
   readonly digest: InputDigest;
   readonly redactor: SessionTextRedactor;
   readonly turnIds: TurnIdSource;
+  readonly clock: Clock;
+  readonly itemIds: { next(): NeedsYouItemId };
 }
 
-// A session as the service shows it: its output stays in the store until
-// item 13b redacts output across chunks (coordinator answer Q5).
-export type SessionView = Omit<Session, 'output'>;
+// A session as the service shows it: its output entries stay in the store
+// until 13d redacts output across chunks; only the window's bounds show.
+export type SessionView = Omit<Session, 'output'> & { readonly outputWindow: OutputBounds };
+
+export interface OutputBounds {
+  readonly lastPosition: number;
+  // Absent while the window holds no entry.
+  readonly earliestRetained?: number;
+}
 
 export interface TurnCommand {
   readonly key: IdempotencyKey;
@@ -85,6 +96,10 @@ export interface SubmittedTurn {
 }
 
 export const KEY_REUSED = 'idempotency-key-reused';
+// The reasons of the wire (control-plane wire contracts, section 9).
+export const ALREADY_ANSWERED = 'already-answered';
+export const ATTEMPT_NOT_CURRENT = 'attempt-not-current';
+export const SESSION_STOPPED = 'session-stopped';
 const TURN_SCOPE = 'turn';
 
 type Change = (session: Session) => Result<Session>;
@@ -96,12 +111,16 @@ export class SessionTimelineService {
   readonly #digest: InputDigest;
   readonly #redactor: SessionTextRedactor;
   readonly #turnIds: TurnIdSource;
+  readonly #clock: Clock;
+  readonly #itemIds: { next(): NeedsYouItemId };
 
   constructor(dependencies: SessionTimelineDependencies) {
     this.#store = dependencies.store;
     this.#digest = dependencies.digest;
     this.#redactor = dependencies.redactor;
     this.#turnIds = dependencies.turnIds;
+    this.#clock = dependencies.clock;
+    this.#itemIds = dependencies.itemIds;
   }
 
   openSession(start: SessionStart): Promise<Result<SessionView>> {
@@ -119,7 +138,7 @@ export class SessionTimelineService {
       if (!stored.ok) return stored;
       const taskSessions = await tx.sessions.listByTask(stored.value.session.taskId);
       if (!taskSessions.ok) return taskSessions;
-      return written(tx, stored.value, bindAttempt(stored.value.session, binding, taskSessions.value));
+      return this.#written(tx, stored.value, bindAttempt(stored.value.session, binding, taskSessions.value));
     });
   }
 
@@ -150,11 +169,11 @@ export class SessionTimelineService {
       if (prior.value !== undefined) return repeatedTurn(stored.value.session, prior.value, digest);
       const text = this.#redacted(command.text);
       const submitted = submitTurn(stored.value.session, { turnId: this.#turnIds.next(), key: command.key, author: command.author, text });
-      if (!submitted.ok) return submitted;
+      if (!submitted.ok) return withReason(submitted.error, TURN_REASONS);
       const key = { scope: TURN_SCOPE, key: command.key, digest, outcome: submitted.value.turn.id };
       const recorded = await tx.idempotency.record(sessionId, key);
       if (!recorded.ok) return recorded;
-      const replaced = await written(tx, stored.value, ok(submitted.value.session));
+      const replaced = await this.#written(tx, stored.value, ok(submitted.value.session));
       return replaced.ok ? ok(Object.freeze({ ...submitted.value, session: replaced.value })) : replaced;
     });
   }
@@ -194,7 +213,7 @@ export class SessionTimelineService {
       const recorded = recordRequest(stored.value.session, redacted);
       if (!recorded.ok) return recorded;
       const held = await tx.idempotency.record(sessionId, { scope, key, digest, outcome: recording.turnId });
-      return held.ok ? written(tx, stored.value, recorded) : held;
+      return held.ok ? this.#written(tx, stored.value, recorded) : held;
     });
   }
 
@@ -216,10 +235,10 @@ export class SessionTimelineService {
         return prior.value.digest === digest ? requestOf(stored.value.session, request) : keyReused(sessionId, command.key);
       }
       const consumed = consumeResponse(stored.value.session, { ...command.response, answer: this.#redactedAnswer(answer) });
-      if (!consumed.ok) return consumed;
+      if (!consumed.ok) return withReason(consumed.error, RESPONSE_REASONS);
       const recorded = await tx.idempotency.record(sessionId, { scope, key: command.key, digest });
       if (!recorded.ok) return recorded;
-      const replaced = await written(tx, stored.value, consumed);
+      const replaced = await this.#written(tx, stored.value, consumed);
       return replaced.ok ? requestOf(consumed.value, request) : replaced;
     });
   }
@@ -251,12 +270,25 @@ export class SessionTimelineService {
       if (!taker.ok) return taker;
       const stopped = await storedSession(tx, stoppedId);
       if (!stopped.ok) return stopped;
-      return written(tx, stopped.value, takeHandoff(stopped.value.session, taker.value.session));
+      return this.#written(tx, stopped.value, takeHandoff(stopped.value.session, taker.value.session));
     });
   }
 
   readSession(sessionId: SessionId): Promise<Result<SessionView>> {
     return this.#read(sessionId, viewOf);
+  }
+
+  // The sessions in one transaction, in the order given.
+  readSessions(sessionIds: readonly SessionId[]): Promise<Result<readonly SessionView[]>> {
+    return this.#store.transaction(async (tx) => {
+      const views: SessionView[] = [];
+      for (const sessionId of sessionIds) {
+        const stored = await storedSession(tx, sessionId);
+        if (!stored.ok) return stored;
+        views.push(viewOf(stored.value.session));
+      }
+      return ok(Object.freeze(views));
+    });
   }
 
   nextDeliverableTurn(sessionId: SessionId): Promise<Result<Turn | undefined>> {
@@ -274,7 +306,7 @@ export class SessionTimelineService {
   #change(sessionId: SessionId, change: Change): Promise<Result<SessionView>> {
     return this.#store.transaction(async (tx) => {
       const stored = await storedSession(tx, sessionId);
-      return stored.ok ? written(tx, stored.value, change(stored.value.session)) : stored;
+      return stored.ok ? this.#written(tx, stored.value, change(stored.value.session)) : stored;
     });
   }
 
@@ -283,6 +315,35 @@ export class SessionTimelineService {
       const stored = await storedSession(tx, sessionId);
       return stored.ok ? ok(read(stored.value.session)) : stored;
     });
+  }
+
+  // Writes the changed session and, in the same transaction, the items its
+  // requests open or settle; an unchanged session writes nothing.
+  async #written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
+    if (!changed.ok) return changed;
+    if (changed.value === stored.session) return ok(viewOf(changed.value));
+    const replaced = await tx.sessions.replace(stored, changed.value);
+    if (!replaced.ok) return replaced;
+    for (const item of itemChanges(stored.session, changed.value, this.#clock.now())) {
+      const applied = await this.#applyItemChange(tx, changed.value, item);
+      if (!applied.ok) return applied;
+    }
+    return ok(viewOf(changed.value));
+  }
+
+  async #applyItemChange(tx: SessionTimelineTransaction, session: Session, item: ItemChange): Promise<Result<void>> {
+    if (item.change === 'open') {
+      const { kind, request, attemptId, attemptGeneration } = item;
+      return tx.items.add({
+        id: this.#itemIds.next(), kind, sessionId: session.id, taskId: session.taskId, request, createdAt: this.#clock.now(), state: 'open',
+        ...(attemptId === undefined ? {} : { attemptId }), ...(attemptGeneration === undefined ? {} : { attemptGeneration }),
+      });
+    }
+    const open = await tx.items.find(session.id, item.kind, item.request);
+    if (!open.ok) return open;
+    if (open.value === undefined) return err(failure('internal', `session ${session.id} lost the item of a request`, { session: session.id }));
+    const { state: _state, ...fields } = open.value;
+    return tx.items.settle({ ...fields, ...item.state });
   }
 
   // Redaction may lengthen a text past its bound, so only its tail is cut,
@@ -310,13 +371,16 @@ async function storedSession(tx: SessionTimelineTransaction, sessionId: SessionI
   return ok(stored.value);
 }
 
-// Writes the changed session; a repeat that the domain answered with the
-// unchanged session writes nothing.
-async function written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
-  if (!changed.ok) return changed;
-  if (changed.value === stored.session) return ok(viewOf(changed.value));
-  const replaced = await tx.sessions.replace(stored, changed.value);
-  return replaced.ok ? ok(viewOf(changed.value)) : replaced;
+// On these paths each failure code has one meaning, which the wire names.
+const TURN_REASONS: Partial<Record<FailureCode, string>> = Object.freeze({ 'precondition-failed': SESSION_STOPPED });
+const RESPONSE_REASONS: Partial<Record<FailureCode, string>> = Object.freeze({
+  conflict: ALREADY_ANSWERED, 'precondition-failed': ATTEMPT_NOT_CURRENT,
+});
+
+function withReason(failed: Failure, reasons: Partial<Record<FailureCode, string>>): Result<never> {
+  const reason = reasons[failed.code];
+  if (reason === undefined || failed.details.reason !== undefined) return err(failed);
+  return err(failure(failed.code, failed.message, { ...failed.details, reason }));
 }
 
 function repeatedTurn(session: Session, prior: IdempotencyRecord, digest: string): Result<SubmittedTurn> {
@@ -343,8 +407,10 @@ function keyReused(sessionId: SessionId, key: HeldKey): Result<never> {
 }
 
 function viewOf(session: Session): SessionView {
-  const { output: _output, ...view } = session;
-  return Object.freeze(view);
+  const { output, ...view } = session;
+  const earliest = output.entries[0]?.position;
+  const outputWindow = Object.freeze({ lastPosition: output.lastPosition, ...(earliest === undefined ? {} : { earliestRetained: earliest }) });
+  return Object.freeze({ ...view, outputWindow });
 }
 
 // An input answer is also bounded in UTF-8 bytes (MAX_INPUT_ANSWER_BYTES).

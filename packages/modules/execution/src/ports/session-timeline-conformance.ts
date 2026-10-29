@@ -8,6 +8,7 @@ import {
   expectSuccess,
   parseEvidenceReference,
   type ConformanceCase,
+  type ProjectId,
   type TaskId,
 } from '@taskelith/sdlc';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
@@ -18,6 +19,7 @@ import { appendOutput } from '../domain/session-output.js';
 import { openSession, type Session } from '../domain/session-records.js';
 import { consumeResponse, recordRequest } from '../domain/session-requests.js';
 import { deliverTurn, recordTurnOutcome, submitTurn } from '../domain/session-turns.js';
+import type { SessionInboxItem, SessionItemKind } from './session-inbox-items.js';
 import type { IdempotencyRecord, SessionTimelineStore, SessionTimelineTransaction } from './session-timeline-store.js';
 
 // The shared suite for SessionTimelineStore; each case gets an empty store.
@@ -66,6 +68,16 @@ function fullSession(): Session {
 
 function keyRecord(scope: string, key: string, digest = 'digest-1', outcome = 'outcome-1'): IdempotencyRecord {
   return Object.freeze({ scope, key: id('IdempotencyKey', key) as IdempotencyKey, digest, outcome });
+}
+
+// An item of the native request `request-1` of `session-1` in generation 1.
+function inboxItem(itemId: string, kind: SessionItemKind = 'permission-request'): SessionInboxItem {
+  const request = { generation: GENERATION, nativeRequestId: id('NativeRequestId', 'request-1') };
+  return Object.freeze({
+    id: id('NeedsYouItemId', itemId), kind, sessionId: session('session-1').id, taskId: TASK, request,
+    attemptId: id('AttemptId', 'attempt-1'), attemptGeneration: FIRST_OWNERSHIP_GENERATION, createdAt: must(parseInstant('2026-10-29T09:00:00.000Z')),
+    state: 'open',
+  });
 }
 
 const run = <T>(store: SessionTimelineStore, work: (tx: SessionTimelineTransaction) => Promise<Result<T>>) => store.transaction(work);
@@ -172,6 +184,38 @@ export const SESSION_TIMELINE_STORE_CONFORMANCE: readonly ConformanceCase<Sessio
       const { outcome: _outcome, ...held } = keyRecord('response:1:request-1', 'key-1');
       expectSuccess(problems, 'record', await run(store, (tx) => tx.idempotency.record(session('session-1').id, held)));
       expectRead(problems, 'find', await run(store, (tx) => tx.idempotency.find(session('session-1').id, held.scope, held.key)), held);
+      return problems;
+    },
+  },
+  {
+    name: 'an item is added once per request and kind, and reads back by its request and identifier without a lineage scope',
+    async check(store) {
+      const problems: string[] = [];
+      must(await run(store, (tx) => tx.sessions.add(session('session-1'))));
+      const item = inboxItem('item-1');
+      expectSuccess(problems, 'add', await run(store, (tx) => tx.items.add(item)));
+      expectCode(problems, 'same request and kind', await run(store, (tx) => tx.items.add(inboxItem('item-2'))), 'conflict');
+      expectCode(problems, 'same identifier', await run(store, (tx) => tx.items.add(inboxItem('item-1', 'delivery-acknowledgement'))), 'conflict');
+      expectSuccess(problems, 'other kind', await run(store, (tx) => tx.items.add(inboxItem('item-3', 'delivery-acknowledgement'))));
+      expectRead(problems, 'find', await run(store, (tx) => tx.items.find(item.sessionId, item.kind, item.request)), item);
+      expectRead(problems, 'get', await run(store, (tx) => tx.items.get(item.id)), { item });
+      expectRead(problems, 'unknown', await run(store, (tx) => tx.items.get(id('NeedsYouItemId', 'item-9'))), undefined);
+      expectRead(problems, 'no project lists it', await run(store, (tx) => tx.items.listOpen(id('ProjectId', 'alpha') as ProjectId, undefined, 10)), []);
+      return problems;
+    },
+  },
+  {
+    name: 'an open item is settled once, and a settled one fails with conflict',
+    async check(store) {
+      const problems: string[] = [];
+      must(await run(store, (tx) => tx.sessions.add(session('session-1'))));
+      const item = inboxItem('item-1');
+      must(await run(store, (tx) => tx.items.add(item)));
+      const closed: SessionInboxItem = { ...item, state: 'closed', closedAt: item.createdAt };
+      expectSuccess(problems, 'settle', await run(store, (tx) => tx.items.settle(closed)));
+      expectRead(problems, 'settled', await run(store, (tx) => tx.items.get(item.id)), { item: closed });
+      expectCode(problems, 'again', await run(store, (tx) => tx.items.settle({ ...closed, closedAt: must(parseInstant('2026-10-29T10:00:00.000Z')) })), 'conflict');
+      expectCode(problems, 'unknown', await run(store, (tx) => tx.items.settle(inboxItem('item-9'))), 'conflict');
       return problems;
     },
   },

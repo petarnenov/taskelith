@@ -2,6 +2,7 @@ import type { Result } from '@taskelith/kernel';
 import type { TaskId } from '@taskelith/sdlc';
 import type { IdempotencyKey, NativeRequestId, SessionId } from '../domain/identifiers.js';
 import type { Session } from '../domain/session-records.js';
+import type { SessionAuditRecords, SessionInboxItems } from './session-inbox-items.js';
 
 // Session timelines with the idempotency keys of their commands. Each
 // transaction commits its writes only when the work answers ok.
@@ -12,6 +13,8 @@ export interface SessionTimelineStore {
 export interface SessionTimelineTransaction {
   readonly sessions: SessionRecords;
   readonly idempotency: IdempotencyRecords;
+  readonly items: SessionInboxItems;
+  readonly audit: SessionAuditRecords;
 }
 
 // A stored session with the version that a replacement must name.

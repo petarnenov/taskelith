@@ -69,6 +69,13 @@ async function requestStates(): Promise<string[]> {
   return value(await service.readSession(SESSION)).requests.map((request) => request.state);
 }
 
+// Each inbox item row as its request, kind, and state.
+async function itemStates(): Promise<string[]> {
+  const rows = await query<{ item: string }>(url, `SELECT native_request_id || ':' || kind || ':' || state AS item
+    FROM session_inbox_items ORDER BY native_request_id, kind`);
+  return rows.map((row) => row.item);
+}
+
 // A turn delivered in generation 1.
 async function deliveredTurn(): Promise<void> {
   await runningSession(service);
@@ -95,18 +102,18 @@ test('a submission killed after its commit keeps one turn and its key, and the r
   assert.deepEqual(await counts(), { turns: 1, keys: 1 });
 });
 
-test('a response killed before its commit leaves the request open, and the retry consumes it once', async () => {
+test('a response killed before its commit leaves the request and its item open, and the retry consumes it and resolves the item once', async () => {
   await sessionWithOpenRequest(service);
   assert.deepEqual(await runStep('respond', 'SessionTimelineCommit.before'), KILLED);
-  assert.deepEqual(await requestStates(), ['open']);
+  assert.deepEqual([await requestStates(), await itemStates()], [['open'], ['request-1:permission-request:open']]);
   assert.equal(stepResult(await runStep('respond')).value?.state, 'answered');
-  assert.deepEqual(await requestStates(), ['answered']);
+  assert.deepEqual([await requestStates(), await itemStates()], [['answered'], ['request-1:permission-request:resolved']]);
 });
 
 test('a response killed after its commit stays answered; its key repeated returns it, and another key or answer is a conflict', async () => {
   await sessionWithOpenRequest(service);
   assert.deepEqual(await runStep('respond', 'SessionTimelineCommit.after'), KILLED);
-  assert.deepEqual(await requestStates(), ['answered']);
+  assert.deepEqual([await requestStates(), await itemStates()], [['answered'], ['request-1:permission-request:resolved']]);
   const committed = await version();
   assert.equal(stepResult(await runStep('respond')).value?.state, 'answered');
   assert.equal(await version(), committed);
@@ -151,18 +158,25 @@ async function reconciliation(): Promise<typeof RECONCILED> {
   };
 }
 
-test('a generation end killed before its commit reconciles nothing, and the repeat reconciles once', async () => {
+// The items after the reconciliation: the open request's closed, and an
+// acknowledgement item opened for the uncertain delivery (wire section 8.1).
+const RECONCILED_ITEMS = [
+  'request-1:delivery-acknowledgement:open', 'request-1:permission-request:resolved', 'request-2:permission-request:closed',
+];
+
+test('a generation end killed before its commit reconciles nothing and opens no item, and the repeat reconciles once', async () => {
   await generationToReconcile();
   assert.deepEqual(await runStep('end-generation', 'SessionTimelineCommit.before'), KILLED);
   assert.deepEqual(await reconciliation(), { turns: ['delivered'], requests: ['answered:pending', 'open'] });
+  assert.deepEqual(await itemStates(), ['request-1:permission-request:resolved', 'request-2:permission-request:open']);
   assert.equal(stepResult(await runStep('end-generation')).ok, true);
-  assert.deepEqual(await reconciliation(), RECONCILED);
+  assert.deepEqual([await reconciliation(), await itemStates()], [RECONCILED, RECONCILED_ITEMS]);
 });
 
-test('a generation end killed after its commit is reconciled after the restart, and a repeat changes nothing', async () => {
+test('a generation end killed after its commit is reconciled with its items after the restart, and a repeat changes nothing', async () => {
   await generationToReconcile();
   assert.deepEqual(await runStep('end-generation', 'SessionTimelineCommit.after'), KILLED);
-  assert.deepEqual(await reconciliation(), RECONCILED);
+  assert.deepEqual([await reconciliation(), await itemStates()], [RECONCILED, RECONCILED_ITEMS]);
   const committed = await version();
   assert.equal(stepResult(await runStep('end-generation')).ok, true);
   assert.equal(await version(), committed);

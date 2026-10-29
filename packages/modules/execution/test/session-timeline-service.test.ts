@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseIdentifier } from '@taskelith/kernel';
+import { parseIdentifier, parseInstant } from '@taskelith/kernel';
 import {
+  ALREADY_ANSWERED,
   InMemorySessionTimelineStore,
   MAX_HARNESS_TEXT_LENGTH,
   MAX_INPUT_ANSWER_BYTES,
@@ -33,6 +34,7 @@ import {
   turnKey,
 } from './session-fixtures.ts';
 
+const FIXED_CLOCK = { now: () => value(parseInstant('2026-10-29T09:00:00.000Z')) };
 const OTHER_PERSON: TurnAuthor = { kind: 'principal', principalId: value(parseIdentifier('PrincipalId', 'person-2')) };
 
 // Redacts each word that starts with SECRET, and digests the input as it is,
@@ -46,7 +48,9 @@ const LENGTHENED = 'SECRET '.repeat(Math.floor(MAX_HARNESS_TEXT_LENGTH / 7));
 const LENGTHENED_REDACTED = redactor.redact(LENGTHENED);
 
 function timeline(store = new InMemorySessionTimelineStore()) {
-  const service = new SessionTimelineService({ store, digest, redactor, turnIds: sequentialIds('TurnId', 'turn') });
+  const service = new SessionTimelineService({
+    store, digest, redactor, turnIds: sequentialIds('TurnId', 'turn'), clock: FIXED_CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+  });
   return { store, service };
 }
 
@@ -205,13 +209,13 @@ test('a response key reused by another attempt or ownership generation fails wit
   assert.deepEqual([byOwnership.code, byOwnership.details.reason], ['conflict', 'idempotency-key-reused']);
 });
 
-test('a second response under another key fails with conflict, and the first stays', async () => {
+test('a second response under another key fails with conflict already-answered, and the first stays', async () => {
   const { service } = timeline();
   await withOpenRequest(service);
-  value(await service.consumeResponse(SESSION, response('answer-1')));
+  const first = value(await service.consumeResponse(SESSION, response('answer-1')));
   const second = failed(await service.consumeResponse(SESSION, response('answer-2')));
-  assert.equal(second.code, 'conflict');
-  assert.equal(second.details.reason, undefined);
+  assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED]);
+  assert.deepEqual(value(await service.readSession(SESSION)).requests[0], first);
 });
 
 test('a response to a reused native request ID fails as the earlier request requires, and the later one stays open', async () => {

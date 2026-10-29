@@ -2,16 +2,26 @@ import type {
   HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
+  NeedsYouItemId,
   OutputEntry,
+  RequestKey,
+  ScopedInboxItem,
   Session as TimelineSession,
+  SessionAuditEvent,
+  SessionAuditRecords,
   SessionId,
+  SessionInboxItem,
+  SessionInboxItems,
+  SessionItemKind,
   SessionRecords,
+  SessionScope,
+  SessionScopes,
   SessionTimelineStore,
   SessionTimelineTransaction,
   StoredSession,
 } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { TaskId } from '@taskelith/sdlc';
+import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
 import type { PostgresDatabase } from './postgres-database.js';
 import { decodeRecord, encodeRecord } from './record-codec.js';
 import type { Session } from './session.js';
@@ -21,14 +31,20 @@ import type { Session } from './session.js';
 export class PostgresSessionTimelineTransaction implements SessionTimelineTransaction {
   readonly sessions: PostgresSessionRecords;
   readonly idempotency: PostgresIdempotencyRecords;
+  readonly items: PostgresSessionInboxItems;
+  readonly audit: PostgresSessionAuditRecords;
+  readonly scopes: PostgresSessionScopeReads;
 
   constructor(session: Session) {
     this.sessions = new PostgresSessionRecords(session);
     this.idempotency = new PostgresIdempotencyRecords(session);
+    this.items = new PostgresSessionInboxItems(session);
+    this.audit = new PostgresSessionAuditRecords(session);
+    this.scopes = new PostgresSessionScopeReads(session);
   }
 
   get changed(): boolean {
-    return this.sessions.changed || this.idempotency.changed;
+    return this.sessions.changed || this.idempotency.changed || this.items.changed || this.audit.changed;
   }
 }
 
@@ -44,6 +60,167 @@ export class PostgresSessionTimelineStore implements SessionTimelineStore {
   transaction<Value>(work: (tx: SessionTimelineTransaction) => Promise<Result<Value>>): Promise<Result<Value>> {
     return this.#database.transaction((tx) => work(tx.sessionTimeline));
   }
+}
+
+// The scopes through Scheduling's task lineage, each read in a snapshot.
+export class PostgresSessionScopes implements SessionScopes {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  scopeOf(sessionId: SessionId): Promise<Result<SessionScope | undefined>> {
+    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.scopeOf(sessionId)));
+  }
+
+  isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<Result<boolean>> {
+    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.isCard(projectId, runId)));
+  }
+
+  listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>> {
+    return this.#database.readOnly(async (tx) => ok(await tx.sessionTimeline.scopes.listByCard(scope, after, limit)));
+  }
+}
+
+// A session's project is its task's, and its card the run of its task's
+// lineage root (product ports, section 3.3).
+const SCOPED_SESSIONS = `agent_sessions
+  JOIN task_lineage AS lineage ON lineage.task_id = agent_sessions.task_id
+  JOIN task_lineage AS root ON root.task_id = lineage.root_task_id`;
+
+interface ScopeRow {
+  readonly project_id: string;
+  readonly run_id: string;
+}
+
+export class PostgresSessionScopeReads {
+  readonly #session: Session;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async scopeOf(sessionId: SessionId): Promise<SessionScope | undefined> {
+    const { rows } = await this.#session.query<ScopeRow>(
+      `SELECT lineage.project_id, root.run_id FROM ${SCOPED_SESSIONS} WHERE agent_sessions.session_id = $1`, [sessionId],
+    );
+    return rows[0] === undefined ? undefined : scopeOfRow(rows[0]);
+  }
+
+  // A root run of the project that holds no delegated child task.
+  async isCard(projectId: ProjectId, runId: WorkflowRunId): Promise<boolean> {
+    const { rows } = await this.#session.query<{ card: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM workflow_runs WHERE id = $1 AND project_id = $2)
+         AND NOT EXISTS (SELECT 1 FROM task_lineage WHERE run_id = $1 AND depth > 0) AS card`,
+      [runId, projectId],
+    );
+    return rows[0]?.card === true;
+  }
+
+  async listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<readonly SessionId[]> {
+    const { rows } = await this.#session.query<{ session_id: string }>(
+      `SELECT agent_sessions.session_id FROM ${SCOPED_SESSIONS}
+       WHERE lineage.project_id = $1 AND root.run_id = $2 AND ($3::text IS NULL OR agent_sessions.session_id COLLATE "C" > $3)
+       ORDER BY agent_sessions.session_id COLLATE "C" LIMIT $4`,
+      [scope.projectId, scope.runId, after ?? null, limit],
+    );
+    return Object.freeze(rows.map((row) => row.session_id as SessionId));
+  }
+}
+
+type ItemRow = { readonly record: string; readonly project_id: string | null; readonly run_id: string | null };
+
+// Items are written only when their state changes: an insert at opening
+// and one update at resolution or closure, never an upsert.
+class PostgresSessionInboxItems implements SessionInboxItems {
+  readonly #session: Session;
+  changed = false;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async find(sessionId: SessionId, kind: SessionItemKind, request: RequestKey): Promise<Result<SessionInboxItem | undefined>> {
+    const { rows } = await this.#session.query<{ record: string }>(
+      'SELECT record FROM session_inbox_items WHERE session_id = $1 AND generation = $2 AND native_request_id = $3 AND kind = $4',
+      [sessionId, request.generation, request.nativeRequestId, kind],
+    );
+    return ok(rows[0] === undefined ? undefined : decodeRecord<SessionInboxItem>(rows[0].record));
+  }
+
+  async get(id: NeedsYouItemId): Promise<Result<ScopedInboxItem | undefined>> {
+    const { rows } = await this.#session.query<ItemRow>(
+      `SELECT items.record, lineage.project_id, root.run_id FROM session_inbox_items AS items
+       JOIN agent_sessions ON agent_sessions.session_id = items.session_id
+       LEFT JOIN task_lineage AS lineage ON lineage.task_id = agent_sessions.task_id
+       LEFT JOIN task_lineage AS root ON root.task_id = lineage.root_task_id
+       WHERE items.item_id = $1`,
+      [id],
+    );
+    return ok(rows[0] === undefined ? undefined : scopedItemOf(rows[0]));
+  }
+
+  async add(item: SessionInboxItem): Promise<Result<void>> {
+    this.changed = true;
+    const { rowCount } = await this.#session.query(
+      `INSERT INTO session_inbox_items (item_id, session_id, kind, generation, native_request_id, state, record)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
+      [item.id, item.sessionId, item.kind, item.request.generation, item.request.nativeRequestId, item.state, encodeRecord(item)],
+    );
+    if (rowCount === 0) return err(failure('conflict', `the item ${item.id} or its request's item exists`, { session: item.sessionId }));
+    return ok(undefined);
+  }
+
+  async settle(item: SessionInboxItem): Promise<Result<void>> {
+    this.changed = true;
+    const { rowCount } = await this.#session.query(
+      "UPDATE session_inbox_items SET state = $2, record = $3 WHERE item_id = $1 AND state = 'open'",
+      [item.id, item.state, encodeRecord(item)],
+    );
+    if (rowCount === 0) return err(failure('conflict', `the item ${item.id} is not open`, { session: item.sessionId }));
+    return ok(undefined);
+  }
+
+  async listOpen(projectId: ProjectId, after: NeedsYouItemId | undefined, limit: number): Promise<Result<readonly ScopedInboxItem[]>> {
+    const { rows } = await this.#session.query<ItemRow>(
+      `SELECT items.record, lineage.project_id, root.run_id FROM session_inbox_items AS items
+       JOIN ${SCOPED_SESSIONS} ON agent_sessions.session_id = items.session_id
+       WHERE items.state = 'open' AND lineage.project_id = $1 AND ($2::text IS NULL OR items.item_id COLLATE "C" > $2)
+       ORDER BY items.item_id COLLATE "C" LIMIT $3`,
+      [projectId, after ?? null, limit],
+    );
+    return ok(Object.freeze(rows.map(scopedItemOf)));
+  }
+}
+
+class PostgresSessionAuditRecords implements SessionAuditRecords {
+  readonly #session: Session;
+  changed = false;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async append(event: SessionAuditEvent): Promise<Result<void>> {
+    this.changed = true;
+    await this.#session.query(
+      'INSERT INTO session_audit_events (kind, item_id, actor, occurred_at) VALUES ($1, $2, $3, $4)',
+      [event.kind, event.subject, event.actor, event.occurredAt],
+    );
+    return ok(undefined);
+  }
+}
+
+function scopeOfRow(row: ScopeRow): SessionScope {
+  return Object.freeze({ projectId: row.project_id as ProjectId, runId: row.run_id as WorkflowRunId });
+}
+
+// Without a lineage, the left joins leave the scope's columns null.
+function scopedItemOf(row: ItemRow): ScopedInboxItem {
+  const item = decodeRecord<SessionInboxItem>(row.record);
+  if (row.project_id === null || row.run_id === null) return Object.freeze({ item });
+  return Object.freeze({ item, scope: scopeOfRow({ project_id: row.project_id, run_id: row.run_id }) });
 }
 
 type SessionRecord = Omit<TimelineSession, 'output'> & {

@@ -111,15 +111,22 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.match(operatorSecret, /^tkop_/);
   assert.equal(brokerServerConfig, join(dataRoot, 'control-plane', 'nats-authority.conf'));
   assert.equal(installationCa, join(dataRoot, 'control-plane', 'installation-ca.pem'));
-  for (const name of ['installation-authority', 'installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem']) {
+  for (const name of ['installation-authority', 'installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem', 'session-input-digest.key']) {
     assert.equal(statSync(join(dataRoot, 'control-plane', name)).mode & 0o777, 0o600, name);
   }
   assert.equal(new X509Certificate(controlPlaneFile('api-certificate.pem')).checkHost('localhost'), 'localhost');
+  const digestKey = controlPlaneFile('session-input-digest.key');
+  assert.ok(!JSON.stringify(initialized.output).includes(JSON.parse(digestKey).key), 'the output holds no key');
   const again = await admin(['init', ...ADMIN]);
   assert.equal((again.output.error as { code: string }).code, 'conflict', 'a second initialization fails');
+  assert.equal(controlPlaneFile('session-input-digest.key'), digestKey, 'a rerun keeps the key');
+  rmSync(join(dataRoot, 'control-plane', 'session-input-digest.key'));
+  assert.equal((await admin(['init', ...ADMIN])).status, 1, 'a third initialization fails too');
+  assert.equal(statSync(join(dataRoot, 'control-plane', 'session-input-digest.key')).mode & 0o777, 0o600, 'a rerun creates a missing key');
   const ownerTrail = await rows(database, 'SELECT * FROM access_audit_events ORDER BY position') as Array<Record<string, unknown>>;
   assert.deepEqual(ownerTrail.map((event) => [event.kind, event.actor]), [
     ['access.owner-created', 'root@control-plane-1'], ['access.owner-bootstrap-refused', 'root@control-plane-1'],
+    ['access.owner-bootstrap-refused', 'root@control-plane-1'],
   ]);
   assert.equal(ownerTrail[1]?.principal_id, ownerTrail[0]?.principal_id);
   assert.doesNotMatch(JSON.stringify(ownerTrail), new RegExp(operatorSecret), 'the refusal names no secret');
@@ -374,7 +381,7 @@ test('the owner exists from initialization, and only its credential manages prin
   assert.deepEqual(await rows(database, 'SELECT project_id FROM project_roles'), []);
   const audit = await rows(database, 'SELECT kind, actor FROM access_audit_events ORDER BY position') as Array<{ kind: string; actor: string }>;
   assert.deepEqual(audit.map((event) => event.kind), [
-    'access.owner-created', 'access.owner-bootstrap-refused', 'access.principal-created', 'access.password-set',
+    'access.owner-created', 'access.owner-bootstrap-refused', 'access.owner-bootstrap-refused', 'access.principal-created', 'access.password-set',
     'access.project-role-assigned', 'access.project-role-removed',
   ]);
   const [stored] = await rows(database, "SELECT password_hash FROM principals WHERE login_name = 'bob'") as Array<{ password_hash: string }>;
