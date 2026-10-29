@@ -26,8 +26,8 @@ export interface RunSlotCredentialRequest {
   readonly slotId: DeliveredSlotId;
 }
 
-// The harness host's only source of a run's slot credential (item 18): a
-// delivery per execution, held in memory until the run ends.
+// The harness host's only source of a run's slot credential (item 18), held
+// until the run ends or its ownership generation or recovery epoch changes.
 export interface RunSlotCredentials {
   obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>>;
   forget(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void;

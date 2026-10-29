@@ -21,9 +21,14 @@ const RUN = {
   slotId: id('ProviderCredentialId', 'slot-1'),
 } as unknown as RunSlotCredentialRequest;
 
-function delivery(executionId = RUN.executionId): SlotCredentialAnswer {
-  const credential = value(DeliveredSlotCredential.of({ executionId, slotId: RUN.slotId, mechanismId: 'mechanism-1', credentialVersion: 1, secret: SECRET }));
+function delivery(executionId = RUN.executionId, secret = SECRET): SlotCredentialAnswer {
+  const credential = value(DeliveredSlotCredential.of({ executionId, slotId: RUN.slotId, mechanismId: 'mechanism-1', credentialVersion: 1, secret }));
   return { kind: 'delivered', credential };
+}
+
+function revealed(answer: Result<SlotCredentialAnswer>): string | undefined {
+  const obtained = value(answer);
+  return obtained.kind === 'delivered' ? obtained.credential.reveal() : undefined;
 }
 
 // Answers each fetch with the next scripted answer and records the fetch.
@@ -37,18 +42,41 @@ function source(client: SlotCredentialClient, sink = new InMemoryLogSink(), epoc
   return new FetchedRunSlotCredentials(client, { recoveryEpoch: () => epoch.current as RecoveryEpoch, logger });
 }
 
-test('a run fetches its credential once with the current recovery epoch, until the run is forgotten', async () => {
-  const client = scripted([ok(delivery()), ok(delivery())]);
-  const epoch = { current: 1 };
-  const runs = source(client, new InMemoryLogSink(), epoch);
-  const first = value(await runs.obtain(RUN));
-  assert.equal(first.kind === 'delivered' && first.credential.reveal(), SECRET);
-  assert.equal((value(await runs.obtain(RUN)) as typeof first).kind, 'delivered');
+test('a run fetches its credential once with the current recovery epoch, until the run ends', async () => {
+  const client = scripted([ok(delivery()), ok(delivery(RUN.executionId, 'fixture-next-run-token'))]);
+  const runs = source(client);
+  assert.equal(revealed(await runs.obtain(RUN)), SECRET);
+  assert.equal(revealed(await runs.obtain(RUN)), SECRET);
   assert.deepEqual(client.fetched, [{ ...RUN, recoveryEpoch: 1 }], 'held for the execution, not fetched again');
   runs.forget(RUN);
-  epoch.current = 2;
+  assert.equal(revealed(await runs.obtain(RUN)), 'fixture-next-run-token', 'the ended run held nothing');
+  assert.equal(client.fetched.length, 2);
+});
+
+test('a new recovery epoch forgets every held delivery, of other runs too', async () => {
+  const OTHER = { ...RUN, executionId: id('ExecutionId', 'execution-2') as never, attemptId: id('AttemptId', 'attempt-2') as never };
+  const client = scripted([
+    ok(delivery()), ok(delivery(OTHER.executionId)),
+    ok(delivery(RUN.executionId, 'fixture-epoch-2-token')), ok(delivery(OTHER.executionId, 'fixture-epoch-2-token')),
+  ]);
+  const epoch = { current: 1 };
+  const runs = source(client, new InMemoryLogSink(), epoch);
   value(await runs.obtain(RUN));
-  assert.deepEqual(client.fetched.map((fetched) => fetched.recoveryEpoch), [1, 2], 'a forgotten run fetches a new delivery');
+  value(await runs.obtain(OTHER));
+  epoch.current = 2;
+  assert.equal(revealed(await runs.obtain(RUN)), 'fixture-epoch-2-token', 'the delivery of epoch 1 is not reused');
+  assert.equal(revealed(await runs.obtain(OTHER)), 'fixture-epoch-2-token', 'the other run held nothing of epoch 1');
+  assert.deepEqual(client.fetched.map((fetched) => fetched.recoveryEpoch), [1, 1, 2, 2]);
+});
+
+test('a new ownership generation of an attempt forgets its held deliveries', async () => {
+  const NEXT = { ...RUN, ownershipGeneration: 3 } as RunSlotCredentialRequest;
+  const client = scripted([ok(delivery()), ok(delivery(RUN.executionId, 'fixture-generation-3-token')), ok(delivery())]);
+  const runs = source(client);
+  value(await runs.obtain(RUN));
+  assert.equal(revealed(await runs.obtain(NEXT)), 'fixture-generation-3-token', 'generation 2 delivery is not reused');
+  assert.equal(revealed(await runs.obtain(RUN)), SECRET, 'generation 2 fetches again');
+  assert.deepEqual(client.fetched.map((fetched) => fetched.ownershipGeneration), [2, 3, 2]);
 });
 
 test('another execution never gets a held credential of another run', async () => {

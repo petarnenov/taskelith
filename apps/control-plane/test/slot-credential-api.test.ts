@@ -138,12 +138,17 @@ test('a malformed path or query answers 400 before the delivery is asked', async
   assert.deepEqual(asked, []);
 });
 
-test('a missing or unknown bearer answers 401, and an unconfigured delivery 503', async () => {
+test('a missing or unknown bearer answers 401', async () => {
   assert.equal((await get(PATH, { bearer: null })).status, 401);
   assert.equal((await get(PATH, { bearer: `tkwk_${'X'.repeat(43)}` })).status, 401);
+  assert.deepEqual(asked, []);
+});
+
+test('without a delivery service, as before 12d wires one, the route answers 503 unavailable', async () => {
   configured = false;
   const unconfigured = await get(PATH);
-  assert.equal(unconfigured.status, 503);
+  assert.deepEqual([unconfigured.status, unconfigured.body.code], [503, 'unavailable']);
+  assert.doesNotMatch(unconfigured.text, new RegExp(SECRET));
   assert.deepEqual(asked, []);
 });
 
