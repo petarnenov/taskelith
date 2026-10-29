@@ -12,6 +12,9 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13a, developed by a briefed s
 - The commit after it, `12c1035c`: `make record` and this record.
 - `c87d0653` `chore: compare session request and response repeats by their whole unredacted input` (the fixes of review pass 1, findings 1 to 5, with their tests, the design, and the session-turn-model delta).
 - The commits after it: the corrected fail-before evidence of findings 5 and 6, then `make record`, the pass 1 record, and `findings.jsonl` and `passes.jsonl`.
+- `fe26c9cd` `chore: fix the low findings of review pass 2 of the implement session timeline change` (findings L1 to L6).
+- `e422b1d8` `chore: cut redacted session text to its bound after redaction` (finding M1 as the architect answered, with its tests, design decision 6, and the session-turn-model delta).
+- `373982ae` `docs: record review pass 2 findings of the implement session timeline change`, then `make record` and this record.
 
 ## Environment
 
@@ -23,7 +26,7 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js 24.22.1 of 
 - Idempotency (checklist `contract-drift`): a turn's digest covers the whole request identity, the author (a principal, or the host with its delegation request key) and the unredacted text; since `c87d0653` a response's digest covers the answer, the responder, and the attempt with its ownership generation, and a native request key holds the digest of its unredacted kind, turn, and text (review pass 1, findings 1 and 2). Tests show that the same turn key from another author with the same text fails with `conflict` and the detail `reason` `idempotency-key-reused` in memory and on PostgreSQL after a new pool. Two turn texts that redact alike were tested only in memory at `64ea6d1d`, which this record overstated (finding 5); `c87d0653` adds that test on PostgreSQL after a new pool with `SecretTextRedactor`, together with request texts that redact alike and response keys reused by another attempt or ownership generation.
 - Q4: `SessionInputDigestKeyFile.create` writes `control-plane/session-input-digest.key` through `ControlPlaneNamespace.create` with mode `0600` (tested); no code logs it or puts it in a record; `HmacInputDigest.fromKey` and `startSessionTimelineService` refuse a missing or wrong-size key with a reason that names only the file or the size, tested with sentinel key bytes. No command creates the key yet, and neither answer Q1 nor the proposal's 13b names its creation at `init` or the service's start in the control plane, so both stay a remaining gate for the coordinator to assign (review pass 2).
 - Races (checklist `concurrency-race`) run on PostgreSQL 18.6 with two real transactions that both read before either writes, held by a `Barrier` inside the work, never by a sleep; the in-memory store runs one transaction at a time.
-- Requirement texts of both deltas are under 500 characters; the longest is "Durable session timeline service", 494 since `c87d0653` ("Session timeline tables", 417, before it). The change validates strictly, and an archive of it in a scratch copy of `openspec/`, repeated at `c87d0653`, added 8 requirements, after which `openspec validate --specs --strict` passed 71 of 71 items.
+- Requirement texts of both deltas are under 500 characters; the longest is "Durable session timeline service", 494 since `c87d0653` ("Session timeline tables", 417, before it). The change validates strictly, and an archive of it in a scratch copy of `openspec/`, repeated at `c87d0653`, added 8 requirements, after which `openspec validate --specs --strict` passed 71 of 71 items; repeated at `373982ae`, after review pass 2 added two requirements, it added 10, and the strict validation passed 71 of 71 again. The new "Redacted text cut to its bound" is 359 characters.
 - Comments: `npm run verify:comments` passes. No AI attribution in commits.
 - Evidence check: the counts below are copied from the runs named with them.
 
@@ -42,6 +45,8 @@ Each new behavioral test was written before its code and run failing, except the
 | `session-timeline-crash.integration.test.ts` (10) | Run against the adapter without the `SessionTimelineCommit` commit point (the pre-change `commitPoints`): 10 of 10 failed, every child exiting without `SIGKILL` |
 | `session-timeline-service.test.ts`, the 4 tests of review pass 1 (findings 1 to 4) | Run against the service of `64ea6d1d`: 4 of 24 failed by assertion (`expected a failure`): request texts that redact alike, overlong request text, a response key from another attempt or ownership generation, and an overlong output chunk; the 20 older tests passed |
 | `session-timeline.integration.test.ts`, the 4 tests of review pass 1 (findings 1, 2, and 5) | Run against the service of `64ea6d1d`: 3 of 22 failed by assertion: request texts that redact alike after a new pool, the race of two such recordings, and a response key from another attempt or ownership generation after a new pool. Two turn texts that redact alike after a new pool passed, because `64ea6d1d` already resolved them; it adds the PostgreSQL evidence of finding 5 |
+| `session-timeline.integration.test.ts`, the tests of review pass 2 (findings L5 and L6) | Run against the migration and repository of `df6ab889` with the new tests (log `13-p2-fb-postgres.log`): 7 of 24 failed. "A change of a session with a bound attempt leaves its attempt row unwritten" failed by assertion, the attempt row's `xmin` advanced (L6); the conformance case "a held key recorded without an outcome reads back without one" and five response tests failed with the `NOT NULL` violation of `outcome`, since a response key now records none (L5) |
+| `session-timeline-service.test.ts`, the 6 tests of finding M1 | Run against the service of `fe26c9cd` (log `13-p2-fb-m1.log`): 6 of 30 failed, the 24 older tests passed. The turn, request, and output chunk tests and the surrogate-pair cut failed with `invalid` from the domain's second check; the input answer test failed by assertion, the full 65,539-byte redacted text recorded; the byte bound test failed because the answer was accepted. After the fix the module's suites passed 315 of 315 (`13-p2-after-m1.log`) |
 | `migrations.integration.test.ts` "the session timeline down migration removes the session timeline tables" | A mutation run after the commit, not before it (finding 6): with the up migration in place and the down migration's four `DROP TABLE` statements removed, it failed by assertion, four tables still present where none were expected; with the statements restored it passed. The earlier run with the migration file moved away failed only with `ENOENT` and proved nothing about the down migration |
 
 The stubs and mutants were restored from the real files before the commit. After the change, `session-timeline.integration.test.ts` passed 18 of 18 in eight consecutive runs and `session-timeline-crash.integration.test.ts` 10 of 10. After `c87d0653` the first passed 22 of 22 in five consecutive runs and the second 10 of 10.
@@ -52,6 +57,7 @@ The stubs and mutants were restored from the real files before the commit. After
 | --- | --- | --- |
 | `make verify` | `6814dcab`, tree `9cacd94c` (log `13-verify-1.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3703, suites 47, pass 3656, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.76 % branches, 98.77 % functions |
 | `make verify` | `335102b3`, tree `fc4bd347` (log `13-verify-2.log` in the session scratchpad) | First run failed, 1 of 3711: the G2 scenario "h. an unauthorized start cancels only that execution" of `test/g2-cancellation-races.test.ts`, which this change does not touch, timed out waiting 20000 ms for the authorized start (log kept as `13-verify-2-attempt1.log`). The rerun on the same clean tree passed, profile full, stamp written: tests 3711, suites 47, pass 3664, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.74 % branches, 98.77 % functions |
+| `make verify` | `373982ae`, tree `e0a59353` (log `13-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3720, suites 47, pass 3673, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.76 % branches, 98.77 % functions. An earlier run on the same tree also passed with 3720 tests but wrote no stamp, because this record was edited while it ran; its log was overwritten by the rerun |
 | `make findings ARGS="route --change implement-session-timeline"` | `64ea6d1d` | "route: elevated (lines, files, security, contracts, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` agrees; recommendation only, committed unedited as `6814dcab`. The brief names pass 1 `codex gpt-6-astra#medium`, pass 2 `claude claude-opus-5-5#medium`, and pass 3 `codex gpt-6.1-sol#medium` |
 
 <!-- make record: begin -->
@@ -59,7 +65,7 @@ The stubs and mutants were restored from the real files before the commit. After
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `fc4bd347097c4d04447cda0234980772407717ab`; tests 3711, pass 3664, fail 0, skipped 47; all files 99.36% lines, 92.74% branches, 98.77% functions.
+- `make verify`: passed, profile full, tree `e0a59353bc0bcc77c6d917cba26d19080d6f6ed6`; tests 3720, pass 3673, fail 0, skipped 47; all files 99.36% lines, 92.76% branches, 98.77% functions.
 - `npm run openspec -- validate implement-session-timeline --strict`: passed, `Change 'implement-session-timeline' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).`.
 - Spec diff against the merge base `62217e7a1f56` with `origin/dev`: no change under `openspec/specs`.
@@ -68,6 +74,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a184cb-122d-7ea3-b3c0-eb5d81062ea4` | 0 | 0 | 4 | 2 |
+| 2 | B | `claude claude-opus-5-5#medium` | `a3bdaf27-9245-42bc-ae80-3af56864035e` | 0 | 0 | 1 | 6 |
 <!-- make record: end -->
 
 ## Independent review
@@ -85,6 +92,21 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   6. Low, missing-fail-before-test (this record, "Fail-before"): the down migration's evidence was an `ENOENT`. Fixed in `335102b3` with a mutation run that removes the four `DROP TABLE` statements and fails by assertion, named a later mutation run.
 - Fail-before of the new tests: see the rows "the 4 tests of review pass 1" and the down migration row in "Fail-before"; logs `13-fb-memory.log`, `13-fb-postgres.log`, and `13-fb-down.log` in the session scratchpad. The service of `64ea6d1d` was restored into the tree, `npm run build`, the tests run, then the fixed file restored and rebuilt.
 
+### Pass 2
+
+- Reviewer B: Claude Code, model `claude-opus-5-5`, effort `medium`, permission mode `plan` with `Edit`, `Write`, and `NotebookEdit` disallowed, session `a3bdaf27-9245-42bc-ae80-3af56864035e`, on `df6ab889` (diff `62217e7a..df6ab889`). The worktree snapshot before and after the review was `46250fc16bba41563184721ea7b8cb50df19028f97305a4602da9bc07927e0e2`, equal.
+- Invocation (from `make review`): `claude -p --model claude-opus-5-5 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, environment `PATH HOME USER LANG TERM`, started 2026-10-28T23:35:25.776Z. Model confirmation: `model: claude-opus-5-5 (reported)`, printed by `make review` from the session log. The brief names pass 2 reviewer B `claude claude-opus-5-5#medium`; `make review` printed "route: recommends effort xhigh; the authorized medium applies (policy version 8)", since `route.json` recommends `claude claude-opus-5-5#xhigh`.
+- Result: Critical 0, High 0, Medium 1, Low 6, matching the pass 2 line of `passes.jsonl`; all seven fixed and recorded in `findings.jsonl`, with `missedBy` pass 1 A on M1, L1, and L3 to L6. The reviewer ran neither PostgreSQL nor `make verify`.
+  1. M1, Medium, contract-drift (`session-timeline-service.ts`, `submitTurn`, `recordRequest`, `consumeResponse`, `appendOutput`): redaction can lengthen a text within its bound past the bound (`pwd=x` becomes `pwd=[redacted]`), and the domain's second check then refused it with `invalid`, against contract section 2 rule 5. The coordinator's answer (architect Niki, 2026-10-29, verbatim in `design.md`, "Coordinator's answers"): "(a) accepted. After redaction, truncate to the bound: code points for texts, UTF-8 bytes for an input answer, always on a whole-character boundary (never split a surrogate pair or a UTF-8 sequence), and only the tail is cut, so a redacted secret cannot reappear." Fixed in `e422b1d8`: `domain/bounded-text.ts` cuts the tail of a redacted text to `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units, the unit the domain checks, never inside a surrogate pair, and an input answer to `MAX_INPUT_ANSWER_BYTES` UTF-8 bytes on a whole character; the service also checks an input answer against `MAX_INPUT_ANSWER_BYTES` before redaction, as control-plane `InputAnswerText` states, so that only a lengthening redaction cuts it (design decision 6, the delta's "Redacted text cut to its bound"). Tests: one per path (turn, request, input answer, output chunk), each with a within-bound text that redacts past the bound, one with a surrogate pair at the cut, and one with an input answer over its byte bound; the input answer test also cuts inside a two-byte character.
+  2. L1, naming (`session-timeline-crash.integration.test.ts:72`): a helper comment promised a second queued turn. Fixed in `fe26c9cd`.
+  3. L2, docs (`proposal.md:14`, `design.md`): "every test written first" ignored the down migration's mutation run. Fixed in `fe26c9cd`, which names the exception.
+  4. L3, docs (this record, `docs/g3-plan.md` row 13): the digest key's creation at `init` was placed in 13b, and the plan row lacked 13a to 13c. Fixed in `fe26c9cd`: a remaining gate for the coordinator, and the row names the sub-changes.
+  5. L4, spec-wording (`specs/session-turn-model/spec.md`): the bound check before redaction named only two texts and had no scenario, and one heading said a task's sessions. Fixed in `fe26c9cd`: the requirement "Text bounds checked before redaction" with its scenario, and "Attempt unique across all sessions".
+  6. L5, naming (`session-timeline-service.ts:181`, `hmac-input-digest.ts`): a native request ID parsed as an idempotency key, a response key's outcome set to its own scope, and the redactor in the digest file. Fixed in `fe26c9cd`: the port's `HeldKey`, an optional outcome (nullable `outcome` in the migration), and `secret-text-redactor.ts` with its own test.
+  7. L6, concurrency-race (`session-timeline-repositories.ts:111`): every write upserted all attempt rows. Fixed in `fe26c9cd`: only attempts the stored session did not bind are inserted.
+- Fail-before of the new tests: the rows "the tests of review pass 2" and "the 6 tests of finding M1" in "Fail-before"; logs `13-p2-fb-postgres.log` and `13-p2-fb-m1.log` in the session scratchpad. The L1 to L4 fixes change comments and records only.
+- Pass 3, reviewer A `codex gpt-6.1-sol#medium` as the brief names it, follows because M1 is Medium; it reviews `fe26c9cd` and `e422b1d8`.
+
 ## Limitations
 
 - Output is redacted per chunk only; a secret split across two chunks is stored unredacted. The service exposes no output read until 13b adds redaction across chunks with a held tail (answer Q5).
@@ -95,7 +117,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review passes 1 to 3 as the brief names them, recorded in `passes.jsonl`, `findings.jsonl`, and this record
+- Review pass 3 as the brief names it, recorded in `passes.jsonl`, `findings.jsonl`, and this record
 - Merge of `origin/dev` before the archive, with Pepi's 12a migration `1792932900000` (answer Q7)
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
