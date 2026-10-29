@@ -23,4 +23,4 @@
 
 - [x] 4.1 Review passes recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
 - [x] 4.2 Architect check by the coordinator of any unreviewed fixes
-- [ ] 4.3 Archive the change in the last commit of the branch
+- [x] 4.3 Archive the change in the last commit of the branch

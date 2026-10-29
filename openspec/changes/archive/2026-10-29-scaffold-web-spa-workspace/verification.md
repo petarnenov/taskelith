@@ -26,6 +26,7 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - Review pass 3 fixes, unreviewed (no pass follows pass 3): `c1d0f379` `chore: catch percent-encoded, Unicode, and escaped origins in the web bundle check` and `f7186f8c` `docs: record the invocation and model confirmation of review pass 2 of scaffold-web-spa-workspace`; then the pass 3 record and the `make record` of the sixth `make verify` (log `verify-28a-6.log` in the session scratchpad).
 - `docs: record the architect check of the scaffold web spa workspace fixes` (this record): the coordinator's architect check of the unreviewed fixes under "Pass 3", and the follow-up note for 28c in the design.
 - `92aafe09`, the merge of `origin/dev` at `22ad068c` (#416, 12d A) without conflicts: `docs/g3-plan.md`, the only file both sides changed, merged automatically (dev changed row 12, this branch row 28). It changes the Scheduling module, the PostgreSQL adapter, the worker's slot credentials, governance, the review scripts, and their tests, and no file of this change; the dependency inventory and the generated web API types stayed current. Then `docs: record the merge of dev into scaffold-web-spa-workspace` and the `make record` of the passing seventh `make verify` on its tree (log `verify-28a-7.log` in the session scratchpad).
+- `docs: archive the scaffold web spa workspace change` (the archive commit): see "Archive".
 
 ## Environment
 
@@ -163,6 +164,15 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 - Fail-before of the new tests: the entry "Review pass 3" in "Fail-before". Finding 2 changes records only.
 - Architect check (Niki, 2026-10-29), verbatim: "28a architect check (Niki, 2026-10-29): passed for c1d0f379, f7186f8c, ab71f1ab and 25865557. c1d0f379: decoding per syntax plus a host label that accepts % and non-ASCII is the right shape. Both judgment calls are accepted: letter escapes stay undecoded, as recorded in Limitations, and no URL parser is added, since anything outside the exact allowlist fails. f7186f8c is fine. The worker image carrying apps/web/dist: record it as a follow-up note for 28c, not in 28a." The follow-up note for 28c is in the [design](design.md), "Follow-ups".
 
+## Archive
+
+- After ticking every task, `npm run openspec -- archive scaffold-web-spa-workspace --yes` on `baf99068` moved the change to `openspec/changes/archive/2026-10-29-scaffold-web-spa-workspace/` and applied the deltas: `openspec/specs/product-ui/spec.md` 3 added, `openspec/specs/workspace-packages/spec.md` 2 added and 1 modified, and `openspec/specs/engineering-principles/spec.md` 1 modified; totals 5 added, 2 modified. Before it, `git fetch origin` showed `origin/dev` at `22ad068c`, already merged; `git merge --no-commit --no-ff origin/dev` reported "Already up to date". The checked state is the tree of the archive commit, the working tree the checks below ran on.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `change/2026-10-29-scaffold-web-spa-workspace` passed; the 14 failures of the 267 items are other, older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only the three specs above, 73 insertions and 2 deletions: the added "Web SPA control-plane client", "Web SPA development server", "Web SPA bundle boundary", "Browser application contract", and "Browser application build and test", and the modified "Workspace package layout" and "Code coverage threshold", as the deltas intend. Every requirement of the three living specs is at most 500 characters; the longest is 478.
+- The moved change has its `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` passed: 93 findings files, 73 pass summary files, 28 route files.
+- `make verify` on the uncommitted archive tree (log `verify-28a-archive.log` in the session scratchpad): passed, profile full, no stamp written (uncommitted working tree); tests 3978, pass 3969, fail 0, cancelled 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.85% functions.
+
 ## Limitations
 
 - The SPA is not served by the control plane until 28c; `make web-dev` is its only way to run, and it was not run against an installation (see "Development server").
@@ -177,5 +187,4 @@ Review plan (governance v9, at most three passes, stopping at a pass that report
 ## Remaining gates
 
 - `make web-dev` was not run against a real installation (see "Development server"); 28c or the first installation run closes this gate (coordinator answer 5).
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
