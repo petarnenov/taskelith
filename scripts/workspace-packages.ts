@@ -87,7 +87,39 @@ function isModulePackage(dir: string): boolean {
   return dir.startsWith('packages/modules/');
 }
 
+// A browser application is bundled by Vite and tested by Vitest, so it
+// follows its own contract instead of the package contract above.
+export const BROWSER_APPLICATIONS: ReadonlySet<string> = new Set(['apps/web']);
+const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+
+export function isBrowserApplication(dir: string): boolean {
+  return BROWSER_APPLICATIONS.has(dir);
+}
+
+// The workspace packages that tsc builds and Node's test runner measures.
+export function nodePackageDirs(root: string): string[] {
+  return workspacePackageDirs(root).filter((dir) => !isBrowserApplication(dir));
+}
+
+export function browserApplicationProblems(root: string, dir: string): string[] {
+  const manifest = readJson(join(root, dir, 'package.json'));
+  const problems: string[] = [];
+  if (manifest.name !== `${PACKAGE_SCOPE}${posix.basename(dir)}`) problems.push(`name must be ${PACKAGE_SCOPE}${posix.basename(dir)}`);
+  if (manifest.private !== true) problems.push('must be private');
+  if (manifest.type !== 'module') problems.push('type must be module');
+  const entries = ['exports', 'main', 'bin', 'imports'].filter((key) => manifest[key] !== undefined);
+  if (entries.length > 0) problems.push(`must declare no ${entries.join(', ')}`);
+  const runtime = ['dependencies', 'peerDependencies', 'optionalDependencies'].filter((key) => Object.keys(manifest[key] ?? {}).length > 0);
+  if (runtime.length > 0) problems.push(`must keep every library in devDependencies, not ${runtime.join(', ')}`);
+  const loose = Object.entries(manifest.devDependencies ?? {}).filter(([, version]) => !EXACT_VERSION.test(String(version)));
+  if (loose.length > 0) problems.push(`must pin exact versions: ${loose.map(([name]) => name).join(', ')}`);
+  const workspace = workspaceDependencies(manifest);
+  if (workspace.length > 0) problems.push(`must depend on no workspace package: ${workspace.join(', ')}`);
+  return problems;
+}
+
 export function missingBuildOutputs(root: string, dir: string): string[] {
+  if (isBrowserApplication(dir)) return ['dist/index.html'].filter((output) => !existsSync(join(root, dir, output)));
   const exports = readJson(join(root, dir, 'package.json')).exports ?? {};
   const port = Object.hasOwn(exports, './port') ? ['dist/port.js', 'dist/port.d.ts'] : [];
   return ['dist/index.js', 'dist/index.d.ts', ...port].filter((output) => !existsSync(join(root, dir, output)));

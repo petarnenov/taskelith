@@ -1,23 +1,27 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { workspacePackageDirs } from './workspace-packages.ts';
+import ts from 'typescript';
+import { BROWSER_APPLICATIONS, nodePackageDirs, workspacePackageDirs } from './workspace-packages.ts';
 
-// Node's coverage reports only modules that tests load, so this fails on a
-// product module missing from the report, unless it declares only types.
+// Coverage reports only modules that tests load, so this fails on a product
+// module missing from Node's or a browser application's Vitest report.
 
-function sourceModules(root: string, dir: string): string[] {
+const NODE_SOURCE = /\.ts$/;
+const BROWSER_SOURCE = /\.tsx?$/;
+
+function sourceModules(root: string, dir: string, pattern = NODE_SOURCE): string[] {
   const full = join(root, dir);
   if (!existsSync(full)) return [];
   return readdirSync(full).flatMap((entry) => {
     const path = join(dir, entry);
-    if (statSync(join(root, path)).isDirectory()) return sourceModules(root, path);
-    return path.endsWith('.ts') && !path.endsWith('.d.ts') ? [path] : [];
+    if (statSync(join(root, path)).isDirectory()) return sourceModules(root, path, pattern);
+    return pattern.test(path) && !path.endsWith('.d.ts') ? [path] : [];
   });
 }
 
 function productSources(root: string): { source: string; compiled: string }[] {
-  return ['', ...workspacePackageDirs(root)].flatMap((packageDir) => {
+  return ['', ...nodePackageDirs(root)].flatMap((packageDir) => {
     const sourceDir = posix.join(packageDir, 'src');
     const distDir = posix.join(packageDir, 'dist');
     return sourceModules(root, sourceDir).map((source) => {
@@ -40,11 +44,35 @@ function isTypeOnly(root: string, compiled: string): boolean {
   return code === 'export {};';
 }
 
-export function missingFromCoverage(root: string, lcov: string): string[] {
+// A browser source that emits nothing at run time declares only types.
+function isTypeOnlySource(root: string, source: string): boolean {
+  const { outputText } = ts.transpileModule(readFileSync(join(root, source), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, verbatimModuleSyntax: true },
+    fileName: source,
+  });
+  return outputText.replace(/\/\/.*$/gm, '').trim() === 'export {};';
+}
+
+export type ReadReport = (path: string) => string;
+
+const readReport: ReadReport = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : '');
+
+// Each browser application's report is <app>/coverage/lcov.info, with paths
+// relative to the application's directory.
+function missingBrowserSources(root: string, dir: string, read: ReadReport): string[] {
+  const covered = coveredFiles(join(root, dir), read(join(root, dir, 'coverage/lcov.info')));
+  return sourceModules(root, posix.join(dir, 'src'), BROWSER_SOURCE)
+    .map((source) => source.split(sep).join('/'))
+    .filter((source) => !covered.has(posix.relative(dir, source)) && !isTypeOnlySource(root, source));
+}
+
+export function missingFromCoverage(root: string, lcov: string, read: ReadReport = readReport): string[] {
   const covered = coveredFiles(root, lcov);
-  return productSources(root)
+  const nodeMissing = productSources(root)
     .filter(({ compiled }) => !covered.has(compiled) && !isTypeOnly(root, compiled))
     .map(({ source }) => source);
+  const browserApps = workspacePackageDirs(root).filter((dir) => BROWSER_APPLICATIONS.has(dir));
+  return [...nodeMissing, ...browserApps.flatMap((dir) => missingBrowserSources(root, dir, read))];
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

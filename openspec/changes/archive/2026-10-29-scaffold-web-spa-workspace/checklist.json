@@ -1,0 +1,106 @@
+{
+  "change": "scaffold-web-spa-workspace",
+  "generatedAt": "2026-10-29T05:01:50.893Z",
+  "devCommit": "115c16c41016ae5f45dee6609558a9299ef8b165",
+  "query": {
+    "capabilities": [
+      "product-ui",
+      "control-plane-wire-contracts",
+      "workspace-packages",
+      "engineering-principles"
+    ],
+    "files": [
+      "apps/web/**",
+      "docs/ui-poc/**",
+      "docs/decisions/0011-mantine-ui-proof-of-concept.md",
+      "openspec/specs/product-ui/**",
+      "package.json"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 8
+      },
+      {
+        "category": "spec-wording",
+        "count": 7
+      },
+      {
+        "category": "docs",
+        "count": 6
+      },
+      {
+        "category": "redaction",
+        "count": 4
+      },
+      {
+        "category": "concurrency-race",
+        "count": 2
+      },
+      {
+        "category": "error-handling",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 746,
+        "inChecklist": 632
+      },
+      "mediumOrWorse": {
+        "findings": 356,
+        "inChecklist": 325
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 117
+      },
+      {
+        "category": "spec-wording",
+        "count": 87
+      },
+      {
+        "category": "docs",
+        "count": 66
+      },
+      {
+        "category": "stale-citation",
+        "count": 46
+      },
+      {
+        "category": "contract-drift",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 20
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 372,
+        "inChecklist": 365
+      },
+      "mediumOrWorse": {
+        "findings": 62,
+        "inChecklist": 62
+      }
+    }
+  }
+}
