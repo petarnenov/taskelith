@@ -32,19 +32,25 @@ export function itemChanges(before: Session, after: Session, at: Instant): reado
   });
 }
 
+// A delegation request has no item of its own, since only the host answers
+// it, but its uncertain delivery opens an acknowledgement as any other's.
 function requestItemChanges(session: Session, earlier: NativeRequest | undefined, request: NativeRequest, at: Instant): ItemChange[] {
-  const kind = request.kind;
-  if (kind === 'delegation-request') return [];
-  const changes: ItemChange[] = [];
-  if (earlier === undefined && request.state === 'open') changes.push({ change: 'open', kind, request: request.key, ...boundAttemptOf(session) });
-  if (earlier?.state === 'open' && request.state !== 'open') {
-    changes.push({ change: 'settle', kind, request: request.key, state: settledState(request, at) });
-  }
-  if (!isUncertain(earlier) && isUncertain(request) && request.state === 'answered') {
-    const { attemptId, ownershipGeneration } = request.response;
-    changes.push({ change: 'open', kind: 'delivery-acknowledgement', request: request.key, attemptId, attemptGeneration: ownershipGeneration });
-  }
-  return changes;
+  const own = request.kind === 'delegation-request' ? [] : answerItemChanges(session, earlier, request, request.kind, at);
+  return [...own, ...acknowledgementChanges(earlier, request)];
+}
+
+function answerItemChanges(
+  session: Session, earlier: NativeRequest | undefined, request: NativeRequest, kind: SessionItemKind, at: Instant,
+): ItemChange[] {
+  if (earlier === undefined && request.state === 'open') return [{ change: 'open', kind, request: request.key, ...boundAttemptOf(session) }];
+  if (earlier?.state === 'open' && request.state !== 'open') return [{ change: 'settle', kind, request: request.key, state: settledState(request, at) }];
+  return [];
+}
+
+function acknowledgementChanges(earlier: NativeRequest | undefined, request: NativeRequest): ItemChange[] {
+  if (isUncertain(earlier) || !isUncertain(request) || request.state !== 'answered') return [];
+  const { attemptId, ownershipGeneration } = request.response;
+  return [{ change: 'open', kind: 'delivery-acknowledgement', request: request.key, attemptId, attemptGeneration: ownershipGeneration }];
 }
 
 // A person's answer resolves the item; a standing rule's, an expiry, or a

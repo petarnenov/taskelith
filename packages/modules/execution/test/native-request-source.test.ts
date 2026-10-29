@@ -160,6 +160,36 @@ test('a generation\'s end closes an open request\'s item and opens a delivery-ac
   assert.deepEqual([found[1]!.attemptId, found[1]!.attemptGeneration], [FIRST_ATTEMPT, ownership(1)]);
 });
 
+const hostResult = (key: string): ResponseCommand => response(key, {
+  ...allow(), responder: { kind: 'host' }, answer: { kind: 'delegation-result', delegationId: 'delegation-1', outcome: 'completed', summary: 'done' },
+});
+
+test('an uncertain delivery of a delegation result opens a delivery-acknowledgement item, by report or by a generation\'s end', async () => {
+  for (const uncertain of ['report', 'generation-end'] as const) {
+    const subject = timeline();
+    await withOpenRequest(subject, 'delegation-request');
+    value(await subject.service.consumeResponse(SESSION, hostResult('host-1')));
+    if (uncertain === 'report') value(await subject.service.recordDeliveryReport(SESSION, requestKey('request-1'), 'delivery-uncertain'));
+    else value(await subject.service.endGeneration(SESSION, generation(1)));
+    const found = await items(subject);
+    assert.deepEqual(found.map((item) => [item.kind, item.state, item.attemptId, item.attemptGeneration]), [
+      ['delivery-acknowledgement', 'open', FIRST_ATTEMPT, ownership(1)],
+    ], uncertain);
+  }
+});
+
+test('a reported uncertain delivery of a person\'s answer opens a delivery-acknowledgement item, and a delivered one none', async () => {
+  for (const report of ['delivery-uncertain', 'delivered'] as const) {
+    const subject = timeline();
+    await withOpenRequest(subject);
+    value(await subject.service.consumeResponse(SESSION, response('answer-1')));
+    value(await subject.service.recordDeliveryReport(SESSION, requestKey('request-1'), report));
+    const kinds = (await items(subject)).map((item) => [item.kind, item.state]);
+    const acknowledgement = report === 'delivered' ? [] : [['delivery-acknowledgement', 'open']];
+    assert.deepEqual(kinds, [['permission-request', 'resolved'], ...acknowledgement], report);
+  }
+});
+
 test('openItems lists a project\'s open items with their card subject and a fixed title, and the installation scope has none', async () => {
   const subject = timeline();
   await withOpenRequest(subject);
