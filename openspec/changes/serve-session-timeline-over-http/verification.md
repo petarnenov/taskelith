@@ -90,6 +90,7 @@ Logs `13b-p2fb-*.log` in the session scratchpad; the mutants were applied by `mu
 | Archive in a scratch copy of `openspec/` | `8dca7e3a`; again at `0e8db953`, after the delta changes of `66c1e841` (log `13b-p2-archive.log`) | Both runs: 8 requirements added (control-plane-api 5, control-plane-wire-contracts 1, postgres-state 1, session-turn-model 1); `openspec validate --specs --strict` then passed 71 of 71 items |
 | `make verify` after pass 1 | `71b5122a`, tree `30d7b5f4` (log `13b-verify-2.log`) | Passed, profile full, stamp written: tests 3854, suites 49, pass 3807, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.64 % branches, 98.78 % functions; "Contract documents have no undeclared breaking change." Two earlier runs on the same tree failed only at timing-bound tests outside this change: the first at `test/g2-cancellation-races.test.ts` "h. an unauthorized start cancels only that execution" (the authorized start not met within 20 s) and `test/installation-script.test.ts` "a bound with a leading zero is read in base 10" (ended after 9.08 s, before 10), the second at the same scenario h (`13b-verify-2-attempt1.log`, `13b-verify-2-attempt2.log`), with a host load average of 5 to 7 and another worktree's service stack running; scenario h then passed twice alone in about 10 s at the same head |
 | `make verify` after pass 2 | `cb8f4fc0`, tree `3f1777fd` (log `13b-verify-3.log`) | Passed at the first run, profile full, stamp written: tests 3859, suites 49, pass 3812, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.63 % branches, 98.78 % functions; "Contract documents have no undeclared breaking change." No timing flake occurred |
+| `make verify` after the architect check | `f77da783`, tree `e1f6b1dc` (log `13b-verify-4.log`) | Passed at the first run, profile full, stamp written: tests 3859, suites 49, pass 3812, fail 0, cancelled 0, skipped 47; all files 99.35 % lines, 92.64 % branches, 98.78 % functions. No timing flake occurred |
 | Focused runs | `c51d6c3c` | `apps/control-plane`, `execution`, `control-plane-store`, and `contracts` tests: 917, pass 888, fail 0; `administration.integration.test.ts` 8 of 8; `session-inbox.integration.test.ts` 9 of 9 in five consecutive runs |
 
 <!-- make record: begin -->
@@ -97,7 +98,7 @@ Logs `13b-p2fb-*.log` in the session scratchpad; the mutants were applied by `mu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `3f1777fd0dfb4e48614e5a19f5abb2ea1dd96cf6`; tests 3859, pass 3812, fail 0, skipped 47; all files 99.35% lines, 92.63% branches, 98.78% functions.
+- `make verify`: passed, profile full, tree `e1f6b1dc1adda9862d1e8e118b5734bc037344ca`; tests 3859, pass 3812, fail 0, skipped 47; all files 99.35% lines, 92.64% branches, 98.78% functions.
 - `npm run openspec -- validate serve-session-timeline-over-http --strict`: passed, `Change 'serve-session-timeline-over-http' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s).`.
 - Spec diff against the merge base `dc2ae98b379d` with `origin/dev`: no change under `openspec/specs`.
