@@ -1,0 +1,56 @@
+## Context
+
+G3 item 12 implements the account pool contract (`docs/contracts/account-pool.md`). Sub-changes 12a to 12c are archived (contract sections 11 to 13). The coordinator Niki (architect) approved on 2026-10-29 a split of 12d into A, this change, B `wire-account-pool-into-control-plane`, and C `rotate-account-pool-credential-key` (12f). A covers the slot commands besides adding, the orphan sweep of section 8.1 with a new list operation of section 6.2, and the epoch rule of section 13 on the worker. It touches no control-plane source.
+
+## Coordinator decisions
+
+Recorded verbatim from the coordinator's answers of 2026-10-29. Q1, Q3, Q5, Q6, and Q8 apply in B and Q9 in C; A applies the split, Q2, Q4 (the grace age and the list operation), and Q7.
+
+>
+> 12d split approved as A → B → C (architect, 2026-10-29). Start A now.
+> - A: `apply-account-slot-commands`, size L, no A1/A2 split. Save the checklist as apply-account-slot-commands at 115c16c41016ae5f45dee6609558a9299ef8b165 with --size L, using the invocation from the brief. Migration 1792933500000.
+> - B: `wire-account-pool-into-control-plane`, size L. It gets its own brief at the dev commit after both A and 13d have landed (13d integrates before B, as you recommend).
+> - C: `rotate-account-pool-credential-key` (12f), size M, after B, with migration 1792933600000.
+> Record this split in docs/g3-plan.md row 12 in A.
+>
+> Answers (record them in A's design as coordinator decisions; Q1, Q3, Q5, Q6 and Q8 apply in B, Q9 in C):
+> - Q1. Agreed. B declares the reasons with the same strings as Scheduling and puts them in the wire enum, with OpenAPI 0.5.0 and a breaking-changes.json entry. Producing them on the board stays out of 12d, because it needs slotRequest from items 11 and 18. Write it in B's design as a follow-up of item 18.
+> - Q2:
+>   - An idempotent repeat (revoke of a revoked slot, reinstate of an active one) answers 200 with the current revision and makes no change.
+>   - Update or rotate of a revoked slot answers 409. Any command on a removed or unknown slot answers 404.
+>   - rotateSlotCredential returns the revision of the switch commit. The cleanup advance is a later revision visible on read, and a cleanup failure does not fail the rotate; the sweep finishes it.
+> - Q3. Agreed: a static admitted pair in composition, with no operation and no owner registration. Use one exported constant for the harness id, `claude-code`, unless the item 3 harness port already defines a literal; then reuse that one. Item 19 replaces it with the plugin declaration.
+> - Q4. Agreed:
+>   - SLOT_CREDENTIAL_SWEEP_MILLISECONDS = 3_600_000, with a settings override for tests and no environment variable;
+>   - a grace age of at least 1 h on stored_at;
+>   - the new §6.2 list operation, with conformance on both adapters.
+> - Q5. Create the key at installation initialization, like the 13b digest key, and only when it is missing. Control-plane start refuses with a clear reason when the key is absent; it does not create it lazily.
+> - Q6. Agreed: TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES, 1–1440, default 60, not changeable at runtime. Per-harness windows go to 12e.
+> - Q7. Agreed: the epoch generation rule, amending §13 from "another epoch" to "a later epoch". A call with a lower epoch answers conflict and drops nothing. Add fail-before tests.
+> - Q8. Yes. The browser endpoint serves no route whose only security is workerCredential or enrollmentToken. The 9a routes (browserSession or operatorToken) stay on both endpoints. Add a test per endpoint.
+> - Q9. Keep `internal`, documented in §11 as unreachable given §8.1 and the revoke rule. Add an invariant test that a version change with a held reservation is refused at the store. No execution.openapi change. C is then S-M or M.
+>
+> Risks:
+> - The revoke SERIALIZABLE race tests run on PostgreSQL, against both placement and delivery.
+> - The §6.1, §6.2 and §13 amendments land in the change that first needs them: §6.2 and §13 in A, §6.1 in B.
+
+## Decisions
+
+1. **Commands.** `updateAccountSlot`, `revokeAccountSlot`, `reinstateAccountSlot`, `removeAccountSlot`, and `rotateSlotCredential` are Scheduling application functions beside `addAccountSlot`. Each writes the slot by compare-and-set through `AccountSlots.replace` in a capacity transaction, which runs at `SERIALIZABLE` and is retried as a whole after a serialization failure. Every answer is the slot record, which carries its revision.
+2. **Outcomes (Q2).** A revocation of a revoked slot and a reinstatement of an active one return the stored slot and write nothing; so does an update to the stored settings. An update of a revoked slot is `conflict`. Any command on a `removed` or unknown slot is `not-found`. A rotation of an active slot is `conflict`, as section 8.1 and its rotation test require (see "Open question").
+3. **Revocation.** In its transaction the revocation lists the assignments whose held reservation names the slot (`AssignmentRepository.listHeldForCredential`, new). An attempt with a non-terminal execution is invalidated with `invalidateLaunches` (predicate `assignment`, reason `attempt-not-launchable`): its grants are revoked, the attempt is cancelled, a cancellation command is written, and the reservation stays held until the execution's terminal fact. Any other holder is cancelled with `cancelInTransaction`, which ends the assignment, releases the reservation, and writes the end command under the command identifier `<assignment>.slot-revoked`, so a rerun writes the same command.
+4. **Rotation.** The rotation reads the slot (refusing a removed or unknown one with `not-found` and an active one with `conflict`), stores the new version, and switches in a second transaction that requires the slot to be still revoked at the read revision and version and held by no reservation; a reinstatement, removal, or rotation in between loses with `conflict`. After the switch it calls `discardOlderThan` and then advances the revision in a transaction that changes nothing else. The answer is the switched slot; a cleanup that rejects is ignored, the advance is then skipped, and the sweep discards the replaced version (Q2).
+5. **Removal.** The removal writes the tombstone and then calls `destroy`; a rejected `destroy`, or a transaction whose commit is unconfirmed, is left to the sweep, which destroys the credential of a removed record. A repeated removal is `not-found` (Q2), so the sweep is the only retry.
+6. **Sweep (Q4).** `SlotCredentials.listStored(storedBefore)` lists every stored version whose store time is before the instant, by slot identifier in code-unit order and then by version. The PostgreSQL adapter dates each version in `slot_credentials.stored_at` (migration `1792933500000`, default `now()`, existing rows dated at the migration), and the sweep takes `now` from a capacity transaction, so both sides use the database clock. `sweepSlotCredentials` refuses a grace age under `SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS` (3,600,000) with `invalid`. Per listed slot: without a record it discards exactly the listed versions, so a version that an add-slot command stored within the grace age stays; for a removed record it destroys the credential; otherwise it calls `discardOlderThan` with the record's version. The operation lists versions, not only slot identifiers, because discarding every version of an unnamed slot would also discard a version that an add-slot command stored a moment ago. The sweep interval and its loop belong to B.
+7. **Epoch rule (Q7).** `FetchedRunSlotCredentials.obtain` refuses with `conflict`, dropping nothing, a call whose current epoch is lower than that of a held delivery or a fetch in flight, and otherwise forgets only the scopes of a lower epoch. A fetch whose epoch changes while it is in flight is still dropped.
+8. **Races.** The PostgreSQL tests gate each racer's first attempt after its read of the slot or of the held count, so both read before either writes, and assert the serial outcome. A revocation and a placement both write the slot row, so the second to commit is retried; the test asserts that it was. A revocation and a re-delivery form no cycle: the delivery writes only its record, which the revocation does not read, so PostgreSQL commits both in the order delivery, revocation, without a retry. That test asserts that serial outcome: the delivery's record is written, and the revocation cancels the attempt and revokes its grant, so a later re-delivery is refused with `attempt-not-launchable`. It asserts a retry only for the branch where the delivery is refused.
+9. **Secrecy.** The new failures name slot identifiers only. Tests check that a refused rotation's result, in JSON and inspection form, does not hold the new credential, on both adapters; the listing returns identifiers and versions only.
+
+## Open question
+
+- Q2 says "Update or rotate of a revoked slot answers 409." Contract section 8.1 (`docs/contracts/account-pool.md`, the rotate paragraph) allows a rotation only of a revoked slot, and its rotation test in section 9 requires success on a revoked slot without a held reservation. Read literally, Q2 would forbid every rotation. This change keeps section 8.1: a rotation of an active slot is `conflict` and one of a revoked slot without held reservations succeeds. The coordinator should confirm.
+
+## Risks
+
+- The commands and the sweep are not wired: B adds the routes and the sweep loop.
+- The revocation reads the held reservations of one slot by a sequential scan of `assignments` with an array test; the table is small in G3.
