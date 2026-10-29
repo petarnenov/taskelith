@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Web SPA control-plane client
-The SPA SHALL call the control plane through a typed fetch over the types that `openapi-typescript` generates from `control-plane.openapi.json` alone into a committed file, and the fetch SHALL send the session's CSRF token in `X-CSRF-Token` on every request other than GET and never on GET; `make verify` SHALL fail when the committed types differ from a fresh generation.
+The SPA SHALL call the control plane through a typed fetch over the types that `openapi-typescript` generates from `control-plane.openapi.json` alone into a committed file, and the fetch SHALL send the session's CSRF token in `X-CSRF-Token` on every request other than GET while it knows the token, and never on GET; `make verify` SHALL fail when the committed types differ from a fresh generation.
 
 #### Scenario: Request other than GET
 - **WHEN** the SPA sends a POST, PUT, PATCH, or DELETE request while it knows the session's CSRF token
 - **THEN** the request carries the token in `X-CSRF-Token`
+
+#### Scenario: Request other than GET without a known token
+- **WHEN** the SPA sends a POST, PUT, PATCH, or DELETE request before it knows the session's CSRF token
+- **THEN** the request carries no `X-CSRF-Token`, and the control plane decides on it
 
 #### Scenario: Stale generated types
 - **WHEN** `control-plane.openapi.json` changes and the committed types are not generated again

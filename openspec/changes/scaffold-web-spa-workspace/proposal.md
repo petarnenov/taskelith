@@ -25,7 +25,7 @@ No requirement is removed.
 
 ## Impact
 
-Private workspace and tooling only; the published `taskelith` package is unchanged. 128 packages enter the lockfile, all as development dependencies; `npm audit` reports only the two findings it reported before. No contract document changes. The installation images build the SPA during `npm run build` and keep `apps/web/dist`; the control plane does not serve it until 28c. Out of scope: the shell, routing, login and sessions, themes, the D10 navigation, the contrast and badge tests (28b), static serving, the SPA fallback, and the CSP (28c), and items 29 to 34 and 40.
+Private workspace and tooling only; the published `taskelith` package is unchanged. 153 entries enter the lockfile, all for development dependencies; `npm audit` reports only the two findings it reported before. No contract document changes. The installation images build the SPA during `npm run build` and keep `apps/web/dist`; the control plane does not serve it until 28c. Out of scope: the shell, routing, login and sessions, themes, the D10 navigation, the contrast and badge tests (28b), static serving, the SPA fallback, and the CSP (28c), and items 29 to 34 and 40.
 
 ## Follow-ups
 
