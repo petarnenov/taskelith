@@ -65,11 +65,15 @@ Each behavior was broken in place on `755e916c` (the code of `45bd8e04`), the bu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `05357fdea4faf7c9f1f82422d0b569bb51a4e93d`; tests 3927, pass 3918, fail 0, skipped 9; all files 99.38% lines, 92.52% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `c0cbcaa92ffe141395dc16173632585bf8fa0a05`; tests 3934, pass 3925, fail 0, skipped 9; all files 99.38% lines, 92.52% branches, 98.85% functions.
 - `npm run openspec -- validate apply-account-slot-commands --strict`: passed, `Change 'apply-account-slot-commands' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a18631-b706-7942-9241-c7d54d8f7cbe` | 0 | 1 | 3 | 0 |
 <!-- make record: end -->
 
 ## Independent review
