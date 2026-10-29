@@ -137,3 +137,15 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
 - Follow-ups 13b (the HTTP operations of control-plane section 9, output redaction across chunks, the native request source, `refused` on the wire, the digest key's creation, and the service wiring) and 13c (the worker messages of 9d)
+
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the implement session timeline change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive implement-session-timeline --yes` on `99e593b6`, with every task of `tasks.md` ticked, and only this section was added afterward.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-29-implement-session-timeline` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `f882c0ac`) | Only this change's deltas: `session-turn-model` and `postgres-state`, 86 insertions and 0 deletions, 10 requirements added (9 and 1) |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 87 file(s); every pass summary file is valid: 67 file(s); every route file is valid: 23 file(s).` |
+| `make verify` on the archive working tree (log `13-verify-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; 3771 tests, 3724 passed, 0 failed, 47 skipped; all files 99.37% lines, 92.82% branches, 98.79% functions |
