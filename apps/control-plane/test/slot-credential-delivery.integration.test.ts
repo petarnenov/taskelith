@@ -82,6 +82,7 @@ const counted: SlotCredentials = {
   discard: (slotId, version) => stored.discard(slotId, version),
   discardOlderThan: (slotId, version) => stored.discardOlderThan(slotId, version),
   destroy: (slotId) => stored.destroy(slotId),
+  listStored: (storedBefore) => stored.listStored(storedBefore),
 };
 
 function service(store: ControlPlaneStore = database, pairs: readonly AdmittedPair[] = [PAIR]): SlotCredentialDeliveryService {

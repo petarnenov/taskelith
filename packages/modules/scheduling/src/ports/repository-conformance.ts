@@ -37,7 +37,7 @@ const AT: Instant = must(parseInstant('2026-10-25T09:00:00.000Z'));
 const LATER: Instant = must(parseInstant('2026-10-25T09:00:10.000Z'));
 const NO_EXECUTION: AssignmentExecutions = { granted: false, nonTerminal: false };
 
-function offered(id: string, attempt: string, offerCommand?: string): Assignment {
+function offered(id: string, attempt: string, offerCommand?: string, credentials: readonly string[] = []): Assignment {
   const taskId = must(parseIdentifier('TaskId', 'task-1'));
   return createAssignment({
     id: must(parseIdentifier('AssignmentId', id)),
@@ -54,7 +54,7 @@ function offered(id: string, attempt: string, offerCommand?: string): Assignment
         rootTaskId: taskId,
       },
       requested: must(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: ['memory-limit'] })),
-      providerCredentials: [],
+      providerCredentials: credentials.map((credential) => must(parseIdentifier('ProviderCredentialId', credential))),
     },
   }, AT);
 }
@@ -181,6 +181,22 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectRead(problems, 'provenance', await repository.get(first.id), accepted);
       expectSame(problems, 'unfinished', await repository.listUnfinishedByWorker(first.workerId), [second, accepted]);
       expectSame(problems, 'unknown worker', await repository.listUnfinishedByWorker(must(parseIdentifier('WorkerId', 'worker-x'))), []);
+      return problems;
+    },
+  },
+  {
+    name: 'the assignments whose held reservation names a slot are listed in identifier order',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const second = offered('assignment-2', 'attempt-2', undefined, ['slot-1']);
+      const first = offered('assignment-1', 'attempt-1', undefined, ['slot-1']);
+      const released = offered('assignment-3', 'attempt-3', undefined, ['slot-1']);
+      const other = offered('assignment-4', 'attempt-4', undefined, ['slot-2']);
+      for (const assignment of [second, first, released, other]) expectSuccess(problems, `add ${assignment.id}`, await repository.add(assignment));
+      expectSuccess(problems, 'release', await repository.replace(ended(released), released.generation));
+      const slot = must(parseIdentifier('ProviderCredentialId', 'slot-1'));
+      expectSame(problems, 'held', await repository.listHeldForCredential(slot), [first, second]);
+      expectSame(problems, 'unknown slot', await repository.listHeldForCredential(must(parseIdentifier('ProviderCredentialId', 'slot-x'))), []);
       return problems;
     },
   },
