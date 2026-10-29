@@ -15,6 +15,10 @@ The control plane SHALL serve the agent session operations of control-plane wire
 - **WHEN** a member of project A reads a session of project B through a path of project A
 - **THEN** the answer is the 404 that an unknown session gets
 
+#### Scenario: Card page in one state
+- **WHEN** a session is added to a card and another changes while `listAgentSessions` reads the card
+- **THEN** the page lists and shows the sessions as one transaction read them
+
 ### Requirement: Wire reasons of session refusals
 The control plane SHALL answer a stopped session's turn with 422 `session-stopped`, a response to an answered request with another key with 409 `already-answered`, and a response for an attempt that is not the active bound one with 422 `attempt-not-current`.
 

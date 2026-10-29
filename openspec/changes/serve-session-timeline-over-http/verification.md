@@ -83,7 +83,7 @@ No review pass has run. Route (`route.json`, rule version 2): elevated; pass 1 r
 
 ## Remaining gates
 
-- Review passes 1 and 2, and pass 3 if pass 2 requires it (governance), recorded in `passes.jsonl`, `findings.jsonl`, and this record
+- Review pass 2, and pass 3 only if pass 2 reports a Medium or worse finding (governance, policy version 8: the passes stop after the first one with only Low findings or none), recorded in `passes.jsonl`, `findings.jsonl`, and this record
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
 - Follow-ups 13c (the worker messages, and the run's revealed credentials in the session output redactor, answer Q9) and 13d `redact-session-output-across-chunks` (output redaction across chunks with a held tail and the `readAgentSessionOutput` route, migration `1792933200000`)

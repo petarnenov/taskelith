@@ -14,9 +14,10 @@
 
 ## 3. Records and checks
 
-- [ ] 3.1 Merge `origin/dev` when it moved, route the change, run `make verify`, and write `verification.md`
+- [x] 3.1 Merge `origin/dev` when it moved, route the change, run `make verify`, and write `verification.md`
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review passes with reviewers A and B, recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
-- [ ] 4.2 Archive the change in the last commit of the branch
+- [ ] 4.1 Review passes in order until one reports only Low findings or none, at most three (governance, policy version 8): pass 1 reviewer A, pass 2 reviewer B, and pass 3 reviewer A only after a pass 2 with a Medium or worse finding, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
+- [x] 4.2 Fix the thirteen findings of pass 1, with fail-before evidence for each new behavioral test, and record them
+- [ ] 4.3 Archive the change in the last commit of the branch
