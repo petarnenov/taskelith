@@ -94,6 +94,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18587-d7e0-7ea0-8d5e-990409afbebb` | 0 | 2 | 4 | 0 |
 | 2 | B | `claude claude-opus-5-5#medium` | `1dbc01fd-93f2-4c7b-9250-c1daa0673b80` | 0 | 0 | 0 | 7 |
+| 3 | A | `codex gpt-6-astra#medium` | `01a185de-92db-78d0-b73b-fef867634719` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Independent review
@@ -174,9 +175,17 @@ The coordinator (Niki) returned the archived branch, head `d545bac6` (the archiv
 
 Route: `route.json` stays as committed in `feb182e9` for the original base `dc2ae98b`. The route gate of `make review` runs only before pass 1 ("Later passes never route"), and the reconciliation review is pass 3, the next pass number after the last recorded pass 2, so the gate does not refuse it and the change is not routed again. As for earlier returns (`apply-account-pool-cooldown-and-affinity`), the pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 3, role A.
 
+### Pass 3 (return review)
+
+- Reviewer A of pass 1: Codex CLI, model `gpt-6-astra`, reasoning effort `medium`, sandbox read-only, session `01a185de-92db-78d0-b73b-fef867634719`, on `fd8db47d`. The worktree snapshot before and after the review was `64e81ffb86e3d3d832b23021ad6d31523a7354ba7d22ee1176bfe54fb7b8f783`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/deliver-slot-credential-per-run -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-10-29T04:15:18.450Z. Model confirmation: `model: gpt-6-astra`, `reasoning effort: medium`, `sandbox: read-only` in the Codex log header, as `make review` printed them. The route line of `make review` recommended `codex gpt-6.1-sol#high`; the brief's `codex gpt-6-astra#medium`, the reviewer of pass 1, stayed.
+- Confirmed: the merge resolutions of `9daa1d65` keep both sides, with the migrations in the order `1792933100000` then `1792933300000` in every list; the browser endpoint excludes `fetchSlotCredential` and still serves `dev`'s six agent-session routes, so the merge has no semantic conflict; the revert `4789be62` is the exact inverse of the archive commit `d545bac6`; `dev` did not change `account-pool-port`, so the delta still matches; and `make record-check` passes.
+- Result: Critical 0, High 0, Medium 0, Low 1, matching the pass 3 line of `passes.jsonl`; recorded in `findings.jsonl` as `fixed-unreviewed`.
+  1. Low, evidence-mismatch (`verification.md`, "Author self-check", "Wire"): the claim that `git diff dc2ae98b -- packages/contracts` is empty was no longer true, since the merge brings `dev`'s changes to four contract files. Fixed in `26538568`: the self-check cites `git diff 3009329f HEAD -- packages/contracts`, which is empty, states that 12c itself changes no wire contract, and names the changes since `dc2ae98b` as 13b's, inherited from `dev`. No other claim of this record diffs the branch head against `dc2ae98b`: "Dependencies" holds against both bases (`git diff dc2ae98b HEAD -- package.json package-lock.json` is empty, and so is the same diff from `3009329f`), and the other mentions of `dc2ae98b` cite it as the base of their own time, such as the route records, the fetches before the return, the first "Merge of dev", and the reconciliation's diff of `dev`'s specs, and stay.
+- Pass 3 reported only a Low finding, so no further pass runs. Unreviewed fix for the coordinator's architect check (governance "Architect check of unreviewed fixes"): `26538568`, a record-only change.
+
 ## Remaining gates
 
-- Review of the resolved diff and the reconciliation by the reviewer of pass 1, `codex gpt-6-astra#medium`, recorded as pass 3, role A.
-- Architect check by the coordinator of any fix that no later pass reviews.
+- Architect check by the coordinator of the unreviewed fix `26538568`.
 - Archive again as the last commit of the branch (task 4.3).
 - Integration into dev by the coordinator (single pull request).
