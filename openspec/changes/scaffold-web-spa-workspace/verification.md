@@ -96,7 +96,7 @@ Each behavior was broken in place on `e73ff2e3`, unless its entry names another 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8672f285b5fcd779a33ea96038f99d02894df334`; tests 3932, pass 3923, fail 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `faac95183ff8380595ccd9d64bf3386e517d1215`; tests 3935, pass 3926, fail 0, skipped 9; all files 99.38% lines, 92.55% branches, 98.84% functions.
 - `npm run openspec -- validate scaffold-web-spa-workspace --strict`: passed, `Change 'scaffold-web-spa-workspace' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
 - Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
@@ -105,6 +105,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18644-4836-70c0-939b-9650724bcf08` | 0 | 0 | 4 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `e76ef202-63df-407f-8dac-41bf7f3a3e03` | 0 | 0 | 1 | 5 |
 <!-- make record: end -->
 
 ## Independent review
