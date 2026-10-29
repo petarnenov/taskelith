@@ -84,10 +84,10 @@ Each behavior was broken in place on `8ddb3800`, the build and the tests run, an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `392069bf14c54c8a4b21c623eba66e78a82cad76`; tests 3839, pass 3830, fail 0, skipped 9; all files 99.40% lines, 92.75% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `6c8c64def89386cc55cf9a78d1d20ab94306d5da`; tests 3898, pass 3889, fail 0, skipped 9; all files 99.38% lines, 92.55% branches, 98.84% functions.
 - `npm run openspec -- validate deliver-slot-credential-per-run --strict`: passed, `Change 'deliver-slot-credential-per-run' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s).`.
-- Spec diff against the merge base `dc2ae98b379d` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 90 file(s); every pass summary file is valid: 70 file(s); every route file is valid: 26 file(s).`.
+- Spec diff against the merge base `3009329fc3d1` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
