@@ -4,6 +4,7 @@ import { checkGeneration, checkNextGeneration, type Generation } from '@taskelit
 import type { Assignment } from '../domain/assignment.js';
 import type { AssignmentRepository } from '../ports/assignment-repository.js';
 import { byCodeUnits } from '../domain/code-unit-order.js';
+import type { ProviderCredentialId } from '../domain/capacity-reservation.js';
 
 // Keeps assignments in process memory; it checks and writes without
 // awaiting, so concurrent writers cannot both pass a check.
@@ -55,6 +56,12 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
   async listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
     return this.all()
       .filter((assignment) => assignment.workerId === workerId && assignment.state !== 'ended')
+      .sort((left, right) => byCodeUnits(left.id, right.id));
+  }
+
+  async listHeldForCredential(credentialId: ProviderCredentialId): Promise<readonly Assignment[]> {
+    return this.all()
+      .filter(({ reservation }) => reservation.state === 'held' && reservation.providerCredentials.includes(credentialId))
       .sort((left, right) => byCodeUnits(left.id, right.id));
   }
 

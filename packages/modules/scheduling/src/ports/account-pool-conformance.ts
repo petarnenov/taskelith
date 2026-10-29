@@ -171,6 +171,9 @@ function expectRevealed(problems: string[], label: string, result: Result<SlotSe
 }
 
 const SECRET_TEXT = 'secret-material';
+// Instants around any store time of a test run, on any clock.
+const FAR_PAST: Instant = must(parseInstant('2000-01-01T00:00:00.000Z'));
+const FAR_FUTURE: Instant = must(parseInstant('2100-01-01T00:00:00.000Z'));
 
 // The custom form that util.inspect and console.log print, if any.
 function customInspection(value: SlotSecret): string | undefined {
@@ -262,6 +265,30 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
       await credentials.destroy(CREDENTIAL_SLOT);
       const late = await credentials.store(CREDENTIAL_SLOT, secret('late-material'));
       expectCode(problems, 'late store', await credentials.reveal(CREDENTIAL_SLOT, late), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'lists the versions stored before an instant by slot in code-unit order, then by version',
+    async check(credentials: SlotCredentials) {
+      const problems: string[] = [];
+      expectSame(problems, 'none yet', await credentials.listStored(FAR_FUTURE), []);
+      const upper = id('ProviderCredentialId', 'Slot-z-upper') as ProviderCredentialId;
+      const second = await credentials.store(OTHER_CREDENTIAL_SLOT, secret('other-first'));
+      const discarded = await credentials.store(CREDENTIAL_SLOT, secret('discarded'));
+      const kept = await credentials.store(CREDENTIAL_SLOT, secret('kept'));
+      const newest = await credentials.store(OTHER_CREDENTIAL_SLOT, secret('other-second'));
+      const upperVersion = await credentials.store(upper, secret('upper'));
+      await credentials.store(UNKNOWN_SLOT, secret('destroyed'));
+      await credentials.discard(CREDENTIAL_SLOT, discarded);
+      await credentials.destroy(UNKNOWN_SLOT);
+      expectSame(problems, 'stored', await credentials.listStored(FAR_FUTURE), [
+        { slotId: upper, version: upperVersion },
+        { slotId: CREDENTIAL_SLOT, version: kept },
+        { slotId: OTHER_CREDENTIAL_SLOT, version: second },
+        { slotId: OTHER_CREDENTIAL_SLOT, version: newest },
+      ]);
+      expectSame(problems, 'stored later', await credentials.listStored(FAR_PAST), []);
       return problems;
     },
   },

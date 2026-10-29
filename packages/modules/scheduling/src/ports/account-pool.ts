@@ -1,5 +1,5 @@
 import type { HarnessPluginId } from '@taskelith/execution';
-import type { Result } from '@taskelith/kernel';
+import type { Instant, Result } from '@taskelith/kernel';
 import type { AccountSlot, SlotCredentialVersion, SubscriptionMechanismId } from '../domain/account-slot.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
 import type { SlotSecret } from '../domain/slot-secret.js';
@@ -38,6 +38,12 @@ export interface AdmittedDeliveries {
   find(harnessId: HarnessPluginId, mechanismId: SubscriptionMechanismId): Promise<AdmittedDelivery | undefined>;
 }
 
+// One stored version of a slot's credential, as the sweep lists it.
+export interface StoredSlotCredential {
+  readonly slotId: ProviderCredentialId;
+  readonly version: SlotCredentialVersion;
+}
+
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;
 // not part of CapacityTransaction (contract sections 1, 6.2, and 7.1).
 export interface SlotCredentials {
@@ -53,4 +59,7 @@ export interface SlotCredentials {
   discardOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
   // Every version and every later store; succeeds for a missing credential.
   destroy(slotId: ProviderCredentialId): Promise<void>;
+  // Versions stored before the instant, by slot id code units, then by
+  // version, for the sweep of section 8.1 (section 6.2).
+  listStored(storedBefore: Instant): Promise<readonly StoredSlotCredential[]>;
 }

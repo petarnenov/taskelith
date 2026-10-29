@@ -16,7 +16,7 @@ import type {
   Task,
   TaskRepository,
 } from '@taskelith/execution';
-import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
+import type { Assignment, AssignmentRepository, ProviderCredentialId } from '@taskelith/scheduling';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import type {
@@ -176,6 +176,10 @@ export class CommittingAssignmentRepository implements AssignmentRepository {
 
   listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
     return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listUnfinishedByWorker(workerId))));
+  }
+
+  listHeldForCredential(credentialId: ProviderCredentialId): Promise<readonly Assignment[]> {
+    return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listHeldForCredential(credentialId))));
   }
 
   byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {

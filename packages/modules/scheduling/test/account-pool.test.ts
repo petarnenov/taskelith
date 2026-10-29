@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
 import type { HarnessPluginId } from '@taskelith/execution';
-import { err, failure, ok, parseIdentifier, parseInstant, REDACTED, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, parseInstant, REDACTED, type Instant, type Result } from '@taskelith/kernel';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
@@ -32,6 +32,7 @@ import {
   type SlotCredentialVersion,
   type SlotCredentials,
   type SlotRequest,
+  type StoredSlotCredential,
 } from '@taskelith/scheduling';
 import * as scheduling from '@taskelith/scheduling';
 
@@ -274,6 +275,7 @@ test('the slot credentials suite rejects an adapter that replaces a version', as
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new UnversionedSlotCredentials()), [
     'stores each credential under a new version and discards one, idempotently',
     'discards only the lower versions of a slot, idempotently, and keeps the rest',
+    'lists the versions stored before an instant by slot in code-unit order, then by version',
   ]);
 });
 
@@ -300,6 +302,33 @@ test('the slot credentials suite rejects an adapter that discards higher version
     'discards only the lower versions of a slot, idempotently, and keeps the rest',
   ]);
 });
+
+// Lists every stored version, however recently it was stored.
+class AgelessListingSlotCredentials extends InMemorySlotCredentials {
+  override async listStored(): Promise<readonly StoredSlotCredential[]> {
+    const farFuture = parseInstant('2100-01-01T00:00:00.000Z');
+    assert.ok(farFuture.ok);
+    return super.listStored(farFuture.value);
+  }
+}
+
+// Orders slot ids by locale, which puts an upper-case id after lower-case.
+class LocaleListingSlotCredentials extends InMemorySlotCredentials {
+  override async listStored(storedBefore: Instant): Promise<readonly StoredSlotCredential[]> {
+    return [...await super.listStored(storedBefore)].sort((left, right) => left.slotId.localeCompare(right.slotId) || left.version - right.version);
+  }
+}
+
+for (const [name, adapter] of [
+  ['ignores the instant', () => new AgelessListingSlotCredentials()],
+  ['orders slots by locale', () => new LocaleListingSlotCredentials()],
+] as const) {
+  test(`the slot credentials suite rejects a listing that ${name}`, async () => {
+    assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, adapter), [
+      'lists the versions stored before an instant by slot in code-unit order, then by version',
+    ]);
+  });
+}
 
 // Counts tombstones too, so a removed slot would block a new one.
 class TombstoneCountingAccountSlots extends InMemoryAccountSlots {

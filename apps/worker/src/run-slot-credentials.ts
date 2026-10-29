@@ -34,8 +34,8 @@ interface PendingFetch {
 
 type EndedScope = (scope: DeliveryScope) => boolean;
 
-// Account pool contract section 7.3: one delivery per execution, held only
-// in memory until the run ends or its generation or epoch changes.
+// Account pool contract sections 7.3 and 13: one delivery per execution in
+// memory until its run ends or a later generation or epoch arrives.
 export class FetchedRunSlotCredentials implements RunSlotCredentials {
   readonly #client: SlotCredentialClient;
   readonly #recoveryEpoch: () => RecoveryEpoch;
@@ -51,7 +51,10 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
 
   async obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>> {
     const recoveryEpoch = this.#recoveryEpoch();
-    this.#forgetWhere((scope) => scope.recoveryEpoch !== recoveryEpoch);
+    if (this.#liveScopes().some((scope) => scope.recoveryEpoch > recoveryEpoch)) {
+      return err(failure('conflict', 'a later recovery epoch holds or fetches a slot credential'));
+    }
+    this.#forgetWhere((scope) => scope.recoveryEpoch < recoveryEpoch);
     if (this.#knowsLaterGeneration(run)) return err(failure('conflict', 'a later ownership generation of the attempt holds or fetches its slot credential'));
     this.#forgetEarlierGenerations(run);
     const key = heldKey(run);
@@ -81,9 +84,13 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
 
   // A call of a superseded generation is stale itself and ends nothing.
   #knowsLaterGeneration(run: RunSlotCredentialRequest): boolean {
+    return this.#liveScopes().some((scope) => scope.attemptId === run.attemptId && scope.ownershipGeneration > run.ownershipGeneration);
+  }
+
+  // The scopes of held deliveries and of fetches still in flight.
+  #liveScopes(): readonly DeliveryScope[] {
     const fetching = [...this.#pending].filter((pending) => !pending.ended).map((pending) => pending.scope);
-    const scopes = [...this.#held.values(), ...fetching];
-    return scopes.some((scope) => scope.attemptId === run.attemptId && scope.ownershipGeneration > run.ownershipGeneration);
+    return [...this.#held.values(), ...fetching];
   }
 
   // A call of a later generation ends what the host has not forgotten yet.

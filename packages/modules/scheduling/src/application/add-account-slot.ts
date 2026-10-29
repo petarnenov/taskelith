@@ -13,6 +13,11 @@ import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reserva
 import type { SlotSecret } from '../domain/slot-secret.js';
 import type { AdmittedDeliveries, AdmittedDelivery, SlotCredentials } from '../ports/account-pool.js';
 import type { CapacityStore, CapacityTransaction } from '../ports/capacity-store.js';
+import { SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS } from './sweep-slot-credentials.js';
+
+// Pool section 6.2: half the sweep's least grace age, from the store to the
+// end of the add transaction, so the sweep never meets a live add's version.
+export const ADD_SLOT_DEADLINE_MILLISECONDS = SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS / 2;
 
 // What an installation owner sends; Access checked the role before.
 export interface AddAccountSlotInput {
@@ -28,6 +33,8 @@ export interface AccountSlotCommandPorts {
   readonly store: CapacityStore;
   readonly credentials: SlotCredentials;
   readonly deliveries: AdmittedDeliveries;
+  // Milliseconds on the process's monotonic clock, for the add deadline.
+  readonly monotonicMilliseconds: () => number;
 }
 
 // Pool sections 6.2 and 7.1: store, then add with the limit check; a version
@@ -37,8 +44,12 @@ export async function addAccountSlot(ports: AccountSlotCommandPorts, input: AddA
   if (delivery === undefined) return err(notAdmitted(input));
   const draft = slotRecord(input, FIRST_CREDENTIAL_VERSION);
   if (!draft.ok) return draft;
+  const deadline = ports.monotonicMilliseconds() + ADD_SLOT_DEADLINE_MILLISECONDS;
   const version = await ports.credentials.store(input.id, input.secret);
-  const added = await ports.store.transaction((tx) => addWithinLimit(tx, slotRecord(input, version), delivery));
+  const added = await ports.store.transaction(async (tx) => {
+    const slot = await addWithinLimit(tx, slotRecord(input, version), delivery);
+    return slot.ok && ports.monotonicMilliseconds() > deadline ? err(deadlineExceeded(input.id)) : slot;
+  });
   if (!added.ok && !mayHaveCommitted(added.error)) await discardUnlessUnreachable(ports.credentials, input.id, version);
   return added;
 }
@@ -78,6 +89,11 @@ function slotRecord(input: AddAccountSlotInput, credentialVersion: SlotCredentia
     concurrencyLimit: input.concurrencyLimit ?? DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
     state: 'active', health: 'healthy', revision: FIRST_SLOT_REVISION,
   });
+}
+
+// Retryable: the transaction rolled back and the version is discarded.
+function deadlineExceeded(id: ProviderCredentialId) {
+  return failure('unavailable', `the add of slot ${id} passed its deadline`, { slot: id, reason: 'add-deadline-exceeded' });
 }
 
 // Names identifiers only, never the credential (contract section 2, rule 5).
