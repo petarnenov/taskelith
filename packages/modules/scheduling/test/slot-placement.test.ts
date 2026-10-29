@@ -216,24 +216,79 @@ test('a slot request for another project than the task\'s is invalid and reserve
   assert.equal(value(await slots.get(id('ProviderCredentialId', 'slot-1'))).revision, 1);
 });
 
-const PINNED = { harnessId: HARNESS, slotId: id('ProviderCredentialId', 'slot-1') };
+const SLOT_1 = id('ProviderCredentialId', 'slot-1');
+const OTHER_HARNESS = id('HarnessPluginId', 'harness-2') as HarnessPluginId;
+const LATER = value(parseInstant('2026-10-29T11:00:00.000Z'));
+const COOLING = { cooldown: { until: LATER, source: 'reported-reset' as const } };
+const resumedOn = (slotId = SLOT_1, harnessId = HARNESS): SlotRequest => ({ projectId: PROJECT, kind: 'resumed-session', pinned: { harnessId, slotId } });
+const afterLimitOn = (alternatives: readonly HarnessPluginId[], harnessId = HARNESS): SlotRequest => ({
+  projectId: PROJECT, kind: 'after-limit', limited: { harnessId, slotId: SLOT_1 }, alternatives,
+});
+const revisionOf = async (slots: InMemoryAccountSlots, name: string) => value(await slots.get(id('ProviderCredentialId', name))).revision;
 
-const NOT_SELECTED_BEFORE_12B: readonly (readonly [string, SlotRequest])[] = [
-  ['resumed-session', { projectId: PROJECT, kind: 'resumed-session', pinned: PINNED }],
-  ['after-limit', { projectId: PROJECT, kind: 'after-limit', limited: PINNED, alternatives: [] }],
-];
+test('a resumed session reserves its own slot though another is less loaded, and writes it once', async () => {
+  const { tx, task, slots } = await fixture([2]);
+  value(await slots.add(slotRecord('slot-0')));
+  value(await slots.add(slotRecord('slot-1')));
+  await holdSlot(tx, 'slot-1', 2);
+  const placed = value(await placeInTransaction(tx, request(task, 'worker-1', resumedOn())));
+  assert.ok(placed.kind === 'placed');
+  assert.deepEqual(placed.assignment.reservation.providerCredentials, ['slot-1']);
+  assert.deepEqual([await revisionOf(slots, 'slot-0'), await revisionOf(slots, 'slot-1')], [1, 2]);
+});
 
-for (const [kind, slotRequest] of NOT_SELECTED_BEFORE_12B) {
-  test(`a ${kind} request fails the placement with invalid before sub-change 12b`, async () => {
-    const { tx, task, slots } = await fixture([2]);
-    value(await slots.add(slotRecord('slot-1')));
+test('a resumed session waits on its cooling slot and is rejected on a revoked one, writing no slot', async () => {
+  const cases: readonly (readonly [Partial<AccountSlot>, string])[] = [
+    [COOLING, 'waiting:provider-concurrency-exhausted'],
+    [{ health: 'unhealthy' }, 'waiting:provider-concurrency-exhausted'],
+    [{ state: 'revoked' }, 'rejected:session-slot-withdrawn'],
+    [{ allowedProjects: [id('ProjectId', 'other-project') as ProjectId] }, 'rejected:session-slot-withdrawn'],
+  ];
+  for (const [overrides, expected] of cases) {
+    const { tx, task, slots, assignments } = await fixture([2]);
+    value(await slots.add(slotRecord('slot-0')));
+    value(await slots.add(slotRecord('slot-1', overrides)));
+    assert.equal(kindOf(value(await placeInTransaction(tx, request(task, 'worker-1', resumedOn())))), expected, JSON.stringify(overrides));
+    assert.deepEqual([assignments.all(), await revisionOf(slots, 'slot-0'), await revisionOf(slots, 'slot-1')], [[], 1, 1]);
+  }
+});
+
+test('a session request naming another harness for its slot is invalid, and an unknown slot not found', async () => {
+  const { tx, task, slots, assignments } = await fixture([2]);
+  value(await slots.add(slotRecord('slot-1')));
+  for (const slotRequest of [resumedOn(SLOT_1, OTHER_HARNESS), afterLimitOn([], OTHER_HARNESS)]) {
     const placed = await placeInTransaction(tx, request(task, 'worker-1', slotRequest));
-    assert.ok(!placed.ok);
-    assert.equal(placed.error.code, 'invalid');
-    assert.deepEqual(placed.error.details, { kind });
-    assert.equal(value(await slots.get(PINNED.slotId)).revision, 1);
-  });
-}
+    assert.deepEqual(!placed.ok && [placed.error.code, placed.error.details], ['invalid', { slot: 'slot-1', harness: 'harness-2' }]);
+  }
+  const unknown = await placeInTransaction(tx, request(task, 'worker-1', resumedOn(id('ProviderCredentialId', 'slot-9'))));
+  assert.equal(!unknown.ok && unknown.error.code, 'not-found');
+  assert.deepEqual([assignments.all(), await revisionOf(slots, 'slot-1')], [[], 1]);
+});
+
+test('after a limit another harness is reserved and no other slot of the limited harness ever is', async () => {
+  const { tx, task, slots } = await fixture([2]);
+  value(await slots.add(slotRecord('slot-1', COOLING)));
+  value(await slots.add(slotRecord('slot-2')));
+  value(await slots.add(slotRecord('slot-3', { harnessId: OTHER_HARNESS })));
+  const placed = value(await placeInTransaction(tx, request(task, 'worker-1', afterLimitOn([OTHER_HARNESS]))));
+  assert.ok(placed.kind === 'placed');
+  assert.deepEqual(placed.assignment.reservation.providerCredentials, ['slot-3']);
+  const alone = await fixture([2]);
+  value(await alone.slots.add(slotRecord('slot-1', COOLING)));
+  value(await alone.slots.add(slotRecord('slot-2')));
+  const waiting = value(await placeInTransaction(alone.tx, request(alone.task, 'worker-1', afterLimitOn([OTHER_HARNESS]))));
+  assert.equal(kindOf(waiting), 'waiting:provider-concurrency-exhausted');
+  assert.deepEqual([await revisionOf(alone.slots, 'slot-1'), await revisionOf(alone.slots, 'slot-2')], [1, 1]);
+});
+
+test('after a limit the limited slot is reserved again once its cooldown ended', async () => {
+  const { tx, task, slots } = await fixture([2]);
+  value(await slots.add(slotRecord('slot-1', { cooldown: { until: AT, source: 'default' } })));
+  value(await slots.add(slotRecord('slot-3', { harnessId: OTHER_HARNESS, ...COOLING })));
+  const placed = value(await placeInTransaction(tx, request(task, 'worker-1', afterLimitOn([OTHER_HARNESS]))));
+  assert.ok(placed.kind === 'placed');
+  assert.deepEqual(placed.assignment.reservation.providerCredentials, ['slot-1']);
+});
 
 // Runs each transaction at once on one shared state, as one writer would.
 function serialStore(tx: CapacityTransaction): CapacityStore {
