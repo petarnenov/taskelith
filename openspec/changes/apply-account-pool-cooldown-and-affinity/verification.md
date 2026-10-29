@@ -87,6 +87,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6-astra#medium` | `01a18510-402e-7b52-9114-917ef75705ab` | 0 | 0 | 3 | 1 |
 | 2 | B | `claude claude-opus-5-5#medium` | `8da6580e-b177-4fe6-9480-ec023c03b621` | 0 | 0 | 1 | 4 |
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a1852d-7bad-7072-afb8-f2d09fedda7f` | 0 | 0 | 0 | 0 |
+| 4 | A | `codex gpt-6-astra#medium` | `01a18546-a323-77a0-bf77-c17bf1076de1` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Independent review
@@ -140,6 +141,15 @@ The coordinator (Niki) returned the archived branch, head `46b81c21` (the archiv
 
 Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0ac`. The route gate of `make review` runs only before pass 1 ("Later passes never route"), and the reconciliation review is pass 4, so the gate does not refuse it and the change is not routed again. As for earlier returns, the pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 4, role A.
 
+### Pass 4 (return review)
+
+- Reviewer A of pass 1: Codex CLI, model `gpt-6-astra`, reasoning effort `medium`, sandbox read-only, session `01a18546-a323-77a0-bf77-c17bf1076de1`, on `b510cb0c`. The worktree snapshot before and after the review was `161fdae3aaf66d073f1c4bcaf052ea9c30108ed905ba2960f942dfccecc67748`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/apply-account-pool-cooldown-and-affinity -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-10-29T01:29:21.186Z. Model confirmation: `model: gpt-6-astra`, `reasoning effort: medium`, `sandbox: read-only` in the Codex log header, as `make review` printed them.
+- Confirmed: both changed rows of `docs/g3-plan.md`, row 12 of this branch and row 13 of `dev`, are kept; the revert `205b4e5e` is the exact inverse of the archive commit `46b81c21`; the `account-pool-port` and `harness-account-pools` deltas stay compatible with `dev`; the `make verify` line under "Generated checks" matches the stamp and its stored record; and the merge has no semantic conflict with the session timeline of `dev`.
+- Result: Critical 0, High 0, Medium 0, Low 1, matching the pass 4 line of `passes.jsonl`; recorded in `findings.jsonl` as `fixed-unreviewed`.
+  1. Low, stale-citation (`verification.md`, "Revision"): `f882c0ac` was still called the branch's merge base with `origin/dev`, which the merge `775d6218` moved to `19c15d69`. Fixed in `3919e645`: the revision names `f882c0ac` as the original base and the brief's checklist base and `19c15d69` as the current merge base; the route note above, the only other place with that wording, names `f882c0ac` as the original base. Other mentions of `f882c0ac` cite it as the base of their own time, such as pass 3's diff and the merge base of the archive commit, and stay.
+- Pass 4 reported only a Low finding, so no further pass runs. Unreviewed fix for the coordinator's architect check (governance "Architect check of unreviewed fixes"): `3919e645`, a record-only change.
+
 ## Limitations
 
 - Nothing calls the new paths outside tests: the control plane's placement service passes no slot request (12d), and no relay applies a session's `limit` event (item 18).
@@ -151,6 +161,6 @@ Route: `route.json` stays as routed on `8b78cd74` for the original base `f882c0a
 
 ## Remaining gates
 
-- Review of the return by reviewer A of pass 1, `codex gpt-6-astra#medium`, as pass 4: the conflict resolution in the merge `775d6218` against its parents and the reconciliation result above, recorded in `passes.jsonl`, `findings.jsonl`, and this record.
+- Architect check by the coordinator (Niki) of the unreviewed pass 4 fix `3919e645`.
 - Archive again as the last commit of the branch (task 4.3), with its archive checks.
 - Integration into dev by the coordinator (single pull request).
