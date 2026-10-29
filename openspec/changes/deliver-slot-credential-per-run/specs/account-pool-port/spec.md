@@ -39,7 +39,7 @@ Each delivery SHALL be recorded, in its check transaction and before the reveal,
 - **THEN** no database table and no stream message holds the credential text
 
 ### Requirement: Slot credential delivery over TLS only
-The control plane SHALL answer `fetchSlotCredential` on a connection without TLS with an internal failure before it reads the bearer, and every answer SHALL carry `Cache-Control: no-store`; the worker's client SHALL send no fetch to a base URL that is not HTTPS SHALL use no delivery whose schema fails or that names another execution or slot, and SHALL repeat no server text in a refusal or failure.
+The control plane SHALL answer `fetchSlotCredential` on a connection without TLS with an internal failure before it reads the bearer, and every answer SHALL carry `Cache-Control: no-store`; the worker's client SHALL send no fetch to a base URL that is not HTTPS, SHALL use no delivery whose schema fails or that names another execution or slot, and SHALL repeat no server text in a refusal or failure.
 
 #### Scenario: Plain HTTP request
 - **WHEN** a worker sends `fetchSlotCredential` over plain HTTP
