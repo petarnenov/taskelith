@@ -178,6 +178,10 @@ Checks on `ee04cd5f`, tree `7e16e488`: `make verify` passed, profile full, stamp
   - Invocation: `env -u JEV_MAF_LAB make review CHANGE=redact-session-output-across-chunks PASS=3 ROLE=A REVIEWER='codex gpt-6.1-sol#medium' PROMPT=13d-pass3-prompt.md LOG=13d-pass3.log`, prompt, log, and `13d-pass3-make.out` in the session scratchpad, outside the tree. `make review` ran `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C /home/petar/taskelith-worktrees/redact-session-output-across-chunks -`, environment `PATH HOME USER LANG TERM`, started 2026-10-29T05:59:25.291Z, and printed "route: recommends effort high; the authorized medium applies (policy version 9)".
   - Confirmation, as `make review` printed it from the reviewer's log: `session: 01a1863d-e42e-7ec3-9ba0-5c524705441c`, `model: gpt-6.1-sol (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`.
 
+### Architect check
+
+Architect check (Niki, coordinator, 2026-10-29): 7591eb47, 970ab77e, the merge 44523562 and ec1da5f9 pass; earlier 53570d62 and the High fix cbf69b2d passed (fuzzer: 0 leaks in 900k runs at bounds 30–400). Accepted deviations: no head form for URL userinfo (every run after :// is already a marker); . / @ are boundaries as in redactJwts; a standalone short head word at a turn's end becomes a marker (Limitations). Pass 3 finding 2 is fixed-unreviewed as the owner asked.
+
 ## Limitations
 
 - A block whose end marker never comes stays dropped up to its turn's end, so text after an unterminated key is over-redacted (answer Q1 accepts losing text over leaking).
@@ -192,7 +196,5 @@ Checks on `ee04cd5f`, tree `7e16e488`: `make verify` passed, profile full, stamp
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 as the route and governance rule ask
-- The coordinator's architect check of the fix of `7591eb47`; the check of `53570d62` passed
 - Merge `origin/dev` right before the archive, and the archive
 - Integration into dev by the coordinator (single pull request)
