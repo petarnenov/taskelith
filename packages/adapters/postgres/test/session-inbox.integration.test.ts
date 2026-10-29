@@ -13,7 +13,7 @@ import {
   type SessionTimelineStore,
   type SessionTimelineTransaction,
 } from '@taskelith/execution';
-import { parseIdentifier } from '@taskelith/kernel';
+import { parseIdentifier, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, PostgresSessionScopes, PostgresSessionTimelineStore } from '@taskelith/postgres';
 import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
@@ -29,6 +29,7 @@ import {
   requestSource,
   sessionWithOpenRequest,
   timelineService,
+  trailingBarrierStore,
   turn,
 } from './session-timeline-fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -45,6 +46,7 @@ const CARD: SessionScope = { projectId: PROJECT, runId: id('RunId', 'run-alpha')
 const PERSON = id('PrincipalId', 'person-1') as PrincipalId;
 const OTHER_PERSON = id('PrincipalId', 'person-2') as PrincipalId;
 const ACKNOWLEDGE = { kind: 'delivery-acknowledgement' as const, decision: 'acknowledge' as const };
+const DENY = { kind: 'permission-request' as const, decision: 'deny' as const };
 
 // The runs and task lineage of SCOPES_LINEAGE, in which TASK is the root
 // task of alpha's card `run-alpha`.
@@ -66,6 +68,16 @@ const answer = (itemId: string, key: string, given: object, responder: Principal
 
 async function itemRows(): Promise<{ item_id: string; kind: string; state: string }[]> {
   return query(url, 'SELECT item_id, kind, state FROM session_inbox_items ORDER BY kind, native_request_id');
+}
+
+async function itemStates(): Promise<string[]> {
+  return (await itemRows()).map((row) => `${row.kind}:${row.state}`);
+}
+
+// The allowing response of `request-1` given by the standing rule `rule-1`.
+function ruled(): ReturnType<typeof allow> {
+  const response = allow('rule-1');
+  return { ...response, response: { ...response.response, responder: { kind: 'standing-rule', ruleId: id('StandingRuleId', 'rule-1') } } };
 }
 
 // The ID of the open request's item, which recording the request opened.
@@ -216,20 +228,31 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
     assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED]);
   });
 
-  test('a standing rule racing an inbox answer: the rule closes the item and the answer fails item-closed, or the rule fails', async () => {
+  test('a standing rule that commits before a racing inbox answer closes the item, and the answer fails item-closed', async () => {
     await sessionWithOpenRequest(service);
     const itemId = await openItemId();
     const barrier = new Barrier(2);
-    const rule = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier));
+    let byRule: Promise<Result<unknown>> | undefined;
+    const inboxStore = trailingBarrierStore(new PostgresSessionTimelineStore(database), barrier, () => byRule!);
+    byRule = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier)).consumeResponse(SESSION, ruled());
+    const byInbox = await source(inboxStore, timelineService(inboxStore)).answer(answer(itemId, 'inbox-1', DENY));
+    value(await byRule);
+    const loser = failed(byInbox);
+    assert.deepEqual([loser.code, loser.details.reason, (await itemRows())[0]!.state], ['precondition-failed', ITEM_CLOSED, 'closed']);
+  });
+
+  test('an inbox answer that commits before a racing standing rule resolves the item, and the rule fails already-answered', async () => {
+    await sessionWithOpenRequest(service);
+    const itemId = await openItemId();
+    const barrier = new Barrier(2);
+    let byInbox: Promise<Result<unknown>> | undefined;
+    const ruleStore = trailingBarrierStore(new PostgresSessionTimelineStore(database), barrier, () => byInbox!);
     const inboxStore = barrierStore(new PostgresSessionTimelineStore(database), barrier);
-    const ruled = allow('rule-1');
-    const [byRule, byInbox] = await Promise.all([
-      rule.consumeResponse(SESSION, { ...ruled, response: { ...ruled.response, responder: { kind: 'standing-rule', ruleId: id('StandingRuleId', 'rule-1') } } }),
-      source(inboxStore, timelineService(inboxStore)).answer(answer(itemId, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
-    ]);
-    const loser = failed(byRule.ok ? byInbox : byRule);
-    const expected = byRule.ok ? ['precondition-failed', ITEM_CLOSED, 'closed'] : ['conflict', ALREADY_ANSWERED, 'resolved'];
-    assert.deepEqual([loser.code, loser.details.reason, (await itemRows())[0]!.state], expected);
+    byInbox = source(inboxStore, timelineService(inboxStore)).answer(answer(itemId, 'inbox-1', DENY));
+    const byRule = await timelineService(ruleStore).consumeResponse(SESSION, ruled());
+    value(await byInbox);
+    const loser = failed(byRule);
+    assert.deepEqual([loser.code, loser.details.reason, (await itemRows())[0]!.state], ['conflict', ALREADY_ANSWERED, 'resolved']);
   });
 
   test('two acknowledgements of one item under two keys resolve it once with one audit event, and the other fails already-answered', async () => {
@@ -261,14 +284,25 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
     assert.equal(await auditRows(), 1);
   });
 
-  test('an answer racing its generation end is answered with an acknowledgement item, or not-found with a closed item', async () => {
+  test('an answer that commits before its racing generation end leaves an open acknowledgement item', async () => {
     await sessionWithOpenRequest(service);
     const barrier = new Barrier(2);
-    const [left, right] = [0, 1].map(() => timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier)));
-    const [answered, ended] = await Promise.all([left!.consumeResponse(SESSION, allow('answer-1')), right!.endGeneration(SESSION, generation(1))]);
-    value(ended);
-    const items = (await itemRows()).map((row) => `${row.kind}:${row.state}`);
-    if (answered.ok) assert.deepEqual(items, ['delivery-acknowledgement:open', 'permission-request:resolved']);
-    else assert.deepEqual([failed(answered).code, items], ['not-found', ['permission-request:closed']]);
+    let answered: Promise<Result<unknown>> | undefined;
+    const ending = timelineService(trailingBarrierStore(new PostgresSessionTimelineStore(database), barrier, () => answered!));
+    answered = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier)).consumeResponse(SESSION, allow('answer-1'));
+    value(await ending.endGeneration(SESSION, generation(1)));
+    value(await answered);
+    assert.deepEqual(await itemStates(), ['delivery-acknowledgement:open', 'permission-request:resolved']);
+  });
+
+  test('an answer after its racing generation end committed fails not-found and leaves the item closed', async () => {
+    await sessionWithOpenRequest(service);
+    const barrier = new Barrier(2);
+    let ended: Promise<Result<unknown>> | undefined;
+    const answering = timelineService(trailingBarrierStore(new PostgresSessionTimelineStore(database), barrier, () => ended!));
+    ended = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier)).endGeneration(SESSION, generation(1));
+    const answered = await answering.consumeResponse(SESSION, allow('answer-1'));
+    value(await ended);
+    assert.deepEqual([failed(answered).code, await itemStates()], ['not-found', ['permission-request:closed']]);
   });
 });

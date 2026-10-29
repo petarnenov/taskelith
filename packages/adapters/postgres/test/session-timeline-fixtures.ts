@@ -140,12 +140,25 @@ export class Barrier {
 // Each transaction of the first attempt waits at the barrier after its first
 // session read, so every party has read before any writes.
 export function barrierStore(store: SessionTimelineStore, barrier: Barrier): SessionTimelineStore {
+  return firstReadStore(store, () => barrier.arrive());
+}
+
+// As barrierStore, then waits for `leader` to settle, so the leader's party
+// commits first and this one writes after it, whatever the scheduling.
+export function trailingBarrierStore(store: SessionTimelineStore, barrier: Barrier, leader: () => Promise<unknown>): SessionTimelineStore {
+  return firstReadStore(store, async () => {
+    await barrier.arrive();
+    await leader();
+  });
+}
+
+function firstReadStore(store: SessionTimelineStore, onFirstRead: () => Promise<void>): SessionTimelineStore {
   let arrived = false;
   return {
     transaction: (work) => store.transaction((tx) => work(gated(tx, async () => {
       if (arrived) return;
       arrived = true;
-      await barrier.arrive();
+      await onFirstRead();
     }))),
   };
 }
