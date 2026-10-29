@@ -51,6 +51,15 @@ The gated PostgreSQL races are new tests, so their evidence is also a contrast: 
 | `make findings ARGS="route --change apply-account-pool-cooldown-and-affinity"`, again | `9532d527` | Routed again before pass 1, as worker step 4 requires when fixes change the diff: `5f86a881` changed a test outside the change's directory, so the first `route.json` (`headCommit` `63d7acae`) was made for another tree, which the route gate of `make review` refuses. The stale `route.json` was deleted (`9532d527`) and the change routed again; committed unedited as `6372755a`. Result: "route: elevated (lines, contracts), rule version 2", features 807 lines and 12 files (before: 803 and 12); the same reviewer plan; shadow `jev-1.14.0` agrees (P(third) 0.70) |
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `1e56aab0b6d780535d7e6df3e93f5361a5053e86`; tests 3673, pass 3664, fail 0, skipped 9; all files 99.42% lines, 92.78% branches, 98.83% functions.
+- `npm run openspec -- validate apply-account-pool-cooldown-and-affinity --strict`: passed, `Change 'apply-account-pool-cooldown-and-affinity' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 87 file(s); every pass summary file is valid: 67 file(s); every route file is valid: 23 file(s).`.
+- Spec diff against the merge base `f882c0ac665f` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
