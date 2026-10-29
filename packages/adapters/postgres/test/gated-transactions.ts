@@ -1,5 +1,4 @@
 import type { PostgresDatabase } from '@taskelith/postgres';
-import type { CapacityStore } from '@taskelith/scheduling';
 
 // Each caller's promise resolves once `parties` callers have arrived.
 export function rendezvous(parties: number): () => Promise<void> {
@@ -19,8 +18,12 @@ export interface GatedRead {
   readonly arrive: () => Promise<void>;
 }
 
+// A capacity store whose transactions are PostgreSQL's, so it also serves
+// the commands that read the grant index.
+export type GatedTransactions = Pick<PostgresDatabase, 'transaction'>;
+
 export interface GatedStore {
-  readonly store: CapacityStore;
+  readonly store: GatedTransactions;
   readonly attempts: () => number;
 }
 
@@ -28,13 +31,38 @@ export interface GatedStore {
 // for the other racers, so a retry runs without the gate.
 export function gatedStore(database: PostgresDatabase, read: GatedRead): GatedStore {
   let attempts = 0;
-  const store: CapacityStore = {
+  const store: GatedTransactions = {
     transaction: (work) => database.transaction((tx) => {
       attempts += 1;
       return work(attempts === 1 ? gatedMember(tx, read) : tx);
     }),
   };
   return { store, attempts: () => attempts };
+}
+
+export interface GatedFirstCall {
+  readonly store: GatedTransactions;
+  // Whether any one transaction ran its work more than once.
+  readonly retried: () => boolean;
+}
+
+// Only the first call of the read waits for the other racers, in whichever
+// transaction of a multi-transaction command it runs.
+export function gatedFirstCall(database: PostgresDatabase, read: GatedRead): GatedFirstCall {
+  let waited = false;
+  let retried = false;
+  const once: GatedRead = { ...read, arrive: () => (waited ? Promise.resolve() : (waited = true, read.arrive())) };
+  const store: GatedTransactions = {
+    transaction: (work) => {
+      let runs = 0;
+      return database.transaction((tx) => {
+        runs += 1;
+        retried ||= runs > 1;
+        return work(gatedMember(tx, once));
+      });
+    },
+  };
+  return { store, retried: () => retried };
 }
 
 function gatedMember<Transaction extends object>(tx: Transaction, read: GatedRead): Transaction {

@@ -18,6 +18,7 @@ import type {
   DelegationRecord,
   DelegationRequests,
   OutboxLookup,
+  ProviderCredentialId,
 } from '@taskelith/scheduling';
 import type {
   AdmissionId,
@@ -254,6 +255,10 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
 
   listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
     return this.#store.list("worker_id = $1 AND state <> 'ended'", [workerId]);
+  }
+
+  listHeldForCredential(credentialId: ProviderCredentialId): Promise<readonly Assignment[]> {
+    return this.#store.list("reservation_state = 'held' AND provider_credentials @> ARRAY[$1::text]", [credentialId]);
   }
 
   async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {

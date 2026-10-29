@@ -6,6 +6,7 @@ import type { HarnessPluginId } from '@taskelith/execution';
 import { PostgresDatabase, PostgresSlotCredentials, type SlotCredentialCipher } from '@taskelith/postgres';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
+  ADD_SLOT_DEADLINE_MILLISECONDS,
   SLOT_CREDENTIAL_DELIVERIES_CONFORMANCE,
   SLOT_CREDENTIALS_CONFORMANCE,
   SlotSecret,
@@ -13,6 +14,7 @@ import {
   addAccountSlot,
   parseSlotCredentialVersion,
   type AddAccountSlotInput,
+  type CapacityStore,
   type ProjectId,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
@@ -106,6 +108,8 @@ const MECHANISM = id('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMe
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const ONE_SLOT = new StaticAdmittedDeliveries([{ harnessId: HARNESS, mechanismId: MECHANISM, delivery: 'subscription-token', slotLimit: 1 }]);
 
+const STILL = () => 0;
+
 function input(name: string, secret: SlotSecret): AddAccountSlotInput {
   return { id: id('ProviderCredentialId', name), harnessId: HARNESS, mechanismId: MECHANISM, allowedProjects: [PROJECT], secret };
 }
@@ -117,7 +121,7 @@ test('of two concurrent adds for the last allowed slot at most one commits, and 
   const secrets = [value(sentinel()), value(sentinel())];
   const shared = credentials();
   const added = await Promise.all(['slot-a', 'slot-b'].map((name, index) => addAccountSlot(
-    { store: racers[index]!.store, credentials: shared, deliveries: ONE_SLOT }, input(name, secrets[index]!),
+    { store: racers[index]!.store, credentials: shared, deliveries: ONE_SLOT, monotonicMilliseconds: STILL }, input(name, secrets[index]!),
   )));
   assert.deepEqual(added.map((result) => result.ok).sort(), [false, true]);
   const loser = added.findIndex((result) => !result.ok);
@@ -131,8 +135,22 @@ test('of two concurrent adds for the last allowed slot at most one commits, and 
   assert.deepEqual(kept, slots);
 });
 
+test('an add slower than its deadline rolls back, keeps no credential, and is retryable', async () => {
+  const clock = { now: 0 };
+  // The capacity transaction starts after the deadline has passed.
+  const slow: CapacityStore = { transaction: (work) => {
+    clock.now += ADD_SLOT_DEADLINE_MILLISECONDS + 1;
+    return database.transaction(work);
+  } };
+  const ports = { store: slow, credentials: credentials(), deliveries: ONE_SLOT, monotonicMilliseconds: () => clock.now };
+  const refused = await addAccountSlot(ports, input('slot-a', value(sentinel())));
+  assert.deepEqual(!refused.ok && [refused.error.code, refused.error.details.reason], ['unavailable', 'add-deadline-exceeded']);
+  assert.deepEqual(await query(url, 'SELECT slot_id FROM account_slots'), []);
+  assert.deepEqual(await query(url, 'SELECT slot_id FROM slot_credentials'), []);
+});
+
 test('a revoked slot counts toward its pair limit and a removed one does not', async () => {
-  const ports = { store: database, credentials: credentials(), deliveries: ONE_SLOT };
+  const ports = { store: database, credentials: credentials(), deliveries: ONE_SLOT, monotonicMilliseconds: STILL };
   const first = value(await addAccountSlot(ports, input('slot-a', value(sentinel()))));
   await query(url, "UPDATE account_slots SET state = 'revoked', revision = 2 WHERE slot_id = $1", [first.id]);
   const blocked = await addAccountSlot(ports, input('slot-b', value(sentinel())));

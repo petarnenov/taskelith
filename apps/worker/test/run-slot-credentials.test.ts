@@ -205,3 +205,29 @@ test('forgetOwnershipGeneration and forgetRecoveryEpoch keep the deliveries of o
   assert.equal(revealed(await runs.obtain(RUN)), SECRET);
   assert.equal(client.fetched.length, 1);
 });
+
+test('a call of an older recovery epoch fails with conflict and keeps the held later delivery', async () => {
+  const client = scripted([ok(delivery(RUN.executionId, 'fixture-epoch-2-token'))]);
+  const epoch = { current: 2 };
+  const runs = source(client, new InMemoryLogSink(), epoch);
+  value(await runs.obtain(RUN));
+  epoch.current = 1;
+  assert.equal(failed(await runs.obtain(RUN)).code, 'conflict');
+  epoch.current = 2;
+  assert.equal(revealed(await runs.obtain(RUN)), 'fixture-epoch-2-token', 'the delivery of epoch 2 is still held');
+  assert.deepEqual(client.fetched.map((fetched) => fetched.recoveryEpoch), [2]);
+});
+
+test('a call of an older recovery epoch leaves the fetch of a later one in flight', async () => {
+  const client = controlled();
+  const epoch = { current: 2 };
+  const runs = source(client, new InMemoryLogSink(), epoch);
+  const later = runs.obtain(RUN);
+  epoch.current = 1;
+  const older = runs.obtain({ ...RUN, executionId: id('ExecutionId', 'execution-2') as never });
+  assert.equal(failed(await older).code, 'conflict');
+  epoch.current = 2;
+  client.answer(ok(delivery(RUN.executionId, 'fixture-epoch-2-token')));
+  assert.equal(revealed(await later), 'fixture-epoch-2-token');
+  assert.equal(client.fetched.length, 1);
+});

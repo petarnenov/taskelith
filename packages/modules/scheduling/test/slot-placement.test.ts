@@ -15,6 +15,7 @@ import {
 import { err, failure, parseInstant, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
+  ADD_SLOT_DEADLINE_MILLISECONDS,
   InMemoryAccountSlots,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
@@ -33,6 +34,7 @@ import {
   parseSlotCredentialVersion,
   placeInTransaction,
   type AccountSlot,
+  type AccountSlotCommandPorts,
   type AddAccountSlotInput,
   type CapacityStore,
   type CapacityTransaction,
@@ -54,7 +56,7 @@ import {
   useAdmission,
   type TaskAdmission,
 } from '@taskelith/sdlc';
-import { id, value } from '@taskelith/testing';
+import { failed, id, value } from '@taskelith/testing';
 
 const AT = value(parseInstant('2026-10-29T10:00:00.000Z'));
 const PROJECT = ROOT_LINK.projectId as ProjectId;
@@ -302,7 +304,7 @@ async function commandFixture(slotLimit?: number) {
   const { tx, slots } = await fixture([2]);
   const credentials = new InMemorySlotCredentials();
   const deliveries = new StaticAdmittedDeliveries([{ ...PAIR, ...(slotLimit === undefined ? {} : { slotLimit }) }]);
-  return { slots, credentials, ports: { store: serialStore(tx), credentials, deliveries } };
+  return { slots, credentials, ports: { store: serialStore(tx), credentials, deliveries, monotonicMilliseconds: () => 0 } };
 }
 
 function input(name: string, overrides: Partial<AddAccountSlotInput> = {}): AddAccountSlotInput {
@@ -365,6 +367,26 @@ test('an add whose commit outcome is unknown keeps its stored version', async ()
   assert.deepEqual(credentials.storedVersions(stored.id), [stored.credentialVersion]);
 });
 
+// A store whose transaction starts the given time after the add's store.
+function startingAfter(ports: AccountSlotCommandPorts, milliseconds: number): AccountSlotCommandPorts {
+  const clock = { now: 0 };
+  const store: CapacityStore = { transaction: (work) => {
+    clock.now += milliseconds;
+    return ports.store.transaction(work);
+  } };
+  return { ...ports, store, monotonicMilliseconds: () => clock.now };
+}
+
+test('an add slower than half the least sweep grace age aborts, discards its version, and is retryable', async () => {
+  const { credentials, ports } = await commandFixture();
+  assert.equal(ADD_SLOT_DEADLINE_MILLISECONDS, 1_800_000);
+  const refused = failed(await addAccountSlot(startingAfter(ports, ADD_SLOT_DEADLINE_MILLISECONDS + 1), input('slot-1')));
+  assert.deepEqual([refused.code, refused.details.reason], ['unavailable', 'add-deadline-exceeded']);
+  assert.deepEqual(credentials.storedVersions(id('ProviderCredentialId', 'slot-1')), []);
+  const added = value(await addAccountSlot(startingAfter(ports, ADD_SLOT_DEADLINE_MILLISECONDS), input('slot-2')));
+  assert.deepEqual(credentials.storedVersions(added.id), [added.credentialVersion]);
+});
+
 class UnreachableDiscard extends InMemorySlotCredentials {
   override async discard(): Promise<void> {
     throw new Error('the credential store is unreachable');
@@ -375,7 +397,7 @@ async function unreachableDiscardFixture(slotLimit?: number) {
   const { tx } = await fixture([2]);
   const credentials = new UnreachableDiscard();
   const deliveries = new StaticAdmittedDeliveries([{ ...PAIR, ...(slotLimit === undefined ? {} : { slotLimit }) }]);
-  return { credentials, ports: { store: serialStore(tx), credentials, deliveries } };
+  return { credentials, ports: { store: serialStore(tx), credentials, deliveries, monotonicMilliseconds: () => 0 } };
 }
 
 test('a refused add keeps its own refusal when the discard of its version fails', async () => {
