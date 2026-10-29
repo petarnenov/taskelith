@@ -142,6 +142,19 @@ Checks on `d874c49e`, tree `eedce090`: `make verify` passed on its first run, pr
 
 The earlier record of 25 of 25 for the two PostgreSQL files holds: run alone at `cbf69b2d`, `session-output-tail.integration.test.ts` passed 10 of 10, one of them the new restart test, and `session-timeline-crash.integration.test.ts` 16 of 16 (log `13d-p3-pg-separate.log`), so before the fix the two held 9 and 16.
 
+## Architect check fixes
+
+The coordinator's architect check of the pass 3 fixes, 2026-10-29, kept the finding 1 fix of `cbf69b2d` after a deep check, declined finding 2 (section "Review pass 3 fixes"), and found one leak in code that no pass had changed. Its fix is unreviewed, outcome `fixed-unreviewed`. The findings schema has no form for a finding without a review pass, reviewer, and session, so this section alone records it.
+
+- `8317bb00` `chore: release a shape head prefix verbatim at a turn's end again` (pass 3, finding 2, declined).
+- `53570d62` `chore: refuse a held output bound below 256 code units` (the leak below).
+
+| Finding | Fix | Fail-before |
+| --- | --- | --- |
+| Leak at a bound below 12 (`pendingBegin`, `secret-output-redactor.ts`), outcome `fixed-unreviewed` | At bound 8, the chunks `a -----BEGIN N` and `ATS USER JWT-----\nqzjw\n-----END PRIVATE KEY-----\nLEAKqzjw\n------END USER NKEY SEED------\nok\n` were stored as `a [redacted]\nLEAKqzjw\n------END USER NKEY SEED------\nok\n`: the partial `.creds` begin marker past the bound was taken as a key's, which the key end marker closed. `SecretOutputRedactor.split` now refuses a bound below `MIN_OUTPUT_BOUND`, 256, with a `RangeError`, and the `SessionOutputRedactor` port states it; production passes 65,536. `pendingBegin` is unchanged. New test: a bound of 255 is refused, the repro is refused at bound 8, and at bound 256 it is stored as `a [redacted]\nok\n`. Design decision 2 states the minimum and the accepted fail-closed over-redaction | Repro before the fix (log `13d-arch-repro.log`): `LEAKqzjw` released. With `MIN_OUTPUT_BOUND` exported but no check (log `13d-arch-fail-before.log`): 1 of 68 redactor tests failed, the new test, "Missing expected exception (RangeError)". With the check: 68 of 68 (log `13d-arch-after.log`) |
+
+The nested-block tests of pass 3 finding 1 ran at a bound of 64, now refused, so they run at 256 (`MIN_OUTPUT_BOUND`), and the long type grew from 41 to 233 characters, so that a long-typed begin or end marker, 260 or 258 characters, still passes the bound while it is cut, as 68 or 66 did at 64. They keep their strength: with the finding 1 fix reverted (log `13d-arch-mutant-f1-scaled.log`), 2 of 68 redactor tests fail, the same two as at bound 64. The redactor test file takes about 21 s instead of 9 s.
+
 ## Independent review
 
 - Pass 1: reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7ed3-a7fc-7bfad5397e36`: 0 Critical, 3 High, 2 Medium, 3 Low. Findings 1, 2, and 4 to 8 fixed; finding 3 declined by coordinator decision (section "Review pass 1 fixes").
@@ -169,5 +182,6 @@ The earlier record of 25 of 25 for the two PostgreSQL files holds: run alone at 
 ## Remaining gates
 
 - Independent review passes 1 to 3 as the route and governance rule ask
+- The coordinator's architect check of the fixes of `8317bb00` and `53570d62`
 - Merge `origin/dev` right before the archive, and the archive
 - Integration into dev by the coordinator (single pull request)
