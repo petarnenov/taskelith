@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createApiClient, CSRF_HEADER, type RequestOptions } from '../src/api/client';
+import { createApiClient, CSRF_HEADER, hasStatus, type RequestOptions } from '../src/api/client';
 
 const TOKEN = 'csrf-fixture';
 
@@ -103,5 +103,33 @@ describe('createApiClient', () => {
     const { send } = recordingFetch(200, 'event: x', 'text/event-stream');
     const result = await createApiClient({ csrfToken: () => TOKEN, fetch: send })('get', '/session');
     expect(result.body).toBeUndefined();
+  });
+
+  it('reads no body from an empty JSON answer', async () => {
+    const send = (async () =>
+      new Response('', { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+    const result = await createApiClient({ csrfToken: () => TOKEN, fetch: send })('delete', '/session');
+    expect(result).toEqual({ status: 200, body: undefined });
+  });
+
+  it('types the body of an undocumented status as unknown', async () => {
+    const { send } = recordingFetch(502, 'Bad Gateway', 'text/plain');
+    const result = await createApiClient({ csrfToken: () => TOKEN, fetch: send })('get', '/session');
+    if (result.status === 200) {
+      // @ts-expect-error a proxy may answer 200 with any body.
+      const state: string = result.body.state;
+      expect(state).toBeUndefined();
+    }
+    expect(hasStatus(result, 200)).toBe(false);
+    expect(result).toEqual({ status: 502, body: undefined });
+  });
+
+  it('narrows a documented status to its documented body', async () => {
+    const { send } = recordingFetch(200, { state: 'anonymous' });
+    const result = await createApiClient({ csrfToken: () => TOKEN, fetch: send })('get', '/session');
+    const state = hasStatus(result, 200) ? result.body.state : 'none';
+    // @ts-expect-error readSession documents no 418.
+    hasStatus(result, 418);
+    expect(state).toBe('anonymous');
   });
 });

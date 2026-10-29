@@ -38,9 +38,26 @@ type OptionsArgument<O> = [RequiredKeys<RequestOptions<O>>] extends [never]
   ? [options?: RequestOptions<O>]
   : [options: RequestOptions<O>];
 
-export type ApiResult<O> = {
+export type DocumentedResult<O> = {
   [Status in keyof Responses<O>]: { readonly status: Status; readonly body: JsonContent<Responses<O>[Status]> };
 }[keyof Responses<O>];
+
+// A proxy or the infrastructure may answer with a status the document lacks.
+export interface UndocumentedResult {
+  readonly status: number;
+  readonly body: unknown;
+}
+
+export type ApiResult<O> = DocumentedResult<O> | UndocumentedResult;
+
+type DocumentedStatus<R> = R extends { readonly status: infer S } ? (number extends S ? never : S) : never;
+
+export function hasStatus<R extends { readonly status: number }, const S extends DocumentedStatus<R>>(
+  result: R,
+  status: S,
+): result is Extract<R, { readonly status: S }> {
+  return result.status === status;
+}
 
 export interface ApiClientOptions {
   readonly csrfToken: () => string | undefined;
@@ -102,5 +119,7 @@ function queryString(values: unknown): string {
 
 async function jsonBody(response: Response): Promise<unknown> {
   const type = response.headers.get('Content-Type') ?? '';
-  return /^application\/json\b/.test(type) ? response.json() : undefined;
+  if (!/^application\/json\b/.test(type)) return undefined;
+  const text = await response.text();
+  return text === '' ? undefined : JSON.parse(text);
 }
