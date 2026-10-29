@@ -1,0 +1,1 @@
+{"change": "apply-account-slot-commands", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18631-b706-7942-9241-c7d54d8f7cbe", "counts": {"critical": 0, "high": 1, "medium": 3, "low": 0}}
