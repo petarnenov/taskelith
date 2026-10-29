@@ -401,6 +401,313 @@
       "status": "declaration-only",
       "finding": "Declares MIT with author Sebastian Mayr. The upstream tree at the registry gitHead contains no license file or README, and the installed index.js has no license header.",
       "evidence": ["https://github.com/Sebmaster/tr46.js/tree/a8009f9ce80ff5dbe71dd71e203afe4e4c878d28"]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm-eabi",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for android-arm-eabi, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.android-arm-eabi.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-android-arm-eabi/-/binding-android-arm-eabi-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-android-arm64",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for android-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.android-arm64.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-android-arm64/-/binding-android-arm64-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-arm64",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for darwin-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.darwin-arm64.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-darwin-arm64/-/binding-darwin-arm64-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-darwin-x64",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for darwin-x64, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.darwin-x64.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-darwin-x64/-/binding-darwin-x64-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-freebsd-x64",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for freebsd-x64, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.freebsd-x64.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-freebsd-x64/-/binding-freebsd-x64-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm-gnueabihf",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-arm-gnueabihf, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-arm-gnueabihf.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-arm-gnueabihf/-/binding-linux-arm-gnueabihf-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-gnu",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-arm64-gnu, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-arm64-gnu.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-arm64-gnu/-/binding-linux-arm64-gnu-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-arm64-musl",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-arm64-musl, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-arm64-musl.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-arm64-musl/-/binding-linux-arm64-musl-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-ppc64-gnu",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-ppc64-gnu, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-ppc64-gnu.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-ppc64-gnu/-/binding-linux-ppc64-gnu-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-s390x-gnu",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-s390x-gnu, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-s390x-gnu.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-s390x-gnu/-/binding-linux-s390x-gnu-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-gnu",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-x64-gnu, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-x64-gnu.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-linux-x64-musl",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for linux-x64-musl, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.linux-x64-musl.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-linux-x64-musl/-/binding-linux-x64-musl-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-openharmony-arm64",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for openharmony-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.openharmony-arm64.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-openharmony-arm64/-/binding-openharmony-arm64-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-arm64-msvc",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for win32-arm64-msvc, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.win32-arm64-msvc.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-win32-arm64-msvc/-/binding-win32-arm64-msvc-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@rolldown/binding-win32-x64-msvc",
+      "version": "1.2.15",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of rolldown 1.2.15 for win32-x64-msvc, recorded from the lockfile. The published tarball, listed on 2026-10-29, holds README.md, package.json, rolldown-binding.win32-x64-msvc.node, declares MIT, and ships no license file. The full MIT text is LICENSE of the rolldown 1.2.15 package and of the upstream tag v1.2.15, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/rolldown/rolldown/blob/v1.2.15/LICENSE",
+        "https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.2.15.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/fsevents",
+      "version": "2.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package fsevents@2.3.3, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, fsevents.d.ts, fsevents.js, fsevents.node, package.json, declares MIT, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-android-arm64",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-android-arm64@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.android-arm64.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-android-arm64/-/lightningcss-android-arm64-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-darwin-arm64",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-darwin-arm64@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.darwin-arm64.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-darwin-arm64/-/lightningcss-darwin-arm64-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-darwin-x64",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-darwin-x64@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.darwin-x64.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-darwin-x64/-/lightningcss-darwin-x64-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-freebsd-x64",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-freebsd-x64@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.freebsd-x64.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-freebsd-x64/-/lightningcss-freebsd-x64-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-linux-arm-gnueabihf",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-linux-arm-gnueabihf@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.linux-arm-gnueabihf.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf/-/lightningcss-linux-arm-gnueabihf-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-linux-arm64-gnu",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-linux-arm64-gnu@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.linux-arm64-gnu.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-linux-arm64-gnu/-/lightningcss-linux-arm64-gnu-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-linux-arm64-musl",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-linux-arm64-musl@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.linux-arm64-musl.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-linux-arm64-musl/-/lightningcss-linux-arm64-musl-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-linux-x64-gnu",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-linux-x64-gnu@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.linux-x64-gnu.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-linux-x64-gnu/-/lightningcss-linux-x64-gnu-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-linux-x64-musl",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-linux-x64-musl@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.linux-x64-musl.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-linux-x64-musl/-/lightningcss-linux-x64-musl-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-win32-arm64-msvc",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-win32-arm64-msvc@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.win32-arm64-msvc.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-win32-arm64-msvc/-/lightningcss-win32-arm64-msvc-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/lightningcss-win32-x64-msvc",
+      "version": "1.33.0",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform package lightningcss-win32-x64-msvc@1.33.0, recorded from the lockfile because it installs only on its own platform. The published tarball, listed on 2026-10-29, holds LICENSE, README.md, lightningcss.win32-x64-msvc.node, package.json, declares MPL-2.0, and ships the full license text in LICENSE.",
+      "evidence": [
+        "https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/react-remove-scroll-bar",
+      "version": "2.3.8",
+      "manifestSha256": "e372f857ce05f266137c65293436b5380fec42ac311e6acb9378ed78b98d75d0",
+      "status": "text-located",
+      "finding": "Dependency of @mantine/core 9.7.4 through react-remove-scroll. The installed package and its published tarball, listed on 2026-10-29, ship build output, the manifest, and README.md, whose License section says MIT, but no license file. The registry gitHead b3b1287 is not on GitHub and 2.3.8 has no tag; the upstream repository's LICENSE holds the full MIT text.",
+      "evidence": [
+        "https://github.com/theKashey/react-remove-scroll-bar/blob/7301c160fda44cb8cf2b9fdfde61efad35736196/LICENSE",
+        "https://registry.npmjs.org/react-remove-scroll-bar/-/react-remove-scroll-bar-2.3.8.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/saxes",
+      "version": "6.0.0",
+      "manifestSha256": "32052572b41c2a890ed0854798c48454cc5991dcaafe5fb1718a4253046acfd3",
+      "status": "text-located",
+      "finding": "Dependency of jsdom 30.1.3, a test-only DOM. The installed package and its published tarball, listed on 2026-10-29, ship saxes.js, its map and declarations, the manifest, and README.md, declaring ISC, but no license file. The upstream repository at the registry gitHead holds the full ISC text in LICENSE.",
+      "evidence": [
+        "https://github.com/lddubeau/saxes/blob/211fa0ebec9b628affc09219199639887174bfc3/LICENSE",
+        "https://registry.npmjs.org/saxes/-/saxes-6.0.0.tgz"
+      ]
     }
   ]
 }
