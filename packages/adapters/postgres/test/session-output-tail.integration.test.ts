@@ -73,6 +73,55 @@ test('a generation ended through recovery after a restart releases a lone held t
   assert.deepEqual(await query(url, 'SELECT 1 FROM agent_session_output_tails'), []);
 });
 
+test('a generation ended through recovery after a restart records a held JWT prefix as one marker', async () => {
+  const turnId = await sessionWithOpenRequest(service);
+  value(await append(service, turnId, HALF_JWT_CHUNK));
+  await restarted(async (timeline) => {
+    value(await timeline.endGeneration(SESSION, FIRST));
+    const read = value(await timeline.readOutput(SESSION, 0, 100));
+    assert.deepEqual(read.kind === 'entries' && read.entries.map((entry) => entry.text), ['token ', '[redacted]']);
+  });
+  assertNoPart(await storedOutput(), 'stored bytes');
+});
+
+const BOUND = 65_536;
+const texts = async (timeline: SessionTimelineService) => {
+  const read = value(await timeline.readOutput(SESSION, 0, 100));
+  return read.kind === 'entries' ? read.entries.map((entry) => entry.text) : [];
+};
+
+test('a run cut at the bound keeps dropping its continuation after a restart, up to the next whitespace', async () => {
+  const turnId = await sessionWithOpenRequest(service);
+  value(await append(service, turnId, `a ${'x'.repeat(BOUND - 2)}`));
+  value(await append(service, turnId, 'yyy'));
+  await restarted(async (timeline) => {
+    value(await append(timeline, turnId, `zz${JWT.slice(0, 12)} more\n`));
+    assert.deepEqual(await texts(timeline), ['a ', '[redacted]', ' more\n']);
+  });
+});
+
+// A block's begin and its foreign end marker, assembled for the tests.
+const CREDS_BEGIN = '-----BEGIN NATS USER JWT-----';
+const CREDS_END = '------END USER NKEY SEED------';
+const PEM_BEGIN = ['-----BEGIN', 'RSA PRIVATE KEY-----'].join(' ');
+const PEM_END = ['-----END', 'RSA PRIVATE KEY-----'].join(' ');
+const BLOCKS = [
+  { name: '.creds block', begin: CREDS_BEGIN, foreignEnd: PEM_END, end: CREDS_END },
+  { name: 'PEM key', begin: PEM_BEGIN, foreignEnd: CREDS_END, end: PEM_END },
+];
+
+for (const block of BLOCKS) {
+  test(`a ${block.name} cut at the bound ends after a restart only at its own end marker`, async () => {
+    const turnId = await sessionWithOpenRequest(service);
+    value(await append(service, turnId, `keys:\n${block.begin}\n${'A'.repeat(65_000)}`));
+    value(await append(service, turnId, 'A'.repeat(1_000)));
+    await restarted(async (timeline) => {
+      value(await append(timeline, turnId, `\n${block.foreignEnd}\nplainSecretBody\n${block.end}\nafter\n`));
+      assert.deepEqual(await texts(timeline), ['keys:\n', '[redacted]', '\nafter\n']);
+    });
+  });
+}
+
 test('a held tail whose ciphertext was changed in the database fails the next append with internal and records nothing', async () => {
   const turnId = await sessionWithOpenRequest(service);
   value(await append(service, turnId, HALF_JWT_CHUNK));

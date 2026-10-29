@@ -32,10 +32,12 @@ const CREDS = [
 
 // Each shape of trust model 5 and a URL's user information, with the part
 // that must never be stored; an empty user information has none.
-const SHAPES: readonly { name: string; text: string; secret: string }[] = [
+const SHAPES: readonly { name: string; text: string; secret: string; parts?: readonly string[] }[] = [
   { name: 'URL user information', text: 'clone https://bot:hunter2pass@example.com/repo now', secret: 'bot:hunter2pass' },
   { name: 'empty URL user information', text: 'clone https://@example.com/repo now', secret: '' },
-  ...['PRIVATE KEY', 'EC PRIVATE KEY', 'ENCRYPTED PRIVATE KEY'].map((type) => ({ name: `PEM ${type}`, text: `key:\n${pem(type)}\nend`, secret: pem(type) })),
+  ...['PRIVATE KEY', 'EC PRIVATE KEY', 'ENCRYPTED PRIVATE KEY'].map((type) => ({
+    name: `PEM ${type}`, text: `key:\n${pem(type)}\nend`, secret: pem(type), parts: pem(type).split('\n').slice(1, -1),
+  })),
   ...(['operator', 'enrollment', 'worker'] as const).map((kind) => {
     const secret = secrets.issue(kind).secret;
     return { name: `issued ${kind} secret`, text: `token ${secret} done`, secret };
@@ -44,7 +46,7 @@ const SHAPES: readonly { name: string; text: string; secret: string }[] = [
     const seed = seedOf(pair.getSeed());
     return { name: `NKey seed ${seed.slice(0, 2)}`, text: `seed ${seed} done`, secret: seed };
   }),
-  { name: '.creds block', text: `creds:\n${CREDS}\nend`, secret: CREDS },
+  { name: '.creds block', text: `creds:\n${CREDS}\nend`, secret: CREDS, parts: [JWT, CREDS.split('\n')[5]!] },
   { name: 'JWT', text: `bearer x${JWT} done`, secret: JWT },
 ];
 
@@ -73,7 +75,70 @@ for (const shape of SHAPES) {
       }
     }
   });
+
+  test(`a turn that ends at any offset of a ${shape.name}, in one or two chunks, stores no part of the secret`, () => {
+    for (let cut = 0; cut <= shape.text.length; cut += 1) {
+      for (let first = 0; first <= cut; first += 1) {
+        const stored = turnOutput([shape.text.slice(0, first), shape.text.slice(first, cut)]);
+        for (const part of shape.parts ?? [shape.secret]) assertNoPart(stored, part, `cuts ${first} and ${cut}`);
+      }
+    }
+  });
 }
+
+test('a turn that ends in a cut JWT, issued secret, seed, or URL user information stores it as one marker', () => {
+  const seed = seedOf(createUser().getSeed());
+  const ends = [
+    ['token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiO', 'token '], ['a x.y.eyJa.b', 'a x.y.'], ['token tkop', 'token '], ['id tkwk_abc', 'id '],
+    [`seed ${seed.slice(0, 20)}`, 'seed '], ['clone https://bot:hunter', 'clone https://'], ['clone https://bot:', 'clone https://'],
+  ];
+  for (const [text, kept] of ends) assert.equal(turnOutput([text!]), `${kept}${REDACTED}`, text);
+});
+
+test('a turn that ends in a word, a host, or a closed JWT keeps or redacts it as the whole text does', () => {
+  for (const text of ['done', 'see https://example.com', 'eyJ0.eyJ1.c2ln', 'SO', 'tok']) {
+    assert.equal(turnOutput([text]), redactSecrets(text), text);
+  }
+});
+
+// A `.creds` block's or PEM key's end marker, assembled for the tests.
+const CREDS_END = '------END USER NKEY SEED------';
+const PEM_END = ['-----END', 'RSA PRIVATE KEY-----'].join(' ');
+const PEM_BEGIN = ['-----BEGIN', 'RSA PRIVATE KEY-----'].join(' ');
+
+test('a .creds block cut past the bound ends at its own end marker, not at a PEM key\'s', () => {
+  const chunks = [`creds:\n${CREDS.split('\n')[0]}\n${'A'.repeat(BOUND)}`, `\n${PEM_END}\nplainSecretBody\n${CREDS_END}\nafter\n`];
+  assert.equal(turnOutput(chunks), `creds:\n${REDACTED}\nafter\n`);
+});
+
+test('a PEM key cut past the bound ends at its own end marker, not at a .creds block\'s', () => {
+  const chunks = [`key:\n${PEM_BEGIN}\n${'A'.repeat(BOUND)}`, `\n${CREDS_END}\nplainSecretBody\n${PEM_END}\nafter\n`];
+  assert.equal(turnOutput(chunks), `key:\n${REDACTED}\nafter\n`);
+});
+
+test('a PEM key opened inside a .creds block cut past the bound keeps the block open past the key\'s end', () => {
+  const chunks = [`${CREDS.split('\n')[0]}\n${'A'.repeat(BOUND)}\n${PEM_BEGIN.slice(0, 14)}`, `${PEM_BEGIN.slice(14)}\nkey\n${CREDS_END}\n`];
+  const rest = [`${PEM_END}\nplainSecretBody\n${CREDS_END}\nafter\n`];
+  assert.equal(turnOutput([...chunks, ...rest]), `${REDACTED}\nafter\n`);
+});
+
+test('a begin marker cut after a space past the bound opens the block of the kind it completes to', () => {
+  const run = `${'x'.repeat(BOUND)}${CREDS.split('\n')[0]}`;
+  const chunks = [`a ${run.slice(0, BOUND + 15)}`, `${run.slice(BOUND + 15)}\n${PEM_END}\nplainSecretBody\n${CREDS_END}\nafter\n`];
+  assert.equal(turnOutput(chunks), `a ${REDACTED}\nafter\n`);
+});
+
+test('a begin marker cut after a space past the bound that completes to no block drops only its run', () => {
+  const chunks = [`a ${'x'.repeat(BOUND)}-----BEGIN CERT`, 'IFICATE-----\nbody\n'];
+  assert.equal(turnOutput(chunks), `a ${REDACTED}\nbody\n`);
+});
+
+test('a block continuation restored from its stored JSON still ends only at its own end marker', () => {
+  const first = redactor.split(NOTHING, `${PEM_BEGIN}\n${'A'.repeat(BOUND)}`, BOUND);
+  const restored = JSON.parse(JSON.stringify(first.held)) as typeof first.held;
+  const second = redactor.split(restored, `\n${CREDS_END}\nplainSecretBody\n${PEM_END}\nafter\n`, BOUND);
+  assert.deepEqual([first.released, second.released, second.held], [REDACTED, '\nafter\n', NOTHING]);
+});
 
 test('a run of non-whitespace characters held at exactly the bound releases nothing of it', () => {
   const split = redactor.split(NOTHING, `ok ${'x'.repeat(BOUND)}`, BOUND);

@@ -4,6 +4,7 @@ import { after, beforeEach, test } from 'node:test';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { ScenarioProcess, crashEnvironment, failed, uncoveredEnvironment, value } from '@taskelith/testing';
 import {
+  HALF_JWT_CHUNK,
   JWT,
   NATIVE,
   SESSION,
@@ -276,4 +277,30 @@ test('an append that holds half a JWT killed after its commit keeps its entry an
   const turnId = value(await service.readSession(SESSION)).turns[0]!.id;
   value(await service.appendOutput(SESSION, { turnId, generation: generation(1), text: `${JWT.slice(30)} done\n` }));
   assert.deepEqual(await outputState(), { entries: ['token ', '[redacted] done\n'], tail: false });
+});
+
+// Generation 1's delivered turn with half a JWT held in its tail.
+async function deliveredTurnWithTail(): Promise<void> {
+  await deliveredTurn();
+  const turnId = value(await service.readSession(SESSION)).turns[0]!.id;
+  value(await service.appendOutput(SESSION, { turnId, generation: generation(1), text: HALF_JWT_CHUNK }));
+}
+
+const turnStates = async () => value(await service.readSession(SESSION)).turns.map((entry) => entry.state);
+
+test('a generation end that releases a tail killed before its commit keeps the tail and the turn, and the rerun releases it once', async () => {
+  await deliveredTurnWithTail();
+  assert.deepEqual(await runStep('end-generation', 'SessionTimelineCommit.before'), KILLED);
+  assert.deepEqual([await outputState(), await turnStates()], [{ entries: ['token '], tail: true }, ['delivered']]);
+  assert.equal(stepResult(await runStep('end-generation')).ok, true);
+  assert.deepEqual([await outputState(), await turnStates()], [{ entries: ['token ', '[redacted]'], tail: false }, ['outcome-unknown']]);
+});
+
+test('a generation end that releases a tail killed after its commit keeps the release, the cleared tail, and the end', async () => {
+  await deliveredTurnWithTail();
+  assert.deepEqual(await runStep('end-generation', 'SessionTimelineCommit.after'), KILLED);
+  assert.deepEqual([await outputState(), await turnStates()], [{ entries: ['token ', '[redacted]'], tail: false }, ['outcome-unknown']]);
+  const committed = await version();
+  assert.equal(stepResult(await runStep('end-generation')).ok, true);
+  assert.deepEqual([await outputState(), await version()], [{ entries: ['token ', '[redacted]'], tail: false }, committed]);
 });
