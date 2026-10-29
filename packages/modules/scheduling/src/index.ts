@@ -261,6 +261,26 @@ export {
 } from './domain/least-loaded-selection.js';
 export { selectSlotInTransaction } from './application/slot-selection-in-transaction.js';
 export {
+  selectAfterLimitSlot,
+  selectResumedSessionSlot,
+  type AfterLimitPools,
+  type ResumedSessionSlot,
+} from './domain/session-slot-selection.js';
+export {
+  SLOT_REPORTED_RESET_MAXIMUM_MINUTES,
+  cooldownAfterLimit,
+  parseDefaultCooldownMinutes,
+  type DefaultCooldownMinutes,
+  type SlotLimitReport,
+} from './domain/slot-cooldown.js';
+export {
+  SLOT_LIMIT_REREADS,
+  applySlotLimitInTransaction,
+  type HarnessLimitSignal,
+  type SlotLimitInput,
+  type SlotSignalTransaction,
+} from './application/apply-slot-limit.js';
+export {
   addAccountSlot,
   type AccountSlotCommandPorts,
   type AddAccountSlotInput,

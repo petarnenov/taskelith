@@ -15,7 +15,9 @@ import {
   leastLoaded,
   parseSlotCredentialVersion,
   reasonOutcome,
+  selectAfterLimitSlot,
   selectNewSessionSlot,
+  selectResumedSessionSlot,
   slotIneligibility,
   triesNextCandidate,
   type AccountSlot,
@@ -35,6 +37,8 @@ const LATEST = at('2026-10-29T12:00:00.000Z');
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const OTHER_PROJECT = id('ProjectId', 'project-2') as ProjectId;
 const HARNESS = id('HarnessPluginId', 'harness-1') as HarnessPluginId;
+const SECOND = id('HarnessPluginId', 'harness-2') as HarnessPluginId;
+const THIRD = id('HarnessPluginId', 'harness-3') as HarnessPluginId;
 
 function slot(name: string, overrides: Partial<AccountSlot> = {}): AccountSlot {
   return {
@@ -111,6 +115,56 @@ test('without an eligible slot the policy waits with the earliest cooldown end o
   assert.deepEqual(select([], 'reject'), { outcome: 'rejected', reason: 'no-eligible-slot' });
 });
 
+const resumed = (own: SlotStanding) => selectResumedSessionSlot({ projectId: PROJECT, own }, NOW);
+const reservedOf = (stored: AccountSlot) => ({ outcome: 'reserved', slot: { harnessId: stored.harnessId, slotId: stored.id } });
+const WAIT = { outcome: 'waiting', reason: 'provider-concurrency-exhausted' } as const;
+
+test('a resumed session reserves its own eligible slot even when it is the most loaded', () => {
+  const own = slot('own', { lastReservedAt: NOW });
+  assert.deepEqual(resumed(standing(own, 3)), reservedOf(own));
+});
+
+test('a resumed session waits on its own unhealthy, cooling, or full slot and never moves', () => {
+  assert.deepEqual(resumed(standing(slot('own', { health: 'unhealthy' }))), WAIT);
+  assert.deepEqual(resumed(standing(slot('own', { cooldown: { until: LATER, source: 'default' } }))), { ...WAIT, earliestCooldownEnd: LATER });
+  assert.deepEqual(resumed(standing(slot('own', { concurrencyLimit: 1 }), 1)), WAIT);
+});
+
+test('a resumed session on a revoked, removed, or disallowed slot is rejected as withdrawn', () => {
+  const withdrawn = { outcome: 'rejected', reason: 'session-slot-withdrawn' };
+  for (const overrides of [{ state: 'revoked' }, { state: 'removed' }, { allowedProjects: [OTHER_PROJECT] }] as const) {
+    assert.deepEqual(resumed(standing(slot('own', overrides))), withdrawn, JSON.stringify(overrides));
+  }
+});
+
+const cooling = (until: Instant) => ({ cooldown: { until, source: 'reported-reset' as const } });
+const afterLimit = (limited: SlotStanding, alternatives: readonly (readonly SlotStanding[])[]) =>
+  selectAfterLimitSlot({ projectId: PROJECT, limited, alternatives }, NOW);
+
+test('after a limit the first other harness with an eligible slot wins, least loaded within it', () => {
+  const limited = standing(slot('limited', cooling(LATEST)));
+  const second = [standing(slot('second-a', { harnessId: SECOND, concurrencyLimit: 1 }), 1)];
+  const third = [standing(slot('third-a', { harnessId: THIRD }), 2), standing(slot('third-b', { harnessId: THIRD }), 1)];
+  assert.deepEqual(afterLimit(limited, [second, third]), reservedOf(slot('third-b', { harnessId: THIRD })));
+  const eligibleSecond = [standing(slot('second-a', { harnessId: SECOND }), 3)];
+  assert.deepEqual(afterLimit(limited, [eligibleSecond, third]), reservedOf(slot('second-a', { harnessId: SECOND })));
+});
+
+test('after a limit the limited slot is reserved again only once its cooldown ended', () => {
+  const ended = slot('limited', cooling(NOW));
+  assert.deepEqual(afterLimit(standing(ended), [[]]), reservedOf(ended));
+  const other = [standing(slot('second-a', { harnessId: SECOND, ...cooling(LATER) }))];
+  assert.deepEqual(afterLimit(standing(slot('limited', cooling(LATEST))), [other]), { ...WAIT, earliestCooldownEnd: LATER });
+  assert.deepEqual(afterLimit(standing(slot('limited', cooling(LATER))), []), { ...WAIT, earliestCooldownEnd: LATER });
+});
+
+test('after a limit a withdrawn limited slot leaves only the other harnesses to wait for', () => {
+  const removed = standing(slot('limited', { state: 'removed', ...cooling(LATER) }));
+  assert.deepEqual(afterLimit(removed, []), WAIT);
+  const other = [standing(slot('second-a', { harnessId: SECOND, ...cooling(LATEST) }))];
+  assert.deepEqual(afterLimit(removed, [other]), { ...WAIT, earliestCooldownEnd: LATEST });
+});
+
 test('the slot reasons reject but stay out of REJECTING_REASONS, and a slot wait is no worker or fleet reason', () => {
   for (const reason of SLOT_REJECTING_REASONS) {
     assert.equal(reasonOutcome(reason), 'rejected');
@@ -127,8 +181,9 @@ const MODULE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const POOL_FILES = [
   'src/domain/account-slot.ts', 'src/domain/slot-secret.ts', 'src/domain/slot-selection.ts', 'src/domain/least-loaded-selection.ts',
   'src/ports/account-pool.ts', 'src/ports/account-pool-conformance.ts', 'src/adapters/in-memory-account-pool.ts',
-  'src/application/add-account-slot.ts', 'src/application/slot-selection-in-transaction.ts',
-  'test/account-pool.test.ts', 'test/slot-selection.test.ts', 'test/slot-placement.test.ts',
+  'src/domain/session-slot-selection.ts', 'src/domain/slot-cooldown.ts', 'src/application/add-account-slot.ts',
+  'src/application/slot-selection-in-transaction.ts', 'src/application/apply-slot-limit.ts',
+  'test/account-pool.test.ts', 'test/slot-selection.test.ts', 'test/slot-placement.test.ts', 'test/slot-cooldown.test.ts',
 ];
 
 test('the account pool code and tests name no harness or vendor', () => {
