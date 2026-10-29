@@ -302,6 +302,7 @@ test('an expired request answers 404 and is never answered', async () => {
   value(await timeline.recordTurnOutcome(expiring.sessionId, { turnId: expiring.turnId, generation: GENERATION, outcome: 'completed' }));
   const expired = await call('POST', `${sessionPath('s-expiring')}/responses`, OTTO, responseBody('expired-1', 'request-1', undefined, 'attempt-s-expiring'));
   assert.deepEqual([expired.status, expired.body.code], [404, 'not-found']);
+  assert.match(String(expired.body.message), /holds the request as expired/);
   assert.equal(value(await timeline.readSession(expiring.sessionId)).requests[0]!.state, 'expired');
 });
 
