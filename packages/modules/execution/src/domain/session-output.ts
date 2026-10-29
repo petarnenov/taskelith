@@ -1,4 +1,5 @@
 import { ok, type Result } from '@taskelith/kernel';
+import { utf8Length } from './bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from './harness-values.js';
 import {
   isLiveTurn,
@@ -49,17 +50,4 @@ function withinBound(entries: readonly OutputEntry[], retainedBefore: number, ad
     dropped += 1;
   }
   return Object.freeze({ entries: Object.freeze(entries.slice(dropped)), retainedBytes, lastPosition: added.position });
-}
-
-// A lone surrogate counts 3 bytes, as its UTF-8 replacement character does.
-function utf8Length(text: string): number {
-  let bytes = 0;
-  for (const character of text) bytes += utf8Width(character.codePointAt(0) ?? 0);
-  return bytes;
-}
-
-function utf8Width(codePoint: number): number {
-  if (codePoint < 0x80) return 1;
-  if (codePoint < 0x800) return 2;
-  return codePoint < 0x10000 ? 3 : 4;
 }

@@ -1,0 +1,103 @@
+{
+  "change": "implement-session-timeline",
+  "generatedAt": "2026-10-28T22:37:49.429Z",
+  "devCommit": "62217e7a1f56056bba460181160562a860a238aa",
+  "query": {
+    "capabilities": [
+      "session-turn-model",
+      "postgres-state"
+    ],
+    "files": [
+      "packages/modules/execution/**",
+      "packages/adapters/postgres/**",
+      "packages/adapters/control-plane-store/**",
+      "docs/contracts/session-timeline.md"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 8
+      },
+      {
+        "category": "error-handling",
+        "count": 4
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 4
+      },
+      {
+        "category": "naming",
+        "count": 4
+      },
+      {
+        "category": "docs",
+        "count": 2
+      },
+      {
+        "category": "concurrency-race",
+        "count": 1
+      },
+      {
+        "category": "spec-wording",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 699,
+        "inChecklist": 587
+      },
+      "mediumOrWorse": {
+        "findings": 329,
+        "inChecklist": 268
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 110
+      },
+      {
+        "category": "spec-wording",
+        "count": 82
+      },
+      {
+        "category": "docs",
+        "count": 61
+      },
+      {
+        "category": "stale-citation",
+        "count": 43
+      },
+      {
+        "category": "contract-drift",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 20
+      },
+      {
+        "category": "scope",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 351,
+        "inChecklist": 345
+      },
+      "mediumOrWorse": {
+        "findings": 62,
+        "inChecklist": 60
+      }
+    }
+  }
+}

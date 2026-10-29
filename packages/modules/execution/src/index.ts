@@ -103,12 +103,20 @@ export {
   type TurnEnd,
   type TurnIdentity,
   type TurnProgress,
+  type TurnReport,
   type TurnState,
   type TurnSubmission,
   type TurnSubmitted,
 } from './domain/session-records.js';
 export { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from './domain/session-attempts.js';
-export { deliverTurn, nextDeliverableTurn, recordTurnOutcome, submitTurn } from './domain/session-turns.js';
+export {
+  deliverTurn,
+  nextDeliverableTurn,
+  recordTurnAcceptanceUnknown,
+  recordTurnOutcome,
+  recordTurnRefused,
+  submitTurn,
+} from './domain/session-turns.js';
 export {
   consumeResponse,
   recordDeliveryReport,
@@ -468,3 +476,24 @@ export {
   SPACE_REFUSAL_REASON,
   type WorkerJournal,
 } from './ports/worker-journal.js';
+export {
+  KEY_REUSED,
+  SessionTimelineService,
+  type ResponseCommand,
+  type SessionTimelineDependencies,
+  type SessionView,
+  type SubmittedTurn,
+  type TurnCommand,
+} from './application/session-timeline-service.js';
+export { InMemorySessionTimelineStore } from './adapters/in-memory-session-timeline-store.js';
+export type { InputDigest, SessionTextRedactor, TurnIdSource } from './ports/session-input.js';
+export { SESSION_TIMELINE_STORE_CONFORMANCE } from './ports/session-timeline-conformance.js';
+export type {
+  HeldKey,
+  IdempotencyRecord,
+  IdempotencyRecords,
+  SessionRecords,
+  SessionTimelineStore,
+  SessionTimelineTransaction,
+  StoredSession,
+} from './ports/session-timeline-store.js';

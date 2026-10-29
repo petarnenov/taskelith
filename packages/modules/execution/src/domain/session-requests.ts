@@ -112,7 +112,7 @@ function isDeliveryUncertain(request: NativeRequest): boolean {
   return request.state === 'answered' && request.response.delivery === 'delivery-uncertain';
 }
 
-function isAnswerWithinBounds(answer: Answer): boolean {
+export function isAnswerWithinBounds(answer: Answer): boolean {
   switch (answer.kind) {
     case 'permission':
       return isTextWithin(answer.message ?? '', 0, MAX_HARNESS_TEXT_LENGTH);

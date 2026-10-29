@@ -62,7 +62,7 @@ function completed(session: Session, name: string): Session {
 }
 
 test('the turn states are those of the contract', () => {
-  assert.deepEqual(TURN_STATES, ['queued', 'delivered', 'ended', 'outcome-unknown']);
+  assert.deepEqual(TURN_STATES, ['queued', 'delivered', 'ended', 'outcome-unknown', 'refused']);
 });
 
 test('a submitted turn keeps the caller-supplied identity, author, and text, and is queued', () => {
