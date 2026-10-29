@@ -9,9 +9,9 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12c, developed by a briefed s
 - Base: `dev` `dc2ae98b`, the brief's checklist base; `git fetch origin` before routing showed `origin/dev` still at `dc2ae98b`.
 - `dbacbda9` `chore: start the deliver-slot-credential-per-run change` (the brief's `checklist.json`, saved `--at dc2ae98b379dbc721df0ae88f05446cbc18b8059 --size M`, unedited; empty `findings.jsonl` and `passes.jsonl`).
 - `8ddb3800` `chore: deliver a reserved slot's credential per run over HTTPS and record each delivery`.
-- `docs: record the deliver-slot-credential-per-run design, spec delta, and contract updates`: the proposal, the design, the spec delta, the task list, this record, account pool contract status and section 13, execution wire contracts section 9, and `docs/g3-plan.md` row 12.
-- `docs: route the deliver-slot-credential-per-run change` (`route.json`, unedited).
-- `docs: record the make verify of deliver-slot-credential-per-run`, the `make record` of a passing `make verify` on the routed tree.
+- `f109b4ad` `docs: record the deliver-slot-credential-per-run design, spec delta, and contract updates`: the proposal, the design, the spec delta, the task list, this record, account pool contract status and section 13, execution wire contracts section 9, and `docs/g3-plan.md` row 12.
+- `f0fb9f6c` `docs: route the deliver-slot-credential-per-run change` (`route.json`, unedited): "route: elevated (lines, files, security, contracts), rule version 2", features 1646 lines and 38 files; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.73) and agrees; recommendation only.
+- `docs: record the make verify of deliver-slot-credential-per-run`, the `make record` of a passing `make verify` on the tree of `f0fb9f6c` (log `verify-12c-1.log` in the session scratchpad, one run).
 
 ## Environment
 
@@ -50,6 +50,15 @@ Each behavior was broken in place on `8ddb3800`, the build and the tests run, an
 | `npm run verify:archive` | records working tree | `Every active OpenSpec change archives into strictly valid specs.` |
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `29a994ff783bef263fad563c4481cd44e906972e`; tests 3812, pass 3803, fail 0, skipped 9; all files 99.39% lines, 92.73% branches, 98.85% functions.
+- `npm run openspec -- validate deliver-slot-credential-per-run --strict`: passed, `Change 'deliver-slot-credential-per-run' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s).`.
+- Spec diff against the merge base `dc2ae98b379d` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Limitations
