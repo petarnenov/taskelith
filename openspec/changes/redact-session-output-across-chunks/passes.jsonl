@@ -1,0 +1,1 @@
+{"change": "redact-session-output-across-chunks", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a18605-e9aa-7ed3-a7fc-7bfad5397e36", "counts": {"critical": 0, "high": 3, "medium": 2, "low": 3}}
