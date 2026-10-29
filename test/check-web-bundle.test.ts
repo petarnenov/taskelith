@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { SECRET_PREFIXES } from '@taskelith/access';
-import { ISSUED_SECRET_PREFIXES, textProblems, WEB_DIST, webBundleProblems } from '../scripts/check-web-bundle.ts';
+import { ALLOWED_URLS, ISSUED_SECRET_PREFIXES, textProblems, WEB_DIST, webBundleProblems } from '../scripts/check-web-bundle.ts';
 
 // Fixture secrets are assembled at run time, so no secret shape is tracked.
 const BASE64 = 'A'.repeat(40);
@@ -19,6 +19,22 @@ const SECRET_FIXTURES: readonly [string, string][] = [
   ['AWS access key', `${'AKIA'}${'A'.repeat(16)}`],
 ];
 
+// Literals that only dev-server.ts or a web test holds, so a bundled copy of
+// either leaves them in the dist; each must still occur in its source.
+const DEVELOPMENT_ONLY_MARKERS: readonly [string, string][] = [
+  ['dev-server.ts', 'https://127.0.0.1:8443'],
+  ['dev-server.ts', 'TASKELITH_WEB_DEV_'],
+  ['test/client.test.ts', 'csrf-fixture'],
+  ['test/client.test.ts', 'fixture-password'],
+  ['test/app.test.tsx', 'names the scaffold honestly'],
+];
+const SPA_FILE = /^(?:index\.html|assets\/index-[A-Za-z0-9_-]+\.(?:js|css))$/;
+
+function distFiles(root: string): string[] {
+  const entries = readdirSync(root, { recursive: true, encoding: 'utf8' });
+  return entries.filter((entry) => statSync(join(root, entry)).isFile()).sort();
+}
+
 function dist(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-web-bundle-'));
   for (const [name, text] of Object.entries(files)) {
@@ -30,6 +46,15 @@ function dist(files: Record<string, string>): string {
 
 test('the built web SPA holds no secret shape, environment value, or external origin', () => {
   assert.deepEqual(webBundleProblems(WEB_DIST), []);
+});
+
+test('the built web SPA holds neither dev-server.ts nor a web test', () => {
+  assert.deepEqual(distFiles(WEB_DIST).filter((file) => !SPA_FILE.test(file)), []);
+  const bundle = distFiles(WEB_DIST).map((file) => readFileSync(join(WEB_DIST, file), 'utf8')).join('\n');
+  for (const [source, marker] of DEVELOPMENT_ONLY_MARKERS) {
+    assert(readFileSync(join('apps/web', source), 'utf8').includes(marker), `${source} no longer holds ${marker}`);
+    assert(!bundle.includes(marker), `the dist holds ${marker} of ${source}`);
+  }
 });
 
 test('the issued-secret prefixes match the access module', () => {
@@ -60,6 +85,17 @@ test('only the listed namespace names and error links pass, and only in scripts'
   assert.deepEqual(textProblems('assets/a.js', 'ns="http://www.w3.org/2000/svg";u=`https://react.dev/errors/`+e'), []);
   assert.deepEqual(textProblems('assets/a.js', 'fetch("https://react.dev/errors/x")'), ['assets/a.js: references the external origin of https://react.dev/errors/x']);
   assert.deepEqual(textProblems('index.html', '<svg xmlns="http://www.w3.org/2000/svg">'), ['index.html: references the external origin of http://www.w3.org/2000/svg']);
+});
+
+test('every allowed URL is an exact string with a one-line reason', () => {
+  for (const [url, reason] of ALLOWED_URLS) {
+    assert.match(url, /^https?:\/\/\S+$/);
+    assert.match(reason, /^[^\n]{20,}\.$/);
+    assert.deepEqual(textProblems('assets/a.js', `u="${url}"`), []);
+    for (const variant of [`${url}x`, url.slice(0, -1)]) {
+      assert.deepEqual(textProblems('assets/a.js', `u="${variant}"`), [`assets/a.js: references the external origin of ${variant}`]);
+    }
+  }
 });
 
 test('the check reads every file of the dist and refuses a missing build or an unexpected file', () => {

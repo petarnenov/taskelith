@@ -26,15 +26,15 @@ export const SECRET_SHAPES: readonly { readonly name: string; readonly pattern: 
 // VITE_ variable, or the whole environment object with its BASE_URL.
 export const ENVIRONMENT_SHAPES: readonly RegExp[] = [/import\.meta\.env/, /\bVITE_[A-Z0-9_]+/, /\bBASE_URL\b/];
 
-// URLs that React DOM and Mantine hold as text, never as a request: XML
-// namespace names and the documentation links of their error messages.
-export const ALLOWED_URLS: ReadonlySet<string> = new Set([
-  'http://www.w3.org/1998/Math/MathML',
-  'http://www.w3.org/1999/xlink',
-  'http://www.w3.org/2000/svg',
-  'http://www.w3.org/XML/1998/namespace',
-  'https://react.dev/errors/',
-  'https://mantine.dev/theming/colors/#primary-color',
+// The only URLs a script may hold, each matched exactly and with its reason:
+// text that React DOM and Mantine never request. Any other URL fails.
+export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
+  ['http://www.w3.org/1998/Math/MathML', 'React DOM names the MathML namespace of elements it creates.'],
+  ['http://www.w3.org/1999/xlink', 'React DOM names the XLink namespace of xlink: attributes.'],
+  ['http://www.w3.org/2000/svg', 'React DOM names the SVG namespace of elements it creates.'],
+  ['http://www.w3.org/XML/1998/namespace', 'React DOM names the XML namespace of xml: attributes.'],
+  ['https://react.dev/errors/', 'React prefixes the link of a minified error message with it.'],
+  ['https://mantine.dev/theming/colors/#primary-color', 'Mantine links its invalid primary color error message to it.'],
 ]);
 
 const URL_PATTERN = /(?:\b[a-z][a-z0-9+.-]*:)?\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?::\d+)?[^\s"'`<>()\\]*/g;
