@@ -139,6 +139,10 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 - Unreviewed fixes for the architect check by the coordinator Niki before the archive: `d930ca88` with `da5541fe`, `e95d3218`, `b34192d2`, `6122df5e`, `42ef6091`, `e7ae1ce9`, `eb1f66f3`, and the records commit that follows them.
 - Architect check (Niki, 2026-10-29): e95d3218, d930ca88, da5541fe, 42ef6091, b34192d2, e7ae1ce9, 6122df5e, eb1f66f3 passed (971d3797, f5f7047b records). Niki's non-blocking note, a follow-up for 12d (under "Limitations"): an obtain with an older recovery epoch still forgets current-epoch scopes (`#forgetWhere` on epoch `!==`), unlike the generation rule; within one worker process the epoch only rises, so the cost is a refetch, not a leak.
 
+## Merge of dev
+
+- Before the archive, `git fetch origin` and `git merge origin/dev` on `330f7e49`: `origin/dev` is at `dc2ae98b`, the branch's merge base, so the merge was "Already up to date", with no conflict and no merge commit. `openspec/specs/account-pool-port/spec.md` last changed in `978072b3`, inside the base, so the delta still matches `dev`'s requirement text: "Confidential credential transport" exists as the MODIFIED delta expects, and none of the four ADDED requirements exists yet.
+
 ## Limitations
 
 - Nothing calls the new paths outside tests: the composition passes no delivery service (12d), and no harness host calls `RunSlotCredentials` (item 18).
@@ -152,6 +156,4 @@ The brief assigns pass 1 to reviewer A `codex gpt-6-astra#medium`, pass 2 to rev
 
 ## Remaining gates
 
-- A merge of the current `dev` into the branch before the archive, if `dev` has moved (`origin/dev` was at `dc2ae98b` at the last fetch).
-- Archive, in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
