@@ -212,6 +212,7 @@ test('a revocation racing a re-delivery commits only in a serial order', async (
 
 test('a revocation of a slot with a launched attempt revokes its grant, sends its cancellation, and keeps the reservation', async () => {
   const { task } = await launchedOnSlot();
+  const [before] = await query<{ state: string }>(url, 'SELECT state FROM assignments');
   value(await revoke(database));
   assert.equal(await heldOnSlot(), 1, 'the reservation waits for the terminal fact');
   assert.deepEqual(await commandTypes(), ['execution.assignment.offer', 'execution.cancellation.request']);
@@ -219,6 +220,7 @@ test('a revocation of a slot with a launched attempt revokes its grant, sends it
   assert.equal(attempt.executions[0]!.grants.at(-1)!.state, 'revoked');
   const [assignment] = await query<{ state: string; reservation_state: string }>(url, 'SELECT state, reservation_state FROM assignments');
   assert.equal(assignment!.reservation_state, 'held');
+  assert.equal(assignment!.state, before!.state, 'the assignment ends with the terminal fact, not the revocation');
 });
 
 const credentials = () => new PostgresSlotCredentials((work) => database.transaction(work), value(AesGcmSlotCredentialCipher.of(randomBytes(32))));
