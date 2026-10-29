@@ -95,11 +95,18 @@ async function ask(sessionId: SessionId, turnId: TurnId, native: string, kind: '
   value(await timeline.recordRequest(sessionId, { key, kind, turnId, text: `may I ${native}` }));
 }
 
-// `s-alpha` has the open requests `request-1` (permission) and `request-2`
-// (input); `s-beta` is of project beta; `s-stopped` is stopped by a limit.
-const ALPHA = await runningSession('s-alpha');
-await ask(ALPHA.sessionId, ALPHA.turnId, 'request-1');
-await ask(ALPHA.sessionId, ALPHA.turnId, 'request-2', 'input-request');
+// A running session with the open requests `request-1` (permission) and
+// `request-2` (input); a test that changes a session has one of its own.
+async function askingSession(name: string): Promise<{ sessionId: SessionId; turnId: TurnId }> {
+  const asking = await runningSession(name);
+  await ask(asking.sessionId, asking.turnId, 'request-1');
+  await ask(asking.sessionId, asking.turnId, 'request-2', 'input-request');
+  return asking;
+}
+
+// `s-alpha`, which only refused commands reach, is an asking session;
+// `s-beta` is of project beta; `s-stopped` is stopped by a limit.
+const ALPHA = await askingSession('s-alpha');
 const BETA = await runningSession('s-beta', scope('beta', 'run-beta'));
 const STOPPED = await runningSession('s-stopped');
 value(await timeline.recordLimitSignal(STOPPED.sessionId, {}));
@@ -248,13 +255,14 @@ test('listAgentSessions pages a card\'s sessions in identifier order with a next
 });
 
 test('readAgentSession shows the card, attempt, generation, positions, limit, and output bounds', async () => {
-  const read = await call('GET', sessionPath('s-alpha'), VERA);
+  await askingSession('s-read');
+  const read = await call('GET', sessionPath('s-read'), VERA);
   assert.equal(read.status, 200);
   assert.deepEqual(read.body, {
     asOf: AS_OF, position: '0',
     session: {
-      sessionId: 's-alpha', taskId: 'task-s-alpha', runId: 'run-alpha', harness: 'harness-a',
-      activeAttempt: { attemptId: 'attempt-s-alpha', ownershipGeneration: 1 }, runningGeneration: 1,
+      sessionId: 's-read', taskId: 'task-s-read', runId: 'run-alpha', harness: 'harness-a',
+      activeAttempt: { attemptId: 'attempt-s-read', ownershipGeneration: 1 }, runningGeneration: 1,
       lastTurnPosition: 1, lastRequestPosition: 2, output: { lastPosition: 0 },
     },
   });
@@ -263,7 +271,8 @@ test('readAgentSession shows the card, attempt, generation, positions, limit, an
 });
 
 test('submitTurn records a turn under a minted identifier, repeats it, and refuses a reused key, a stopped session, and an empty text', async () => {
-  const path = `${sessionPath('s-alpha')}/turns`;
+  const submitting = await runningSession('s-submit');
+  const path = `${sessionPath('s-submit')}/turns`;
   const recorded = await call('POST', path, OTTO, turnBody('submit-1'));
   assert.equal(recorded.status, 201, recorded.text);
   const turn = recorded.body.turn as { turnId: string; author: unknown; state: string; position: number };
@@ -278,27 +287,29 @@ test('submitTurn records a turn under a minted identifier, repeats it, and refus
   const stopped = await call('POST', `${sessionPath('s-stopped')}/turns`, OTTO, turnBody('submit-2'));
   assert.deepEqual([stopped.status, stopped.body.code, (stopped.body.details as Record<string, string>).reason], [422, 'precondition-failed', 'session-stopped']);
   assert.equal((await call('POST', path, OTTO, turnBody('submit-3', ''))).status, 400);
-  assert.equal(value(await timeline.readSession(ALPHA.sessionId)).turns.length, 2);
+  assert.equal(value(await timeline.readSession(submitting.sessionId)).turns.length, 2);
 });
 
 test('respondToNativeRequest answers with the request and its position, repeats it, and refuses as section 9 orders', async () => {
-  const path = `${sessionPath('s-alpha')}/responses`;
-  const wrongKind = await call('POST', path, OTTO, responseBody('respond-0', 'request-1', { kind: 'input', text: 'yes' }));
+  await askingSession('s-respond');
+  const path = `${sessionPath('s-respond')}/responses`;
+  const ownResponse = (key: string, native?: string, answer?: unknown) => responseBody(key, native, answer, 'attempt-s-respond');
+  const wrongKind = await call('POST', path, OTTO, ownResponse('respond-0', 'request-1', { kind: 'input', text: 'yes' }));
   assert.deepEqual([wrongKind.status, wrongKind.body.code], [400, 'invalid']);
   const notCurrent = await call('POST', path, OTTO, responseBody('respond-0', 'request-1', undefined, 'attempt-other'));
   assert.deepEqual([notCurrent.status, notCurrent.body.code, (notCurrent.body.details as Record<string, string>).reason], [422, 'precondition-failed', 'attempt-not-current']);
-  const unknown = await call('POST', path, OTTO, responseBody('respond-0', 'request-9'));
+  const unknown = await call('POST', path, OTTO, ownResponse('respond-0', 'request-9'));
   assert.deepEqual([unknown.status, unknown.body.code], [404, 'not-found']);
-  const answered = await call('POST', path, OTTO, responseBody('respond-1'));
+  const answered = await call('POST', path, OTTO, ownResponse('respond-1'));
   assert.equal(answered.status, 200, answered.text);
   assert.deepEqual([answered.body.position, answered.body.state, answered.body.delivery, answered.body.answer], [1, 'answered', 'pending', { kind: 'permission', decision: 'allow' }]);
-  const repeated = await call('POST', path, OTTO, responseBody('respond-1'));
+  const repeated = await call('POST', path, OTTO, ownResponse('respond-1'));
   assert.deepEqual([repeated.status, repeated.body], [200, answered.body]);
-  const reused = await call('POST', path, OTTO, responseBody('respond-1', 'request-1', { kind: 'permission', decision: 'deny' }));
+  const reused = await call('POST', path, OTTO, ownResponse('respond-1', 'request-1', { kind: 'permission', decision: 'deny' }));
   assert.deepEqual([reused.status, (reused.body.details as Record<string, string>).reason], [409, 'idempotency-key-reused']);
-  const second = await call('POST', path, OTTO, responseBody('respond-2', 'request-1', { kind: 'permission', decision: 'deny' }));
+  const second = await call('POST', path, OTTO, ownResponse('respond-2', 'request-1', { kind: 'permission', decision: 'deny' }));
   assert.deepEqual([second.status, (second.body.details as Record<string, string>).reason], [409, 'already-answered']);
-  const input = await call('POST', path, OTTO, responseBody('respond-3', 'request-2', { kind: 'input', text: 'an answer' }));
+  const input = await call('POST', path, OTTO, ownResponse('respond-3', 'request-2', { kind: 'input', text: 'an answer' }));
   assert.deepEqual([input.status, input.body.position, input.body.answer], [200, 2, { kind: 'input', text: 'an answer' }]);
 });
 
