@@ -15,6 +15,7 @@ G3 item 13 (`docs/g3-plan.md`, row 13), sub-change 13a, developed by a briefed s
 - `fe26c9cd` `chore: fix the low findings of review pass 2 of the implement session timeline change` (findings L1 to L6).
 - `e422b1d8` `chore: cut redacted session text to its bound after redaction` (finding M1 as the architect answered, with its tests, design decision 6, and the session-turn-model delta).
 - `373982ae` `docs: record review pass 2 findings of the implement session timeline change`, then `make record` and this record.
+- `e355e01f` and `87f1e9af` (the Low findings of review pass 3), then the pass 3 records, design decision 6's amendment of answer M1, `make record`, and this record.
 
 ## Environment
 
@@ -107,6 +108,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Fail-before of the new tests: the rows "the tests of review pass 2" and "the 6 tests of finding M1" in "Fail-before"; logs `13-p2-fb-postgres.log` and `13-p2-fb-m1.log` in the session scratchpad. The L1 to L4 fixes change comments and records only.
 - Pass 3, reviewer A `codex gpt-6.1-sol#medium` as the brief names it, follows because M1 is Medium; it reviews `fe26c9cd` and `e422b1d8`.
 
+### Pass 3
+
+- Reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox read-only, session `01a184ff-058d-7232-8cc7-7f260b948982`, on `eb1bed49` (diff `62217e7a...eb1bed49`). The worktree snapshot before and after the review was `8f08f1d3818945a737482bca302bbc5e8ebb7727d64a77f4102bb0ce2973a4cc`, equal.
+- Invocation (from `make review`): `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C /home/petar/taskelith-worktrees/implement-session-timeline -`, environment `PATH HOME USER LANG TERM`, started 2026-10-29T00:11:07.841Z. Model confirmation: `model: gpt-6.1-sol (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`, printed by `make review`. The brief names pass 3 reviewer A `codex gpt-6.1-sol#medium`; `make review` printed "route: recommends effort high; the authorized medium applies (policy version 8)".
+- Result: Critical 0, High 0, Medium 0, Low 2, matching the pass 3 line of `passes.jsonl`; both recorded in `findings.jsonl`. The reviewer confirmed the fixes of pass 2, M1 and L1 to L6, ran 70 focused tests, and ran neither PostgreSQL nor `make verify`.
+  1. Low, docs (`docs/contracts/installation-and-enrollment.md:49`): the key file's row still placed its creation before item 13b wires the service, which the fix of L3 had left unassigned (`missedBy` pass 2 B). Fixed in `e355e01f`: no command creates it yet, and its creation and the service's wiring wait for the coordinator.
+  2. Low, evidence-mismatch (this record, "Author self-check"): the longest requirement was named "Durable session timeline service" at 494 characters, which pass 2 had cut to 415. Fixed in `87f1e9af`: "Session timeline tables", 417, then the service at 415, with 494 as its length at `c87d0653`.
+- Pass 3 reported only Low findings, so the review ends: both are fixed without another review, outcome `fixed-unreviewed`, and both fixes are unreviewed, pending the coordinator's architect check. They change records and documentation only, so no new behavioral test.
+- The architect amended answer M1 (Niki, 2026-10-29), recorded in design decision 6: UTF-16 code units, matching the domain's bound, and the input answer's byte bound checked before redaction too.
+
 ## Limitations
 
 - Output is redacted per chunk only; a secret split across two chunks is stored unredacted. The service exposes no output read until 13b adds redaction across chunks with a held tail (answer Q5).
@@ -117,7 +128,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 3 as the brief names it, recorded in `passes.jsonl`, `findings.jsonl`, and this record
+- The coordinator's architect check of the unreviewed pass 3 fixes, `e355e01f` and `87f1e9af`
 - Merge of `origin/dev` before the archive, with Pepi's 12a migration `1792932900000` (answer Q7)
 - Archive of the change in the last commit of the branch
 - Integration into dev by the coordinator (single pull request)
