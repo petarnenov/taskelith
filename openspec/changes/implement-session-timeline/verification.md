@@ -69,10 +69,10 @@ The stubs and mutants were restored from the real files before the commit. After
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `4133e5c3ed64e20ea95e41e5133a2e160d8dd58f`; tests 3720, pass 3673, fail 0, skipped 47; all files 99.36% lines, 92.78% branches, 98.77% functions.
+- `make verify`: passed, profile full, tree `b6d6917cdc644cad8911301e57f1178d7ef8e4c8`; tests 3771, pass 3724, fail 0, skipped 47; all files 99.37% lines, 92.81% branches, 98.79% functions.
 - `npm run openspec -- validate implement-session-timeline --strict`: passed, `Change 'implement-session-timeline' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).`.
-- Spec diff against the merge base `62217e7a1f56` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 87 file(s); every pass summary file is valid: 67 file(s); every route file is valid: 23 file(s).`.
+- Spec diff against the merge base `f882c0ac665f` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
