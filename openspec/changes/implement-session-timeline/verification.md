@@ -59,6 +59,7 @@ The stubs and mutants were restored from the real files before the commit. After
 | `make verify` | `6814dcab`, tree `9cacd94c` (log `13-verify-1.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3703, suites 47, pass 3656, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.76 % branches, 98.77 % functions |
 | `make verify` | `335102b3`, tree `fc4bd347` (log `13-verify-2.log` in the session scratchpad) | First run failed, 1 of 3711: the G2 scenario "h. an unauthorized start cancels only that execution" of `test/g2-cancellation-races.test.ts`, which this change does not touch, timed out waiting 20000 ms for the authorized start (log kept as `13-verify-2-attempt1.log`). The rerun on the same clean tree passed, profile full, stamp written: tests 3711, suites 47, pass 3664, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.74 % branches, 98.77 % functions |
 | `make verify` | `373982ae`, tree `e0a59353` (log `13-verify-3.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3720, suites 47, pass 3673, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.76 % branches, 98.77 % functions. An earlier run on the same tree also passed with 3720 tests but wrote no stamp, because this record was edited while it ran; its log was overwritten by the rerun |
+| `make verify` | `c6ff25b1`, tree `4133e5c3` (log `13-verify-4.log` in the session scratchpad) | Passed, profile full, stamp written: tests 3720, suites 47, pass 3673, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.78 % branches, 98.77 % functions |
 | `make findings ARGS="route --change implement-session-timeline"` | `64ea6d1d` | "route: elevated (lines, files, security, contracts, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` agrees; recommendation only, committed unedited as `6814dcab`. The brief names pass 1 `codex gpt-6-astra#medium`, pass 2 `claude claude-opus-5-5#medium`, and pass 3 `codex gpt-6.1-sol#medium` |
 
 <!-- make record: begin -->
@@ -66,7 +67,7 @@ The stubs and mutants were restored from the real files before the commit. After
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e0a59353bc0bcc77c6d917cba26d19080d6f6ed6`; tests 3720, pass 3673, fail 0, skipped 47; all files 99.36% lines, 92.76% branches, 98.77% functions.
+- `make verify`: passed, profile full, tree `4133e5c3ed64e20ea95e41e5133a2e160d8dd58f`; tests 3720, pass 3673, fail 0, skipped 47; all files 99.36% lines, 92.78% branches, 98.77% functions.
 - `npm run openspec -- validate implement-session-timeline --strict`: passed, `Change 'implement-session-timeline' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 86 file(s); every pass summary file is valid: 66 file(s); every route file is valid: 22 file(s).`.
 - Spec diff against the merge base `62217e7a1f56` with `origin/dev`: no change under `openspec/specs`.
@@ -76,6 +77,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a184cb-122d-7ea3-b3c0-eb5d81062ea4` | 0 | 0 | 4 | 2 |
 | 2 | B | `claude claude-opus-5-5#medium` | `a3bdaf27-9245-42bc-ae80-3af56864035e` | 0 | 0 | 1 | 6 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a184ff-058d-7232-8cc7-7f260b948982` | 0 | 0 | 0 | 2 |
 <!-- make record: end -->
 
 ## Independent review
