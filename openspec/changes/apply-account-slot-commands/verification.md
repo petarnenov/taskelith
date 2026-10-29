@@ -11,7 +11,11 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12d A, developed by a briefed
 - `45bd8e04` `chore: apply the account slot commands, the credential sweep, and the later recovery epoch rule`.
 - `94e23088` `docs: record the apply-account-slot-commands design, spec delta, and contract updates`: the proposal, the design, the spec delta, the task list, account pool contract status and sections 6.2, 8.1, and 13, and `docs/g3-plan.md` row 12.
 - `755e916c` `docs: route the apply-account-slot-commands change` (`route.json`, unedited): "route: elevated (lines, files, security, contracts, size), rule version 2", features 1197 lines and 24 files; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.79) and agrees; recommendation only. The brief assigns the three passes at effort `medium`.
-- `docs: record the verification of apply-account-slot-commands` (this record) and `docs: record the make verify of apply-account-slot-commands`, the `make record` of a passing `make verify` on the tree of the record commit (log `verify-12dA-1.log` in the session scratchpad).
+- `bf45659e` `docs: record the verification of apply-account-slot-commands` (this record) and `38b83883` `docs: record the make verify of apply-account-slot-commands`, the `make record` of a passing `make verify` on the tree of the record commit (log `verify-12dA-1.log` in the session scratchpad).
+- `f9093de0` `docs: record the coordinator decisions on apply-account-slot-commands`: the records round of 2026-10-29. The design replaces its open question with the coordinator's Q2 correction and records the accepted deviations 1 to 4; account pool contract section 6.2 names the race that the pairs of `listStored` close.
+- `0b0c1066` `docs: route the apply-account-slot-commands change again` (`route.json`, unedited). The contract edit changed the tree outside the change's directory, so the routed commit `94e23088` no longer matched `HEAD`, and worker step 4 says: "if that run's fixes change the diff, delete `route.json`, route again, and record why in `verification.md`" (protocol "Route gate" would otherwise route at pass 1). The new record routes `f9093de0` with the same features, tier, and plan as before.
+- `docs: record the review plan of apply-account-slot-commands` and `docs: record the make verify of apply-account-slot-commands again`, the `make record` of a passing `make verify` on the tree of the review plan commit (log `verify-12dA-2.log` in the session scratchpad).
+- Governance v9 (`assign-fable-to-review-pass-2`, #415, `2250f3f7`) landed on `dev` after this change's route was first recorded; it is not merged into this branch.
 
 ## Environment
 
@@ -67,7 +71,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run. The brief assigns pass 1 `codex gpt-6-astra#medium` (A), pass 2 `claude claude-opus-5-5#medium` (B), and pass 3 `codex gpt-6.1-sol#medium` (A), each invoked with `env -u JEV_MAF_LAB`.
+Not yet run. Review plan, each pass invoked with `env -u JEV_MAF_LAB`:
+
+- Pass 1: `codex gpt-6-astra#medium` (A).
+- Pass 2: `claude claude-fable-5-1#medium` (B), by the owner decision of 2026-10-29 (governance v9, landed on `dev` as #415 `2250f3f7` after this change's route was recorded).
+- Pass 3: `codex gpt-6.1-sol#medium` (A), only after a pass 2 with a Medium or worse finding.
+
+`route.json` recommends `claude claude-opus-5-5#xhigh` for pass 2 and effort `high` for passes 1 and 3. The effort is `medium` because routed effort is not authorized; the pass 2 reviewer is `claude-fable-5-1` by the owner decision.
 
 ## Limitations
 
@@ -75,7 +85,6 @@ Not yet run. The brief assigns pass 1 `codex gpt-6-astra#medium` (A), pass 2 `cl
 - The re-delivery race forms no serialization cycle, so PostgreSQL commits both transactions in the order delivery, revocation, without a retry; in the observed runs the delivery committed with one attempt each. The test asserts that serial outcome and asserts a retry only in the branch where the delivery is refused ([design](design.md), decision 8).
 - The races run one interleaving each: the first attempt of each racer waits after its read for the other.
 - The test's re-delivery transaction repeats the checks and the record of `SlotCredentialDeliveryService` with the Scheduling functions, because this change touches no control-plane source.
-- Open question for the coordinator: Q2's "rotate of a revoked slot answers 409" contradicts contract section 8.1; this change keeps section 8.1 ([design](design.md), "Open question").
 
 ## Remaining gates
 
