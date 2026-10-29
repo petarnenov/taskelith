@@ -40,6 +40,31 @@ export function gatedStore(database: PostgresDatabase, read: GatedRead): GatedSt
   return { store, attempts: () => attempts };
 }
 
+export interface GatedFirstCall {
+  readonly store: GatedTransactions;
+  // Whether any one transaction ran its work more than once.
+  readonly retried: () => boolean;
+}
+
+// Only the first call of the read waits for the other racers, in whichever
+// transaction of a multi-transaction command it runs.
+export function gatedFirstCall(database: PostgresDatabase, read: GatedRead): GatedFirstCall {
+  let waited = false;
+  let retried = false;
+  const once: GatedRead = { ...read, arrive: () => (waited ? Promise.resolve() : (waited = true, read.arrive())) };
+  const store: GatedTransactions = {
+    transaction: (work) => {
+      let runs = 0;
+      return database.transaction((tx) => {
+        runs += 1;
+        retried ||= runs > 1;
+        return work(gatedMember(tx, once));
+      });
+    },
+  };
+  return { store, retried: () => retried };
+}
+
 function gatedMember<Transaction extends object>(tx: Transaction, read: GatedRead): Transaction {
   const member = Reflect.get(tx, read.member) as object;
   const gated = boundProxy(member, read.method, (original) => async (...args: unknown[]) => {

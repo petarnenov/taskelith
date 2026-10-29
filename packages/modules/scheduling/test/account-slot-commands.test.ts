@@ -313,15 +313,28 @@ test('a rotation is refused while the slot is active or held, and not found for 
   assert.equal(failed(await rotateSlotCredential({ store: removed.store, credentials }, { id: UNKNOWN, secret: secret(NEW_TEXT) })).code, 'not-found');
 });
 
-// Runs a command between the rotation's store and its switch.
+type Interleaved = () => Promise<unknown>;
+
+// Runs a command once at a point of a rotation: before or after its store,
+// or before its cleanup.
 class InterleavingCredentials extends InMemorySlotCredentials {
-  between: (() => Promise<unknown>) | undefined;
+  beforeStore: Interleaved | undefined;
+  between: Interleaved | undefined;
+  beforeCleanup: Interleaved | undefined;
   override async store(slotId: ProviderCredentialId, stored: SlotSecret): Promise<SlotCredentialVersion> {
+    await this.#once('beforeStore');
     const assigned = await super.store(slotId, stored);
-    const between = this.between;
-    this.between = undefined;
-    await between?.();
+    await this.#once('between');
     return assigned;
+  }
+  override async discardOlderThan(slotId: ProviderCredentialId, kept: SlotCredentialVersion): Promise<void> {
+    await this.#once('beforeCleanup');
+    return super.discardOlderThan(slotId, kept);
+  }
+  async #once(point: 'beforeStore' | 'between' | 'beforeCleanup'): Promise<void> {
+    const command = this[point];
+    this[point] = undefined;
+    await command?.();
   }
 }
 
@@ -339,6 +352,51 @@ for (const [name, between] of [
     assert.deepEqual(credentials.storedVersions(SLOT), [1, 2]);
   });
 }
+
+const rotate = (made: Fixture, credentials: InMemorySlotCredentials, text: string) =>
+  rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, secret: secret(text) });
+
+async function revealedText(credentials: InMemorySlotCredentials, slots: InMemoryAccountSlots): Promise<string> {
+  return value(await credentials.reveal(SLOT, (await stored(slots)).credentialVersion)).reveal();
+}
+
+test('another rotation between a rotation\'s store and its switch wins, and the record names a kept version', async () => {
+  const made = await withSlot({ state: 'revoked' });
+  const credentials = new InterleavingCredentials();
+  await credentials.store(SLOT, secret(OLD_TEXT));
+  let inner: Result<AccountSlot> | undefined;
+  credentials.between = async () => { inner = await rotate(made, credentials, 'fixture-inner-token'); };
+  assert.equal(failed(await rotate(made, credentials, NEW_TEXT)).code, 'conflict');
+  assert.equal(value(inner!).credentialVersion, 3);
+  assert.deepEqual(credentials.storedVersions(SLOT), [3], 'the outer version went with the inner cleanup');
+  assert.equal(await revealedText(credentials, made.slots), 'fixture-inner-token');
+});
+
+test('a rotation that switches before an earlier rotation\'s cleanup keeps its version deliverable', async () => {
+  const made = await withSlot({ state: 'revoked' });
+  const credentials = new InterleavingCredentials();
+  await credentials.store(SLOT, secret(OLD_TEXT));
+  let later: Result<AccountSlot> | undefined;
+  credentials.beforeCleanup = async () => { later = await rotate(made, credentials, 'fixture-later-token'); };
+  const earlier = value(await rotate(made, credentials, NEW_TEXT));
+  assert.deepEqual([earlier.credentialVersion, value(later!).credentialVersion], [2, 3]);
+  assert.deepEqual(credentials.storedVersions(SLOT), [3]);
+  assert.deepEqual([(await stored(made.slots)).credentialVersion, (await stored(made.slots)).revision], [3, 4]);
+  assert.equal(await revealedText(credentials, made.slots), 'fixture-later-token');
+});
+
+test('an orphan above the current version stays until the next successful rotation, which stores after it', async () => {
+  const made = await withSlot({ state: 'revoked' });
+  const credentials = new InterleavingCredentials();
+  await credentials.store(SLOT, secret(OLD_TEXT));
+  credentials.beforeStore = () => rotate(made, credentials, 'fixture-winner-token');
+  assert.equal(failed(await rotate(made, credentials, 'fixture-orphan-token')).code, 'conflict');
+  assert.equal((await stored(made.slots)).credentialVersion, 2);
+  assert.deepEqual(credentials.storedVersions(SLOT), [2, 3], 'the higher orphan is kept');
+  assert.equal(value(await rotate(made, credentials, NEW_TEXT)).credentialVersion, 4);
+  assert.deepEqual(credentials.storedVersions(SLOT), [4]);
+  assert.equal(await revealedText(credentials, made.slots), NEW_TEXT);
+});
 
 test('a rotation whose cleanup fails still answers the switch, and the sweep discards the replaced version', async () => {
   const { store, slots } = await withSlot({ state: 'revoked' });

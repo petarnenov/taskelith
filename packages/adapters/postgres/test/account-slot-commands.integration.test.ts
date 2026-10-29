@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { inspect } from 'node:util';
 import { after, beforeEach, test } from 'node:test';
 import { ok, err, failure, type Result } from '@taskelith/kernel';
-import type { AssignmentId, ExecutionId, HarnessPluginId, RecoveryEpoch, Task, WorkerId } from '@taskelith/execution';
+import { endAttempt, recordNotStarted, type AssignmentId, type ExecutionId, type HarnessPluginId, type RecoveryEpoch, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase, PostgresSlotCredentials, type PostgresTransaction } from '@taskelith/postgres';
 import {
   ROOT_LINK,
@@ -15,6 +15,8 @@ import {
   parseAccountSlot,
   parseResourceRequest,
   parseSlotCredentialVersion,
+  releaseInTransaction,
+  removeAccountSlot,
   revokeAccountSlot,
   rotateSlotCredential,
   sweepSlotCredentials,
@@ -23,6 +25,7 @@ import {
   type PlacementOutcome,
   type PlacementRequest,
   type ProviderCredentialId,
+  type SlotCredentialVersion,
   type SlotDeliveryRecord,
   type SlotDeliveryRequest,
   type SlotRequest,
@@ -32,7 +35,7 @@ import {
 import { AesGcmSlotCredentialCipher } from '@taskelith/secrets';
 import { id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, seedWorker, usedAdmission } from './capacity-fixtures.ts';
-import { gatedStore, rendezvous, type GatedRead, type GatedTransactions } from './gated-transactions.ts';
+import { gatedFirstCall, gatedStore, rendezvous, type GatedRead, type GatedTransactions } from './gated-transactions.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -253,4 +256,94 @@ test('a rotation on PostgreSQL switches the slot, discards the replaced version,
   const refused = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: next });
   assert.equal(!refused.ok && refused.error.code, 'conflict');
   assert.ok(!JSON.stringify(refused).includes(next.reveal()) && !inspect(refused).includes(next.reveal()));
+});
+
+async function revealed(store: PostgresSlotCredentials, version: number): Promise<string> {
+  return value(await store.reveal(SLOT, value(parseSlotCredentialVersion(version)))).reveal();
+}
+
+async function slotVersion(): Promise<number> {
+  const [row] = await query<{ credential_version: number }>(url, 'SELECT credential_version FROM account_slots WHERE slot_id = $1', [SLOT]);
+  return row!.credential_version;
+}
+
+test('of two rotations that read the same revision the first switch wins and the record names a kept version', async () => {
+  await addSlot({ state: 'revoked' });
+  const store = credentials();
+  await store.store(SLOT, sentinel());
+  // Both switches read the slot and its held count before either writes.
+  const arrive = rendezvous(2);
+  const racers = [gatedFirstCall(database, READ_HELD(arrive)), gatedFirstCall(database, READ_HELD(arrive))];
+  const secrets = [sentinel(), sentinel()];
+  const results = await Promise.all(racers.map((racer, index) => rotateSlotCredential({ store: racer.store, credentials: store }, { id: SLOT, secret: secrets[index]! })));
+  const winner = results.findIndex((result) => result.ok);
+  const loser = 1 - winner;
+  assert.notEqual(winner, -1);
+  assert.equal(!results[loser]!.ok && results[loser]!.error.code, 'conflict');
+  assert.ok(racers[loser]!.retried(), 'the losing switch was not retried');
+  const won = value(results[winner]!).credentialVersion;
+  assert.equal(await slotVersion(), won);
+  assert.equal(await revealed(store, won), secrets[winner]!.reveal());
+  const orphan = 5 - won;
+  assert.deepEqual(await storedVersions(SLOT), orphan > won ? [won, orphan] : [won], 'only a higher orphan is kept');
+  assert.deepEqual(await slotState(), { state: 'revoked', revision: 3 });
+});
+
+// Runs a command once before the first cleanup of a rotation.
+class CleanupInterleaving extends PostgresSlotCredentials {
+  beforeCleanup: (() => Promise<unknown>) | undefined;
+  override async discardOlderThan(slotId: ProviderCredentialId, kept: SlotCredentialVersion): Promise<void> {
+    const command = this.beforeCleanup;
+    this.beforeCleanup = undefined;
+    await command?.();
+    return super.discardOlderThan(slotId, kept);
+  }
+}
+
+test('a rotation that switches before an earlier rotation\'s cleanup keeps its version deliverable on PostgreSQL', async () => {
+  await addSlot({ state: 'revoked' });
+  const store = new CleanupInterleaving((work) => database.transaction(work), value(AesGcmSlotCredentialCipher.of(randomBytes(32))));
+  await store.store(SLOT, sentinel());
+  const later = sentinel();
+  let laterResult: Result<AccountSlot> | undefined;
+  store.beforeCleanup = async () => { laterResult = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: later }); };
+  const earlier = value(await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: sentinel() }));
+  assert.deepEqual([earlier.credentialVersion, value(laterResult!).credentialVersion], [2, 3]);
+  assert.deepEqual(await storedVersions(SLOT), [3]);
+  assert.deepEqual([await slotVersion(), (await slotState()).revision], [3, 4]);
+  assert.equal(await revealed(store, 3), later.reveal());
+});
+
+test('a removal of a reserved active slot destroys the credential, cancels nothing, and keeps the reservation until the terminal fact', async () => {
+  const { task, assignmentId, executionId } = await launchedOnSlot();
+  const store = credentials();
+  await store.store(SLOT, sentinel());
+  const removed = value(await removeAccountSlot({ store: database, credentials: store }, SLOT));
+  assert.equal(removed.state, 'removed');
+  assert.deepEqual(await storedVersions(SLOT), []);
+  assert.deepEqual(await commandTypes(), ['execution.assignment.offer'], 'the removal writes no command of its own');
+  assert.equal(await heldOnSlot(), 1);
+  const attempt = value(await database.transaction((tx) => tx.tasks.get(task.id))).attempts.at(-1)!;
+  assert.equal(attempt.cancellation, undefined, 'the attempt is left to be drained');
+  const request: SlotDeliveryRequest = {
+    workerId: WORKER, recoveryEpoch: 1 as RecoveryEpoch, attemptId: attempt.id, ownershipGeneration: task.ownershipGeneration, executionId, slotId: SLOT,
+  };
+  const refused = await database.transaction((tx) => redeliver(tx, request));
+  assert.equal(!refused.ok && refused.error.details.reason, 'removed');
+  // The drain: the terminal fact, the attempt's end, and the release commit
+  // in one transaction (item 21).
+  const released = value(await database.transaction(async (tx) => {
+    const stored = value(await tx.tasks.get(task.id));
+    const at = await tx.now();
+    const sealed = value(recordNotStarted(stored, { workerId: WORKER, executionId }, at)).task;
+    value(await tx.tasks.replace(sealed, stored.generation));
+    const drained = endAttempt(sealed, attempt.id, at);
+    if (!drained.ok) return drained;
+    const replaced = await tx.tasks.replace(drained.value, sealed.generation);
+    if (!replaced.ok) return replaced;
+    return releaseInTransaction(tx, { assignmentId, commandId: id('EventId', 'release-0'), correlationId: id('CorrelationId', 'correlation-release') });
+  }));
+  assert.equal(released.outcome, 'released');
+  assert.equal(await heldOnSlot(), 0);
+  assert.deepEqual(await commandTypes(), ['execution.assignment.end', 'execution.assignment.offer']);
 });
