@@ -48,7 +48,7 @@ test('a run fetches its credential once with the current recovery epoch, until t
   assert.equal(revealed(await runs.obtain(RUN)), SECRET);
   assert.equal(revealed(await runs.obtain(RUN)), SECRET);
   assert.deepEqual(client.fetched, [{ ...RUN, recoveryEpoch: 1 }], 'held for the execution, not fetched again');
-  runs.forget(RUN);
+  runs.forgetRun(RUN);
   assert.equal(revealed(await runs.obtain(RUN)), 'fixture-next-run-token', 'the ended run held nothing');
   assert.equal(client.fetched.length, 2);
 });
@@ -109,4 +109,79 @@ test('no log record, string, JSON, or inspection of a held delivery shows the cr
   for (const shown of [JSON.stringify(sink.records), JSON.stringify(answer), inspect(answer, { depth: 5 }), inspect(runs, { depth: 5 })]) {
     assert.doesNotMatch(shown, new RegExp(SECRET));
   }
+});
+
+// A client whose fetches each wait until the test answers them.
+function controlled(): SlotCredentialClient & { fetched: SlotCredentialFetch[]; answer: (next: Result<SlotCredentialAnswer>) => void } {
+  const fetched: SlotCredentialFetch[] = [];
+  const waiting: Array<(next: Result<SlotCredentialAnswer>) => void> = [];
+  return {
+    fetched,
+    fetch: (request) => { fetched.push(request); return new Promise((resolve) => waiting.push(resolve)); },
+    answer: (next) => waiting.shift()!(next),
+  };
+}
+
+const IN_FLIGHT_ENDS: Array<[string, (runs: FetchedRunSlotCredentials, epoch: { current: number }) => void]> = [
+  ['the run ends', (runs) => runs.forgetRun(RUN)],
+  ['its ownership generation ends', (runs) => runs.forgetOwnershipGeneration(RUN)],
+  ['its recovery epoch ends', (runs) => runs.forgetRecoveryEpoch(1 as RecoveryEpoch)],
+  ['the worker moves to another recovery epoch', (_runs, epoch) => { epoch.current = 2; }],
+];
+
+for (const [ending, end] of IN_FLIGHT_ENDS) {
+  test(`a delivery that arrives after ${ending} is neither returned nor held`, async () => {
+    const client = controlled();
+    const epoch = { current: 1 };
+    const runs = source(client, new InMemoryLogSink(), epoch);
+    const first = runs.obtain(RUN);
+    end(runs, epoch);
+    client.answer(ok(delivery()));
+    const dropped = failed(await first);
+    assert.equal(dropped.code, 'conflict');
+    assert.doesNotMatch(JSON.stringify(dropped), new RegExp(SECRET));
+    const again = runs.obtain(RUN);
+    client.answer(ok(delivery(RUN.executionId, 'fixture-after-end-token')));
+    assert.equal(revealed(await again), 'fixture-after-end-token', 'the late delivery was not held');
+    assert.equal(client.fetched.length, 2);
+  });
+}
+
+test('a fetch of another run is not dropped when one run ends', async () => {
+  const OTHER = { ...RUN, executionId: id('ExecutionId', 'execution-2') as never };
+  const client = controlled();
+  const runs = source(client);
+  const other = runs.obtain(OTHER);
+  runs.forgetRun(RUN);
+  client.answer(ok(delivery(OTHER.executionId)));
+  assert.equal(revealed(await other), SECRET);
+});
+
+// The scope of each call stays the same, so a call cannot drop the held
+// delivery; only the forget can.
+const HELD_ENDS: Array<[string, (runs: FetchedRunSlotCredentials) => void]> = [
+  ['forgetOwnershipGeneration', (runs) => runs.forgetOwnershipGeneration(RUN)],
+  ['forgetRecoveryEpoch', (runs) => runs.forgetRecoveryEpoch(1 as RecoveryEpoch)],
+];
+
+for (const [operation, end] of HELD_ENDS) {
+  test(`${operation} drops the held delivery without a call of another scope`, async () => {
+    const client = scripted([ok(delivery()), ok(delivery(RUN.executionId, 'fixture-forgotten-token'))]);
+    const runs = source(client);
+    value(await runs.obtain(RUN));
+    end(runs);
+    assert.equal(revealed(await runs.obtain(RUN)), 'fixture-forgotten-token');
+    assert.equal(client.fetched.length, 2);
+  });
+}
+
+test('forgetOwnershipGeneration and forgetRecoveryEpoch keep the deliveries of other generations and epochs', async () => {
+  const client = scripted([ok(delivery())]);
+  const runs = source(client);
+  value(await runs.obtain(RUN));
+  runs.forgetOwnershipGeneration({ attemptId: RUN.attemptId, ownershipGeneration: 1 as never });
+  runs.forgetOwnershipGeneration({ attemptId: id('AttemptId', 'attempt-2') as never, ownershipGeneration: RUN.ownershipGeneration });
+  runs.forgetRecoveryEpoch(2 as RecoveryEpoch);
+  assert.equal(revealed(await runs.obtain(RUN)), SECRET);
+  assert.equal(client.fetched.length, 1);
 });

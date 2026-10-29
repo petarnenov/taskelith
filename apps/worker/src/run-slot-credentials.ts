@@ -6,7 +6,7 @@ import type {
   SlotCredentialAnswer,
   SlotCredentialClient,
 } from '@taskelith/execution';
-import { ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 
 export interface RunSlotCredentialsOptions {
@@ -15,12 +15,24 @@ export interface RunSlotCredentialsOptions {
   readonly logger?: Logger;
 }
 
-interface HeldDelivery {
-  readonly credential: DeliveredSlotCredential;
+// The run, ownership generation, and recovery epoch of one fetch.
+interface DeliveryScope {
+  readonly executionId: RunSlotCredentialRequest['executionId'];
   readonly attemptId: RunSlotCredentialRequest['attemptId'];
   readonly ownershipGeneration: RunSlotCredentialRequest['ownershipGeneration'];
   readonly recoveryEpoch: RecoveryEpoch;
 }
+
+interface HeldDelivery extends DeliveryScope {
+  readonly credential: DeliveredSlotCredential;
+}
+
+interface PendingFetch {
+  readonly scope: DeliveryScope;
+  ended: boolean;
+}
+
+type EndedScope = (scope: DeliveryScope) => boolean;
 
 // Account pool contract section 7.3: one delivery per execution, held only
 // in memory until the run ends or its generation or epoch changes.
@@ -29,6 +41,7 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
   readonly #recoveryEpoch: () => RecoveryEpoch;
   readonly #logger: Logger;
   readonly #held = new Map<string, HeldDelivery>();
+  readonly #pending = new Set<PendingFetch>();
 
   constructor(client: SlotCredentialClient, options: RunSlotCredentialsOptions) {
     this.#client = client;
@@ -42,42 +55,60 @@ export class FetchedRunSlotCredentials implements RunSlotCredentials {
     const key = heldKey(run);
     const held = this.#held.get(key);
     if (held !== undefined) return ok(Object.freeze({ kind: 'delivered', credential: held.credential }));
-    const answer = await this.#client.fetch({ ...run, recoveryEpoch });
-    // The fields name identifiers only; the logger redacts a credential key.
-    const fields = { executionId: run.executionId, attemptId: run.attemptId, slot: run.slotId };
-    if (!answer.ok) {
-      this.#logger.warn('worker.slot-delivery.failed', { ...fields, code: answer.error.code });
-    } else if (answer.value.kind === 'refused') {
-      this.#logger.warn('worker.slot-delivery.refused', { ...fields, reason: answer.value.refusal.reason });
-    } else {
-      const { attemptId, ownershipGeneration } = run;
-      this.#held.set(key, { credential: answer.value.credential, attemptId, ownershipGeneration, recoveryEpoch });
-    }
+    const pending: PendingFetch = { scope: scopeOf(run, recoveryEpoch), ended: false };
+    this.#pending.add(pending);
+    const fetched = await this.#client.fetch({ ...run, recoveryEpoch }).finally(() => this.#pending.delete(pending));
+    const ended = pending.ended || this.#recoveryEpoch() !== recoveryEpoch;
+    const answer = ended ? withoutDelivery(fetched) : fetched;
+    this.#logOutcome(run, answer);
+    if (answer.ok && answer.value.kind === 'delivered') this.#held.set(key, { ...pending.scope, credential: answer.value.credential });
     return answer;
   }
 
-  // The run ended: no later run reuses its credential.
-  forget(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void {
-    const prefix = executionKey(run);
-    this.#forgetWhere((key) => key.startsWith(prefix));
+  forgetRun(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void {
+    this.#forgetWhere((scope) => scope.executionId === run.executionId && scope.attemptId === run.attemptId);
   }
 
-  // A new recovery epoch ends every held delivery, and a new ownership
-  // generation of an attempt ends that attempt's deliveries.
+  forgetOwnershipGeneration(attempt: Pick<RunSlotCredentialRequest, 'attemptId' | 'ownershipGeneration'>): void {
+    this.#forgetWhere((scope) => scope.attemptId === attempt.attemptId && scope.ownershipGeneration === attempt.ownershipGeneration);
+  }
+
+  forgetRecoveryEpoch(recoveryEpoch: RecoveryEpoch): void {
+    this.#forgetWhere((scope) => scope.recoveryEpoch === recoveryEpoch);
+  }
+
+  // A call that reads another epoch, or another generation of its attempt,
+  // also ends what the host has not forgotten yet.
   #forgetStale(run: RunSlotCredentialRequest, recoveryEpoch: RecoveryEpoch): void {
-    this.#forgetWhere((_key, held) => held.recoveryEpoch !== recoveryEpoch
-      || (held.attemptId === run.attemptId && held.ownershipGeneration !== run.ownershipGeneration));
+    this.#forgetWhere((scope) => scope.recoveryEpoch !== recoveryEpoch
+      || (scope.attemptId === run.attemptId && scope.ownershipGeneration !== run.ownershipGeneration));
   }
 
-  #forgetWhere(stale: (key: string, held: HeldDelivery) => boolean): void {
-    for (const [key, held] of [...this.#held]) if (stale(key, held)) this.#held.delete(key);
+  #forgetWhere(ended: EndedScope): void {
+    for (const [key, held] of [...this.#held]) if (ended(held)) this.#held.delete(key);
+    for (const pending of this.#pending) if (ended(pending.scope)) pending.ended = true;
+  }
+
+  #logOutcome(run: RunSlotCredentialRequest, answer: Result<SlotCredentialAnswer>): void {
+    // The fields name identifiers only; the logger redacts a credential key.
+    const fields = { executionId: run.executionId, attemptId: run.attemptId, slot: run.slotId };
+    if (!answer.ok) this.#logger.warn('worker.slot-delivery.failed', { ...fields, code: answer.error.code });
+    else if (answer.value.kind === 'refused') this.#logger.warn('worker.slot-delivery.refused', { ...fields, reason: answer.value.refusal.reason });
   }
 }
 
-function executionKey({ attemptId, executionId }: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): string {
-  return `${attemptId}\n${executionId}\n`;
+// A delivery that arrives after its run, generation, or epoch ended is
+// dropped; a refusal or failure holds nothing and passes unchanged.
+function withoutDelivery(answer: Result<SlotCredentialAnswer>): Result<SlotCredentialAnswer> {
+  if (!answer.ok || answer.value.kind !== 'delivered') return answer;
+  return err(failure('conflict', 'the run, ownership generation, or recovery epoch ended while its slot credential was fetched'));
 }
 
-function heldKey(run: RunSlotCredentialRequest): string {
-  return `${executionKey(run)}${run.slotId}`;
+function scopeOf(run: RunSlotCredentialRequest, recoveryEpoch: RecoveryEpoch): DeliveryScope {
+  const { executionId, attemptId, ownershipGeneration } = run;
+  return Object.freeze({ executionId, attemptId, ownershipGeneration, recoveryEpoch });
+}
+
+function heldKey({ attemptId, executionId, slotId }: RunSlotCredentialRequest): string {
+  return `${attemptId}\n${executionId}\n${slotId}`;
 }

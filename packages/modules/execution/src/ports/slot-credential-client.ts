@@ -6,7 +6,7 @@ import type {
   SlotCredentialFetch,
   SlotCredentialRefusal,
 } from '../domain/slot-credential-delivery.js';
-import type { AttemptId, ExecutionId } from '../domain/identifiers.js';
+import type { AttemptId, ExecutionId, RecoveryEpoch } from '../domain/identifiers.js';
 
 export type SlotCredentialAnswer =
   | { readonly kind: 'delivered'; readonly credential: DeliveredSlotCredential }
@@ -26,9 +26,11 @@ export interface RunSlotCredentialRequest {
   readonly slotId: DeliveredSlotId;
 }
 
-// The harness host's only source of a run's slot credential (item 18), held
-// until the run ends or its ownership generation or recovery epoch changes.
+// The harness host's only source of a run's slot credential (item 18); each
+// forget ends the held and the fetching deliveries of what ended.
 export interface RunSlotCredentials {
   obtain(run: RunSlotCredentialRequest): Promise<Result<SlotCredentialAnswer>>;
-  forget(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void;
+  forgetRun(run: Pick<RunSlotCredentialRequest, 'executionId' | 'attemptId'>): void;
+  forgetOwnershipGeneration(attempt: Pick<RunSlotCredentialRequest, 'attemptId' | 'ownershipGeneration'>): void;
+  forgetRecoveryEpoch(recoveryEpoch: RecoveryEpoch): void;
 }
