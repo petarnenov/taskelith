@@ -413,3 +413,38 @@ test('the harness manifest may depend on no workspace package but the kernel', (
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('web SPA source imports no workspace package and reads no environment value but MODE', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/kernel', 'packages/contracts', 'apps/*'] }));
+    for (const [dir, name] of [['packages/kernel', '@taskelith/kernel'], ['packages/contracts', '@taskelith/contracts'], ['apps/web', '@taskelith/web']]) {
+      mkdirSync(join(root, dir!, 'src'), { recursive: true });
+      writeFileSync(join(root, dir!, 'package.json'), JSON.stringify({ name }));
+    }
+    mkdirSync(join(root, 'apps/web/test'), { recursive: true });
+    writeFileSync(join(root, 'apps/web/src/mode.ts'), 'export const mode = import.meta.env.MODE;\n');
+    writeFileSync(join(root, 'apps/web/dev-server.ts'), "import { readFileSync } from 'node:fs';\nexport const env = import.meta.env.VITE_X;\n");
+    writeFileSync(join(root, 'apps/web/test/env.test.ts'), "import { readFileSync } from 'node:fs';\nconst all = import.meta.env;\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(join(root, 'apps/web/src/kernel.ts'), "import { REDACTED } from '@taskelith/kernel';\n");
+    writeFileSync(join(root, 'apps/web/src/paths.tsx'), "import type { HttpPaths } from '@taskelith/contracts';\nexport const P = () => <i />;\n");
+    writeFileSync(join(root, 'apps/web/src/env.ts'), 'export const a = import.meta.env.VITE_TOKEN;\nexport const b = import.meta.env;\nexport const c = import.meta.env["MODE"];\n');
+
+    const violations = checkWorkspaceBoundaries(root);
+    const expected = [
+      ['apps/web/src/kernel.ts', 'web SPA cannot import workspace package "@taskelith/kernel"'],
+      ['apps/web/src/paths.tsx', 'web SPA cannot import workspace package "@taskelith/contracts"'],
+      ['apps/web/src/env.ts', 'may read only import.meta.env.MODE, not "import.meta.env.VITE_TOKEN"'],
+      ['apps/web/src/env.ts', 'may read only import.meta.env.MODE, not "import.meta.env" (R03)'],
+      ['apps/web/src/env.ts', 'may read only import.meta.env.MODE, not "import.meta.env["MODE"]"'],
+    ];
+    for (const [file, message] of expected) {
+      assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

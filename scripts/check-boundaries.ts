@@ -247,15 +247,48 @@ function checkModuleImport({ rel, spec, target, relative: isRelative }: ImportEd
 }
 
 function checkWebImport({ rel, spec, target, relative: isRelative }: ImportEdge): string[] {
-  if (!rel.startsWith('apps/web/')) return [];
+  if (!rel.startsWith('apps/web/src/')) return [];
   const violations: string[] = [];
   if (spec.startsWith('node:') || isBuiltin(spec) || (!isRelative && INFRA_SDKS.has(packageName(spec)))) {
     violations.push(`${rel}: web SPA cannot import Node or server SDK "${spec}" (R03)`);
   }
   if (target && /^(?:apps\/(?:control-plane|worker|cli)|(?:src|packages)\/(?:modules|adapters|plugins))\//.test(target)) {
     violations.push(`${rel}: web SPA cannot import backend/worker module or adapter "${spec}" (R03)`);
+  } else if (spec.startsWith(WORKSPACE_SCOPE)) {
+    violations.push(`${rel}: web SPA cannot import workspace package "${spec}"; it uses its generated API types (R03)`);
   }
   return violations;
+}
+
+// The SPA reads only import.meta.env.MODE, so no other environment value
+// can be inlined into the bundle.
+export function webEnvironmentViolations(rel: string, source: string): string[] {
+  if (!rel.startsWith('apps/web/src/')) return [];
+  const violations: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isImportMetaEnv(node) && !isModeRead(node)) {
+      violations.push(`${rel}: web SPA may read only import.meta.env.MODE, not "${envReadText(node)}" (R03)`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(rel, source, ts.ScriptTarget.Latest, true, rel.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS));
+  return violations;
+}
+
+function isImportMetaEnv(node: ts.Node): node is ts.PropertyAccessExpression {
+  return ts.isPropertyAccessExpression(node) && node.name.text === 'env' && ts.isMetaProperty(node.expression)
+    && node.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
+}
+
+function envReadText(env: ts.PropertyAccessExpression): string {
+  const { parent } = env;
+  const isRead = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === env;
+  return (isRead ? parent : env).getText();
+}
+
+function isModeRead(env: ts.Node): boolean {
+  const { parent } = env;
+  return ts.isPropertyAccessExpression(parent) && parent.expression === env && parent.name.text === 'MODE';
 }
 
 // Worker-only code: the worker app, worker process adapters, and each package
@@ -329,7 +362,9 @@ export function checkWorkspaceBoundaries(root: string): string[] {
     }
     if (!/\.(?:[cm]?ts|tsx)$/.test(rel)) continue;
 
-    for (const { spec, typeOnly, erased } of extractImports(rel, readFileSync(file, 'utf8'))) {
+    const source = readFileSync(file, 'utf8');
+    violations.push(...webEnvironmentViolations(rel, source));
+    for (const { spec, typeOnly, erased } of extractImports(rel, source)) {
       const target = importTarget(file, spec, root, workspaces);
       const edge: ImportEdge = { rel, spec, target, relative: spec.startsWith('.'), typeOnly, erased, workspaces };
       if (edge.relative && edge.target!.startsWith('..')) {
