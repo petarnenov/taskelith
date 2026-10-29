@@ -17,7 +17,7 @@
 
 - [x] 3.1 Write the proposal, the design, the spec deltas, this task list, the dependency register rows, the `docs/g3-plan.md` row 28 split, and the README section
 - [x] 3.2 Measure the installation image size before and after
-- [ ] 3.3 Route the change, run `make verify`, and write `verification.md`
+- [x] 3.3 Route the change, run `make verify`, and write `verification.md`
 
 ## 4. Review and archive
 

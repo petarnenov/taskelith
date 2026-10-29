@@ -12,7 +12,11 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28a, developed by a briefed s
 - `3e221892` `chore: scaffold the web SPA workspace with generated control-plane types and a CSRF-aware fetch`.
 - `b4460b36` `chore: build, test, and measure the browser application in make verify`.
 - `e73ff2e3` `chore: keep server modules, environment values, secrets, and external origins out of the web bundle`.
-- `docs: record the scaffold-web-spa-workspace design, spec deltas, and plan split`: the proposal, the design, the spec deltas, the task list, this record, the dependency register, `docs/g3-plan.md` row 28, and the README.
+- `397ffd3e` `docs: record the scaffold-web-spa-workspace design, spec deltas, and plan split`: the proposal, the design, the spec deltas, the task list, this record, the dependency register, `docs/g3-plan.md` row 28, and the README.
+- `ac04ad01` `docs: route the scaffold-web-spa-workspace change` (`route.json`, unedited). The first `make verify` on that tree (log `verify-28a-1.log` in the session scratchpad) passed every test, tests 3927, pass 3918, fail 0, skipped 9, and the web tests, then failed `npm run verify:dependencies`: the inventory records the hash of the root `package.json`, whose `test` script `b4460b36` changed after the inventory of `ff6a7795`.
+- `68de6c09` `chore: regenerate the dependency inventory for the web test scripts`: `make dependency-inventory` changed only that hash in `docs/dependencies/licenses.json`; no dependency changed, so the additions stay in `ff6a7795`.
+- `7a436fbc` `docs: route the scaffold-web-spa-workspace change again after the inventory regeneration` (`route.json`, unedited, at head `68de6c09`): the regeneration changed the diff outside the change directory, so under worker step 4 the first route was deleted and the change routed again. "route: elevated (lines, files, capabilities, size), rule version 2"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.81) and agrees; recommendation only. The route's pass 2 reviewer differs from the brief's `claude claude-fable-5-1#medium`, and its efforts are above the brief's; the brief's reviewers stand unless the coordinator decides otherwise. `git fetch origin` before routing showed `origin/dev` at `2250f3f7` (#415, `assign-fable-to-review-pass-2`), which this branch has not merged.
+- `docs: record the make verify of scaffold-web-spa-workspace`, the `make record` of the passing second `make verify` on the tree of `7a436fbc` (log `verify-28a-2.log` in the session scratchpad). The web workspace's own Vitest coverage in that run: tests 17, pass 17; statements 100% (30/30), branches 100% (24/24), functions 100% (9/9), lines 100% (24/24); `Every product module is in the coverage report.`
 
 ## Environment
 
@@ -72,6 +76,15 @@ Each behavior was broken in place on `e73ff2e3`, its tests run, and the file res
 | `npm run openspec -- validate scaffold-web-spa-workspace --strict` | records working tree | `Change 'scaffold-web-spa-workspace' is valid` |
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `4d683c9de87763a0af8a4f5b0e3390fca145b2fe`; tests 3927, pass 3918, fail 0, skipped 9; all files 99.38% lines, 92.54% branches, 98.84% functions.
+- `npm run openspec -- validate scaffold-web-spa-workspace --strict`: passed, `Change 'scaffold-web-spa-workspace' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 91 file(s); every pass summary file is valid: 71 file(s); every route file is valid: 27 file(s).`.
+- Spec diff against the merge base `115c16c41016` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
