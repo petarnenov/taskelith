@@ -13,7 +13,9 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12b, developed by a briefed s
 - `80d9533a` `docs: route the apply-account-pool-cooldown-and-affinity change` (`route.json`, unedited).
 - `731a56dd` `docs: write the verification record of apply-account-pool-cooldown-and-affinity`. A `make verify` started on it was stopped by the author before its result, to make the two-limits race name the retried limit; it counts for nothing.
 - `5f86a881` `chore: check which racing limit was retried by the slot's revision`: the race "two limits racing on one slot keep the later reported reset" asserted only that some limit was retried; it now derives the limit that committed second from the slot's revision, 5 when the later reset was written second and 4 otherwise, and asserts that this one was retried. Design decision 10 says so, changed in the record update below.
-- This record's update with design decision 10, `docs: update the verification record of apply-account-pool-cooldown-and-affinity`, the tree that `make verify` ran on, and then the commit of `make record`.
+- `b0e26382` `docs: update the verification record of apply-account-pool-cooldown-and-affinity`, with design decision 10.
+- `9532d527` `docs: delete the stale route of apply-account-pool-cooldown-and-affinity` and `6372755a` `docs: route the apply-account-pool-cooldown-and-affinity change again after the race test fix` (`route.json`, unedited; see "Checks").
+- This record's last update before `make verify`, `docs: record the second route of apply-account-pool-cooldown-and-affinity`, the tree that `make verify` ran on, and then the commit of `make record`.
 
 ## Environment
 
@@ -46,6 +48,7 @@ The gated PostgreSQL races are new tests, so their evidence is also a contrast: 
 | `npm run verify:archive` | `63d7acae` working tree | `Every active OpenSpec change archives into strictly valid specs.` |
 | `make contract-compatibility` | `63d7acae` | 0 breaking changes for each of the six documents against `f882c0ac665f` |
 | `make findings ARGS="route --change apply-account-pool-cooldown-and-affinity"` | `63d7acae` | "route: elevated (lines, contracts), rule version 2", features 803 lines and 12 files; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-opus-5-5#xhigh`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.70) and agrees; recommendation only, committed unedited as `80d9533a`. The brief names the reviewers at effort medium |
+| `make findings ARGS="route --change apply-account-pool-cooldown-and-affinity"`, again | `9532d527` | Routed again before pass 1, as worker step 4 requires when fixes change the diff: `5f86a881` changed a test outside the change's directory, so the first `route.json` (`headCommit` `63d7acae`) was made for another tree, which the route gate of `make review` refuses. The stale `route.json` was deleted (`9532d527`) and the change routed again; committed unedited as `6372755a`. Result: "route: elevated (lines, contracts), rule version 2", features 807 lines and 12 files (before: 803 and 12); the same reviewer plan; shadow `jev-1.14.0` agrees (P(third) 0.70) |
 
 <!-- make record: begin -->
 <!-- make record: end -->
