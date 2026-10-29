@@ -125,7 +125,7 @@ Each observation is an `ObservationMetadata` envelope with its attempt and owner
 - **Classified operation.** `session.request.recorded` of a permission request carries the plugin's `operation` when the port classified it ([agent harness port](agent-harness-port.md) section 7.2), with the full branch ref of a `push`; no other request kind carries one. The control plane matches a standing rule for `push-to-task-branch` only when the operation is a `push` whose ref is `refs/heads/` and the branch of the task's change, checked in the use transaction ([product ports](product-ports.md) section 5); an unclassified request, or a push to another ref, matches no rule and waits for a person.
 - **Before display.** A request's observation is applied, and its record committed, before any read or event shows it (control-plane section 10, "Commit before display").
 - **A turn's failure.** `session.turn.ended` carries a failure exactly when its outcome is `failed`, as `recordTurnOutcome` requires.
-- **Output.** `chunk` numbers a generation's output chunks from 1 without gaps; the control plane redacts a generation's output across chunks before it records it (control-plane section 7, "Output across chunks").
+- **Output.** `chunk` numbers a generation's output chunks from 1 without gaps; the control plane redacts each turn's output across chunks before it records it (control-plane section 7, "Output across chunks").
 
 ## 10. Redaction rule
 

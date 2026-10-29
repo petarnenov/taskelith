@@ -12,18 +12,40 @@ The service SHALL hold back the tail of a turn's output that could still be the 
 - **THEN** no read shows any part of it, and the next chunk records the secret redacted
 
 ### Requirement: Held tail bound
-The held tail SHALL never exceed `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units: past the bound the oldest part SHALL be released, never inside a surrogate pair, and the released part of a run of non-whitespace characters longer than the bound, and its continuation up to the next whitespace, SHALL be recorded as markers.
+The held tail SHALL never exceed `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units: a held part past the bound SHALL be recorded as one marker, and a durable flag SHALL drop its continuation, a run's up to the next whitespace and an open PEM key's or `.creds` block's up to its end marker, so that nothing of a cut secret is released.
 
 #### Scenario: Tail at the bound
-- **WHEN** a held tail reaches exactly `MAX_HARNESS_TEXT_LENGTH` code units
+- **WHEN** a held run reaches exactly `MAX_HARNESS_TEXT_LENGTH` code units
 - **THEN** nothing of it is released
 
 #### Scenario: Secret at the forced cut
-- **WHEN** a run without whitespace passes the bound with a JWT across the forced cut
-- **THEN** no stored entry holds any part of the JWT
+- **WHEN** a run without whitespace passes the bound with a JWT across the cut
+- **THEN** the run and its continuation are recorded as one marker, and no stored entry holds any part of the JWT
+
+#### Scenario: Key longer than the bound
+- **WHEN** a PEM private key longer than the bound is written in chunks
+- **THEN** it is recorded as one marker, and the text after its end marker is released
+
+### Requirement: Held tail sealed at rest
+The service SHALL store a held tail only as AES-256-GCM ciphertext under the session output tail key, with the session, the turn, and the tail's version as authenticated data, and SHALL fail with `internal`, releasing nothing, for a tail that does not open.
+
+#### Scenario: Tail at rest
+- **WHEN** a chunk that holds half a secret commits
+- **THEN** no stored byte of the output or tail tables holds any part of it
+
+#### Scenario: Changed ciphertext
+- **WHEN** a stored tail's ciphertext or turn is changed
+- **THEN** the next append fails with `internal`, and no entry is recorded
+
+### Requirement: Session output tail key
+The service SHALL refuse to start when the output tail key file is missing or its key is not 32 bytes, with a reason that holds no key byte; the key file SHALL be created with mode `0600`, and no log or record SHALL carry the key.
+
+#### Scenario: Wrong-size tail key
+- **WHEN** the tail key file holds a key of another size
+- **THEN** the service does not start, and the reason names only the size
 
 ### Requirement: Held tail released at its turn's end
-The service SHALL release a held tail, redacted, as entries of its own turn in the transaction that records its turn's outcome, its acceptance unknown, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
+The service SHALL release a held tail, redacted, as entries of its own turn in the transaction of any change that ends the turn, such as its outcome, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
 
 #### Scenario: Generation ends with a tail
 - **WHEN** a generation ends while its turn holds a tail with half a secret
@@ -40,8 +62,8 @@ The service SHALL record released text longer than `MAX_HARNESS_TEXT_LENGTH` as 
 The service SHALL read a session's retained output after a cursor in one transaction, returning at most a page of entries in position order and whether more remain, `cursor-expired` with the earliest retained position for a cursor older than the window, and `invalid` for a cursor past the last position.
 
 #### Scenario: Page of output
-- **WHEN** a reader asks for 100 entries after a cursor with 101 retained after it
-- **THEN** it receives the first 100 in order and that more remain
+- **WHEN** a reader asks for 2 entries after a cursor with 3 retained after it
+- **THEN** it receives the first 2 in order and that more remain
 
 ## MODIFIED Requirements
 

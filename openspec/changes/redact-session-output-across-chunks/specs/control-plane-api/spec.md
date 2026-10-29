@@ -22,3 +22,12 @@ The control plane SHALL serve the agent session operations of control-plane wire
 #### Scenario: Output of another project
 - **WHEN** a member of project A calls `readAgentSessionOutput` for a session of project B through a path of project A
 - **THEN** the answer is the 404 that an unknown session gets, and no output is read
+
+## ADDED Requirements
+
+### Requirement: Session output tail key at initialization
+Installation initialization SHALL create `control-plane/session-output-tail.key` with mode `0600` through the control-plane namespace when it is missing, also on a rerun, SHALL never overwrite an existing key, and SHALL never log or output it.
+
+#### Scenario: Rerun with a lost tail key
+- **WHEN** initialization runs again on an installation with a tail key, and again after the key is lost
+- **THEN** the first rerun keeps the key's bytes, and the second creates a new key with mode `0600`

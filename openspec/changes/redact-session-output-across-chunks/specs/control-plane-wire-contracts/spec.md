@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Held output tail on the wire
-Wire contracts section 7 SHALL state that a held tail belongs to its turn and is released, redacted, before the turn's outcome or its generation's end is recorded, that it never exceeds `MAX_HARNESS_TEXT_LENGTH` code units, and how a run past that bound is recorded.
+Wire contracts section 7 SHALL state that a turn's output is redacted as one text with a held tail that belongs to its turn, is stored only sealed, and is released, redacted, before the turn's outcome or its generation's end is recorded, and that a held part past `MAX_HARNESS_TEXT_LENGTH` code units is recorded as one marker with its continuation dropped.
 
 #### Scenario: Tail never served
 - **WHEN** a client reads output while a turn holds a tail
