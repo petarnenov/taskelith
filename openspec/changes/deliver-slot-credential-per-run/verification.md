@@ -32,7 +32,7 @@ G3 item 12 (`docs/g3-plan.md`, row 12), sub-change 12c, developed by a briefed s
 - `eb1f66f3` `docs: cite the commits of two revisions of the deliver-slot-credential-per-run record` (pass 2 finding 7).
 - `da5541fe` `chore: state which older ownership generation the slot credential port refuses` (pass 2 finding 4: the port comment names only the generations the worker knows).
 - `docs: record review pass 2 of deliver-slot-credential-per-run and its unreviewed fixes`: the pass 2 lines of `passes.jsonl` and `findings.jsonl`, the proposal, the task list, and this record. `git fetch origin` showed `origin/dev` still at `dc2ae98b`.
-- `docs: record the make verify of the pass 2 fixes of deliver-slot-credential-per-run`, the `make record` of a passing `make verify` on the tree of the pass 2 records commit (log `verify-12c-4.log` in the session scratchpad, one run).
+- `docs: record the make verify of the pass 2 fixes of deliver-slot-credential-per-run`, the `make record` of a passing `make verify` on the tree of the pass 2 records commit (log `verify-12c-4.log` in the session scratchpad). The first run on that tree failed one test outside this change, `test/installation-script.test.ts:570` "a bound with a leading zero is read in base 10", which ended after 9.094 s where it expects at least 10 s on the loaded host (log `verify-12c-4-flaky.log`); the second run, unchanged, passed and is the one recorded.
 
 ## Environment
 
@@ -80,7 +80,7 @@ Each behavior was broken in place on `8ddb3800`, the build and the tests run, an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `c5b072d77ab93cdba75ae855bedf518a1427a109`; tests 3835, pass 3826, fail 0, skipped 9; all files 99.40% lines, 92.75% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `6851b49c26555fca345515b9b99ae0feede629a2`; tests 3839, pass 3830, fail 0, skipped 9; all files 99.40% lines, 92.75% branches, 98.86% functions.
 - `npm run openspec -- validate deliver-slot-credential-per-run --strict`: passed, `Change 'deliver-slot-credential-per-run' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 89 file(s); every pass summary file is valid: 69 file(s); every route file is valid: 25 file(s).`.
 - Spec diff against the merge base `dc2ae98b379d` with `origin/dev`: no change under `openspec/specs`.
@@ -89,6 +89,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a18587-d7e0-7ea0-8d5e-990409afbebb` | 0 | 2 | 4 | 0 |
+| 2 | B | `claude claude-opus-5-5#medium` | `1dbc01fd-93f2-4c7b-9250-c1daa0673b80` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
 ## Independent review
