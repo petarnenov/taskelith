@@ -34,9 +34,6 @@ const CREDS_CONTEXT = `${credsBegin}\n`;
 const TOKEN_CHARACTER = /[A-Za-z0-9_-]/;
 const ISSUED_AT_END = new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})(?:_[A-Za-z0-9_-]*)?$`);
 const SEED_AT_END = /S[OAU][A-Z2-7]{1,55}$/;
-// The heads of the shapes matched without a word boundary before them.
-const SHAPE_HEADS = ['eyJ', ...Object.values(SECRET_PREFIXES), 'SO', 'SA', 'SU'];
-const HEAD_PREFIXES = SHAPE_HEADS.flatMap((head) => Array.from(head, (_, end) => head.slice(0, end + 1)));
 const SCHEME_CHARACTER = /[A-Za-z0-9+.-]/;
 // A host and a user name cut before its `@` look alike, so both match.
 const USERINFO_SO_FAR = /^[^/?#@]+$/;
@@ -229,14 +226,8 @@ function pemPartial(head: string): Partial {
 function withoutInterruptedSecret(text: string): string {
   const runFrom = runStart(text, text.length);
   const run = text.slice(runFrom);
-  const starts = [headStart(run), jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
+  const starts = [jwtStart(run), issuedStart(run), seedStart(run), userinfoStart(run)].filter((start) => start !== undefined);
   return starts.length === 0 ? text : text.slice(0, runFrom + Math.min(...starts)) + REDACTED;
-}
-
-// The longest suffix of the run that is a non-empty prefix of a head.
-function headStart(run: string): number | undefined {
-  const lengths = HEAD_PREFIXES.filter((prefix) => run.endsWith(prefix)).map((prefix) => prefix.length);
-  return lengths.length === 0 ? undefined : run.length - Math.max(...lengths);
 }
 
 // A JWT cut short holds at most two dots after its `eyJ`.

@@ -41,14 +41,14 @@ const SHAPES: readonly { name: string; text: string; secret: string; parts?: rea
   })),
   ...(['operator', 'enrollment', 'worker'] as const).map((kind) => {
     const secret = secrets.issue(kind).secret;
-    return { name: `issued ${kind} secret`, text: `token ${secret} ok`, secret };
+    return { name: `issued ${kind} secret`, text: `token ${secret} done`, secret };
   }),
   ...[createOperator(), createAccount(), createUser()].map((pair) => {
     const seed = seedOf(pair.getSeed());
-    return { name: `NKey seed ${seed.slice(0, 2)}`, text: `seed ${seed} ok`, secret: seed };
+    return { name: `NKey seed ${seed.slice(0, 2)}`, text: `seed ${seed} done`, secret: seed };
   }),
   { name: '.creds block', text: `creds:\n${CREDS}\nend`, secret: CREDS, parts: [JWT, CREDS.split('\n')[5]!] },
-  { name: 'JWT', text: `bearer x${JWT} ok`, secret: JWT },
+  { name: 'JWT', text: `bearer x${JWT} done`, secret: JWT },
 ];
 
 function assertNoPart(stored: string, secret: string, label: string): void {
@@ -57,12 +57,9 @@ function assertNoPart(stored: string, secret: string, label: string): void {
   }
 }
 
-// What a match of each shape may begin with, so a run that ends in one of
-// them may be a cut secret; and URL user information after its scheme.
-const SHAPE_BEGINNINGS = [
-  /^e(?:y(?:J[\w-]*(?:\.[\w-]*){0,2})?)?$/, /^t(?:k(?:o(?:p(?:_[\w-]*)?)?|e(?:n(?:_[\w-]*)?)?|w(?:k(?:_[\w-]*)?)?)?)?$/,
-  /^S(?:[OAU][A-Z2-7]{0,55})?$/,
-];
+// A cut match of each shape from its whole head on, so a run that ends in
+// one may be a cut secret; and URL user information after its scheme.
+const SHAPE_BEGINNINGS = [/^eyJ[\w-]*(?:\.[\w-]*){0,2}$/, /^tk(?:op|en|wk)(?:_[\w-]*)?$/, /^S[OAU][A-Z2-7]{1,55}$/];
 const USERINFO_SO_FAR = /[\w+.-]:\/\/([^\s/?#@]+)$/;
 const BLOCKS = [
   { begin: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/, end: /-----END [A-Z0-9 ]*PRIVATE KEY-----/ },
@@ -75,7 +72,7 @@ function openBlockStart(text: string): number | undefined {
 }
 
 // The stored output of a turn that ends after `text`: an open block is one
-// marker, and so is the run from its earliest start of a possible secret.
+// marker, and so is the run from its earliest start of a cut secret.
 function expectedTurnEnd(text: string): string {
   const blockStart = openBlockStart(text);
   if (blockStart !== undefined) return redactSecrets(text.slice(0, blockStart)) + REDACTED;
@@ -143,25 +140,25 @@ test('a turn that ends in a host redacts it as a possible user name', () => {
   assert.equal(turnOutput(['see https://example.com']), `see https://${REDACTED}`);
 });
 
-test('a turn that ends in a word no shape begins with, a URL with a path, or a closed JWT keeps or redacts it as the whole text does', () => {
-  for (const text of ['ok', 'tok', 'eyJ0.eyJ1.c2ln', 'see https://example.com/']) {
+test('a turn that ends in a word, a URL with a path, or a closed JWT keeps or redacts it as the whole text does', () => {
+  for (const text of ['done', 'eyJ0.eyJ1.c2ln', 'SO', 'tok', 'see https://example.com/']) {
     assert.equal(turnOutput([text]), redactSecrets(text), text);
   }
 });
 
-// `SO` or `done` may be a seed or a JWT cut after its first characters, so
-// they are redacted too: over-redaction accepted (13d design, decision 1).
-test('a turn that ends in a non-empty prefix of a shape\'s head stores the prefix as one marker', () => {
-  const heads = ['e', 'ey', 'eyJ', 't', 'tk', 'tko', 'tkop', 'tke', 'tken', 'tkw', 'tkwk', 'S', 'SO', 'SA', 'SU'];
-  for (const head of heads) assert.equal(turnOutput([`a ${head}`]), `a ${REDACTED}`, head);
-  assert.deepEqual(['done', 'SO', 'eyJx'].map((text) => turnOutput([text])), [`don${REDACTED}`, REDACTED, REDACTED]);
+// A head cut short holds no secret material, so it is kept: an ordinary
+// turn's end stays intact (13d design, decision 1).
+test('a turn that ends in done, ey, tko, or another prefix shorter than a shape\'s head releases it verbatim', () => {
+  for (const text of ['done', 'ey', 'tko', 'e', 't', 'tk', 'tke', 'tkw', 'S', 'SO', 'SA', 'SU']) {
+    assert.equal(turnOutput([`a ${text}`]), `a ${text}`, text);
+    assert.equal(turnOutput([`a ${text.slice(0, 1)}`, text.slice(1)]), `a ${text}`, `${text} in two chunks`);
+  }
 });
 
-test('a run one character past the head of every shape is kept at a turn\'s end, while one character of a head is a marker', () => {
-  for (const kept of ['ez', 'eyz', 'tz', 'tkz', 'tkoz', 'tkopz', 'tkenz', 'tkwkz', 'Sz', 'SOz', 'SAz', 'SUz']) {
-    assert.equal(turnOutput([`a ${kept}`]), `a ${kept}`, kept);
+test('a turn that ends in a shape\'s whole head stores it as one marker', () => {
+  for (const head of ['eyJ', 'tkop', 'tken', 'tkwk', 'SOA', 'SAB', 'SU2']) {
+    assert.equal(turnOutput([`a ${head}`]), `a ${REDACTED}`, head);
   }
-  for (const marker of ['e', 't', 'S']) assert.equal(turnOutput([`a z${marker}`]), `a z${REDACTED}`, marker);
 });
 
 // A `.creds` block's or PEM key's end marker, assembled for the tests.
