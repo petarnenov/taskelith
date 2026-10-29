@@ -196,7 +196,7 @@ function antigravity(model: string, label: string, effort: string): ReviewerInvo
 }
 
 // docs/agent-task-protocol.md "Reviewer invocations" and the efforts of
-// governance "Authorized reviewers" (policy version 8), opus #high kept.
+// governance "Authorized reviewers" (policy version 9), opus #high kept.
 const INVOCATIONS: readonly ReviewerInvocation[] = [
   codex('gpt-6.1-sol', 'medium'),
   opencode('opencode-go/kimi-k3.1-pro', 'high'),

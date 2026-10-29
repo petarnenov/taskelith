@@ -353,10 +353,10 @@ test('the route recommendation tells an effort apart from another reviewer', asy
   await withFixture(async (fixture) => {
     writeRecommendation(fixture.root, CODEX_HIGH, CLAUDE_XHIGH);
     const second = await review(fixture, '2', CLAUDE);
-    assert.match(second.stdout, /^route: recommends effort xhigh; the authorized high applies \(policy version 8\)$/m);
+    assert.match(second.stdout, /^route: recommends effort xhigh; the authorized high applies \(policy version 9\)$/m);
     assert.doesNotMatch(second.stdout, /other reviewer|coordinator/);
     const third = await review(fixture, '3');
-    assert.match(third.stdout, /^route: recommends effort high; the authorized medium applies \(policy version 8\)$/m);
+    assert.match(third.stdout, /^route: recommends effort high; the authorized medium applies \(policy version 9\)$/m);
     writeRecommendation(fixture.root, { ...CODEX_HIGH, variant: 'medium' }, CLAUDE_XHIGH);
     assert.match((await review(fixture, '3')).stdout, /^route: recommends codex gpt-6\.1-sol#medium$/m);
     writeRecommendation(fixture.root, { ...CODEX_HIGH, model: 'gpt-6-astra' }, { ...CLAUDE_XHIGH, model: 'claude-fable-5-1' });

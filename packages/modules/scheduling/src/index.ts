@@ -245,6 +245,7 @@ export {
   type AdmittedDelivery,
   type SlotCredentials,
   type SlotDelivery,
+  type StoredSlotCredential,
 } from './ports/account-pool.js';
 export {
   InMemoryAccountSlots,
@@ -252,6 +253,7 @@ export {
   InMemorySlotCredentialDeliveries,
   StaticAdmittedDeliveries,
   type AdmittedPair,
+  type SlotCredentialClock,
 } from './adapters/in-memory-account-pool.js';
 export {
   leastLoaded,
@@ -282,10 +284,31 @@ export {
   type SlotSignalTransaction,
 } from './application/apply-slot-limit.js';
 export {
+  ADD_SLOT_DEADLINE_MILLISECONDS,
   addAccountSlot,
   type AccountSlotCommandPorts,
   type AddAccountSlotInput,
 } from './application/add-account-slot.js';
+export {
+  reinstateAccountSlot,
+  removeAccountSlot,
+  revokeAccountSlot,
+  rotateSlotCredential,
+  updateAccountSlot,
+  type RevocationCommandIdFor,
+  type RevokeAccountSlotInput,
+  type RotateSlotCredentialInput,
+  type SlotCredentialCommandPorts,
+  type SlotRevocationPorts,
+  type SlotRevocationStore,
+  type UpdateAccountSlotInput,
+} from './application/account-slot-commands.js';
+export {
+  SLOT_CREDENTIAL_SWEEP_MINIMUM_GRACE_MILLISECONDS,
+  sweepSlotCredentials,
+  type SlotCredentialSweep,
+  type SlotCredentialSweepPorts,
+} from './application/sweep-slot-credentials.js';
 export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';
 export {
   checkDeliveredSlot,

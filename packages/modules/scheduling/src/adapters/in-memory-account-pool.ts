@@ -1,5 +1,5 @@
 import type { ExecutionId, HarnessPluginId } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { TaskId } from '@taskelith/sdlc';
 import {
   FIRST_SLOT_REVISION,
@@ -13,7 +13,13 @@ import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reserva
 import type { SlotDeliveryRecord } from '../domain/slot-credential-delivery.js';
 import type { SlotSecret } from '../domain/slot-secret.js';
 import type { SlotCredentialDeliveries } from '../ports/slot-credential-deliveries.js';
-import type { AccountSlots, AdmittedDeliveries, AdmittedDelivery, SlotCredentials } from '../ports/account-pool.js';
+import type {
+  AccountSlots,
+  AdmittedDeliveries,
+  AdmittedDelivery,
+  SlotCredentials,
+  StoredSlotCredential,
+} from '../ports/account-pool.js';
 
 // Test doubles of the account pool ports, with the rules their suites check.
 export class InMemoryAccountSlots implements AccountSlots {
@@ -57,15 +63,35 @@ export class InMemoryAccountSlots implements AccountSlots {
   }
 }
 
+// The clock of a store's time; tests pass their own.
+export type SlotCredentialClock = () => Instant;
+
 export class InMemorySlotCredentials implements SlotCredentials {
   protected readonly versions = new Map<ProviderCredentialId, Map<SlotCredentialVersion, SlotSecret>>();
   protected readonly destroyed = new Set<ProviderCredentialId>();
   readonly #lastVersions = new Map<ProviderCredentialId, number>();
+  readonly #storedAt = new Map<string, Instant>();
+  readonly #now: SlotCredentialClock;
+
+  constructor(now: SlotCredentialClock = systemNow) {
+    this.#now = now;
+  }
 
   async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<SlotCredentialVersion> {
     const version = this.nextVersion(slotId);
-    if (!this.destroyed.has(slotId)) this.versionsOf(slotId).set(version, secret);
+    if (!this.destroyed.has(slotId)) {
+      this.versionsOf(slotId).set(version, secret);
+      this.#storedAt.set(storedKey(slotId, version), this.#now());
+    }
     return version;
+  }
+
+  async listStored(storedBefore: Instant): Promise<readonly StoredSlotCredential[]> {
+    const before = Date.parse(storedBefore);
+    const listed = [...this.versions].flatMap(([slotId, stored]) => [...stored.keys()]
+      .filter((version) => Date.parse(this.#storedAt.get(storedKey(slotId, version)) ?? storedBefore) < before)
+      .map((version) => Object.freeze({ slotId, version })));
+    return Object.freeze(listed.sort((left, right) => byCodeUnits(left.slotId, right.slotId) || left.version - right.version));
   }
 
   async reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>> {
@@ -105,6 +131,16 @@ export class InMemorySlotCredentials implements SlotCredentials {
     this.versions.set(slotId, stored);
     return stored;
   }
+}
+
+function storedKey(slotId: ProviderCredentialId, version: SlotCredentialVersion): string {
+  return JSON.stringify([slotId, version]);
+}
+
+function systemNow(): Instant {
+  const now = instantFromEpochMilliseconds(Date.now());
+  if (!now.ok) throw new Error(now.error.message);
+  return now.value;
 }
 
 export interface AdmittedPair extends AdmittedDelivery {

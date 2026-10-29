@@ -1,5 +1,5 @@
 import type { HarnessPluginId } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import {
   FIRST_SLOT_REVISION,
   SlotSecret,
@@ -14,6 +14,7 @@ import {
   type SlotCredentials,
   type SlotHealth,
   type SlotState,
+  type StoredSlotCredential,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
 import { instant } from './capacity-repositories.js';
@@ -157,6 +158,11 @@ interface CounterRow {
   readonly destroyed: boolean;
 }
 
+interface StoredRow {
+  readonly slot_id: string;
+  readonly version: number;
+}
+
 interface SealedRow {
   readonly nonce: Buffer;
   readonly sealed: Buffer;
@@ -202,6 +208,13 @@ export class PostgresSlotCredentialRecords {
 
   async deleteOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
     await this.#session.query('DELETE FROM slot_credentials WHERE slot_id = $1 AND version < $2', [slotId, version]);
+  }
+
+  async listStoredBefore(storedBefore: Instant): Promise<readonly StoredSlotCredential[]> {
+    const { rows } = await this.#session.query<StoredRow>(
+      'SELECT slot_id, version FROM slot_credentials WHERE stored_at < $1 ORDER BY slot_id COLLATE "C", version', [storedBefore],
+    );
+    return Object.freeze(rows.map((row) => Object.freeze({ slotId: row.slot_id as ProviderCredentialId, version: credentialVersion(row.version) })));
   }
 
   // The counter keeps its last version, so no version is reused.
@@ -253,6 +266,10 @@ export class PostgresSlotCredentials implements SlotCredentials {
 
   async destroy(slotId: ProviderCredentialId): Promise<void> {
     await this.#run((records) => records.destroy(slotId));
+  }
+
+  listStored(storedBefore: Instant): Promise<readonly StoredSlotCredential[]> {
+    return this.#run((records) => records.listStoredBefore(storedBefore));
   }
 
   async #run<Value>(work: (records: PostgresSlotCredentialRecords) => Promise<Value>): Promise<Value> {
