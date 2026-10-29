@@ -124,7 +124,7 @@ Checks on `3ef33459`, tree `8def7253`: `make verify` passed, profile full, stamp
 
 - Pass 1: reviewer A, codex gpt-6-astra, variant medium, session `01a18605-e9aa-7ed3-a7fc-7bfad5397e36`: 0 Critical, 3 High, 2 Medium, 3 Low. Findings 1, 2, and 4 to 8 fixed; finding 3 declined by coordinator decision (section "Review pass 1 fixes").
 - Pass 2: reviewer B, claude claude-fable-5-1, variant medium (governance v9), session `6228fa04-9305-4f73-865b-2b98a44e9e7c`: 0 Critical, 0 High, 1 Medium, 2 Low, all fixed (section "Review pass 2 fixes").
-- Pass 3: reviewer A, codex gpt-6.1-sol, variant medium, owed because pass 2 reported a Medium finding; not started.
+- Pass 3: reviewer A, codex gpt-6.1-sol, variant medium, owed because pass 2 reported a Medium finding, session `01a1863d-e42e-7ec3-9ba0-5c524705441c`: 0 Critical, 1 High, 1 Medium, 2 Low. The last pass under the cap of three; its fixes go to the coordinator's architect check (section "Review pass 3 fixes").
 
 ## Limitations
 
