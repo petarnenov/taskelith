@@ -70,8 +70,17 @@ export const redactJwtsWithEmptyParts = textRule(
   `$1${REDACTED}`,
 );
 
-const CREDS_END = '------END USER NKEY SEED------';
-const CREDS_BLOCK = /-----BEGIN NATS USER JWT-----[\s\S]*?------END USER NKEY SEED------/g;
+// The markers of the secret blocks that hold whitespace, as regular
+// expression sources, for a redactor that must find where a block ends.
+export const SECRET_BLOCK_MARKERS = Object.freeze({
+  pemKeyBegin: '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----',
+  pemKeyEnd: '-----END [A-Z0-9 ]*PRIVATE KEY-----',
+  credsBegin: '-----BEGIN NATS USER JWT-----',
+  credsEnd: '------END USER NKEY SEED------',
+});
+
+const CREDS_END = SECRET_BLOCK_MARKERS.credsEnd;
+const CREDS_BLOCK = new RegExp(`${SECRET_BLOCK_MARKERS.credsBegin}[\\s\\S]*?${CREDS_END}`, 'g');
 
 // Only up to the last end marker, so no begin marker is scanned to the end
 // of the text in vain.
@@ -84,8 +93,8 @@ export function redactCredsBlocks(text: string): string {
 
 // A PEM private key of any type, such as `PRIVATE KEY`, `EC PRIVATE KEY`,
 // or `ENCRYPTED PRIVATE KEY`; certificates and public keys stay.
-const PEM_KEY_BEGIN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g;
-const PEM_KEY_END = /-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
+const PEM_KEY_BEGIN = new RegExp(SECRET_BLOCK_MARKERS.pemKeyBegin, 'g');
+const PEM_KEY_END = new RegExp(SECRET_BLOCK_MARKERS.pemKeyEnd, 'g');
 
 // A half-open range of text positions.
 export interface TextSpan {

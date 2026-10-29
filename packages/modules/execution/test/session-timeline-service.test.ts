@@ -18,6 +18,7 @@ import { failed, sequentialIds, value } from '@taskelith/testing';
 import { evidence, ownership } from './fixtures.ts';
 import {
   FIRST_ATTEMPT,
+  FLIPPING_CIPHER,
   HARNESS,
   NATIVE,
   OTHER_SESSION,
@@ -30,6 +31,7 @@ import {
   generation,
   permissionRequest,
   requestKey,
+  trailingRunRedactor,
   turnId,
   turnKey,
 } from './session-fixtures.ts';
@@ -49,7 +51,8 @@ const LENGTHENED_REDACTED = redactor.redact(LENGTHENED);
 
 function timeline(store = new InMemorySessionTimelineStore()) {
   const service = new SessionTimelineService({
-    store, digest, redactor, turnIds: sequentialIds('TurnId', 'turn'), clock: FIXED_CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    store, digest, redactor, outputRedactor: trailingRunRedactor(redactor.redact), tailCipher: FLIPPING_CIPHER,
+    turnIds: sequentialIds('TurnId', 'turn'), clock: FIXED_CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
   });
   return { store, service };
 }
@@ -278,12 +281,12 @@ test('a refused change writes nothing', async () => {
   assert.deepEqual(await stored(store), before);
 });
 
-test('output is appended per chunk with its text redacted and reaches no service read', async () => {
+test('released output is recorded redacted, and no session view carries an entry', async () => {
   const { service, store } = timeline();
   await withOpenRequest(service);
-  const appended = value(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'key SECRET' }));
+  const appended = value(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: 'key SECRET\n' }));
   assert.equal('output' in appended, false);
-  assert.deepEqual((await stored(store)).session.output.entries.map((entry) => entry.text), ['key [redacted]']);
+  assert.deepEqual((await stored(store)).session.output.entries.map((entry) => entry.text), ['key [redacted]\n']);
 });
 
 test('a limit stops the session, the handoff is written, and the next session of the task takes it once', async () => {
@@ -360,10 +363,11 @@ test('an input answer longer than its byte bound before redaction fails with inv
   assert.equal(failed(await service.consumeResponse(SESSION, response('answer-1', input))).code, 'invalid');
 });
 
-test('an output chunk that redaction lengthens past its bound is appended with its tail cut', async () => {
+test('released output that redaction lengthens past the entry bound is split into entries and loses nothing', async () => {
   const { service, store } = timeline();
   await withOpenRequest(service);
   value(await service.appendOutput(SESSION, { turnId: turnId('turn-1'), generation: generation(1), text: LENGTHENED }));
-  const texts = (await stored(store)).session.output.entries.map((entry) => entry.text);
-  assert.deepEqual(texts, [LENGTHENED_REDACTED.slice(0, MAX_HARNESS_TEXT_LENGTH)]);
+  const entries = (await stored(store)).session.output.entries;
+  assert.deepEqual(entries.map((entry) => [entry.position, entry.text.length]), [[1, MAX_HARNESS_TEXT_LENGTH], [2, LENGTHENED_REDACTED.length - MAX_HARNESS_TEXT_LENGTH]]);
+  assert.equal(entries.map((entry) => entry.text).join(''), LENGTHENED_REDACTED);
 });

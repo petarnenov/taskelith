@@ -13,11 +13,13 @@ import type {
   SessionInboxItem,
   SessionInboxItems,
   SessionItemKind,
+  SessionOutputTails,
   SessionRecords,
   SessionScope,
   SessionScopes,
   SessionTimelineStore,
   SessionTimelineTransaction,
+  StoredOutputTail,
   StoredSession,
 } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -34,6 +36,7 @@ export class PostgresSessionTimelineTransaction implements SessionTimelineTransa
   readonly items: PostgresSessionInboxItems;
   readonly audit: PostgresSessionAuditRecords;
   readonly scopes: PostgresSessionScopeReads;
+  readonly tails: PostgresSessionOutputTails;
 
   constructor(session: Session) {
     this.sessions = new PostgresSessionRecords(session);
@@ -41,10 +44,11 @@ export class PostgresSessionTimelineTransaction implements SessionTimelineTransa
     this.items = new PostgresSessionInboxItems(session);
     this.audit = new PostgresSessionAuditRecords(session);
     this.scopes = new PostgresSessionScopeReads(session);
+    this.tails = new PostgresSessionOutputTails(session);
   }
 
   get changed(): boolean {
-    return this.sessions.changed || this.idempotency.changed || this.items.changed || this.audit.changed;
+    return this.sessions.changed || this.idempotency.changed || this.items.changed || this.audit.changed || this.tails.changed;
   }
 }
 
@@ -209,6 +213,54 @@ class PostgresSessionAuditRecords implements SessionAuditRecords {
       'INSERT INTO session_audit_events (kind, item_id, actor, occurred_at) VALUES ($1, $2, $3, $4)',
       [event.kind, event.subject, event.actor, event.occurredAt],
     );
+    return ok(undefined);
+  }
+}
+
+interface TailRow {
+  readonly turn_id: string;
+  readonly generation: string;
+  readonly version: string;
+  readonly nonce: Buffer;
+  readonly sealed: Buffer;
+}
+
+// One row per session holding only the tail's ciphertext, which no path
+// but output's reads (13d design decision 3).
+class PostgresSessionOutputTails implements SessionOutputTails {
+  readonly #session: Session;
+  changed = false;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async get(sessionId: SessionId): Promise<Result<StoredOutputTail | undefined>> {
+    const { rows } = await this.#session.query<TailRow>(
+      'SELECT turn_id, generation, version, nonce, sealed FROM agent_session_output_tails WHERE session_id = $1', [sessionId],
+    );
+    const row = rows[0];
+    if (row === undefined) return ok(undefined);
+    return ok(Object.freeze({
+      sessionId, turnId: row.turn_id as StoredOutputTail['turnId'], generation: Number(row.generation) as StoredOutputTail['generation'],
+      version: Number(row.version), nonce: new Uint8Array(row.nonce), sealed: new Uint8Array(row.sealed),
+    }));
+  }
+
+  async put(tail: StoredOutputTail): Promise<Result<void>> {
+    this.changed = true;
+    await this.#session.query(
+      `INSERT INTO agent_session_output_tails (session_id, turn_id, generation, version, nonce, sealed) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (session_id) DO UPDATE SET turn_id = EXCLUDED.turn_id, generation = EXCLUDED.generation, version = EXCLUDED.version,
+         nonce = EXCLUDED.nonce, sealed = EXCLUDED.sealed`,
+      [tail.sessionId, tail.turnId, tail.generation, tail.version, Buffer.from(tail.nonce), Buffer.from(tail.sealed)],
+    );
+    return ok(undefined);
+  }
+
+  async clear(sessionId: SessionId): Promise<Result<void>> {
+    this.changed = true;
+    await this.#session.query('DELETE FROM agent_session_output_tails WHERE session_id = $1', [sessionId]);
     return ok(undefined);
   }
 }

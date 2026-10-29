@@ -125,7 +125,7 @@ export {
   requestsAwaitingAnswer,
   uncertainDeliveries,
 } from './domain/session-requests.js';
-export { OUTPUT_RETENTION_BYTES, appendOutput, readOutputAfter } from './domain/session-output.js';
+export { OUTPUT_RETENTION_BYTES, appendOutput, checkOutputTurn, liveTurnOf, readOutputAfter } from './domain/session-output.js';
 export { recordLimitSignal, takeHandoff, writeHandoff } from './domain/session-handoff.js';
 export {
   ADMISSION_PRESSURE_CAUSES,
@@ -501,6 +501,7 @@ export {
   SessionTimelineService,
   type CardSessionPage,
   type OutputBounds,
+  type OutputPage,
   type ResponseCommand,
   type SessionTimelineDependencies,
   type SessionView,
@@ -532,14 +533,26 @@ export {
   type SessionInboxItems,
   type SessionItemKind,
 } from './ports/session-inbox-items.js';
-export type { InputDigest, SessionTextRedactor, TurnIdSource } from './ports/session-input.js';
+export type {
+  HeldOutput,
+  InputDigest,
+  OutputContinuation,
+  OutputSplit,
+  OutputTailCipher,
+  SealedBytes,
+  SessionOutputRedactor,
+  SessionTextRedactor,
+  TurnIdSource,
+} from './ports/session-input.js';
 export { SESSION_TIMELINE_STORE_CONFORMANCE } from './ports/session-timeline-conformance.js';
 export type {
   HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
+  SessionOutputTails,
   SessionRecords,
   SessionTimelineStore,
   SessionTimelineTransaction,
+  StoredOutputTail,
   StoredSession,
 } from './ports/session-timeline-store.js';

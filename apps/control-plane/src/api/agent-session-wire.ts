@@ -3,6 +3,7 @@ import {
   parseSessionGeneration,
   type Answer,
   type NativeRequest,
+  type OutputEntry,
   type PrincipalId,
   type RequestKey,
   type Responder,
@@ -136,6 +137,10 @@ function requestKeyOf(key: Wire<'NativeRequestKey'>): Result<RequestKey> {
   if (!generation.ok) return generation;
   const nativeRequestId = parseIdentifier('NativeRequestId', key.nativeRequestId);
   return nativeRequestId.ok ? ok({ generation: generation.value, nativeRequestId: nativeRequestId.value }) : nativeRequestId;
+}
+
+export function outputEntryBody(entry: OutputEntry): Wire<'OutputEntry'> {
+  return { position: entry.position, turnId: entry.turnId, generation: entry.generation, text: entry.text };
 }
 
 // `0` before the first entry, or the position of the last one held.

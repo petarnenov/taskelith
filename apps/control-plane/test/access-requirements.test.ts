@@ -71,7 +71,8 @@ test('the credential renewal, confirmation, and relay take the worker credential
 
 const LOGIN_OPERATIONS = ['logIn', 'logOut', 'readSession'];
 const AGENT_SESSION_OPERATIONS = [
-  'listAgentSessionRequests', 'listAgentSessionTurns', 'listAgentSessions', 'readAgentSession', 'respondToNativeRequest', 'submitTurn',
+  'listAgentSessionRequests', 'listAgentSessionTurns', 'listAgentSessions', 'readAgentSession', 'readAgentSessionOutput', 'respondToNativeRequest',
+  'submitTurn',
 ];
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {

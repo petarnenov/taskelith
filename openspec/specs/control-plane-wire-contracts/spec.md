@@ -224,10 +224,14 @@ A `permission-request`, `input-request`, or `delivery-acknowledgement` item SHAL
 - **THEN** both `answerInboxItem` and `respondToNativeRequest` answer 400, and the request stays open
 
 ### Requirement: Output after a cursor on the wire
-`readAgentSessionOutput` SHALL return at most 100 retained entries after its cursor in position order with a `next` position while more remain, `cursor-expired` with the earliest retained position for a cursor older than the retained window, and 400 for a cursor after the last position.
+`readAgentSessionOutput` SHALL return at most 100 retained entries after its cursor in position order with a `next` position, the last entry's, while more remain, `cursor-expired` with the earliest retained position for a cursor older than the retained window, and 400 for a cursor after the last position.
 
 #### Scenario: Expired output cursor
 - **WHEN** a client reads output after a position that left the retained window
+- **THEN** the answer is `cursor-expired` with the earliest retained position
+
+#### Scenario: Window trimmed between pages
+- **WHEN** a client follows `next` after the window trimmed past it
 - **THEN** the answer is `cursor-expired` with the earliest retained position
 
 ### Requirement: Event streams
@@ -294,7 +298,7 @@ A stream SHALL end on any change of its principal's roles in its project, or of 
 - **THEN** its stream receives `stream-ended` with `role-changed` and ends, and the reconnection is refused with 403
 
 ### Requirement: Event payloads and session text
-An event's data SHALL be the record, or for `board-changed` the field, that the corresponding read returns for the same state, and the control plane SHALL redact session text with `@taskelith/secrets` before it records it, a generation's output as one text across its chunks, so that a read and an event carry the same redacted text.
+An event's data SHALL be the record, or for `board-changed` the field, that the corresponding read returns for the same state, and the control plane SHALL redact session text with `@taskelith/secrets` before it records it, a turn's output as one text across its chunks, so that a read and an event carry the same redacted text.
 
 #### Scenario: Secret in agent output
 - **WHEN** a harness writes output that holds a credential of a known shape
@@ -386,3 +390,10 @@ The wire `TurnState` SHALL include `refused`, and a refused turn SHALL appear in
 #### Scenario: Turn refused by the plugin
 - **WHEN** a client lists the turns of a session whose turn the harness plugin refused
 - **THEN** the turn has state `refused` and its generation, and matches `Turn`
+
+### Requirement: Held output tail on the wire
+Wire contracts section 7 SHALL state that a turn's output is redacted as one text with a held tail that belongs to its turn, is stored only sealed, and is released, redacted, before the turn's outcome or its generation's end is recorded, and that a held part past `MAX_HARNESS_TEXT_LENGTH` code units is recorded as one marker with its continuation dropped, an open block's up to the end marker of its own kind.
+
+#### Scenario: Tail never served
+- **WHEN** a client reads output while a turn holds a tail
+- **THEN** the answer carries only released entries, and none of the held text

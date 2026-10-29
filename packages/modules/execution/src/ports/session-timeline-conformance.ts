@@ -12,7 +12,7 @@ import {
   type TaskId,
 } from '@taskelith/sdlc';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
-import { FIRST_SESSION_GENERATION, type IdempotencyKey, type SessionId } from '../domain/identifiers.js';
+import { FIRST_SESSION_GENERATION, parseSessionGeneration, type IdempotencyKey, type SessionGeneration, type SessionId } from '../domain/identifiers.js';
 import { bindAttempt, endGeneration, startGeneration } from '../domain/session-attempts.js';
 import { recordLimitSignal, writeHandoff } from '../domain/session-handoff.js';
 import { appendOutput } from '../domain/session-output.js';
@@ -20,7 +20,7 @@ import { openSession, type Session } from '../domain/session-records.js';
 import { consumeResponse, recordRequest } from '../domain/session-requests.js';
 import { deliverTurn, recordTurnOutcome, submitTurn } from '../domain/session-turns.js';
 import type { SessionInboxItem, SessionItemKind } from './session-inbox-items.js';
-import type { IdempotencyRecord, SessionTimelineStore, SessionTimelineTransaction } from './session-timeline-store.js';
+import type { IdempotencyRecord, SessionTimelineStore, SessionTimelineTransaction, StoredOutputTail } from './session-timeline-store.js';
 
 // The shared suite for SessionTimelineStore; each case gets an empty store.
 
@@ -80,8 +80,30 @@ function inboxItem(itemId: string, kind: SessionItemKind = 'permission-request')
   });
 }
 
+// A tail of `session-1` whose bytes cover every value, 0 to 255.
+function outputTail(version: number, turn = 'turn-1', generation: SessionGeneration = GENERATION): StoredOutputTail {
+  const bytes = Uint8Array.from({ length: 256 }, (_, index) => (index + version) % 256);
+  return Object.freeze({
+    sessionId: session('session-1').id, turnId: id('TurnId', turn), generation, version, nonce: bytes.slice(0, 12), sealed: bytes,
+  });
+}
+
+// Bytes compared as hexadecimal, whatever byte array type a store returns.
+function tailData(tail: StoredOutputTail | undefined): unknown {
+  if (tail === undefined) return undefined;
+  return { ...tail, nonce: hex(tail.nonce), sealed: hex(tail.sealed) };
+}
+
+function hex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 const run = <T>(store: SessionTimelineStore, work: (tx: SessionTimelineTransaction) => Promise<Result<T>>) => store.transaction(work);
 const get = (store: SessionTimelineStore, sessionId: SessionId) => run(store, (tx) => tx.sessions.get(sessionId));
+const tailOf = async (store: SessionTimelineStore, sessionId: SessionId) => {
+  const read = await run(store, (tx) => tx.tails.get(sessionId));
+  return read.ok ? { ok: true as const, value: tailData(read.value) } : read;
+};
 
 export const SESSION_TIMELINE_STORE_CONFORMANCE: readonly ConformanceCase<SessionTimelineStore>[] = Object.freeze([
   {
@@ -230,6 +252,44 @@ export const SESSION_TIMELINE_STORE_CONFORMANCE: readonly ConformanceCase<Sessio
       });
       expectCode(problems, 'work', failed, 'conflict');
       expectRead(problems, 'session', await get(store, session('session-1').id), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'an output tail reads back byte for byte, a put replaces it, and a clear removes it',
+    async check(store) {
+      const problems: string[] = [];
+      const sessionId = session('session-1').id;
+      must(await run(store, (tx) => tx.sessions.add(session('session-1'))));
+      expectRead(problems, 'none', await tailOf(store, sessionId), undefined);
+      expectSuccess(problems, 'put', await run(store, (tx) => tx.tails.put(outputTail(1))));
+      expectRead(problems, 'first', await tailOf(store, sessionId), tailData(outputTail(1)));
+      const next = outputTail(2, 'turn-2', must(parseSessionGeneration(2)));
+      expectSuccess(problems, 'replace', await run(store, (tx) => tx.tails.put(next)));
+      expectRead(problems, 'replaced', await tailOf(store, sessionId), tailData(next));
+      expectSuccess(problems, 'clear', await run(store, (tx) => tx.tails.clear(sessionId)));
+      expectRead(problems, 'cleared', await tailOf(store, sessionId), undefined);
+      expectSuccess(problems, 'clear again', await run(store, (tx) => tx.tails.clear(sessionId)));
+      return problems;
+    },
+  },
+  {
+    name: 'a transaction whose work fails leaves the output tail as it was',
+    async check(store) {
+      const problems: string[] = [];
+      const sessionId = session('session-1').id;
+      must(await run(store, (tx) => tx.sessions.add(session('session-1'))));
+      must(await run(store, (tx) => tx.tails.put(outputTail(1))));
+      const rollback = { ok: false as const, error: { code: 'conflict' as const, message: 'rolled back', details: {} } };
+      expectCode(problems, 'put', await run(store, async (tx) => {
+        must(await tx.tails.put(outputTail(2)));
+        return rollback;
+      }), 'conflict');
+      expectCode(problems, 'clear', await run(store, async (tx) => {
+        must(await tx.tails.clear(sessionId));
+        return rollback;
+      }), 'conflict');
+      expectRead(problems, 'kept', await tailOf(store, sessionId), tailData(outputTail(1)));
       return problems;
     },
   },

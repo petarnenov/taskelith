@@ -170,6 +170,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#agentSessions.listAgentSessionTurns(request);
       case 'listAgentSessionRequests':
         return this.#agentSessions.listAgentSessionRequests(request);
+      case 'readAgentSessionOutput':
+        return this.#agentSessions.readAgentSessionOutput(request);
       case 'submitTurn':
         return this.#agentSessions.submitTurn(request);
       case 'respondToNativeRequest':

@@ -13,6 +13,20 @@ export function truncatedToLength(text: string, maximum: number): string {
   return text.slice(0, splitsPair ? maximum - 1 : maximum);
 }
 
+// Consecutive parts of at most `maximum` (2 or more) UTF-16 code units,
+// split on whole characters; an empty text has no part.
+export function splitToLength(text: string, maximum: number): readonly string[] {
+  const parts: string[] = [];
+  let rest = text;
+  while (rest.length > maximum) {
+    const part = truncatedToLength(rest, maximum);
+    parts.push(part);
+    rest = rest.slice(part.length);
+  }
+  if (rest !== '') parts.push(rest);
+  return Object.freeze(parts);
+}
+
 // Cuts the tail to at most `maximum` UTF-8 bytes on a whole character.
 export function truncatedToUtf8Bytes(text: string, maximum: number): string {
   let bytes = 0;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { after, test } from 'node:test';
 import {
@@ -22,7 +23,7 @@ import {
 } from '@taskelith/execution';
 import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
 import { parseOwnershipGeneration, type ProjectId, type TaskId, type WorkflowRunId } from '@taskelith/sdlc';
-import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
+import { Argon2idPasswordHasher, NodeSecrets, SecretOutputRedactor, outputTailCipher, redactSecrets } from '@taskelith/secrets';
 import { sequentialIds, value } from '@taskelith/testing';
 
 const OPERATOR = `tkop_${'C'.repeat(43)}`;
@@ -59,6 +60,7 @@ const rootTask = (taskId: TaskId, at: SessionScope) => LINEAGE.addTask({ taskId,
 const timelineStore = new InMemorySessionTimelineStore(LINEAGE);
 const timeline = new SessionTimelineService({
   store: timelineStore, digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
+  outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(randomBytes(32))),
   turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
 });
 const api = new ControlPlaneApi({
@@ -157,6 +159,7 @@ const READS = [
   ['GET', sessionPath('s-alpha')],
   ['GET', `${sessionPath('s-alpha')}/turns`],
   ['GET', `${sessionPath('s-alpha')}/requests`],
+  ['GET', `${sessionPath('s-alpha')}/output`],
 ] as const;
 const COMMANDS = [
   ['POST', `${sessionPath('s-alpha')}/turns`, turnBody('refused-key')],
@@ -220,6 +223,7 @@ test('a session of another project answers a member the same 404 as an unknown o
     answers.push(await call('GET', sessionPath(sessionId), OTTO));
     answers.push(await call('GET', `${sessionPath(sessionId)}/turns`, OTTO));
     answers.push(await call('GET', `${sessionPath(sessionId)}/requests`, OTTO));
+    answers.push(await call('GET', `${sessionPath(sessionId)}/output`, OTTO));
     answers.push(await call('POST', `${sessionPath(sessionId)}/turns`, OTTO, turnBody('foreign-key')));
     answers.push(await call('POST', `${sessionPath(sessionId)}/responses`, OTTO, responseBody('foreign-key', 'request-1', undefined, 'attempt-s-beta')));
   }
@@ -272,7 +276,7 @@ test('readAgentSession shows the card, attempt, generation, positions, limit, an
 
 test('readAgentSession shows the retained output from its earliest position to its last', async () => {
   const writing = await runningSession('s-output');
-  for (const text of ['first output', 'second output']) {
+  for (const text of ['first output\n', 'second output\n']) {
     value(await timeline.appendOutput(writing.sessionId, { turnId: writing.turnId, generation: GENERATION, text }));
   }
   const read = await call('GET', sessionPath('s-output'), VERA);
@@ -369,4 +373,71 @@ test('listAgentSessionRequests numbers requests from 1 in recording order, and p
   const second = await call('GET', `${sessionPath('s-requests')}/requests?after=100`, VERA);
   const rest = second.body.requests as { position: number; key: { nativeRequestId: string } }[];
   assert.deepEqual([rest.map((request) => [request.position, request.key.nativeRequestId]), second.body.next], [[[101, 'native-101']], undefined]);
+});
+
+const append = (session: { sessionId: SessionId; turnId: TurnId }, text: string) => (
+  timeline.appendOutput(session.sessionId, { turnId: session.turnId, generation: GENERATION, text })
+);
+const outputPath = (sessionId: string, after?: number) => `${sessionPath(sessionId)}/output${after === undefined ? '' : `?after=${after}`}`;
+const entriesOf = (answer: Answer) => answer.body.entries as { position: number; turnId: string; generation: number; text: string }[];
+// A JWT of three parts, assembled so that no tracked file holds one.
+const JWT = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ3b3JrZXIifQ', 'c2lnbmF0dXJlLW9mLXRoZS10b2tlbg'].join('.');
+
+test('readAgentSessionOutput serves only redacted output: a JWT split at any offset shows no part of it, held or released', async () => {
+  const writing = await runningSession('s-split');
+  let whole = '';
+  for (let offset = 1; offset < JWT.length; offset += 1) {
+    const [first, second] = [`token ${JWT.slice(0, offset)}`, `${JWT.slice(offset)} done\n`];
+    value(await append(writing, first));
+    const held = await call('GET', outputPath('s-split'), VERA);
+    assert.equal(held.status, 200, held.text);
+    assert.equal(held.text.includes(JWT.slice(0, Math.max(offset, 4))), false, `offset ${offset} shows the held part`);
+    value(await append(writing, second));
+    whole += first + second;
+  }
+  const texts: string[] = [];
+  for (let after = 0, more = true; more;) {
+    const page = await call('GET', outputPath('s-split', after), VERA);
+    texts.push(...entriesOf(page).map((entry) => entry.text));
+    more = page.body.next !== undefined;
+    after = Number(page.body.next);
+  }
+  assert.equal(texts.join(''), redactSecrets(whole));
+  for (let start = 0; start + 4 <= JWT.length; start += 1) assert.equal(texts.join('').includes(JWT.slice(start, start + 4)), false);
+});
+
+test('readAgentSessionOutput pages 100 entries with next, the rest without, and none for a session without output', async () => {
+  const empty = await call('GET', outputPath('s-alpha'), VERA);
+  assert.deepEqual([empty.status, empty.body], [200, { result: 'entries', asOf: AS_OF, position: '0', entries: [] }]);
+  const writing = await runningSession('s-pages');
+  for (let index = 1; index <= 101; index += 1) value(await append(writing, `line ${index}\n`));
+  const first = await call('GET', outputPath('s-pages'), VERA);
+  assert.deepEqual([first.status, first.body.result, entriesOf(first).length, first.body.next], [200, 'entries', 100, 100]);
+  assert.deepEqual(entriesOf(first)[0], { position: 1, turnId: writing.turnId, generation: 1, text: 'line 1\n' });
+  const last = await call('GET', outputPath('s-pages', 100), BEARER);
+  assert.deepEqual([entriesOf(last).map((entry) => entry.text), last.body.next], [['line 101\n'], undefined]);
+  const done = await call('GET', outputPath('s-pages', 101), VERA);
+  assert.deepEqual([entriesOf(done), done.body.next], [[], undefined]);
+});
+
+test('readAgentSessionOutput refuses a cursor past the last position and a malformed one with 400', async () => {
+  const writing = await runningSession('s-cursor');
+  value(await append(writing, 'one\n'));
+  for (const after of ['2', '-1', '01', 'x']) {
+    const refused = await call('GET', `${sessionPath('s-cursor')}/output?after=${after}`, VERA);
+    assert.deepEqual([refused.status, refused.body.code], [400, 'invalid'], after);
+  }
+});
+
+test('readAgentSessionOutput answers cursor-expired with the earliest retained position when the window trimmed between pages', async () => {
+  const writing = await runningSession('s-trimmed');
+  for (let index = 1; index <= 101; index += 1) value(await append(writing, `line ${index}\n`));
+  const first = await call('GET', outputPath('s-trimmed'), VERA);
+  assert.equal(first.body.next, 100);
+  // Each chunk releases one entry of 196,606 bytes; 54 pass the 10 MiB window.
+  for (let index = 0; index < 54; index += 1) value(await append(writing, `${'\u20ac'.repeat(65_535)}\n`));
+  const earliest = value(await timeline.readSession(writing.sessionId)).outputWindow.earliestRetained;
+  assert.ok(earliest !== undefined && earliest > 101, 'the window trimmed past the cursor');
+  const expired = await call('GET', outputPath('s-trimmed', 100), VERA);
+  assert.deepEqual([expired.status, expired.body], [200, { result: 'cursor-expired', asOf: AS_OF, position: '0', earliestRetained: earliest }]);
 });

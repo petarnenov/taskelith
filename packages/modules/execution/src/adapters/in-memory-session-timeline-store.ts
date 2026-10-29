@@ -17,9 +17,11 @@ import type {
   HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
+  SessionOutputTails,
   SessionRecords,
   SessionTimelineStore,
   SessionTimelineTransaction,
+  StoredOutputTail,
   StoredSession,
 } from '../ports/session-timeline-store.js';
 
@@ -63,19 +65,20 @@ interface State {
   readonly keys: Map<string, IdempotencyRecord>;
   readonly items: Map<NeedsYouItemId, SessionInboxItem>;
   readonly audit: SessionAuditEvent[];
+  readonly tails: Map<SessionId, StoredOutputTail>;
 }
 
 function copy(state: State): State {
   return {
     sessions: new Map(state.sessions), attempts: new Map(state.attempts), keys: new Map(state.keys), items: new Map(state.items),
-    audit: [...state.audit],
+    audit: [...state.audit], tails: new Map(state.tails),
   };
 }
 
 // One transaction at a time over a copy of the state, which replaces the
 // state only when the work answers ok. Its scopes come from `lineage`.
 export class InMemorySessionTimelineStore implements SessionTimelineStore, SessionScopes {
-  #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [] };
+  #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [], tails: new Map() };
   #queue: Promise<unknown> = Promise.resolve();
   readonly #lineage: InMemoryTaskLineage;
 
@@ -89,7 +92,7 @@ export class InMemorySessionTimelineStore implements SessionTimelineStore, Sessi
       const scopes = new MemorySessionScopes(draft, this.#lineage);
       const result = await work({
         sessions: new MemorySessionRecords(draft), idempotency: new MemoryIdempotencyRecords(draft),
-        items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes,
+        items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes, tails: new MemoryOutputTails(draft),
       });
       if (result.ok) this.#state = draft;
       return result;
@@ -235,6 +238,25 @@ class MemoryAuditRecords implements SessionAuditRecords {
 
   async append(event: SessionAuditEvent): Promise<Result<void>> {
     this.state.audit.push(Object.freeze({ ...event }));
+    return ok(undefined);
+  }
+}
+
+class MemoryOutputTails implements SessionOutputTails {
+  constructor(private readonly state: State) {}
+
+  async get(sessionId: SessionId): Promise<Result<StoredOutputTail | undefined>> {
+    return ok(this.state.tails.get(sessionId));
+  }
+
+  async put(tail: StoredOutputTail): Promise<Result<void>> {
+    if (!this.state.sessions.has(tail.sessionId)) return err(failure('not-found', `no session ${tail.sessionId} holds an output tail`));
+    this.state.tails.set(tail.sessionId, Object.freeze({ ...tail, nonce: Uint8Array.from(tail.nonce), sealed: Uint8Array.from(tail.sealed) }));
+    return ok(undefined);
+  }
+
+  async clear(sessionId: SessionId): Promise<Result<void>> {
+    this.state.tails.delete(sessionId);
     return ok(undefined);
   }
 }

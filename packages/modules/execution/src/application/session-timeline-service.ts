@@ -1,11 +1,11 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import type { Clock, EvidenceReference } from '@taskelith/sdlc';
-import { truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
+import { splitToLength, truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
 import { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from '../domain/session-attempts.js';
 import { recordLimitSignal, takeHandoff, writeHandoff } from '../domain/session-handoff.js';
-import { appendOutput } from '../domain/session-output.js';
+import { appendOutput, checkOutputTurn, liveTurnOf, readOutputAfter } from '../domain/session-output.js';
 import {
   isSameRequestKey,
   isTextWithin,
@@ -17,6 +17,7 @@ import {
   type LimitSignal,
   type NativeRequest,
   type OutputAppend,
+  type OutputEntry,
   type RequestKey,
   type RequestRecording,
   type Responder,
@@ -48,7 +49,7 @@ import {
 } from '../domain/session-turns.js';
 import { MAX_INPUT_ANSWER_BYTES, type NeedsYouItemId } from '../ports/needs-you.js';
 import type { ScopedInboxItem } from '../ports/session-inbox-items.js';
-import type { InputDigest, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
+import type { InputDigest, OutputTailCipher, SessionOutputRedactor, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
 import type { SessionScope } from '../ports/session-scopes.js';
 import type {
   HeldKey,
@@ -57,6 +58,7 @@ import type {
   SessionTimelineTransaction,
   StoredSession,
 } from '../ports/session-timeline-store.js';
+import { NOTHING_HELD, SealedOutputTails, type TailOwner } from './sealed-output-tails.js';
 import { itemChanges, type ItemChange } from './session-item-changes.js';
 
 // `clock` and `itemIds` stamp the native request items that each change
@@ -65,13 +67,15 @@ export interface SessionTimelineDependencies {
   readonly store: SessionTimelineStore;
   readonly digest: InputDigest;
   readonly redactor: SessionTextRedactor;
+  readonly outputRedactor: SessionOutputRedactor;
+  readonly tailCipher: OutputTailCipher;
   readonly turnIds: TurnIdSource;
   readonly clock: Clock;
   readonly itemIds: { next(): NeedsYouItemId };
 }
 
-// A session as the service shows it: its output entries stay in the store
-// until 13d redacts output across chunks; only the window's bounds show.
+// A session as the service shows it: only its output window's bounds show,
+// and `readOutput` pages the entries.
 export type SessionView = Omit<Session, 'output'> & { readonly outputWindow: OutputBounds };
 
 export interface OutputBounds {
@@ -79,6 +83,11 @@ export interface OutputBounds {
   // Absent while the window holds no entry.
   readonly earliestRetained?: number;
 }
+
+// A page of retained output after a cursor (wire contracts, section 9).
+export type OutputPage =
+  | { readonly kind: 'entries'; readonly entries: readonly OutputEntry[]; readonly more: boolean }
+  | { readonly kind: 'cursor-expired'; readonly earliestRetained: number };
 
 export interface TurnCommand {
   readonly key: IdempotencyKey;
@@ -119,6 +128,8 @@ export class SessionTimelineService {
   readonly #store: SessionTimelineStore;
   readonly #digest: InputDigest;
   readonly #redactor: SessionTextRedactor;
+  readonly #outputRedactor: SessionOutputRedactor;
+  readonly #tails: SealedOutputTails;
   readonly #turnIds: TurnIdSource;
   readonly #clock: Clock;
   readonly #itemIds: { next(): NeedsYouItemId };
@@ -127,6 +138,8 @@ export class SessionTimelineService {
     this.#store = dependencies.store;
     this.#digest = dependencies.digest;
     this.#redactor = dependencies.redactor;
+    this.#outputRedactor = dependencies.outputRedactor;
+    this.#tails = new SealedOutputTails(dependencies.tailCipher);
     this.#turnIds = dependencies.turnIds;
     this.#clock = dependencies.clock;
     this.#itemIds = dependencies.itemIds;
@@ -286,13 +299,39 @@ export class SessionTimelineService {
     return this.#change(sessionId, (session) => recordDeliveryReport(session, key, report));
   }
 
-  // Each chunk is redacted alone until 13d holds a tail across chunks.
+  // A turn's output is redacted as one text: what could still be or start
+  // a secret stays in the sealed held tail (wire contracts, section 7).
   appendOutput(sessionId: SessionId, output: OutputAppend): Promise<Result<SessionView>> {
     if (!isTextWithin(output.text, 0, MAX_HARNESS_TEXT_LENGTH)) {
       return Promise.resolve(err(failure('invalid', `session ${sessionId} got output text out of bounds`, { session: sessionId })));
     }
-    const redacted = { ...output, text: this.#redacted(output.text) };
-    return this.#change(sessionId, (session) => appendOutput(session, redacted));
+    return this.#store.transaction(async (tx) => {
+      const stored = await storedSession(tx, sessionId);
+      if (!stored.ok) return stored;
+      const live = checkOutputTurn(stored.value.session, output);
+      if (!live.ok) return live;
+      const tail = await this.#tails.read(tx, sessionId);
+      if (!tail.ok) return tail;
+      if (tail.value !== undefined && !isSameOwner(tail.value, output)) return strayTail(sessionId);
+      const split = this.#outputRedactor.split(tail.value?.held ?? NOTHING_HELD, output.text, MAX_HARNESS_TEXT_LENGTH);
+      const written = await this.#tails.write(tx, sessionId, output, split.held, tail.value);
+      if (!written.ok) return written;
+      return this.#written(tx, stored.value, appendedOutput(stored.value.session, output, split.released));
+    });
+  }
+
+  // The retained output after `after`, at most `limit` entries, read in one
+  // transaction; a cursor past the last position fails with `invalid`.
+  readOutput(sessionId: SessionId, after: number, limit: number): Promise<Result<OutputPage>> {
+    return this.#store.transaction(async (tx): Promise<Result<OutputPage>> => {
+      const stored = await storedSession(tx, sessionId);
+      if (!stored.ok) return stored;
+      const read = readOutputAfter(stored.value.session, after);
+      if (!read.ok) return read;
+      if (read.value.kind === 'cursor-expired') return ok(read.value);
+      const { entries } = read.value;
+      return ok(Object.freeze({ kind: 'entries' as const, entries: Object.freeze(entries.slice(0, limit)), more: entries.length > limit }));
+    });
   }
 
   recordLimitSignal(sessionId: SessionId, signal: LimitSignal): Promise<Result<SessionView>> {
@@ -348,8 +387,25 @@ export class SessionTimelineService {
   #change(sessionId: SessionId, change: Change): Promise<Result<SessionView>> {
     return this.#store.transaction(async (tx) => {
       const stored = await storedSession(tx, sessionId);
-      return stored.ok ? this.#written(tx, stored.value, change(stored.value.session)) : stored;
+      if (!stored.ok) return stored;
+      return this.#written(tx, stored.value, await this.#changedAfterRelease(tx, stored.value.session, change));
     });
+  }
+
+  // A change that ends the live turn first releases its held tail, redacted,
+  // as the turn's last output, then applies to that session (decision 3).
+  async #changedAfterRelease(tx: SessionTimelineTransaction, session: Session, change: Change): Promise<Result<Session>> {
+    const changed = change(session);
+    const live = liveTurnOf(session);
+    if (!changed.ok || live === undefined || liveTurnOf(changed.value)?.id === live.id) return changed;
+    const tail = await this.#tails.read(tx, session.id);
+    if (!tail.ok) return tail;
+    if (tail.value === undefined) return changed;
+    if (tail.value.turnId !== live.id) return strayTail(session.id);
+    const released = appendedOutput(session, tail.value, this.#outputRedactor.release(tail.value.held));
+    if (!released.ok) return released;
+    const cleared = await tx.tails.clear(session.id);
+    return cleared.ok ? change(released.value) : cleared;
   }
 
   #read<Value>(sessionId: SessionId, read: (session: Session) => Value): Promise<Result<Value>> {
@@ -404,6 +460,28 @@ export class SessionTimelineService {
         return { ...answer, summary: this.#redacted(answer.summary) };
     }
   }
+}
+
+// Released text past the entry bound becomes several entries, split on
+// whole characters, so that none of it is lost (design decision 4).
+function appendedOutput(session: Session, owner: TailOwner, released: string): Result<Session> {
+  let appended = session;
+  for (const text of splitToLength(released, MAX_HARNESS_TEXT_LENGTH)) {
+    const next = appendOutput(appended, { turnId: owner.turnId, generation: owner.generation, text });
+    if (!next.ok) return next;
+    appended = next.value;
+  }
+  return ok(appended);
+}
+
+function isSameOwner(left: TailOwner, right: TailOwner): boolean {
+  return left.turnId === right.turnId && left.generation === right.generation;
+}
+
+// Each tail is released before its turn stops running, so another turn's
+// tail means the store broke that rule.
+function strayTail(sessionId: SessionId): Result<never> {
+  return err(failure('internal', `session ${sessionId} holds the output tail of another turn`, { session: sessionId }));
 }
 
 async function storedSession(tx: SessionTimelineTransaction, sessionId: SessionId): Promise<Result<StoredSession>> {

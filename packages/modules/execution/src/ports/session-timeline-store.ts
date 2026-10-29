@@ -1,6 +1,6 @@
 import type { Result } from '@taskelith/kernel';
 import type { TaskId } from '@taskelith/sdlc';
-import type { IdempotencyKey, NativeRequestId, SessionId } from '../domain/identifiers.js';
+import type { IdempotencyKey, NativeRequestId, SessionGeneration, SessionId, TurnId } from '../domain/identifiers.js';
 import type { Session } from '../domain/session-records.js';
 import type { SessionAuditRecords, SessionInboxItems } from './session-inbox-items.js';
 import type { SessionScopes } from './session-scopes.js';
@@ -17,6 +17,7 @@ export interface SessionTimelineTransaction {
   readonly items: SessionInboxItems;
   readonly audit: SessionAuditRecords;
   readonly scopes: SessionScopes;
+  readonly tails: SessionOutputTails;
 }
 
 // A stored session with the version that a replacement must name.
@@ -51,4 +52,22 @@ export interface IdempotencyRecord {
 export interface IdempotencyRecords {
   find(sessionId: SessionId, scope: string, key: HeldKey): Promise<Result<IdempotencyRecord | undefined>>;
   record(sessionId: SessionId, record: IdempotencyRecord): Promise<Result<void>>;
+}
+
+// A turn's held output tail at rest: only its ciphertext, sealed with the
+// session, turn, and version as authenticated data.
+export interface StoredOutputTail {
+  readonly sessionId: SessionId;
+  readonly turnId: TurnId;
+  readonly generation: SessionGeneration;
+  readonly version: number;
+  readonly nonce: Uint8Array;
+  readonly sealed: Uint8Array;
+}
+
+// At most one tail per session, read by no path but output's.
+export interface SessionOutputTails {
+  get(sessionId: SessionId): Promise<Result<StoredOutputTail | undefined>>;
+  put(tail: StoredOutputTail): Promise<Result<void>>;
+  clear(sessionId: SessionId): Promise<Result<void>>;
 }

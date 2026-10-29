@@ -6,6 +6,7 @@ import type { NeedsYouItemId, PrincipalId } from '@taskelith/execution';
 import { PostgresDatabase, PostgresSessionTimelineStore } from '@taskelith/postgres';
 import { crashPointsFromEnvironment, value } from '@taskelith/testing';
 import {
+  HALF_JWT_CHUNK,
   PERSON,
   SESSION,
   allow,
@@ -45,6 +46,7 @@ const steps: Readonly<Record<string, () => Promise<Result<unknown>>>> = {
   'end-generation': () => service.endGeneration(SESSION, generation(1)),
   'acceptance-unknown': async () => service.recordTurnAcceptanceUnknown(SESSION, { turnId: await turnOf('turn-1'), generation: generation(1) }),
   acknowledge,
+  'append-half': async () => service.appendOutput(SESSION, { turnId: await turnOf('turn-1'), generation: generation(1), text: HALF_JWT_CHUNK }),
   refused: async () => service.recordTurnRefused(SESSION, { turnId: await turnOf('turn-1'), generation: generation(1) }),
 };
 
