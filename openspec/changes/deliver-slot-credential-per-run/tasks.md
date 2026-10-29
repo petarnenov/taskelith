@@ -10,6 +10,7 @@
 - [x] 2.3 `HttpSlotCredentialClient` and the worker's `RunSlotCredentials` implementation
 - [x] 2.4 Tests: checks, record, refusals, the gated PostgreSQL race, redaction on every new output path, no credential in the database or on NATS, and their fail-before runs
 - [x] 2.5 Fix the six findings of review pass 1, each with tests that fail before the fix
+- [x] 2.6 Fix the seven Low findings of review pass 2 without another review, each behavior fix with a test that fails before it
 
 ## 3. Records and checks
 
@@ -18,6 +19,6 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review passes recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
+- [x] 4.1 Review passes recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
 - [ ] 4.2 Architect check by the coordinator of any unreviewed fixes
 - [ ] 4.3 Archive the change in the last commit of the branch
