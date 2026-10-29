@@ -15,10 +15,15 @@ import type { InputDigest } from '../ports/session-input.js';
 import { SESSION_ITEM_KINDS, type ScopedInboxItem, type SessionItemKind } from '../ports/session-inbox-items.js';
 import type { ViewPositions } from '../ports/session-scopes.js';
 import type { SessionTimelineStore, SessionTimelineTransaction } from '../ports/session-timeline-store.js';
-import { ALREADY_ANSWERED, KEY_REUSED, type SessionTimelineService } from './session-timeline-service.js';
+import {
+  ALREADY_ANSWERED,
+  KEY_REUSED,
+  itemClosed,
+  itemKeyScope,
+  type SessionTimelineService,
+} from './session-timeline-service.js';
 
 export const SOURCE_PAGE_SIZE = 100;
-export const ITEM_CLOSED = 'item-closed';
 
 // Fixed titles: no session text, which only members may read, reaches one.
 const TITLES: Readonly<Record<SessionItemKind, string>> = Object.freeze({
@@ -91,21 +96,20 @@ export class NativeRequestSource implements NeedsYouSource {
     if (answer === undefined || item.attemptId === undefined || item.attemptGeneration === undefined) {
       return err(failure('invalid', `item ${item.id} takes no such answer`));
     }
-    const consumed = await this.#timeline.consumeResponse(item.sessionId, {
+    const answered = await this.#timeline.answerItem(item.id, {
       key: request.idempotencyKey,
       response: {
         request: item.request, answer, responder: { kind: 'principal', principalId: request.responder },
         attemptId: item.attemptId, ownershipGeneration: item.attemptGeneration,
       },
     });
-    if (!consumed.ok) return consumed.error.code === 'not-found' ? itemClosed(item.id) : consumed;
-    return this.#current(item.id);
+    return answered.ok ? this.#found(answered.value) : answered;
   }
 
   // Resolves the item, audited; it resends, answers, and starts nothing.
   #acknowledge({ scoped, request }: AnsweredItem): Promise<Result<NeedsYouItem>> {
     const { item } = scoped;
-    const scope = `item:${item.id}`;
+    const scope = itemKeyScope(item.id);
     const digest = this.#digest.digest(JSON.stringify(['acknowledge', request.responder]));
     return this.#store.transaction(async (tx) => {
       const current = await tx.items.get(item.id);
@@ -131,12 +135,6 @@ export class NativeRequestSource implements NeedsYouSource {
     if (!settled.ok) return settled;
     const audited = await tx.audit.append({ kind: 'session.delivery-acknowledged', subject: item.id, actor: request.responder, occurredAt: at });
     return audited.ok ? ok({ ...scoped, item }) : audited;
-  }
-
-  async #current(itemId: NeedsYouItemId): Promise<Result<NeedsYouItem>> {
-    const scoped = await this.#store.transaction((tx) => tx.items.get(itemId));
-    if (!scoped.ok) return scoped;
-    return scoped.value === undefined ? unknownItem(itemId) : this.#found(scoped.value);
   }
 
   #found(scoped: ScopedInboxItem): Result<NeedsYouItem> {
@@ -172,10 +170,6 @@ function timelineAnswerOf(answer: NeedsYouAnswer): Answer | undefined {
 
 function unknownItem(itemId: NeedsYouItemId): Result<never> {
   return err(failure('not-found', `no inbox item ${itemId}`));
-}
-
-function itemClosed(itemId: NeedsYouItemId): Result<never> {
-  return err(failure('precondition-failed', `item ${itemId} is closed`, { reason: ITEM_CLOSED }));
 }
 
 function keyReused(itemId: NeedsYouItemId): Result<never> {

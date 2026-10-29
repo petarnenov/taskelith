@@ -480,6 +480,7 @@ export {
 export {
   ALREADY_ANSWERED,
   ATTEMPT_NOT_CURRENT,
+  ITEM_CLOSED,
   KEY_REUSED,
   SESSION_STOPPED,
   SessionTimelineService,
@@ -493,7 +494,6 @@ export {
 export { InMemorySessionTimelineStore, type TaskScopes } from './adapters/in-memory-session-timeline-store.js';
 export { BEFORE_ANY_EVENT } from './adapters/before-event-positions.js';
 export {
-  ITEM_CLOSED,
   NativeRequestSource,
   SOURCE_PAGE_SIZE,
   type NativeRequestSourceDependencies,

@@ -3,6 +3,7 @@ import { after, beforeEach, test } from 'node:test';
 import {
   ALREADY_ANSWERED,
   BEFORE_ANY_EVENT,
+  ITEM_CLOSED,
   NativeRequestSource,
   type IdempotencyKey,
   type NeedsYouItemId,
@@ -178,6 +179,40 @@ test.describe('session inbox items on PostgreSQL', { concurrency: false }, () =>
     assert.deepEqual([loser.code, loser.details.reason], ['conflict', ALREADY_ANSWERED]);
     assert.deepEqual((await itemRows()).map((row) => row.state), ['resolved']);
     assert.equal(value(await service.readSession(SESSION)).requests[0]!.state, 'answered');
+  });
+
+  test('one key used by a response and then an inbox answer, or the reverse, answers the second already-answered', async () => {
+    const permission = (decision: string) => ({ kind: 'permission-request', decision });
+    await sessionWithOpenRequest(service);
+    const [itemId] = (await itemRows()).map((row) => row.item_id);
+    value(await service.consumeResponse(SESSION, allow('shared-1')));
+    for (const decision of ['allow', 'deny']) {
+      const second = failed(await source(new PostgresSessionTimelineStore(database)).answer(answer(itemId!, 'shared-1', permission(decision))));
+      assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED], decision);
+    }
+    await truncateAll(url);
+    await lineage();
+    await sessionWithOpenRequest(service);
+    const [answeredId] = (await itemRows()).map((row) => row.item_id);
+    value(await source(new PostgresSessionTimelineStore(database)).answer(answer(answeredId!, 'shared-1', permission('allow'))));
+    const second = failed(await service.consumeResponse(SESSION, allow('shared-1')));
+    assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED]);
+  });
+
+  test('a standing rule racing an inbox answer: the rule closes the item and the answer fails item-closed, or the rule fails', async () => {
+    await sessionWithOpenRequest(service);
+    const [itemId] = (await itemRows()).map((row) => row.item_id);
+    const barrier = new Barrier(2);
+    const rule = timelineService(barrierStore(new PostgresSessionTimelineStore(database), barrier));
+    const inboxStore = barrierStore(new PostgresSessionTimelineStore(database), barrier);
+    const ruled = allow('rule-1');
+    const [byRule, byInbox] = await Promise.all([
+      rule.consumeResponse(SESSION, { ...ruled, response: { ...ruled.response, responder: { kind: 'standing-rule', ruleId: id('StandingRuleId', 'rule-1') } } }),
+      source(inboxStore, timelineService(inboxStore)).answer(answer(itemId!, 'inbox-1', { kind: 'permission-request', decision: 'deny' })),
+    ]);
+    const loser = failed(byRule.ok ? byInbox : byRule);
+    const expected = byRule.ok ? ['precondition-failed', ITEM_CLOSED, 'closed'] : ['conflict', ALREADY_ANSWERED, 'resolved'];
+    assert.deepEqual([loser.code, loser.details.reason, (await itemRows())[0]!.state], expected);
   });
 
   test('two acknowledgements of one item under two keys resolve it once with one audit event, and the other fails already-answered', async () => {

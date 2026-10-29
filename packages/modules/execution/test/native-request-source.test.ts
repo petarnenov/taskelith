@@ -222,6 +222,30 @@ test('an inbox answer and a response reach one consumption: the second is alread
   assert.deepEqual([reused.code, reused.details.reason], ['conflict', KEY_REUSED]);
 });
 
+test('an inbox answer of an item that a standing rule closed fails with item-closed', async () => {
+  const subject = timeline();
+  await withOpenRequest(subject);
+  value(await subject.service.consumeResponse(SESSION, response('rule-1', { ...allow(), responder: { kind: 'standing-rule', ruleId: id('StandingRuleId', 'rule-1') } })));
+  const closed = failed(await subject.source.answer(answer('item-1', 'inbox-1', { kind: 'permission-request', decision: 'allow' })));
+  assert.deepEqual([closed.code, closed.details.reason], ['precondition-failed', ITEM_CLOSED]);
+});
+
+test('one key used by a response and then an inbox answer, or the reverse, is two keys: the second is already-answered', async () => {
+  const allowed = { kind: 'permission-request', decision: 'allow' } as const;
+  const responded = timeline();
+  await withOpenRequest(responded);
+  value(await responded.service.consumeResponse(SESSION, response('shared-1')));
+  for (const given of [allowed, { kind: 'permission-request', decision: 'deny' } as const]) {
+    const second = failed(await responded.source.answer(answer('item-1', 'shared-1', given)));
+    assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED], given.decision);
+  }
+  const answered = timeline();
+  await withOpenRequest(answered);
+  value(await answered.source.answer(answer('item-1', 'shared-1', allowed)));
+  const second = failed(await answered.service.consumeResponse(SESSION, response('shared-1')));
+  assert.deepEqual([second.code, second.details.reason], ['conflict', ALREADY_ANSWERED]);
+});
+
 test('an inbox answer of another kind is invalid, of an unknown item not-found, and of an expired request item-closed', async () => {
   const subject = timeline();
   await withOpenRequest(subject);
