@@ -10,7 +10,7 @@ import {
   type RevealedSlotDelivery,
   type SlotCredentialFetchRequest,
 } from '@taskelith/control-plane';
-import type { HarnessPluginId, LaunchGrant, LaunchOutcome, RecoveryEpoch } from '@taskelith/execution';
+import { executionsUnderAssignment, type HarnessPluginId, type LaunchGrant, type LaunchOutcome, type RecoveryEpoch } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { connectTransport, ensureStreams, JetStreamPublisher, OutboxPublisher, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
@@ -18,6 +18,8 @@ import { PostgresDatabase, PostgresOutboxRelay, PostgresSlotCredentials, migrate
 import {
   SlotSecret,
   StaticAdmittedDeliveries,
+  createAssignment,
+  endAssignment,
   parseAccountSlot,
   type AdmittedPair,
   type ProjectId,
@@ -27,7 +29,7 @@ import {
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
 import { AesGcmSlotCredentialCipher } from '@taskelith/secrets';
-import type { OwnershipGeneration } from '@taskelith/sdlc';
+import { nextGeneration, nextOwnershipGeneration, type OwnershipGeneration } from '@taskelith/sdlc';
 import { failed, id, integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
 import { createLaunchRun, launchAuthority, placedTask, type Placed } from './launch-fixtures.ts';
 
@@ -191,6 +193,47 @@ test('a released reservation cannot fetch, though the execution had a delivery',
   assert.equal(reasonOf(await service().fetch(PRINCIPAL, fetch)), 'capacity-not-reserved');
   assert.equal(reveals, 1);
   assert.equal((await deliveries())[0]!.deliveries, 1, 'a refusal changes no record');
+});
+
+// Ends the attempt's assignment, releases its reservation, and places the
+// attempt on the other worker at the next ownership generation.
+async function reassign(placed: Placed): Promise<void> {
+  const old = value(await database.transaction(async (tx) => {
+    const assignment = value(await tx.assignments.get(placed.request.assignmentId));
+    const task = value(await tx.tasks.get(placed.taskId));
+    const executions = executionsUnderAssignment(task, assignment.id);
+    const ended = value(endAssignment(assignment, assignment.generation, 'cancelled', executions, await tx.now()));
+    const replaced = await tx.assignments.replace(ended, assignment.generation);
+    return replaced.ok ? ok(ended) : replaced;
+  }));
+  await sql(url, `UPDATE assignments SET reservation_state = 'released', record = replace(record, '"state":"held"', '"state":"released"')
+    WHERE id = $1`, [old.id]);
+  value(await database.transaction(async (tx) => {
+    const at = await tx.now();
+    const task = value(await tx.tasks.get(placed.taskId));
+    const ownershipGeneration = nextOwnershipGeneration(task.ownershipGeneration);
+    const owned = Object.freeze({ ...task, ownershipGeneration, generation: nextGeneration(task.generation), changedAt: at });
+    value(await tx.tasks.replace(owned, task.generation));
+    const reservation = { ...old.reservation, id: id('ReservationId', 'task-1-reservation-2') as never };
+    return tx.assignments.add(createAssignment({
+      id: id('AssignmentId', 'task-1-assignment-2') as never, attemptId: old.attemptId, workerId: OTHER_WORKER.workerId,
+      ownershipGeneration, reservation,
+    }, at));
+  }));
+}
+
+test('a reassigned attempt cannot fetch on its old worker, though the execution had a delivery', async () => {
+  const { placed, fetch } = await launched();
+  value(await service().fetch(PRINCIPAL, fetch));
+  await reassign(placed);
+  const assignments = await database.transaction(async (tx) => ok(await tx.assignments.listByAttempt(fetch.attemptId)));
+  assert.deepEqual(value(assignments).map((assignment) => [assignment.workerId, assignment.state]).sort(),
+    [[WORKER.workerId, 'ended'], [OTHER_WORKER.workerId, 'offered']], 'the attempt moved to the other worker');
+  assert.equal(reasonOf(await service().fetch(PRINCIPAL, fetch)), 'assignment-not-active');
+  const next = { ...fetch, ownershipGeneration: nextOwnershipGeneration(fetch.ownershipGeneration) };
+  assert.equal(reasonOf(await service().fetch(PRINCIPAL, next)), 'assignment-not-active', 'the new generation does not help it');
+  assert.equal(reveals, 1);
+  assert.deepEqual((await deliveries()).map((record) => [record.deliveries, record.worker_id]), [[1, WORKER.workerId]], 'a refusal changes no record');
 });
 
 test('a slot that names another version than the earlier delivery reveals nothing', async () => {
