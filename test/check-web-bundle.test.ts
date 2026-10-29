@@ -88,6 +88,27 @@ test('an IP, single-label, or userinfo origin fails the check', () => {
   }
 });
 
+test('a percent-encoded or Unicode host fails the check', () => {
+  for (const url of ['https://%65vil.example/x', 'https://例え.テスト/x']) {
+    assert.deepEqual(textProblems('assets/a.js', `fetch("${url}")`), [`assets/a.js: references the external origin of ${url}`]);
+  }
+});
+
+test('an escaped URL fails the check as the browser decodes it', () => {
+  const escaped: readonly [string, string][] = [
+    ['index.html', '<link href="https:&#47;&#47;fonts.googleapis.com/css">'],
+    ['index.html', '<link href="https&colon;&sol;&sol;fonts.googleapis.com/css">'],
+    ['index.html', '<link href="https:&#x2F;&#x2f;fonts.googleapis.com/css">'],
+    ['assets/a.js', 'fetch("https:\\/\\/fonts.googleapis.com/css")'],
+    ['assets/a.js', 'fetch("https:\\u002f\\x2Ffonts.googleapis.com/css")'],
+    ['assets/a.js', 'fetch("https:\\u{2f}\\u{2F}fonts.googleapis.com/css")'],
+    ['assets/index.css', '@import url("https:\\2f \\00002Ffonts.googleapis.com/css")'],
+  ];
+  for (const [name, text] of escaped) {
+    assert.deepEqual(textProblems(name, text), [`${name}: references the external origin of https://fonts.googleapis.com/css`], text);
+  }
+});
+
 test('only the listed namespace names and error links pass, and only in scripts', () => {
   assert.deepEqual(textProblems('assets/a.js', 'ns="http://www.w3.org/2000/svg";u=`https://react.dev/errors/`+e'), []);
   assert.deepEqual(textProblems('assets/a.js', 'fetch("https://react.dev/errors/x")'), ['assets/a.js: references the external origin of https://react.dev/errors/x']);

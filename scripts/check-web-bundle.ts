@@ -37,16 +37,30 @@ export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
   ['https://mantine.dev/theming/colors/#primary-color', 'Mantine links its invalid primary color error message to it.'],
 ]);
 
-// Any host after `//`: a DNS name, a single label, IPv4, or [IPv6], with
-// optional userinfo and port.
-const URL_PATTERN = /(?:\b[a-z][a-z0-9+.-]*:)?\/\/(?:[^\s/?#@"'`<>()\\]+@)?(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)(?::\d+)?[^\s"'`<>()\\]*/g;
-const CHECKED_EXTENSIONS = new Set(['.html', '.js', '.css', '.map', '.json', '.svg', '.txt']);
+// Any host after `//`: a name, IPv4, or [IPv6], with optional userinfo and
+// port; a name label may hold percent escapes and non-ASCII characters.
+const URL_PATTERN = /(?:\b[a-z][a-z0-9+.-]*:)?\/\/(?:[^\s/?#@"'`<>()\\]+@)?(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9%\u0080-\uFFFF-]+(?:\.[A-Za-z0-9%\u0080-\uFFFF-]+)*)(?::\d+)?[^\s"'`<>()\\]*/g;
+const NAMED_REFERENCES: ReadonlyMap<string, string> = new Map([['colon', ':'], ['sol', '/'], ['period', '.'], ['percnt', '%']]);
+
+type Decoder = (text: string) => string;
+
+// Each file is also read as its own syntax decodes it, so an escaped URL is
+// checked in the form the browser requests; markup may inline the others.
+const DECODERS_BY_EXTENSION: ReadonlyMap<string, readonly Decoder[]> = new Map([
+  ['.html', [decodeMarkup, decodeScript, decodeStyle]],
+  ['.svg', [decodeMarkup, decodeScript, decodeStyle]],
+  ['.js', [decodeScript]],
+  ['.map', [decodeScript]],
+  ['.json', [decodeScript]],
+  ['.css', [decodeStyle]],
+  ['.txt', []],
+]);
 
 export function webBundleProblems(dist: string): string[] {
   if (!existsSync(dist)) return [`${dist} does not exist; build the web SPA first`];
   return files(dist).flatMap((file) => {
     const name = relative(dist, file);
-    if (!CHECKED_EXTENSIONS.has(extname(file))) return [`${name}: unexpected file type`];
+    if (!DECODERS_BY_EXTENSION.has(extname(file))) return [`${name}: unexpected file type`];
     return textProblems(name, readFileSync(file, 'utf8'));
   });
 }
@@ -56,10 +70,37 @@ export function textProblems(name: string, text: string): string[] {
   return [
     ...SECRET_SHAPES.filter(({ pattern }) => pattern.test(text)).map(({ name: shape }) => `${name}: holds a ${shape}`),
     ...ENVIRONMENT_SHAPES.filter((pattern) => pattern.test(text)).map((pattern) => `${name}: holds an environment value (${pattern.source})`),
-    ...[...new Set(text.match(URL_PATTERN) ?? [])]
+    ...referencedUrls(name, text)
       .filter((url) => !(urlsAllowed && ALLOWED_URLS.has(url)))
       .map((url) => `${name}: references the external origin of ${url}`),
   ];
+}
+
+function referencedUrls(name: string, text: string): string[] {
+  const decoders = DECODERS_BY_EXTENSION.get(extname(name)) ?? [];
+  const views = [text, ...decoders.map((decode) => decode(text))];
+  return [...new Set(views.flatMap((view) => view.match(URL_PATTERN) ?? []))];
+}
+
+function decodeMarkup(text: string): string {
+  return text.replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));?/gi, (reference, hex?: string, decimal?: string, name?: string) =>
+    name === undefined ? codePoint(reference, hex ? parseInt(hex, 16) : Number(decimal)) : (NAMED_REFERENCES.get(name) ?? reference));
+}
+
+// A letter escape stays, because in a regular expression it names a class
+// such as \s; the minifier writes string literals without one.
+function decodeScript(text: string): string {
+  return text.replace(/\\(?:u\{([0-9A-Fa-f]+)\}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|([^\n0-9A-Za-z]))/g, (escape, braced?: string, unicode?: string, hex?: string, other?: string) =>
+    other ?? codePoint(escape, parseInt((braced ?? unicode ?? hex)!, 16)));
+}
+
+function decodeStyle(text: string): string {
+  return text.replace(/\\(?:([0-9a-f]{1,6})[ \t\n\r\f]?|([^\n0-9a-f]))/gi, (escape, hex?: string, other?: string) =>
+    other ?? codePoint(escape, parseInt(hex!, 16)));
+}
+
+function codePoint(original: string, value: number): string {
+  return value <= 0x10ffff ? String.fromCodePoint(value) : original;
 }
 
 function files(dir: string): string[] {

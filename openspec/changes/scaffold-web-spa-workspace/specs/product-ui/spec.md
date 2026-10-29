@@ -29,6 +29,10 @@ The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve i
 - **WHEN** the built bundle references a font or stylesheet on an external origin
 - **THEN** `make verify` fails and names the file and the URL
 
+#### Scenario: Escaped external URL
+- **WHEN** the built bundle references an external origin through a percent-encoded or Unicode host, or through an HTML, script, or style sheet escape
+- **THEN** `make verify` fails and names the file and the URL as the browser decodes it
+
 #### Scenario: Secret in the bundle
 - **WHEN** the built bundle holds a PEM block, an issued Taskelith secret, an NKey seed, a JSON Web Token, or another listed secret shape
 - **THEN** `make verify` fails and names the file and the shape
