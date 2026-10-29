@@ -60,9 +60,30 @@ test('a fetch is a GET over pinned TLS with the bearer, and the delivery is held
   for (const shown of [String(credential), JSON.stringify(outcome), inspect(outcome, { depth: 5 })]) assert.doesNotMatch(shown, new RegExp(SECRET));
 });
 
-test('a refusal comes back as its typed reason', async () => {
+test('a refusal comes back as its typed reason with a local message', async () => {
   answer = { status: 422, body: { code: 'precondition-failed', message: 'slot slot/1 is revoked', details: { reason: 'revoked' } } };
-  assert.deepEqual(value(await client().fetch(REQUEST)), { kind: 'refused', refusal: { reason: 'revoked', message: 'slot slot/1 is revoked' } });
+  assert.deepEqual(value(await client().fetch(REQUEST)), {
+    kind: 'refused', refusal: { reason: 'revoked', message: 'the control plane refused the slot credential: revoked' },
+  });
+});
+
+// A short text of no known credential shape, which shape redaction misses.
+const ODD = 'zq7Kx2';
+
+test('no refusal or failure repeats the server message, a detail value, or an unknown reason', async () => {
+  const bodies: Array<{ status: number; body: unknown }> = [
+    { status: 422, body: { code: 'precondition-failed', message: `revoked ${ODD}`, details: { reason: 'revoked' } } },
+    { status: 422, body: { code: 'precondition-failed', message: 'refused', details: { reason: ODD } } },
+    { status: 422, body: { code: 'precondition-failed', message: 'refused', details: { reason: 'revoked', extra: ODD } } },
+    { status: 503, body: { code: 'unavailable', message: `down ${ODD}`, details: { reason: ODD, other: ODD } } },
+    { status: 409, body: { code: 'conflict', message: ODD, details: { reason: ODD } } },
+    { status: 500, body: { code: 'internal', message: ODD, details: {} } },
+  ];
+  for (const body of bodies) {
+    answer = body;
+    const outcome = await client().fetch(REQUEST);
+    assert.doesNotMatch(JSON.stringify(outcome), new RegExp(ODD), JSON.stringify(body));
+  }
 });
 
 test('a delivery that breaks its schema or names another execution or slot is not used, and no failure holds the credential', async () => {
@@ -84,7 +105,9 @@ test('another status is a failure by its code', async () => {
   answer = { status: 503, body: { code: 'unavailable', message: 'the database is not available', details: {} } };
   assert.equal(failed(await client().fetch(REQUEST)).code, 'unavailable');
   answer = { status: 422, body: { code: 'precondition-failed', message: 'odd', details: { reason: 'not-a-reason' } } };
-  assert.equal(failed(await client().fetch(REQUEST)).code, 'precondition-failed');
+  assert.deepEqual(failed(await client().fetch(REQUEST)), {
+    code: 'precondition-failed', message: 'fetchSlotCredential answered 422', details: { status: '422' },
+  });
 });
 
 test('a base URL that is not HTTPS sends nothing', async () => {

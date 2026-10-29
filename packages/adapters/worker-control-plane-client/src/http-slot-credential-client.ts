@@ -1,17 +1,17 @@
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import {
   DeliveredSlotCredential,
+  SLOT_CREDENTIAL_REFUSAL_REASONS,
   type SlotCredentialAnswer,
   type SlotCredentialClient,
   type SlotCredentialFetch,
 } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { getJson, pinnedTarget, statusFailure, type HttpTarget } from './control-plane-http.js';
-import { sanitizeFailureText } from './failure-cause.js';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
+import { getJson, pinnedTarget, statusFailureCode, type HttpTarget } from './control-plane-http.js';
 import type { ControlPlaneClientSettings } from './http-launch-authority-client.js';
 
 // `fetchSlotCredential` over pinned TLS (execution wire contracts section
-// 8.6). No failure quotes the response body, which may hold the secret.
+// 8.6). No answer quotes the response body, which may hold the secret.
 export class HttpSlotCredentialClient implements SlotCredentialClient {
   readonly #target: HttpTarget;
   readonly #bearer: () => string;
@@ -29,7 +29,7 @@ export class HttpSlotCredentialClient implements SlotCredentialClient {
     const { status, body } = answered.value;
     if (status === 200) return delivered(request, body);
     if (status === 422 && checkHttpSchema('SlotCredentialRefusal', body).ok) return refused(body as HttpSchemas['SlotCredentialRefusal']);
-    return err(statusFailure('fetchSlotCredential', answered.value));
+    return err(slotStatusFailure(status));
   }
 }
 
@@ -50,6 +50,15 @@ function delivered(request: SlotCredentialFetch, body: unknown): Result<SlotCred
   return held.ok ? ok(Object.freeze({ kind: 'delivered', credential: held.value })) : held;
 }
 
-function refused({ message, details }: HttpSchemas['SlotCredentialRefusal']): Result<SlotCredentialAnswer> {
-  return ok(Object.freeze({ kind: 'refused', refusal: Object.freeze({ reason: details.reason, message: sanitizeFailureText(message) }) }));
+// The message is local text; only a reason of the fixed list is kept.
+function refused({ details }: HttpSchemas['SlotCredentialRefusal']): Result<SlotCredentialAnswer> {
+  const reason = SLOT_CREDENTIAL_REFUSAL_REASONS.find((known) => known === details.reason);
+  if (reason === undefined) return err(slotStatusFailure(422));
+  const message = `the control plane refused the slot credential: ${reason}`;
+  return ok(Object.freeze({ kind: 'refused', refusal: Object.freeze({ reason, message }) }));
+}
+
+// Only the status, never the server's message or details.
+function slotStatusFailure(status: number): Failure {
+  return failure(statusFailureCode(status), `fetchSlotCredential answered ${status}`, { status: String(status) });
 }
