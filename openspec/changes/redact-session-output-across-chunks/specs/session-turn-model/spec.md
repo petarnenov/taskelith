@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Output redacted across chunks
-The service SHALL hold back the tail of a turn's output that could still be the start or a part of a secret of a known shape, keep it durably apart from the session, never show it, and record only released text, redacted, so that the released parts of a turn joined equal the redaction of its whole output while no tail passes its bound.
+The service SHALL hold back the tail of a turn's output that could still be the start or a part of a secret of a known shape, keep it durably apart from the session, never show it, and record only released text, redacted, so that the released parts of a turn joined equal the redaction of its whole output while no held part passes its bound and the turn does not end inside an open block or a secret cut short.
 
 #### Scenario: Secret split across chunks
-- **WHEN** a harness writes a secret of a known shape in two or three chunks, split at any offset
+- **WHEN** a harness writes a secret of a known shape in two or three chunks, split at any offset, and no held part passes the bound
 - **THEN** the turn's stored output equals the redaction of the whole text and holds no part of the secret
 
 #### Scenario: Restart with a held tail
@@ -12,7 +12,7 @@ The service SHALL hold back the tail of a turn's output that could still be the 
 - **THEN** no read shows any part of it, and the next chunk records the secret redacted
 
 ### Requirement: Held tail bound
-The held tail SHALL never exceed `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units: a held part past the bound SHALL be recorded as one marker, and a durable flag SHALL drop its continuation, a run's up to the next whitespace and an open PEM key's or `.creds` block's up to its end marker, so that nothing of a cut secret is released.
+The held tail SHALL never exceed `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units: a held part past the bound SHALL be recorded as one marker, and a durable flag SHALL drop its continuation, a run's up to the next whitespace and an open PEM key's or `.creds` block's up to the end marker of its own kind, so that nothing of a cut secret is released.
 
 #### Scenario: Tail at the bound
 - **WHEN** a held run reaches exactly `MAX_HARNESS_TEXT_LENGTH` code units
@@ -21,6 +21,10 @@ The held tail SHALL never exceed `MAX_HARNESS_TEXT_LENGTH` UTF-16 code units: a 
 #### Scenario: Secret at the forced cut
 - **WHEN** a run without whitespace passes the bound with a JWT across the cut
 - **THEN** the run and its continuation are recorded as one marker, and no stored entry holds any part of the JWT
+
+#### Scenario: End marker of another kind
+- **WHEN** a `.creds` block passes the bound, and a PEM key end marker, more text, and the block's own end marker follow
+- **THEN** everything up to the block's own end marker is dropped, and only the text after it is released
 
 #### Scenario: Key longer than the bound
 - **WHEN** a PEM private key longer than the bound is written in chunks
@@ -45,11 +49,15 @@ The service SHALL refuse to start when the output tail key file is missing or it
 - **THEN** the service does not start, and the reason names only the size
 
 ### Requirement: Held tail released at its turn's end
-The service SHALL release a held tail, redacted, as entries of its own turn in the transaction of any change that ends the turn, such as its outcome, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
+The service SHALL release a held tail, redacted, with an open block or a secret cut short by the turn's end as one marker, as entries of its own turn in the transaction of any change that ends the turn, such as its outcome, its generation's end, or its bound attempt's end, before that change, also when recovery records it.
 
 #### Scenario: Generation ends with a tail
 - **WHEN** a generation ends while its turn holds a tail with half a secret
 - **THEN** the tail is recorded redacted as the turn's last entry, and the session keeps no tail
+
+#### Scenario: Turn ends inside a secret
+- **WHEN** a turn ends, also through recovery, while its tail holds a JWT cut short after its first dot
+- **THEN** the JWT is recorded as one marker, and no stored entry holds any part of it
 
 ### Requirement: Released output split into entries
 The service SHALL record released text longer than `MAX_HARNESS_TEXT_LENGTH` as consecutive entries of at most that many code units, split on whole characters, losing none of it.

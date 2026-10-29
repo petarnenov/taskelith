@@ -81,7 +81,9 @@ Not started.
 ## Limitations
 
 - A block whose end marker never comes stays dropped up to its turn's end, so text after an unterminated key is over-redacted (answer Q1 accepts losing text over leaking).
-- `recordTurnAcceptanceUnknown` releases nothing, since its turn keeps running; its tail is released by the turn's later outcome or its generation's end.
+- `recordTurnAcceptanceUnknown` releases nothing: it takes only a queued turn, which holds no output and so no tail, and makes it `outcome-unknown`, after which an outcome for it is refused (design, decision 3).
+- A turn whose output ends, without whitespace, in a form that may be a cut secret, such as `SUCCESS`, `tkop`, or a URL with a port, has that run recorded as one marker (design, decision 1).
+- Output that 13a and 13b stored redacted per chunk is served as stored; no installation holds it, and a promotion must not carry 13a or 13b without 13d (design, "Legacy output").
 - The output route tests are in `agent-session-routes.test.ts`, which holds the role fixtures, not in a new file (design, "Test plan").
 - The restart test reads the output and every stored byte; it does not read `readCardSessions` separately, which holds no output text.
 - The in-memory store runs one transaction at a time, so the race is tested on PostgreSQL only.
