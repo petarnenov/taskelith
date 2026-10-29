@@ -61,8 +61,8 @@ export interface ApiServices {
   readonly launches: {
     authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
   };
-  // Slot credential delivery; absent until the composition has the key and
-  // the admitted pairs (sub-change 12d), and then answered 503.
+  // Slot credential delivery; until 12d wires the key and the admitted pairs
+  // it is absent, and the route answers 503.
   readonly slotCredentials?: {
     fetch(principal: WorkerPrincipal, request: SlotCredentialFetchRequest): Promise<Result<RevealedSlotDelivery>>;
   };
