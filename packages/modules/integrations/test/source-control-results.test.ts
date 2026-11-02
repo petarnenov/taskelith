@@ -135,14 +135,16 @@ test('a read-only credential whose secret does not work is reported', async () =
 });
 
 test('a refresh that changes the permissions or moves the expiry back is reported', async () => {
-  const soon = new Date(Date.now() + 1000).toISOString();
+  const now = Date.now();
+  const halfLifetime = 30 * 60 * 1000;
+  const soon = new Date(now + halfLifetime).toISOString();
   const lines = await patched((provider) => ({
     refreshRunCredential: async (request) => {
       const refreshed = await provider.refreshRunCredential(request);
       if (!refreshed.ok) return refreshed;
       return ok({ ...refreshed.value, permissions: ['read-code', 'write-code', 'write-statuses'], expiresAt: soon });
     },
-  }));
+  }), { now: () => now });
   const refreshFindings = ['refreshRunCredential granted', 'refreshRunCredential changed', 'refreshRunCredential must'];
   assert.deepEqual(lines.map((line) => line.split(' ').slice(3, 5).join(' ')), [
     ...refreshFindings,
