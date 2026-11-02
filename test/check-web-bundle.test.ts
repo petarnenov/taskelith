@@ -142,6 +142,21 @@ test('every allowed URL is an exact string with a one-line reason', () => {
   }
 });
 
+const REACT_ROUTER_URLS = ['http://localhost', 'server://singlefetch/', 'https://reactrouter.com/en/main/routers/picking-a-router.', '//g,'];
+
+test('the React Router texts pass only exactly and only in scripts', () => {
+  const nearMisses = ['http://localhost:1234', 'http://localhost.example.com', 'https://localhost', 'server://singlefetch/x', '//g.example'];
+  for (const url of nearMisses) {
+    assert.deepEqual(textProblems('assets/a.js', `u="${url}"`), [`assets/a.js: references the external origin of ${url}`]);
+  }
+  for (const url of REACT_ROUTER_URLS) {
+    assert.ok(ALLOWED_URLS.has(url), url);
+    for (const name of ['index.html', 'assets/index.css']) {
+      assert.deepEqual(textProblems(name, `u="${url}"`), [`${name}: references the external origin of ${url}`]);
+    }
+  }
+});
+
 test('the check reads every file of the dist and refuses a missing build or an unexpected file', () => {
   const root = dist({ 'index.html': '<div id="root"></div>', 'assets/index.js': `"${SECRET_FIXTURES[5]![1]}"`, 'assets/font.woff2': '' });
   try {

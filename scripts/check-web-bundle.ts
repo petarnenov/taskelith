@@ -35,12 +35,17 @@ export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
   ['http://www.w3.org/XML/1998/namespace', 'React DOM names the XML namespace of xml: attributes.'],
   ['https://react.dev/errors/', 'React prefixes the link of a minified error message with it.'],
   ['https://mantine.dev/theming/colors/#primary-color', 'Mantine links its invalid primary color error message to it.'],
+  // react-router 8.5.1 lib/router/history.js createBrowserURLImpl and
+  // lib/router/navigation.js DEFAULT_NAVIGATION_URL.
   ['http://localhost', 'React Router resolves a path against this base to parse it.'],
+  // react-router 8.5.1 lib/dom/ssr/single-fetch.js singleFetchUrl.
   ['server://singlefetch/', 'React Router resolves a path against this base without a window.'],
+  // react-router 8.5.1 lib/hooks.js getDataRouterConsoleError.
   [
     'https://reactrouter.com/en/main/routers/picking-a-router.',
     'React Router links its missing data router error message to it.',
   ],
+  // react-router 8.5.1 lib/router/utils.js decodePath.
   ['//g,', 'React Router escapes a slash with /\\//g, which reads so once unescaped.'],
 ]);
 
