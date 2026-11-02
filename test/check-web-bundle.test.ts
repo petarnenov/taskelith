@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -54,6 +55,20 @@ test('the built web SPA holds neither dev-server.ts nor a web test', () => {
   for (const [source, marker] of DEVELOPMENT_ONLY_MARKERS) {
     assert(readFileSync(join('apps/web', source), 'utf8').includes(marker), `${source} no longer holds ${marker}`);
     assert(!bundle.includes(marker), `the dist holds ${marker} of ${source}`);
+  }
+});
+
+// A shell that exports NODE_ENV=development once built React's development
+// bundle, whose diagnostics name external origins.
+test('the web build yields the production bundle whatever NODE_ENV says', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'taskelith-web-node-env-'));
+  try {
+    const vite = join(process.cwd(), 'node_modules/.bin/vite');
+    const env = { ...process.env, NODE_ENV: 'development' };
+    execFileSync(vite, ['build', '--outDir', outDir, '--logLevel', 'error'], { cwd: 'apps/web', env, stdio: 'pipe' });
+    assert.deepEqual(webBundleProblems(outDir), []);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
   }
 });
 
