@@ -160,7 +160,7 @@ export interface ReviewRouter<Decision, Input = RouteFeatures> {
 
 // The version of the rule's thresholds and of its reviewer table. A change
 // of either bumps it; older ones stay, so archived records stay valid.
-export const RULE_VERSION = 3;
+export const RULE_VERSION = 4;
 
 type ReviewerModel = Pick<Reviewer, 'harness' | 'model'>;
 
@@ -190,6 +190,7 @@ const TRIGGER_THRESHOLDS: ReadonlyMap<number, TriggerThresholds> = new Map([
   [1, THRESHOLDS_V1],
   [2, THRESHOLDS_V1],
   [3, THRESHOLDS_V1],
+  [4, THRESHOLDS_V1],
 ]);
 
 // Undefined for an unknown rule version.
@@ -201,6 +202,7 @@ const SOL: ReviewerModel = { harness: 'codex', model: 'gpt-6.1-sol' };
 const ASTRA: ReviewerModel = { harness: 'codex', model: 'gpt-6-astra' };
 const FABLE: ReviewerModel = { harness: 'claude', model: 'claude-fable-5-1' };
 const OPUS: ReviewerModel = { harness: 'claude', model: 'claude-opus-5-5' };
+const ARGON: ReviewerModel = { harness: 'agy', model: 'gemini-4-argon-medium' };
 
 // Version 1: the reviewer assignment of 2026-10-27, passes 1 and 2.
 const REVIEWER_TABLE_V1: ReviewerTable = [
@@ -224,10 +226,19 @@ const REVIEWER_TABLE_V3: ReviewerTable = [
   { pass: 3, role: 'A', reviewer: SOL, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
 ];
 
+// Version 4: argon reviews pass 3 since 2026-11-02, also with external
+// facts. Its tier is in its model id, so elevated stays medium.
+const REVIEWER_TABLE_V4: ReviewerTable = [
+  { pass: 1, role: 'A', reviewer: ASTRA, networkedReviewer: FABLE, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 2, role: 'B', reviewer: FABLE, networkedReviewer: OPUS, efforts: { standard: 'medium', elevated: 'high' } },
+  { pass: 3, role: 'A', reviewer: ARGON, networkedReviewer: ARGON, efforts: { standard: 'medium', elevated: 'medium' } },
+];
+
 const REVIEWER_TABLES: ReadonlyMap<number, ReviewerTable> = new Map([
   [1, REVIEWER_TABLE_V1],
   [2, REVIEWER_TABLE_V2],
   [3, REVIEWER_TABLE_V3],
+  [4, REVIEWER_TABLE_V4],
 ]);
 
 type PlanFeatures = Pick<RouteFeatures, 'externalFacts'>;
