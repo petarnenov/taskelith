@@ -11,6 +11,7 @@ G3 item 20 ([G3 plan](/docs/g3-plan.md) row 20), sub-change 20a. The item 7 SCM 
 - Remote URL: `RepositoryRemoteResolver.resolveRemoteUrl` returns a repository's HTTPS remote URL without user information, query, or fragment.
 - Conformance suite: the refreshed credential case probes both versions before and after the adoption, a new adopted credential case covers several versions and stale and unissued confirmations, the revoked case revokes after a refresh, and a new repository remote case compares the URL with the fixture's `projectRemoteUrl`. The fixture's code reads and writes send `authorization`. The in-memory SCM implements the revision and gains a defect per new guarantee.
 - Contract: [source control contract](/docs/contracts/source-control.md) sections 1, 2 (rule 7), 3, 4.1 (new), 7, 8, and 9.
+- Wire contract wording (scope widened by coordinator decision 2026-11-03): [execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 8.7, "Version", says that a version ends at a confirmed adoption of a higher version, its own `expiresAt`, or a revocation, not at a refresh. No wire schema, document, reason code, or version changes.
 
 ## Capabilities
 
@@ -24,4 +25,4 @@ None.
 
 ## Impact
 
-Private workspace packages `@taskelith/integrations` and `@taskelith/workspace`; commit types `chore`, `test`, and `docs`. Size M. Not in 20a: the plugin SDK re-export and the plugin API version (20c), the secret shape rules (20b), any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents. The `git-workspace-port` capability is unchanged, because `WorkspaceCredential` keeps its fields.
+Private workspace packages `@taskelith/integrations` and `@taskelith/workspace`; commit types `chore`, `test`, and `docs`. Size M. Not in 20a: the plugin SDK re-export and the plugin API version (20c), the secret shape rules (20b), any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents; of the wire contracts only the section 8.7 sentence above changes. The `git-workspace-port` capability is unchanged, because `WorkspaceCredential` keeps its fields.

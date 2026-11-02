@@ -11,8 +11,8 @@ The integrations module SHALL define a draft `SourceControlProvider` port, versi
 `refreshRunCredential` SHALL return the next version of the credential, with the same `credentialId`, repositories, and permissions, a new secret and `authorization`, and a later expiry, and SHALL end no earlier version. `revokeRunCredential` SHALL end every version of the credential and return no value. An ended version SHALL be refused for every permission, reads included.
 
 #### Scenario: Long run
-- **WHEN** a run outlives its credential's expiry and the credential is refreshed
-- **THEN** the refreshed version writes in the project's repository and is refused outside it, and the previous version keeps working until the run's adoption of the new one is confirmed
+- **WHEN** a run will outlive its credential's expiry and the credential is refreshed before that expiry
+- **THEN** the refreshed version writes in the project's repository and is refused outside it, and the previous version keeps working until the run's adoption of the new one is confirmed, the credential is revoked, or the previous version's own expiry passes, whichever comes first
 
 #### Scenario: Revoked read-only credential
 - **WHEN** a read-only credential that could read is revoked
@@ -50,6 +50,10 @@ Each run credential SHALL carry a version, 1 at issue and one more at each refre
 - **WHEN** a confirmation names a version above the credential's latest
 - **THEN** it fails with `not-found`
 
+#### Scenario: Unknown or revoked credential
+- **WHEN** a confirmation names an unknown credential or a revoked one
+- **THEN** it fails with `not-found`
+
 ### Requirement: Run credential authorization
 Each run credential version SHALL carry `authorization`, the complete `Authorization` header value that sends its secret, which the plugin forms: a scheme, one space, and credentials of visible ASCII characters with inner spaces only, at most 65536 characters. It SHALL be as secret as the secret, SHALL change with each refresh, and SHALL differ between runs, and the workspace's `WorkspaceCredential` SHALL be the part of `RunCredential` that it uses.
 
@@ -67,6 +71,10 @@ Each run credential version SHALL carry `authorization`, the complete `Authoriza
 #### Scenario: Project repository
 - **WHEN** the conformance suite resolves the project repository and the foreign repository
 - **THEN** the project's remote URL is the one the fixture names natively, and the foreign repository's differs from it
+
+#### Scenario: Repository the plugin cannot see
+- **WHEN** the conformance suite resolves the fixture's repository that the plugin's own identity cannot see
+- **THEN** the resolution fails with `not-found`
 
 #### Scenario: Remote URL with user information
 - **WHEN** a plugin returns a remote URL with user information, a query, or a fragment, or one that is not HTTPS

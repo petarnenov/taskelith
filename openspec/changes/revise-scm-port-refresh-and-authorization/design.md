@@ -16,7 +16,7 @@ The brief of the coordinator assigns G3 sub-change 20a: revise the item 7 port s
 
 ## Wire contract text that the revision makes stale
 
-[Execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 8.7, "Version", answers `credential-ended` for "a version whose secret a refresh, a revocation, or its expiry ended". Under port `0.2.0` a refresh ends no version; a confirmed adoption of a later version does. The brief excludes the wire contracts, so this change leaves the text and reports it to the coordinator as a question; `execution.openapi.json` enumerates `credential-ended` without that wording.
+[Execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 8.7, "Version", answers `credential-ended` for "a version whose secret a refresh, a revocation, or its expiry ended". Under port `0.2.0` a refresh ends no version; a confirmed adoption of a later version does. The brief excluded the wire contracts; the coordinator widened the scope on 2026-11-03 to this wording only, because the port change created the drift. The sentence now says that a version ends when a confirmed adoption of a higher version ends it, when its own `expiresAt` passes, or on a revocation. No wire schema, OpenAPI or AsyncAPI document, reason code, or wire version changes; `execution.openapi.json` enumerates `credential-ended` without that wording.
 
 ## Risks
 
