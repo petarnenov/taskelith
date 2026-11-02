@@ -95,6 +95,7 @@ All runs in this worktree with Node.js 24.22.1.
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `make verify` after the pass 2 fixes and the merge of `origin/dev` `8c0e9aca` (`a80aac85`, no file of this change touched) | `a80aac85`, tree `73dfca9a` | Passed, profile full, stamp written: tests 4132, suites 49, pass 4085, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `credential-cases.js` 100 %; "Contract documents have no undeclared breaking change." |
 | `make verify` after the pass 1 fixes | `aa2137e5`, tree `48615f3d` | Passed, profile full, stamp written: tests 4129, suites 49, pass 4082, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.69 % branches, 98.84 % functions; `credential-cases.js` and `remote-cases.js` 100 % each; "Contract documents have no undeclared breaking change." Two earlier runs on the same tree failed outside this change: the first because the shell exported `NODE_ENV=development`, so the web SPA was built with React's development messages and "the built web SPA holds no secret shape, environment value, or external origin" failed; the second, with `env -u NODE_ENV make verify`, on the timing test "a bound with a leading zero is read in base 10" (`test/installation-script.test.ts:570`, ended after 9.098 s, before 10). The passing run was the third, also with `env -u NODE_ENV` |
 | `make verify` | `a68207eb`, tree `6e8ee9f9` | Passed, profile full, stamp written: tests 4126, suites 49, pass 4079, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `credential-cases.js`, `remote-cases.js`, and `source-control-readers.js` 100 % each; `untrusted-shapes.js` 100 % lines, 95.65 % branches, 96.55 % functions; "Contract documents have no undeclared breaking change." An earlier run on the same commit passed with the same totals but wrote no stamp, because this record was written in the worktree during the run |
 | `npm run openspec -- validate revise-scm-port-refresh-and-authorization --strict` | `a68207eb` | `Change 'revise-scm-port-refresh-and-authorization' is valid` |
@@ -110,15 +111,16 @@ Route (`route.json`, rule version 3): elevated (lines, files, security, contract
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `0d76a484312a4bdc4d68edd12bd2a7bf8be1a461`; tests 4129, pass 4082, fail 0, skipped 47; all files 99.36% lines, 92.68% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `73dfca9a36d1039499e17df4d89683c7a89bf97a`; tests 4132, pass 4085, fail 0, skipped 47; all files 99.36% lines, 92.66% branches, 98.84% functions.
 - `npm run openspec -- validate revise-scm-port-refresh-and-authorization --strict`: passed, `Change 'revise-scm-port-refresh-and-authorization' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 95 file(s); every pass summary file is valid: 75 file(s); every route file is valid: 30 file(s).`.
-- Spec diff against the merge base `ecf8cd3c62d2` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 97 file(s); every pass summary file is valid: 77 file(s); every route file is valid: 30 file(s).`.
+- Spec diff against the merge base `8c0e9aca6435` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19e52-ff6c-7252-9ddb-1be5470ae760` | 0 | 0 | 4 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `3de8e612-8b75-4606-b3c2-fa6c0cf341b8` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
 ## Independent review
