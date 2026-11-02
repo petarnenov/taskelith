@@ -162,8 +162,19 @@ The pass 2 fixes are unreviewed fixes; no later pass reviews them. Each awaits t
 - The contrast test covers the pairs the shell draws at rest and hovered (design, decision 7), not focus rings or the pairs of later screens.
 - The expiry check trusts the client clock within a 10 s margin (design, "Risks and trade-offs").
 
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the build web SPA shell change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive build-web-spa-shell --yes` on `1d6df5c4`, with every task of `tasks.md` ticked (4.2 ticked as the placed architect check, which stays a remaining gate), and only this section and the remaining gates changed afterward. `origin/dev` was `8c0e9aca` (#420) after `git fetch origin`; the merge base stays `26697ab0`.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-11-03-build-web-spa-shell` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `26697ab0`) | Only this change's delta of `product-ui`: 4 requirements added ("Web SPA session shell", "Web SPA session expiry", "Web SPA screen routes", "Web SPA color schemes") and 1 modified ("Web SPA bundle boundary"), 65 insertions and 1 deletion; no requirement of the spec exceeds 500 characters (longest 473) |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 96 file(s); every pass summary file is valid: 76 file(s); every route file is valid: 30 file(s).` |
+| `make verify` on the archive working tree (log `verify-28b-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; tests 4092, pass 4083, fail 0, skipped 9; all files 99.39% lines, 92.58% branches, 98.87% functions; `apps/web` Vitest tests 143, pass 143, statements, branches, functions, and lines 100% |
+
 ## Remaining gates
 
 - Architect check of the unreviewed pass 2 fixes by the coordinator.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
