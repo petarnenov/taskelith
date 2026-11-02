@@ -25,18 +25,18 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 ## Author self-check
 
 - Scope: only the brief's 28b scope. No OpenAPI operation, contract document, or control-plane file changed (`git diff ecf8cd3c HEAD -- packages` is empty); login needs no new operation, because `readSession` starts the anonymous session whose CSRF token `logIn` needs. No dependency changed: React Router and Mantine came with 28a, and `package-lock.json` is unchanged. No mock or sample data: each page names its screen, its G3 item, and its change, and says that it shows no data.
-- D17: only Mantine components, their props, and theme settings in `createTheme` (`primaryShade`, two color tuple shades, component default props); no CSS file, no Styles API, no custom component library. React Router's `Link` is the `component` of Mantine's `Button` and `NavLink`. The seven icons are the proof of concept's `icons.tsx` unchanged.
+- D17: only Mantine components, their props, and theme settings in `createTheme` (`primaryShade`, three color tuple shades, component default props); no CSS file, no Styles API, no custom component library. React Router's `Link` is the `component` of Mantine's `Button` and `NavLink`. The seven icons are the proof of concept's `icons.tsx` unchanged.
 - System fonts: the theme sets no font family, so Mantine's system stacks apply; the bundle check finds no external origin.
 - Proof of concept: the design names the followed sources (`docs/ui-poc/src/main.tsx`, `theme.ts`, `icons.tsx`) and each departure with the requirement or decision behind it ("Reference proof of concept").
 - Hexagonal boundaries: the shell depends on `SessionGateway` and `Clock` ports; `createSessionGateway` is the only module that knows the session wire format; `npm run check:boundaries` passes.
 - Secrecy: no credential, token, or key is in the repository, the bundle, or a log; the tests use fixture strings (`fixture-password`, `fixture-secret`, tokens of repeated letters). The CSRF token lives in memory only.
-- Spec delta: `product-ui` adds "Web SPA session shell" (396 characters), "Web SPA session expiry" (274), "Web SPA screen routes" (368), and "Web SPA color schemes" (362), and modifies "Web SPA bundle boundary" (434, 413 before), keeping its four scenarios and adding "Development NODE_ENV in the shell". `npm run verify:archive` archives it into strictly valid specs.
+- Spec delta: `product-ui` adds "Web SPA session shell" (471 characters), "Web SPA session expiry" (274), "Web SPA screen routes" (368), and "Web SPA color schemes" (362), and modifies "Web SPA bundle boundary" (456, 413 before), keeping its four scenarios and adding "Development NODE_ENV in the shell". `npm run verify:archive` archives it into strictly valid specs.
 - Comments: `npm run verify:comments` passes; it does not check `.tsx`, so every comment in the new `.tsx` files was checked by hand against two lines of 80 characters (coordinator answer 6 of 28a).
 - Coverage of `apps/web/src`: statements 100% (320/320), branches 100% (163/163), functions 100% (103/103), lines 100% (267/267), in the Vitest run of the `make verify` below (tests 141, pass 141); before review pass 1: statements 100% (237/237), branches 99.17% (120/121), functions 100% (79/79), lines 100% (199/199), tests 106.
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). The Vitest totals and coverage above are from `verify-28b-p1.log` in the session scratchpad, a passing `make verify` on its first run on the tree of `5575058c` (`8c42edc3`), tests 4092, pass 4083, fail 0, skipped 9; the totals before review pass 1 were from `verify-28b-2.log`. A first `make verify` on the same tree (`verify-28b-1.log`) failed only `packages/adapters/postgres/test/fleet-conformance.integration.test.ts` "a token that expires while its use waits for the row lock enrolls nothing" (tests 4090, pass 4080, fail 1, skipped 9): the test gives its token one second of life and holds a row lock for 1.5 s, and the loaded host stretched it; this change touches no PostgreSQL code, and the second run passed unchanged.
+The generated part below matches the tree (`make record-check`). The Vitest totals and coverage above are from `verify-28b-p1.log` in the session scratchpad, a passing `make verify` on its first run on the tree of `5575058c` (`8c42edc3`), tests 4092, pass 4083, fail 0, skipped 9; the totals before review pass 1 were from `verify-28b-2.log`, the second `make verify` on the tree of `a683a63b`. The first `make verify` on that tree (`verify-28b-1.log`) failed only `packages/adapters/postgres/test/fleet-conformance.integration.test.ts` "a token that expires while its use waits for the row lock enrolls nothing" (tests 4090, pass 4080, fail 1, skipped 9): the test gives its token one second of life and holds a row lock for 1.5 s, and the loaded host stretched it; this change touches no PostgreSQL code, and the second run passed unchanged.
 
 ## Fail-before
 
@@ -76,8 +76,8 @@ Coordinator conditions on the bundle allowlist: each React Router entry is an ex
 | --- | --- | --- |
 | `npm run test --workspace=@taskelith/web` (inside `make verify`) | `5575058c` | tests 141, pass 141; statements 100%, branches 100%, functions 100%, lines 100% |
 | `npm run test --workspace=@taskelith/web` (inside `make verify`) | `a683a63b` | tests 106, pass 106; statements 100%, branches 99.17%, functions 100%, lines 100% |
-| `npm run verify:comments`, `verify:links`, `verify:archive`, `verify:findings`, `verify:web-api-types`, `check:boundaries` | `2a727030` | each passed |
-| `npm run openspec -- validate build-web-spa-shell --strict` | `2a727030` | `Change 'build-web-spa-shell' is valid` |
+| `npm run verify:comments`, `verify:links`, `verify:archive`, `verify:findings`, `verify:web-api-types`, `check:boundaries` (inside `make verify`) | `5575058c` | each passed |
+| `npm run openspec -- validate build-web-spa-shell --strict` | `5575058c` | `Change 'build-web-spa-shell' is valid` |
 | `make record-check CHANGE=build-web-spa-shell` | this record | `the generated part matches the tree` |
 
 <!-- make record: begin -->
