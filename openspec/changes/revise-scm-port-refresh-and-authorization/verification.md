@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 20 (`docs/g3-plan.md`, row 20), sub-change 20a, developed by a briefed subagent for the worker Zaki from `dev` `ecf8cd3c`: the `SourceControlProvider` port of `@taskelith/integrations` from `0.1.0` to `0.2.0`, with run credential versions, `confirmRunCredentialAdoption`, `authorization`, and `resolveRemoteUrl`; `WorkspaceCredential` of `@taskelith/workspace` derived from `RunCredential`; the conformance suite, its fixture, and the in-memory SCM; the source control contract; and the `scm-port` delta. Out of scope by the brief: the plugin SDK re-export and the plugin API version (20c), the secret shape rules (20b), any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents.
+G3 plan item 20 (`docs/g3-plan.md`, row 20), developed by a briefed subagent for the worker Zaki from `dev` `ecf8cd3c`: the `SourceControlProvider` port of `@taskelith/integrations` from `0.1.0` to `0.2.0`, with run credential versions, `confirmRunCredentialAdoption`, `authorization`, and `resolveRemoteUrl`; `WorkspaceCredential` of `@taskelith/workspace` derived from `RunCredential`; the conformance suite, its fixture, and the in-memory SCM; the source control contract; and the `scm-port` delta. Out of scope by the brief: the plugin SDK re-export and the plugin API version and the secret shape rules, which later changes of item 20 deliver, any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents.
 
 ## Revision
 
@@ -13,6 +13,7 @@ G3 item 20 (`docs/g3-plan.md`, row 20), sub-change 20a, developed by a briefed s
 - `a68207eb` `docs: route the revise scm port refresh and authorization change` (`route.json` unedited).
 - `1cae2eb3` `docs: record the verification of the revise scm port refresh and authorization change`, the head that review pass 1 read.
 - Pass 1 fix round: `86a5e39a` `chore: probe unknown and revoked adoptions and a hidden repository in the scm conformance suite` (findings 1 and 2), `9b7136e4` `test: drive the refresh expiry test with a frozen service clock` (finding 4), `705ca4e1` `docs: align the scm port records and the wire credential wording with pass 1` (finding 3, the contract, and the execution wire contracts wording), and the commits after it: this record, `passes.jsonl`, `findings.jsonl` (finding 5), and `make record`.
+- Pass 2 fix round: `de92dcf9` `chore: refresh an adopted credential in the scm conformance suite and align the scm port wording with pass 2` (findings 4 to 7 of pass 2), and the commits after it: this record (findings 1 to 3 of pass 2), `passes.jsonl`, `findings.jsonl`, and `make record`.
 
 ## Environment
 
@@ -20,13 +21,13 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 ## Author self-check
 
-- Scope: the four items of the brief only. The plugin SDK, `PLUGIN_API_VERSION`, the GitHub plugin, the redaction rules, handlers, and the wire documents are untouched; `git diff ecf8cd3c --stat` lists files under `packages/modules/integrations/`, `packages/modules/workspace/`, `docs/contracts/source-control.md`, and this change only.
+- Scope: the four items of the brief only. The plugin SDK, `PLUGIN_API_VERSION`, the GitHub plugin, the redaction rules, handlers, and the wire documents are untouched; `git diff ecf8cd3c --stat` lists files under `packages/modules/integrations/`, `packages/modules/workspace/`, `docs/contracts/source-control.md`, `docs/contracts/execution-wire-contracts.md`, and this change, whose `execution-wire-contracts` delta joins the `scm-port` one; the wire contract document and that delta came in by coordinator decision 2026-11-03 ("Scope widening").
 - Vendor names (ADR 0006): no type, value, or test of the module names an SCM; only section 7 of the contract, the mapping table, names GitHub and Forgejo.
 - Item 26's pattern (design decisions 2 and 3): the predecessor stays valid until a confirmation of its successor, as `confirmCredentials` drops it; the deadline is each version's own `expiresAt`, because a plugin cannot act at a future time by itself.
-- Wire alignment (checklist `contract-drift`): the port's `version` is the version of execution wire contracts section 8.7 and of `ScmCredentialDelivery.version`; the `authorization` check is stricter than `ScmAuthorization` and has its 65536 bound; the remote URL check repeats the pattern and bound of `RemoteUrl` in `execution.openapi.json`. One stale sentence in execution wire contracts section 8.7 is left to the coordinator (design, "Wire contract text that the revision makes stale").
+- Wire alignment (checklist `contract-drift`): the port's `version` is the version of execution wire contracts section 8.7 and of `ScmCredentialDelivery.version`; the `authorization` check is stricter than `ScmAuthorization` and has its 65536 bound; the remote URL check repeats the pattern and bound of `RemoteUrl` in `execution.openapi.json`. The stale sentence in execution wire contracts section 8.7 that the revision created was resolved by the coordinator's scope widening of 2026-11-03 ("Scope widening").
 - Secrets (checklist `redaction`): findings name `authorization`, `version`, and the remote URL only by field and problem; the shape tests assert the finding text, which holds no returned value, and the suite compares `authorization` values without printing them.
 - `git-workspace-port`: `WorkspaceCredential` keeps its five fields, so its requirements are unchanged; the workspace and Git adapter packages build and their tests pass in `make verify`.
-- Requirement texts are 348 to 453 characters; the change validates strictly, and `npm run verify:archive` archives it into strictly valid specs.
+- Requirement texts are 348 to 492 characters, the MODIFIED `execution-wire-contracts` requirement 476; the change validates strictly, and `npm run verify:archive` archives it into strictly valid specs.
 - Comments: `npm run verify:comments` passes. No AI attribution in commits.
 
 ## Fail-before
@@ -128,13 +129,35 @@ Every pass runs at effort medium although `route.json` recommends high (owner de
 
 - Reviewer: role A, Codex CLI, model `gpt-6-astra`, effort medium; session `01a19e52-ff6c-7252-9ddb-1be5470ae760`; run by the coordinator on head `1cae2eb3`, which reported in Bulgarian; recorded here in English.
 - Counts: Critical 0, High 0, Medium 4, Low 1, as in `passes.jsonl`.
-- Findings and resolutions (outcome `fixed-unreviewed` until pass 2 checks them):
+- Findings and resolutions (outcome `fixed`: pass 2 verified all five fixes):
   1. Medium, missing-fail-before-test (`packages/modules/integrations/src/ports/credential-cases.ts:63`): the adopted credential case probed adoption only for a version not yet issued, so a provider that confirmed an unknown or revoked credential passed. Fixed in `86a5e39a`: after the revocation the case confirms the revoked credential and an unknown one and expects `not-found`; defects `adoptsUnknownCredential` and `adoptsRevokedCredential` and their tests.
   2. Medium, contract-drift (`packages/modules/integrations/src/ports/remote-cases.ts:8`): no refusal check for a repository the plugin cannot see. Fixed in `86a5e39a`: the fixture's new `hiddenRepository`, a `not-found` check, the defect `resolvesHiddenRepository` and its test; contract section 8 and 9 and the delta name it (`705ca4e1`).
   3. Medium, spec-wording (`specs/scm-port/spec.md:14`): scenario "Long run" refreshed after the expiry. Fixed in `705ca4e1`: the refresh comes before the expiry, and the previous version works until the adoption, a revocation, or its own expiry, whichever comes first.
   4. Medium, test-flakiness (`packages/modules/integrations/test/source-control-results.test.ts:138`): an expiry one second ahead of the live clock. Fixed in `9b7136e4`: `ScmSetup.now` injects the fake's clock, the test freezes it and sets the expiry half a lifetime ahead, before the original expiry.
   5. Low, evidence-mismatch (`verification.md:33`): fail-before evidence cited files only in a session scratchpad. Fixed in this record: the mutant table gives each exact edit and the commands, and no record names a file outside the repository.
 - Fail-before: "Fail-before of the pass 1 fixes" above.
+
+### Pass 2
+
+- Reviewer: role B, Claude Code, model `claude-fable-5-1`, effort medium; session `3de8e612-8b75-4606-b3c2-fa6c0cf341b8`; run by the coordinator on head `250bfea2`; it verified the five fixes of pass 1.
+- Counts: Critical 0, High 0, Medium 0, Low 7, as in `passes.jsonl`. A Low-only pass ends the review: the fixes below are unreviewed fixes (outcome `fixed-unreviewed`), for the coordinator's architect check.
+- Findings and resolutions:
+  1. Low, evidence-mismatch (`verification.md:23`): the scope self-check left out `docs/contracts/execution-wire-contracts.md` and the `execution-wire-contracts` delta. Fixed in this record: the self-check names both with the coordinator decision of 2026-11-03.
+  2. Low, evidence-mismatch (`verification.md:26`): the wire alignment self-check still left the section 8.7 sentence to the coordinator. Fixed in this record: the coordinator's scope widening of 2026-11-03 resolved it.
+  3. Low, evidence-mismatch (`verification.md:29`): the requirement length range was stale. Fixed in this record: 348 to 492 characters after the pass 2 fixes, recomputed over both deltas.
+  4. Low, docs (`docs/contracts/source-control.md:3` and `:25`, `proposal.md:3`): the records named sub-changes of item 20 that `docs/g3-plan.md` row 20 does not define. Fixed in `de92dcf9` and this record: the contract, proposal, design, and this record refer to plan item 20 and name the change by its OpenSpec change name; `docs/g3-plan.md` is unchanged.
+  5. Low, missing-fail-before-test (`packages/modules/integrations/src/ports/credential-cases.ts:63`): the adopted credential case never refreshed after a confirmed adoption. Fixed in `de92dcf9`: after the adoption of the third version the case refreshes it, which the refresh check requires to be version 4, and reads with the fourth version; the defect `adoptionDropsGrant` (a refresh after a confirmation answers `not-found`) and the test "a refresh after a confirmed adoption that fails is reported"; the expected findings of "a refresh that changes the permissions or moves the expiry back is reported" gain the extra refresh's finding; contract section 8 and 9 name the check and the variant.
+  6. Low, spec-wording (`specs/scm-port/spec.md:35`, `docs/contracts/source-control.md:40`): the expiry of an unconfirmed version did not say who enforces it. Fixed in `de92dcf9`: the service enforces it where it can, otherwise the plugin refuses the version from its next operation on; requirement "Credential versions and adoption" is 492 characters.
+  7. Low, spec-wording (`docs/contracts/source-control.md:40` and `:44`): refresh and revocation did not say they fail with `not-found` for an unknown or revoked credential. Fixed in `de92dcf9`: both contract bullets and requirement "Credential refresh and revocation" state it. The conformance suite does not check this failure, only the in-memory SCM implements it; reported to the coordinator instead of widening the suite (see "Limitations").
+- Fail-before: "Fail-before of the pass 2 fixes" below.
+
+### Fail-before of the pass 2 fixes
+
+Finding 5: with the new test, the in-memory SCM, and `source-control-results.test.ts` of `de92dcf9`, and `packages/modules/integrations/src/ports/credential-cases.ts` checked out from `250bfea2` (`git checkout 250bfea2 -- <file>`, `npx tsc -b packages/modules/integrations`, then `node --experimental-strip-types --test packages/modules/integrations/test/*.test.ts`, Node.js 24.22.1), 106 tests ran, 104 passed and 2 failed: "a refresh after a confirmed adoption that fails is reported" and "a refresh that changes the permissions or moves the expiry back is reported", whose expectation includes the new refresh. With the file restored, 106 of 106 passed in three runs. Findings 1 to 4, 6, and 7 change records and wording only.
+
+### Architect check of unreviewed fixes
+
+The fixes of pass 2 (`de92dcf9` and this record) have no later review pass. Coordinator's architect check: pending.
 
 ### Scope widening
 
@@ -152,6 +175,8 @@ Execution wire contracts section 8.7, "Version": scope widened by coordinator de
 
 - The suite ran only against the in-memory SCM. A live service run of the revised cases, including a version that outlives an earlier one's expiry, is item 20's GitHub plugin work (contract section 9).
 - The deadline of an unconfirmed version is its own expiry; no test waits for a live expiry.
+- The conformance suite does not check that `refreshRunCredential` and `revokeRunCredential` fail with `not-found` for an unknown or revoked credential (pass 2 finding 7); the in-memory SCM does so. Left to the coordinator.
+- `test/installation-script.test.ts:570` failed once on timing during a `make verify` run of this branch and passed on rerun; it is outside this change and a known coordinator follow-up.
 
 ## Questions for the coordinator
 
@@ -160,6 +185,6 @@ Execution wire contracts section 8.7, "Version": scope widened by coordinator de
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 as governance assigns them.
+- Coordinator's architect check of the unreviewed pass 2 fixes.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
