@@ -173,6 +173,18 @@ Execution wire contracts section 8.7, "Version": scope widened by coordinator de
 | `npm run openspec -- validate --all --strict` on the archived scratch copy | `Totals: 71 passed, 0 failed (71 items)` |
 | `diff` of the living `execution-wire-contracts` spec before and after the scratch archive | One changed line, `384c384`, the same WHEN line; the scratch copy was deleted afterward |
 
+## Archive
+
+Checked on the tree of the archive commit, the working tree the checks ran on, after ticking every task in `tasks.md` and `npm run openspec -- archive revise-scm-port-refresh-and-authorization --yes` (`Totals: + 3, ~ 4, - 0, → 0`, archived as `2026-11-03-revise-scm-port-refresh-and-authorization`):
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 71 passed, 0 failed (71 items)` |
+| `env -u NODE_ENV make verify` | Passed, profile full, uncommitted working tree, so no stamp: tests 4132, suites 49, pass 4085, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.65 % branches, 98.84 % functions |
+| This change's line of `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-11-03-revise-scm-port-refresh-and-authorization` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | `openspec/specs/scm-port/spec.md` (the `scm-port` delta) and one line of `openspec/specs/execution-wire-contracts/spec.md` (the WHEN line of scenario "Ended version"); nothing else |
+| Moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` | Both present; `Every findings file is valid: 97 file(s); every pass summary file is valid: 77 file(s); every route file is valid: 30 file(s).` |
+
 ## Limitations
 
 - The suite ran only against the in-memory SCM. A live service run of the revised cases, including a version that outlives an earlier one's expiry, is item 20's GitHub plugin work (contract section 9).
@@ -188,5 +200,4 @@ Execution wire contracts section 8.7, "Version": scope widened by coordinator de
 ## Remaining gates
 
 - Coordinator's architect check of the unreviewed pass 2 fixes.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
