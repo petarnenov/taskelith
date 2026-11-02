@@ -41,7 +41,27 @@ With `scripts/` changed and the tests not yet updated, the route and review test
 - `npm run openspec -- validate assign-argon-to-review-pass-3 --strict`: `Change 'assign-argon-to-review-pass-3' is valid`.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `cddff36a8749a5c672c825913e6d2cc6f0057b2e`; tests 4090, pass 4081, fail 0, skipped 9; all files 99.39% lines, 92.59% branches, 98.87% functions.
+- `npm run openspec -- validate assign-argon-to-review-pass-3 --strict`: passed, `Change 'assign-argon-to-review-pass-3' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 95 file(s); every pass summary file is valid: 75 file(s); every route file is valid: 29 file(s).`.
+- Spec diff against the merge base `ecf8cd3c62d2` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
+
+## Archive checks
+
+Run on the working tree of the archive commit, before this section was written (tree `5a342eb3e195a52c501dae80c112433dd2cc1787`):
+
+- `npm run openspec -- archive assign-argon-to-review-pass-3 --yes`: `review-process` 2 requirements modified; archived as `2026-11-02-assign-argon-to-review-pass-3`.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-02-assign-argon-to-review-pass-3`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/review-process/spec.md`, the two modified requirements and the scenario "Record of rule version 3" (9 insertions, 5 deletions).
+- The moved change has `findings.jsonl` and `passes.jsonl`, both empty; `make findings ARGS="validate"`: `Every findings file is valid: 95 file(s); every pass summary file is valid: 75 file(s); every route file is valid: 29 file(s).`
+- `make verify`: the first run failed 1 of 4090 in `packages/adapters/postgres/test/fleet-conformance.integration.test.ts`, "a token that expires while its use waits for the row lock enrolls nothing" (`false` against `'token-expired'`), a timing-bound test that this change does not touch and that passed in the pre-archive run; the rerun passed, profile full, uncommitted working tree, tests 4090, pass 4081, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.87% functions.
 
 ## Review
 
