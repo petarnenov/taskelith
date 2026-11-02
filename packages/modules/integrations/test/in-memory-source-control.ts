@@ -45,10 +45,13 @@ export interface ScmDefects {
   readonly adoptionEndsAdopted?: boolean;
   readonly adoptionEndsLater?: boolean;
   readonly adoptsUnissuedVersion?: boolean;
+  readonly adoptsUnknownCredential?: boolean;
+  readonly adoptsRevokedCredential?: boolean;
   readonly staleAdoptionRestores?: boolean;
   readonly revocationKeepsEarlier?: boolean;
   readonly unusableAuthorization?: boolean;
   readonly remoteOfProjectForAll?: boolean;
+  readonly resolvesHiddenRepository?: boolean;
 }
 
 // The service's own configuration, which a conforming plugin respects.
@@ -57,10 +60,13 @@ export interface ScmSetup {
   readonly existingRequiredStatuses?: readonly string[];
   // A permission the service adds to every grant, having no narrower one.
   readonly alsoGrants?: string;
+  // The service's clock in epoch milliseconds; the live clock by default.
+  readonly now?: () => number;
 }
 
 export const PROJECT = 'acme/project';
 export const FOREIGN = 'acme/other';
+export const HIDDEN = 'acme/hidden';
 const BASE = 'main';
 const SIGNATURE = 'x-signature';
 const DELIVERY = 'x-delivery';
@@ -104,12 +110,14 @@ export class InMemoryScm {
   private readonly mergeMethods: readonly string[];
   private readonly existingRequiredStatuses: readonly string[];
   private readonly alsoGrants: readonly string[];
+  private readonly now: () => number;
 
   constructor(defects: ScmDefects = {}, setup: ScmSetup = {}) {
     this.defects = defects;
     this.mergeMethods = setup.mergeMethods ?? DEFAULT_MERGE_METHODS;
     this.existingRequiredStatuses = setup.existingRequiredStatuses ?? [];
     this.alsoGrants = setup.alsoGrants === undefined ? [] : [setup.alsoGrants];
+    this.now = setup.now ?? Date.now;
   }
 
   provider(): SourceControlProvider {
@@ -144,6 +152,7 @@ export class InMemoryScm {
       projectRepository: PROJECT,
       projectRemoteUrl: REMOTES.get(PROJECT)!,
       foreignRepository: FOREIGN,
+      hiddenRepository: HIDDEN,
       baseBranch: BASE,
       mergeMethod: 'squash',
       prepareHeadBranch: async () => {
@@ -178,7 +187,7 @@ export class InMemoryScm {
       authorization: authorizationOf(secret),
       repositories: [...repositories],
       permissions: granted,
-      expiresAt: expiry(),
+      expiresAt: new Date(this.now() + LIFETIME_MS).toISOString(),
     };
     this.store(credential, false);
     return ok(credential);
@@ -195,7 +204,7 @@ export class InMemoryScm {
       version: this.defects.refreshKeepsVersion ? previous.version : previous.version + 1,
       secret,
       authorization: this.defects.refreshKeepsAuthorization ? previous.authorization : authorizationOf(secret),
-      expiresAt: this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt),
+      expiresAt: this.defects.refreshKeepsExpiry ? previous.expiresAt : this.extendedExpiry(previous.expiresAt),
       permissions: this.defects.refreshWidens ? [...SCM_PERMISSIONS] : previous.permissions,
     };
     if (this.defects.refreshEndsPrevious) latest.ended = true;
@@ -208,7 +217,7 @@ export class InMemoryScm {
   private confirm(credentialId: string, version: number): Result<void> {
     const versions = this.versionsOf(credentialId);
     const latest = versions.at(-1);
-    if (!latest) return err(failure('not-found', 'unknown credential'));
+    if (!latest) return this.confirmsMissing(credentialId) ? ok(undefined) : err(failure('not-found', 'unknown credential'));
     if (version > latest.credential.version && !this.defects.adoptsUnissuedVersion) {
       return err(failure('not-found', 'unknown version'));
     }
@@ -217,6 +226,11 @@ export class InMemoryScm {
       else if (this.defects.staleAdoptionRestores && stored.credential.version === version) stored.ended = false;
     }
     return ok(undefined);
+  }
+
+  private confirmsMissing(credentialId: string): boolean {
+    const revoked = this.revoked.has(credentialId);
+    return Boolean(revoked ? this.defects.adoptsRevokedCredential : this.defects.adoptsUnknownCredential);
   }
 
   private endsOnAdoption(stored: number, adopted: number): boolean {
@@ -249,8 +263,19 @@ export class InMemoryScm {
   }
 
   private resolve(repository: string): Result<{ repository: string; remoteUrl: string }> {
-    const remoteUrl = this.defects.remoteOfProjectForAll ? REMOTES.get(PROJECT) : REMOTES.get(repository);
+    const remoteUrl = this.remoteOf(repository);
     return remoteUrl === undefined ? err(failure('not-found', 'unknown repository')) : ok({ repository, remoteUrl });
+  }
+
+  private remoteOf(repository: string): string | undefined {
+    const known = REMOTES.get(repository);
+    if (known !== undefined) return this.defects.remoteOfProjectForAll ? REMOTES.get(PROJECT) : known;
+    return this.defects.resolvesHiddenRepository ? `https://scm.example/${repository}.git` : undefined;
+  }
+
+  // Strictly later than the previous expiry, even within one millisecond.
+  private extendedExpiry(previous: string): string {
+    return new Date(Math.max(this.now() + LIFETIME_MS, Date.parse(previous) + 1)).toISOString();
   }
 
   // Only a code write leaves a trace that later cases see. Code access
@@ -270,7 +295,7 @@ export class InMemoryScm {
     if (!stored || this.defects.unusableCredentials) return forbidden();
     const reads = permission === 'read-code';
     if (stored.ended && !(reads && this.defects.endedCanRead)) return forbidden();
-    if (Date.parse(stored.credential.expiresAt) <= Date.now()) return forbidden();
+    if (Date.parse(stored.credential.expiresAt) <= this.now()) return forbidden();
     const { permissions, repositories } = stored.credential;
     if (!permissions.includes(permission) || this.defects.grantsOnPaper === permission) return forbidden();
     const unscoped = stored.unscoped || this.defects.unscopedCredentials || (reads && this.defects.readsOutsideProject);
@@ -386,15 +411,6 @@ function statusKey(repository: string, commit: string, context: string): string 
 
 function authorizationOf(secret: string): string {
   return `Bearer ${secret}`;
-}
-
-function expiry(): string {
-  return new Date(Date.now() + LIFETIME_MS).toISOString();
-}
-
-// Strictly later than the previous expiry, even within one millisecond.
-function extendedExpiry(previous: string): string {
-  return new Date(Math.max(Date.now() + LIFETIME_MS, Date.parse(previous) + 1)).toISOString();
 }
 
 function signatureOf(rawBody: Uint8Array, secret: string): string {

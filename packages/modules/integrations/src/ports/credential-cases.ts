@@ -3,7 +3,12 @@ import { failsWith, fixtureResult, nothing, succeeds, type ConformanceCase } fro
 import { isSameSet, isSubset } from './conformance-steps.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
-import { SCM_PERMISSIONS, type RunCredential, type RunCredentialRequest } from './source-control.js';
+import {
+  SCM_PERMISSIONS,
+  type RunCredential,
+  type RunCredentialAdoption,
+  type RunCredentialRequest,
+} from './source-control.js';
 
 // Cases for run credentials: what each grant claims, and what the fixture
 // can natively do with it.
@@ -14,6 +19,7 @@ const READ_WRITE = Object.freeze(['read-code', 'write-code']);
 // (contract section 7, Forgejo admission gate).
 const CHANGE_REQUESTS = Object.freeze(['read-code', 'write-change-requests']);
 const STATUSES = Object.freeze(['read-code', 'write-statuses']);
+const UNKNOWN_CREDENTIAL = 'conformance-unknown-credential';
 
 interface Probe {
   readonly permission: string;
@@ -50,7 +56,7 @@ export async function checkRefreshedCredential(run: ConformanceCase, fixture: So
 }
 
 // An adoption ends only the versions before the adopted one; a repeated or
-// stale adoption ends nothing more.
+// stale adoption ends nothing more. Only issued versions can be adopted.
 export async function checkAdoptedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const first = await issueCredential(run, fixture, 'conformance-adoption', READ_ONLY);
   const second = await refresh(run, fixture, first);
@@ -72,6 +78,19 @@ export async function checkAdoptedCredential(run: ConformanceCase, fixture: Sour
   await expectRefused(run, fixture, readProbe(fixture, second, 'after a stale adoption'));
   await expectReads(run, fixture, third, 'after its adoption');
   await revoke(run, fixture, third);
+  await expectUnknownAdoption(run, fixture, 'a revoked credential', { credentialId: third.credentialId, version: third.version });
+  const unknown = { credentialId: UNKNOWN_CREDENTIAL, version: 1 };
+  await expectUnknownAdoption(run, fixture, 'an unknown credential', unknown);
+}
+
+function expectUnknownAdoption(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  subject: string,
+  adoption: RunCredentialAdoption,
+): Promise<void> {
+  const operation = `confirmRunCredentialAdoption of ${subject}`;
+  return failsWith(run, operation, () => fixture.provider.confirmRunCredentialAdoption(adoption), 'not-found');
 }
 
 // The access before the revocation shows that the refusals after it come

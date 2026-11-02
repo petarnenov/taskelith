@@ -46,6 +46,18 @@ test('an adoption of a version not yet issued that succeeds is reported', async 
   ]);
 });
 
+test('an adoption of an unknown credential that succeeds is reported', async () => {
+  assert.deepEqual(await defective({ adoptsUnknownCredential: true }), [
+    'adopted credential outcome: confirmRunCredentialAdoption of an unknown credential succeeded, expected failure not-found',
+  ]);
+});
+
+test('an adoption of a revoked credential that succeeds is reported', async () => {
+  assert.deepEqual(await defective({ adoptsRevokedCredential: true }), [
+    'adopted credential outcome: confirmRunCredentialAdoption of a revoked credential succeeded, expected failure not-found',
+  ]);
+});
+
 test('a stale adoption that restores an ended version is reported', async () => {
   assert.deepEqual(await defective({ staleAdoptionRestores: true }), [
     'adopted credential outcome: read-code to the project repository after a stale adoption must fail with forbidden',
@@ -153,7 +165,10 @@ test('a remote URL of another repository is reported', async () => {
   const elsewhere = await patched(() => ({
     resolveRemoteUrl: async ({ repository }) => ok({ repository, remoteUrl: `https://elsewhere.example/${repository}.git` }),
   }));
-  assert.deepEqual(elsewhere, ['repository remote outcome: resolveRemoteUrl returned another remoteUrl than the fixture names']);
+  assert.deepEqual(elsewhere, [
+    'repository remote outcome: resolveRemoteUrl returned another remoteUrl than the fixture names',
+    'repository remote outcome: resolveRemoteUrl of a repository the plugin cannot see succeeded, expected failure not-found',
+  ]);
   const echo = await patched((provider) => ({
     resolveRemoteUrl: async (request) => {
       const resolved = await provider.resolveRemoteUrl(request);
@@ -162,6 +177,12 @@ test('a remote URL of another repository is reported', async () => {
   }));
   assert.deepEqual(headings(echo), ['repository remote outcome', 'repository remote outcome']);
   assert.match(echo[0]!, /resolveRemoteUrl returned another repository than requested$/);
+});
+
+test('a remote URL invented for a repository the plugin cannot see is reported', async () => {
+  assert.deepEqual(await defective({ resolvesHiddenRepository: true }), [
+    'repository remote outcome: resolveRemoteUrl of a repository the plugin cannot see succeeded, expected failure not-found',
+  ]);
 });
 
 test('a remote URL that the plugin cannot resolve is reported', async () => {

@@ -24,8 +24,11 @@ export function defective(defects: ScmDefects, setup: ScmSetup = {}): Promise<st
 }
 
 // The fake's own provider with some operations replaced.
-export function patched(override: (provider: SourceControlProvider) => Partial<SourceControlProvider>): Promise<string[]> {
-  const scm = new InMemoryScm();
+export function patched(
+  override: (provider: SourceControlProvider) => Partial<SourceControlProvider>,
+  setup: ScmSetup = {},
+): Promise<string[]> {
+  const scm = new InMemoryScm({}, setup);
   const provider = scm.provider();
   return findings(scm.fixture({ ...provider, ...override(provider) }));
 }

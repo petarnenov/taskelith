@@ -21,6 +21,8 @@ export interface SourceControlConformanceFixture {
   readonly projectRemoteUrl: string;
   // Outside the project, yet open to the plugin's own identity.
   readonly foreignRepository: string;
+  // A repository that the plugin's own identity cannot see.
+  readonly hiddenRepository: string;
   readonly baseBranch: string;
   readonly mergeMethod: string;
   // The lower-case name of the header that carries a delivery's signature.
