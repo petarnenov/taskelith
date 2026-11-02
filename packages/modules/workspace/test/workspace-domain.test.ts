@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { parseIdentifier } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
+import type { RunCredential } from '@taskelith/integrations';
 import type { TaskId } from '@taskelith/sdlc';
 import {
   DIRTY_REASONS,
@@ -245,6 +246,24 @@ test('a credential is in scope only with the repository and the access', () => {
   assert.ok(!write.ok);
   assert.deepEqual([write.error.code, write.error.details.reason], ['forbidden', 'credential-out-of-scope']);
   assert.ok(!checkCredentialScope(credential, identifier('RepositoryId', 'acme/other') as RepositoryId, 'read-code').ok);
+});
+
+// Compile-time: the SCM port's run credential is a workspace credential,
+// so a run's credential reaches the workspace without a conversion.
+test('a run credential of the SCM port serves as a workspace credential', () => {
+  const run: RunCredential = {
+    credentialId: 'c-1',
+    runId: 'r-1',
+    version: 1,
+    secret: 's',
+    authorization: 'Basic cw==',
+    repositories: ['acme/project'],
+    permissions: ['read-code'],
+    expiresAt: '2026-11-02T00:00:00.000Z',
+  };
+  const credential: WorkspaceCredential = run;
+  const repository = identifier('RepositoryId', 'acme/project') as RepositoryId;
+  assert.ok(checkCredentialScope(credential, repository, 'read-code').ok);
 });
 
 test('the push command is exactly the leased options, the remote, and one refspec', () => {

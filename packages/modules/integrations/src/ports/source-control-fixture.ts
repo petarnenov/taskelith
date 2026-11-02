@@ -17,6 +17,8 @@ export interface SignedChangeRequestEvent {
 export interface SourceControlConformanceFixture {
   readonly provider: SourceControlProvider;
   readonly projectRepository: string;
+  // The project repository's HTTPS remote URL, as the service names it.
+  readonly projectRemoteUrl: string;
   // Outside the project, yet open to the plugin's own identity.
   readonly foreignRepository: string;
   readonly baseBranch: string;
@@ -26,8 +28,8 @@ export interface SourceControlConformanceFixture {
   prepareHeadBranch(): Promise<PreparedHead>;
   advanceHead(branch: string): Promise<string>;
   readBranchHead(branch: string): Promise<string>;
-  // Natively does what `permission` allows, such as a code write for
-  // write-code, with the run credential.
+  // Natively does what `permission` allows with the run credential: a code
+  // read or write sends its `authorization` as the Git workspace does.
   attemptAction(credential: RunCredential, repository: string, permission: string): Promise<Result<void>>;
   attemptBypassMerge(changeRequest: ChangeRequestData): Promise<Result<void>>;
   // The method, in port terms, by which this commit was merged.

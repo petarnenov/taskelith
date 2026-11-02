@@ -27,7 +27,6 @@ export interface ScmDefects {
   readonly refreshUnscopes?: boolean;
   readonly unusableCredentials?: boolean;
   readonly refreshKeepsSecret?: boolean;
-  readonly refreshKeepsOldSecret?: boolean;
   readonly sharedSecret?: boolean;
   readonly canonicalJsonOnly?: boolean;
   readonly enforcesOnlyFor?: string;
@@ -39,6 +38,17 @@ export interface ScmDefects {
   readonly grantsOnPaper?: string;
   readonly onlyPendingBlocksFor?: string;
   readonly refreshWidens?: boolean;
+  readonly refreshEndsPrevious?: boolean;
+  readonly refreshKeepsVersion?: boolean;
+  readonly refreshKeepsAuthorization?: boolean;
+  readonly adoptionKeepsPrevious?: boolean;
+  readonly adoptionEndsAdopted?: boolean;
+  readonly adoptionEndsLater?: boolean;
+  readonly adoptsUnissuedVersion?: boolean;
+  readonly staleAdoptionRestores?: boolean;
+  readonly revocationKeepsEarlier?: boolean;
+  readonly unusableAuthorization?: boolean;
+  readonly remoteOfProjectForAll?: boolean;
 }
 
 // The service's own configuration, which a conforming plugin respects.
@@ -55,6 +65,7 @@ const BASE = 'main';
 const SIGNATURE = 'x-signature';
 const DELIVERY = 'x-delivery';
 const WEBHOOK_SECRET = 'webhook-secret';
+const REMOTES = new Map([PROJECT, FOREIGN].map((repository) => [repository, `https://scm.example/${repository}.git`]));
 const LIFETIME_MS = 60 * 60 * 1000;
 const DEFAULT_MERGE_METHODS = Object.freeze(['merge-commit', 'squash']);
 
@@ -82,7 +93,10 @@ export class InMemoryScm {
   private readonly branches = new Map<string, string>([[branchKey(PROJECT, BASE), 'c0'], [branchKey(FOREIGN, BASE), 'c0']]);
   private readonly protections = new Map<string, Protection>();
   private readonly statuses = new Map<string, string>();
+  // Every version of every credential, by secret and by authorization.
   private readonly credentials = new Map<string, StoredCredential>();
+  private readonly authorizations = new Map<string, string>();
+  private readonly revoked = new Set<string>();
   private readonly changeRequests = new Map<string, StoredChangeRequest>();
   private readonly mergedBy = new Map<string, string>();
 
@@ -103,7 +117,9 @@ export class InMemoryScm {
       capabilities: { mergeMethods: this.mergeMethods, reviewEvidence: ['required-status'] },
       issueRunCredential: async (request) => this.issue(request.runId, request.repositories, request.permissions),
       refreshRunCredential: async ({ credentialId }) => this.refresh(credentialId),
+      confirmRunCredentialAdoption: async ({ credentialId, version }) => this.confirm(credentialId, version),
       revokeRunCredential: async ({ credentialId }) => this.revoke(credentialId),
+      resolveRemoteUrl: async ({ repository }) => this.resolve(repository),
       ensureMergeProtection: async ({ repository, branch, requiredStatuses }) => {
         const required = [...new Set([...this.existingRequiredStatuses, ...requiredStatuses])];
         const protection = { requiredStatuses: required, bindsProvider: !this.defects.bypassableProtection };
@@ -126,6 +142,7 @@ export class InMemoryScm {
     return {
       provider,
       projectRepository: PROJECT,
+      projectRemoteUrl: REMOTES.get(PROJECT)!,
       foreignRepository: FOREIGN,
       baseBranch: BASE,
       mergeMethod: 'squash',
@@ -136,7 +153,7 @@ export class InMemoryScm {
       advanceHead: async (branch) => this.push(PROJECT, branch),
       readBranchHead: async (branch) => this.branches.get(branchKey(PROJECT, branch))!,
       signatureHeader: SIGNATURE,
-      attemptAction: async (credential, repository, permission) => this.act(credential.secret, repository, permission),
+      attemptAction: async (credential, repository, permission) => this.act(credential, repository, permission),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),
       observeMergeMethod: async (mergeCommit) => this.mergedBy.get(mergeCommit) ?? 'none',
       signDelivery: async (event) => this.sign(JSON.stringify(event), WEBHOOK_SECRET),
@@ -153,38 +170,96 @@ export class InMemoryScm {
     const id = this.next();
     const secret = this.defects.sharedSecret ? 'shared-secret' : `secret-${id}`;
     const granted = [...new Set([...permissions, ...this.alsoGrants])];
-    const credential = { credentialId: `cred-${id}`, runId, secret, repositories: [...repositories], permissions: granted, expiresAt: expiry() };
-    this.credentials.set(credential.secret, { credential, ended: false, unscoped: false });
+    const credential = {
+      credentialId: `cred-${id}`,
+      runId,
+      version: 1,
+      secret,
+      authorization: authorizationOf(secret),
+      repositories: [...repositories],
+      permissions: granted,
+      expiresAt: expiry(),
+    };
+    this.store(credential, false);
     return ok(credential);
   }
 
   private refresh(credentialId: string): Result<RunCredential> {
-    const stored = this.findCredential(credentialId);
-    if (!stored) return err(failure('not-found', 'unknown credential'));
-    const previous = stored.credential;
+    const versions = this.versionsOf(credentialId);
+    const latest = versions.at(-1);
+    if (!latest) return err(failure('not-found', 'unknown credential'));
+    const previous = latest.credential;
     const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
-    const expiresAt = this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt);
-    const permissions = this.defects.refreshWidens ? [...SCM_PERMISSIONS] : previous.permissions;
-    const credential = { ...previous, secret, expiresAt, permissions };
-    if (!this.defects.refreshKeepsOldSecret) stored.ended = true;
-    this.credentials.set(secret, { credential, ended: false, unscoped: Boolean(this.defects.refreshUnscopes) });
+    const credential = {
+      ...previous,
+      version: this.defects.refreshKeepsVersion ? previous.version : previous.version + 1,
+      secret,
+      authorization: this.defects.refreshKeepsAuthorization ? previous.authorization : authorizationOf(secret),
+      expiresAt: this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt),
+      permissions: this.defects.refreshWidens ? [...SCM_PERMISSIONS] : previous.permissions,
+    };
+    if (this.defects.refreshEndsPrevious) latest.ended = true;
+    this.store(credential, Boolean(this.defects.refreshUnscopes));
     return ok(credential);
   }
 
-  private revoke(credentialId: string): Result<void> {
-    const stored = this.findCredential(credentialId);
-    if (!stored) return err(failure('not-found', 'unknown credential'));
-    stored.ended = true;
+  // Ends the versions before the adopted one; a version not yet issued is
+  // unknown.
+  private confirm(credentialId: string, version: number): Result<void> {
+    const versions = this.versionsOf(credentialId);
+    const latest = versions.at(-1);
+    if (!latest) return err(failure('not-found', 'unknown credential'));
+    if (version > latest.credential.version && !this.defects.adoptsUnissuedVersion) {
+      return err(failure('not-found', 'unknown version'));
+    }
+    for (const stored of versions) {
+      if (this.endsOnAdoption(stored.credential.version, version)) stored.ended = true;
+      else if (this.defects.staleAdoptionRestores && stored.credential.version === version) stored.ended = false;
+    }
     return ok(undefined);
   }
 
-  private findCredential(credentialId: string): StoredCredential | undefined {
-    return [...this.credentials.values()].find((stored) => !stored.ended && stored.credential.credentialId === credentialId);
+  private endsOnAdoption(stored: number, adopted: number): boolean {
+    if (this.defects.adoptionKeepsPrevious) return false;
+    if (this.defects.adoptionEndsAdopted) return stored <= adopted;
+    if (this.defects.adoptionEndsLater) return stored !== adopted;
+    return stored < adopted;
   }
 
-  // Only a code write leaves a trace that later cases see.
-  private act(secret: string, repository: string, permission: string): Result<void> {
+  private revoke(credentialId: string): Result<void> {
+    const versions = this.versionsOf(credentialId);
+    if (versions.length === 0) return err(failure('not-found', 'unknown credential'));
+    this.revoked.add(credentialId);
+    const ended = this.defects.revocationKeepsEarlier ? versions.slice(-1) : versions;
+    for (const stored of ended) stored.ended = true;
+    return ok(undefined);
+  }
+
+  // The versions of a credential that is not revoked, oldest first.
+  private versionsOf(credentialId: string): StoredCredential[] {
+    if (this.revoked.has(credentialId)) return [];
+    return [...this.credentials.values()]
+      .filter((stored) => stored.credential.credentialId === credentialId)
+      .sort((left, right) => left.credential.version - right.credential.version);
+  }
+
+  private store(credential: RunCredential, unscoped: boolean): void {
+    this.credentials.set(credential.secret, { credential, ended: false, unscoped });
+    if (!this.defects.unusableAuthorization) this.authorizations.set(credential.authorization, credential.secret);
+  }
+
+  private resolve(repository: string): Result<{ repository: string; remoteUrl: string }> {
+    const remoteUrl = this.defects.remoteOfProjectForAll ? REMOTES.get(PROJECT) : REMOTES.get(repository);
+    return remoteUrl === undefined ? err(failure('not-found', 'unknown repository')) : ok({ repository, remoteUrl });
+  }
+
+  // Only a code write leaves a trace that later cases see. Code access
+  // goes by the authorization, as Git sends it, the rest by the secret.
+  private act(credential: RunCredential, repository: string, permission: string): Result<void> {
     const writesCode = permission === 'write-code';
+    const codeAccess = writesCode || permission === 'read-code';
+    const secret = codeAccess ? this.authorizations.get(credential.authorization) : credential.secret;
+    if (secret === undefined) return forbidden();
     const access = this.access(secret, repository, writesCode && this.defects.readOnlyCanWrite ? 'read-code' : permission);
     if (access.ok && writesCode) this.push(repository, BASE);
     return access;
@@ -307,6 +382,10 @@ function branchKey(repository: string, branch: string): string {
 
 function statusKey(repository: string, commit: string, context: string): string {
   return `${repository}@${commit}:${context}`;
+}
+
+function authorizationOf(secret: string): string {
+  return `Bearer ${secret}`;
 }
 
 function expiry(): string {

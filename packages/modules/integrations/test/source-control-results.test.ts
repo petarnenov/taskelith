@@ -38,6 +38,7 @@ test('a value that is not a Result is reported', async () => {
     'write credential result',
     'change request and status credentials result',
     'refreshed credential result',
+    'adopted credential result',
     'revoked credential result',
     'credential isolation result',
   ]);
@@ -46,10 +47,10 @@ test('a value that is not a Result is reported', async () => {
 
 test('a failure with an unknown code or malformed details is reported', async () => {
   const unknownCode = await patched(() => ({ revokeRunCredential: async () => err({ code: 'gone', message: 'no', details: {} }) as never }));
-  assert.deepEqual(headings(unknownCode), ['revoked credential result', 'credential isolation result']);
-  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code is not a kernel failure code');
+  assert.deepEqual(headings(unknownCode), ['adopted credential result', 'revoked credential result', 'credential isolation result']);
+  assert.equal(unknownCode[0], 'adopted credential result: revokeRunCredential: result.error.code is not a kernel failure code');
   const badDetails = await patched(() => ({ revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: 123 }) as never }));
-  assert.equal(badDetails[0], 'revoked credential result: revokeRunCredential: result.error.details must be a record of strings');
+  assert.equal(badDetails[0], 'adopted credential result: revokeRunCredential: result.error.details must be a record of strings');
   const throwingDetails = await patched(() => ({
     revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: { get reason() { throw new Error('no getter'); } } }) as never,
   }));
@@ -59,6 +60,7 @@ test('a failure with an unknown code or malformed details is reported', async ()
 test('a revocation that returns a value is a shape finding', async () => {
   const lines = await patched(() => ({ revokeRunCredential: async () => ok({ revoked: true }) as never }));
   assert.deepEqual(lines, [
+    'adopted credential shape: revokeRunCredential: value must be undefined',
     'revoked credential shape: revokeRunCredential: value must be undefined',
     'credential isolation shape: revokeRunCredential: value must be undefined',
   ]);
@@ -88,11 +90,12 @@ test('an effective grant beyond the request is allowed, but not write-code', asy
     'read-only credential outcome',
     'change request and status credentials outcome',
     'refreshed credential outcome',
+    'adopted credential outcome',
     'credential isolation outcome',
   ]);
   const escalations = escalated.filter((line) => line.endsWith('issueRunCredential granted write-code to a request without it'));
-  assert.equal(escalations.length, 6);
-  assert.match(escalated[5]!, /^credential isolation outcome: write-code .* after another run got write-code must fail with forbidden$/);
+  assert.equal(escalations.length, 7);
+  assert.match(escalated[6]!, /^credential isolation outcome: write-code .* after another run got write-code must fail with forbidden$/);
 });
 
 test('a reported permission that the service does not grant is reported', async () => {
@@ -108,6 +111,9 @@ test('a reported permission that the service does not grant is reported', async 
     'change request and status credentials outcome: write-statuses to the project repository must succeed',
     'refreshed credential outcome: refreshRunCredential granted permissions that miss a requested one or are not port permissions',
     'refreshed credential outcome: refreshRunCredential changed the permissions',
+    'refreshed credential outcome: write-statuses to the project repository before the adoption of its successor must succeed',
+    'adopted credential outcome: refreshRunCredential granted permissions that miss a requested one or are not port permissions',
+    'adopted credential outcome: refreshRunCredential changed the permissions',
   ]);
 });
 
@@ -115,35 +121,41 @@ test('a read-only credential whose secret does not work is reported', async () =
   const lines = await patched((provider) => ({
     issueRunCredential: async (request) => {
       const credential = await issued(provider, request);
-      return ok(request.permissions.includes('write-code') ? credential : { ...credential, secret: 'not-a-token' });
+      const broken = { ...credential, secret: 'not-a-token', authorization: 'Bearer not-a-token' };
+      return ok(request.permissions.includes('write-code') ? credential : broken);
     },
   }));
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'change request and status credentials outcome',
+    'refreshed credential outcome',
     'credential isolation outcome',
   ]);
   assert.match(lines[0]!, /^read-only credential outcome: read-code to the project repository must succeed$/);
 });
 
 test('a refresh that changes the permissions or moves the expiry back is reported', async () => {
+  const soon = new Date(Date.now() + 1000).toISOString();
   const lines = await patched((provider) => ({
     refreshRunCredential: async (request) => {
       const refreshed = await provider.refreshRunCredential(request);
       if (!refreshed.ok) return refreshed;
-      return ok({ ...refreshed.value, permissions: ['read-code', 'write-code', 'write-statuses'], expiresAt: new Date(Date.now() + 1000).toISOString() });
+      return ok({ ...refreshed.value, permissions: ['read-code', 'write-code', 'write-statuses'], expiresAt: soon });
     },
   }));
+  const refreshFindings = ['refreshRunCredential granted', 'refreshRunCredential changed', 'refreshRunCredential must'];
   assert.deepEqual(lines.map((line) => line.split(' ').slice(3, 5).join(' ')), [
-    'refreshRunCredential granted',
-    'refreshRunCredential changed',
-    'refreshRunCredential must',
+    ...refreshFindings,
     'write-code to',
     'write-statuses to',
-    'refreshRunCredential granted',
-    'refreshRunCredential changed',
-    'refreshRunCredential must',
+    'write-code to',
+    'write-statuses to',
+    ...refreshFindings,
     'write-change-requests to',
+    'write-change-requests to',
+    ...refreshFindings,
+    'refreshRunCredential must',
+    ...refreshFindings,
   ]);
 });
 
