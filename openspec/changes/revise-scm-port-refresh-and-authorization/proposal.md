@@ -1,6 +1,6 @@
 ## Why
 
-G3 item 20 ([G3 plan](/docs/g3-plan.md) row 20), sub-change 20a. The item 7 SCM port, version `0.1.0`, ends a credential's previous secret when a refresh returns, so a running run cannot work between that end and its adoption of the new secret, and a failed delivery leaves it with none ([source control contract](/docs/contracts/source-control.md) section 3). The Git workspace already expects a run credential with `authorization`, the complete `Authorization` header value ([Git workspace contract](/docs/contracts/git-workspace.md) section 14), which the port does not carry. [Control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 4.1 assigns to item 20 a port operation that derives a repository's remote URL.
+G3 plan item 20 ([G3 plan](/docs/g3-plan.md) row 20). The item 7 SCM port, version `0.1.0`, ends a credential's previous secret when a refresh returns, so a running run cannot work between that end and its adoption of the new secret, and a failed delivery leaves it with none ([source control contract](/docs/contracts/source-control.md) section 3). The Git workspace already expects a run credential with `authorization`, the complete `Authorization` header value ([Git workspace contract](/docs/contracts/git-workspace.md) section 14), which the port does not carry. [Control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 4.1 assigns to item 20 a port operation that derives a repository's remote URL.
 
 ## What Changes
 
@@ -26,4 +26,4 @@ None.
 
 ## Impact
 
-Private workspace packages `@taskelith/integrations` and `@taskelith/workspace`; commit types `chore`, `test`, and `docs`. Size M. Not in 20a: the plugin SDK re-export and the plugin API version (20c), the secret shape rules (20b), any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents; of the wire contracts only the section 8.7 sentence and the scenario above change. The `git-workspace-port` capability is unchanged, because `WorkspaceCredential` keeps its fields.
+Private workspace packages `@taskelith/integrations` and `@taskelith/workspace`; commit types `chore`, `test`, and `docs`. Size M. Not in this change: the plugin SDK re-export and the plugin API version, the secret shape rules, which later changes of item 20 deliver, any GitHub code, control-plane handlers, and the OpenAPI and AsyncAPI documents; of the wire contracts only the section 8.7 sentence and the scenario above change. The `git-workspace-port` capability is unchanged, because `WorkspaceCredential` keeps its fields.

@@ -8,7 +8,7 @@ The integrations module SHALL define a draft `SourceControlProvider` port, versi
 - **THEN** it depends on `WebhookVerifier` and not on the credential or change request operations
 
 ### Requirement: Credential refresh and revocation
-`refreshRunCredential` SHALL return the next version of the credential, with the same `credentialId`, repositories, and permissions, a new secret and `authorization`, and a later expiry, and SHALL end no earlier version. `revokeRunCredential` SHALL end every version of the credential and return no value. An ended version SHALL be refused for every permission, reads included.
+`refreshRunCredential` SHALL return the next version of the credential, with the same `credentialId`, repositories, and permissions, a new secret and `authorization`, and a later expiry, and SHALL end no earlier version. `revokeRunCredential` SHALL end every version of the credential and return no value. Both SHALL fail with `not-found` for an unknown or revoked credential. An ended version SHALL be refused for every permission, reads included.
 
 #### Scenario: Long run
 - **WHEN** a run will outlive its credential's expiry and the credential is refreshed before that expiry
@@ -32,7 +32,7 @@ A refreshed credential SHALL reach its running run, and the run SHALL adopt it. 
 ## ADDED Requirements
 
 ### Requirement: Credential versions and adoption
-Each run credential SHALL carry a version, 1 at issue and one more at each refresh. `confirmRunCredentialAdoption` SHALL end every earlier version of the credential and keep the adopted and later ones; a repeated or stale confirmation SHALL succeed and end nothing more, and one of a version not yet issued, or of an unknown or revoked credential, SHALL fail with `not-found`. An unconfirmed version SHALL still end at its own expiry.
+Each run credential SHALL carry a version, 1 at issue and one more per refresh. `confirmRunCredentialAdoption` SHALL end every earlier version and keep the adopted and later ones; a repeated or stale confirmation SHALL succeed and end nothing more, and one of an unissued version or an unknown or revoked credential SHALL fail with `not-found`. An unconfirmed version SHALL end at its own expiry, which the service enforces where it can, else the plugin refuses it from its next operation on.
 
 #### Scenario: Adoption ends the predecessor
 - **WHEN** a credential is refreshed and the adoption of the new version is confirmed

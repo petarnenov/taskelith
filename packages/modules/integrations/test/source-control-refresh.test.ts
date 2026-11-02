@@ -58,6 +58,12 @@ test('an adoption of a revoked credential that succeeds is reported', async () =
   ]);
 });
 
+test('a refresh after a confirmed adoption that fails is reported', async () => {
+  assert.deepEqual(await defective({ adoptionDropsGrant: true }), [
+    'adopted credential outcome: refreshRunCredential failed with not-found, expected success',
+  ]);
+});
+
 test('a stale adoption that restores an ended version is reported', async () => {
   assert.deepEqual(await defective({ staleAdoptionRestores: true }), [
     'adopted credential outcome: read-code to the project repository after a stale adoption must fail with forbidden',

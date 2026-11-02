@@ -47,6 +47,7 @@ export interface ScmDefects {
   readonly adoptsUnissuedVersion?: boolean;
   readonly adoptsUnknownCredential?: boolean;
   readonly adoptsRevokedCredential?: boolean;
+  readonly adoptionDropsGrant?: boolean;
   readonly staleAdoptionRestores?: boolean;
   readonly revocationKeepsEarlier?: boolean;
   readonly unusableAuthorization?: boolean;
@@ -103,6 +104,7 @@ export class InMemoryScm {
   private readonly credentials = new Map<string, StoredCredential>();
   private readonly authorizations = new Map<string, string>();
   private readonly revoked = new Set<string>();
+  private readonly adopted = new Set<string>();
   private readonly changeRequests = new Map<string, StoredChangeRequest>();
   private readonly mergedBy = new Map<string, string>();
 
@@ -196,7 +198,8 @@ export class InMemoryScm {
   private refresh(credentialId: string): Result<RunCredential> {
     const versions = this.versionsOf(credentialId);
     const latest = versions.at(-1);
-    if (!latest) return err(failure('not-found', 'unknown credential'));
+    const dropped = this.defects.adoptionDropsGrant && this.adopted.has(credentialId);
+    if (!latest || dropped) return err(failure('not-found', 'unknown credential'));
     const previous = latest.credential;
     const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
     const credential = {
@@ -225,6 +228,7 @@ export class InMemoryScm {
       if (this.endsOnAdoption(stored.credential.version, version)) stored.ended = true;
       else if (this.defects.staleAdoptionRestores && stored.credential.version === version) stored.ended = false;
     }
+    this.adopted.add(credentialId);
     return ok(undefined);
   }
 

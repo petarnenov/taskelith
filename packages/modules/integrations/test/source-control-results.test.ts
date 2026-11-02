@@ -157,6 +157,7 @@ test('a refresh that changes the permissions or moves the expiry back is reporte
     'write-change-requests to',
     ...refreshFindings,
     'refreshRunCredential must',
+    'refreshRunCredential must',
     ...refreshFindings,
   ]);
 });

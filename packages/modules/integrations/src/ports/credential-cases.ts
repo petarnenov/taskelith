@@ -55,8 +55,8 @@ export async function checkRefreshedCredential(run: ConformanceCase, fixture: So
   await expectRefreshed(run, fixture, 'conformance-refresh', SCM_PERMISSIONS);
 }
 
-// An adoption ends only the versions before the adopted one; a repeated or
-// stale adoption ends nothing more. Only issued versions can be adopted.
+// An adoption ends only earlier versions, a repeated or stale one nothing
+// more; only issued versions are adopted, and adopted ones still refresh.
 export async function checkAdoptedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const first = await issueCredential(run, fixture, 'conformance-adoption', READ_ONLY);
   const second = await refresh(run, fixture, first);
@@ -77,6 +77,8 @@ export async function checkAdoptedCredential(run: ConformanceCase, fixture: Sour
   await confirmAdoption(run, fixture, second);
   await expectRefused(run, fixture, readProbe(fixture, second, 'after a stale adoption'));
   await expectReads(run, fixture, third, 'after its adoption');
+  const fourth = await refresh(run, fixture, third);
+  await expectReads(run, fixture, fourth, 'after a refresh that follows an adoption');
   await revoke(run, fixture, third);
   await expectUnknownAdoption(run, fixture, 'a revoked credential', { credentialId: third.credentialId, version: third.version });
   const unknown = { credentialId: UNKNOWN_CREDENTIAL, version: 1 };

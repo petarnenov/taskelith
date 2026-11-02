@@ -1,6 +1,6 @@
 ## Context
 
-The brief of the coordinator assigns G3 sub-change 20a: revise the item 7 port so that a refresh keeps the previous secret until the run confirms adoption, as item 26 does for worker credentials, add `authorization` to the run credential, and add the port operation that [control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 4.1 assigns to item 20. The pattern of item 26 is `confirmCredentials` and `expirePredecessors` of `packages/modules/fleet` (`src/domain/enrollment.ts`, `src/ports/fleet-conformance.ts`): the predecessor stays valid until the successor is confirmed or the rotation's deadline passes.
+The brief of the coordinator assigns part of G3 plan item 20: revise the item 7 port so that a refresh keeps the previous secret until the run confirms adoption, as item 26 does for worker credentials, add `authorization` to the run credential, and add the port operation that [control-plane wire contracts](/docs/contracts/control-plane-wire-contracts.md) section 4.1 assigns to item 20. The pattern of item 26 is `confirmCredentials` and `expirePredecessors` of `packages/modules/fleet` (`src/domain/enrollment.ts`, `src/ports/fleet-conformance.ts`): the predecessor stays valid until the successor is confirmed or the rotation's deadline passes.
 
 ## Decisions
 
