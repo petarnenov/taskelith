@@ -58,6 +58,9 @@ export const redactIssuedSecrets = textRule(
   new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})_[A-Za-z0-9_-]{20,}`, 'g'),
   REDACTED,
 );
+// A GitHub App installation token, stateful or `ghs_APPID_JWT`, by GitHub's
+// own pattern for both formats (design of add-github-token-secret-shape).
+export const redactGithubInstallationTokens = textRule(/ghs_[A-Za-z0-9._-]{36,}/g, REDACTED);
 export const redactNkeySeeds = textRule(/S[OAU][A-Z2-7]{56}/g, REDACTED);
 // Tried once per run of JWT characters, keeping the run before `eyJ`.
 export const redactJwts = textRule(
@@ -135,7 +138,10 @@ export function redactPemPrivateKeys(text: string): string {
 // Secrets marked by their syntax: URL user information, a bearer token, and
 // a `key=value` pair.
 export const MARKED_SECRET_RULES: readonly TextRule[] = [redactUrlUserinfo, redactBearerTokens, redactKeyValuePairs];
-// Bearer secrets, NKey seeds, `.creds` blocks, and JWTs (trust model 5).
-export const TOKEN_SHAPE_RULES: readonly TextRule[] = [redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts];
+// Bearer secrets, GitHub installation tokens, NKey seeds, `.creds` blocks,
+// and JWTs (trust model 5); a stateless GitHub token comes before its JWT.
+export const TOKEN_SHAPE_RULES: readonly TextRule[] = [
+  redactIssuedSecrets, redactGithubInstallationTokens, redactCredsBlocks, redactNkeySeeds, redactJwts,
+];
 // PEM private keys come first, so no other rule cuts a key's markers apart.
 export const SECRET_SHAPE_RULES: readonly TextRule[] = [redactPemPrivateKeys, ...TOKEN_SHAPE_RULES];
