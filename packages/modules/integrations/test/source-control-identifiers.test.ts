@@ -19,7 +19,7 @@ test('a run identifier that is not a kernel identifier is a shape finding', asyn
     const lines = await patched((provider) => ({
       issueRunCredential: async (request) => ok({ ...(await issued(provider, request)), runId }),
     }));
-    assert.equal(shapeFindings(lines, 'credential.runId', KERNEL_IDENTIFIER).length, 6, runId);
+    assert.equal(shapeFindings(lines, 'credential.runId', KERNEL_IDENTIFIER).length, 7, runId);
   }
 });
 
@@ -28,7 +28,7 @@ test('an empty or unbounded credential repository is a shape finding', async () 
     const lines = await patched((provider) => ({
       issueRunCredential: async (request) => ok({ ...(await issued(provider, request)), repositories: [repository] }),
     }));
-    assert.equal(shapeFindings(lines, 'credential.repositories', EXTERNAL_IDENTIFIERS).length, 6);
+    assert.equal(shapeFindings(lines, 'credential.repositories', EXTERNAL_IDENTIFIERS).length, 7);
   }
 });
 

@@ -89,11 +89,10 @@ export type GitTreeEntry = TreeEntry | { readonly type: 'gitlink'; readonly comm
 
 // The run credential of the SCM port, passed per remote operation and
 // never stored in the workspace (contract section 7).
-export type WorkspaceCredential = Pick<RunCredential, 'credentialId' | 'secret' | 'repositories' | 'permissions'> & {
-  // The whole Authorization header value, formed by the SCM plugin's
-  // credential binding; as secret as `secret` itself.
-  readonly authorization: string;
-};
+export type WorkspaceCredential = Pick<
+  RunCredential,
+  'credentialId' | 'secret' | 'authorization' | 'repositories' | 'permissions'
+>;
 
 export type RemoteAccess = 'read-code' | 'write-code';
 

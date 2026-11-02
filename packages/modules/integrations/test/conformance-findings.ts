@@ -10,7 +10,7 @@ import { InMemoryScm, type ScmDefects, type ScmSetup } from './in-memory-source-
 
 // Helpers that run the suite and render its findings as text lines.
 
-const CASE_COUNT = 15;
+const CASE_COUNT = 17;
 
 export async function findings(fixture: SourceControlConformanceFixture): Promise<string[]> {
   const report = await runSourceControlConformance(fixture);
@@ -24,8 +24,11 @@ export function defective(defects: ScmDefects, setup: ScmSetup = {}): Promise<st
 }
 
 // The fake's own provider with some operations replaced.
-export function patched(override: (provider: SourceControlProvider) => Partial<SourceControlProvider>): Promise<string[]> {
-  const scm = new InMemoryScm();
+export function patched(
+  override: (provider: SourceControlProvider) => Partial<SourceControlProvider>,
+  setup: ScmSetup = {},
+): Promise<string[]> {
+  const scm = new InMemoryScm({}, setup);
   const provider = scm.provider();
   return findings(scm.fixture({ ...provider, ...override(provider) }));
 }

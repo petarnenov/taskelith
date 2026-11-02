@@ -7,18 +7,22 @@ import {
   type CommitStatusData,
   type MergeProtectionData,
   type MergeResult,
+  type RepositoryRemote,
   type RunCredential,
   type SourceControlCapabilities,
   type WebhookEvent,
 } from './source-control.js';
 import {
+  authorizationValue,
   externalIdentifier,
   externalIdentifiers,
   flag,
+  httpsRemoteUrl,
   kernelIdentifier,
   nonEmptyText,
   oneOf,
   optional,
+  positiveInteger,
   readRecord,
   text,
   texts,
@@ -40,10 +44,17 @@ export const readCapabilities = reader<SourceControlCapabilities>('capabilities'
 export const readRunCredential = reader<RunCredential>('credential', {
   credentialId: externalIdentifier,
   runId: kernelIdentifier,
+  version: positiveInteger,
   secret: nonEmptyText,
+  authorization: authorizationValue,
   repositories: externalIdentifiers,
   permissions: texts,
   expiresAt: text,
+});
+
+export const readRepositoryRemote = reader<RepositoryRemote>('remote', {
+  repository: externalIdentifier,
+  remoteUrl: httpsRemoteUrl,
 });
 
 export const readMergeProtection = reader<MergeProtectionData>('protection', {

@@ -381,7 +381,7 @@ A delivery SHALL follow the checks of account pool contract section 7.3, refusin
 - **THEN** the answer is 422 with reason `credential-ended` and nothing is issued or revealed
 
 #### Scenario: Ended version
-- **WHEN** a worker fetches a version whose secret a refresh ended
+- **WHEN** a worker fetches a version that a confirmed adoption of a higher version, its own `expiresAt`, or a revocation ended
 - **THEN** the answer is 422 with reason `credential-ended` and nothing is revealed
 
 ### Requirement: Remote re-check at SCM credential delivery
