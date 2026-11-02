@@ -11,7 +11,8 @@ G3 item 20 (`docs/g3-plan.md`, row 20), sub-change 20a, developed by a briefed s
 - `f2619531` `chore: revise the scm port to 0.2.0 with adoption, authorization, and remote url` (port, readers, cases, fixture, in-memory SCM, tests, and `WorkspaceCredential`).
 - `9f62a58c` `docs: describe the source control port revision 0.2.0` (the contract).
 - `a68207eb` `docs: route the revise scm port refresh and authorization change` (`route.json` unedited).
-- The commit after `a68207eb`: this record and `make record`, the head that review pass 1 reads.
+- `1cae2eb3` `docs: record the verification of the revise scm port refresh and authorization change`, the head that review pass 1 read.
+- Pass 1 fix round: `86a5e39a` `chore: probe unknown and revoked adoptions and a hidden repository in the scm conformance suite` (findings 1 and 2), `9b7136e4` `test: drive the refresh expiry test with a frozen service clock` (finding 4), `705ca4e1` `docs: align the scm port records and the wire credential wording with pass 1` (finding 3, the contract, and the execution wire contracts wording), and the commits after it: this record, `passes.jsonl`, `findings.jsonl` (finding 5), and `make record`.
 
 ## Environment
 
@@ -30,7 +31,32 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 ## Fail-before
 
-The tests of the new guarantees exercise the conformance suite against defective in-memory services, so each was run against a mutant of the suite with the guarantee removed (scripts `mutants.py` and `mutants2.py`, logs `mutants.log` and `mutants2.log` in the session scratchpad); every mutant was restored and the package rebuilt after its run. Before the suite existed, the new and updated tests failed against the revised port types with the old suite and fake: 96 of 103 tests failed (log `fail-before.log`).
+The tests of the new guarantees exercise the conformance suite against defective in-memory services, so each was run against a mutant of the suite with the guarantee removed. Each mutant is one exact text replacement in the source of `f2619531`, listed below; for each, the worktree applied it, ran `npx tsc -b packages/modules/integrations` and `node --experimental-strip-types --test packages/modules/integrations/test/*.test.ts` (M21 and M22: `packages/modules/integrations/test/source-control-refresh.test.ts` only) with Node.js 24.22.1, recorded the failing test names, restored the file, and rebuilt. The second table gives the failures. Before the suite existed, the new and updated tests failed against the revised port types with the old suite and fake: 96 of 103 tests failed; that run's output was not kept, so the mutants are the reproducible evidence.
+
+| Mutant | File under `packages/modules/integrations/src/ports/` | Text replaced | Replacement |
+| --- | --- | --- | --- |
+| M1 | `credential-cases.ts` | `await expectGrantedAccess(run, fixture, original, 'before the adoption of its successor');` | (line removed) |
+| M2 | `credential-cases.ts` | `await expectEnded(run, fixture, original, 'after the adoption of its successor');` | (line removed) |
+| M3 | `credential-cases.ts` | `await expectGrantedAccess(run, fixture, refreshed, 'after its adoption');` | (line removed) |
+| M4 | `credential-cases.ts` | `refreshed.version === previous.version + 1` | `true` |
+| M5 | `credential-cases.ts` | `refreshed.credentialId === previous.credentialId` | `true` |
+| M6 | `credential-cases.ts` | `refreshed.authorization !== previous.authorization` | `true` |
+| M7 | `credential-cases.ts` | `credential.version === 1` | `true` |
+| M8 | `credential-cases.ts` | `version: third.version + 1 }` | `version: third.version }` |
+| M9 | `credential-cases.ts` | `await expectRefused(run, fixture, readProbe(fixture, second, 'after a stale adoption'));` | (line removed) |
+| M10 | `credential-cases.ts` | `await expectReads(run, fixture, third, 'after the adoption of an earlier version');` | (line removed) |
+| M11 | `credential-cases.ts` | `await expectEnded(run, fixture, credential, 'after the revocation of its credential');` | (line removed) |
+| M12 | `credential-cases.ts` | `reader.authorization !== writer.authorization` | `true` |
+| M13 | `source-control-readers.ts` | `authorization: authorizationValue,` | `authorization: nonEmptyText,` |
+| M14 | `source-control-readers.ts` | `version: positiveInteger,` | `version: (() => undefined),` |
+| M15 | `source-control-readers.ts` | `remoteUrl: httpsRemoteUrl,` | `remoteUrl: text,` |
+| M16 | `remote-cases.ts` | `project.remoteUrl === fixture.projectRemoteUrl` | `true` |
+| M17 | `remote-cases.ts` | `foreign.remoteUrl !== project.remoteUrl` | `true` |
+| M18 | `remote-cases.ts` | `remote.repository === repository` | `true` |
+| M19 | `source-control-conformance.ts` | `['adopted credential', checkAdoptedCredential],` | (line removed) |
+| M20 | `source-control-conformance.ts` | `['repository remote', checkRepositoryRemote],` | (line removed) |
+| M21 | `untrusted-shapes.ts` | `value.length <= MAX_REMOTE_URL_LENGTH && REMOTE_URL.test(value)` | `value.length <= MAX_REMOTE_URL_LENGTH && !/[\s?#]/.test(value) && ((u) => u !== null && u.protocol === 'https:' && u.host !== '' && u.username === '' && u.password === '')(URL.parse(value))` |
+| M22 | `untrusted-shapes.ts` | `value.length <= MAX_AUTHORIZATION_LENGTH && AUTHORIZATION.test(value)` | `AUTHORIZATION.test(value)` |
 
 | Mutant | Tests that failed |
 | --- | --- |
@@ -54,13 +80,21 @@ The tests of the new guarantees exercise the conformance suite against defective
 | M21: the remote URL checked by the URL parser only, which accepts an IPv6 literal and port 0 | 1: the remote URL shape test |
 | M22: `authorization` without the 65536 bound | 1: the authorization shape test |
 
-The compile-time test "a run credential of the SCM port serves as a workspace credential" cannot build against `dev`'s types: with `dev`'s `RunCredential` and `WorkspaceCredential`, `tsc --strict` reports `TS2322: Type 'RunCredential' is not assignable to type 'WorkspaceCredential'` and "Property 'authorization' is missing" (log `align-fail-before.log`).
+The compile-time test "a run credential of the SCM port serves as a workspace credential" cannot build against `dev`'s types: with `dev`'s `RunCredential` and `WorkspaceCredential`, `tsc --strict` reports `TS2322: Type 'RunCredential' is not assignable to type 'WorkspaceCredential'` and "Property 'authorization' is missing" (output not kept; the error follows from `dev`'s `RunCredential`, which has no `authorization`).
+
+### Fail-before of the pass 1 fixes
+
+All runs in this worktree with Node.js 24.22.1.
+
+- Findings 1 and 2: with the new tests and the in-memory SCM of the fix round, and `packages/modules/integrations/src/ports/credential-cases.ts` and `remote-cases.ts` checked out from `1cae2eb3` (`git checkout 1cae2eb3 -- <both files>`, `npx tsc -b packages/modules/integrations`, then `node --experimental-strip-types --test packages/modules/integrations/test/*.test.ts`), 105 tests ran, 101 passed and 4 failed: "an adoption of an unknown credential that succeeds is reported", "an adoption of a revoked credential that succeeds is reported", and "a remote URL invented for a repository the plugin cannot see is reported", each with an empty finding list where one finding was expected, and "a remote URL of another repository is reported", whose patched provider now also gets the hidden-repository finding. The files were restored and rebuilt; then 105 of 105 passed, three runs.
+- Finding 4: `Date.now` advanced by 200 ms on every call emulates a slow host: `node --experimental-strip-types --import 'data:text/javascript,const n=Date.now;let k=0;Date.now=()=>n()+200*++k;' --test --test-name-pattern='moves the expiry back' packages/modules/integrations/test/source-control-results.test.ts`. On `1cae2eb3` (working tree stashed and the package rebuilt) the test failed with extra `refreshRunCredential returned an expiresAt that is not a canonical future instant` findings; on the fix round it passed (1 of 1).
+- Finding 3 changes a scenario, and finding 5 this record; neither is a behavior.
 
 ## Checks
 
 | Check | Revision | Result |
 | --- | --- | --- |
-| `make verify` | `a68207eb`, tree `6e8ee9f9` (log `20a-verify-2.log` in the session scratchpad) | Passed, profile full, stamp written: tests 4126, suites 49, pass 4079, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `credential-cases.js`, `remote-cases.js`, and `source-control-readers.js` 100 % each; `untrusted-shapes.js` 100 % lines, 95.65 % branches, 96.55 % functions; "Contract documents have no undeclared breaking change." An earlier run on the same commit (log `20a-verify-1.log`) passed with the same totals but wrote no stamp, because this record was written in the worktree during the run |
+| `make verify` | `a68207eb`, tree `6e8ee9f9` | Passed, profile full, stamp written: tests 4126, suites 49, pass 4079, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `credential-cases.js`, `remote-cases.js`, and `source-control-readers.js` 100 % each; `untrusted-shapes.js` 100 % lines, 95.65 % branches, 96.55 % functions; "Contract documents have no undeclared breaking change." An earlier run on the same commit passed with the same totals but wrote no stamp, because this record was written in the worktree during the run |
 | `npm run openspec -- validate revise-scm-port-refresh-and-authorization --strict` | `a68207eb` | `Change 'revise-scm-port-refresh-and-authorization' is valid` |
 | `npm run verify:archive` | `9f62a58c` | "Every active OpenSpec change archives into strictly valid specs." |
 | Focused runs | `f2619531` | `packages/modules/integrations/test/*.test.ts`: 102 of 102, three runs; `packages/modules/workspace/test/workspace-domain.test.ts`: 27 of 27 |
@@ -83,7 +117,23 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run. The coordinator runs the passes and records them here, in `passes.jsonl`, and in `findings.jsonl`.
+Every pass runs at effort medium although `route.json` recommends high (owner decision 2026-11-02).
+
+### Pass 1
+
+- Reviewer: role A, Codex CLI, model `gpt-6-astra`, effort medium; session `01a19e52-ff6c-7252-9ddb-1be5470ae760`; run by the coordinator on head `1cae2eb3`, which reported in Bulgarian; recorded here in English.
+- Counts: Critical 0, High 0, Medium 4, Low 1, as in `passes.jsonl`.
+- Findings and resolutions (outcome `fixed-unreviewed` until pass 2 checks them):
+  1. Medium, missing-fail-before-test (`packages/modules/integrations/src/ports/credential-cases.ts:63`): the adopted credential case probed adoption only for a version not yet issued, so a provider that confirmed an unknown or revoked credential passed. Fixed in `86a5e39a`: after the revocation the case confirms the revoked credential and an unknown one and expects `not-found`; defects `adoptsUnknownCredential` and `adoptsRevokedCredential` and their tests.
+  2. Medium, contract-drift (`packages/modules/integrations/src/ports/remote-cases.ts:8`): no refusal check for a repository the plugin cannot see. Fixed in `86a5e39a`: the fixture's new `hiddenRepository`, a `not-found` check, the defect `resolvesHiddenRepository` and its test; contract section 8 and 9 and the delta name it (`705ca4e1`).
+  3. Medium, spec-wording (`specs/scm-port/spec.md:14`): scenario "Long run" refreshed after the expiry. Fixed in `705ca4e1`: the refresh comes before the expiry, and the previous version works until the adoption, a revocation, or its own expiry, whichever comes first.
+  4. Medium, test-flakiness (`packages/modules/integrations/test/source-control-results.test.ts:138`): an expiry one second ahead of the live clock. Fixed in `9b7136e4`: `ScmSetup.now` injects the fake's clock, the test freezes it and sets the expiry half a lifetime ahead, before the original expiry.
+  5. Low, evidence-mismatch (`verification.md:33`): fail-before evidence cited files only in a session scratchpad. Fixed in this record: the mutant table gives each exact edit and the commands, and no record names a file outside the repository.
+- Fail-before: "Fail-before of the pass 1 fixes" above.
+
+### Scope widening
+
+Execution wire contracts section 8.7, "Version": scope widened by coordinator decision 2026-11-03 (contract drift created by the port change). The sentence now says that a fetch answers `credential-ended` for an ended version, which ends when a confirmed adoption of a higher version ends it, when its own `expiresAt` passes, or on a revocation. Wording only: no wire schema, OpenAPI or AsyncAPI document, reason code, or wire version changed. The living `execution-wire-contracts` spec still has scenario "Ended version", "a version whose secret a refresh ended"; it was reported to the coordinator and not edited.
 
 ## Limitations
 
@@ -92,7 +142,7 @@ Not yet run. The coordinator runs the passes and records them here, in `passes.j
 
 ## Questions for the coordinator
 
-1. Execution wire contracts section 8.7, "Version", says a fetch answers `credential-ended` for "a version whose secret a refresh, a revocation, or its expiry ended". Under port `0.2.0` a refresh ends no version; a confirmed adoption of a later version does. Recommendation: amend that sentence in the item 21 or 9c follow-up that owns the document; this change does not touch it, as the brief excludes the wire contracts.
+1. Execution wire contracts section 8.7, "Version": resolved by the coordinator's scope widening of 2026-11-03 (see "Scope widening"). Open: scenario "Ended version" of the living `execution-wire-contracts` spec still says "a version whose secret a refresh ended"; this change does not edit it.
 2. The port adds `version` to `RunCredential` and the request `RunCredentialAdoption`, which the brief did not name, because a confirmation must say which of several live versions the run adopted (design decision 1). It matches the wire's version numbering.
 
 ## Remaining gates

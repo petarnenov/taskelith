@@ -1,0 +1,1 @@
+{"change": "revise-scm-port-refresh-and-authorization", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a19e52-ff6c-7252-9ddb-1be5470ae760", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 1}}
