@@ -186,6 +186,18 @@ describe('createSessionGateway answer order', () => {
     expect(held[3]?.csrf).toBe(STALE_TOKEN);
   });
 
+  it('keeps the token of a later login over an earlier login that ends after it', async () => {
+    const { gateway, held } = heldControlPlane();
+    const earlier = gateway.logIn(credentials);
+    const later = gateway.logIn(credentials);
+    held[1]!.answer({ status: 200, body: AUTHENTICATED });
+    await later;
+    held[0]!.answer({ status: 200, body: { ...AUTHENTICATED, csrfToken: STALE_TOKEN } });
+    await earlier;
+    void gateway.logOut();
+    expect(held[2]?.csrf).toBe(SESSION_TOKEN);
+  });
+
   it('keeps the token of a read that answered after the logout was sent', async () => {
     const { gateway, held } = heldControlPlane();
     const signedIn = gateway.read();
