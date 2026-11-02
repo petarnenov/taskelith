@@ -109,7 +109,7 @@ Route (`route.json`, rule version 3): elevated (lines, files, security, contract
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `48615f3d7ca764d0149cdab4aebcfe5ec59df06c`; tests 4129, pass 4082, fail 0, skipped 47; all files 99.36% lines, 92.69% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `0d76a484312a4bdc4d68edd12bd2a7bf8be1a461`; tests 4129, pass 4082, fail 0, skipped 47; all files 99.36% lines, 92.68% branches, 98.84% functions.
 - `npm run openspec -- validate revise-scm-port-refresh-and-authorization --strict`: passed, `Change 'revise-scm-port-refresh-and-authorization' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 95 file(s); every pass summary file is valid: 75 file(s); every route file is valid: 30 file(s).`.
 - Spec diff against the merge base `ecf8cd3c62d2` with `origin/dev`: no change under `openspec/specs`.
