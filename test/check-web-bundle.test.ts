@@ -27,7 +27,8 @@ const DEVELOPMENT_ONLY_MARKERS: readonly [string, string][] = [
   ['dev-server.ts', 'TASKELITH_WEB_DEV_'],
   ['test/client.test.ts', 'csrf-fixture'],
   ['test/client.test.ts', 'fixture-password'],
-  ['test/app.test.tsx', 'names the scaffold honestly'],
+  ['test/app.test.tsx', 'shows nothing of the product until'],
+  ['test/fakes.tsx', '2026-11-02T10:00:00.000Z'],
 ];
 const SPA_FILE = /^(?:index\.html|assets\/index-[A-Za-z0-9_-]+\.(?:js|css))$/;
 
@@ -132,7 +133,7 @@ test('only the listed namespace names and error links pass, and only in scripts'
 
 test('every allowed URL is an exact string with a one-line reason', () => {
   for (const [url, reason] of ALLOWED_URLS) {
-    assert.match(url, /^https?:\/\/\S+$/);
+    assert.match(url, /^(?:[a-z]+:)?\/\/\S+$/);
     assert.match(reason, /^[^\n]{20,}\.$/);
     assert.deepEqual(textProblems('assets/a.js', `u="${url}"`), []);
     for (const variant of [`${url}x`, url.slice(0, -1)]) {

@@ -27,7 +27,7 @@ export const SECRET_SHAPES: readonly { readonly name: string; readonly pattern: 
 export const ENVIRONMENT_SHAPES: readonly RegExp[] = [/import\.meta\.env/, /\bVITE_[A-Z0-9_]+/, /\bBASE_URL\b/];
 
 // The only URLs a script may hold, each matched exactly and with its reason:
-// text that React DOM and Mantine never request. Any other URL fails.
+// text that React DOM, React Router, and Mantine never request.
 export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
   ['http://www.w3.org/1998/Math/MathML', 'React DOM names the MathML namespace of elements it creates.'],
   ['http://www.w3.org/1999/xlink', 'React DOM names the XLink namespace of xlink: attributes.'],
@@ -35,6 +35,13 @@ export const ALLOWED_URLS: ReadonlyMap<string, string> = new Map([
   ['http://www.w3.org/XML/1998/namespace', 'React DOM names the XML namespace of xml: attributes.'],
   ['https://react.dev/errors/', 'React prefixes the link of a minified error message with it.'],
   ['https://mantine.dev/theming/colors/#primary-color', 'Mantine links its invalid primary color error message to it.'],
+  ['http://localhost', 'React Router resolves a path against this base to parse it.'],
+  ['server://singlefetch/', 'React Router resolves a path against this base without a window.'],
+  [
+    'https://reactrouter.com/en/main/routers/picking-a-router.',
+    'React Router links its missing data router error message to it.',
+  ],
+  ['//g,', 'React Router escapes a slash with /\\//g, which reads so once unescaped.'],
 ]);
 
 // Any host after `//`: a name, IPv4, or [IPv6], with optional userinfo and
