@@ -13,7 +13,9 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28b, developed by a briefed s
 - `661fa865` `chore: build the web SPA session shell with routes, themes, and the D10 navigation`: `apps/web/src` and its tests, React Router's texts in `scripts/check-web-bundle.ts`, and the updated markers and allowlist format test in `test/check-web-bundle.test.ts`.
 - `2a727030` `docs: record the build-web-spa-shell design, spec delta, and README status`.
 - `a683a63b` `docs: route the build-web-spa-shell change` (`route.json`, unedited, at head `2a727030`): "route: elevated (lines, files, size), rule version 3"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `codex gpt-6.1-sol#high`; shadow `jev-1.14.0` elevated (P(third) 0.79) and agrees; recommendation only.
-- `docs: record the make verify of build-web-spa-shell` (this record), the `make record` of the passing `make verify` on the tree of `a683a63b`.
+- `bc71cc6b` `docs: record the make verify of build-web-spa-shell`, the `make record` of the passing `make verify` on the tree of `a683a63b`; pass 1 reviewed this head.
+- `226d6fa0` merges `origin/dev` `26697ab0` (#419, governance v10) without conflicts; the change is not routed again.
+- `9eece10a`, `1c7847b0`, and `a10be4ae`: the review pass 1 fixes, and the commit after them records the findings (section "Review pass 1 fixes").
 
 ## Environment
 
@@ -44,6 +46,28 @@ Logs in the session scratchpad.
 - React Router's texts (`fb-28b-allowlist.log`): the four new `ALLOWED_URLS` entries removed on the recorded tree, over the dist that `make verify` built; "the built web SPA holds no secret shape, environment value, or external origin": tests 1, pass 0, fail 1, naming `http://localhost`, `//g,`, `https://reactrouter.com/en/main/routers/picking-a-router.`, and `server://singlefetch/`; restored with `git checkout`.
 - Required-field asterisk: `withAsterisk={false}` turned back on in `SignInPage.tsx` before the commit; the sign-in page test failed (tests 21, pass 20, fail 1) and passed after the restore.
 - The other tests are new tests of new behavior; `test/theme-contrast.test.ts` also shows that Mantine's default dimmed text fails the 4.5:1 check.
+
+## Review pass 1 fixes
+
+Pass 1 (reviewer A, codex gpt-6-astra, variant medium, session `01a19e4e-66c1-75c3-8dfe-f7d538fc2060`) reported 0 Critical, 0 High, 5 Medium, and 4 Low findings (`findings.jsonl`, `passes.jsonl`).
+
+- `9eece10a` `chore: guard the web session against late and invalid answers and fit the shell to review pass 1` (findings 1 to 5 and 9).
+- `1c7847b0` `test: name the React Router source of each allowed bundle URL and reject near misses` (the coordinator's conditions on the allowlist).
+- `a10be4ae` `docs: apply review pass 1 fixes to the build-web-spa-shell design, spec delta, and review plan` (findings 6 to 8, and the fixes of the others in `design.md`).
+
+| Finding | Fix | Fail-before |
+| --- | --- | --- |
+| 1 (Medium) | The gateway's token keeper counts the logins and logouts that ended; an answer to a request sent before one ended keeps no token, and a late logout does not forget a later login's token (design, decision 1) | `fb-28b-p1-gateway.log`: the new tests against the gateway of `bc71cc6b`, tests 31, fail 16, among them both "answer order" tests (the stale read's token and the forgotten login token were sent) |
+| 2 (Medium) | A successful logout shows the sign-in page at once, cancelling the expiry check; every answer changes the view only if no newer view showed; the post-logout read takes over only an authenticated session (design, decision 2) | `fb-28b-p1-provider.log`: `SessionProvider.tsx` of `bc71cc6b` under the final tests, tests 29, fail 6, among them "shows the sign-in page as soon as the logout ends, before the next read", "keeps a new login over the read that followed the logout", and "keeps a new login over a logout that ends after the session expired"; `fb-28b-p1-guard-mutation.log`: with the provider's view guard disabled, the two "keeps a new login" tests fail |
+| 3 (Medium) | The gateway checks the fields it uses and maps an empty, HTML, incomplete, or unparsable body to unavailable; the provider reads a rejected gateway call as unavailable or a failed logout; the sign-in form always leaves its submitting state | `fb-28b-p1-gateway.log`: the 14 "invalid answers" tests failed (TypeError or a wrong outcome); `fb-28b-p1-provider.log`: the three "gateway that rejects" tests failed with unhandled rejections |
+| 4 (Medium) | Hover pairs of every variant and the hovered navigation link in the contrast test; `indigo.2` `#c8d3ff` in `createTheme` (4.13:1 to 4.59:1) | `fb-28b-p1-contrast-hover.log`: the extended test against the theme of `bc71cc6b`, tests 42, fail 1, "keeps hovered primary light at 4.5:1 or more", 4.127 in the light scheme |
+| 5 (Medium) | Below `sm` the header keeps the burger, the logo, "Needs you", and the account menu, and the navbar takes "New task" and the scheme switch, through Mantine's `visibleFrom` and `hiddenFrom` only (design, decision 5) | `fb-28b-p1-header.log`: the phone-width test against `AppLayout.tsx`, `navigation.tsx`, and `ColorSchemeToggle.tsx` of `bc71cc6b`, fail 1 (five controls instead of three) |
+| 6 (Low) | The retry-only page is limited to a session read without a valid answer; a failed login or logout keeps the current page and says so; scenarios "Control plane without a valid answer" and "Late answer" | Records only |
+| 7 (Low) | "a URL of an external origin" restored in "Web SPA bundle boundary" | Records only |
+| 8 (Low) | The review plan cites the owner decision of 2026-11-02 and governance v10, on this branch since `226d6fa0`, and calls `medium` the authorized effort | Records only |
+| 9 (Low) | The invalid-request hint states the `LoginName` pattern, 1 to 64 characters starting with a letter or digit, and a password of 1 to 1024; the fields carry `maxLength` 64 and 1024 | `fb-28b-p1-signin-limits.log`: against `SignInPage.tsx` of `bc71cc6b`, tests 29, fail 2, the boundary test (a 65th character was taken) and the invalid-request hint |
+
+Coordinator conditions on the bundle allowlist: each React Router entry is an exact string, which the check compares whole through `Map.has`, applies only to `.js` files, and has a comment naming its React Router 8.5.1 source (design, decision 11). The new test "the React Router texts pass only exactly and only in scripts" rejects `http://localhost:1234`, `http://localhost.example.com`, `https://localhost`, `server://singlefetch/x`, and `//g.example` in a script and every entry in `index.html` and a style sheet; it pins behavior that already held, so it passes on `bc71cc6b` too, and `fb-28b-p1-allowlist-mutation.log` shows it failing with a prefix match in place of `Map.has`. New task is the empty `PlannedPage` route stub that names item 30, and each departure from the proof of concept names its source in `docs/ui-poc/` and, where it applies, D10 (design, "Proof of concept").
 
 ## Checks
 
@@ -78,7 +102,11 @@ Reviewer mismatch: `route.json` (rule version 3) names `codex gpt-6.1-sol#high` 
 
 ### Pass 1
 
-Not run yet.
+Reviewer A, codex gpt-6-astra, variant medium, session `01a19e4e-66c1-75c3-8dfe-f7d538fc2060`, on head `bc71cc6b`: 0 Critical, 0 High, 5 Medium, 4 Low, all fixed (section "Review pass 1 fixes"); the counts match `passes.jsonl`.
+
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=build-web-spa-shell PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=review-28b-p1.md LOG=review-28b-p1.log`, prompt, log, report, and the output of `make review` (`review-28b-p1.out`) in the session scratchpad, outside the tree. `make review` ran `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C /Users/petarnenov/taskelith-worktrees/build-web-spa-shell -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-11-02T22:08:20.465Z, and printed "route: recommends effort high; the authorized medium applies (policy version 9)".
+- Confirmation, as `make review` printed it from the reviewer's log: `session: 01a19e4e-66c1-75c3-8dfe-f7d538fc2060`, `model: gpt-6-astra (reported)`, `effort: medium (reported)`, `sandbox: read-only (reported)`.
+- Snapshot: the tree's snapshot before and after the review was identical (`1bb5e429ebfd5074ddd1ae373ba62b7f78d88780ee6d432b842e99ac5722f4b1`); the reviewer changed no file.
 
 ### Pass 2
 
@@ -101,7 +129,7 @@ Place for the coordinator's check of any fix that no later pass reviews.
 
 ## Remaining gates
 
-- Independent review passes 1, 2, and, after a pass 2 with a Medium or worse finding, 3, recorded in `passes.jsonl`, `findings.jsonl`, and this record.
+- Independent review pass 2 and, after a pass 2 with a Medium or worse finding, pass 3, recorded in `passes.jsonl`, `findings.jsonl`, and this record; pass 1 is recorded.
 - Architect check by the coordinator of any unreviewed fixes.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
