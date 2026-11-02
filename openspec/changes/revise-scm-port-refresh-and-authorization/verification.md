@@ -138,7 +138,15 @@ Every pass runs at effort medium although `route.json` recommends high (owner de
 
 ### Scope widening
 
-Execution wire contracts section 8.7, "Version": scope widened by coordinator decision 2026-11-03 (contract drift created by the port change). The sentence now says that a fetch answers `credential-ended` for an ended version, which ends when a confirmed adoption of a higher version ends it, when its own `expiresAt` passes, or on a revocation. Wording only: no wire schema, OpenAPI or AsyncAPI document, reason code, or wire version changed. The living `execution-wire-contracts` spec still has scenario "Ended version", "a version whose secret a refresh ended"; it was reported to the coordinator and not edited.
+Execution wire contracts section 8.7, "Version": scope widened by coordinator decision 2026-11-03 (contract drift created by the port change). The sentence now says that a fetch answers `credential-ended` for an ended version, which ends when a confirmed adoption of a higher version ends it, when its own `expiresAt` passes, or on a revocation. Wording only: no wire schema, OpenAPI or AsyncAPI document, reason code, or wire version changed. Scenario "Ended version" of the living `execution-wire-contracts` spec: scope widened by coordinator decision 2026-11-03. The MODIFIED delta `specs/execution-wire-contracts/spec.md` copies requirement "Per-run SCM credential delivery" with its text and all six scenarios and changes only the scenario's WHEN line, from "a version whose secret a refresh ended" to "a version that a confirmed adoption of a higher version, its own `expiresAt`, or a revocation ended". Wording only: no schema, wire version, reason code, or OpenAPI or AsyncAPI change.
+
+| Check | Result |
+| --- | --- |
+| `diff <(sed -n 360,385p openspec/specs/execution-wire-contracts/spec.md) <(tail -n +3 specs/execution-wire-contracts/spec.md)` | One changed line, `25c25`, the WHEN line of scenario "Ended version"; nothing else differs |
+| `npm run openspec -- validate --all --strict` in the worktree | `Totals: 72 passed, 0 failed (72 items)` |
+| `npm run openspec -- archive revise-scm-port-refresh-and-authorization --yes` on a scratch copy outside the worktree | `Totals: + 3, ~ 4, - 0, → 0`, archived as `2026-11-03-revise-scm-port-refresh-and-authorization` |
+| `npm run openspec -- validate --all --strict` on the archived scratch copy | `Totals: 71 passed, 0 failed (71 items)` |
+| `diff` of the living `execution-wire-contracts` spec before and after the scratch archive | One changed line, `384c384`, the same WHEN line; the scratch copy was deleted afterward |
 
 ## Limitations
 
@@ -147,7 +155,7 @@ Execution wire contracts section 8.7, "Version": scope widened by coordinator de
 
 ## Questions for the coordinator
 
-1. Execution wire contracts section 8.7, "Version": resolved by the coordinator's scope widening of 2026-11-03 (see "Scope widening"). Open: scenario "Ended version" of the living `execution-wire-contracts` spec still says "a version whose secret a refresh ended"; this change does not edit it.
+1. Execution wire contracts section 8.7, "Version": resolved by the coordinator's scope widening of 2026-11-03 (see "Scope widening"). Scenario "Ended version" of the living `execution-wire-contracts` spec: resolved by the same scope widening through a MODIFIED delta.
 2. The port adds `version` to `RunCredential` and the request `RunCredentialAdoption`, which the brief did not name, because a confirmation must say which of several live versions the run adopted (design decision 1). It matches the wire's version numbering.
 
 ## Remaining gates
