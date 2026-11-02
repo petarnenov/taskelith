@@ -8,18 +8,28 @@ const TEXT = 'var(--mantine-color-text)';
 const DIMMED = 'var(--mantine-color-dimmed)';
 
 // Surfaces that Mantine's stylesheets set per scheme, not its resolvers:
-// Popover and Input backgrounds and the Menu item hover.
-const SURFACES: Record<Scheme, { dropdown: string; input: string; menuHover: string; alertText: string }> = {
+// Popover and Input backgrounds and the Menu item and NavLink hovers.
+interface Surfaces {
+  readonly dropdown: string;
+  readonly input: string;
+  readonly menuHover: string;
+  readonly navLinkHover: string;
+  readonly alertText: string;
+}
+
+const SURFACES: Record<Scheme, Surfaces> = {
   light: {
     dropdown: 'var(--mantine-color-white)',
     input: 'var(--mantine-color-white)',
     menuHover: 'var(--mantine-color-gray-1)',
+    navLinkHover: 'var(--mantine-color-gray-0)',
     alertText: 'var(--mantine-color-black)',
   },
   dark: {
     dropdown: 'var(--mantine-color-dark-6)',
     input: 'var(--mantine-color-dark-6)',
     menuHover: 'var(--mantine-color-dark-4)',
+    navLinkHover: 'var(--mantine-color-dark-6)',
     alertText: 'var(--mantine-color-white)',
   },
 };
@@ -29,9 +39,12 @@ type Pair = readonly [name: string, foreground: string, background: string];
 
 function shellPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
   const surfaces = SURFACES[scheme];
-  const variant = (name: string, kind: string, color: string): Pair => {
-    const { color: foreground, background } = colors.variant(kind, color);
-    return [name, foreground, background];
+  const variant = (name: string, kind: string, color: string): Pair[] => {
+    const { color: foreground, background, hover, hoverColor } = colors.variant(kind, color);
+    return [
+      [name, foreground, background],
+      [`hovered ${name}`, hoverColor, hover],
+    ];
   };
   const alert = (color: string): Pair[] => {
     const { color: title, background } = colors.variant('light', color);
@@ -47,10 +60,11 @@ function shellPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ['text on a dropdown', TEXT, surfaces.dropdown],
     ['text on a hovered menu item', TEXT, surfaces.menuHover],
     ['text in an input', TEXT, surfaces.input],
-    variant('primary filled', 'filled', 'indigo'),
-    variant('primary light', 'light', 'indigo'),
-    variant('gray subtle', 'subtle', 'gray'),
-    variant('default', 'default', 'gray'),
+    ['text on a hovered navigation link', TEXT, surfaces.navLinkHover],
+    ...variant('primary filled', 'filled', 'indigo'),
+    ...variant('primary light', 'light', 'indigo'),
+    ...variant('gray subtle', 'subtle', 'gray'),
+    ...variant('default', 'default', 'gray'),
     ...alert('indigo'),
     ...alert('red'),
   ];

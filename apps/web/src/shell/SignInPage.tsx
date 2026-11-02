@@ -4,9 +4,15 @@ import { CheckIcon, LogoIcon } from '../icons';
 import type { LoginRejection } from '../session/session';
 import { useSession, type SignedOutNotice } from '../session/SessionProvider';
 
+// The OpenAPI document's LoginName and Password schemas.
+const LOGIN_NAME_MAX_LENGTH = 64;
+const PASSWORD_MAX_LENGTH = 1024;
+
 const FAILURE_TEXT: Record<LoginRejection | 'unavailable', string> = {
   'wrong-credentials': 'The login name or the password is wrong.',
-  'invalid-request': 'Enter a login name of lowercase letters, digits, ".", "_", or "-", and a password.',
+  'invalid-request':
+    `Enter a login name of 1 to ${LOGIN_NAME_MAX_LENGTH} lowercase letters, digits, ".", "_", or "-" ` +
+    `that starts with a letter or digit, and a password of 1 to ${PASSWORD_MAX_LENGTH} characters.`,
   'form-expired': 'The sign-in form expired. Sign in again.',
   unavailable: 'The control plane cannot be reached. Try again.',
 };
@@ -23,8 +29,8 @@ export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
     setSubmitting(true);
     setFailure(undefined);
     const outcome = await logIn({ loginName, password });
-    if (outcome.kind === 'logged-in') return;
     setSubmitting(false);
+    if (outcome.kind === 'logged-in') return;
     setPassword('');
     setFailure(FAILURE_TEXT[outcome.kind === 'rejected' ? outcome.reason : outcome.kind]);
   }
@@ -48,6 +54,7 @@ export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
           <TextInput
             label="Login name"
             autoComplete="username"
+            maxLength={LOGIN_NAME_MAX_LENGTH}
             required
             withAsterisk={false}
             value={loginName}
@@ -56,6 +63,7 @@ export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
           <PasswordInput
             label="Password"
             autoComplete="current-password"
+            maxLength={PASSWORD_MAX_LENGTH}
             required
             withAsterisk={false}
             value={password}

@@ -1,4 +1,4 @@
-import { Button, Group, NavLink, Text } from '@mantine/core';
+import { Button, Group, NavLink, Text, type MantineBreakpoint } from '@mantine/core';
 import { Link, matchPath, useLocation } from 'react-router';
 import { InboxIcon, PlusIcon } from '../icons';
 import { MAIN_NAVIGATION, NEEDS_YOU, NEW_TASK, type PlannedScreen } from '../screens';
@@ -46,21 +46,34 @@ export function NavbarNavigation({ onNavigate }: { readonly onNavigate: () => vo
   ));
 }
 
-export function NewTaskButton() {
+export function NewTaskButton({ visibleFrom }: { readonly visibleFrom: MantineBreakpoint }) {
   const active = useIsActive()(NEW_TASK);
   return (
     <Button
       component={Link}
       to={NEW_TASK.path}
+      visibleFrom={visibleFrom}
       variant={active ? 'filled' : 'default'}
       leftSection={<PlusIcon />}
-      aria-label={NEW_TASK.label}
       aria-current={active ? 'page' : undefined}
     >
-      <Text span visibleFrom="sm" inherit>
-        {NEW_TASK.label}
-      </Text>
+      {NEW_TASK.label}
     </Button>
+  );
+}
+
+export function NewTaskNavLink({ onNavigate }: { readonly onNavigate: () => void }) {
+  const active = useIsActive()(NEW_TASK);
+  return (
+    <NavLink
+      component={Link}
+      to={NEW_TASK.path}
+      label={NEW_TASK.label}
+      leftSection={<PlusIcon />}
+      active={active}
+      aria-current={active ? 'page' : undefined}
+      onClick={onNavigate}
+    />
   );
 }
 

@@ -32,11 +32,39 @@ function controlPlane(...answers: (Answer | Error)[]) {
       body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
     });
     if (answer instanceof Error) throw answer;
-    const payload = answer.body === undefined ? null : JSON.stringify(answer.body);
-    const headers: HeadersInit = answer.body === undefined ? {} : { 'Content-Type': 'application/json' };
-    return new Response(payload, { status: answer.status, headers });
+    return response(answer);
   }) as typeof fetch;
   return { requests, gateway: createSessionGateway(send) };
+}
+
+function response(answer: Answer): Response {
+  const payload = answer.body === undefined ? null : JSON.stringify(answer.body);
+  const headers: HeadersInit = answer.body === undefined ? {} : { 'Content-Type': 'application/json' };
+  return new Response(payload, { status: answer.status, headers });
+}
+
+interface HeldRequest {
+  readonly method: string;
+  readonly csrf: string | null;
+  readonly answer: (answer: Answer) => Promise<void>;
+}
+
+// A control plane that holds each request until the test answers it, so
+// a test chooses the order in which the answers arrive.
+function heldControlPlane() {
+  const held: HeldRequest[] = [];
+  const send = ((_url: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((settle) => {
+      held.push({
+        method: init?.method ?? 'GET',
+        csrf: new Headers(init?.headers).get(CSRF_HEADER),
+        answer: async (answer) => {
+          settle(response(answer));
+          await new Promise((tick) => setTimeout(tick, 0));
+        },
+      });
+    })) as typeof fetch;
+  return { held, gateway: createSessionGateway(send) };
 }
 
 const anonymous: Answer = { status: 200, body: { state: 'anonymous', csrfToken: ANONYMOUS_TOKEN } };
@@ -119,5 +147,83 @@ describe('createSessionGateway logOut', () => {
     expect(await gateway.logOut()).toEqual({ kind: 'failed' });
     await gateway.logOut();
     expect(requests[2]?.csrf).toBe(SESSION_TOKEN);
+  });
+});
+
+describe('createSessionGateway answer order', () => {
+  const STALE_TOKEN = 'c'.repeat(43);
+  const staleAnonymous: Answer = { status: 200, body: { state: 'anonymous', csrfToken: STALE_TOKEN } };
+
+  it('keeps the login token over a read that started before the login and ends after it', async () => {
+    const { gateway, held } = heldControlPlane();
+    const first = gateway.read();
+    const second = gateway.read();
+    await held[1]!.answer(anonymous);
+    const login = gateway.logIn(credentials);
+    await held[2]!.answer({ status: 200, body: AUTHENTICATED });
+    await held[0]!.answer(staleAnonymous);
+    await Promise.all([first, second, login]);
+    void gateway.logOut();
+    expect(held.map(({ method, csrf }) => [method, csrf])).toEqual([
+      ['GET', null],
+      ['GET', null],
+      ['POST', ANONYMOUS_TOKEN],
+      ['DELETE', SESSION_TOKEN],
+    ]);
+  });
+
+  it('keeps the login token over a logout that started before the login and ends after it', async () => {
+    const { gateway, held } = heldControlPlane();
+    const read = gateway.read();
+    await held[0]!.answer({ status: 200, body: AUTHENTICATED });
+    const logout = gateway.logOut();
+    const login = gateway.logIn(credentials);
+    await held[2]!.answer({ status: 200, body: { ...AUTHENTICATED, csrfToken: STALE_TOKEN } });
+    await held[1]!.answer({ status: 204 });
+    await Promise.all([read, logout, login]);
+    void gateway.logOut();
+    expect(held[3]?.csrf).toBe(STALE_TOKEN);
+  });
+});
+
+describe('createSessionGateway invalid answers', () => {
+  const htmlResponse = () => new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+
+  function sendingOnly(make: () => Response) {
+    return createSessionGateway((async () => make()) as unknown as typeof fetch);
+  }
+
+  it.each([
+    ['an empty body', { status: 200 }],
+    ['an empty object', { status: 200, body: {} }],
+    ['an unknown state', { status: 200, body: { state: 'other', csrfToken: ANONYMOUS_TOKEN } }],
+    ['a missing token', { status: 200, body: { state: 'anonymous' } }],
+    ['a missing principal', { status: 200, body: { ...AUTHENTICATED, principal: undefined } }],
+    ['roles that are not a list', { status: 200, body: { ...AUTHENTICATED, installationRoles: 'installation-owner' } }],
+    ['an unreadable end', { status: 200, body: { ...AUTHENTICATED, expiresAt: 'soon' } }],
+  ])('reads %s as unavailable', async (_, answer) => {
+    const { gateway } = controlPlane(answer);
+    expect(await gateway.read()).toEqual({ kind: 'unavailable' });
+  });
+
+  it('reads an HTML page and incomplete JSON as unavailable', async () => {
+    expect(await sendingOnly(htmlResponse).read()).toEqual({ kind: 'unavailable' });
+    const incomplete = () => new Response('{"state":', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    expect(await sendingOnly(incomplete).read()).toEqual({ kind: 'unavailable' });
+  });
+
+  it.each([
+    ['an empty body', { status: 401 }],
+    ['an empty object', { status: 401, body: {} }],
+    ['a failure without a reason', { status: 401, body: { code: 'unauthenticated', message: 'x', details: {} } }],
+    ['an incomplete session', { status: 200, body: { state: 'authenticated', csrfToken: SESSION_TOKEN } }],
+    ['an empty success', { status: 200 }],
+  ])('maps a login answer with %s to unavailable', async (_, answer) => {
+    const { gateway } = controlPlane(answer);
+    expect(await gateway.logIn(credentials)).toEqual({ kind: 'unavailable' });
+  });
+
+  it('maps a login answer of an HTML page to unavailable', async () => {
+    expect(await sendingOnly(htmlResponse).logIn(credentials)).toEqual({ kind: 'unavailable' });
   });
 });

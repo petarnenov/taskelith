@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COLOR_SCHEME_KEY } from '../src/App';
 import { EXPIRY_MARGIN_MILLISECONDS } from '../src/session/SessionProvider';
-import type { LoginOutcome, SessionRead } from '../src/session/session';
+import type { LoginOutcome, LogoutOutcome, SessionRead } from '../src/session/session';
 import { ANONYMOUS, AUTHENTICATED, fakeGateway, HOUR, ManualClock, NOW, OPERATOR, renderApp } from './fakes';
 
 beforeEach(() => localStorage.clear());
@@ -72,6 +72,25 @@ describe('the sign-in page', () => {
   });
 });
 
+describe('the sign-in fields', () => {
+  it('take a login name of at most 64 characters and a password of at most 1024', async () => {
+    renderApp('/app/', fakeGateway(ANONYMOUS));
+    const user = userEvent.setup();
+    const loginName = (await screen.findByLabelText(/Login name/)) as HTMLInputElement;
+    const password = screen.getByLabelText(/Password/) as HTMLInputElement;
+    await user.click(loginName);
+    await user.paste('a'.repeat(64));
+    expect(loginName.value).toHaveLength(64);
+    await user.paste('b');
+    expect(loginName.value).toBe('a'.repeat(64));
+    await user.click(password);
+    await user.paste('p'.repeat(1024));
+    expect(password.value).toHaveLength(1024);
+    await user.paste('q');
+    expect(password.value).toBe('p'.repeat(1024));
+  });
+});
+
 describe('login', () => {
   it('logs in and shows the page of the address it was opened at', async () => {
     const gateway = fakeGateway();
@@ -83,7 +102,11 @@ describe('login', () => {
 
   it.each<[string, LoginOutcome, string]>([
     ['wrong credentials', { kind: 'rejected', reason: 'wrong-credentials' }, 'The login name or the password is wrong.'],
-    ['an invalid request', { kind: 'rejected', reason: 'invalid-request' }, 'Enter a login name of lowercase letters'],
+    [
+      'an invalid request',
+      { kind: 'rejected', reason: 'invalid-request' },
+      'Enter a login name of 1 to 64 lowercase letters, digits, ".", "_", or "-" that starts with a letter or digit, and a password of 1 to 1024 characters.',
+    ],
     ['an expired form', { kind: 'rejected', reason: 'form-expired' }, 'The sign-in form expired. Sign in again.'],
     ['an unreachable control plane', { kind: 'unavailable' }, 'The control plane cannot be reached. Try again.'],
   ])('explains %s and clears the password', async (_, outcome, text) => {
@@ -201,16 +224,109 @@ describe('session expiry', () => {
   });
 });
 
+describe('logout, expiry, and login in any order', () => {
+  async function signOut() {
+    const user = await openAccountMenu();
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+  }
+
+  it('shows the sign-in page as soon as the logout ends, before the next read', async () => {
+    const clock = new ManualClock();
+    const followUp = deferred<SessionRead>();
+    const gateway = fakeGateway(AUTHENTICATED);
+    gateway.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(followUp.promise);
+    renderApp('/app/', gateway, clock);
+    await signOut();
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(clock.pendingDelays()).toEqual([]);
+    await act(async () => followUp.resolve(ANONYMOUS));
+    expect(screen.getByText('You signed out')).toBeDefined();
+  });
+
+  it('keeps a new login over the read that followed the logout', async () => {
+    const followUp = deferred<SessionRead>();
+    const gateway = fakeGateway(AUTHENTICATED);
+    gateway.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(followUp.promise);
+    renderApp('/app/', gateway);
+    await signOut();
+    await signIn();
+    await screen.findByRole('heading', { level: 1, name: 'Project board' });
+    const otherTab: SessionRead = { kind: 'authenticated', operator: { ...OPERATOR, loginName: 'other' } };
+    await act(async () => followUp.resolve(otherTab));
+    expect(screen.getByRole('button', { name: 'Account menu' }).textContent).toBe('OP');
+  });
+
+  it('keeps a new login over a logout that ends after the session expired', async () => {
+    const clock = new ManualClock();
+    const logout = deferred<LogoutOutcome>();
+    const gateway = fakeGateway(AUTHENTICATED);
+    gateway.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(ANONYMOUS).mockResolvedValueOnce(ANONYMOUS);
+    gateway.logOut.mockReturnValueOnce(logout.promise);
+    renderApp('/app/', gateway, clock);
+    await signOut();
+    act(() => clock.advance(HOUR + EXPIRY_MARGIN_MILLISECONDS));
+    await screen.findByText('Your session expired');
+    await signIn();
+    await screen.findByRole('heading', { level: 1, name: 'Project board' });
+    await act(async () => logout.resolve({ kind: 'logged-out' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Project board' })).toBeDefined();
+    expect(gateway.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the signed-out page over an expiry read that ends after the logout', async () => {
+    const clock = new ManualClock();
+    const expiry = deferred<SessionRead>();
+    const gateway = fakeGateway(AUTHENTICATED);
+    gateway.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(expiry.promise).mockResolvedValueOnce(ANONYMOUS);
+    renderApp('/app/', gateway, clock);
+    await screen.findByRole('heading', { level: 1, name: 'Project board' });
+    act(() => clock.advance(HOUR + EXPIRY_MARGIN_MILLISECONDS));
+    await signOut();
+    await screen.findByText('You signed out');
+    await act(async () => expiry.resolve(AUTHENTICATED));
+    expect(screen.getByText('You signed out')).toBeDefined();
+  });
+});
+
+describe('a gateway that rejects', () => {
+  it('reads a rejected session read as an unreachable control plane', async () => {
+    const gateway = fakeGateway();
+    gateway.read.mockRejectedValueOnce(new Error('broken'));
+    renderApp('/app/', gateway);
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeDefined();
+  });
+
+  it('releases the sign-in form after a rejected login', async () => {
+    const gateway = fakeGateway();
+    gateway.logIn.mockRejectedValueOnce(new Error('broken'));
+    renderApp('/app/', gateway);
+    await signIn();
+    expect((await screen.findByRole('alert')).textContent).toContain('The control plane cannot be reached.');
+    expect(screen.getByRole('button', { name: 'Sign in' }).hasAttribute('data-loading')).toBe(false);
+  });
+
+  it('stays signed in after a rejected logout', async () => {
+    const gateway = fakeGateway(AUTHENTICATED);
+    gateway.logOut.mockRejectedValueOnce(new Error('broken'));
+    renderApp('/app/', gateway);
+    const user = await openAccountMenu();
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('did not end the session');
+  });
+});
+
 describe('the color scheme', () => {
   it('starts dark and keeps the chosen scheme for the next visit', async () => {
     const first = renderApp('/app/');
     expect(document.documentElement.getAttribute('data-mantine-color-scheme')).toBe('dark');
-    await userEvent.click(await screen.findByRole('button', { name: 'Switch to the light theme' }));
+    const header = within(await screen.findByRole('banner'));
+    await userEvent.click(header.getByRole('button', { name: 'Switch to the light theme' }));
     expect(document.documentElement.getAttribute('data-mantine-color-scheme')).toBe('light');
     expect(localStorage.getItem(COLOR_SCHEME_KEY)).toBe('light');
     first.unmount();
     renderApp('/app/');
-    expect(await screen.findByRole('button', { name: 'Switch to the dark theme' })).toBeDefined();
+    expect(within(await screen.findByRole('banner')).getByRole('button', { name: 'Switch to the dark theme' })).toBeDefined();
     expect(document.documentElement.getAttribute('data-mantine-color-scheme')).toBe('light');
   });
 });

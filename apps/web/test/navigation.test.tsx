@@ -62,9 +62,10 @@ describe('the navigation', () => {
     await screen.findByRole('heading', { level: 1, name: 'Project board' });
     await user.click(navigation(HEADER_NAVIGATION).getByRole('link', { name: 'Sessions' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Agent sessions' })).toBeDefined();
-    await user.click(screen.getByRole('link', { name: 'New task' }));
+    const header = within(screen.getByRole('banner'));
+    await user.click(header.getByRole('link', { name: 'New task' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'New task' })).toBeDefined();
-    expect(screen.getByRole('link', { name: 'New task' }).getAttribute('aria-current')).toBe('page');
+    expect(header.getByRole('link', { name: 'New task' }).getAttribute('aria-current')).toBe('page');
     await user.click(screen.getByRole('link', { name: 'Needs you' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Needs you' })).toBeDefined();
     expect(screen.getByRole('link', { name: 'Needs you' }).getAttribute('aria-current')).toBe('page');
@@ -79,6 +80,39 @@ describe('the navigation', () => {
     await user.click(navigation(NAVBAR_NAVIGATION).getByRole('link', { name: 'Workers' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Workers and account pools' })).toBeDefined();
     expect(burger.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+// jsdom applies no media query, so the test reads Mantine's visibleFrom
+// and hiddenFrom classes, which hide an element below the breakpoint.
+function shownBelowSm(element: Element): boolean {
+  return element.closest('[class*="mantine-visible-from-"]') === null;
+}
+
+describe('the phone-width header', () => {
+  it('keeps three targets and the logo and moves New task and the scheme switch to the navbar', async () => {
+    renderApp('/app/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { level: 1, name: 'Project board' });
+    const header = screen.getByRole('banner');
+    const controls = [...header.querySelectorAll('a, button')].filter(shownBelowSm);
+    expect(controls.map((control) => control.getAttribute('aria-label') ?? control.textContent)).toEqual([
+      'Toggle navigation',
+      'Needs you',
+      'Account menu',
+    ]);
+    const navbarExtras = within(screen.getByRole('navigation', { name: NAVBAR_NAVIGATION }).parentElement!);
+    const newTask = navbarExtras.getByRole('link', { name: 'New task' });
+    const schemeSwitch = navbarExtras.getByRole('button', { name: 'Switch to the light theme' });
+    for (const control of [newTask, schemeSwitch]) {
+      expect(control.closest('[class*="mantine-hidden-from-sm"]')).not.toBeNull();
+    }
+    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }));
+    await user.click(schemeSwitch);
+    expect(document.documentElement.getAttribute('data-mantine-color-scheme')).toBe('light');
+    await user.click(newTask);
+    expect(await screen.findByRole('heading', { level: 1, name: 'New task' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Toggle navigation' }).getAttribute('aria-expanded')).toBe('false');
   });
 });
 

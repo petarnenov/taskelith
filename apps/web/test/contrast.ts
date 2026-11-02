@@ -20,9 +20,18 @@ interface Rgba {
   readonly a: number;
 }
 
+// The rest and hover colors of a component variant; Mantine keeps the
+// text color on hover unless the resolver names a hover color.
+export interface VariantColors {
+  readonly background: string;
+  readonly color: string;
+  readonly hover: string;
+  readonly hoverColor: string;
+}
+
 export interface SchemeColors {
   readonly resolve: (value: string) => string;
-  readonly variant: (variant: string, color: MantineColor) => { background: string; color: string };
+  readonly variant: (variant: string, color: MantineColor) => VariantColors;
 }
 
 export function schemeColors(override: MantineThemeOverride, scheme: Scheme): SchemeColors {
@@ -33,7 +42,8 @@ export function schemeColors(override: MantineThemeOverride, scheme: Scheme): Sc
     resolve: (value) => resolveVariable(variables, value),
     variant: (variant, color) => {
       const colors = defaultVariantColorsResolver({ color, theme, variant });
-      return { background: colors.background, color: colors.color };
+      const hoverColor = colors.hoverColor ?? colors.color;
+      return { background: colors.background, color: colors.color, hover: colors.hover, hoverColor };
     },
   };
 }

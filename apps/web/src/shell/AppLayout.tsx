@@ -6,8 +6,12 @@ import { LogoIcon } from '../icons';
 import type { Operator } from '../session/session';
 import { useSession } from '../session/SessionProvider';
 import { AccountMenu } from './AccountMenu';
-import { ColorSchemeToggle } from './ColorSchemeToggle';
-import { HeaderNavigation, NavbarNavigation, NeedsYouButton, NewTaskButton } from './navigation';
+import { ColorSchemeNavLink, ColorSchemeToggle } from './ColorSchemeToggle';
+import { HeaderNavigation, NavbarNavigation, NeedsYouButton, NewTaskButton, NewTaskNavLink } from './navigation';
+
+// Below this breakpoint a 320 px header holds only the burger, the logo,
+// "Needs you", and the account menu; the navbar takes the other two.
+const MOBILE_EXTRAS_BREAKPOINT = 'sm';
 
 export function AppLayout({ operator }: { readonly operator: Operator }) {
   const { logOut } = useSession();
@@ -38,15 +42,21 @@ export function AppLayout({ operator }: { readonly operator: Operator }) {
           </Group>
           <HeaderNavigation />
           <Group gap="sm" ml="auto" wrap="nowrap">
-            <NewTaskButton />
+            <NewTaskButton visibleFrom={MOBILE_EXTRAS_BREAKPOINT} />
             <NeedsYouButton />
-            <ColorSchemeToggle />
+            <ColorSchemeToggle visibleFrom={MOBILE_EXTRAS_BREAKPOINT} />
             <AccountMenu operator={operator} onLogOut={() => void signOut()} />
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Navbar p="sm" component="nav" aria-label="Main menu">
-        <NavbarNavigation onNavigate={close} />
+      <AppShell.Navbar p="sm">
+        <AppShell.Section component="nav" aria-label="Main menu" grow>
+          <NavbarNavigation onNavigate={close} />
+        </AppShell.Section>
+        <AppShell.Section hiddenFrom={MOBILE_EXTRAS_BREAKPOINT}>
+          <NewTaskNavLink onNavigate={close} />
+          <ColorSchemeNavLink />
+        </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main>
         {logoutFailed ? (

@@ -27,13 +27,15 @@ const SEGMENT_LINE_HEIGHT = TARGET_SIZE - 2 * SEGMENT_PADDING_Y;
 // these shades lift it to 4.5:1 on every surface the shell draws.
 const gray = withShade(DEFAULT_THEME.colors.gray, 6, '#6c757d');
 const dark = withShade(DEFAULT_THEME.colors.dark, 2, '#999999');
+// indigo.2 is the light scheme's hovered light variant behind indigo.9.
+const indigo = withShade(DEFAULT_THEME.colors.indigo, 2, '#c8d3ff');
 
 export const theme = createTheme({
   primaryColor: 'indigo',
   primaryShade: { light: 7, dark: 8 },
   respectReducedMotion: true,
   defaultRadius: 'md',
-  colors: { gray, dark },
+  colors: { gray, dark, indigo },
   components: {
     ActionIcon: ActionIcon.extend({ defaultProps: { size: 'xl' } }),
     Anchor: Anchor.extend({

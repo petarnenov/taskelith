@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Clock } from './clock';
 import type { Credentials, LoginOutcome, LogoutOutcome, Operator, SessionGateway, SessionRead } from './session';
 
@@ -37,79 +37,129 @@ interface SessionProviderProps {
 }
 
 export function SessionProvider({ gateway, clock, children }: SessionProviderProps) {
-  const [view, setView] = useState<SessionView>({ status: 'checking' });
+  const settled = useMemo(() => settledGateway(gateway), [gateway]);
+  const { view, show, sinceNow } = useSessionView();
   const [checks, setChecks] = useState(0);
-  useInitialCheck(gateway, checks, setView);
-  useExpiryCheck(gateway, clock, view, setView);
+  useInitialCheck(settled, checks, sinceNow);
+  useExpiryCheck(settled, clock, view, sinceNow);
 
   const retry = useCallback(() => {
-    setView({ status: 'checking' });
+    show({ status: 'checking' });
     setChecks((count) => count + 1);
-  }, []);
+  }, [show]);
 
   const logIn = useCallback(
     async (credentials: Credentials) => {
-      const outcome = await gateway.logIn(credentials);
-      if (outcome.kind === 'logged-in') setView({ status: 'signed-in', operator: outcome.operator });
-      if (outcome.kind === 'rejected' && outcome.reason === 'form-expired') await renewAnonymousSession(gateway, setView);
+      const showIfUnchanged = sinceNow();
+      const outcome = await settled.logIn(credentials);
+      if (outcome.kind === 'logged-in') showIfUnchanged({ status: 'signed-in', operator: outcome.operator });
+      if (outcome.kind === 'rejected' && outcome.reason === 'form-expired') {
+        await renewAnonymousSession(settled, sinceNow());
+      }
       return outcome;
     },
-    [gateway],
+    [settled, sinceNow],
   );
 
+  // The shell leaves as soon as the session ended; the read that follows
+  // only fetches the token of the next anonymous session.
   const logOut = useCallback(async () => {
-    const outcome = await gateway.logOut();
-    if (outcome.kind === 'logged-out') setView(viewOf(await gateway.read(), 'signed-out'));
+    const showIfUnchanged = sinceNow();
+    const outcome = await settled.logOut();
+    if (outcome.kind === 'logged-out' && showIfUnchanged(SIGNED_OUT)) {
+      await renewAnonymousSession(settled, sinceNow());
+    }
     return outcome;
-  }, [gateway]);
+  }, [settled, sinceNow]);
 
   const session = useMemo(() => ({ view, retry, logIn, logOut }), [view, retry, logIn, logOut]);
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
 
-type SetView = (view: SessionView) => void;
+const SIGNED_OUT: SessionView = { status: 'signed-out', notice: 'signed-out' };
 
-function useInitialCheck(gateway: SessionGateway, checks: number, setView: SetView): void {
+// Shows the view only if no other view showed since the request was sent,
+// so that a late answer never undoes a newer one; reports whether it did.
+type ShowIfUnchanged = (view: SessionView) => boolean;
+
+function useSessionView() {
+  const [view, setView] = useState<SessionView>({ status: 'checking' });
+  const changes = useRef(0);
+  const show = useCallback((next: SessionView) => {
+    changes.current += 1;
+    setView(next);
+  }, []);
+  const sinceNow = useCallback((): ShowIfUnchanged => {
+    const sentAt = changes.current;
+    return (next) => {
+      if (sentAt !== changes.current) return false;
+      show(next);
+      return true;
+    };
+  }, [show]);
+  return { view, show, sinceNow };
+}
+
+function useInitialCheck(gateway: SessionGateway, checks: number, sinceNow: () => ShowIfUnchanged): void {
   useEffect(() => {
     let current = true;
+    const showIfUnchanged = sinceNow();
     void gateway.read().then((read) => {
-      if (current) setView(viewOf(read, 'none'));
+      if (current) showIfUnchanged(viewOf(read, 'none'));
     });
     return () => {
       current = false;
     };
-  }, [gateway, checks, setView]);
+  }, [gateway, checks, sinceNow]);
 }
 
 // At the end the session announced, read it again: another tab or request
 // may have renewed it; otherwise the sign-in page says that it expired.
-function useExpiryCheck(gateway: SessionGateway, clock: Clock, view: SessionView, setView: SetView): void {
+function useExpiryCheck(gateway: SessionGateway, clock: Clock, view: SessionView, sinceNow: () => ShowIfUnchanged): void {
   const operator = view.status === 'signed-in' ? view.operator : undefined;
   useEffect(() => {
     if (operator === undefined) return undefined;
     let current = true;
     const delay = Math.max(operator.expiresAt - clock.now(), 0) + EXPIRY_MARGIN_MILLISECONDS;
     const cancel = clock.schedule(delay, () => {
+      const showIfUnchanged = sinceNow();
       void gateway.read().then((read) => {
-        if (current) setView(viewOf(read, 'expired'));
+        if (current) showIfUnchanged(viewOf(read, 'expired'));
       });
     });
     return () => {
       current = false;
       cancel();
     };
-  }, [gateway, clock, operator, setView]);
+  }, [gateway, clock, operator, sinceNow]);
 }
 
 // A fresh anonymous session gives the next login a valid CSRF token; a
 // session that another tab logged in meanwhile is taken over.
-async function renewAnonymousSession(gateway: SessionGateway, setView: SetView): Promise<void> {
+async function renewAnonymousSession(gateway: SessionGateway, showIfUnchanged: ShowIfUnchanged): Promise<void> {
   const read = await gateway.read();
-  if (read.kind === 'authenticated') setView(viewOf(read, 'none'));
+  if (read.kind === 'authenticated') showIfUnchanged(viewOf(read, 'none'));
 }
 
 function viewOf(read: SessionRead, notice: SignedOutNotice): SessionView {
   if (read.kind === 'authenticated') return { status: 'signed-in', operator: read.operator };
   if (read.kind === 'anonymous') return { status: 'signed-out', notice };
   return { status: 'unavailable' };
+}
+
+// The shell reads a gateway that throws as an unreachable control plane.
+function settledGateway(gateway: SessionGateway): SessionGateway {
+  return {
+    read: () => settle(gateway.read, { kind: 'unavailable' }),
+    logIn: (credentials) => settle(() => gateway.logIn(credentials), { kind: 'unavailable' }),
+    logOut: () => settle(gateway.logOut, { kind: 'failed' }),
+  };
+}
+
+async function settle<T>(call: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await call();
+  } catch {
+    return fallback;
+  }
 }
