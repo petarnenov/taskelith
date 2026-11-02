@@ -70,6 +70,22 @@ Pass 1 (reviewer A, codex gpt-6-astra, variant medium, session `01a19e4e-66c1-75
 
 Coordinator conditions on the bundle allowlist: each React Router entry is an exact string, which the check compares whole through `Map.has`, applies only to `.js` files, and has a comment naming its React Router 8.5.1 source (design, decision 11). The new test "the React Router texts pass only exactly and only in scripts" rejects `http://localhost:1234`, `http://localhost.example.com`, `https://localhost`, `server://singlefetch/x`, and `//g.example` in a script and every entry in `index.html` and a style sheet; it pins behavior that already held, so it passes on `bc71cc6b` too, and `fb-28b-p1-allowlist-mutation.log` shows it failing with a prefix match in place of `Map.has`. New task is the empty `PlannedPage` route stub that names item 30, and each departure from the proof of concept names its source in `docs/ui-poc/` and, where it applies, D10 (design, "Proof of concept").
 
+## Review pass 2 fixes
+
+Pass 2 (reviewer B, claude claude-fable-5-1, variant medium, session `2d5fe890-4da1-4bfa-8a59-bc44100e3b2c`) confirmed the nine pass 1 fixes and reported 0 Critical, 0 High, 0 Medium, and 6 Low findings (`findings.jsonl`, `passes.jsonl`). Under governance "Low findings are fixed" they are fixed without another pass and are unreviewed fixes (section "Architect check of unreviewed fixes").
+
+- `f261f3e2` `chore: keep the token of a read that answered after the logout was sent` (L1 and L2).
+- `d84bbd83` `docs: apply review pass 2 fixes to the build-web-spa-shell records` (L3 to L6).
+
+| Finding | Fix | Fail-before |
+| --- | --- | --- |
+| L1 (Low) | The token keeper counts the tokens it kept; a logout that ends drops the token only when no read kept one since the logout was sent, because such a read holds the anonymous session that followed (`end` in `createTokenKeeper`) | `fb-28b-p2-logout-read.log`: the new test "keeps the token of a read that answered after the logout was sent" against the gateway of `1e44ec1e`, tests 32, pass 31, fail 1, `expected null to be 'aaaa…'` (the login carried no CSRF token) |
+| L2 (Low) | The held answer only settles the response, without a `setTimeout` tick; each answer-order test awaits the gateway promise of the request it answered | Test change only; the three answer-order tests pass |
+| L3 (Low) | The proposal and this record name three color tuple shades (`gray.6`, `dark.2`, `indigo.2`) | Records only |
+| L4 (Low) | The requirement lengths are 471 ("Web SPA session shell") and 456 ("Web SPA bundle boundary") characters | Records only |
+| L5 (Low) | `verify-28b-1.log` and `verify-28b-2.log` are named as the runs on the tree of `a683a63b` | Records only |
+| L6 (Low) | The checks table cites `5575058c`, whose `make verify` ran the listed checks | Records only |
+
 ## Checks
 
 | Check | Revision | Result |
@@ -116,15 +132,22 @@ Reviewer A, codex gpt-6-astra, variant medium, session `01a19e4e-66c1-75c3-8dfe-
 
 ### Pass 2
 
-Not run yet.
+Reviewer B, claude claude-fable-5-1, variant medium, session `2d5fe890-4da1-4bfa-8a59-bc44100e3b2c`, on head `1e44ec1e`: 0 Critical, 0 High, 0 Medium, 6 Low, all fixed (section "Review pass 2 fixes"); the counts match `passes.jsonl`. It confirmed that the nine pass 1 fixes are correct and complete.
+
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=build-web-spa-shell PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' PROMPT=review-28b-p2.md LOG=review-28b-p2.log`, prompt, log, and report in the session scratchpad, outside the tree; started 2026-11-02T22:45:36.201Z; `make review` printed that the route recommends effort high and the authorized medium applies (policy version 10).
+- Confirmation, as `make review` printed it from the reviewer's log: session `2d5fe890-4da1-4bfa-8a59-bc44100e3b2c`, model `claude-fable-5-1` (reported).
+- Snapshot: the tree's snapshot before and after the review was identical (`250549423ed3d9e6a964bd036d0aa7df74fe2d127d39f3075d15ac9868fd2071`); the reviewer changed no file.
 
 ### Pass 3
 
-Not run yet; runs only after a pass 2 with a Medium or worse finding.
+Not run: pass 2 reported only Low findings, so the review stops (governance "Low findings are fixed").
 
 ### Architect check of unreviewed fixes
 
-Place for the coordinator's check of any fix that no later pass reviews.
+The pass 2 fixes are unreviewed fixes; no later pass reviews them. Each awaits the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"):
+
+- L1 and L2, `f261f3e2` (`apps/web/src/session/control-plane-session.ts`, `apps/web/test/control-plane-session.test.ts`): architect check pending.
+- L3 to L6, `d84bbd83` (`proposal.md`, `verification.md`): architect check pending.
 
 ## Limitations
 
@@ -135,7 +158,6 @@ Place for the coordinator's check of any fix that no later pass reviews.
 
 ## Remaining gates
 
-- Independent review pass 2 and, after a pass 2 with a Medium or worse finding, pass 3, recorded in `passes.jsonl`, `findings.jsonl`, and this record; pass 1 is recorded.
-- Architect check by the coordinator of any unreviewed fixes.
+- Architect check of the unreviewed pass 2 fixes by the coordinator.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
