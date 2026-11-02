@@ -16,7 +16,9 @@ G3 item 28 (`docs/g3-plan.md`, row 28), sub-change 28b, developed by a briefed s
 - `bc71cc6b` `docs: record the make verify of build-web-spa-shell`, the `make record` of the passing `make verify` on the tree of `a683a63b`; pass 1 reviewed this head.
 - `226d6fa0` merges `origin/dev` `26697ab0` (#419, governance v10) without conflicts; the change is not routed again.
 - `9eece10a`, `1c7847b0`, and `a10be4ae`: the review pass 1 fixes; `5575058c` records the findings and pass 1 (section "Review pass 1 fixes").
-- `docs: record the make verify of build-web-spa-shell after review pass 1` (this record), the `make record` of the passing `make verify` on the tree of `5575058c`.
+- `1e44ec1e` `docs: record the make verify of build-web-spa-shell after review pass 1`, the `make record` of the passing `make verify` on the tree of `5575058c`; pass 2 reviewed this head.
+- `f261f3e2`, `d84bbd83`, and `8eb98967`: the review pass 2 fixes and a coverage test; `96d000bc` records the findings and pass 2 (section "Review pass 2 fixes").
+- `docs: record the make verify of build-web-spa-shell after review pass 2` (this record), the `make record` of the passing `make verify` on the tree of `8eb98967`.
 
 ## Environment
 
@@ -32,11 +34,11 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 - Secrecy: no credential, token, or key is in the repository, the bundle, or a log; the tests use fixture strings (`fixture-password`, `fixture-secret`, tokens of repeated letters). The CSRF token lives in memory only.
 - Spec delta: `product-ui` adds "Web SPA session shell" (471 characters), "Web SPA session expiry" (274), "Web SPA screen routes" (368), and "Web SPA color schemes" (362), and modifies "Web SPA bundle boundary" (456, 413 before), keeping its four scenarios and adding "Development NODE_ENV in the shell". `npm run verify:archive` archives it into strictly valid specs.
 - Comments: `npm run verify:comments` passes; it does not check `.tsx`, so every comment in the new `.tsx` files was checked by hand against two lines of 80 characters (coordinator answer 6 of 28a).
-- Coverage of `apps/web/src`: statements 100% (320/320), branches 100% (163/163), functions 100% (103/103), lines 100% (267/267), in the Vitest run of the `make verify` below (tests 141, pass 141); before review pass 1: statements 100% (237/237), branches 99.17% (120/121), functions 100% (79/79), lines 100% (199/199), tests 106.
+- Coverage of `apps/web/src`: statements 100% (326/326), branches 100% (167/167), functions 100% (105/105), lines 100% (272/272), in the Vitest run of the `make verify` below (tests 143, pass 143); after review pass 1: statements 100% (320/320), branches 100% (163/163), functions 100% (103/103), lines 100% (267/267), tests 141; before review pass 1: statements 100% (237/237), branches 99.17% (120/121), functions 100% (79/79), lines 100% (199/199), tests 106.
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). The Vitest totals and coverage above are from `verify-28b-p1.log` in the session scratchpad, a passing `make verify` on its first run on the tree of `5575058c` (`8c42edc3`), tests 4092, pass 4083, fail 0, skipped 9; the totals before review pass 1 were from `verify-28b-2.log`, the second `make verify` on the tree of `a683a63b`. The first `make verify` on that tree (`verify-28b-1.log`) failed only `packages/adapters/postgres/test/fleet-conformance.integration.test.ts` "a token that expires while its use waits for the row lock enrolls nothing" (tests 4090, pass 4080, fail 1, skipped 9): the test gives its token one second of life and holds a row lock for 1.5 s, and the loaded host stretched it; this change touches no PostgreSQL code, and the second run passed unchanged.
+The generated part below matches the tree (`make record-check`). The Vitest totals and coverage above are from `verify-28b-p2c.log` in the session scratchpad, a passing `make verify` on the tree of `8eb98967` (`ab451025`), tests 4092, pass 4083, fail 0, skipped 9. On the same tree `verify-28b-p2b.log` failed only two timing-bound tests that this change does not touch: `packages/adapters/postgres/test/fleet-conformance.integration.test.ts` "a token that expires while its use waits for the row lock enrolls nothing" (see below) and `test/installation-script.test.ts` "a bound with a leading zero is read in base 10", whose timer measured 9.085 s for a 10 s bound (tests 4092, pass 4081, fail 2, skipped 9); the rerun passed unchanged. `verify-28b-p2.log` passed on the tree of `96d000bc` (`21f92754`) with `apps/web/src` branches at 99.4% (166/167): the stale-login branch of `change` lost its test when L1 moved logout to `end`, and `8eb98967` adds that test. The totals after review pass 1 were from `verify-28b-p1.log`, a passing `make verify` on its first run on the tree of `5575058c` (`8c42edc3`); the totals before review pass 1 were from `verify-28b-2.log`, the second `make verify` on the tree of `a683a63b`. The first `make verify` on that tree (`verify-28b-1.log`) failed only `packages/adapters/postgres/test/fleet-conformance.integration.test.ts` "a token that expires while its use waits for the row lock enrolls nothing" (tests 4090, pass 4080, fail 1, skipped 9): the test gives its token one second of life and holds a row lock for 1.5 s, and the loaded host stretched it; this change touches no PostgreSQL code, and the second run passed unchanged.
 
 ## Fail-before
 
@@ -76,6 +78,7 @@ Pass 2 (reviewer B, claude claude-fable-5-1, variant medium, session `2d5fe890-4
 
 - `f261f3e2` `chore: keep the token of a read that answered after the logout was sent` (L1 and L2).
 - `d84bbd83` `docs: apply review pass 2 fixes to the build-web-spa-shell records` (L3 to L6).
+- `8eb98967` `test: keep a later login token over an earlier login that ends after it`: after L1 only logins reach the stale branch of `change`, so this test keeps branch coverage of `apps/web/src` at 100%; it pins behavior that already held.
 
 | Finding | Fix | Fail-before |
 | --- | --- | --- |
@@ -90,10 +93,11 @@ Pass 2 (reviewer B, claude claude-fable-5-1, variant medium, session `2d5fe890-4
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `npm run test --workspace=@taskelith/web` (inside `make verify`) | `8eb98967` | tests 143, pass 143; statements 100%, branches 100%, functions 100%, lines 100% |
 | `npm run test --workspace=@taskelith/web` (inside `make verify`) | `5575058c` | tests 141, pass 141; statements 100%, branches 100%, functions 100%, lines 100% |
 | `npm run test --workspace=@taskelith/web` (inside `make verify`) | `a683a63b` | tests 106, pass 106; statements 100%, branches 99.17%, functions 100%, lines 100% |
-| `npm run verify:comments`, `verify:links`, `verify:archive`, `verify:findings`, `verify:web-api-types`, `check:boundaries` (inside `make verify`) | `5575058c` | each passed |
-| `npm run openspec -- validate build-web-spa-shell --strict` | `5575058c` | `Change 'build-web-spa-shell' is valid` |
+| `npm run verify:comments`, `verify:links`, `verify:archive`, `verify:findings`, `verify:web-api-types`, `check:boundaries` (inside `make verify`) | `5575058c`, `8eb98967` | each passed |
+| `npm run openspec -- validate build-web-spa-shell --strict` | `5575058c`, `8eb98967` | `Change 'build-web-spa-shell' is valid` |
 | `make record-check CHANGE=build-web-spa-shell` | this record | `the generated part matches the tree` |
 
 <!-- make record: begin -->
@@ -101,7 +105,7 @@ Pass 2 (reviewer B, claude claude-fable-5-1, variant medium, session `2d5fe890-4
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8c42edc3d13db7a2ee44a603e1381b7a3fee3024`; tests 4092, pass 4083, fail 0, skipped 9; all files 99.39% lines, 92.57% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `ab451025008c848c5b4b4a52e136af529c94c991`; tests 4092, pass 4083, fail 0, skipped 9; all files 99.39% lines, 92.59% branches, 98.87% functions.
 - `npm run openspec -- validate build-web-spa-shell --strict`: passed, `Change 'build-web-spa-shell' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 96 file(s); every pass summary file is valid: 76 file(s); every route file is valid: 30 file(s).`.
 - Spec diff against the merge base `26697ab03a21` with `origin/dev`: no change under `openspec/specs`.
@@ -110,6 +114,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19e4e-66c1-75c3-8dfe-f7d538fc2060` | 0 | 0 | 5 | 4 |
+| 2 | B | `claude claude-fable-5-1#medium` | `2d5fe890-4da1-4bfa-8a59-bc44100e3b2c` | 0 | 0 | 0 | 6 |
 <!-- make record: end -->
 
 ## Independent review
@@ -147,6 +152,7 @@ Not run: pass 2 reported only Low findings, so the review stops (governance "Low
 The pass 2 fixes are unreviewed fixes; no later pass reviews them. Each awaits the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"):
 
 - L1 and L2, `f261f3e2` (`apps/web/src/session/control-plane-session.ts`, `apps/web/test/control-plane-session.test.ts`): architect check pending.
+- Coverage test, `8eb98967` (`apps/web/test/control-plane-session.test.ts`): architect check pending.
 - L3 to L6, `d84bbd83` (`proposal.md`, `verification.md`): architect check pending.
 
 ## Limitations
