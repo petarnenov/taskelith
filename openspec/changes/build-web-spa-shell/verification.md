@@ -68,13 +68,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Review plan (governance v10, owner decision 2026-11-02; at most three passes, stopping at a pass that reports only Low findings or none):
+Review plan (at most three passes, stopping at a pass that reports only Low findings or none), after the owner decision of 2026-11-02 that governance policy version 10 records: `docs/governance.md` on this branch holds version 10 since `226d6fa0` merged `origin/dev` `26697ab0` (#419, `assign-argon-to-review-pass-3`); the tree that pass 1 reviewed held version 9, and the decision applied to it already under "Tasks during the change to version 10":
 
 - Pass 1: reviewer A `codex gpt-6-astra#medium`.
 - Pass 2: reviewer B `claude claude-fable-5-1#medium`.
 - Pass 3, only after a pass 2 with a Medium or worse finding: reviewer A `agy gemini-4-argon-medium#medium`.
 
-Reviewer mismatch: `route.json` (rule version 3) names `codex gpt-6.1-sol#high` for pass 3 and effort `high` for every pass; by owner decision 2026-11-02 pass 3 is Argon, and every pass runs at the routed effort `medium` that the brief names.
+Reviewer mismatch: `route.json` (rule version 3) names `codex gpt-6.1-sol#high` for pass 3 and effort `high` for every pass, which only recommends (governance "Routed effort"). Pass 3 is Argon by the owner decision of 2026-11-02 (governance v10, "Reviewer assignment"), and every pass runs at `medium`, the effort that the authorized reviewer list authorizes and the brief names, not the routed `high`. Later passes keep this `route.json`; the change is not routed again.
 
 ### Pass 1
 
@@ -95,8 +95,8 @@ Place for the coordinator's check of any fix that no later pass reviews.
 ## Limitations
 
 - No browser run against a running installation: the shell was tested in jsdom with a fake gateway and a fake `fetch`, and `make web-dev` was not started; 28c or the first installation run closes this, as for 28a.
-- jsdom has no layout, so the 44 px targets are checked through the theme's default props, not measured, and the phone-width layout was not checked in a browser.
-- The contrast test covers the pairs the shell draws (design, decision 7), not hover states or the pairs of later screens.
+- jsdom has no layout, so the 44 px targets are checked through the theme's default props, not measured; the phone-width header is checked through Mantine's `visibleFrom` and `hiddenFrom` classes and the width arithmetic of design decision 5, not in a browser at 320 px.
+- The contrast test covers the pairs the shell draws at rest and hovered (design, decision 7), not focus rings or the pairs of later screens.
 - The expiry check trusts the client clock within a 10 s margin (design, "Risks and trade-offs").
 
 ## Remaining gates

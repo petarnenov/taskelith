@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Web SPA session shell
-The SPA SHALL read the caller's session through `readSession` before it shows any page, show only a sign-in page while the session is anonymous, log in through `logIn` with the anonymous session's CSRF token, and log out through `logOut`; the navigation, the account menu, and the pages SHALL show only in an authenticated session, and an unreachable control plane SHALL show no page but a retry.
+The SPA SHALL read the caller's session through `readSession` before it shows any page, show only a sign-in page while the session is anonymous, log in through `logIn` with the anonymous session's CSRF token, and log out through `logOut`; the navigation, the account menu, and the pages SHALL show only in an authenticated session. A session read without a valid answer SHALL show no page but a retry; a login or logout without one SHALL keep the current page and say so.
 
 #### Scenario: Anonymous visit
 - **WHEN** a browser without a logged-in session opens any address under `/app/`
@@ -13,7 +13,15 @@ The SPA SHALL read the caller's session through `readSession` before it shows an
 
 #### Scenario: Logout
 - **WHEN** the operator signs out and `logOut` ends the session or answers that it had already ended
-- **THEN** the SPA shows the sign-in page, which says that only this browser session ended; when `logOut` fails, the SPA stays signed in and says so
+- **THEN** the SPA shows the sign-in page as soon as `logOut` answers, which says that only this browser session ended; when `logOut` fails, the SPA stays signed in and says so
+
+#### Scenario: Control plane without a valid answer
+- **WHEN** `readSession`, `logIn`, or `logOut` gets no answer, an undocumented status, or a body without the fields the SPA uses
+- **THEN** a session read shows only a retry, a login keeps the sign-in page saying that the control plane cannot be reached, and a logout keeps the operator signed in saying that the session did not end
+
+#### Scenario: Late answer
+- **WHEN** the answer to a session request arrives after a login or logout that was sent later has ended
+- **THEN** the late answer changes neither the page nor the CSRF token that the next request carries
 
 ### Requirement: Web SPA session expiry
 When the time that the session's `expiresAt` names has passed, the SPA SHALL read the session again; an authenticated answer SHALL keep the operator signed in until its new `expiresAt`, and an anonymous one SHALL show the sign-in page with a notice that the session expired.
@@ -55,7 +63,7 @@ The SPA SHALL start in the dark color scheme, switch between dark and light, and
 ## MODIFIED Requirements
 
 ### Requirement: Web SPA bundle boundary
-`make verify` SHALL fail when SPA source under `apps/web/src/` imports a Node built-in, a server SDK, any `@taskelith/` workspace package, or a file outside `apps/web/src/`, or reads `import.meta.env` other than `MODE`, and when the production bundle, which the build makes whatever `NODE_ENV` says, holds a secret shape, an environment value, or a URL other than a fixed list of library texts that are never requested in its scripts.
+`make verify` SHALL fail when SPA source under `apps/web/src/` imports a Node built-in, a server SDK, any `@taskelith/` workspace package, or a file outside `apps/web/src/`, or reads `import.meta.env` other than `MODE`, and when the production bundle, which the build makes whatever `NODE_ENV` says, holds a secret shape, an environment value, or a URL of an external origin other than a fixed list of library texts that are never requested in its scripts.
 
 #### Scenario: External font
 - **WHEN** the built bundle references a font or stylesheet on an external origin
