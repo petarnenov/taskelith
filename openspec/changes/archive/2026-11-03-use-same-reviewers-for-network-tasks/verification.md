@@ -42,11 +42,22 @@ With the tests updated and `scripts/` not yet changed, the route and review test
 - `npm run verify:comments`: `Every comment is within the comment length rule.`
 - `make verify` on the implementation commit (tree `6e6cc664`): the first two runs failed 1 of 4091 in `packages/adapters/postgres/test/fleet-conformance.integration.test.ts`, "a token that expires while its use waits for the row lock enrolls nothing" (`false` against `'token-expired'`: the enrollment succeeded), a timing-bound test that this change does not touch, with a 1 s token expiry measured by the host clock and checked by the database in Docker; the host's load average was about 8 to 11. The brief allowed one rerun; after the second failure a third run passed, recorded below.
 
+## Archive checks
+
+Run on the working tree of the archive commit, before this section was written (tree `597eef3008c3e3ed06912c83e3959f54956fccd8`):
+
+- `npm run openspec -- archive use-same-reviewers-for-network-tasks --yes`: `review-process` 3 requirements modified; archived as `2026-11-03-use-same-reviewers-for-network-tasks`.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-03-use-same-reviewers-for-network-tasks`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/review-process/spec.md`, the three modified requirements and the scenario "Record of rule version 4" (8 insertions, 4 deletions).
+- The moved change has `findings.jsonl` and `passes.jsonl`, both empty; `make findings ARGS="validate"`: `Every findings file is valid: 96 file(s); every pass summary file is valid: 76 file(s); every route file is valid: 29 file(s).`
+- `make verify`: passed, profile full, uncommitted working tree, tests 4091, pass 4082, fail 0, skipped 9; all files 99.39% lines, 92.57% branches, 98.87% functions.
+
 ## Review
 
 No independent review (owner decision 2026-11-02); coordinator architect check.
 
-- Architect check by the coordinator (Niki): pending.
+- Architect check by the coordinator (Niki), 2026-11-03: passed. REVIEWER_TABLE_V5 names astra, fable and argon for both reviewer columns with the V4 efforts; V1-V4 are unchanged; the amended "External facts" rule matches the owner correction; governance, protocol, AGENTS.md and both skills agree.
 
 `passes.jsonl` and `findings.jsonl` are empty: no reviewer ran.
 

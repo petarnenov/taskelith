@@ -24,5 +24,5 @@
 
 ## 6. Review and archive
 
-- [ ] 6.1 No independent review (owner decision, 2026-11-02); architect check by the coordinator
-- [ ] 6.2 Archive the change
+- [x] 6.1 No independent review (owner decision, 2026-11-02); architect check by the coordinator
+- [x] 6.2 Archive the change
