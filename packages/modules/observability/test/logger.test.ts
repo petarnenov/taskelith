@@ -24,6 +24,9 @@ const CREDS_END = '------END USER NKEY SEED------';
 const pem = (edge: 'BEGIN' | 'END', type: string) => `-----${edge} ${type}-----`;
 const KEY_BODY = 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg';
 const CERTIFICATE = `${pem('BEGIN', 'CERTIFICATE')}\nMIIBkTCCATegAwIBAgIUFakeCertificateBody\n${pem('END', 'CERTIFICATE')}`;
+// Synthetic GitHub installation tokens: stateful, and stateless with a JWT.
+const GITHUB_TOKEN = `ghs_${'A1b2'.repeat(9)}`;
+const GITHUB_STATELESS_TOKEN = `ghs_12345_${JWT}`;
 const CREDS = `${CREDS_BEGIN}\n${JWT}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${SEED}\n${CREDS_END}`;
 
 function logger(): { sink: InMemoryLogSink; logger: Logger } {
@@ -87,6 +90,21 @@ test('issued secrets, seeds, JWTs, and creds blocks are redacted in fields and c
   assert.equal(redactText('tkop_short and eyJa.b stay'), 'tkop_short and eyJa.b stay');
 });
 
+test('GitHub installation tokens are redacted in fields and correlation, even glued', () => {
+  const { sink, logger: log } = logger();
+  log.with({ correlationId: `r-${GITHUB_TOKEN}` }).warn('e', { cause: `push x${GITHUB_TOKEN} or ${GITHUB_STATELESS_TOKEN} failed` });
+  const record = sink.records[0]!;
+  assert.equal(record.correlation.correlationId, `r-${REDACTED}`);
+  assert.equal(record.fields['cause'], `push x${REDACTED} or ${REDACTED} failed`);
+});
+
+test('near misses of a GitHub installation token stay', () => {
+  const body = 'A1b2'.repeat(9);
+  for (const kept of [`ghx_${body}`, `GHS_${body}`, `ghs_${body.slice(1)}`, `ghs-${body}`]) {
+    assert.equal(redactText(`keep ${kept} here`), `keep ${kept} here`, kept);
+  }
+});
+
 test('PEM private keys of every type are redacted, whole or cut, and certificates stay', () => {
   for (const type of ['PRIVATE KEY', 'ENCRYPTED PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY']) {
     const key = `${pem('BEGIN', type)}\n${KEY_BODY}\n${pem('END', type)}`;
@@ -113,7 +131,7 @@ test('a marked secret in front of a PEM key leaves no part of the key', () => {
 
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
-  assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'SA', 'a://', 'a://b@']);
+  assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'ghs_', 'SA', 'a://', 'a://b@']);
   assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], 400_000);
   const keyBegin = pem('BEGIN', 'PRIVATE KEY');
   assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], 400_000);

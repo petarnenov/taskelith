@@ -46,6 +46,24 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED, worker: 'w1' }]);
 });
 
+test('text loses GitHub installation tokens, stateful or stateless, even glued', () => {
+  const token = `ghs_${'A1b2'.repeat(9)}`;
+  const stateless = `ghs_12345_${'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl'}`;
+  assert.equal(redactSecrets(`token ${token} failed`), `token ${REDACTED} failed`);
+  assert.equal(redactSecrets(`x${token}`), `x${REDACTED}`, 'a prefix glued in front hides nothing');
+  assert.equal(redactSecrets(`token ${stateless} failed`), `token ${REDACTED} failed`);
+  const redacted = redactFailure(failure('forbidden', `bad ${stateless}`, { presented: token }));
+  assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED }]);
+  assert.deepEqual(scrubEnvironment({ GIT_HINT: `use ${token}`, KEEP: 'k' }), { KEEP: 'k' });
+});
+
+test('near misses of a GitHub installation token stay', () => {
+  const body = 'A1b2'.repeat(9);
+  for (const kept of [`ghx_${body}`, `GHS_${body}`, `ghs_${body.slice(1)}`, `ghs-${body}`]) {
+    assert.equal(redactSecrets(`keep ${kept} here`), `keep ${kept} here`, kept);
+  }
+});
+
 test('the user information of a URL is redacted, percent-encoded or not', () => {
   assert.equal(redactSecrets('postgres://owner:example-password@localhost/taskelith'), `postgres://${REDACTED}@localhost/taskelith`);
   assert.equal(redactSecrets('connect nats://s3cr%40t:p%2Fw@127.0.0.1:4222 failed'), `connect nats://${REDACTED}@127.0.0.1:4222 failed`);
@@ -60,7 +78,7 @@ test('the user information of a URL is redacted, percent-encoded or not', () => 
 
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa', 'eyJa.b.', 'proxy-', 'x.eyJ'];
-  assertLinearOnRuns(redactSecrets, [...units, 'tkop_', 'SA', 'a://', 'a://b@']);
+  assertLinearOnRuns(redactSecrets, [...units, 'tkop_', 'ghs_', 'SA', 'a://', 'a://b@']);
   const begin = '-----BEGIN NATS USER JWT-----';
   assertLinearOnRuns(redactSecrets, [begin, `${begin}a`], 400_000);
 });
