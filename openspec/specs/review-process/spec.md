@@ -30,7 +30,7 @@ Each change without an owner-accepted review exception SHALL be independently re
 
 #### Scenario: Review depends on external facts
 - **WHEN** a change's review depends on external facts
-- **THEN** the reviewer of every pass has network access
+- **THEN** the reviewers of passes 2 and 3 have network access, and pass 1 is `codex gpt-6-astra#medium`, which has none, so it cannot check external facts
 
 ### Requirement: Pass cap and finding handling
 A change SHALL receive at most three review passes. Critical, High, or Medium findings of pass 3 SHALL be fixed without another review, recorded as unreviewed fixes, and checked under "Architect check of unreviewed fixes"; one the author does not fix SHALL be decided by the owner, and a further pass SHALL need the owner's permission. Low findings SHALL be fixed, and a pass with only Low findings SHALL NOT trigger another pass.
@@ -411,15 +411,15 @@ In an active change, each reviewer of `findings.jsonl` and `passes.jsonl` SHALL 
 - **THEN** validation passes, the archived file is not rewritten, and `reviewers` and `index` count its passes and findings under the canonical key, in one row with that reviewer's other passes and findings
 
 ### Requirement: Reviewer assignment
-The coordinator SHALL assign each new change the reviewer of each pass that the governance policy's reviewer assignment names for the change, not the next ones in the rotation. The reviewers it names for a change whose review depends on external facts, which needs network access, MAY share a harness in adjacent passes. An OpenCode reviewer SHALL NOT review pass 1 or 3, also not as a replacement, and MAY review pass 2 only of a documentation-only change.
+The coordinator SHALL assign each new change the reviewer of each pass that the governance policy's reviewer assignment names for the change, not the next ones in the rotation. A change whose review depends on external facts, which needs network access, SHALL have the same reviewers as every other change. An OpenCode reviewer SHALL NOT review pass 1 or 3, also not as a replacement, and MAY review pass 2 only of a documentation-only change.
 
 #### Scenario: Assigned reviewers available
 - **WHEN** a new change without external facts is assigned and the reviewers that the assignment names are available
-- **THEN** pass 1 is `codex gpt-6-astra#medium`, pass 2 `claude claude-fable-5-1#medium`, and pass 3 `codex gpt-6.1-sol#medium`
+- **THEN** pass 1 is `codex gpt-6-astra#medium`, pass 2 `claude claude-fable-5-1#medium`, and pass 3 `agy gemini-4-argon-medium#medium`
 
 #### Scenario: Change that needs network access
 - **WHEN** a new change's review depends on external facts, so it needs network access
-- **THEN** passes 1 and 3 are `claude claude-fable-5-1#medium` and pass 2 `claude claude-opus-5-5#medium`, and `verification.md` names this rule as the reason for the shared harness
+- **THEN** pass 1 is `codex gpt-6-astra#medium`, pass 2 `claude claude-fable-5-1#medium`, and pass 3 `agy gemini-4-argon-medium#medium`
 
 #### Scenario: OpenCode reviewer for a code change
 - **WHEN** the reviewer of pass 2 of a change that is not documentation-only must be replaced and the next reviewer in the rotation is an OpenCode reviewer
@@ -468,11 +468,11 @@ The rule router SHALL be deterministic and, since rule version 2, SHALL recommen
 
 #### Scenario: Large change
 - **WHEN** a change without external facts changes 420 lines in 6 files of one capability
-- **THEN** the rule recommends `elevated` with trigger `lines`, pass 1 `codex gpt-6-astra#high`, pass 2 `claude claude-fable-5-1#high`, and pass 3 `codex gpt-6.1-sol#high`
+- **THEN** the rule recommends `elevated` with trigger `lines`, pass 1 `codex gpt-6-astra#high`, pass 2 `claude claude-fable-5-1#high`, and pass 3 `agy gemini-4-argon-medium#medium`
 
 #### Scenario: Small change with external facts
 - **WHEN** a change whose `design.md` has an "External facts" section changes 40 lines and fires no trigger
-- **THEN** the rule recommends `standard` with passes 1 and 3 `claude claude-fable-5-1#medium` and pass 2 `claude claude-opus-5-5#medium`
+- **THEN** the rule recommends `standard` with pass 1 `codex gpt-6-astra#medium`, pass 2 `claude claude-fable-5-1#medium`, and pass 3 `agy gemini-4-argon-medium#medium`
 
 #### Scenario: Same input, same decision
 - **WHEN** the rule router routes the same features twice
@@ -481,6 +481,14 @@ The rule router SHALL be deterministic and, since rule version 2, SHALL recommen
 #### Scenario: Record of rule version 2
 - **WHEN** an archived `route.json` of rule version 2 is validated
 - **THEN** its pass plans are checked against the version 2 table, with pass 2 `claude claude-opus-5-5`
+
+#### Scenario: Record of rule version 3
+- **WHEN** an archived `route.json` of rule version 3 is validated
+- **THEN** its pass plans are checked against the version 3 table, with pass 3 `codex gpt-6.1-sol`
+
+#### Scenario: Record of rule version 4
+- **WHEN** an archived `route.json` of rule version 4 with external facts is validated
+- **THEN** its pass plans are checked against the version 4 table, with pass 1 `claude claude-fable-5-1` and pass 2 `claude claude-opus-5-5`
 
 ### Requirement: Shadow routing
 The shadow router SHALL ask TypeSafe AI's Jev model one `noul` question, whether the change will need review pass 3, with criteria taken from the review sequence stop rule, never from the rule router's triggers. Its probability P(third), the threshold 0.4, the tier that P(third) maps to, `elevated` at or above the threshold and `standard` below it, and that tier's pass plans SHALL be recorded beside the rule's and SHALL NOT change the rule's recommendation.

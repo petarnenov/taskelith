@@ -79,9 +79,9 @@ test('the command writes a valid route.json and prints the summary', async () =>
   assert.equal(record.headCommit, HEAD_COMMIT);
   assert.equal(record.features.linesChanged, 40);
   assert.equal(record.features.size, 'M');
-  assert.match(run.stdout, /^route: elevated \(security\), rule version 3$/m);
+  assert.match(run.stdout, /^route: elevated \(security\), rule version 5$/m);
   assert.match(run.stdout, /^pass 1, reviewer A: codex gpt-6-astra#high$/m);
-  assert.match(run.stdout, /^pass 3, reviewer A: codex gpt-6\.1-sol#high, only after a pass 2 with a Medium or worse finding$/m);
+  assert.match(run.stdout, /^pass 3, reviewer A: agy gemini-4-argon-medium#medium, only after a pass 2 with a Medium or worse finding$/m);
   assert.equal(run.stderr, 'shadow router failed (timeout); the rule decided alone\n');
 });
 

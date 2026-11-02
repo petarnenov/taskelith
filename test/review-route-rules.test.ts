@@ -9,13 +9,32 @@ import { featuresWith, QUIET_FEATURES, touching } from './review-route-fake.ts';
 
 const planKeys = (tier: Tier, externalFacts: boolean) => passPlans(tier, { externalFacts }).map(({ reviewer }) => reviewerKey(reviewer));
 
-// Fails before the change: rule version 2 planned opus for pass 2.
-test('the reviewer table of rule version 3 plans fable for pass 2', () => {
-  assert.equal(RULE_VERSION, 3);
-  assert.deepEqual(planKeys('standard', false), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'codex gpt-6.1-sol#medium']);
-  assert.deepEqual(planKeys('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'claude claude-fable-5-1#medium']);
-  assert.deepEqual(planKeys('elevated', false), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'codex gpt-6.1-sol#high']);
-  assert.deepEqual(planKeys('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#high', 'claude claude-fable-5-1#high']);
+// Fails before the change: rule version 4 planned fable and opus for
+// passes 1 and 2 of a networked change.
+test('the reviewer table of rule version 5 plans a networked change as any other', () => {
+  assert.equal(RULE_VERSION, 5);
+  assert.deepEqual(planKeys('standard', false), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(planKeys('standard', true), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(planKeys('elevated', false), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(planKeys('elevated', true), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'agy gemini-4-argon-medium#medium']);
+});
+
+test('rule version 4 keeps its reviewer table', () => {
+  const keysOf = (tier: Tier, externalFacts: boolean) =>
+    versionedPassPlans(4, tier, { externalFacts })!.map(({ reviewer }) => reviewerKey(reviewer));
+  assert.deepEqual(keysOf('standard', false), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(keysOf('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(keysOf('elevated', false), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'agy gemini-4-argon-medium#medium']);
+  assert.deepEqual(keysOf('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#high', 'agy gemini-4-argon-medium#medium']);
+});
+
+test('rule version 3 keeps its reviewer table', () => {
+  const keysOf = (tier: Tier, externalFacts: boolean) =>
+    versionedPassPlans(3, tier, { externalFacts })!.map(({ reviewer }) => reviewerKey(reviewer));
+  assert.deepEqual(keysOf('standard', false), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'codex gpt-6.1-sol#medium']);
+  assert.deepEqual(keysOf('standard', true), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'claude claude-fable-5-1#medium']);
+  assert.deepEqual(keysOf('elevated', false), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'codex gpt-6.1-sol#high']);
+  assert.deepEqual(keysOf('elevated', true), ['claude claude-fable-5-1#high', 'claude claude-opus-5-5#high', 'claude claude-fable-5-1#high']);
 });
 
 test('rule version 2 keeps its reviewer table', () => {
@@ -45,7 +64,9 @@ test('rule version 1 keeps its reviewer table', () => {
   assert.equal(versionedPassPlans(0, 'standard', { externalFacts: false }), undefined);
 });
 
-test('rule versions 1 to 3 share the thresholds', () => {
+test('rule versions 1 to 5 share the thresholds', () => {
+  assert.deepEqual(versionedTriggers(5, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
+  assert.deepEqual(versionedTriggers(4, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
   assert.deepEqual(versionedTriggers(3, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
   assert.deepEqual(versionedTriggers(2, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
   assert.deepEqual(versionedTriggers(1, featuresWith({ linesChanged: 400, size: 'M-L' })), ['lines', 'size']);
@@ -122,13 +143,13 @@ test('a large change without external facts gets the elevated Codex plan', async
   const decision = await new RuleRouter().route(featuresWith({ linesChanged: 420, filesChanged: 6 }));
   assert.equal(decision.tier, 'elevated');
   assert.deepEqual(decision.triggers, ['lines']);
-  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'codex gpt-6.1-sol#high']);
+  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['codex gpt-6-astra#high', 'claude claude-fable-5-1#high', 'agy gemini-4-argon-medium#medium']);
 });
 
-test('a small change with external facts gets the standard Fable plan', async () => {
+test('a small change with external facts gets the standard plan', async () => {
   const decision = await new RuleRouter().route(featuresWith({ externalFacts: true }));
   assert.equal(decision.tier, 'standard');
-  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['claude claude-fable-5-1#medium', 'claude claude-opus-5-5#medium', 'claude claude-fable-5-1#medium']);
+  assert.deepEqual(decision.passes.map(({ reviewer }) => reviewerKey(reviewer)), ['codex gpt-6-astra#medium', 'claude claude-fable-5-1#medium', 'agy gemini-4-argon-medium#medium']);
 });
 
 test('the same features give equal decisions', async () => {
