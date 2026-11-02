@@ -46,7 +46,7 @@ function response(answer: Answer): Response {
 interface HeldRequest {
   readonly method: string;
   readonly csrf: string | null;
-  readonly answer: (answer: Answer) => Promise<void>;
+  readonly answer: (answer: Answer) => void;
 }
 
 // A control plane that holds each request until the test answers it, so
@@ -58,10 +58,7 @@ function heldControlPlane() {
       held.push({
         method: init?.method ?? 'GET',
         csrf: new Headers(init?.headers).get(CSRF_HEADER),
-        answer: async (answer) => {
-          settle(response(answer));
-          await new Promise((tick) => setTimeout(tick, 0));
-        },
+        answer: (answer) => settle(response(answer)),
       });
     })) as typeof fetch;
   return { held, gateway: createSessionGateway(send) };
@@ -158,11 +155,13 @@ describe('createSessionGateway answer order', () => {
     const { gateway, held } = heldControlPlane();
     const first = gateway.read();
     const second = gateway.read();
-    await held[1]!.answer(anonymous);
+    held[1]!.answer(anonymous);
+    await second;
     const login = gateway.logIn(credentials);
-    await held[2]!.answer({ status: 200, body: AUTHENTICATED });
-    await held[0]!.answer(staleAnonymous);
-    await Promise.all([first, second, login]);
+    held[2]!.answer({ status: 200, body: AUTHENTICATED });
+    await login;
+    held[0]!.answer(staleAnonymous);
+    await first;
     void gateway.logOut();
     expect(held.map(({ method, csrf }) => [method, csrf])).toEqual([
       ['GET', null],
@@ -175,14 +174,31 @@ describe('createSessionGateway answer order', () => {
   it('keeps the login token over a logout that started before the login and ends after it', async () => {
     const { gateway, held } = heldControlPlane();
     const read = gateway.read();
-    await held[0]!.answer({ status: 200, body: AUTHENTICATED });
+    held[0]!.answer({ status: 200, body: AUTHENTICATED });
+    await read;
     const logout = gateway.logOut();
     const login = gateway.logIn(credentials);
-    await held[2]!.answer({ status: 200, body: { ...AUTHENTICATED, csrfToken: STALE_TOKEN } });
-    await held[1]!.answer({ status: 204 });
-    await Promise.all([read, logout, login]);
+    held[2]!.answer({ status: 200, body: { ...AUTHENTICATED, csrfToken: STALE_TOKEN } });
+    await login;
+    held[1]!.answer({ status: 204 });
+    await logout;
     void gateway.logOut();
     expect(held[3]?.csrf).toBe(STALE_TOKEN);
+  });
+
+  it('keeps the token of a read that answered after the logout was sent', async () => {
+    const { gateway, held } = heldControlPlane();
+    const signedIn = gateway.read();
+    held[0]!.answer({ status: 200, body: AUTHENTICATED });
+    await signedIn;
+    const logout = gateway.logOut();
+    const expiry = gateway.read();
+    held[2]!.answer(anonymous);
+    await expiry;
+    held[1]!.answer({ status: 204 });
+    await logout;
+    void gateway.logIn(credentials);
+    expect(held[3]?.csrf).toBe(ANONYMOUS_TOKEN);
   });
 });
 

@@ -47,7 +47,7 @@ export function createSessionGateway(send?: typeof fetch): SessionGateway {
     if (result === undefined) return { kind: 'failed' };
     // 401: the session had already ended, which is what logging out wants.
     if (!hasStatus(result, 204) && !hasStatus(result, 401)) return { kind: 'failed' };
-    answer.change(undefined);
+    answer.end();
     return { kind: 'logged-out' };
   }
 
@@ -56,7 +56,8 @@ export function createSessionGateway(send?: typeof fetch): SessionGateway {
 
 interface TrackedAnswer {
   readonly keep: (token: string) => void;
-  readonly change: (token: string | undefined) => void;
+  readonly change: (token: string) => void;
+  readonly end: () => void;
 }
 
 // An answer to a request sent before a login or logout ended carries the
@@ -64,17 +65,28 @@ interface TrackedAnswer {
 function createTokenKeeper() {
   let token: string | undefined;
   let sessionChanges = 0;
+  let keeps = 0;
   function track(): TrackedAnswer {
     const sentAfter = sessionChanges;
+    const keepsBefore = keeps;
     const isCurrent = () => sentAfter === sessionChanges;
+    function replace(next: string | undefined) {
+      token = next;
+      sessionChanges += 1;
+    }
     return {
       keep: (next) => {
-        if (isCurrent()) token = next;
-      },
-      change: (next) => {
         if (!isCurrent()) return;
         token = next;
-        sessionChanges += 1;
+        keeps += 1;
+      },
+      change: (next) => {
+        if (isCurrent()) replace(next);
+      },
+      // A read kept since the logout was sent holds the session that
+      // followed the ended one, so its token stays.
+      end: () => {
+        if (isCurrent()) replace(keeps === keepsBefore ? undefined : token);
       },
     };
   }
