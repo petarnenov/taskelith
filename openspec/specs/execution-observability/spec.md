@@ -21,7 +21,7 @@ The observability module SHALL write each log record through a `LogSink` port as
 
 ### Requirement: Logs without secrets
 
-The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, GitHub App installation tokens, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys from text in fields and correlation, in time linear in the text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
+The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, GitHub App installation tokens, `Authorization: Basic` credentials, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys from text in fields and correlation, in time linear in the text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
 
 #### Scenario: A failure message quotes a connection URL
 
@@ -45,8 +45,16 @@ The logger SHALL replace the value of every field whose name may hold a secret w
 
 #### Scenario: Pathological log text
 
-- **WHEN** a field or correlation value holds tens of thousands of characters such as `a.`, `proxy-`, `ghs_`, or `eyJ` repeated, or `.creds` or PEM private-key begin markers without an end
+- **WHEN** a field or correlation value holds tens of thousands of characters such as `a.`, `proxy-`, `ghs_`, `eyJ`, or `authorization: basic ` repeated, or `.creds` or PEM private-key begin markers without an end
 - **THEN** redacting it takes time linear in its length
+
+#### Scenario: Basic credentials in a Git configuration form
+- **WHEN** a field or correlation value holds `Authorization: Basic` and credentials, alone, as a `-c http.extraHeader=` value, as a `GIT_CONFIG_VALUE_<n>` value, or in JSON, also with a token shape glued inside the credentials
+- **THEN** the record holds `[redacted]` in place of the whole credentials and keeps the header name
+
+#### Scenario: Near miss of Basic credentials
+- **WHEN** a field or correlation value holds `Basic` and credentials without an `Authorization` header name, `Authorizations:`, `WWW-Authenticate: Basic realm=`, or `Authorization: Basically`
+- **THEN** the record holds that text unchanged
 
 ### Requirement: G2 signal catalogue and metrics port
 

@@ -158,6 +158,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a19f67-ce5d-71a1-ba28-cbbaf6f1fdef` | 0 | 1 | 1 | 1 |
 <!-- make record: end -->
 
+## Archive checks
+
+Run on the working tree of the archive commit, before this section was written (tree `5d8cb203faeb097a235f4ba435894ca7b90ca984`):
+
+- `npm run openspec -- archive implement-github-scm-plugin-core --yes`: totals + 8, ~ 7, - 0 across `scm-port` (6 added, 3 modified), `plugin-registration`, `execution-observability`, and `installation-enrollment`; archived as `2026-11-03-implement-github-scm-plugin-core`.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-03-implement-github-scm-plugin-core`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's four capabilities, `execution-observability`, `installation-enrollment`, `plugin-registration`, and `scm-port` (143 insertions, 7 deletions).
+- The moved change has `findings.jsonl` (20 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"`: `Every findings file is valid: 102 file(s); every pass summary file is valid: 82 file(s); every route file is valid: 35 file(s).`
+- `env -u NODE_ENV make verify`: passed on the first run, profile full, uncommitted working tree, no stamp written: tests 4280, suites 49, pass 4233, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.67 % branches, 98.85 % functions.
+
 ## Independent review
 
 ### Pass 1, role A
