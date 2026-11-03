@@ -33,7 +33,8 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Evidence check
 
-- `verify-14-6.log` (scratchpad): `make verify: passed, profile full, tree a10bffd925687b6c1f716f1c96997bb5825bfc73`, the tree of `50eb65d1`, clean; tests 4374, pass 4365, fail 0, skipped 9; all files 99.39% lines, 92.63% branches, 98.85% functions; no rerun. The generated block below is written from it by `make record`; `make record-check` passes.
+- `verify-14-p1.log` (scratchpad), after the pass 1 fixes: `make verify: passed, profile full, tree e2ffbd521ea4a1194a3f7487c44918cb311110f9`, the tree of the commit that records the sixth route, clean; tests 4385, pass 4376, fail 0, skipped 9; all files 99.40% lines, 92.67% branches, 98.86% functions; no rerun. Its new files: `event-stream-hub.js` 100, 94.44, 97.06; `event-stream-api.js` 100, 92.16, 100; `event-log-keeper.js` 100, 96.55, 100; `ui-event-notifications.js` 97.00, 97.22, 85.71; `ui-event-repositories.js` 100, 100, 100. The generated block below is written from it by `make record`; `make record-check` passes.
+- Superseded by it: `verify-14-6.log` (passed on the tree `a10bffd…` of `50eb65d1`, before pass 1).
 - Superseded: `verify-14-1.log` (comment rule), `verify-14-2.log` (tree `3ee1085…` of `58fda845`: one timing failure outside the change, `test/installation-script.test.ts` "a bound with a leading zero is read in base 10", "ended after 9.113s, before 10"), `verify-14-3.log` (the one rerun on the same tree: passed, tests 4370, fail 0), `verify-14-4.log` (passed on the tree of `eeaf5509`, superseded by the listener test), and `verify-14-5.log` (passed on the tree `cace440d…` of `6c762264`, tests 4372, fail 0, superseded by the tests of `b3c30f8a`).
 
 ## Fail-before
@@ -86,11 +87,15 @@ Each fix has a test that fails before it; the logs are in the scratchpad. Pass 2
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a10bffd925687b6c1f716f1c96997bb5825bfc73`; tests 4374, pass 4365, fail 0, skipped 9; all files 99.39% lines, 92.63% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `e2ffbd521ea4a1194a3f7487c44918cb311110f9`; tests 4385, pass 4376, fail 0, skipped 9; all files 99.40% lines, 92.67% branches, 98.86% functions.
 - `npm run openspec -- validate implement-ui-event-stream --strict`: passed, `Change 'implement-ui-event-stream' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).`.
 - Spec diff against the merge base `26bbb10fecea` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a05d-9a59-7f03-bfa4-ad152fe1020d` | 0 | 2 | 3 | 0 |
 <!-- make record: end -->
 
 ## Remaining gates
