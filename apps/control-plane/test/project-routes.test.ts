@@ -289,3 +289,34 @@ test('a denial by the command\'s own role check, after the server passed the cal
     assert.deepEqual(await state(), before, 'nothing is recorded');
   }
 });
+
+test('a project handler passes a service failure on and refuses a request without a principal', async () => {
+  const down = async () => err(failure('unavailable', 'the access store is down'));
+  const failing = new ControlPlaneApi({
+    projects: {
+      setup: {
+        createProject: down, listProjects: down, readProject: down, renameProject: down, readDefaults: down, replaceDefaults: down,
+        readAutoMergeSetting: down, listMembers: down,
+      },
+      members: { assignProjectMember: down, removeProjectMember: down },
+    },
+  } as unknown as ApiServices);
+  const bodies: Record<string, unknown> = {
+    createProject: { name: 'X', defaults: DEFAULTS }, updateProject: { expectedRevision: 1, name: 'X' },
+    assignProjectMember: { role: 'project-viewer' }, updateProjectDefaults: { expectedRevision: 1, defaults: DEFAULTS },
+  };
+  const operations = ['listProjects', 'createProject', 'readProject', 'updateProject', 'listProjectMembers', 'assignProjectMember',
+    'removeProjectMember', 'readProjectDefaults', 'updateProjectDefaults', 'readAutoMergeSetting'];
+  for (const operationId of operations) {
+    const request = { parameters: [ALPHA, owner], body: bodies[operationId], query: new URLSearchParams(), correlationId: 'c' as never };
+    const failed = await failing.handle(operationId, { ...request, principalId: owner }, '');
+    assert.deepEqual(!failed.ok && failed.error.code, 'unavailable', operationId);
+    const anonymous = await failing.handle(operationId, request, '');
+    const needsCaller = !['readProject', 'listProjectMembers', 'readProjectDefaults', 'readAutoMergeSetting'].includes(operationId);
+    assert.equal(!anonymous.ok && anonymous.error.code, needsCaller ? 'internal' : 'unavailable', operationId);
+  }
+  const badAfter = await failing.handle('listProjectMembers', {
+    parameters: [ALPHA], body: undefined, query: new URLSearchParams({ after: 'has space' }), correlationId: 'c' as never, principalId: owner,
+  }, '');
+  assert.equal(!badAfter.ok && badAfter.error.code, 'invalid');
+});
