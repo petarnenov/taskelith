@@ -8,6 +8,7 @@ import {
   StoredScmIntegrationVerifiers,
   type ScmIntegrationId,
   type ScmIntegrations,
+  type ScmPlugins,
   type ScmWebhookDeliveries,
   type SourceControlPlugin,
   type UnverifiableIntegrations,
@@ -18,6 +19,7 @@ import { CommittingScmWebhookDeliveries, PostgresRepositoryBindings, PostgresScm
 import { registerGithubSourceControlPlugin } from '@taskelith/scm-github';
 import { scmSecretCipher } from '@taskelith/secrets';
 import { repositoryBindingService } from './repository-bindings.js';
+import { singlePlugin } from './scm-plugins.js';
 
 // The ports the composition offers SCM plugins.
 export const SCM_PLUGIN_HOST = Object.freeze({ ports: Object.freeze(['SourceControlProvider']) });
@@ -43,16 +45,24 @@ export function startScmIntegrationServices(
   const github = registerGithubSourceControlPlugin(SCM_PLUGIN_HOST);
   if (!github.ok) return github;
   const integrations = new PostgresScmIntegrations(database, cipher.value);
-  const bindings = repositoryBindingService({ bindings: new PostgresRepositoryBindings(database), integrations, plugin: github.value, projects });
-  return ok({ ...scmIntegrationServices(integrations, new CommittingScmWebhookDeliveries(database), github.value, logger), bindings });
+  const plugins = singlePlugin(github.value);
+  const bindings = repositoryBindingService({ bindings: new PostgresRepositoryBindings(database), integrations, plugins, projects });
+  const deliveries = new CommittingScmWebhookDeliveries(database);
+  return ok({ ...scmIntegrationServices({ store: integrations, deliveries, plugin: github.value, plugins }, logger), bindings });
+}
+
+export interface ScmIntegrationPorts {
+  readonly store: ScmIntegrations;
+  readonly deliveries: ScmWebhookDeliveries;
+  readonly plugin: SourceControlPlugin;
+  readonly plugins: ScmPlugins;
 }
 
 // The installation's SCM plugin also gives the receiver its decoy and its
 // eventless rule, so no plugin fact is copied here.
 export function scmIntegrationServices(
-  store: ScmIntegrations, deliveries: ScmWebhookDeliveries, plugin: SourceControlPlugin, logger: Logger,
+  { store, deliveries, plugin, plugins }: ScmIntegrationPorts, logger: Logger,
 ): ScmIntegrationServices {
-  const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
   const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger));
   return {
     integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId } }),

@@ -11,7 +11,7 @@ import {
   SessionService,
 } from '@taskelith/access';
 import { checkHttpSchema } from '@taskelith/contracts';
-import { ControlPlaneApi, bindableProjects, createApiServer, repositoryBindingService, type ApiServices } from '@taskelith/control-plane';
+import { ControlPlaneApi, bindableProjects, createApiServer, repositoryBindingService, singlePlugin, type ApiServices } from '@taskelith/control-plane';
 import {
   InMemoryRepositoryBindings,
   InMemoryScmIntegrations,
@@ -119,7 +119,7 @@ async function fixture(t: TestContext) {
   value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
   const scm = new FakeScm();
   const bindings = new InMemoryRepositoryBindings(integrations);
-  const service = repositoryBindingService({ bindings, integrations, plugin: scm.plugin(), projects: bindableProjects(setup) });
+  const service = repositoryBindingService({ bindings, integrations, plugins: singlePlugin(scm.plugin()), projects: bindableProjects(setup) });
   const sink = new InMemoryLogSink();
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },

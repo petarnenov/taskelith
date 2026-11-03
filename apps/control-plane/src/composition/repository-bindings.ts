@@ -4,21 +4,19 @@ import {
   type BindableProjects,
   type RepositoryBindings,
   type ScmIntegrations,
-  type SourceControlPlugin,
+  type ScmPlugins,
 } from '@taskelith/integrations';
 import { ok } from '@taskelith/kernel';
 
 export interface RepositoryBindingPorts {
   readonly bindings: RepositoryBindings;
   readonly integrations: Pick<ScmIntegrations, 'configurationOf'>;
-  readonly plugin: SourceControlPlugin;
+  readonly plugins: ScmPlugins;
   readonly projects: BindableProjects;
 }
 
-// The bindings of the installation's SCM plugin, the only one it registers.
-export function repositoryBindingService({ bindings, integrations, plugin, projects }: RepositoryBindingPorts): RepositoryBindingService {
-  const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
-  return new RepositoryBindingService({ bindings, integrations, plugins, projects });
+export function repositoryBindingService(ports: RepositoryBindingPorts): RepositoryBindingService {
+  return new RepositoryBindingService(ports);
 }
 
 // The Access module's projects as the integrations module asks for them.
