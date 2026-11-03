@@ -22,6 +22,7 @@ import {
   readJsonBody,
   StreamAnswer,
   writeResponse,
+  writeResponseBeforeBodyEnds,
   type ApiResponse,
 } from './http-exchange.js';
 import { requirementBeforeBody } from './access-requirements.js';
@@ -183,7 +184,8 @@ async function serve({ handlers, slots, routes, logger, webApp }: ListenerContex
   const failed = 'content' in answer ? undefined : answer.failure;
   if (!response.headersSent) {
     if ('content' in answer) writeWebAppFile(response, answer, correlationId);
-    else writeResponse(response, answer, correlationId);
+    else if ('stream' in answer || request.complete) writeResponse(response, answer, correlationId);
+    else void writeResponseBeforeBodyEnds(request, response, answer, correlationId);
   }
   const fields = requestLogFields({
     method: redactSecrets(request.method ?? ''), operationId, parameters, query, declaredQuery, status: answer.status,

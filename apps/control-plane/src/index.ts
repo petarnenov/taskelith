@@ -43,7 +43,7 @@ export {
 export { WEB_APP_NONCE_PLACEHOLDER, WEB_APP_OPERATION, type WebAppFiles } from './api/web-app.js';
 export { WEB_APP_DIR_VARIABLE, readWebAppDirectory, type WebAppEntryProbe } from './composition/web-app-directory.js';
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
-export { MAX_SCM_WEBHOOK_BODY_BYTES } from './api/http-exchange.js';
+export { MAX_DRAIN_MILLISECONDS, MAX_DRAINED_BODY_BYTES, MAX_SCM_WEBHOOK_BODY_BYTES } from './api/http-exchange.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export {
   SCM_PLUGIN_HOST,

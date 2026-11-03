@@ -15,6 +15,10 @@ export const MAX_SCM_WEBHOOK_BODY_BYTES = 25 * 1024 ** 2;
 export const MAX_CONCURRENT_WEBHOOKS = 4;
 // The failure reason of a body over its route's limit.
 export const BODY_TOO_LARGE = 'body-too-large';
+// After an answer sent before its request's body ended: the body bytes and
+// the time a client still writing it gets before the connection closes.
+export const MAX_DRAINED_BODY_BYTES = 32 * 1024 ** 2;
+export const MAX_DRAIN_MILLISECONDS = 10_000;
 
 // Headers such as Set-Cookie; a failure keeps its redacted code and
 // details for the request log.
@@ -45,6 +49,8 @@ export interface StreamResponse extends ResponseExtras {
 }
 
 export type ApiResponse = JsonResponse | BinaryResponse | EmptyResponse | StreamResponse;
+// An answer whose whole content is known when its head is written.
+export type CompleteResponse = Exclude<ApiResponse, StreamResponse>;
 
 // The success of an `event-stream` route, which the server answers with
 // the headers before it starts the stream.
@@ -88,6 +94,39 @@ export function parseJson(bytes: Buffer): Result<unknown> {
 
 export function writeResponse(response: ServerResponse, answer: ApiResponse, correlationId: string): void {
   if ('stream' in answer) return writeStream(response, answer, correlationId);
+  response.end(startResponse(response, answer, correlationId));
+}
+
+// Closing with the body unread would reset the connection under a client
+// still writing it, so the answer goes first and the close waits a bound.
+export async function writeResponseBeforeBodyEnds(
+  request: IncomingMessage, response: ServerResponse, answer: CompleteResponse, correlationId: string,
+): Promise<void> {
+  response.write(startResponse(response, answer, correlationId));
+  await drained(request);
+  response.end();
+}
+
+// Discards the rest of a request's body until it ends or exceeds a bound.
+function drained(request: IncomingMessage): Promise<void> {
+  return new Promise((resolve) => {
+    let bytes = 0;
+    const timer = setTimeout(stop, MAX_DRAIN_MILLISECONDS);
+    function count(chunk: Buffer): void {
+      bytes += chunk.length;
+      if (bytes > MAX_DRAINED_BODY_BYTES) stop();
+    }
+    function stop(): void {
+      clearTimeout(timer);
+      request.off('data', count).off('end', stop).off('close', stop).off('error', stop);
+      resolve();
+    }
+    request.on('data', count).once('end', stop).once('close', stop).once('error', stop);
+  });
+}
+
+// Writes the head of an answer with a known length and returns its content.
+function startResponse(response: ServerResponse, answer: CompleteResponse, correlationId: string): Uint8Array {
   const binary = 'binary' in answer;
   const content = 'empty' in answer ? Buffer.alloc(0) : binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
   response.writeHead(answer.status, {
@@ -99,7 +138,7 @@ export function writeResponse(response: ServerResponse, answer: ApiResponse, cor
     // Evidence bytes are data; a browser must not render them as a page.
     'x-content-type-options': 'nosniff',
   });
-  response.end(content);
+  return content;
 }
 
 // No content length, since the stream has no end that the server knows.

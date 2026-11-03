@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync } from 'node:crypto';
 import { request as httpRequest, type ClientRequest, type IncomingMessage } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect, type AddressInfo, type Socket } from 'node:net';
 import { after, beforeEach, test } from 'node:test';
 import {
   ControlPlaneApi,
+  MAX_DRAIN_MILLISECONDS,
   MAX_SCM_WEBHOOK_BODY_BYTES,
   createApiServer,
   type ApiServices,
@@ -233,6 +234,68 @@ test('a declared length over the limit is 413 before the body is read', async ()
     assert.equal(verifications, 0);
   } finally {
     request.destroy();
+  }
+});
+
+// What a raw sender wrote and read before its connection closed.
+interface RawExchange {
+  readonly written: number;
+  readonly received: string;
+}
+
+// A sender that declares `length` body bytes, writes `sent` of them, and
+// only then reads, as an HTTP client may; the connection is to `base`.
+function rawDelivery(length: number, sent = length): { socket: Socket; exchange: Promise<RawExchange> } {
+  const socket = connect(Number(new URL(base).port), '127.0.0.1');
+  const chunks: Buffer[] = [];
+  let written = 0;
+  socket.pause();
+  socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+  socket.on('error', () => undefined);
+  const exchange = new Promise<RawExchange>((resolve) => {
+    socket.on('close', () => resolve({ written, received: Buffer.concat(chunks).toString() }));
+  });
+  socket.write(`POST /scm-integrations/${KNOWN}/webhooks HTTP/1.1\r\nhost: control-plane\r\ncontent-type: application/json\r\ncontent-length: ${length}\r\n\r\n`);
+  const piece = Buffer.alloc(64 * 1024, 'a');
+  const pump = (): void => {
+    while (written < sent && !socket.destroyed) {
+      const next = piece.subarray(0, Math.min(piece.length, sent - written));
+      written += next.length;
+      if (!socket.write(next)) return void socket.once('drain', pump);
+    }
+    socket.resume();
+  };
+  pump();
+  return { socket, exchange };
+}
+
+test('a sender that writes its whole oversized body before reading still gets the 413', async () => {
+  const { exchange } = rawDelivery(MAX_SCM_WEBHOOK_BODY_BYTES + 1);
+  const { received } = await answeredWithin(exchange, 60_000);
+  assert.match(received, /^HTTP\/1\.1 413 /);
+  assert.match(received, /\r\nconnection: close\r\n/i);
+  assert.equal(JSON.parse(received.slice(received.indexOf('\r\n\r\n') + 4)).details.reason, 'body-too-large');
+  assert.equal(verifications, 0);
+});
+
+test('after an early answer the server stops draining a body past its byte bound', async () => {
+  const declared = 1024 ** 3;
+  const { exchange } = rawDelivery(declared);
+  const { written } = await answeredWithin(exchange, 60_000);
+  assert.ok(written < declared / 8, `the sender wrote ${written} of ${declared} bytes before the close`);
+});
+
+test('after an early answer the server closes a stalled body after its drain time', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const { socket, exchange } = rawDelivery(MAX_SCM_WEBHOOK_BODY_BYTES + 1, 10);
+  try {
+    const head = await new Promise<Buffer>((resolve) => socket.once('data', resolve));
+    assert.match(head.toString(), /^HTTP\/1\.1 413 /);
+    context.mock.timers.tick(MAX_DRAIN_MILLISECONDS);
+    const { written } = await exchange;
+    assert.equal(written, 10);
+  } finally {
+    socket.destroy();
   }
 });
 
