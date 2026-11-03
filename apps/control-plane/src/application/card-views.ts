@@ -97,8 +97,8 @@ export class CardReader {
   }
 
   async view(record: CardRecord): Promise<Result<CardView>> {
-    const run = await this.#reads.runs.get(record.runId);
-    if (!run.ok) return run.error.code === 'not-found' ? err(failure('internal', `card ${record.runId} has no run`)) : run;
+    const run = inconsistentIfMissing(await this.#reads.runs.get(record.runId), `card ${record.runId} has no run`);
+    if (!run.ok) return run;
     const gates = await this.#reads.gates.listByRun(record.runId);
     const request = await this.#mergeRequest(record);
     if (!request.ok) return request;
@@ -129,9 +129,11 @@ export class CardReader {
     if (!links.ok) return links;
     const states: CardTaskState[] = [];
     for (const link of links.value) {
-      const task = await this.#reads.tasks.get(link.taskId);
+      const task = inconsistentIfMissing(await this.#reads.tasks.get(link.taskId), `card task ${link.taskId} has no record`);
       if (!task.ok) return task;
-      const admission = await this.#reads.admissions.get(task.value.admissionId);
+      const admission = inconsistentIfMissing(
+        await this.#reads.admissions.get(task.value.admissionId), `card task ${link.taskId} has no admission`,
+      );
       if (!admission.ok) return admission;
       const hasOpenItem = items.some((item) => item.subject.scope === 'card' && item.subject.taskId === link.taskId);
       const state = await taskState(task.value, this.#taskContext(hasOpenItem));
@@ -193,6 +195,12 @@ async function allOpenItems(sources: readonly NeedsYouSource[], scope: NeedsYouS
     }
   }
   return ok(Object.freeze(items.sort(newestFirst)));
+}
+
+// A record that a registered card names but its store lacks is an
+// inconsistency of the stored state, never a missing card.
+function inconsistentIfMissing<T>(read: Result<T>, message: string): Result<T> {
+  return read.ok || read.error.code !== 'not-found' ? read : err(failure('internal', message));
 }
 
 function newestFirst(left: NeedsYouItem, right: NeedsYouItem): number {

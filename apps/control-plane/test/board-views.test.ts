@@ -277,6 +277,19 @@ test('a task detail of another project, or of a run that is no card, answers not
   assert.equal(orphan.ok || orphan.error.code, 'internal');
 });
 
+test('a card task without its task or admission record answers internal, never not-found', async () => {
+  const world = await runningCard();
+  const read = () => views(world).forCaller(false).taskDetail('alpha' as never, 'run-1' as never);
+  world.admissions.delete(world.tasks.get('task-1')!.admissionId);
+  const noAdmission = await read();
+  assert.equal(noAdmission.ok || noAdmission.error.code, 'internal', 'without its admission');
+  world.tasks.delete('task-1');
+  const noTask = await read();
+  assert.equal(noTask.ok || noTask.error.code, 'internal', 'without its task');
+  const board = await views(world).forCaller(false).board('alpha' as never);
+  assert.equal(board.ok || board.error.code, 'internal', 'the board');
+});
+
 test('the inbox lists every page of every source newest first, filtered by kind and card', async () => {
   const world = await runningCard();
   world.items = [
