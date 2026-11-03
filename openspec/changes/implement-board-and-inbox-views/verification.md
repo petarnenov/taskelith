@@ -41,6 +41,18 @@ Logs in the session scratchpad (`fb-15-*.log`). Each mutation was applied to one
 - `fb-15-auto-merge-default.log` (`composition/board-views.ts`, a project without a setting starts with auto-merge off) at `74e0739a`: 1 of 1 fails, the composition test that `74e0739a` adds.
 - `fb-15-quarantine.log` (`composition/board-views.ts`, the installation's quarantine ignored) at `74e0739a`: 1 of 1 fails, the same test. A first mutation that dropped the skip of a worker without a record failed the build and ran the unmutated `dist`; its log was discarded.
 
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `35bb6db1362b6a34b4b52bc82d553ad217636fa1`; tests 4533, pass 4524, fail 0, skipped 9; all files 99.42% lines, 92.67% branches, 98.77% functions.
+- `npm run openspec -- validate implement-board-and-inbox-views --strict`: passed, `Change 'implement-board-and-inbox-views' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 107 file(s); every pass summary file is valid: 87 file(s); every route file is valid: 40 file(s).`.
+- Spec diff against the merge base `468783d9f2e5` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
+
 ## Limitations
 
 - Until item 25 registers cards, no writer calls `CardCatalog.register`, so every board is empty and every task detail answers `404` (Q2 (a)).
