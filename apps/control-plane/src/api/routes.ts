@@ -1,5 +1,6 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { FailureCode } from '@taskelith/kernel';
+import { BODY_TOO_LARGE, MAX_SCM_WEBHOOK_BODY_BYTES } from './http-exchange.js';
 
 // `browserSession`: the session cookie, with the CSRF header on any method
 // but GET; `none`: no credential, so a public or optional-session operation.
@@ -28,6 +29,12 @@ export interface RouteDefinition {
   // The body is multipart: `body` validates its `record` part, and its
   // `content` part reaches the operation as exact bytes.
   readonly upload?: true;
+  // The body reaches the operation unparsed, as bytes with the lower-case
+  // headers, read up to this limit: its signature authenticates it.
+  readonly signedBodyLimit?: number;
+  // A path parameter that is not valid percent-encoding reaches the
+  // operation as sent, where other routes answer 400.
+  readonly keepsUndecodablePathParameters?: true;
   readonly success: number;
   readonly statuses: Partial<Record<FailureCode, number>>;
   // Statuses by failure reason, which take precedence over those by code.
@@ -36,6 +43,7 @@ export interface RouteDefinition {
 
 const SEGMENT = '([^/]+)';
 const COMMON: Partial<Record<FailureCode, number>> = { invalid: 400, forbidden: 401, unavailable: 503, internal: 500 };
+const OVER_LIMIT: Readonly<Record<string, number>> = Object.freeze({ [BODY_TOO_LARGE]: 413 });
 const SESSION_PATH = `^/projects/${SEGMENT}/agent-sessions/${SEGMENT}`;
 const SESSION_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
 const SESSION_COMMAND: Partial<Record<FailureCode, number>> = { ...SESSION_READ, conflict: 409, 'precondition-failed': 422 };
@@ -150,6 +158,12 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'respondToNativeRequest', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/responses$`),
     security: ['browserSession', 'operatorToken'], body: 'NativeResponseSubmission', response: 'NativeRequest', success: 200,
     statuses: SESSION_COMMAND,
+  },
+  // Control-plane wire contracts section 5.
+  {
+    operationId: 'receiveScmWebhook', method: 'POST', pattern: new RegExp(`^/scm-integrations/${SEGMENT}/webhooks$`), security: ['none'],
+    signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, keepsUndecodablePathParameters: true, response: 'empty', success: 202,
+    statuses: COMMON, reasons: OVER_LIMIT,
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {

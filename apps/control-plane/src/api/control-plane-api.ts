@@ -13,6 +13,7 @@ import {
 } from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
+import type { ScmWebhookReceiver } from '@taskelith/integrations';
 import type { ConfirmedCredentials, CredentialRenewalRequest, Enrollment, EnrollmentRequest, RenewedCredentials, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
@@ -23,7 +24,7 @@ import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../application/slot-credential-delivery.js';
 import type { TaskService } from '../application/task-service.js';
-import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
+import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type SignedBody, type Upload } from './api-server.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
@@ -77,6 +78,8 @@ export interface ApiServices {
   readonly logger?: Logger;
   // The agent sessions of section 9, apart from the login `sessions`.
   readonly agentSessions: AgentSessionOperations;
+  // The webhook receiver of wire contracts section 5.
+  readonly scmWebhooks: Pick<ScmWebhookReceiver, 'receive'>;
   // Projects, their members, and their defaults (wire section 4).
   readonly projects: ProjectOperations;
 }
@@ -181,6 +184,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#agentSessions.submitTurn(request);
       case 'respondToNativeRequest':
         return this.#agentSessions.respondToNativeRequest(request);
+      case 'receiveScmWebhook':
+        return this.#receiveScmWebhook(first, request.body as SignedBody);
       default:
         return this.#dispatchProject(operationId, request);
     }
@@ -343,6 +348,12 @@ export class ControlPlaneApi implements ApiHandlers {
   async #requestDelegation({ worker, body, correlationId }: ApiRequest): Promise<Result<HttpSchemas['DelegationOutcome']>> {
     if (worker === undefined) return err(failure('internal', 'requestDelegation reached its handler without a worker'));
     return this.#services.delegations.requestDelegation(worker, body as HttpSchemas['DelegationRequest'], correlationId);
+  }
+
+  // Every accepted delivery answers 202 without a body, a repeat included.
+  async #receiveScmWebhook(integrationId: string, delivery: SignedBody): Promise<Result<void>> {
+    const received = await this.#services.scmWebhooks.receive(integrationId, delivery);
+    return received.ok ? ok(undefined) : received;
   }
 
   async #download(evidenceId: string): Promise<Result<Uint8Array>> {

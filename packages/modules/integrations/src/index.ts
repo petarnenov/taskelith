@@ -45,3 +45,11 @@ export type {
   SignedChangeRequestEvent,
   SourceControlConformanceFixture,
 } from './ports/source-control-fixture.js';
+export type {
+  DeliveryRecording,
+  EventlessDeliveries,
+  ScmIntegrationId,
+  ScmIntegrationVerifiers,
+  ScmWebhookDeliveries,
+} from './ports/webhook-receipt.js';
+export { ScmWebhookReceiver, type ScmWebhookReceiverPorts, type WebhookReceipt } from './application/webhook-receiver.js';

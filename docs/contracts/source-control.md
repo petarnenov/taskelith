@@ -79,8 +79,23 @@ A plugin declares its merge methods and review evidence in `SourceControlCapabil
 
 - `verifyWebhookDelivery` receives the headers, with names in lower case, and the body bytes exactly as received. It verifies the signature over those bytes before it trusts any payload.
 - It fails with `forbidden` for a missing signature, a signature made with another secret, or a body that was parsed and serialized again.
-- The receiver that calls it needs an ingress that the service can reach, with TLS. The installation has no externally reachable ingress: it publishes the control-plane API on `127.0.0.1` only, over HTTPS on a certificate of the installation CA since G3 sub-change 26a ([local installation](../local-installation.md)). Item 9 (`define-g3-wire-contracts`) defines the receiver's HTTP operation, item 20 builds the receiver, item 26 (`secure-remote-connectivity`) provides the TLS of D11 (b), and item 37 (`extend-installation-for-g3`) the installation that serves it. Until they merge, no service can deliver a webhook to an installation.
+- The receiver that calls it needs an ingress that the service can reach, with TLS. The installation has no externally reachable ingress: it publishes the control-plane API on `127.0.0.1` only, over HTTPS on a certificate of the installation CA since G3 sub-change 26a ([local installation](../local-installation.md)). Item 9 (`define-g3-wire-contracts`) defines the receiver's HTTP operation, item 20 builds the receiver (section 6.1), item 26 (`secure-remote-connectivity`) provides the TLS of D11 (b), and item 37 (`extend-installation-for-g3`) the installation that serves it. Until they merge, no service can deliver a webhook to an installation.
 - The verified event carries an opaque `deliveryId` that every redelivery of the same delivery repeats and that differs between deliveries; the module deduplicates by it.
+
+### 6.1 Receipt
+
+The module's `ScmWebhookReceiver` serves the receiver of [control-plane wire contracts](control-plane-wire-contracts.md) section 5 (item 20, sub-change `receive-scm-webhooks`) through three ports of its own, outside the plugin-facing port entry:
+
+| Port | Role | Implemented by |
+| --- | --- | --- |
+| `ScmIntegrationVerifiers` | The `WebhookVerifier` of an integration by its identifier, or none for an unknown one | The composition: an in-memory map, empty until SCM integrations are stored |
+| `ScmWebhookDeliveries` | Records a verified event once per integration and `deliveryId`, answering `recorded` or `repeated` | The PostgreSQL adapter: the table `scm_webhook_deliveries`, keyed by both, without a foreign key, with the identifiers stored as their UTF-16LE code units so that any port identifier, a NUL included, is kept exactly |
+| `EventlessDeliveries` | Tells, by its headers, a verified delivery that its service sends without an event of the port | The composition: for GitHub, the events `ping`, `installation`, and `installation_repositories` |
+
+- **One refusal.** An identifier that is not a kernel `Identifier`, an unknown integration, a `forbidden` verification, and a missing signature all fail with `forbidden`, reason `signature-invalid`, and one message. For an unknown or invalid integration the receiver first runs a decoy verifier, which the composition provides with the work of the plugin's verification for the same headers: for GitHub, nothing for a missing or malformed signature, and HMAC-SHA256 over the raw body under a random key with a constant-time comparison for a well-formed one.
+- **No event.** A verification that fails with `invalid` comes after a valid signature, since a plugin checks the signature first. The receipt is `no-event`, answered 202 and not recorded, only when `EventlessDeliveries` calls the delivery eventless and its body is a JSON object in strict UTF-8: for GitHub, a `ping`, `installation`, or `installation_repositories` event, which has no repository for the port's `WebhookEvent`. Any other one, such as a `push` without a repository or a `ping` whose body is no JSON object, fails with `invalid`. The headers are not signed: GitHub's signature covers the body only, so the event and delivery headers are trusted only as far as TLS and the secret keep signed bodies from others.
+- **Checked events.** The receiver checks a verified event with the module's runtime reader before it records it; an event of another shape fails with `internal` and is not recorded.
+- **Concurrent redeliveries.** Each record is one SERIALIZABLE transaction that inserts with `ON CONFLICT DO NOTHING` on the key. Of two concurrent identical deliveries one inserts; the other's insert meets a row its snapshot cannot see, fails to serialize, and its retry answers `repeated`.
 
 ## 7. SCM mapping
 
@@ -133,6 +148,6 @@ The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effec
 
 - SCM plugins and their I/O: item 20 for GitHub; Forgejo later.
 - The Git workspace and its use of the run credential: item 6, the [Git workspace contract](git-workspace.md).
-- The module's use cases: credential delivery to a run, a refreshed credential included (item 21, with its notice, fetch, and adoption confirmation in item 9 and its adoption in item 18), webhook deduplication, and merge orchestration (items 21 and 23).
+- The module's use cases: credential delivery to a run, a refreshed credential included (item 21, with its notice, fetch, and adoption confirmation in item 9 and its adoption in item 18), the consumers of recorded webhook events, and merge orchestration (items 21 and 23). Webhook receipt and deduplication are section 6.1.
 - The plugin SDK's `draft` re-export and the plugin API version: item 20, `implement-github-scm-plugin-core`.
 - Wire schemas, including the webhook receiver's HTTP operation: item 9.

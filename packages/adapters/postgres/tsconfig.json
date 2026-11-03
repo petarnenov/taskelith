@@ -6,6 +6,7 @@
     { "path": "../../modules/access" },
     { "path": "../../modules/execution" },
     { "path": "../../modules/fleet" },
+    { "path": "../../modules/integrations" },
     { "path": "../../modules/observability" },
     { "path": "../../modules/scheduling" },
     { "path": "../../modules/sdlc" },

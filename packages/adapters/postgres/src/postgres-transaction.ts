@@ -30,6 +30,7 @@ import { PostgresProducerCursors, PostgresWorkerReports } from './observation-re
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
+import { PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
 import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
@@ -76,6 +77,7 @@ export class PostgresTransaction {
   readonly slotCredentialRecords: PostgresSlotCredentialRecords;
   readonly slotCredentialDeliveries: PostgresSlotCredentialDeliveries;
   readonly sessionTimeline: PostgresSessionTimelineTransaction;
+  readonly scmWebhookDeliveries: PostgresScmWebhookDeliveryRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -119,6 +121,7 @@ export class PostgresTransaction {
     this.slotCredentialRecords = new PostgresSlotCredentialRecords(session);
     this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
     this.sessionTimeline = new PostgresSessionTimelineTransaction(session);
+    this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
     this.outboxLookup = this.outbox;
   }
 

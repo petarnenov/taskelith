@@ -37,12 +37,20 @@ export {
   type ApiRequest,
   type ApiServer,
   type Caller,
+  type SignedBody,
   type Upload,
 } from './api/api-server.js';
 export { WEB_APP_NONCE_PLACEHOLDER, WEB_APP_OPERATION, type WebAppFiles } from './api/web-app.js';
 export { WEB_APP_DIR_VARIABLE, readWebAppDirectory, type WebAppEntryProbe } from './composition/web-app-directory.js';
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
+export { MAX_SCM_WEBHOOK_BODY_BYTES } from './api/http-exchange.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
+export {
+  GITHUB_EVENTLESS_EVENTS,
+  GithubEventlessDeliveries,
+  GithubWebhookDecoy,
+  InMemoryScmIntegrationVerifiers,
+} from './composition/scm-webhooks.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
 export { HEARTBEAT_QUEUE, HeartbeatService, type HeartbeatMessage } from './application/heartbeat-service.js';

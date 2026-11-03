@@ -46,4 +46,5 @@ export {
 } from './postgres-database.js';
 export { PostgresTransaction } from './postgres-transaction.js';
 export { PostgresRunCatalog } from './run-catalog.js';
+export { CommittingScmWebhookDeliveries, PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
 export { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
