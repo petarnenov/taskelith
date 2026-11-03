@@ -6,9 +6,10 @@ The adapter compares the expiry with the database clock: `CommittingFleetRegistr
 
 ## What Changes
 
-- The test derives the expiry from the database clock, `clock_timestamp()` plus two seconds.
-- It waits until `pg_stat_activity` shows the enrollment's `UPDATE enrollment_tokens` waiting on a lock, and asserts that the database clock is still before the expiry at that moment.
-- It releases the lock only after the database clock has passed the expiry, by polling `clock_timestamp()` instead of sleeping on a host timer.
+- A test helper, `steppedClockCredentials`, creates sentinel credentials whose sessions resolve an unqualified `clock_timestamp()` to a function that returns a fixed instant plus the value of a sequence, placed before `pg_catalog` in the role's `search_path`. A step sets the sequence, which every session sees at once, also inside a running transaction.
+- The test enrolls through a database opened with those credentials. The clock stands at `2099-01-01T00:00:00.000Z`, and the token expires one second later.
+- It waits until `pg_stat_activity` shows the enrollment's `UPDATE enrollment_tokens` waiting on a lock, steps the clock two seconds ahead, and only then releases the lock. No host clock or host timer takes part.
+- A `finally` block ends both test connections, which also releases the lock, and waits for the enrollment, so a failed step cannot block later tests.
 - No product code changes.
 
 ## Capabilities

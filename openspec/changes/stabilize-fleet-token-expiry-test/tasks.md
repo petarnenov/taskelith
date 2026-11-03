@@ -14,10 +14,10 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Five consecutive targeted runs under load, `npm run openspec -- validate stabilize-fleet-token-expiry-test --strict`, and `make verify`
-- [ ] 4.2 Record `verification.md`
+- [x] 4.1 Five consecutive targeted runs under load, `npm run openspec -- validate stabilize-fleet-token-expiry-test --strict`, and `make verify`
+- [x] 4.2 Record `verification.md`
 
 ## 5. Review and archive
 
-- [ ] 5.1 Independent review
+- [ ] 5.1 Independent review (pass 1 done)
 - [ ] 5.2 Archive the change
