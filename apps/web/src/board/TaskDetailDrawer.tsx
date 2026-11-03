@@ -1,6 +1,7 @@
 import { Alert, Box, Drawer } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
+import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
@@ -15,7 +16,9 @@ import { useTaskDetail } from './useTaskDetail';
 // The task detail address opens the Drawer over the board, so a reload or
 // a link keeps it; closing it leads back to the board.
 export function TaskDetailRoute() {
-  const { projectId = '', runId = '' } = useParams();
+  const params = useParams();
+  const projectId = identifierOf(params.projectId ?? '');
+  const runId = identifierOf(params.runId ?? '');
   const outlet = useOutletContext<BoardOutlet>();
   const navigate = useNavigate();
   const board = outlet.projectId === projectId ? outlet.live : undefined;

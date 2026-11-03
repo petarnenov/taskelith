@@ -28,7 +28,21 @@ export const TASK_DETAIL: PlannedScreen = {
 };
 
 export function taskDetailPath(projectId: string, runId: string): string {
-  return `/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(runId)}`;
+  return `/projects/${routeSegment(projectId)}/cards/${routeSegment(runId)}`;
+}
+
+// The SPA's server answers 404 for a dot in the last segment or a decoded
+// separator, so each other character is written as ~ and two hex digits.
+function routeSegment(identifier: string): string {
+  return identifier.replace(/[^A-Za-z0-9_-]/g, (character) => `~${hex(character)}`);
+}
+
+export function identifierOf(segment: string): string {
+  return segment.replace(/~([0-9A-F]{2})/g, (_escape, code: string) => String.fromCharCode(Number.parseInt(code, 16)));
+}
+
+function hex(character: string): string {
+  return character.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
 }
 
 const SESSIONS: PlannedScreen = {

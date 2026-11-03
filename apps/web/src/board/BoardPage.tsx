@@ -1,6 +1,7 @@
 import { Alert, Stack, Text, Title } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Outlet, useParams } from 'react-router';
+import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { Project, ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
@@ -23,10 +24,10 @@ export interface BoardOutlet {
 // (product ports section 3.5); it never shows task data it did not read.
 export function BoardPage() {
   const { view, select, retry } = useProjects();
-  const { projectId: addressed } = useParams();
+  const { projectId: segment } = useParams();
   useEffect(() => {
-    if (addressed !== undefined) select(addressed);
-  }, [addressed, select]);
+    if (segment !== undefined) select(identifierOf(segment));
+  }, [segment, select]);
   const project = view.status === 'listed' ? view.selected : undefined;
   const live = useLiveBoard(project?.projectId);
   const heading = useRef<HTMLHeadingElement>(null);

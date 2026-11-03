@@ -1,7 +1,7 @@
 import { Button, Menu, Text, type MantineBreakpoint } from '@mantine/core';
 import { useMatch, useNavigate } from 'react-router';
 import { CheckIcon, ChevronIcon } from '../icons';
-import { TASK_DETAIL } from '../screens';
+import { identifierOf, TASK_DETAIL } from '../screens';
 import { useProjects } from './ProjectsProvider';
 
 interface ProjectPickerProps {
@@ -61,6 +61,6 @@ function useChoice(select: (projectId: string) => void): (projectId: string) => 
   const navigate = useNavigate();
   return (projectId) => {
     select(projectId);
-    if (detail !== null && detail.params.projectId !== projectId) void navigate('/');
+    if (detail !== null && identifierOf(detail.params.projectId ?? '') !== projectId) void navigate('/');
   };
 }
