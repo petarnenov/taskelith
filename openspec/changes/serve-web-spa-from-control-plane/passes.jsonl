@@ -1,1 +1,2 @@
 {"change":"serve-web-spa-from-control-plane","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a19f28-b5fd-7971-85cd-78597aad9656","counts":{"critical":0,"high":0,"medium":5,"low":3}}
+{"change":"serve-web-spa-from-control-plane","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"45a4e8b6-e060-4098-b203-24bbf77b8c8b","counts":{"critical":0,"high":0,"medium":0,"low":5}}

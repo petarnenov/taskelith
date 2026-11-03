@@ -14,7 +14,8 @@ Commit type: `apps/control-plane`, `apps/web`, and `infra/` are private workspac
 - `3e96d94d` `docs: record the serve-web-spa-from-control-plane design, spec deltas, and SPA status`, with the README, the `Makefile` `web-dev` comment, and the installation contract's listeners.
 - `0f34df27` `docs: route the serve-web-spa-from-control-plane change` (`route.json`, unedited, at head `3e96d94d`): "route: elevated (lines, files, contracts, docker), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.76) and agrees; recommendation only.
 - `8f8367f1` `docs: record the make verify of serve-web-spa-from-control-plane`, the `make record` of the passing `make verify` on the tree of `0f34df27`; pass 1 reviewed this head.
-- Pass 1 fix round: `6b390339` merges `origin/dev` `3341f8a8` (#424, no conflict); `41e12b2e` `test: expect the SPA to refuse raw dot segments, links, and replaced entries, with headers on failures and on the browser endpoint only`; `da8aa6d4` `chore: check the SPA path as sent, remember left-out links, read the build without following links, and reserve /app/ in the wire contracts`; then the docs and records commits of the round and the `make record` of its `make verify`.
+- Pass 1 fix round: `6b390339` merges `origin/dev` `3341f8a8` (#424, no conflict); `41e12b2e` `test: expect the SPA to refuse raw dot segments, links, and replaced entries, with headers on failures and on the browser endpoint only`; `da8aa6d4` `chore: check the SPA path as sent, remember left-out links, read the build without following links, and reserve /app/ in the wire contracts`; then the docs and records commits of the round and the `make record` of its `make verify` (`b8a15dc6`); pass 2 reviewed this head.
+- Pass 2 fix round: `8daccf93` `test: expect the web build's start failure to name the directory and the error code`; `e650fdd5` `chore: name the directory and the error code in the web build's start failure` (L4); `14c45a97` `chore: name the SPA's file answer and the listener context apart from the page and the listener` (L5); `355854b5` `docs: apply review pass 2 fixes to the serve-web-spa-from-control-plane records` (L1 to L3, and the directory of L4 in the design, the spec delta, and the installation contract); then the record of pass 2 and the `make record` of its `make verify`.
 
 ## Environment
 
@@ -74,6 +75,13 @@ Logs in the session scratchpad. `41e12b2e` holds the tests alone.
 - With the fixes (`da8aa6d4`), the same command: tests 19, pass 19, fail 0.
 - Integration (finding 5; `it-28c-p1-fixed.log`, `fb-28c-p1-worker-build.log`, `fb-28c-p1-browser-no-build.log`): `node --experimental-strip-types scripts/docker-slot.ts run -- bash scripts/services.sh run taskelith-1897053002-verify` around `node --experimental-strip-types --test --test-name-pattern='TLS listeners' apps/control-plane/test/control-plane-api.integration.test.ts`, with `SETTINGS.webAppDirectory` set to a fixture build. Fixed: tests 10, pass 10, fail 0. The worker listener also given the build in `src/composition/control-plane.ts`: fail 1, "the browser endpoint serves the configured web build, and the worker endpoint never does" (`/app/sessions` on the worker endpoint actual `[200, text/html; charset=utf-8]`, expected `[404, application/json]`). The browser listener without the build: fail 1, the same test (`/app/sessions` on the browser endpoint actual `[404, application/json]`, expected `[200, text/html; charset=utf-8]`). The file was restored and rebuilt after each run (`git diff` empty).
 
+### Fail-before of the pass 2 fixes
+
+Logs in the session scratchpad. `8daccf93` holds the test alone.
+
+- L4 (`fb-28c-p2-directory.log`): the test of `8daccf93` against the sources of `b8a15dc6`, after `npx tsc -b apps/control-plane`, `node --experimental-strip-types --test apps/control-plane/test/web-app.test.ts`: tests 19, pass 18, fail 1, "a directory without index.html or that cannot be read fails and names it and the error": for the directory without `index.html`, actual details `directory` and `code` `[undefined, undefined]`, expected the directory and `undefined`. With `e650fdd5` (`fb-28c-p2-directory-fixed.log`): tests 19, pass 19, fail 0; the missing directory names `ENOENT` and a file given as the directory `ENOTDIR`.
+- L5 is a rename with no behaviour change; the same 19 tests pass after `14c45a97`. L1 to L3 change records only.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -109,6 +117,31 @@ Review plan of the brief (governance v11, effort medium, `env -u JEV_MAF_LAB` be
 - Finding 8 (Low, `process`): the remaining gates made pass 2 unconditional. Fixed: pass 2 follows a pass 1 with a Medium or worse finding, pass 3 a pass 2 with one.
 - Coordinator conditions: the wire contracts' section 1 reserves `/app/` for the SPA, and the OpenAPI test checks that sentence (fail-before above); the image build and smoke below.
 
+### Pass 2
+
+- Reviewer: Claude Code `claude-fable-5-1`, role B, variant `medium`, through `env -u JEV_MAF_LAB make review CHANGE=serve-web-spa-from-control-plane PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' PROMPT=<scratchpad>/review-28c-p2.md LOG=<scratchpad>/review-28c-p2.log`, started 2026-11-03T02:30:04.990Z, at head `b8a15dc6` against `3341f8a8`; session `45a4e8b6-e060-4098-b203-24bbf77b8c8b`; model `claude-fable-5-1` (reported). `make review` printed that the route recommends effort high and the authorized medium applies. Snapshot `5b26501337517ec4f4c08addff940d28cf01197797b8464609c3d27e8a9f680b` before and after, unchanged; the reviewer changed no file.
+- Result: Critical 0, High 0, Medium 0, Low 5, recorded in `passes.jsonl` and `findings.jsonl`. It confirmed that the five Medium and three Low fixes of pass 1 are correct and complete. Under governance "Low findings are fixed" the five are fixed without another pass.
+
+| Finding | Fix | Commit |
+| --- | --- | --- |
+| L1 (Low, `evidence-mismatch`) | The proposal's impact and the self-check say no change under `packages/contracts`, and name the wire contracts' `/app` reservation and the installation contract's `TASKELITH_WEB_APP_DIR` | `355854b5` |
+| L2 (Low, `stale-citation`) | `12dee8c7` is the checklist base; the merge base is `3341f8a8` since `6b390339`; the pass 3 condition is governance's, not `route.json`'s | `355854b5` |
+| L3 (Low, `spec-wording`) | "Web SPA served under /app/" specifies GET and HEAD of `/app` and of every path under `/app/` (452 characters) | `355854b5` |
+| L4 (Low, `error-handling`) | Every start failure of the build names `directory` in its details, and an unreadable directory also the system error's `code`; the design, the "Web SPA build at start" requirement (436 characters), and the installation contract name the directory | `8daccf93`, `e650fdd5`, `355854b5` |
+| L5 (Low, `naming`) | `WebAppFile` with `content`, `fileAnswer`, `writeWebAppFile`, and `'content' in answer`; the listener's shared state is `ListenerContext` | `14c45a97` |
+
+### Pass 3
+
+Not run: pass 2 reported only Low findings, so the review stops (governance "Low findings are fixed").
+
+### Architect check of unreviewed fixes
+
+The pass 2 fixes are unreviewed fixes; no later pass reviews them. Each awaits the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"):
+
+- L4, `8daccf93` and `e650fdd5` (`apps/control-plane/src/composition/web-app-directory.ts`, `apps/control-plane/test/web-app.test.ts`): architect check pending.
+- L5, `14c45a97` (`apps/control-plane/src/api/web-app.ts`, `apps/control-plane/src/api/api-server.ts`): architect check pending.
+- L1 to L3 and the records of L4, `355854b5` (`proposal.md`, `design.md`, `specs/control-plane-api/spec.md`, `verification.md`, `docs/contracts/installation-and-enrollment.md`): architect check pending.
+
 ## Limitations
 
 - The image smoke (above) started the image's own modules over plain HTTP, not the composed control plane on the installation's HTTPS endpoint; the composed endpoints are covered by the integration test "the browser endpoint serves the configured web build, and the worker endpoint never does".
@@ -117,7 +150,5 @@ Review plan of the brief (governance v11, effort medium, `env -u JEV_MAF_LAB` be
 
 ## Remaining gates
 
-- Independent review pass 2, because pass 1 reported Medium findings, and pass 3 only after a pass 2 with a Medium or worse finding; review stops at a pass with only Low findings or none.
-- Architect check by the coordinator of any unreviewed fixes.
-- Archive of the change in the last commit of the branch.
+- Architect check of the unreviewed pass 2 fixes by the coordinator.
 - Integration into dev by the coordinator (single pull request)
