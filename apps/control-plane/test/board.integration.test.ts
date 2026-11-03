@@ -7,7 +7,7 @@ import { NoMergeQueue } from '@taskelith/integrations';
 import { err, failure, ok } from '@taskelith/kernel';
 import { PostgresDatabase, PostgresUiEventLog, migrate, type PostgresCrashPoint } from '@taskelith/postgres';
 import { integrationEndpoint, value } from '@taskelith/testing';
-import { EARLY, admission, run, task } from './board-fixtures.ts';
+import { BoardWorld, EARLY, admission, run, task } from './board-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_board_${process.pid}`;
@@ -85,6 +85,32 @@ test('the board and the task detail read one snapshot over PostgreSQL, the head 
   assert.deepEqual(detail.tasks.map((each) => [each.taskId, each.taskRunId]), [['task-run-1', 'run-1']]);
   const counts = value(await views.counts({ kind: 'project', projectId: 'alpha' as never }));
   assert.deepEqual([counts.total, counts.byCard], [0, []]);
+});
+
+// A task of run-1 admitted in its own transaction, or a delegated child.
+async function admitted(taskId: string, parent?: string): Promise<void> {
+  value(await database.transaction(async (tx) => {
+    value(await tx.admissions.add(admission(taskId, 'apply')));
+    return tx.tasks.add(task(taskId));
+  }));
+  await sql(`INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id) VALUES ($1, $2, $3, $4, 'alpha', $5)`,
+    [taskId, parent ?? null, parent ?? taskId, parent === undefined ? 0 : 1, parent === undefined ? 'run-1' : `run-${taskId}`]);
+}
+
+test('the task detail lists the tasks in the same order over PostgreSQL as in memory, not by task identifier', async () => {
+  const admissions: [string, string?][] = [['task-b'], ['task-b-child', 'task-b'], ['task-a'], ['task-a-z', 'task-a'], ['task-a-y', 'task-a']];
+  await card('run-1');
+  for (const [taskId, parent] of admissions) await admitted(taskId, parent);
+  const world = new BoardWorld();
+  await world.card('run-1', 'alpha', EARLY, run('run-1', { proposal: 'completed', specs: 'completed', apply: 'in-progress' }));
+  world.addTask('run-1', task('task-run-1'), 'apply', { session: false });
+  for (const [taskId, parent] of admissions) {
+    world.addTask('run-1', task(taskId), 'apply', { session: false, ...(parent === undefined ? {} : { parent, depth: 1 }) });
+  }
+  const order = async (views: BoardViews) => value(await views.forCaller(false).taskDetail('alpha' as never, 'run-1' as never)).tasks.map((each) => each.taskId);
+  const expected = ['task-run-1', 'task-b', 'task-b-child', 'task-a', 'task-a-z', 'task-a-y'];
+  assert.deepEqual(await order(startBoardServices(database, NO_SOURCES).views), expected);
+  assert.deepEqual(await order(new BoardViews({ ...world.parts(), store: world.store() })), expected);
 });
 
 test('an inbox source takes its position from the head of the view snapshot', async () => {

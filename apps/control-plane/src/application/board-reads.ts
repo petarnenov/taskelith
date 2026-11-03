@@ -20,8 +20,8 @@ export interface BoardReads {
   autoMergeEnabled(projectId: ProjectId): Promise<Result<boolean>>;
 }
 
-// Every task of a card's lineage, in task identifier order until a store
-// keeps the admission order (design decision 9).
+// Every task of a card's lineage in admission order, each delegated child
+// under its parent in its own admission order.
 export interface CardLineage {
   tasks(runId: WorkflowRunId): Promise<Result<readonly CardTask[]>>;
 }

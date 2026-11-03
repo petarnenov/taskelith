@@ -796,3 +796,21 @@ test('the SCM integrations migration checks its values and its down migration re
   assert.deepEqual(tables, []);
   assert.equal((await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'scm_webhook_deliveries'")).length, 1);
 });
+
+test('the board migration orders existing tasks by identifier, new ones after, and its down migration drops the order', async () => {
+  const directory = await copiedMigrations();
+  await rm(join(directory, `${BOARD_CARDS}.sql`));
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url, directory)).ok, true);
+  const insert = (id: string) => query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, 'adm', 1, '{}')", [id]);
+  for (const id of ['task-b', 'task-a', 'task-c']) await insert(id);
+  assert.deepEqual(await migrate(url), { ok: true, value: [BOARD_CARDS] });
+  await insert('task-0');
+  const order = await query<{ id: string }>(url, 'SELECT id FROM tasks ORDER BY admission_seq');
+  assert.deepEqual(order.map((row) => row.id), ['task-a', 'task-b', 'task-c', 'task-0']);
+  const column = "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'admission_seq'";
+  assert.deepEqual(await query(url, column), [{ is_nullable: 'NO' }]);
+  await migratedDown(url, BOARD_CARDS);
+  assert.deepEqual(await query(url, column), []);
+  assert.deepEqual(await query(url, "SELECT 1 FROM pg_class WHERE relname = 'tasks_admission_seq'"), []);
+});

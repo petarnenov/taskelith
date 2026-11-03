@@ -30,9 +30,16 @@ async function touches(): Promise<string[]> {
   return rows.map((row) => `${row.subject}:${row.subject_id}`);
 }
 
-async function lineage(taskId: string, runId: string, root = taskId, depth = 0): Promise<void> {
+async function lineage(taskId: string, runId: string, root = taskId, depth = 0, parent = root): Promise<void> {
   await query(url, `INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id)
-    VALUES ($1, $2, $3, $4, 'alpha', $5)`, [taskId, depth === 0 ? null : root, root, depth, runId]);
+    VALUES ($1, $2, $3, $4, 'alpha', $5)`, [taskId, depth === 0 ? null : parent, root, depth, runId]);
+}
+
+// Opens each task in its own transaction, in the order given.
+async function admit(...taskIds: string[]): Promise<void> {
+  for (const taskId of taskIds) {
+    await query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, '{}')", [taskId, `adm-${taskId}`]);
+  }
 }
 
 async function card(runId: string, projectId = 'alpha'): Promise<void> {
@@ -86,6 +93,7 @@ test('taking touches removes them and names each card once, through its lineage,
   await lineage('task-1', 'run-1');
   await lineage('task-child', 'run-child', 'task-1', 1);
   await query(url, "INSERT INTO agent_sessions (session_id, task_id, version, record) VALUES ('s-2', 'task-child', 1, '{}')");
+  await admit('task-1', 'task-child');
   await query(url, 'TRUNCATE card_touches');
   const take = () => database.transaction((tx) => tx.cardProjections.take(100));
   await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('run', 'run-child'), ('session', 's-2'), ('run', 'run-unknown')");
@@ -158,11 +166,15 @@ test('a change of the installation quarantine or recovery epoch touches every ca
   assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1', 'run-2'], workersChanged: false } });
 });
 
-test('a card lists its tasks in task identifier order, whatever order they were admitted in', async () => {
+test('a card lists its tasks in admission order, each delegated child under its parent', async () => {
   await card('run-1');
   await lineage('task-b', 'run-1');
   await lineage('task-a', 'run-1');
-  await lineage('task-a-child', 'run-child', 'task-a', 1);
+  await lineage('task-a-z', 'run-a-z', 'task-a', 1);
+  await lineage('task-b-child', 'run-b-child', 'task-b', 1);
+  await lineage('task-a-z-child', 'run-a-z-child', 'task-a', 2, 'task-a-z');
+  await lineage('task-a-y', 'run-a-y', 'task-a', 1);
+  await admit('task-b', 'task-a', 'task-a-z', 'task-b-child', 'task-a-z-child', 'task-a-y');
   const tasks = value(await database.readOnly((tx) => tx.cards.tasks('run-1' as never)));
-  assert.deepEqual(tasks.map((each) => each.taskId), ['task-a', 'task-a-child', 'task-b']);
+  assert.deepEqual(tasks.map((each) => each.taskId), ['task-b', 'task-b-child', 'task-a', 'task-a-z', 'task-a-z-child', 'task-a-y']);
 });

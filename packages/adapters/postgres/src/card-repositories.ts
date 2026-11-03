@@ -32,6 +32,17 @@ const CARD_LINEAGE = `task_lineage AS lineage
   JOIN task_lineage AS root ON root.task_id = lineage.root_task_id
   JOIN cards ON cards.run_id = root.run_id`;
 
+// A card's tasks in admission order, each delegated child under its
+// parent: the path of admission sequences from the root orders them.
+const CARD_ROOT_TASKS = `SELECT lineage.task_id, lineage.run_id, lineage.parent_task_id, lineage.depth,
+    ARRAY[tasks.admission_seq] AS admission_path
+  FROM task_lineage AS lineage JOIN tasks ON tasks.id = lineage.task_id
+  WHERE lineage.run_id = $1 AND lineage.depth = 0 AND EXISTS (SELECT 1 FROM cards WHERE cards.run_id = $1)`;
+const DELEGATED_TASKS = `SELECT child.task_id, child.run_id, child.parent_task_id, child.depth,
+    ordered.admission_path || tasks.admission_seq
+  FROM ordered JOIN task_lineage AS child ON child.parent_task_id = ordered.task_id
+  JOIN tasks ON tasks.id = child.task_id`;
+
 // The cards that task intake writes, and their lineage.
 export class PostgresCardCatalog implements CardCatalog {
   readonly #session: Session;
@@ -62,11 +73,10 @@ export class PostgresCardCatalog implements CardCatalog {
     return ok(Object.freeze(rows.map(cardOf)));
   }
 
-  // No store keeps the admission order, so task identifier order stands in.
   async tasks(runId: WorkflowRunId): Promise<Result<readonly CardTask[]>> {
     const { rows } = await this.#session.query<LineageRow>(
-      `SELECT lineage.task_id, lineage.run_id, lineage.parent_task_id, lineage.depth FROM ${CARD_LINEAGE}
-       WHERE cards.run_id = $1 ORDER BY lineage.task_id COLLATE "C"`,
+      `WITH RECURSIVE ordered AS (${CARD_ROOT_TASKS} UNION ALL ${DELEGATED_TASKS})
+       SELECT task_id, run_id, parent_task_id, depth FROM ordered ORDER BY admission_path`,
       [runId],
     );
     return ok(Object.freeze(rows.map(cardTaskOf)));

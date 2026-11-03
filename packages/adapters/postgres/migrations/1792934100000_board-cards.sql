@@ -22,6 +22,18 @@ CREATE TABLE board_projections (
   workers_online integer NOT NULL CHECK (workers_online >= 0)
 );
 
+-- The order in which tasks were admitted, total and stable but not commit
+-- order; a task's INSERT takes the next value, existing ones their id order.
+CREATE SEQUENCE tasks_admission_seq AS bigint;
+ALTER TABLE tasks ADD COLUMN admission_seq bigint;
+UPDATE tasks SET admission_seq = ordered.seq
+  FROM (SELECT id, row_number() OVER (ORDER BY id COLLATE "C") AS seq FROM tasks) AS ordered
+  WHERE tasks.id = ordered.id;
+SELECT setval('tasks_admission_seq', coalesce(max(admission_seq), 0) + 1, false) FROM tasks;
+ALTER TABLE tasks
+  ALTER COLUMN admission_seq SET DEFAULT nextval('tasks_admission_seq'),
+  ALTER COLUMN admission_seq SET NOT NULL;
+
 -- What a writer's transaction changed, for the card projector: a run, a
 -- task, an admission, a session, a project, a worker, or the fleet.
 CREATE TABLE card_touches (
@@ -99,3 +111,5 @@ DROP FUNCTION touch_card() CASCADE;
 DROP TABLE card_touches;
 DROP TABLE board_projections;
 DROP TABLE cards;
+ALTER TABLE tasks DROP COLUMN admission_seq;
+DROP SEQUENCE tasks_admission_seq;
