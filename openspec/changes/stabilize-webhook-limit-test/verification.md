@@ -52,6 +52,7 @@ First round, at `7ebb61f1`; the pass 1 fix round has its own below.
 | `npm run openspec -- validate stabilize-webhook-limit-test --strict` | `7ebb61f1` | `Change 'stabilize-webhook-limit-test' is valid` |
 | `env -u NODE_ENV make verify` | `7a728252` | Passed on the first run, profile full, tree `a1fd9563`, stamp written; the totals are in "Generated checks"; the four tests of the test file named in this change passed (1092, 118, 103, and 5 ms) |
 | `env -u NODE_ENV make verify`, pass 1 fix round | `4e21b578` | Passed on the first run (an earlier run at `130f59bb` was stopped unfinished, to add the coordinator's decisions), profile full, tree `b4e8245a`, stamp written; tests 4646, pass 4599, fail 0, skipped 47 |
+| `env -u NODE_ENV make verify`, pass 2 fix round | `26d472fb` | Passed on the first run, no known flake, profile full, tree `2a95176f`, stamp written; tests 4649, pass 4602, fail 0, skipped 47 |
 
 ### Route
 
@@ -62,7 +63,7 @@ Route (`route.json`, rule version 5): elevated, trigger `contracts`; pass 1 revi
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b4e8245adf977b3dc379646db6a0c6f1a70b1495`; tests 4646, pass 4599, fail 0, skipped 47; all files 99.41% lines, 92.80% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `2a95176f8acc5f9351507d597f6da3616c39a33c`; tests 4649, pass 4602, fail 0, skipped 47; all files 99.41% lines, 92.77% branches, 98.82% functions.
 - `npm run openspec -- validate stabilize-webhook-limit-test --strict`: passed, `Change 'stabilize-webhook-limit-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 109 file(s); every pass summary file is valid: 89 file(s); every route file is valid: 42 file(s).`.
 - Spec diff against the merge base `0e8d10e0a7bd` with `origin/dev`: no change under `openspec/specs`.
@@ -71,6 +72,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e` | 0 | 2 | 5 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `34844afd-1dac-4b08-9356-c15e840c4a7c` | 0 | 0 | 1 | 5 |
 <!-- make record: end -->
 
 ## Independent review
