@@ -145,6 +145,7 @@ class LiveStream {
   #pumping = false;
   #again = false;
   #ended = false;
+  #loginDue = false;
   #cancelKeepAlive = () => undefined as void;
   #cancelExpiry = () => undefined as void;
 
@@ -160,7 +161,7 @@ class LiveStream {
 
   start(): void {
     this.#armKeepAlive();
-    if (this.#subject.login !== undefined) void this.#checkLogin();
+    this.#loginDue = this.#subject.login !== undefined;
     this.wake();
   }
 
@@ -203,7 +204,7 @@ class LiveStream {
   async #drain(): Promise<void> {
     const { log } = this.#dependencies;
     const page = this.#dependencies.readPage ?? STREAM_READ_PAGE;
-    while (!this.#ended) {
+    while (await this.#loginStillLive()) {
       const bounds = await log.bounds();
       if (!bounds.ok) return this.#warn(bounds.error);
       if (bounds.value.floor > this.#cursor) return this.#resync();
@@ -222,7 +223,7 @@ class LiveStream {
   }
 
   async #deliver(entry: LoggedEntry): Promise<boolean> {
-    if (this.#ended) return false;
+    if (!(await this.#loginStillLive())) return false;
     if (entry.kind === 'event') return this.#send({ kind: 'event', position: entry.position, event: entry.event });
     if (entry.position <= this.#openedAt) return true;
     if (entry.change.change === 'sessions-ended') return this.#checkLogin();
@@ -256,6 +257,14 @@ class LiveStream {
     });
   }
 
+  // A due login check runs inside the read loop, so nothing is delivered
+  // before it answers.
+  async #loginStillLive(): Promise<boolean> {
+    if (!this.#loginDue) return !this.#ended;
+    this.#loginDue = false;
+    return this.#checkLogin();
+  }
+
   // The stream ends without a frame with its login session; a session that
   // cannot be read ends it too, and the client reconnects.
   async #checkLogin(): Promise<boolean> {
@@ -276,6 +285,9 @@ class LiveStream {
     if (this.#ended) return;
     const remaining = Date.parse(until) - Date.parse(this.#dependencies.clock.now());
     const milliseconds = Math.min(Math.max(remaining, 0), MAX_TIMER_MILLISECONDS);
-    this.#cancelExpiry = this.#dependencies.scheduler.after(milliseconds, () => void this.#checkLogin());
+    this.#cancelExpiry = this.#dependencies.scheduler.after(milliseconds, () => {
+      this.#loginDue = true;
+      this.wake();
+    });
   }
 }

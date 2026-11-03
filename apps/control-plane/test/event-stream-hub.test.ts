@@ -245,3 +245,83 @@ test('the open fails when the role check fails again or the log cannot be read, 
   hub.close();
   assert.deepEqual([sink.closed, hub.openStreams()], [true, 0]);
 });
+
+// A login check that answers only when the test settles it; `started`
+// settles once that many checks began.
+function heldLogin() {
+  const waiters: Array<{ count: number; resolve: () => void }> = [];
+  const held = {
+    checks: 0,
+    settle: (_answer: Instant | undefined) => undefined as void,
+    fail: (_error: Error) => undefined as void,
+    started: (count: number) => new Promise<void>((resolve) => {
+      if (held.checks >= count) resolve();
+      else waiters.push({ count, resolve });
+    }),
+  };
+  const session: LoginSession = {
+    liveUntil: () => new Promise((resolve, reject) => {
+      held.checks++;
+      held.settle = (answer) => resolve(ok(answer));
+      held.fail = reject;
+      for (const waiter of waiters.filter((candidate) => candidate.count <= held.checks)) waiter.resolve();
+    }),
+  };
+  return { held, session };
+}
+
+// Counts the log's reads, so a test sees that a stream read nothing.
+function countingHub(log: InMemoryUiEventLog) {
+  const counted = {
+    reads: 0,
+    bounds: () => (counted.reads++, log.bounds()),
+    readAfter: (...args: Parameters<InMemoryUiEventLog['readAfter']>) => (counted.reads++, log.readAfter(...args)),
+  };
+  const scheduler = new ManualScheduler();
+  const clock = new ManualClock();
+  const hub = new EventStreamHub({ log: counted, scheduler, clock, logger: new Logger(new InMemoryLogSink(), { now: () => AT }) });
+  return { counted, scheduler, clock, hub };
+}
+
+test('a browser stream reads nothing from the log before its first login check answers, and ends if the login ended', async () => {
+  const log = new InMemoryUiEventLog();
+  await committed(log, eventEntry(marked(1)));
+  const { counted, hub } = countingHub(log);
+  const { held, session } = heldLogin();
+  const { sink } = await opened(hub, 0, subject(projectScope(ALPHA), session));
+  await held.started(1);
+  const reads = counted.reads;
+  hub.wake();
+  held.settle(undefined);
+  await sink.until((recorded) => recorded.closed);
+  assert.deepEqual([sink.frames, counted.reads - reads, hub.openStreams()], [[], 0, 0], 'only the open read the log');
+});
+
+test('a browser stream delivers nothing while its expiry check runs, and ends if that check finds the login ended', async () => {
+  const log = new InMemoryUiEventLog();
+  const { counted, scheduler, clock, hub } = countingHub(log);
+  const { held, session } = heldLogin();
+  const { sink } = await opened(hub, undefined, subject(projectScope(ALPHA), session));
+  await held.started(1);
+  held.settle(new Date(Date.parse(AT) + 60_000).toISOString() as Instant);
+  await scheduler.armed(60_000);
+  clock.advance(60_000);
+  scheduler.fire(60_000);
+  await held.started(2);
+  const reads = counted.reads;
+  await committed(log, eventEntry(marked(1)));
+  hub.wake();
+  held.settle(undefined);
+  await sink.until((recorded) => recorded.closed);
+  assert.deepEqual([sink.frames, counted.reads - reads, hub.openStreams()], [[], 0, 0], 'the expiry check holds the reads');
+});
+
+test('a login check that throws ends the stream and logs the failure', async () => {
+  const { hub, logs } = setup();
+  const { held, session } = heldLogin();
+  const { sink } = await opened(hub, undefined, subject(projectScope(ALPHA), session));
+  held.fail(new Error('the sessions table is gone'));
+  await sink.until((recorded) => recorded.closed);
+  assert.deepEqual([sink.frames, hub.openStreams()], [[], 0]);
+  assert.ok(logs.records.some((record) => record.event === 'events.stream.failed'));
+});
