@@ -113,7 +113,7 @@ Run `g1` (16:39:53–16:41:13) stopped during webhook processing after exposing 
 
 ## Live conformance run
 
-`make conformance-github OUT=<dir>` runs the shared SCM conformance suite against GitHub.com with the `scm-github` plugin and the App's own credential (change `run-github-scm-conformance`). It is manual, run on SCM changes, and not part of `make verify`. It reads `TASKELITH_GITHUB_APP_KEY_FILE`, `TASKELITH_GITHUB_WEBHOOK_SECRET_FILE`, `TASKELITH_GITHUB_APP_ID`, and `TASKELITH_GITHUB_INSTALLATION_ID`; `LONG_RUN=1` adds the hour-long refresh case and `CLEANUP_ONLY=1` only resets the repositories. A guard refuses every repository except the private `petarnenov/taskelith-conformance-project`, `-foreign`, and `-hidden` before any call; the App is installed on the first two only. Each run ends with a cleanup and saves only redacted evidence. Status: on 2026-11-03 the run passed all 17 cases, and with `LONG_RUN=1` all 18, the hour-long refresh case included, with no finding, after two fixes: the plugin's own tokens narrowed to the route's repository, and the propagation window of a credential's end (source control contract section 3), as GitHub's Git smart HTTP accepted a revoked token for a few seconds. Evidence and ending latencies: [GitHub live conformance](github-conformance/README.md).
+`make conformance-github OUT=<dir>` runs the shared SCM conformance suite against GitHub.com with the `scm-github` plugin and the App's own credential (change `run-github-scm-conformance`). It is manual, run on SCM changes, and not part of `make verify`. It reads `TASKELITH_GITHUB_APP_KEY_FILE`, `TASKELITH_GITHUB_WEBHOOK_SECRET_FILE`, `TASKELITH_GITHUB_APP_ID`, and `TASKELITH_GITHUB_INSTALLATION_ID`; `LONG_RUN=1` adds the hour-long refresh case and `CLEANUP_ONLY=1` only resets the repositories. A guard refuses every repository except the private `petarnenov/taskelith-conformance-project`, `-foreign`, and `-hidden` before any call; the App is installed on the first two only. Each run ends with a cleanup and saves only redacted evidence. Status: on 2026-11-03 the run passed all 17 cases, and with `LONG_RUN=1` all 18, the hour-long refresh case included, with no finding; after the fixes of review pass 1 it passed again in `live-5` and `long-2`. The live runs needed two fixes: the plugin's own tokens narrowed to the route's repository, and the propagation window of a credential's end (source control contract section 3), as GitHub's Git smart HTTP accepted a revoked token for a few seconds. Evidence and ending latencies: [GitHub live conformance](github-conformance/README.md).
 
 ## Consequences for the SCM port
 
@@ -130,9 +130,12 @@ Stated in harness-neutral terms, so that a later Forgejo plugin maps onto the sa
 - The review of GitHub's terms against Taskelith's use is recorded on 2026-10-25 in [Terms review](#terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission follows in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - A real webhook receiver that verifies signatures on the raw body, in place of the API copy, covering every delivery of a run, including redeliveries and deliveries caused by cleanup.
 - A reviewer identity separate from the App for approvals.
-- Token refresh for runs longer than an hour, and rate-limit behaviour under load.
-- Private repositories, and the minimum permission set without `administration` once protection is configured by an operator.
-- Narrowing a token to one repository within an installation that has several, and cleanup after a failure in the middle of a run.
+- Done (2026-11-04): token refresh for runs longer than an hour, by the long run `long-2` of the live conformance ([report](github-conformance/long-2.json)).
+- Rate-limit behaviour under load.
+- Done (2026-11-04): private repositories; the live conformance runs on the private disposable repositories ([report](github-conformance/live-5.json)).
+- The minimum permission set without `administration` once protection is configured by an operator.
+- Done (2026-11-04): narrowing a token to one repository within an installation that has several; the installation covers three repositories, and the guard refused no token request in the live run ([report](github-conformance/live-5.json)).
+- Cleanup after a failure in the middle of a run.
 - GitHub's security-reporting process and service maintenance and support evidence, recorded with sources.
 - Recovery and upgrade behaviour: API version retirement, service outages, and rate limiting during a run.
 - The owner decided on 2026-10-24 to keep the qualification App's permissions, including administration, unchanged.
