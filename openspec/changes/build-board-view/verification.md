@@ -135,6 +135,7 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 - Finding 7 (`e704ba26`): the requirement keeps up to 1,000 events that arrive during a read and resyncs beyond that (481 characters, was 468); `npm run openspec -- validate build-board-view --strict` passes.
 - Findings 8 and 9 (`e5db172c`): the self-check dates its coverage before the pass 1 fixes and adds the later numbers, and the Revision list names every commit up to the reviewed head `4efdbca2`.
 - Records: pass 2 and its findings in `passes.jsonl` and `findings.jsonl`, outcome `fixed-unreviewed`, and this section.
+- Route: the fixes changed the diff, so `route.json` was deleted and the change routed again on the fixed head (`28aea54b`, unedited): "route: elevated", the same reviewers as before, shadow `jev-1.14.0` elevated (P(third) 0.72) and agrees; recommendation only.
 - Coordinator decision (Niki, 2026-11-03): `Shell.tsx:19` of 28b shows a `Loader` without a reduced-motion check; 29b fixes it by reusing the reduced-motion helper that 29a adds, with its own test.
 - Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 264 tests pass; `make findings ARGS="validate"` passes; the new comments of the changed `.ts` and `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
 
