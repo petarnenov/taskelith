@@ -58,17 +58,25 @@ Niki, 2026-11-03, on the brief's questions:
 - Q5: a 24 h window as a named, configurable setting, pruned by a job that raises the stored floor; a cursor below it gets the resync (decision 6).
 - Migration timestamp `1792933900000`; `1792933600000` (12f) and `1792933700000` (20e) stay unused.
 
+Niki, coordinator decision, 2026-11-03, on the implemented change:
+
+- Size: accepted as one change: at `634b3beb`, 61 files outside `openspec/` (+3078/−125 lines), 74 files with the records (+3593/−125), under 5000 lines; no split.
+- 14b, the durable snapshot of pruned output with its new operation, is a separate change, scheduled after item 15 unless item 29's board needs older output first ("Follow-ups").
+- Item 15 emits `card-changed` and `board-changed`; this change only types and maps them.
+- An inbox subject without an attempt stays skipped: the skip logs only the event type and the schema violation, never payload text, and the stream goes on (decision 7; the HTTP test of the skip also fails if item 13 starts a generation without an attempt).
+- A role change committed before the open but numbered after the bounds read may end a new stream once: accepted as the safe direction, since a stream never outlives a role; the reconnect stays open ("Risks / Trade-offs").
+
 ## Follow-ups
 
-- 14b: the durable snapshot of output older than the retained window, with its own operation.
-- Item 15 emits `card-changed` and `board-changed`, and the `card-changed` of an item that counts toward a card.
+- 14b: the durable snapshot of output older than the retained window, with its own operation, a separate change scheduled after item 15, unless item 29's board needs older output first (coordinator decision, 2026-11-03).
+- Item 15 emits `card-changed` and `board-changed`, and the `card-changed` of an item that counts toward a card (coordinator decision, 2026-11-03).
 
 ## Test plan
 
 - Execution (in-memory): the log's conformance cases (numbering from 1 in commit order, once, within the limit; the read filter, upper bound, and limit; pruning and the floor); the session events of a running turn, a request and its answer, held and released output, a repeat, a failure, an unscoped session, and an acknowledgement through the source.
 - Access: each principal change recorded with its change and none for a refused or empty command or a rolled-back transaction; `liveUntil` without renewal.
 - PostgreSQL (`make test`): the conformance cases; positions in commit order against insertion order; no entry after a rollback and no gap under concurrent numberings; Access role changes in the log; the notifications; the migration's checks and down migration; crash points `SessionTimelineCommit.before/after` and `EventNumberingCommit.before/after`.
-- Control plane: the hub (head start, scope filter, paging, resume, resync at open and when the floor passes a cursor, role-change ends of project and installation streams, changes before the open, a login that ends, expires, renews, or cannot be read, keep-alive, overflow, wake coalescing, detach, a failed open); the assigner, pruning, view positions, and the loop; HTTP over the in-memory stores (headers and frames, the session events against `ProjectEvent`, `Last-Event-ID` over `after`, reconnect, both resyncs, 400, 401, 403, 404, the installation stream, role change, logout, the buffer bound, a skipped invalid event); settings; the composition over PostgreSQL (a role change ends a project stream through the assigner).
+- Control plane: the hub (head start, scope filter, paging, resume, resync at open and when the floor passes a cursor, role-change ends of project and installation streams, changes before the open, a login that ends, expires, renews, or cannot be read, keep-alive, overflow, wake coalescing, detach, a failed open); the assigner, pruning, view positions, and the loop; HTTP over the in-memory stores (headers and frames, the session events against `ProjectEvent`, `Last-Event-ID` over `after`, reconnect, both resyncs, 400, 401, 403, 404, the installation stream, role change, logout, the buffer bound, a skipped invalid event, an inbox item without an attempt); settings; the composition over PostgreSQL (a role change ends a project stream through the assigner).
 - Coverage: the new files reach at least 75% of lines, branches, and functions under `make verify`.
 
 ## Review checklist
@@ -77,7 +85,7 @@ The brief's checklist (`checklist.json`, dev `26bbb10f`, size L) ranks contract-
 
 ## Risks / Trade-offs
 
-- A change committed before a stream opens but numbered after its bounds read can end a new stream once (a role change) or make it re-read its login; the client reconnects, so the error is on the safe side.
+- A change committed before a stream opens but numbered after its bounds read can end a new stream once (a role change) or make it re-read its login; the client reconnects, and the reconnect stays open, so the error is on the safe side: a stream never outlives a role (coordinator decision, 2026-11-03; the hub test "a role change committed before the open but numbered after it ends the new stream once, and a reconnect stays open").
 - Every stream reads the log's bounds on each wake, at least once a second; the cost grows with open streams, which G6 measures.
 - The in-memory log is a test adapter; production runs PostgreSQL only.
-- An inbox item whose subject lacks an attempt breaks `NativeRequestInboxSubject` and is skipped as a defective event; item 13 binds an attempt before any request, so none is expected.
+- An inbox item whose subject lacks an attempt breaks `NativeRequestInboxSubject` and is skipped as a defective event, logged with its type and violation only, and the stream sends the next event; item 13 starts a generation, and so records a request, only with an active attempt, so none is expected (coordinator decision, 2026-11-03; the HTTP test "an inbox item without an attempt is skipped, logged by identifiers only, and the next event still arrives").
