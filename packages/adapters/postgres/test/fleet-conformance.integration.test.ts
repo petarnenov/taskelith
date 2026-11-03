@@ -20,14 +20,22 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
-import { ok, parseInstant, type Instant } from '@taskelith/kernel';
+import { ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
 import pg from 'pg';
-import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { createMigratedDatabase, query, steppedClockCredentials, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const database = new PostgresDatabase(url);
 after(() => database.close());
+// A database clock that stands still until a test steps it, ahead of the
+// real one, so the transaction start that `now()` reads is never expired.
+const STEPPED_AT = '2099-01-01T00:00:00.000Z';
+const TOKEN_LIFETIME_MILLISECONDS = 1000;
+const STEPPED_EXPIRY = value(parseInstant(new Date(Date.parse(STEPPED_AT) + TOKEN_LIFETIME_MILLISECONDS).toISOString()));
+const steppedClock = await steppedClockCredentials(url, STEPPED_AT);
+const steppedDatabase = new PostgresDatabase(steppedClock.credentials);
+after(() => steppedDatabase.close());
 
 function runSuite<Port>(port: string, cases: readonly ConformanceCase<Port>[], create: () => Port): void {
   for (const conformance of cases) {
@@ -72,56 +80,39 @@ test('an enrolled worker is placeable once reachable and admitted, and a revoked
 
 test('a token that expires while its use waits for the row lock enrolls nothing', { concurrency: false }, async () => {
   await truncateAll(url);
-  const registry = new CommittingFleetRegistry(database);
+  await steppedClock.stepTo(0);
+  assert.deepEqual(await query(steppedClock.credentials, 'SELECT clock_timestamp() AS at'), [{ at: new Date(STEPPED_AT) }]);
+  const registry = new CommittingFleetRegistry(steppedDatabase);
+  value(await registry.addToken(fleetToken('t1', {}, STEPPED_EXPIRY)));
   const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
   await Promise.all([holder.connect(), observer.connect()]);
-  const expiresAt = await databaseClockIn(observer, TOKEN_LIFETIME_MILLISECONDS);
-  value(await registry.addToken(fleetToken('t1', {}, expiresAt)));
-  await holder.query('BEGIN');
-  await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
-  const enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
-
-  assert.equal(await waitForWaitingEnrollment(observer, expiresAt), true, 'the enrollment waits before the token expires');
-  await waitForDatabaseClockPast(observer, expiresAt);
-  await holder.query('COMMIT');
-  await Promise.all([holder.end(), observer.end()]);
-  const enrolled = await enrolling;
-  assert.equal(!enrolled.ok && enrolled.error.details.reason, 'token-expired');
+  let enrolling: Promise<Result<void>> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
+    enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
+    await waitForWaitingEnrollment(observer);
+    await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
+    await holder.query('COMMIT');
+    const enrolled = await enrolling;
+    assert.equal(!enrolled.ok && enrolled.error.details.reason, 'token-expired');
+  } finally {
+    // Ending the holder also releases its lock after a failed step.
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([enrolling]);
+  }
 });
 
-// Long enough for the setup to reach the lock wait on a loaded host.
-const TOKEN_LIFETIME_MILLISECONDS = 2000;
-
-// The adapter compares the expiry with the database clock, not the host's.
-async function databaseClockIn(client: pg.Client, milliseconds: number): Promise<Instant> {
-  const { rows } = await client.query<{ at: Date }>(
-    "SELECT date_trunc('milliseconds', clock_timestamp()) + $1::int * interval '1 millisecond' AS at", [milliseconds],
-  );
-  return value(parseInstant(rows[0]!.at.toISOString()));
-}
-
-// Whether the enrollment was seen waiting for the row lock before `instant`.
-async function waitForWaitingEnrollment(client: pg.Client, instant: Instant): Promise<boolean> {
+async function waitForWaitingEnrollment(client: pg.Client): Promise<void> {
   for (let tries = 0; tries < 500; tries++) {
-    const { rows } = await client.query<{ waiting: boolean; early: boolean }>(
+    const { rows } = await client.query<{ waiting: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-         AND pid <> pg_backend_pid() AND query LIKE 'UPDATE enrollment_tokens %') AS waiting,
-         clock_timestamp() < $1 AS early`,
-      [instant],
+         AND pid <> pg_backend_pid() AND query LIKE 'UPDATE enrollment_tokens %') AS waiting`,
     );
-    if (rows[0]!.waiting) return rows[0]!.early;
+    if (rows[0]!.waiting) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('the enrollment never waited for the row lock');
-}
-
-async function waitForDatabaseClockPast(client: pg.Client, instant: Instant): Promise<void> {
-  for (let tries = 0; tries < 1500; tries++) {
-    const { rows } = await client.query<{ past: boolean }>('SELECT clock_timestamp() > $1 AS past', [instant]);
-    if (rows[0]!.past) return;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error('the database clock never passed the expiry');
 }
 
 test('a publisher that waited for the lock pushes every entry committed meanwhile', { concurrency: false }, async () => {
