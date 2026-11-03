@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BoardStreamEvent } from '../src/board/board';
+import { RESYNC_DELAY_MILLISECONDS, startBoardFeed } from '../src/board/board-feed';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
-import { board, card, OTHER_PROJECT, PROJECT } from './fakes';
+import { board, card, ManualClock, OTHER_PROJECT, PROJECT } from './fakes';
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -172,6 +173,30 @@ describe('the project event stream', () => {
     source.dispatch('board-changed', JSON.stringify({ type: 'board-changed', position: 'x', occurredAt: 'now', workersOnline: 1 }));
     source.dispatch('card-changed', 42);
     expect(events).toEqual([{ kind: 'resync' }, { kind: 'resync' }, { kind: 'resync' }, { kind: 'resync' }]);
+  });
+
+  it('makes the board feed wait longer after each repeated unreadable event', async () => {
+    const sources: FakeEventSource[] = [];
+    const gateway = createBoardGateway({
+      fetch: vi.fn<typeof fetch>(() => Promise.resolve(json(200, board()))),
+      openEventSource: (url) => {
+        const source = new FakeEventSource(url);
+        sources.push(source);
+        return source;
+      },
+    });
+    const clock = new ManualClock();
+    const stop = startBoardFeed({ projectId: PROJECT.projectId, gateway, clock, show: () => {} });
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    sources[0]!.dispatch('card-changed', '{not json');
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    sources[1]!.dispatch('card-changed', '{not json');
+    expect(sources[1]!.closed).toBe(true);
+    await vi.waitFor(() => expect(clock.pendingDelays()).toEqual([RESYNC_DELAY_MILLISECONDS]));
+    expect(sources).toHaveLength(2);
+    clock.advance(RESYNC_DELAY_MILLISECONDS);
+    await vi.waitFor(() => expect(sources).toHaveLength(3));
+    stop();
   });
 
   it('reports resync and stream-ended, and nothing once closed', () => {

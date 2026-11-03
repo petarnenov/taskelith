@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Board, ReadResult } from '../src/board/board';
-import { startBoardFeed, STREAM_RETRY_MILLISECONDS, type BoardFeedState } from '../src/board/board-feed';
+import type { Board, BoardStreamEvent, ReadResult } from '../src/board/board';
+import {
+  MAX_CHANGES_DURING_READ,
+  RESYNC_DELAY_MILLISECONDS,
+  startBoardFeed,
+  STREAM_RETRY_MILLISECONDS,
+  type BoardFeedState,
+} from '../src/board/board-feed';
 import { board, card, FakeBoardGateway, ManualClock, PROJECT } from './fakes';
 
 // A promise the test resolves when it chooses, so no read races it.
@@ -31,6 +37,13 @@ function start(gateway = new FakeBoardGateway(), clock = new ManualClock()) {
 
 const read = (value: Board): ReadResult<Board> => ({ kind: 'read', value });
 const at = (position: string, minute = 1) => ({ position, occurredAt: `2026-11-03T09:0${minute}:00.000Z` });
+
+// Emits one card change at each position after the snapshot's 40.
+function emitChanges(stream: { emit: (event: BoardStreamEvent) => void }, count: number): void {
+  for (let offset = 1; offset <= count; offset += 1) {
+    stream.emit({ kind: 'card-changed', ...at(String(40 + offset)), card: card() });
+  }
+}
 
 describe('the board feed', () => {
   it('reads the board, then opens the stream after its position', async () => {
@@ -142,6 +155,124 @@ describe('the board feed', () => {
     expect(view.board.cards.map((known) => known.runId)).toEqual(['run-early', 'run-late']);
     expect(view.board.position).toBe('45');
     expect(stream.isClosed()).toBe(false);
+  });
+
+  it('keeps the live updates lost after a failed stream until the new stream opens', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'opened' });
+    feed.gateway.lastStream().emit({ kind: 'failed' });
+    await settled();
+    feed.clock.advance(STREAM_RETRY_MILLISECONDS);
+    expect(feed.gateway.openStreams()).toHaveLength(1);
+    expect(feed.shown().liveness).toBe('lost');
+    feed.gateway.lastStream().emit({ kind: 'opened' });
+    expect(feed.shown().liveness).toBe('live');
+  });
+
+  it('shows the live updates as lost from a resync until the new stream opens', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'opened' });
+    const snapshot = deferred<ReadResult<Board>>();
+    feed.gateway.readBoard.mockReturnValueOnce(snapshot.promise);
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    expect(feed.shown().liveness).toBe('lost');
+    snapshot.resolve(read(board({ position: '90' })));
+    await settled();
+    expect(feed.gateway.lastStream().after).toBe('90');
+    expect(feed.shown().liveness).toBe('lost');
+    feed.gateway.lastStream().emit({ kind: 'opened' });
+    expect(feed.shown().liveness).toBe('live');
+  });
+
+  it('recovers from a first resync at once and waits longer before each repeated one', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(2);
+    expect(feed.gateway.streams).toHaveLength(2);
+    for (const [repeat, delay] of [RESYNC_DELAY_MILLISECONDS, 2 * RESYNC_DELAY_MILLISECONDS].entries()) {
+      feed.gateway.lastStream().emit({ kind: 'resync' });
+      await settled();
+      expect(feed.clock.pendingDelays()).toEqual([delay]);
+      expect(feed.gateway.openStreams()).toEqual([]);
+      feed.clock.advance(delay);
+      await settled();
+      expect(feed.gateway.readBoard).toHaveBeenCalledTimes(3 + repeat);
+      expect(feed.gateway.openStreams()).toHaveLength(1);
+    }
+  });
+
+  it('waits at most the stream retry delay between repeated resyncs', async () => {
+    const feed = start();
+    await settled();
+    for (let resync = 0; resync < 6; resync += 1) {
+      feed.gateway.lastStream().emit({ kind: 'resync' });
+      await settled();
+      feed.clock.advance(Math.max(0, ...feed.clock.pendingDelays()));
+      await settled();
+    }
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    expect(feed.clock.pendingDelays()).toEqual([STREAM_RETRY_MILLISECONDS]);
+  });
+
+  it('recovers from a resync at once again after the stream delivered a change', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'card-changed', ...at('41'), card: card() });
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    expect(feed.clock.pendingDelays()).toEqual([]);
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(3);
+    expect(feed.gateway.openStreams()).toHaveLength(1);
+  });
+
+  it('cancels a pending resync when stopped', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    feed.stop();
+    feed.clock.advance(RESYNC_DELAY_MILLISECONDS);
+    await settled();
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps no changes while no read runs, however many the stream delivers', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    emitChanges(stream, MAX_CHANGES_DURING_READ + 1);
+    feed.gateway.readBoard.mockReturnValueOnce(deferred<ReadResult<Board>>().promise);
+    stream.emit({ kind: 'stream-ended' });
+    stream.emit({ kind: 'card-changed', ...at(String(42 + MAX_CHANGES_DURING_READ)), card: card() });
+    expect(stream.isClosed()).toBe(false);
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it('replaces a read that falls too far behind the stream with a resync', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    const stalled = deferred<ReadResult<Board>>();
+    feed.gateway.readBoard.mockReturnValueOnce(stalled.promise);
+    stream.emit({ kind: 'stream-ended' });
+    emitChanges(stream, MAX_CHANGES_DURING_READ);
+    expect(stream.isClosed()).toBe(false);
+    feed.gateway.readBoard.mockResolvedValueOnce(read(board({ position: '5000' })));
+    stream.emit({ kind: 'card-changed', ...at(String(41 + MAX_CHANGES_DURING_READ)), card: card() });
+    expect(stream.isClosed()).toBe(true);
+    expect(feed.shown().liveness).toBe('lost');
+    stalled.resolve(read(board({ position: '45' })));
+    await settled();
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(3);
+    expect(feed.shown().view.board.position).toBe('5000');
+    expect(feed.gateway.lastStream().after).toBe('5000');
   });
 
   it('keeps only the answer of the latest read', async () => {
