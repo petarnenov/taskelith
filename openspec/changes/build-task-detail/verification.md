@@ -21,6 +21,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `977756d3` `docs: route the build-task-detail change after the pass 2 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `0e5a0f33` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,124 lines in 35 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
 - `1053a645` `test: widen the async query timeout for apps/web` and `f728e434`, its record (see "Pass 2 fixes").
 - `a463504c` `docs: route the build-task-detail change after the async query timeout`: the timeout commit changed the diff, so the old `route.json` was deleted and the change routed again at head `f728e434` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,130 lines in 37 files; the tier stayed elevated, with the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
+- Merged origin/dev d0d59478 (#434) before the archive, because the archive verify hit the 413 flake that #434 stabilizes (verify-29b-archive.log:5485).
 
 ## Environment
 
@@ -150,7 +151,7 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 - After the fixes the whole `apps/web` suite passes: 457 tests in 15 files, 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines; `tsc` of both `apps/web` configurations and `npm run verify:comments` pass.
 - Timing margin (`1053a645` `test: widen the async query timeout for apps/web`), approved by the coordinator (Niki) on 2026-11-03: the `make verify` of the fixed tree, `verify-29b-p2c.log` in the session scratchpad, failed one `apps/web` test, the `findByRole` of the link "Add the board" at `test/task-detail.test.tsx` line 68, which took 1337 ms against the 1000 ms default of Testing Library; a cold Mantine render on the loaded iMac, and the file passed 3 times on its own. `apps/web/test/setup.ts` now sets `configure({ asyncUtilTimeout: 5000 })`, and `apps/web/vitest.config.ts` sets `testTimeout: 15000`, above the Vitest default of 5000 ms, so a test leaves room above its query timeout. Fail-before does not apply to a timing margin. This commit is unreviewed too and awaits the coordinator's architect check.
 - `make verify` of the fixed tree (`a463504c`, tree `fed39a90`), `verify-29b-p2e.log` in the session scratchpad: passed at the first run, profile full, no rerun; in it `apps/web` Vitest ran 457 tests, all passing, with 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines. The generated part above records it.
-- Architect check by the coordinator (Niki): _pending_.
+- Architect check (Niki, 2026-11-03): PASSED for 23789da3, 49518eea, 0e5a0f33, 1053a645.
 
 ## Limitations
 
@@ -168,5 +169,4 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 
 ## Remaining gates
 
-- Architect check by the coordinator of the pass 2 fixes and the timing margin `1053a645`, which no later pass reviews (see "Pass 2 fixes").
 - Integration into dev by the coordinator (single pull request).
