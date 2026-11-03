@@ -1,0 +1,111 @@
+{
+  "change": "manage-scm-integrations",
+  "generatedAt": "2026-11-03T06:43:35.969Z",
+  "devCommit": "4b89aa6ec5785669b3e58798cd06d52c2fdcb0be",
+  "query": {
+    "capabilities": [
+      "scm-port",
+      "control-plane-api",
+      "control-plane-wire-contracts",
+      "postgres-state",
+      "plugin-registration",
+      "delivery-planning"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/integrations/**",
+      "packages/plugins/scm-github/**",
+      "packages/plugin-sdk/**",
+      "packages/adapters/postgres/**",
+      "packages/adapters/secrets/**",
+      "packages/adapters/control-plane-store/**",
+      "docs/g3-plan.md"
+    ],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 56
+      },
+      {
+        "category": "docs",
+        "count": 40
+      },
+      {
+        "category": "error-handling",
+        "count": 28
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 26
+      },
+      {
+        "category": "spec-wording",
+        "count": 22
+      },
+      {
+        "category": "redaction",
+        "count": 20
+      },
+      {
+        "category": "naming",
+        "count": 19
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 844,
+        "inChecklist": 716
+      },
+      "mediumOrWorse": {
+        "findings": 415,
+        "inChecklist": 340
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 138
+      },
+      {
+        "category": "spec-wording",
+        "count": 97
+      },
+      {
+        "category": "docs",
+        "count": 73
+      },
+      {
+        "category": "stale-citation",
+        "count": 52
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 24
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 7
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 422,
+        "inChecklist": 415
+      },
+      "mediumOrWorse": {
+        "findings": 65,
+        "inChecklist": 65
+      }
+    }
+  }
+}
