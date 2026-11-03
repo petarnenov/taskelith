@@ -1,11 +1,11 @@
 {
   "change": "manage-scm-integrations",
-  "generatedAt": "2026-11-03T07:11:03.655Z",
+  "generatedAt": "2026-11-03T07:17:33.741Z",
   "devCommit": "4b89aa6ec5785669b3e58798cd06d52c2fdcb0be",
-  "headCommit": "33212169e17eff066d7daeadaf3114c7d7b88b09",
+  "headCommit": "cb7cbbcb105a290e16ae38c34ae1c8069468dd80",
   "features": {
-    "linesChanged": 1870,
-    "filesChanged": 54,
+    "linesChanged": 1873,
+    "filesChanged": 55,
     "capabilities": [
       "control-plane-api",
       "plugin-registration",
@@ -75,7 +75,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.79,
+    "thirdPassProbability": 0.82,
     "threshold": 0.4,
     "passes": [
       {
@@ -106,6 +106,6 @@
         }
       }
     ],
-    "latencyMs": 338
+    "latencyMs": 368
   }
 }
