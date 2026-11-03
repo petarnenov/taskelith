@@ -7,6 +7,16 @@ type Listener = () => void;
 // Provisional, in docs/operational-targets.md: how long the connection,
 // and each LISTEN on it, may take before the attempt counts as lost.
 export const LISTEN_DEADLINE_MILLISECONDS = 5_000;
+// Provisional, there too: how often an open connection is probed, since a
+// half-open one raises no error.
+export const LISTEN_PROBE_MILLISECONDS = 30_000;
+const KEEP_ALIVE_DELAY_MILLISECONDS = 10_000;
+
+export interface NotificationOptions {
+  readonly logger?: Logger;
+  readonly deadlineMilliseconds?: number;
+  readonly probeMilliseconds?: number;
+}
 
 // The log's wake-ups (appended, numbered) over one LISTEN connection, which
 // `listen` reopens; readers also poll, so a missed one only delays them.
@@ -14,6 +24,7 @@ export class PostgresUiEventNotifications {
   readonly #url: URL;
   readonly #logger: Logger;
   readonly #deadlineMilliseconds: number;
+  readonly #probeMilliseconds: number;
   readonly #appended = new Set<Listener>();
   readonly #numbered = new Set<Listener>();
   #client: pg.Client | undefined;
@@ -21,11 +32,14 @@ export class PostgresUiEventNotifications {
   #opening: Promise<boolean> | undefined;
   #cancelConnect: ((error: Error) => void) | undefined;
   #closed = false;
+  #probing = false;
+  #probedAt = Number.NEGATIVE_INFINITY;
 
-  constructor(url: URL, logger: Logger = SILENT_LOGGER, deadlineMilliseconds = LISTEN_DEADLINE_MILLISECONDS) {
+  constructor(url: URL, options: NotificationOptions = {}) {
     this.#url = url;
-    this.#logger = logger;
-    this.#deadlineMilliseconds = deadlineMilliseconds;
+    this.#logger = options.logger ?? SILENT_LOGGER;
+    this.#deadlineMilliseconds = options.deadlineMilliseconds ?? LISTEN_DEADLINE_MILLISECONDS;
+    this.#probeMilliseconds = options.probeMilliseconds ?? LISTEN_PROBE_MILLISECONDS;
   }
 
   onAppended(listener: Listener): () => void {
@@ -38,10 +52,13 @@ export class PostgresUiEventNotifications {
     return () => this.#numbered.delete(listener);
   }
 
-  // Opens the connection unless it is open, joining an opening one;
-  // answers whether it is open.
+  // Opens the connection unless it is open, joining an opening one, or
+  // probes an open one when due; answers whether it is open.
   listen(): Promise<boolean> {
-    if (this.#client !== undefined) return Promise.resolve(true);
+    if (this.#client !== undefined) {
+      this.#probeWhenDue(this.#client);
+      return Promise.resolve(true);
+    }
     if (this.#closed) return Promise.resolve(false);
     this.#opening ??= this.#open().finally(() => {
       this.#opening = undefined;
@@ -61,6 +78,7 @@ export class PostgresUiEventNotifications {
   async #open(): Promise<boolean> {
     const client = new pg.Client({
       connectionString: this.#url.href, connectionTimeoutMillis: this.#deadlineMilliseconds, query_timeout: this.#deadlineMilliseconds,
+      keepAlive: true, keepAliveInitialDelayMillis: KEEP_ALIVE_DELAY_MILLISECONDS,
     });
     client.on('error', (error) => this.#lost(client, error));
     client.on('notification', (message) => this.#notify(message.channel));
@@ -81,7 +99,21 @@ export class PostgresUiEventNotifications {
       return false;
     }
     this.#client = client;
+    this.#probedAt = performance.now();
     return true;
+  }
+
+  // A probe without an answer by the deadline counts as a lost connection.
+  #probeWhenDue(client: pg.Client): void {
+    if (this.#probing || performance.now() - this.#probedAt < this.#probeMilliseconds) return;
+    this.#probing = true;
+    this.#probedAt = performance.now();
+    client.query('SELECT 1').then(
+      () => undefined,
+      (error: Error) => this.#lost(client, error),
+    ).finally(() => {
+      this.#probing = false;
+    });
   }
 
   // pg leaves `connect` pending when `end` interrupts it, so `close` also

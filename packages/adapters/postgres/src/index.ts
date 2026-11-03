@@ -48,4 +48,4 @@ export { PostgresTransaction } from './postgres-transaction.js';
 export { PostgresRunCatalog } from './run-catalog.js';
 export { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 export { APPENDED_CHANNEL, NUMBERED_CHANNEL, PostgresUiEventLog, PostgresUiEventRecords } from './ui-event-repositories.js';
-export { LISTEN_DEADLINE_MILLISECONDS, PostgresUiEventNotifications } from './ui-event-notifications.js';
+export { LISTEN_DEADLINE_MILLISECONDS, LISTEN_PROBE_MILLISECONDS, PostgresUiEventNotifications, type NotificationOptions } from './ui-event-notifications.js';

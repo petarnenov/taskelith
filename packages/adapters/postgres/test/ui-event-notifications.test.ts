@@ -34,7 +34,7 @@ const closedSocket = (socket: Socket) => new Promise<void>((resolve) => (socket.
 test('a LISTEN connection that never answers gives up at its deadline, logs it, and closes its socket', async (t) => {
   const silent = await silentServer(t);
   const logs = new InMemoryLogSink();
-  const notifications = new PostgresUiEventNotifications(silent.url, new Logger(logs, { now: () => AT }), 200);
+  const notifications = new PostgresUiEventNotifications(silent.url, { logger: new Logger(logs, { now: () => AT }), deadlineMilliseconds: 200 });
   t.after(() => notifications.close());
   assert.equal(await notifications.listen(), false);
   assert.ok(logs.records.some((record) => record.event === 'postgres.events.listen.lost'));
@@ -43,7 +43,7 @@ test('a LISTEN connection that never answers gives up at its deadline, logs it, 
 
 test('close ends a LISTEN connection that is still opening, and the pending listen answers false', async (t) => {
   const silent = await silentServer(t);
-  const notifications = new PostgresUiEventNotifications(silent.url, new Logger(new InMemoryLogSink(), { now: () => AT }), 600_000);
+  const notifications = new PostgresUiEventNotifications(silent.url, { logger: new Logger(new InMemoryLogSink(), { now: () => AT }), deadlineMilliseconds: 600_000 });
   const connecting = notifications.listen();
   await silent.accepted();
   await notifications.close();
@@ -53,7 +53,7 @@ test('close ends a LISTEN connection that is still opening, and the pending list
 
 test('a listen while the connection opens joins it instead of opening another', async (t) => {
   const silent = await silentServer(t);
-  const notifications = new PostgresUiEventNotifications(silent.url, new Logger(new InMemoryLogSink(), { now: () => AT }), 200);
+  const notifications = new PostgresUiEventNotifications(silent.url, { logger: new Logger(new InMemoryLogSink(), { now: () => AT }), deadlineMilliseconds: 200 });
   t.after(() => notifications.close());
   assert.deepEqual(await Promise.all([notifications.listen(), notifications.listen()]), [false, false]);
   assert.equal(silent.sockets.length, 1);

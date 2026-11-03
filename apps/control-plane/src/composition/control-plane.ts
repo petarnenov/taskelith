@@ -201,7 +201,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const projectSetup = new ProjectSetupService({ store: access.store, random: access.secrets, clock });
   const eventLog = new PostgresUiEventLog(database);
   const hub = new EventStreamHub({ log: eventLog, scheduler: NODE_SCHEDULER, clock, logger });
-  const notifications = new PostgresUiEventNotifications(settings.postgres, logger);
+  const notifications = new PostgresUiEventNotifications(settings.postgres, { logger });
   cleanup.push(() => notifications.close());
   const numbering = new WakeableLoop(NODE_SCHEDULER);
   notifications.onAppended(() => numbering.wake());

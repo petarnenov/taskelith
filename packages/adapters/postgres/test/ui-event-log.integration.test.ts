@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { connect, createServer, type Socket } from 'node:net';
 import { after, beforeEach, test, type TestContext } from 'node:test';
 import { OwnerBootstrapService, PrincipalAdministration, ProjectSetupService, type PasswordHasher, type PrincipalId } from '@taskelith/access';
 import { UI_EVENT_LOG_CONFORMANCE, projectScope, type CommittedEntry, type PrincipalId as ReaderId, type UiEvent } from '@taskelith/execution';
@@ -250,7 +251,7 @@ test('a listener that cannot connect answers false and logs the loss, a close du
   const logs = new InMemoryLogSink();
   const unreachable = new URL(url.href);
   unreachable.port = '1';
-  const failing = new PostgresUiEventNotifications(unreachable, new Logger(logs, { now: () => AT }));
+  const failing = new PostgresUiEventNotifications(unreachable, { logger: new Logger(logs, { now: () => AT }) });
   assert.equal(await failing.listen(), false);
   assert.ok(logs.records.some((record) => record.event === 'postgres.events.listen.lost'));
   const closing = new PostgresUiEventNotifications(url);
@@ -276,7 +277,7 @@ test('a listener that cannot connect answers false and logs the loss, a close du
 
 test('a listener whose connection is lost logs it, and the next listen reconnects and hears again', async () => {
   const logs = new InMemoryLogSink();
-  const notifications = new PostgresUiEventNotifications(url, new Logger(logs, { now: () => AT }));
+  const notifications = new PostgresUiEventNotifications(url, { logger: new Logger(logs, { now: () => AT }) });
   after(() => notifications.close());
   assert.equal(await notifications.listen(), true);
   const lost = gate();
@@ -291,5 +292,55 @@ test('a listener whose connection is lost logs it, and the next listen reconnect
   await untilNumberable(url);
   value(await log.assign(100, AT));
   await numbered.opened;
+});
+
+// Log records, with a wait for the first record of an event.
+class WaitingLogs extends InMemoryLogSink {
+  readonly #waiters: Array<{ event: string; resolve: () => void }> = [];
+
+  override write(record: Parameters<InMemoryLogSink['write']>[0]): void {
+    super.write(record);
+    for (const waiter of this.#waiters.filter((candidate) => candidate.event === record.event)) waiter.resolve();
+  }
+
+  logged(event: string): Promise<void> {
+    if (this.records.some((record) => record.event === event)) return Promise.resolve();
+    return new Promise((resolve) => this.#waiters.push({ event, resolve }));
+  }
+}
+
+// Forwards to the test's PostgreSQL until `freeze`, after which it drops
+// every byte both ways and keeps the sockets open, as a half-open peer does.
+async function freezableProxy(t: TestContext) {
+  let frozen = false;
+  const sockets: Socket[] = [];
+  const server = createServer((client) => {
+    const upstream = connect(Number(url.port), url.hostname);
+    sockets.push(client, upstream);
+    client.on('data', (chunk) => frozen || upstream.write(chunk));
+    upstream.on('data', (chunk) => frozen || client.write(chunk));
+    for (const socket of [client, upstream]) socket.on('error', () => undefined);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  t.after(() => new Promise<void>((resolve) => {
+    for (const socket of sockets) socket.destroy();
+    server.close(() => resolve());
+  }));
+  const proxied = new URL(url.href);
+  proxied.hostname = '127.0.0.1';
+  proxied.port = String((server.address() as { port: number }).port);
+  return { url: proxied, freeze: () => { frozen = true; } };
+}
+
+test('a probe of a LISTEN connection that stopped answering counts it as lost, and the next listen tries a new connection', async (t) => {
+  const proxy = await freezableProxy(t);
+  const logs = new WaitingLogs();
+  const notifications = new PostgresUiEventNotifications(proxy.url, { logger: new Logger(logs, { now: () => AT }), deadlineMilliseconds: 3_000, probeMilliseconds: 0 });
+  t.after(() => notifications.close());
+  assert.equal(await notifications.listen(), true);
+  proxy.freeze();
+  assert.equal(await notifications.listen(), true, 'the probe runs beside the answer');
+  await logs.logged('postgres.events.listen.lost');
+  assert.equal(await notifications.listen(), false, 'the frozen peer refuses the reopening by its deadline');
 });
 
