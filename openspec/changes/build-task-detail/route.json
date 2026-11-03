@@ -1,8 +1,8 @@
 {
   "change": "build-task-detail",
-  "generatedAt": "2026-11-03T20:39:06.616Z",
-  "devCommit": "d3dd09ed86b57f3fb0f885bef3757d67f96c02c1",
-  "headCommit": "f728e4341bcf60da667ec149e57feed1732e264e",
+  "generatedAt": "2026-11-03T20:57:19.537Z",
+  "devCommit": "d0d59478235781b8b095852b9306fe3e76237de8",
+  "headCommit": "654353cd962a7d562bbc3ae786094b7d9ebd6cb3",
   "features": {
     "linesChanged": 2130,
     "filesChanged": 37,
@@ -69,7 +69,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.67,
+    "thirdPassProbability": 0.65,
     "threshold": 0.4,
     "passes": [
       {
@@ -100,6 +100,6 @@
         }
       }
     ],
-    "latencyMs": 338
+    "latencyMs": 1281
   }
 }
