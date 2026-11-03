@@ -63,6 +63,7 @@ export class GithubChangeRequests {
       const settings = conflicts.join(',');
       return err(failure('precondition-failed', 'The branch protection has settings this plugin would weaken', { settings }));
     }
+    if (isEnsured(current.value, contexts)) return ok(protectionData(request, current.value));
     const protectedBranch = await this.api.asApp('PUT /repos/{owner}/{repo}/branches/{branch}/protection', {
       ...branch,
       required_status_checks: { strict: false, contexts },
@@ -71,13 +72,7 @@ export class GithubChangeRequests {
       restrictions: null,
     });
     if (!protectedBranch.ok) return err(refusal(protectedBranch.error, 'protect a branch'));
-    const data = recordOf(protectedBranch.value.data);
-    return ok({
-      repository: request.repository,
-      branch: request.branch,
-      requiredStatuses: textsOf(recordOf(data['required_status_checks'])['contexts']),
-      bindsProvider: recordOf(data['enforce_admins'])['enabled'] === true,
-    });
+    return ok(protectionData(request, recordOf(protectedBranch.value.data)));
   }
 
   async openChangeRequest(request: draft.OpenChangeRequest): Promise<Result<draft.ChangeRequestData>> {
@@ -196,6 +191,23 @@ function weakenedSettings(current: JsonRecord, contexts: readonly string[]): rea
   if (textsOf(checks['contexts']).some((context) => !ours.has(context))) conflicts.push('required_status_checks.contexts');
   conflicts.push(...DROPPED_SETTINGS.filter((setting) => recordOf(current[setting])['enabled'] === true));
   return conflicts;
+}
+
+// Unweakened protection that already requires exactly these contexts of
+// administrators needs no write.
+function isEnsured(current: JsonRecord, contexts: readonly string[]): boolean {
+  const required = new Set(textsOf(recordOf(current['required_status_checks'])['contexts']));
+  const bindsAdministrators = recordOf(current['enforce_admins'])['enabled'] === true;
+  return bindsAdministrators && required.size === contexts.length && contexts.every((context) => required.has(context));
+}
+
+function protectionData(request: draft.MergeProtectionRequest, data: JsonRecord): draft.MergeProtectionData {
+  return {
+    repository: request.repository,
+    branch: request.branch,
+    requiredStatuses: textsOf(recordOf(data['required_status_checks'])['contexts']),
+    bindsProvider: recordOf(data['enforce_admins'])['enabled'] === true,
+  };
 }
 
 function isSet(value: unknown): boolean {

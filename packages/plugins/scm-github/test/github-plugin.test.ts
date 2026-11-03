@@ -29,3 +29,11 @@ test('merge methods and the webhook secret are checked', () => {
     assert.equal(!created.ok && created.error.code, 'invalid', JSON.stringify(overrides));
   }
 });
+
+test('empty App settings are invalid, not thrown', () => {
+  const { options } = githubTestbed();
+  for (const overrides of [{ appId: '' }, { installationId: ' ' }, { privateKey: '' }]) {
+    const created = createGithubSourceControl({ ...options, ...overrides });
+    assert.equal(!created.ok && created.error.code, 'invalid', JSON.stringify(overrides));
+  }
+});

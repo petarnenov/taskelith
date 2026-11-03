@@ -1,13 +1,34 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { draft } from '@taskelith/plugin-sdk';
 import type { InstallationToken, InstallationTokens, TokenGrant } from './installation-tokens.js';
 
 type RunCredential = draft.RunCredential;
 
+// The plugin's time; tests drive it with the emulated GitHub's clock.
+export interface CredentialClock {
+  now(): number;
+  sleep(milliseconds: number): Promise<void>;
+}
+
+export const SYSTEM_CLOCK: CredentialClock = Object.freeze({
+  now: () => Date.now(),
+  sleep: async (milliseconds: number) => { await sleep(milliseconds); },
+});
+
+const SECOND_MS = 1000;
+const REFRESH_MINTS = 2;
+const MAX_REFRESH_WAIT_MS = 5 * SECOND_MS;
+// Past GitHub's expiry by this much, a token ends without a revocation,
+// which allows for skew between the local and GitHub's clocks.
+const EXPIRY_MARGIN_MS = 60 * SECOND_MS;
+
 // A version holds its token until it ends; then only its number remains.
 interface CredentialVersion {
   token: string | undefined;
+  // GitHub's expiry of the token, in epoch milliseconds.
+  readonly expiry: number;
 }
 
 interface RunCredentialVersion {
@@ -19,7 +40,6 @@ interface StoredCredential {
   readonly runId: string;
   readonly grant: TokenGrant;
   readonly versions: CredentialVersion[];
-  // GitHub's expiry of the newest version, in epoch milliseconds.
   latestExpiry: number;
   // Refreshes still waiting for GitHub, which a revocation waits for.
   readonly refreshing: Set<Promise<Result<RunCredentialVersion>>>;
@@ -31,19 +51,24 @@ interface StoredCredential {
 export class GithubRunCredentials {
   private readonly credentials = new Map<string, StoredCredential>();
 
-  constructor(private readonly tokens: InstallationTokens) {}
+  constructor(
+    private readonly tokens: InstallationTokens,
+    private readonly clock: CredentialClock,
+  ) {}
 
   async issueRunCredential(request: draft.RunCredentialRequest): Promise<Result<RunCredential>> {
+    this.forgetExpired();
     const requested = { repositories: [...request.repositories], permissions: [...request.permissions] };
     const minted = await this.tokens.mint(requested);
     if (!minted.ok) return minted;
     const credentialId = randomUUID();
     const { repositories, permissions, token, expiresAt } = minted.value;
+    const expiry = Date.parse(expiresAt);
     const stored: StoredCredential = {
       runId: request.runId,
       grant: { repositories, permissions },
-      versions: [{ token }],
-      latestExpiry: Date.parse(expiresAt),
+      versions: [{ token, expiry }],
+      latestExpiry: expiry,
       refreshing: new Set(),
       revoked: false,
     };
@@ -52,6 +77,7 @@ export class GithubRunCredentials {
   }
 
   async refreshRunCredential({ credentialId }: draft.RunCredentialReference): Promise<Result<RunCredential>> {
+    this.forgetExpired();
     const stored = this.live(credentialId);
     if (!stored.ok) return stored;
     const refreshing = this.nextVersion(stored.value);
@@ -66,6 +92,7 @@ export class GithubRunCredentials {
   }
 
   async confirmRunCredentialAdoption({ credentialId, version }: draft.RunCredentialAdoption): Promise<Result<void>> {
+    this.forgetExpired();
     const stored = this.live(credentialId);
     if (!stored.ok) return stored;
     const { versions } = stored.value;
@@ -78,6 +105,7 @@ export class GithubRunCredentials {
   // A failed revocation at GitHub keeps the credential, so a retry ends the
   // rest; it no longer refreshes or confirms an adoption.
   async revokeRunCredential({ credentialId }: draft.RunCredentialReference): Promise<Result<void>> {
+    this.forgetExpired();
     const stored = this.credentials.get(credentialId);
     if (stored === undefined) return err(unknownCredential());
     stored.revoked = true;
@@ -87,24 +115,33 @@ export class GithubRunCredentials {
     return ended;
   }
 
-  // A token minted after a revocation still joins the versions, which it
-  // ends; one that does not extend the expiry is discarded.
+  // GitHub sets an expiry an hour after the token request, to the second,
+  // so a mint in the newest version's second waits for the next one, once.
   private async nextVersion(stored: StoredCredential): Promise<Result<RunCredentialVersion>> {
-    const minted = await this.tokens.mint(stored.grant);
-    if (!minted.ok) return minted;
-    const { token, expiresAt } = minted.value;
-    if (stored.revoked) {
-      stored.versions.push({ token });
-      return err(unknownCredential());
+    for (let mints = 1; ; mints += 1) {
+      const minted = await this.tokens.mint(stored.grant);
+      if (!minted.ok) return minted;
+      const added = addVersion(stored, minted.value);
+      if (added !== undefined) return added;
+      await this.tokens.discard(minted.value.token);
+      const shortfall = stored.latestExpiry - Date.parse(minted.value.expiresAt);
+      if (mints === REFRESH_MINTS || shortfall >= MAX_REFRESH_WAIT_MS) return err(noLaterExpiry());
+      await this.clock.sleep(shortfall + SECOND_MS);
+      if (stored.revoked) return err(unknownCredential());
     }
-    const expiry = Date.parse(expiresAt);
-    if (expiry <= stored.latestExpiry) {
-      await this.tokens.discard(token);
-      return err(failure('unavailable', 'GitHub gave the refresh no later expiry; retry after a second'));
+  }
+
+  // Versions past their expiry end without GitHub, which refuses them
+  // anyway; a credential with every version ended is forgotten.
+  private forgetExpired(): void {
+    const ended = this.clock.now() - EXPIRY_MARGIN_MS;
+    for (const [credentialId, stored] of this.credentials) {
+      for (const version of stored.versions) {
+        if (version.expiry <= ended) version.token = undefined;
+      }
+      const isEnded = stored.versions.every((version) => version.token === undefined);
+      if (isEnded && stored.refreshing.size === 0) this.credentials.delete(credentialId);
     }
-    stored.versions.push({ token });
-    stored.latestExpiry = expiry;
-    return ok({ minted: minted.value, version: stored.versions.length });
   }
 
   private live(credentialId: string): Result<StoredCredential> {
@@ -142,6 +179,24 @@ function runCredential(credentialId: string, stored: StoredCredential, { minted,
 // workspace contract section 14).
 export function basicAuthorization(token: string): string {
   return `Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+}
+
+// A token minted after a revocation still joins the versions, which the
+// revocation ends; one without a later expiry is left to the caller.
+function addVersion(stored: StoredCredential, minted: InstallationToken): Result<RunCredentialVersion> | undefined {
+  const expiry = Date.parse(minted.expiresAt);
+  if (stored.revoked) {
+    stored.versions.push({ token: minted.token, expiry });
+    return err(unknownCredential());
+  }
+  if (expiry <= stored.latestExpiry) return undefined;
+  stored.versions.push({ token: minted.token, expiry });
+  stored.latestExpiry = expiry;
+  return ok({ minted, version: stored.versions.length });
+}
+
+function noLaterExpiry() {
+  return failure('unavailable', 'GitHub gave the refresh no later expiry; retry later');
 }
 
 function unknownCredential() {

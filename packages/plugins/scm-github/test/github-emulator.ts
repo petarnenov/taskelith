@@ -28,7 +28,8 @@ export interface EmulatorSetup {
   // GitHub's names of the merge methods the repositories allow.
   readonly allowedMergeMethods?: readonly string[];
   readonly pageSize?: number;
-  // How far the clock moves per token; real time passes between requests.
+  // How far the clock moves per token; by default none, as GitHub's
+  // second-precision expiries repeat within one second.
   readonly mintClockStepMs?: number;
   // Defects: permissions added to every narrowed token, protection that
   // never binds an administrator, and token answers without an expiry.
@@ -226,6 +227,15 @@ export class GithubEmulator {
     this.time += milliseconds;
   }
 
+  now(): number {
+    return this.time;
+  }
+
+  // GitHub's own spelling of an installed repository, matched without case.
+  private installedName(repository: string): string | undefined {
+    return this.setup.installed.find((name) => name.toLowerCase() === repository.toLowerCase());
+  }
+
   private route(request: RecordedRequest, path: string): Reply {
     const answer = this.answers.findIndex((next) => next.method === request.method && next.path.test(path));
     if (answer !== -1) return this.answers.splice(answer, 1)[0]!.reply;
@@ -241,13 +251,13 @@ export class GithubEmulator {
     if (installationId !== this.setup.installationId) return [404, { message: 'Not Found' }];
     const body = (request.body ?? {}) as { repositories?: string[]; permissions?: Record<string, string> };
     const owner = this.setup.installed[0]!.split('/')[0];
-    const names = body.repositories?.map((name) => `${owner}/${name}`) ?? [...this.setup.installed];
-    if (!names.every((name) => this.setup.installed.includes(name))) return [422, { message: 'Not accessible' }];
+    const names = body.repositories?.map((name) => this.installedName(`${owner}/${name}`)) ?? [...this.setup.installed];
+    if (!names.every((name): name is string => name !== undefined)) return [422, { message: 'Not accessible' }];
     const permissions = body.permissions ?? APP_PERMISSIONS;
     if (!Object.entries(permissions).every(([name, level]) => grants(APP_PERMISSIONS[name], level))) {
       return [422, { message: 'Permission not granted to the App' }];
     }
-    this.time += this.setup.mintClockStepMs ?? 1000;
+    this.time += this.setup.mintClockStepMs ?? 0;
     const granted = { ...permissions, ...this.setup.alsoGrants, metadata: 'read' };
     const token = this.storeToken(new Set(names), granted, body.repositories !== undefined);
     const repositories = names.map((full_name) => ({ full_name, name: full_name.split('/')[1] }));

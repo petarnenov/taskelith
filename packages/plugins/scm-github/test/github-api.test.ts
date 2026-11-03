@@ -35,3 +35,9 @@ test('GitHub messages in the App clock skew retry reach no console', async (t) =
   assert.equal(answered.length, 3);
   for (const secret of SECRETS) assert.ok(printed.every((line) => !line.includes(secret)), 'a secret reached the console');
 });
+
+test('a request that fails before reaching GitHub is internal, not unavailable', async () => {
+  const { provider } = githubTestbed({ privateKey: 'not a private key' });
+  const issued = await provider.issueRunCredential({ runId: 'run-1', repositories: [PROJECT], permissions: ['read-code'] });
+  assert.deepEqual(issued.ok ? undefined : [issued.error.code, issued.error.message.includes('GitHub refused')], ['internal', false]);
+});

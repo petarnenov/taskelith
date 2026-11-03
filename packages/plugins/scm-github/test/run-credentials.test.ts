@@ -40,8 +40,9 @@ test('every request names API version 2022-11-28', async () => {
   const { provider, emulator } = githubTestbed();
   const credential = await value(provider.issueRunCredential(READ_ONLY));
   await value(provider.revokeRunCredential(credential));
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'not-found');
   assert.equal(GITHUB_API_VERSION, '2022-11-28');
-  assert.ok(emulator.requests.length >= 3);
+  assert.ok(emulator.requests.some((request) => request.path.startsWith('/installation/repositories')));
   assert.ok(emulator.requests.every((request) => request.headers['x-github-api-version'] === '2022-11-28'));
 });
 
@@ -61,10 +62,28 @@ test('two runs with the same grant get distinct tokens', async () => {
   assert.notEqual(first.credentialId, second.credentialId);
 });
 
-test('the installation repositories are read across pages', async () => {
-  const { provider } = githubTestbed({}, { pageSize: 1 });
-  const credential = await value(provider.issueRunCredential({ ...READ_ONLY, repositories: [FOREIGN] }));
-  assert.deepEqual(credential.repositories, [FOREIGN]);
+test('a mint lists no installation repositories', async () => {
+  const { provider, emulator } = githubTestbed();
+  await value(provider.issueRunCredential(READ_ONLY));
+  assert.equal(emulator.requests.some((request) => request.path.startsWith('/installation/repositories')), false);
+});
+
+test('a repository named in another case is granted under its requested name', async () => {
+  const { provider } = githubTestbed();
+  const credential = await value(provider.issueRunCredential({ ...READ_ONLY, repositories: ['ACME/Project'] }));
+  assert.deepEqual(credential.repositories, ['ACME/Project']);
+});
+
+test("another owner's repository is not found and leaves no token", async () => {
+  const { provider, emulator } = githubTestbed();
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: ['other/project'] })), 'not-found');
+  assert.equal(emulator.liveRunTokens(), 0);
+});
+
+test('a refused token request reads the installation across pages', async () => {
+  const { provider, emulator } = githubTestbed({}, { pageSize: 1 });
+  emulator.refuseNext('POST', TOKEN_ROUTE, 422);
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [FOREIGN] })), 'invalid');
 });
 
 test('a request outside the installation or malformed mints no token', async () => {
@@ -209,24 +228,52 @@ for (const extra of [{ statuses: 'write' }, { administration: 'write' }] as Reco
   });
 }
 
-test('a refresh within the same second as its version fails and leaves no token', async () => {
-  const { provider, emulator } = githubTestbed({}, { mintClockStepMs: 0 });
+test('a refresh in the same second as its version waits for a later expiry', async () => {
+  const { provider, emulator } = githubTestbed();
   const credential = await value(provider.issueRunCredential(READ_ONLY));
-  assert.equal(await code(provider.refreshRunCredential(credential)), 'unavailable');
-  assert.equal(emulator.liveRunTokens(), 1);
-  emulator.advance(1000);
   const refreshed = await value(provider.refreshRunCredential(credential));
   assert.ok(Date.parse(refreshed.expiresAt) > Date.parse(credential.expiresAt));
   assert.equal(refreshed.version, 2);
+  assert.equal(emulator.liveRunTokens(), 2);
 });
 
-test('of two concurrent refreshes in one second only one succeeds', async () => {
-  const { provider, emulator } = githubTestbed({}, { mintClockStepMs: 0 });
+test('a refresh that waiting does not make later fails and leaves no token', async () => {
+  const clock = { now: () => Date.now(), sleep: async () => {} };
+  const { provider, emulator } = githubTestbed({ clock });
+  const credential = await value(provider.issueRunCredential(READ_ONLY));
+  assert.equal(await code(provider.refreshRunCredential(credential)), 'unavailable');
+  assert.equal(emulator.liveRunTokens(), 1);
+  assert.equal(emulator.requests.filter((request) => TOKEN_ROUTE.test(request.path) && request.body !== undefined).length, 3);
+});
+
+test('two concurrent refreshes in one second both get later versions', async () => {
+  const { provider, emulator } = githubTestbed();
   const credential = await value(provider.issueRunCredential(READ_ONLY));
   emulator.advance(1000);
   const results = await Promise.all([provider.refreshRunCredential(credential), provider.refreshRunCredential(credential)]);
-  assert.deepEqual(results.map((result) => result.ok).sort(), [false, true]);
-  assert.equal(emulator.liveRunTokens(), 2);
+  assert.deepEqual(results.map((result) => (result.ok ? result.value.version : undefined)).sort(), [2, 3]);
+  assert.equal(emulator.liveRunTokens(), 3);
+});
+
+const PAST_EXPIRY_MS = 61 * 60 * 1000 + 1;
+
+test('a credential whose versions all expired is forgotten without GitHub', async () => {
+  const { provider, emulator } = githubTestbed();
+  const credential = await value(provider.issueRunCredential(READ_ONLY));
+  emulator.advance(PAST_EXPIRY_MS);
+  assert.equal(await code(provider.revokeRunCredential(credential)), 'not-found');
+  assert.equal(emulator.requests.some((request) => REVOCATION_ROUTE.test(request.path)), false);
+});
+
+test('an expired earlier version ends without a revocation request', async () => {
+  const { provider, emulator } = githubTestbed();
+  const first = await value(provider.issueRunCredential(READ_ONLY));
+  emulator.advance(30 * 60 * 1000);
+  const second = await value(provider.refreshRunCredential(first));
+  emulator.advance(PAST_EXPIRY_MS - 30 * 60 * 1000);
+  await value(provider.confirmRunCredentialAdoption(second));
+  assert.equal(emulator.requests.some((request) => REVOCATION_ROUTE.test(request.path)), false);
+  assert.ok(emulator.isTokenLive(second.secret));
 });
 
 for (const status of [403, 404, 422, 500]) {

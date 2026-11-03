@@ -18,8 +18,9 @@ export function textsOf(value: unknown): readonly string[] {
 }
 
 // A refusal as a kernel failure, by its status only: GitHub's message is
-// not passed on.
+// not passed on. Status 0 is a local failure, such as a bad App key.
 export function refusal(refused: GithubRefusal, action: string): Failure {
+  if (refused.status === 0) return failure('internal', `The request to ${action} failed before reaching GitHub`);
   return failure(codeOf(refused.status), `GitHub refused to ${action}`, { status: String(refused.status) });
 }
 
@@ -28,7 +29,7 @@ export function malformed(action: string): Failure {
 }
 
 function codeOf(status: number): FailureCode {
-  if (status === 0 || status === 429 || status >= 500) return 'unavailable';
+  if (status === 429 || status >= 500) return 'unavailable';
   if (status === 401 || status === 403) return 'forbidden';
   if (status === 404) return 'not-found';
   if (status === 409) return 'conflict';

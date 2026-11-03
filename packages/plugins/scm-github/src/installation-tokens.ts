@@ -1,5 +1,5 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { GithubApi } from './github-api.js';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
+import type { GithubApi, GithubRefusal } from './github-api.js';
 import { malformed, recordOf, refusal, textOf, type JsonRecord } from './github-data.js';
 import { effectivePermissions, githubPermissions, isExactGrant } from './permissions.js';
 import { parseRepository } from './repository-name.js';
@@ -38,13 +38,13 @@ export class InstallationTokens {
   // repositories of the installation; any other token is discarded.
   async mint(grant: TokenGrant): Promise<Result<InstallationToken>> {
     await this.retryDiscarded();
-    const requested = await this.tokenRequest(grant);
+    const requested = tokenRequest(grant);
     if (!requested.ok) return requested;
     const minted = await this.api.asApp('POST /app/installations/{installation_id}/access_tokens', {
       installation_id: this.installationId,
       ...requested.value,
     });
-    if (!minted.ok) return err(refusal(minted.error, 'issue an installation token'));
+    if (!minted.ok) return err(await this.mintRefusal(minted.error, grant.repositories));
     const data = recordOf(minted.value.data);
     const token = tokenOf(data);
     if (token === undefined) return err(malformed('an installation token request'));
@@ -80,29 +80,43 @@ export class InstallationTokens {
     return err(failure('unavailable', 'GitHub did not confirm a token revocation', { status }));
   }
 
-  private async tokenRequest(grant: TokenGrant): Promise<Result<TokenRequest>> {
-    const permissions = githubPermissions(grant.permissions);
-    if (!permissions.ok) return permissions;
-    if (grant.repositories.length === 0) return err(failure('invalid', 'A run credential needs at least one repository'));
-    const names: string[] = [];
-    for (const repository of grant.repositories) {
-      const parsed = parseRepository(repository);
-      if (!parsed.ok) return parsed;
-      names.push(parsed.value.repo);
-    }
+  // GitHub refuses a repository outside the installation with 422, as it
+  // does other invalid requests; only then is the installation listed.
+  private async mintRefusal(refused: GithubRefusal, repositories: readonly string[]): Promise<Failure> {
+    const failed = refusal(refused, 'issue an installation token');
+    if (refused.status !== 422) return failed;
     const installed = await this.installedRepositories();
-    if (!installed.ok) return installed;
-    if (!grant.repositories.every((repository) => installed.value.has(repository))) {
-      return err(failure('not-found', 'A run credential names a repository outside the installation'));
-    }
-    return ok({ repositories: names, permissions: permissions.value });
+    if (!installed.ok || repositories.every((repository) => installed.value.has(repositoryKey(repository)))) return failed;
+    return outsideInstallation();
   }
 
   private async installedRepositories(): Promise<Result<ReadonlySet<string>>> {
     const listed = await this.api.listAsApp('GET /installation/repositories');
     if (!listed.ok) return err(refusal(listed.error, "list the installation's repositories"));
-    return ok(new Set(listed.value.map((repository) => textOf(recordOf(repository)['full_name']) ?? '')));
+    return ok(new Set(listed.value.map((repository) => repositoryKey(textOf(recordOf(repository)['full_name']) ?? ''))));
   }
+}
+
+function tokenRequest(grant: TokenGrant): Result<TokenRequest> {
+  const permissions = githubPermissions(grant.permissions);
+  if (!permissions.ok) return permissions;
+  if (grant.repositories.length === 0) return err(failure('invalid', 'A run credential needs at least one repository'));
+  const names: string[] = [];
+  for (const repository of grant.repositories) {
+    const parsed = parseRepository(repository);
+    if (!parsed.ok) return parsed;
+    names.push(parsed.value.repo);
+  }
+  return ok({ repositories: names, permissions: permissions.value });
+}
+
+// GitHub matches repository names regardless of case.
+function repositoryKey(repository: string): string {
+  return repository.toLowerCase();
+}
+
+function outsideInstallation(): Failure {
+  return failure('not-found', 'A run credential names a repository outside the installation');
 }
 
 function tokenOf(data: JsonRecord): string | undefined {
@@ -111,7 +125,7 @@ function tokenOf(data: JsonRecord): string | undefined {
 }
 
 // The token's grant must equal the request (source control contract
-// section 3); its expiry is a kernel instant.
+// section 3); another owner's repositories are outside the installation.
 function readGrant(
   token: string,
   data: JsonRecord,
@@ -123,12 +137,13 @@ function readGrant(
   const granted = Array.isArray(data['repositories'])
     ? data['repositories'].map((repository) => textOf(recordOf(repository)['full_name']) ?? '')
     : [];
+  if (!isSameSet(repositories.map(repositoryKey), granted.map(repositoryKey))) return err(outsideInstallation());
   const grantedPermissions = recordOf(data['permissions']);
-  if (!isSameSet(repositories, granted) || !isExactGrant(permissions, grantedPermissions)) {
-    return err(failure('internal', 'GitHub granted other repositories or permissions than requested'));
+  if (!isExactGrant(permissions, grantedPermissions)) {
+    return err(failure('internal', 'GitHub granted other permissions than requested'));
   }
   const effective = effectivePermissions(grantedPermissions);
-  return ok({ token, expiresAt: new Date(expiry).toISOString(), repositories: granted, permissions: effective });
+  return ok({ token, expiresAt: new Date(expiry).toISOString(), repositories: [...repositories], permissions: effective });
 }
 
 function isSameSet(left: readonly string[], right: readonly string[]): boolean {

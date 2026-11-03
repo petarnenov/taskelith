@@ -24,7 +24,8 @@ export interface GithubReply {
   readonly data: unknown;
 }
 
-// The HTTP status of a refused request, or 0 when no response arrived.
+// The HTTP status of a refused request, or 0 when it failed locally;
+// Octokit reports an unreachable service as status 500.
 export interface GithubRefusal {
   readonly status: number;
 }
@@ -92,8 +93,8 @@ async function settle<T>(call: () => Promise<T>): Promise<GithubResult<T>> {
   }
 }
 
-// Octokit's request errors carry the response status; anything else is a
-// request that got no response.
+// Octokit's request errors carry the response status; anything else
+// failed in this process.
 function statusOf(error: unknown): number {
   if (typeof error !== 'object' || error === null || !('status' in error)) return 0;
   const status = (error as { status: unknown }).status;

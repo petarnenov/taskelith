@@ -112,6 +112,14 @@ test('a branch without protection gets the required contexts', async () => {
   assert.deepEqual(emulator.protectionOf(PROJECT, 'main')?.contexts, [REVIEW]);
 });
 
+test('an ensured protection is not written again', async () => {
+  const { provider, emulator } = githubTestbed();
+  const first = await value(provider.ensureMergeProtection(ENSURE));
+  const second = await value(provider.ensureMergeProtection(ENSURE));
+  assert.deepEqual(second, first);
+  assert.equal(emulator.requests.filter((request) => request.method === 'PUT').length, 1);
+});
+
 test('a branch with only this protection is protected again', async () => {
   const { provider, emulator } = githubTestbed();
   emulator.protectBranch(PROJECT, 'main', { contexts: [REVIEW], enforceAdmins: false });

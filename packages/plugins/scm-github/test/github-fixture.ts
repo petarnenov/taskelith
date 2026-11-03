@@ -45,6 +45,7 @@ export function githubTestbed(
     fetch: emulator.fetch,
     webhookSecret: WEBHOOK_SECRET,
     mergeMethods: ['merge-commit', 'squash', 'rebase'],
+    clock: { now: () => emulator.now(), sleep: async (milliseconds: number) => emulator.advance(milliseconds) },
     ...overrides,
   };
   const provider = createGithubSourceControl(options);
