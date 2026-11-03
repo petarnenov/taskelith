@@ -73,6 +73,14 @@ export const redactJwtsWithEmptyParts = textRule(
   `$1${REDACTED}`,
 );
 
+const REDACTED_SOURCE = REDACTED.replace(/[[\]]/g, '\\$&');
+// A Basic credential after an Authorization header name, as in Git's
+// `http.extraHeader`, through any shape an earlier rule already redacted.
+export const redactBasicCredentials = textRule(
+  new RegExp(String.raw`(authorization\\?["']?\s*[:=]\s*\\?["']?basic\s+)(?:[A-Za-z0-9+/]|${REDACTED_SOURCE})+=*`, 'gi'),
+  `$1${REDACTED}`,
+);
+
 // The markers of the secret blocks that hold whitespace, as regular
 // expression sources, for a redactor that must find where a block ends.
 export const SECRET_BLOCK_MARKERS = Object.freeze({
@@ -139,9 +147,10 @@ export function redactPemPrivateKeys(text: string): string {
 // a `key=value` pair.
 export const MARKED_SECRET_RULES: readonly TextRule[] = [redactUrlUserinfo, redactBearerTokens, redactKeyValuePairs];
 // GitHub installation tokens, bearer secrets, `.creds` blocks, NKey seeds,
-// JWTs (trust model 5); GitHub first, so no rule cuts its token or JWT.
+// JWTs (trust model 5), then Basic credentials, whole with any shape inside.
 export const TOKEN_SHAPE_RULES: readonly TextRule[] = [
   redactGithubInstallationTokens, redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts,
+  redactBasicCredentials,
 ];
 // PEM private keys come first, so no other rule cuts a key's markers apart.
 export const SECRET_SHAPE_RULES: readonly TextRule[] = [redactPemPrivateKeys, ...TOKEN_SHAPE_RULES];
