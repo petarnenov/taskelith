@@ -104,6 +104,7 @@ Architect check (coordinator): pending.
 | `env -u NODE_ENV make verify` (run 1) | `90ef6d65`, clean | Failed, profile full (`apps/control-plane/package.json changed`): tests 4402, pass 4354, fail 1, skipped 47. The one failure was this change's: `apps/control-plane/test/access-requirements.test.ts` "a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only" listed the served operations without the four new routes (`createScmIntegration`, `listScmIntegrations`, `readScmIntegration` appeared as unexpected). Fixed in `cb7cbbcb`; no known flake failed |
 | `env -u NODE_ENV make verify` (run 2) | `06851a35`, tree `ec677ca1`, clean | Passed, profile full, stamp written: tests 4402, suites 49, pass 4355, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.71 % branches, 98.88 % functions; new files 100 % lines and functions each, branches: `scm-integration-api.js` 83.33 %, control-plane `scm-integrations.js` 84.62 %, postgres `scm-integrations.js` 91.84 %, `in-memory-scm-integrations.js` 88.89 %, `scm-integration-service.js` 93.94 %, `stored-integration-verifiers.js` 86.67 %, `github-plugin.js` 95.65 %, `normalized-origin.js`, `scm-integration.js`, `scm-secret-cipher.js`, `scm-integration-secret-key.js` 100 %. No known flake failed |
 | `env -u NODE_ENV make verify` (pass 1 fix round, run 1) | `62a560d9`, tree `a34946f2`, clean | Passed, profile full (`apps/control-plane/package.json changed`), stamp written: tests 4413, suites 49, pass 4366, fail 0, cancelled 0, skipped 47; all files 99.39 % lines, 92.73 % branches, 98.89 % functions; changed files: `api-server.js` 99.17 % lines, 92.38 % branches, `routes.js` and `in-memory-scm-integrations.js` 100 % each, `scm-integrations-conformance.js` 100 % lines and functions, 80 % branches. No known flake failed; no rerun |
+| `env -u NODE_ENV make verify` (pass 2 fix round, run 1) | `10b8c383`, tree `92d14252`, clean | Passed, profile full, stamp written: tests 4421, suites 49, pass 4374, fail 0, cancelled 0, skipped 47; all files 99.39 % lines, 92.76 % branches, 98.91 % functions; changed files 100 % lines and functions each, branches: postgres `scm-integrations.js` 98.18 %, `stored-integration-verifiers.js` 89.47 %, `scm-integration-service.js` 94.37 %, `in-memory-scm-integrations.js` and control-plane `scm-integrations.js` 100 %, `github-plugin.js` 95.65 %. No known flake failed; no rerun |
 | `npm run openspec -- validate manage-scm-integrations --strict` | `33212169` | `Change 'manage-scm-integrations' is valid` |
 | `npm run verify:archive`, inside run 2 | tree `ec677ca1` | `Every active OpenSpec change archives into strictly valid specs.`: the archive of this change, tried in a temporary copy |
 
@@ -116,7 +117,7 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, secu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a34946f2ccdc5c0b7d847bbb2c13cf98601910cc`; tests 4413, pass 4366, fail 0, skipped 47; all files 99.39% lines, 92.73% branches, 98.89% functions.
+- `make verify`: passed, profile full, tree `92d14252f30e36fd7be5ac40abd432b9995f0c53`; tests 4421, pass 4374, fail 0, skipped 47; all files 99.39% lines, 92.76% branches, 98.91% functions.
 - `npm run openspec -- validate manage-scm-integrations --strict`: passed, `Change 'manage-scm-integrations' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 105 file(s); every pass summary file is valid: 85 file(s); every route file is valid: 38 file(s).`.
 - Spec diff against the merge base `4b89aa6ec578` with `origin/dev`: no change under `openspec/specs`.
@@ -125,6 +126,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a04c-b762-7452-8a9c-a3856c97fce8` | 0 | 0 | 4 | 0 |
+| 2 | B | `claude claude-fable-5-1#medium` | `2f6c7103-d8f0-4ccb-89f2-680d0f76d16e` | 0 | 0 | 0 | 8 |
 <!-- make record: end -->
 
 ## Independent review
