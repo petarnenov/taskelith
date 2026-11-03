@@ -8,7 +8,7 @@ The port entry SHALL define the draft `SourceControlPlugin`: a plugin's manifest
 - **THEN** each check fails with `invalid` naming that setting, and no message quotes a value
 
 #### Scenario: GitHub secrets
-- **WHEN** the GitHub plugin checks a `private-key` that Node.js cannot parse, an empty `webhook-secret`, or an unknown secret name
+- **WHEN** the GitHub plugin checks a `private-key` that is no RSA key Node.js parses, an empty `webhook-secret`, or an unknown secret name
 - **THEN** each check fails with `invalid` naming that secret only
 
 ### Requirement: SCM integration management
