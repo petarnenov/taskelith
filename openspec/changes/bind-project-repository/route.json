@@ -1,11 +1,11 @@
 {
   "change": "bind-project-repository",
-  "generatedAt": "2026-11-03T22:06:02.090Z",
+  "generatedAt": "2026-11-03T22:31:36.296Z",
   "devCommit": "634080a0e3792e5d5c0fb0796e89ed9b1ac5d65c",
-  "headCommit": "d1f1613820fe8e47ab3332da2809f62604177561",
+  "headCommit": "fb4049bff7e016d86547e8a382cccc90f4e40cd8",
   "features": {
-    "linesChanged": 1387,
-    "filesChanged": 34,
+    "linesChanged": 1606,
+    "filesChanged": 37,
     "capabilities": [
       "control-plane-api",
       "control-plane-wire-contracts",
@@ -73,7 +73,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.76,
+    "thirdPassProbability": 0.77,
     "threshold": 0.4,
     "passes": [
       {
@@ -104,6 +104,6 @@
         }
       }
     ],
-    "latencyMs": 352
+    "latencyMs": 369
   }
 }
