@@ -1,0 +1,1 @@
+{"change": "bind-project-repository", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1a37b-5df2-7510-9179-31c62a1fd763", "counts": {"critical": 0, "high": 1, "medium": 2, "low": 1}}
