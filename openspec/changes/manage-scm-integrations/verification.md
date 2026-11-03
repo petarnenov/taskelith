@@ -124,6 +124,24 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   3. Fixed in `444e9878`: `SCM_INTEGRATIONS_CONFORMANCE` runs against `InMemoryScmIntegrations` (`packages/modules/integrations/test/scm-integrations-conformance.test.ts`) and `PostgresScmIntegrations`; the PostgreSQL-only pages test that the suite replaces is removed, and the sealing and overlap tests stay.
   4. Fixed in this record: "Pass 1 fix round: failing before, passing after" gives behavior negative controls that run the assertions, apart from the historical test-first evidence.
 - Coordinator decisions applied in the same round (Niki, 2026-11-03): Q1, audit events for an integration's creation, update, and secret change are a named follow-up in the scope of 11b (proposal, design non-goals and risks); Q2, the single registered SCM plugin's decoy and eventless rule, and Q3, `SOURCE_CONTROL_PORT_VERSION` stays `0.2.0`, are accepted and stated in design decision 7 and the risks; Q4, only a composition root imports a plugin package, enforced by `npm run check:boundaries` (`b3a15bee`, evidence above).
+- Pass 2 checked every pass 1 fix and coordinator decision and found them in place, so the four pass 1 findings stay `fixed`.
+
+### Pass 2 (role B)
+
+- Reviewer: Claude Code `claude-fable-5-1`, effort `medium` (`claude claude-fable-5-1#medium`), assigned by the coordinator; `route.json` recommends `high`, and the authorized `medium` applies (owner decision 2026-11-02).
+- Invocation, through `make review CHANGE=manage-scm-integrations PASS=2`: `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, environment `PATH HOME USER LANG TERM`, started 2026-11-03T08:00:47Z at head `d24a5051`.
+- Confirmation: model `claude-fable-5-1` reported; session `2f6c7103-d8f0-4ccb-89f2-680d0f76d16e`; exit 0.
+- Snapshot before and after: both `8a1038a2f8e0df48adc0cc0586f1eeb8a8e5bee2b4c4872cd2694ee811e08284`, unchanged, taken by the worker Zaki; the reviewer reported that it modified no file.
+- Counts: Critical 0, High 0, Medium 0, Low 8, as in `passes.jsonl`. A Low-only pass ends the review: the fixes go in without another pass, as `fixed-unreviewed`, for the coordinator's architect check.
+- Findings, recorded before any fix (`findings.jsonl`, each missed by pass 1, role A):
+  1. Low, `concurrency-race`: the store's reads run in read-write SERIALIZABLE transactions.
+  2. Low, `error-handling`: an update opens every stored secret, also those it replaces.
+  3. Low, `error-handling`: stored verifiers drop a missing plugin or a failed build silently.
+  4. Low, `contract-drift`: the GitHub `private-key` check accepts keys that are not RSA.
+  5. Low, `docs`: the wire contract reads as if `details.setting` also names a refused origin.
+  6. Low, `contract-drift`: an optional change field present but `undefined` overwrites the stored value.
+  7. Low, `contract-drift`: updates can grow the secret names past the response schema's 32.
+  8. Low, `contract-drift`: both adapters duplicate how a change merges over the current integration.
 
 ## Limitations
 
