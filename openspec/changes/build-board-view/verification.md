@@ -35,7 +35,7 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). Its totals are from `verify-29a-2.log` in the session scratchpad, the second `make verify` on the tree of `ab35acb9` (`6bfd91d0`), unchanged between the runs. The first run, `verify-29a-1.log`, failed only the control-plane test "a body over the limit is 413 before any verification, and one at the limit is read", whose request ended in `fetch failed` with `write ECONNRESET` (tests 4610, pass 4600, fail 1, skipped 9); this change touches no file under `apps/control-plane`, so the run was repeated once on the same tree without a change, and it passed. The first run stopped at that failure before `apps/web` Vitest ran; in the second run it ran 246 tests, all passing, with 98.52% statements, 97.13% branches, 99.54% functions, and 100% lines (pass 1 finding 8).
+The generated part below matches the tree (`make record-check`). Since the pass 1 fixes its totals are from `verify-29a-p1.log` in the session scratchpad, the `make verify` of the tree of `d3f7ce31` (`49bdafdf`), which passed at the first run; in it `apps/web` Vitest ran 260 tests, all passing, with 98.58% statements, 97.43% branches, 99.55% functions, and 100% lines. Before review they were from `verify-29a-2.log`, the second `make verify` on the tree of `ab35acb9` (`6bfd91d0`), unchanged between the runs. The first run, `verify-29a-1.log`, failed only the control-plane test "a body over the limit is 413 before any verification, and one at the limit is read", whose request ended in `fetch failed` with `write ECONNRESET` (tests 4610, pass 4600, fail 1, skipped 9); this change touches no file under `apps/control-plane`, so the run was repeated once on the same tree without a change, and it passed. The first run stopped at that failure before `apps/web` Vitest ran; in the second run it ran 246 tests, all passing, with 98.52% statements, 97.13% branches, 99.54% functions, and 100% lines (pass 1 finding 8).
 
 ## Fail-before
 
@@ -59,11 +59,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `6bfd91d0c822443241bd0db961c4d3af1c507bba`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.70% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `49bdafdf31fa2c68268b78946668caf6e4159162`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.72% branches, 98.85% functions.
 - `npm run openspec -- validate build-board-view --strict`: passed, `Change 'build-board-view' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 109 file(s); every pass summary file is valid: 89 file(s); every route file is valid: 42 file(s).`.
 - Spec diff against the merge base `0e8d10e0a7bd` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a28c-fb8e-7173-966a-655865635f91` | 0 | 0 | 6 | 2 |
 <!-- make record: end -->
 
 ## Independent review
@@ -99,7 +103,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad; each
 - Finding 8: the evidence check above credits the web results to the second run only.
 - Coordinator decision (Niki, 2026-11-03): the project choice stays in `localStorage` in 29a, and the deviations this keeps (the board's address names no project; design, "Risks and trade-offs") are accepted. `11a810ee` adds "shows the first run, without an error, when the kept project is gone and none is listed" and asserts no error in the existing fallback to the first listed project; both pass before and after, since the behaviour was already there. Follow-up for 29b: when the route `/app/projects/:projectId/...` opens, it sets the picker to that project.
 - Route: the fixes changed the diff, so `route.json` was deleted and the change routed again on the fixed head; the new record is committed unedited.
-- Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 259 tests pass; `npm run openspec -- validate build-board-view --strict` passes; the new and changed comments of the `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
+- Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 260 tests pass; `npm run openspec -- validate build-board-view --strict` passes; the new and changed comments of the `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
 
 ## Limitations
 
