@@ -71,11 +71,15 @@ Logs in the session scratchpad (`fb-15b-*.log`). Each mutation was applied to on
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `d36af11a1f0d3dfb6a533d59147c233fea057a4e`; tests 4592, pass 4583, fail 0, skipped 9; all files 99.43% lines, 92.75% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `0f46f206e1349d2a5bc2a74e154e2d78a178152d`; tests 4606, pass 4597, fail 0, skipped 9; all files 99.43% lines, 92.71% branches, 98.85% functions.
 - `npm run openspec -- validate answer-inbox-items --strict`: passed, `Change 'answer-inbox-items' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 108 file(s); every pass summary file is valid: 88 file(s); every route file is valid: 41 file(s).`.
 - Spec diff against the merge base `1c75f149484f` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a221-d5d0-7172-8ad0-1f95cc21f513` | 0 | 1 | 4 | 1 |
 <!-- make record: end -->
 
 ## Limitations
