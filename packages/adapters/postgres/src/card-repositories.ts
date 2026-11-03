@@ -74,7 +74,7 @@ export class PostgresCardCatalog implements CardCatalog {
 }
 
 interface TouchRow {
-  readonly subject: 'run' | 'task' | 'session' | 'project' | 'worker';
+  readonly subject: 'run' | 'task' | 'admission' | 'session' | 'project' | 'worker' | 'fleet';
   readonly subject_id: string;
 }
 
@@ -94,7 +94,7 @@ export class PostgresCardProjections {
   }
 
   // Removes the oldest touches and answers the cards they name; a worker's
-  // touch names every card, since the fleet shapes each.
+  // or the fleet's touch names every card, since the fleet shapes each.
   async take(limit: number): Promise<Result<TouchedCards>> {
     const { rows } = await this.#session.query<TouchRow>(
       `DELETE FROM card_touches WHERE touch_id IN (SELECT touch_id FROM card_touches ORDER BY touch_id LIMIT $1)
@@ -103,12 +103,14 @@ export class PostgresCardProjections {
     if (rows.length > 0) this.projected = true;
     const of = (subject: TouchRow['subject']) => rows.filter((row) => row.subject === subject).map((row) => row.subject_id);
     const workersChanged = of('worker').length > 0;
+    const everyCard = workersChanged || of('fleet').length > 0;
     const { rows: cards } = await this.#session.query<{ run_id: string }>(
       `SELECT cards.run_id FROM cards WHERE cards.run_id = ANY($1) OR cards.project_id = ANY($2) OR $3
        UNION SELECT cards.run_id FROM ${CARD_LINEAGE} WHERE lineage.run_id = ANY($1) OR lineage.task_id = ANY($4)
          OR lineage.task_id IN (SELECT task_id FROM agent_sessions WHERE session_id = ANY($5))
+         OR lineage.task_id IN (SELECT id FROM tasks WHERE admission_id = ANY($6))
        ORDER BY 1`,
-      [of('run'), of('project'), workersChanged, of('task'), of('session')],
+      [of('run'), of('project'), everyCard, of('task'), of('session'), of('admission')],
     );
     return ok(Object.freeze({ touches: rows.length, runIds: Object.freeze(cards.map((row) => row.run_id as WorkflowRunId)), workersChanged }));
   }

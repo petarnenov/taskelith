@@ -115,3 +115,45 @@ test('the projections keep each card\'s last event and each board\'s workers onl
   assert.deepEqual(await database.readOnly(async (tx) => tx.cardProjections.lastWorkersOnline('alpha' as never)), { ok: true, value: 3 });
   assert.deepEqual(await database.readOnly(async (tx) => tx.cardProjections.lastWorkersOnline('beta' as never)), { ok: true, value: undefined });
 });
+
+const take = () => database.transaction((tx) => tx.cardProjections.take(100));
+
+async function twoWaitingCards(): Promise<void> {
+  await card('run-1');
+  await card('run-2');
+  await lineage('task-1', 'run-1');
+  await lineage('task-2', 'run-2');
+  await query(url, 'TRUNCATE card_touches');
+}
+
+test('a reservation held or released on a worker touches every card, whose fleet obstacle it can change', async () => {
+  await twoWaitingCards();
+  await query(url, `INSERT INTO assignments (id, attempt_id, worker_id, reservation_state, generation, record,
+    project_id, run_id, task_id, root_task_id, cpu_millicores, memory_mebibytes, state, changed_at)
+    VALUES ('as-1', 'att-1', 'w-1', 'held', 1, '{}', 'alpha', 'run-1', 'task-1', 'task-1', 1000, 1024, 'offered', now())`);
+  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1', 'run-2'], workersChanged: false } });
+  await query(url, "UPDATE assignments SET reservation_state = 'released' WHERE id = 'as-1'");
+  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1', 'run-2'], workersChanged: false } });
+  await query(url, "UPDATE assignments SET generation = 2 WHERE id = 'as-1'");
+  assert.deepEqual(await take(), { ok: true, value: { touches: 1, runIds: ['run-1'], workersChanged: false } }, 'the occupancy stayed');
+});
+
+test('an admission write touches the cards of the tasks it admits', async () => {
+  await twoWaitingCards();
+  await query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ('task-1', 'adm-1', 1, '{}')");
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "INSERT INTO admissions (id, generation, state, artifact_ids, record) VALUES ('adm-1', 1, 'admitted', '{}', '{}')");
+  await query(url, "UPDATE admissions SET generation = 2, state = 'used' WHERE id = 'adm-1'");
+  assert.deepEqual(await touches(), ['admission:adm-1', 'admission:adm-1']);
+  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1'], workersChanged: false } });
+});
+
+test('a change of the installation quarantine or recovery epoch touches every card, and of its identity none', async () => {
+  await twoWaitingCards();
+  await query(url, 'INSERT INTO installation (quarantined) VALUES (true)');
+  await query(url, 'UPDATE installation SET quarantined = false');
+  await query(url, 'UPDATE installation SET recovery_epoch = 1');
+  await query(url, "UPDATE installation SET installation_id = 'inst-1'");
+  assert.deepEqual(await touches(), ['fleet:installation', 'fleet:installation', 'fleet:installation']);
+  assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1', 'run-2'], workersChanged: false } });
+});

@@ -23,10 +23,10 @@ CREATE TABLE board_projections (
 );
 
 -- What a writer's transaction changed, for the card projector: a run, a
--- task, a session, a project, or a worker, by its identifier.
+-- task, an admission, a session, a project, a worker, or the fleet.
 CREATE TABLE card_touches (
   touch_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  subject text NOT NULL CHECK (subject IN ('run', 'task', 'session', 'project', 'worker')),
+  subject text NOT NULL CHECK (subject IN ('run', 'task', 'admission', 'session', 'project', 'worker', 'fleet')),
   subject_id text NOT NULL
 );
 
@@ -36,6 +36,15 @@ BEGIN
   INSERT INTO card_touches (subject, subject_id) VALUES (
     TG_ARGV[0], to_jsonb(CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END) ->> TG_ARGV[1]
   );
+  RETURN NULL;
+END
+$$;
+
+-- The fleet's capacity or state, which every waiting card reads; the
+-- subject names the table that changed.
+CREATE FUNCTION touch_fleet() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO card_touches (subject, subject_id) VALUES ('fleet', TG_TABLE_NAME);
   RETURN NULL;
 END
 $$;
@@ -50,8 +59,16 @@ CREATE TRIGGER task_lineage_touch AFTER INSERT ON task_lineage
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
 CREATE TRIGGER tasks_touch AFTER INSERT OR UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'id');
+CREATE TRIGGER admissions_touch AFTER INSERT OR UPDATE ON admissions
+  FOR EACH ROW EXECUTE FUNCTION touch_card('admission', 'id');
 CREATE TRIGGER assignments_touch AFTER INSERT OR UPDATE ON assignments
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
+-- A reservation held or released changes a worker's free slots.
+CREATE TRIGGER assignments_fleet_touch_insert AFTER INSERT ON assignments
+  FOR EACH ROW WHEN (NEW.reservation_state = 'held') EXECUTE FUNCTION touch_fleet();
+CREATE TRIGGER assignments_fleet_touch_update AFTER UPDATE ON assignments
+  FOR EACH ROW WHEN (OLD.reservation_state IS DISTINCT FROM NEW.reservation_state OR OLD.worker_id IS DISTINCT FROM NEW.worker_id)
+  EXECUTE FUNCTION touch_fleet();
 CREATE TRIGGER placement_outcomes_touch AFTER INSERT OR UPDATE OR DELETE ON placement_outcomes
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
 CREATE TRIGGER agent_sessions_touch AFTER INSERT OR UPDATE ON agent_sessions
@@ -67,10 +84,17 @@ CREATE TRIGGER workers_touch_update AFTER UPDATE ON workers
   FOR EACH ROW WHEN (to_jsonb(OLD) - 'last_contact_at' IS DISTINCT FROM to_jsonb(NEW) - 'last_contact_at')
   EXECUTE FUNCTION touch_card('worker', 'worker_id');
 
+CREATE TRIGGER installation_touch_insert AFTER INSERT ON installation
+  FOR EACH ROW EXECUTE FUNCTION touch_fleet();
+CREATE TRIGGER installation_touch_update AFTER UPDATE ON installation
+  FOR EACH ROW WHEN (OLD.quarantined IS DISTINCT FROM NEW.quarantined OR OLD.recovery_epoch IS DISTINCT FROM NEW.recovery_epoch)
+  EXECUTE FUNCTION touch_fleet();
+
 -- Down Migration
 
 -- CASCADE drops every trigger of the function, also on a table that an
 -- earlier down migration already removed with its triggers.
+DROP FUNCTION touch_fleet() CASCADE;
 DROP FUNCTION touch_card() CASCADE;
 DROP TABLE card_touches;
 DROP TABLE board_projections;
