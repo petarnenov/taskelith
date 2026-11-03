@@ -56,6 +56,15 @@ All runs on this iMac with Node.js 24.22.1, from the worktree, against `bash scr
 Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `codex gpt-6-astra#medium`, pass 2 reviewer B `claude claude-fable-5-1#medium`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router agreed (P(third) 0.11).
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `957beaccc187ae086eee316d3080c7e3d6d7c64e`; tests 4113, pass 4104, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.87% functions.
+- `npm run openspec -- validate stabilize-fleet-token-expiry-test --strict`: passed, `Change 'stabilize-fleet-token-expiry-test' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`.
+- Spec diff against the merge base `c355525b1f11` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
