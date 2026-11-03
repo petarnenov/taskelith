@@ -14,7 +14,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `defeb7fa` `chore: build the web task detail drawer with live updates, card links, the address's project, and a still session loader`.
 - `9e7e9b7a` `docs: record the build-task-detail proposal, design, spec delta, and SPA status`.
 - `54f41806` `docs: route the build-task-detail change` (`route.json`, unedited, at head `9e7e9b7a`): "route: elevated (lines, files, size), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.66) and agrees; recommendation only, the brief's effort medium applies.
-- This record and the `make record` of its `make verify` follow.
+- `70f5da18` `docs: record the build-task-detail verification`, then the `make record` of its `make verify`.
 
 ## Environment
 
@@ -35,7 +35,7 @@ macOS on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s npm 
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`).
+The generated part below matches the tree (`make record-check`). Its totals are from `verify-29b-1.log` in the session scratchpad, the `make verify` of the tree of `70f5da18` (`f8f348de`), which passed at the first run; in it `apps/web` Vitest ran 339 tests in 14 files, all passing, with 98.91% statements, 97.68% branches, 99.66% functions, and 100% lines.
 
 ## Fail-before
 
@@ -57,6 +57,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
   - Lost live updates (`fb-29b-lost.log`): the notice never shows: fail 1, "shows the time of its state while the live updates are lost".
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `f8f348de3c496f2a23a1e9e6894f9e84cad6c57b`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.73% branches, 98.87% functions.
+- `npm run openspec -- validate build-task-detail --strict`: passed, `Change 'build-task-detail' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 110 file(s); every pass summary file is valid: 90 file(s); every route file is valid: 43 file(s).`.
+- Spec diff against the merge base `d3dd09ed86b5` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
