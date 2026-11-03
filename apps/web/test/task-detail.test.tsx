@@ -61,11 +61,22 @@ describe('the task detail route', () => {
     expect(screen.getByRole('article', { name: 'Add the board' })).toBeDefined();
   });
 
-  it('encodes the project and the run in the link of a card', async () => {
-    const gateway = gatewayWith(taskDetail(), board({ cards: [card({ runId: 'run/1 a' })] }));
+  it.each([
+    ['run/1 a', '/app/projects/project-1/cards/run~2F1~20a'],
+    ['run.1', '/app/projects/project-1/cards/run~2E1'],
+    ['run~1%', '/app/projects/project-1/cards/run~7E1~25'],
+  ])('writes the run %s in its route-safe form in the link of a card', async (runId, href) => {
+    const gateway = gatewayWith(taskDetail(), board({ cards: [card({ runId })] }));
     renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), gateway);
     const link = await screen.findByRole('link', { name: 'Add the board' });
-    expect(link.getAttribute('href')).toBe('/app/projects/project-1/cards/run%2F1%20a');
+    expect(link.getAttribute('href')).toBe(href);
+  });
+
+  it('reads the detail of the identifiers that a route-safe address names', async () => {
+    const gateway = gatewayWith(taskDetail({ card: card({ runId: 'run.1' }) }));
+    openDetail(undefined, '/app/projects/project-1/cards/run~2E1', gateway);
+    await drawer();
+    expect(gateway.readTaskDetail).toHaveBeenCalledWith(PROJECT.projectId, 'run.1');
   });
 
   it('keeps the detail on a reload of its address, and closing it leads back to the board', async () => {
