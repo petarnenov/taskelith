@@ -5,6 +5,7 @@ import type { BindableProjects, RepositoryBinding, RepositoryBindings } from '..
 import type { ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
 import type { MergeMethod, RepositoryRemote, SourceControlProvider } from '../ports/source-control.js';
 import { readCapabilities, readRepositoryRemote } from '../ports/source-control-readers.js';
+import { readResult, type Reading } from '../ports/untrusted-shapes.js';
 
 // The binding a maintainer sends: no remote URL, which the plugin resolves.
 export interface RepositoryBindingRequest {
@@ -90,30 +91,42 @@ export class RepositoryBindingService {
     const { integration, secrets } = stored.value;
     const plugin = this.#ports.plugins.pluginOf(integration.pluginId);
     if (plugin === undefined) return err(failure('unavailable', 'the integration names no registered SCM plugin'));
-    let provider: Result<SourceControlProvider>;
-    try {
-      provider = plugin.createProvider({ settings: integration.settings, secrets: secrets.reveal() });
-    } catch {
-      return err(pluginDefect());
-    }
-    if (!provider.ok) return err(failure('unavailable', 'the SCM plugin cannot serve the integration'));
-    return ok({ integration, provider: provider.value });
+    const built = await pluginAnswer(() => plugin.createProvider({ settings: integration.settings, secrets: secrets.reveal() }), asProvider);
+    if (!built.ok) return built;
+    if (!built.value.ok) return err(failure('unavailable', 'the SCM plugin cannot serve the integration'));
+    return ok({ integration, provider: built.value.value });
   }
 }
 
-// The plugin's answer is untrusted: its message may quote a secret, so
-// only its code is kept, and a malformed value is never quoted.
-async function resolvedRemote(provider: SourceControlProvider, repository: string): Promise<Result<RepositoryRemote>> {
-  let resolved: Result<RepositoryRemote>;
+// Calls the plugin and reads its envelope and value once, inside one
+// boundary; a throw or a broken shape is the plugin defect, never quoted.
+async function pluginAnswer<Value>(
+  call: () => Result<unknown> | Promise<Result<unknown>>, read: (value: unknown) => Reading<Value>,
+): Promise<Result<Result<Value>>> {
   try {
-    resolved = await provider.resolveRemoteUrl({ repository });
+    const envelope = readResult(await call());
+    if (!envelope.ok) return err(pluginDefect());
+    if (!envelope.value.ok) return ok(err(envelope.value.error));
+    const value = read(envelope.value.value);
+    return value.ok ? ok(ok(value.value)) : err(pluginDefect());
   } catch {
     return err(pluginDefect());
   }
-  if (!resolved.ok) return err(resolverFailure(resolved.error));
-  const remote = readRepositoryRemote(resolved.value);
-  if (!remote.ok || remote.value.repository !== repository) return err(pluginDefect());
-  return remote;
+}
+
+// A provider is an object whose operations are called in their own boundary.
+function asProvider(value: unknown): Reading<SourceControlProvider> {
+  const isObject = typeof value === 'object' && value !== null;
+  return isObject ? ok(value as SourceControlProvider) : err(['provider must be an object']);
+}
+
+// The plugin's message may quote a secret, so only its code is kept.
+async function resolvedRemote(provider: SourceControlProvider, repository: string): Promise<Result<RepositoryRemote>> {
+  const resolved = await pluginAnswer(() => provider.resolveRemoteUrl({ repository }), readRepositoryRemote);
+  if (!resolved.ok) return resolved;
+  if (!resolved.value.ok) return err(resolverFailure(resolved.value.error));
+  const remote = resolved.value.value;
+  return remote.repository === repository ? ok(remote) : err(pluginDefect());
 }
 
 function resolverFailure({ code }: Failure): Failure {
