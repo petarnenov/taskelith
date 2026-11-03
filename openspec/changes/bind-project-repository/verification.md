@@ -109,7 +109,7 @@ The coordinator accepted the M2 semantics: while a put holds the integration's s
 
 - Results: the integrations module tests 159 of 159 pass; `repository-bindings.integration.test.ts` 10 of 10 pass, 5 runs in a row (`pg-bindings.log`, `pg-bindings-repeat.log`).
 - Negative controls: the in-memory put without `exclusive` fails case (1), tests 8, fail 1, with the order update, then put (`nc-11b1-order1-memory.log`); the PostgreSQL read without `FOR SHARE` fails case (1) and the existing overlap test, tests 10, fail 2 (`nc-11b1-order1-pg.log`). `git status` was clean after each.
-- Limit: the outcome of case (1) is deterministic in both stores, but the observation that the update waits is bounded by the 50 ms grace; a store that does not wait is caught when its update finishes within it, as both controls did. A store that waits correctly never fails it.
+- Limit: the outcome of case (1) is deterministic in both stores, but the observation that the update waits is bounded by the 50 ms grace; a store that does not wait is caught when its update finishes within it, as both controls did. A store that waits correctly never fails it. Pass 2 finding L1 replaced the grace with an observed wait (`f1afd259`, below).
 
 ### Coordinator decisions after pass 1
 
@@ -120,6 +120,31 @@ Decided by the coordinator (Niki) after pass 1 and committed apart from the find
 - Q3: the 422 order stays resolver, origin, merge method.
 - Q4: `docs/g3-plan.md` row 11 records the split of 11b into 11b1 and 11b2 (`ec6d081a`).
 - The design records the fixes and decisions (`6b4900b0`).
+
+### Pass 2
+
+- Reviewer: Claude Code, model `claude-fable-5-1`, variant `medium`, role B, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=bind-project-repository PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the reviewer reported model `claude-fable-5-1` and session `5e548a65-4794-401c-acce-5a5992e5bec0`.
+- Reviewed `634080a0..9da12f10`, including the pass 1 fixes, deviations 1 to 5, and the coordinator decisions, all of which it accepted; the snapshot (`7ed21ba3…`) was unchanged after the pass.
+- Counts: Critical 0, High 0, Medium 0, Low 4, recorded in `passes.jsonl` and `findings.jsonl` with the outcome `fixed-unreviewed`. The pass is Low-only, so the review ends; no pass reviews the fixes below.
+- The reviewer cited lines 897 and 615 for L1 and L4, beyond the end of both files; the findings record the lines of the cited code before the fix, 169 and 114.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| L1 | Low | The conformance case observed the waiting update with a fixed 50 ms sleep, which the test authoring rule forbids | Fixed: the target observes the wait, see below |
+| L2 | Low | The binding 409 description omitted a revision named while the project is unbound | Fixed in the OpenAPI document and wire section 4 |
+| L3 | Low | The one-plugin lookup was duplicated in two compositions | Fixed: `singlePlugin`, built once and passed to both services |
+| L4 | Low | A plugin defect left no record of the failing plugin call | Fixed: one sanitized `scm.plugin.defect` error record per defect |
+
+### Pass 2 fixes (unreviewed)
+
+- `f1afd259` `test: observe the waiting integration update instead of a fixed wait in the binding conformance suite` (L1): `RepositoryBindingsTarget.untilUpdateWaits` answers whether the started update waits for the held put. In memory, a test subclass of `InMemoryScmIntegrations` records an `exclusive` call queued while earlier exclusive work runs; `update` calls `exclusive` synchronously, so the answer is known without waiting. In PostgreSQL, the test polls `pg_stat_activity` for a backend of the test database in `wait_event_type = 'Lock'` running `UPDATE scm_integrations`, every 10 ms, to a 30 s deadline that only bounds a store whose update never waits. Both stores pass, 18 of 18 (`l1-run.log`). Negative controls, rerun: the in-memory put without `exclusive` fails the case, tests 8, fail 1, "the update waits for the put: expected true, got false" and the order update, then put (`nc-11b1-p2-memory.log`); the PostgreSQL read without `FOR SHARE` fails the case at the 30 s deadline and the overlap test, tests 10, fail 2 (`nc-11b1-p2-pg.log`). `git status` was clean after each. Test-only, so no fail-before log.
+- `f5a093e7` `chore: name a revision on an unbound project in the binding conflict description` (L2): the `bindRepository` 409 description and wire section 4; `npm run generate:web-api-types` leaves the generated client unchanged, as it carries no descriptions.
+- `291d50db` `chore: build the installation's scm plugin lookup once for the integration and binding services` (L3): `singlePlugin` in `composition/scm-plugins.ts`; `startScmIntegrationServices` builds it once and passes it to `repositoryBindingService` and `scmIntegrationServices`, which now takes `ScmIntegrationPorts`; `RepositoryBindingPorts` takes `plugins`. Behavior unchanged; the two route suites pass, 22 of 22 (`l3-run.log`).
+- `83a39ed4` `test: expect one sanitized report of each scm plugin defect of a repository binding` (L4 test): `fb-11b1-p2-4.log`: tests 29, pass 27, fail 2 (the service case of every defect kind, and the HTTP leak test, which now also asserts the `scm.plugin.defect` records and that no secret reaches them).
+- `06268da1` `test: expect a throwing envelope getter as a malformed envelope and a throwing capabilities getter as a throw` (L4 test correction): the readers catch a throwing getter of an envelope or a value and answer a broken shape, so only a throwing call or `capabilities` getter is the kind `threw`.
+- `3f061c97` `chore: report each scm plugin defect of a repository binding as one sanitized error record` (L4 fix): port `ScmPluginDefects` with `ScmPluginDefect` (integration id, plugin id, operation `createProvider`, `resolveRemoteUrl`, or `capabilities`, and kind `threw`, `malformed-envelope`, `malformed-value`, `foreign-repository`, `unnormalizable-origin`, or `unexpected-failure-code`); the composition logs it as the error `scm.plugin.defect` with these four fields only, never the plugin's message, stack, or a value. A typed refusal, an unusable configuration, and a bind report nothing. The integrations module and both route suites pass, 183 of 183 (`l4-run.log`).
+- Architect check by the coordinator (Niki): _pending_.
 
 ## Limitations
 
@@ -134,7 +159,5 @@ Decided by the coordinator (Niki) after pass 1 and committed apart from the find
 
 ## Remaining gates
 
-- Review pass 2 (role B), which also checks the pass 1 fixes and the coordinator decisions above; pass 3 (role A) only after a pass 2 with a Medium or worse finding; each recorded in `passes.jsonl`, `findings.jsonl`, and this record.
-- The coordinator's architect check of any fix that no later pass reviews.
-- Archive on the branch, then the handoff.
+- The architect check by the coordinator (Niki) of the pass 2 fixes, which no pass reviews.
 - Integration into dev by the coordinator (single pull request).
