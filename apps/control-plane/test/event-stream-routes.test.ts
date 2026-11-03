@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { after, test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import {
   AuthorizationService,
   InMemoryAccessStore,
@@ -50,58 +50,86 @@ const OPERATOR = `tkop_${'E'.repeat(43)}`;
 const PASSWORD = 'password of the event stream test';
 const INVOCATION = { actor: 'root@control-plane-1', reason: 'event stream route test' };
 
-// Access records its principal changes into the same log as the timeline.
-const log = new InMemoryUiEventLog();
-const store = new InMemoryAccessStore({ committed: (changes) => log.commit(changes.map((change) => ({ kind: 'principal-change', change: change as never }))) });
-const secrets = new NodeSecrets();
-const clock = { now: () => AT };
-const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
-const sessions = new SessionService({ store, hasher, secrets, random: secrets, clock, throttle: new LoginThrottle({ clock, sleep: async () => undefined }) });
-const administration = new PrincipalAdministration({ store, hasher, random: secrets, clock });
-const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
-value(await administration.setPassword(owner, 'owner', PASSWORD, INVOCATION));
-await addProjects(store, ['alpha', 'beta'], clock.now());
-const principals = new Map<string, PrincipalId>();
-for (const [loginName, projectId] of [['vera', 'alpha'], ['vince', 'alpha'], ['nora', undefined]] as const) {
-  principals.set(loginName, value(await administration.createPrincipal(owner, loginName, INVOCATION)).principalId);
-  value(await administration.setPassword(owner, loginName, PASSWORD, INVOCATION));
-  if (projectId !== undefined) value(await administration.assignProjectRole(owner, { projectId, loginName, role: 'project-viewer' }, INVOCATION));
-}
-
-const logs = new InMemoryLogSink();
-const logger = new Logger(logs, clock);
-const scheduler = new ManualScheduler();
-const hub = new EventStreamHub({ log, scheduler, clock, logger });
-const keeper = new EventLogKeeper({ log, clock });
-// The setup's role changes precede every stream of the tests.
-value(await keeper.numberCommitted());
-const authorization = new AuthorizationService(store);
-const projectSetup = new ProjectSetupService({ store, random: secrets, clock });
-const events = { hub, projects: projectSetup, authorization, sessions, logger };
-const api = new ControlPlaneApi({
-  operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
-  sessions, authorization, events, projects: { setup: projectSetup },
-} as unknown as ApiServices);
-const server = createApiServer(api);
-await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-after(() => {
-  hub.close();
-  return new Promise<void>((resolve) => server.close(() => resolve()));
-});
-
 const BEARER = { authorization: `Bearer ${OPERATOR}` };
 
-// A logged-in browser's headers, with the CSRF header of its session.
-async function browser(loginName: string): Promise<Record<string, string>> {
-  const anonymous = await fetch(`${base}/session`);
-  const cookie = /^(__Host-taskelith-session=[^;]*);/.exec(anonymous.headers.get('set-cookie') ?? '')![1]!;
-  const csrf = String((await anonymous.json() as { csrfToken: string }).csrfToken);
-  const loggedIn = await fetch(`${base}/session`, {
-    method: 'POST', headers: { cookie, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ loginName, password: PASSWORD }),
+// One test's stores, log, hub, and server, disposed after it, so that no
+// test sees another's events, streams, or log records.
+async function routeFixture(t: TestContext) {
+  // Access records its principal changes into the same log as the timeline.
+  const log = new InMemoryUiEventLog();
+  const store = new InMemoryAccessStore({ committed: (changes) => log.commit(changes.map((change) => ({ kind: 'principal-change', change: change as never }))) });
+  const secrets = new NodeSecrets();
+  const clock = { now: () => AT };
+  const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
+  const sessions = new SessionService({ store, hasher, secrets, random: secrets, clock, throttle: new LoginThrottle({ clock, sleep: async () => undefined }) });
+  const administration = new PrincipalAdministration({ store, hasher, random: secrets, clock });
+  const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
+  value(await administration.setPassword(owner, 'owner', PASSWORD, INVOCATION));
+  await addProjects(store, ['alpha', 'beta'], clock.now());
+  const principals = new Map<string, PrincipalId>();
+  for (const [loginName, projectId] of [['vera', 'alpha'], ['vince', 'alpha'], ['nora', undefined]] as const) {
+    principals.set(loginName, value(await administration.createPrincipal(owner, loginName, INVOCATION)).principalId);
+    value(await administration.setPassword(owner, loginName, PASSWORD, INVOCATION));
+    if (projectId !== undefined) value(await administration.assignProjectRole(owner, { projectId, loginName, role: 'project-viewer' }, INVOCATION));
+  }
+
+  const logs = new InMemoryLogSink();
+  const logger = new Logger(logs, clock);
+  const scheduler = new ManualScheduler();
+  const hub = new EventStreamHub({ log, scheduler, clock, logger });
+  const keeper = new EventLogKeeper({ log, clock });
+  // The setup's role changes precede every stream of the test.
+  value(await keeper.numberCommitted());
+  const authorization = new AuthorizationService(store);
+  const projectSetup = new ProjectSetupService({ store, random: secrets, clock });
+  const events = { hub, projects: projectSetup, authorization, sessions, logger };
+  const api = new ControlPlaneApi({
+    operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
+    sessions, authorization, events, projects: { setup: projectSetup },
+  } as unknown as ApiServices);
+  const server = createApiServer(api);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const streams: OpenStream[] = [];
+  t.after(async () => {
+    hub.close();
+    await Promise.all(streams.map((stream) => stream.cancel().catch(() => undefined)));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  const rotated = /^(__Host-taskelith-session=[^;]*);/.exec(loggedIn.headers.get('set-cookie') ?? '')![1]!;
-  return { cookie: rotated, 'x-csrf-token': String((await loggedIn.json() as { csrfToken: string }).csrfToken) };
+
+  // A logged-in browser's headers, with the CSRF header of its session.
+  async function browser(loginName: string): Promise<Record<string, string>> {
+    const anonymous = await fetch(`${base}/session`);
+    const cookie = /^(__Host-taskelith-session=[^;]*);/.exec(anonymous.headers.get('set-cookie') ?? '')![1]!;
+    const csrf = String((await anonymous.json() as { csrfToken: string }).csrfToken);
+    const loggedIn = await fetch(`${base}/session`, {
+      method: 'POST', headers: { cookie, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ loginName, password: PASSWORD }),
+    });
+    const rotated = /^(__Host-taskelith-session=[^;]*);/.exec(loggedIn.headers.get('set-cookie') ?? '')![1]!;
+    return { cookie: rotated, 'x-csrf-token': String((await loggedIn.json() as { csrfToken: string }).csrfToken) };
+  }
+
+  async function open(path: string, headers: Record<string, string>): Promise<OpenStream> {
+    const stream = new OpenStream(await fetch(`${base}${path}`, { headers }));
+    streams.push(stream);
+    return stream;
+  }
+
+  async function refusal(path: string, headers: Record<string, string>): Promise<number> {
+    const response = await fetch(`${base}${path}`, { headers });
+    assert.equal(response.headers.get('content-type'), 'application/json');
+    await response.arrayBuffer();
+    return response.status;
+  }
+
+  // The assigner numbers what was committed, and the streams read it.
+  async function publish(): Promise<void> {
+    value(await keeper.numberCommitted());
+    hub.wake();
+  }
+
+  const head = async () => value(await log.bounds()).head;
+  return { log, clock, administration, owner, principals, logs, scheduler, hub, events, base, browser, open, refusal, publish, head };
 }
 
 interface Frame {
@@ -155,29 +183,8 @@ function frameOf(block: string): Frame {
   return frame as Frame;
 }
 
-async function open(path: string, headers: Record<string, string>): Promise<OpenStream> {
-  const response = await fetch(`${base}${path}`, { headers });
-  const stream = new OpenStream(response);
-  after(() => stream.cancel().catch(() => undefined));
-  return stream;
-}
-
-async function refusal(path: string, headers: Record<string, string>): Promise<number> {
-  const response = await fetch(`${base}${path}`, { headers });
-  assert.equal(response.headers.get('content-type'), 'application/json');
-  await response.arrayBuffer();
-  return response.status;
-}
-
-// The assigner numbers what was committed, and the streams read it.
-async function publish(): Promise<void> {
-  value(await keeper.numberCommitted());
-  hub.wake();
-}
-
-const head = async () => value(await log.bounds()).head;
-
-test('a project stream is a no-store text/event-stream whose events each carry an id, an event, and one data line', async () => {
+test('a project stream is a no-store text/event-stream whose events each carry an id, an event, and one data line', async (t) => {
+  const { log, scheduler, open, publish, head } = await routeFixture(t);
   const stream = await open('/projects/alpha/events', BEARER);
   assert.equal(stream.response.status, 200);
   assert.equal(stream.response.headers.get('content-type'), 'text/event-stream');
@@ -194,7 +201,8 @@ test('a project stream is a no-store text/event-stream whose events each carry a
   assert.deepEqual(await stream.next(), { comment: 'keep-alive' }, 'no event of another scope comes before the keep-alive');
 });
 
-test('the events of a session\'s changes carry the records that its reads return, each valid against ProjectEvent', async () => {
+test('the events of a session\'s changes carry the records that its reads return, each valid against ProjectEvent', async (t) => {
+  const { log, clock, logs, open, publish } = await routeFixture(t);
   const lineage = new InMemoryTaskLineage({ runs: [{ runId: 'run-alpha', projectId: 'alpha' }], tasks: [] });
   const timeline = new SessionTimelineService({
     store: new InMemorySessionTimelineStore(lineage, log), digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
@@ -229,7 +237,8 @@ test('the events of a session\'s changes carry the records that its reads return
   assert.equal(logs.records.filter((record) => record.event === 'events.stream.invalid-event').length, 0);
 });
 
-test('Last-Event-ID wins over after, a reconnect resumes after it, and with neither the stream starts at the head', async () => {
+test('Last-Event-ID wins over after, a reconnect resumes after it, and with neither the stream starts at the head', async (t) => {
+  const { log, open, publish, head } = await routeFixture(t);
   log.commit([eventEntry(marked(11)), eventEntry(marked(12)), eventEntry(marked(13))]);
   await publish();
   const top = await head();
@@ -243,7 +252,8 @@ test('Last-Event-ID wins over after, a reconnect resumes after it, and with neit
   assert.deepEqual((await fresh.next())?.data?.workersOnline, 14);
 });
 
-test('a cursor beyond the head answers 200 with a cursor-unknown resync and ends, and one below the floor cursor-expired', async () => {
+test('a cursor beyond the head answers 200 with a cursor-unknown resync and ends, and one below the floor cursor-expired', async (t) => {
+  const { log, open, head } = await routeFixture(t);
   const beyond = await open(`/projects/alpha/events?after=${(await head()) + 1}`, BEARER);
   assert.equal(beyond.response.status, 200);
   assert.deepEqual(await beyond.next(), { event: 'resync', data: { type: 'resync', reason: 'cursor-unknown' } });
@@ -257,7 +267,8 @@ test('a cursor beyond the head answers 200 with a cursor-unknown resync and ends
   assert.equal(await expired.next(), undefined);
 });
 
-test('a malformed after or Last-Event-ID answers 400 before any stream opens', async () => {
+test('a malformed after or Last-Event-ID answers 400 before any stream opens', async (t) => {
+  const { base } = await routeFixture(t);
   for (const [path, headers] of [
     ['/projects/alpha/events?after=01', BEARER], ['/projects/alpha/events?after=-1', BEARER],
     ['/events', { ...BEARER, 'last-event-id': 'x' }], ['/projects/alpha/events?after=1', { ...BEARER, 'last-event-id': '' }],
@@ -267,7 +278,8 @@ test('a malformed after or Last-Event-ID answers 400 before any stream opens', a
   }
 });
 
-test('the streams need a credential, a role on the project or the owner\'s, and an existing project', async () => {
+test('the streams need a credential, a role on the project or the owner\'s, and an existing project', async (t) => {
+  const { browser, refusal } = await routeFixture(t);
   const nora = await browser('nora');
   const vera = await browser('vera');
   for (const [path, headers, status] of [
@@ -279,7 +291,8 @@ test('the streams need a credential, a role on the project or the owner\'s, and 
   }
 });
 
-test('the installation stream carries the installation-scoped inbox events to the owner, and no project\'s', async () => {
+test('the installation stream carries the installation-scoped inbox events to the owner, and no project\'s', async (t) => {
+  const { log, open, publish } = await routeFixture(t);
   const stream = await open('/events', BEARER);
   const item = {
     id: 'item-installation', sourceId: 'reconciliation', kind: 'reconciliation', reconciliationReason: 'unrecorded-process',
@@ -297,7 +310,8 @@ test('the installation stream carries the installation-scoped inbox events to th
   });
 });
 
-test('a change of the reader\'s role in the project ends its stream with stream-ended, and a reconnect is authorized anew', async () => {
+test('a change of the reader\'s role in the project ends its stream with stream-ended, and a reconnect is authorized anew', async (t) => {
+  const { administration, owner, principals, browser, open, refusal, publish } = await routeFixture(t);
   const vince = await browser('vince');
   const stream = await open('/projects/alpha/events', vince);
   value(await administration.assignProjectRole(owner, { projectId: ALPHA, loginName: 'vince', role: 'project-operator' }, INVOCATION));
@@ -308,7 +322,8 @@ test('a change of the reader\'s role in the project ends its stream with stream-
   assert.equal(await refusal('/projects/alpha/events', vince), 403);
 });
 
-test('a logout ends the browser\'s streams without a frame, and a bearer stream goes on', async () => {
+test('a logout ends the browser\'s streams without a frame, and a bearer stream goes on', async (t) => {
+  const { log, base, browser, open, publish } = await routeFixture(t);
   const vera = await browser('vera');
   const browserStream = await open('/projects/alpha/events', vera);
   const bearerStream = await open('/projects/alpha/events', BEARER);
@@ -320,10 +335,11 @@ test('a logout ends the browser\'s streams without a frame, and a bearer stream 
   assert.equal((await bearerStream.next())?.data?.workersOnline, 31);
 });
 
-test('a stream whose unsent bytes pass the buffer bound is dropped, and an event that breaks its schema is never sent', async () => {
+test('a stream whose unsent bytes pass the buffer bound is dropped, and an event that breaks its schema is never sent', async (t) => {
+  const { log, owner, logs, events, publish } = await routeFixture(t);
   const response = new FakeResponse();
   const streams = new EventStreamApi(events);
-  const answer = value(await streams.streamProjectEvents(request('alpha')));
+  const answer = value(await streams.streamProjectEvents(request(owner, 'alpha')));
   answer.start(response as unknown as ServerResponse);
   log.commit([eventEntry({ scope: projectScope(ALPHA), occurredAt: AT, record: { type: 'card-changed', card: {} as never } }), eventEntry(marked(41))]);
   await publish();
@@ -337,7 +353,8 @@ test('a stream whose unsent bytes pass the buffer bound is dropped, and an event
   assert.deepEqual([response.destroyed, response.ended], [true, false]);
 });
 
-test('an inbox item without an attempt is skipped, logged by identifiers only, and the next event still arrives', async () => {
+test('an inbox item without an attempt is skipped, logged by identifiers only, and the next event still arrives', async (t) => {
+  const { log, clock, logs, open, publish } = await routeFixture(t);
   const lineage = new InMemoryTaskLineage({ runs: [{ runId: 'run-alpha', projectId: 'alpha' }], tasks: [] });
   const timeline = new SessionTimelineService({
     store: new InMemorySessionTimelineStore(lineage, log), digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
@@ -374,7 +391,7 @@ test('an inbox item without an attempt is skipped, logged by identifiers only, a
   assert.equal(JSON.stringify(skipped[0]!.fields).includes(item.title), false, 'no payload text reaches the log');
 });
 
-function request(projectId: string): ApiRequest {
+function request(owner: PrincipalId, projectId: string): ApiRequest {
   return { parameters: [projectId], body: undefined, query: new URLSearchParams(), correlationId: 'c-1' as CorrelationId, principalId: owner };
 }
 
