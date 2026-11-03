@@ -1,36 +1,54 @@
-import { Alert, Button, Group, Loader, Stack, Text, Title } from '@mantine/core';
-import { useReducedMotion } from '@mantine/hooks';
+import { Alert, Stack, Text, Title } from '@mantine/core';
+import { useEffect, useMemo } from 'react';
+import { Outlet, useParams } from 'react-router';
+import { LoadingStatus } from '../shell/LoadingStatus';
 import type { Project, ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
 import type { BoardView } from './board-model';
-import type { Liveness } from './board-feed';
+import type { BoardFeedState, Liveness } from './board-feed';
 import { BoardColumns } from './BoardColumns';
+import { LoadError, withRequiredRole } from './LoadError';
 import { useProjects } from './ProjectsProvider';
-import { useLiveBoard } from './useLiveBoard';
+import { useLiveBoard, type LiveBoard } from './useLiveBoard';
+
+// What the board hands the task detail drawer of its outlet.
+export interface BoardOutlet {
+  readonly projectId?: string;
+  readonly state: BoardFeedState;
+}
 
 // The landing page: the board of the chosen project and its states
 // (product ports section 3.5); it never shows task data it did not read.
 export function BoardPage() {
-  const { view, retry } = useProjects();
+  const { view, select, retry } = useProjects();
+  const { projectId: addressed } = useParams();
+  useEffect(() => {
+    if (addressed !== undefined) select(addressed);
+  }, [addressed, select]);
+  const project = view.status === 'listed' ? view.selected : undefined;
+  const live = useLiveBoard(project?.projectId);
+  const outlet = useMemo<BoardOutlet>(
+    () => ({ projectId: project?.projectId, state: live.state }),
+    [project?.projectId, live.state],
+  );
   return (
     <Stack>
       <Title order={1}>Project board</Title>
-      {view.status === 'loading' ? <Loading text="Loading your projects…" /> : null}
+      {view.status === 'loading' ? <LoadingStatus text="Loading your projects…" /> : null}
       {view.status === 'unavailable' ? (
         <LoadError title="The projects cannot be read" onRetry={retry}>
           The control plane did not answer with your projects, so no board is shown.
         </LoadError>
       ) : null}
       {view.status === 'listed' && view.selected === undefined ? <FirstRun /> : null}
-      {view.status === 'listed' && view.selected !== undefined ? (
-        <ProjectBoard key={view.selected.projectId} project={view.selected} />
-      ) : null}
+      {project === undefined ? null : <ProjectBoard project={project} live={live} />}
+      <Outlet context={outlet} />
     </Stack>
   );
 }
 
-function ProjectBoard({ project }: { readonly project: Project }) {
-  const { state, retry } = useLiveBoard(project.projectId);
+function ProjectBoard({ project, live }: { readonly project: Project; readonly live: LiveBoard }) {
+  const { state, retry } = live;
   return (
     <Stack>
       <Text>
@@ -39,7 +57,7 @@ function ProjectBoard({ project }: { readonly project: Project }) {
           {project.name}
         </Text>
       </Text>
-      {state.status === 'loading' ? <Loading text="Loading the board…" /> : null}
+      {state.status === 'loading' ? <LoadingStatus text="Loading the board…" /> : null}
       {state.status === 'failed' ? <BoardFailure failure={state.failure} onRetry={retry} /> : null}
       {state.status === 'shown' ? <ShownBoard view={state.view} liveness={state.liveness} /> : null}
     </Stack>
@@ -113,39 +131,5 @@ function BoardFailure({ failure, onRetry }: { readonly failure: ReadFailed; read
     <LoadError title={title} onRetry={onRetry}>
       {withRequiredRole(text, failure)}
     </LoadError>
-  );
-}
-
-// Wire contracts section 2: a 403 names the role, so the SPA can show it.
-function withRequiredRole(text: string, failure: ReadFailed): string {
-  if (failure.kind !== 'denied' || failure.requiredRole === undefined) return text;
-  return `${text} Reading it needs the role ${failure.requiredRole}.`;
-}
-
-interface LoadErrorProps {
-  readonly title: string;
-  readonly onRetry: () => void;
-  readonly children: string;
-}
-
-function LoadError({ title, onRetry, children }: LoadErrorProps) {
-  return (
-    <Stack align="flex-start">
-      <Alert color="red" variant="light" title={title}>
-        {children}
-      </Alert>
-      <Button onClick={onRetry}>Retry</Button>
-    </Stack>
-  );
-}
-
-// The theme's reduced motion does not stop the loader, so it is left out.
-function Loading({ text }: { readonly text: string }) {
-  const reducedMotion = useReducedMotion();
-  return (
-    <Group gap="sm" role="status" aria-busy="true">
-      {reducedMotion ? null : <Loader size="sm" aria-hidden="true" />}
-      <Text c="dimmed">{text}</Text>
-    </Group>
   );
 }

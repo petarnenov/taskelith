@@ -39,6 +39,7 @@ function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => voi
   return {
     listProjects: () => checked(gateway.listProjects),
     readBoard: (projectId) => checked(() => gateway.readBoard(projectId)),
+    readTaskDetail: (projectId, runId) => checked(() => gateway.readTaskDetail(projectId, runId)),
     openEvents: gateway.openEvents,
   };
 }

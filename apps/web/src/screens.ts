@@ -17,8 +17,8 @@ export const BOARD: PlannedScreen = {
   change: 'build-board-view',
 };
 
-// Reserved for the task detail of a card, which change 29b builds as a
-// Drawer over the board; it is not in the navigation.
+// The task detail of a card, a Drawer over the board; it is not in the
+// navigation, and its address names the project and the card's run.
 export const TASK_DETAIL: PlannedScreen = {
   path: '/projects/:projectId/cards/:runId',
   label: 'Task detail',
@@ -26,6 +26,10 @@ export const TASK_DETAIL: PlannedScreen = {
   item: 29,
   change: 'build-task-detail',
 };
+
+export function taskDetailPath(projectId: string, runId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(runId)}`;
+}
 
 const SESSIONS: PlannedScreen = {
   path: '/sessions',
@@ -88,4 +92,4 @@ export const MAIN_NAVIGATION: readonly PlannedScreen[] = [BOARD, SESSIONS, REVIE
 export const SCREENS: readonly PlannedScreen[] = [...MAIN_NAVIGATION, NEW_TASK, NEEDS_YOU];
 
 // The routed screens whose page is still the empty planned page.
-export const PLANNED_SCREENS: readonly PlannedScreen[] = [...SCREENS.filter((screen) => screen !== BOARD), TASK_DETAIL];
+export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => screen !== BOARD);

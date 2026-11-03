@@ -7,17 +7,27 @@ export interface LiveBoard {
   readonly retry: () => void;
 }
 
-// The project's board, kept current by its event stream while shown.
-export function useLiveBoard(projectId: string): LiveBoard {
+const LOADING: BoardFeedState = { status: 'loading' };
+
+interface ShownState {
+  readonly projectId?: string;
+  readonly state: BoardFeedState;
+}
+
+// The project's board, kept current by its event stream while shown; a
+// state of another project is never returned, and no project reads none.
+export function useLiveBoard(projectId: string | undefined): LiveBoard {
   const { gateway, clock } = useBoardServices();
-  const [state, setState] = useState<BoardFeedState>({ status: 'loading' });
+  const [shown, setShown] = useState<ShownState>({ state: LOADING });
   const [loads, setLoads] = useState(0);
 
   useEffect(() => {
-    setState({ status: 'loading' });
-    return startBoardFeed({ projectId, gateway, clock, show: setState });
+    setShown({ projectId, state: LOADING });
+    if (projectId === undefined) return undefined;
+    const show = (state: BoardFeedState) => setShown({ projectId, state });
+    return startBoardFeed({ projectId, gateway, clock, show });
   }, [projectId, gateway, clock, loads]);
 
   const retry = useCallback(() => setLoads((count) => count + 1), []);
-  return { state, retry };
+  return { state: shown.projectId === projectId ? shown.state : LOADING, retry };
 }

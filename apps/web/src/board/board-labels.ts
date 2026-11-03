@@ -1,7 +1,11 @@
 import type { MantineColor } from '@mantine/core';
 import type {
+  AdmissionState,
+  AttemptOutcomeKind,
   BoardColumn,
   CardWait,
+  EvidenceFreshness,
+  EvidenceKind,
   GateState,
   MergeGateState,
   SessionActivityState,
@@ -106,6 +110,30 @@ export const ACTIVITY_LABELS: Readonly<Record<SessionActivityState, ActivityLabe
   stopped: { label: 'Session stopped', tone: 'muted' },
   'worker-unreachable': { label: 'Worker unreachable', tone: 'still' },
   'process-uncertain': { label: 'Process state uncertain', tone: 'danger' },
+};
+
+export const EVIDENCE_KIND_LABELS: Readonly<Record<EvidenceKind, string>> = {
+  'structural-validation': 'structural validation',
+  'semantic-approval': 'semantic approval',
+  'platform-record': 'platform record',
+};
+
+export const FRESHNESS_LABELS: Readonly<Record<EvidenceFreshness, GateLabel>> = {
+  current: { label: 'current', color: 'teal' },
+  stale: { label: 'stale', color: 'orange' },
+  missing: { label: 'missing', color: 'gray' },
+};
+
+export const ADMISSION_STATE_LABELS: Readonly<Record<AdmissionState, string>> = {
+  admitted: 'admitted',
+  used: 'used',
+  invalidated: 'invalidated',
+};
+
+export const OUTCOME_LABELS: Readonly<Record<AttemptOutcomeKind, string>> = {
+  exited: 'exited',
+  'operator-resolved': 'resolved by an operator',
+  'not-started': 'never started',
 };
 
 // An obstacle reason as words: its identifier without the hyphens.
