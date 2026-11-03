@@ -21,6 +21,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - Pass 2 fixes (section "Review pass 2"): `ac520b74` (L1), `9b7d7d28` (L2), `395ca84b` (L4), `e38f2e03` (L5), `f0f97fd5` and `e177fbce` (M1), `d4f07806` (L3), `43c20d47` (L7), `a936a1dd` (L8), `f3de16c9` (the design, proposal, and delta), then the records (`33c40f3e`, with L6). The fixes changed the diff, so `238e317e` deleted the eighth `route.json` and `3d82e0c6` routed a ninth time (unedited; tier `elevated`, 63 files and 3896 lines, triggers lines, files, capabilities, contracts, and size, the same reviewers, and the shadow router agreeing at P(third) 0.80), then the `make verify` of that tree.
 - `verify-14-p2.log` on the tree of `a864ded0` failed 1 test of the change (section "Pass 2 fixes"), so `6e84c16a` fixed the test and `e7cecce3` recorded it; that changed the diff, so `d832dbd2` deleted the ninth `route.json` and `62b9a3b2` routed a tenth time (unedited; tier `elevated`, 63 files and 3910 lines, otherwise as the ninth), then the `make verify` of that tree.
 - Pass 3 fixes (section "Review pass 3"): `2e0d0de2` (M1) and `72211095` (L1), then the records (`707b48bf`). The fixes changed the diff, so `2b1d62cf` deleted the tenth `route.json` and `1a458850` routed an eleventh time (unedited; tier `elevated`, 64 files and 3936 lines, triggers lines, files, capabilities, contracts, and size, the same reviewers, and the shadow router agreeing at P(third) 0.81), then the `make verify` of that tree.
+- Return and merge of dev (section "Merge of dev"): the archive commit `4470e56a` was pushed and the coordinator's integration conflicted, so `f95412c2` `docs: restore the active implement ui event stream change to merge dev` reverts it; `918f5475` `chore: merge dev into the implement ui event stream change` merges `origin/dev` `f0ed0139`; `7137e415` `test: ...` adds the migration order test. The merge changed the diff, so `3fec4329` deleted the eleventh `route.json` and `4fb9a89f` routed a twelfth time (unedited; tier `elevated`, 64 files and 3951 lines, the same triggers, the shadow router agreeing at P(third) 0.79), then the `make verify` of that tree.
 
 ## Environment
 
@@ -125,6 +126,25 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 - **L1, a stale comment** (`72211095`). The comment of `BEFORE_ANY_EVENT` names the tests that wire no UI event log as its users, since the control plane reads its positions from the log.
 - Coordinator architect check: (pending).
 
+## Merge of dev
+
+The coordinator's integration of the archived branch (head `4470e56a`) conflicted after #428 (`receive-scm-webhooks`, 20e) and #429 (`manage-scm-integrations`, 20f) landed, so the task came back under worker step 10. `f95412c2` reverts the archive commit, restoring the active change and the living specs of `26bbb10f`; `918f5475` merges `origin/dev` `f0ed0139`; the merge base of the archive commit and `dev` was `26bbb10f`. Eight files conflicted, and each keeps #428's and #429's edits with this change's on top:
+
+- `apps/control-plane/src/api/control-plane-api.ts`: `ApiServices` and `ControlPlaneApi` keep both `events` and `scmIntegrations`; the dispatch keeps the two stream cases and `receiveScmWebhook`.
+- `apps/control-plane/src/api/routes.ts`: the two section 10 stream routes stay after the agent session routes, followed by #428's `receiveScmWebhook` route (security `none`, `signedBodyLimit`) and #429's four SCM integration routes, unchanged.
+- `apps/control-plane/src/composition/control-plane.ts`: the composition builds this change's authorization, project setup, event log, hub, notifications, numbering loop, and keeper, then #429's `startScmIntegrationServices`; the API gets `scmWebhooks`, `scmIntegrations`, `projects`, and `events`.
+- `apps/control-plane/test/access-requirements.test.ts`: the served operations are the agent session, event stream, login, project, and SCM integration operations and `receiveScmWebhook`.
+- `apps/control-plane/test/api-server.test.ts`: the five stub service sets carry `scmWebhooks`, `scmIntegrations`, and `events`.
+- `packages/adapters/postgres/src/postgres-transaction.ts`: the transaction keeps `uiEvents`, `scmWebhookDeliveries`, and `scmIntegrations`; the session timeline still gets `uiEvents`.
+- `packages/adapters/postgres/test/test-database.ts`: the truncated tables keep `scm_webhook_deliveries` and `ui_events`.
+- `packages/adapters/postgres/test/migrations.integration.test.ts`: both constants stay; every migration list ends `SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS`; the schema list holds every change's tables; the tests that copy the migrations remove both later files from the copy; both changes' tests stay.
+
+Migration order and down migrations: `1792933700000` (20e), `1792933800000` (11a), `1792933900000` (this change), and `1792934000000` (20f) apply in that order, which the first migration test asserts on an empty database. `7137e415` adds a test that migrates an empty database, asserts that the last four applied migrations are those four in that order, then runs their down migrations earliest first and checks that each removes its own table (`scm_webhook_deliveries`, `projects`, `ui_events`, `scm_integrations`) and keeps every later one, so each down runs over the later tables. The existing tests still run this change's down with #429's tables present and #427's down with this change's. The new test was written with the merge and has no fail-before run.
+
+Reconciliation: this change's only deltas that modify or remove a living requirement are `control-plane-wire-contracts` "Event position after commit" (MODIFIED) and `control-plane-api` "View position before the event stream" (REMOVED). `git diff 26bbb10f origin/dev -- openspec/specs` changes neither: #428 and #429 only add requirements to `control-plane-api` (seven, from "SCM webhook receiver served" to "SCM integration secret key at initialization") and `postgres-state` ("SCM webhook deliveries table", "SCM integration storage", "Sealed SCM secrets"), and edit `plugin-registration` and `scm-port`, which this change does not touch; `control-plane-wire-contracts`, `session-turn-model`, and `trust-and-operational-foundation` did not change on `dev`. So no delta needed rewriting, and the restored deltas are unchanged. No name this change adds equals a living requirement of the same capability (checked with `grep` over `openspec/specs`; "Event streams" exists only in `control-plane-wire-contracts`, while this change adds it to `control-plane-api`). `npm run openspec -- validate implement-ui-event-stream --strict` passes; in a scratch copy of the merged tree, `archive implement-ui-event-stream --yes` and then `validate --all --strict` pass. #428's and #429's edits of wire contracts sections 2 and 4 merged without a conflict and do not touch section 10.
+
+Reconciliation review: pending, by the reviewer of pass 1 (worker step 10 item 4), over the merge commit's resolved diff and the commits after it.
+
 ## Limitations
 
 - `card-changed` and `board-changed` are typed and mapped but not emitted; item 15 emits them (Q2 and coordinator decision, 2026-11-03); likewise the `card-changed` that section 10 pairs with an item counting toward a card.
@@ -156,5 +176,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Architect check of the pass 3 fixes by the coordinator (section "Pass 3 fixes").
+- Reconciliation review of the merge of dev by the reviewer of pass 1 (section "Merge of dev").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
