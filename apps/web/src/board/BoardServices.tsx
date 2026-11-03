@@ -21,13 +21,17 @@ export function BoardServicesProvider({ children, ...services }: BoardServices &
 export function useBoardServices(): BoardServices {
   const services = useContext(BoardServicesContext);
   if (services === undefined) throw new Error('useBoardServices needs a BoardServicesProvider.');
-  const { expire } = useSession();
+  const { expiryOfRequest } = useSession();
   const { gateway, clock } = services;
-  return useMemo(() => ({ gateway: expiringGateway(gateway, expire), clock }), [gateway, clock, expire]);
+  return useMemo(
+    () => ({ gateway: expiringGateway(gateway, expiryOfRequest), clock }),
+    [gateway, clock, expiryOfRequest],
+  );
 }
 
-function expiringGateway(gateway: BoardGateway, expire: () => void): BoardGateway {
+function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => void): BoardGateway {
   async function checked<T>(read: () => Promise<ReadResult<T>>): Promise<ReadResult<T>> {
+    const expire = expiryOfRequest();
     const result = await settle(read);
     if (result.kind === 'unauthenticated') expire();
     return result;

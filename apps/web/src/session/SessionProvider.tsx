@@ -16,8 +16,9 @@ export interface Session {
   readonly retry: () => void;
   readonly logIn: (credentials: Credentials) => Promise<LoginOutcome>;
   readonly logOut: () => Promise<LogoutOutcome>;
-  // A request answered that no valid session was presented.
-  readonly expire: () => void;
+  // Called as a request starts; the function it returns ends that session
+  // after a 401, unless a newer view showed since, as after a new login.
+  readonly expiryOfRequest: () => () => void;
 }
 
 // The session is read again this long after its end, so that a client
@@ -76,13 +77,18 @@ export function SessionProvider({ gateway, clock, children }: SessionProviderPro
 
   // Only a signed-in view ends; the read that follows fetches the token
   // of the next anonymous session, or takes over another tab's login.
-  const expire = useCallback(() => {
-    if (currentView().status !== 'signed-in') return;
-    show(EXPIRED);
-    void renewAnonymousSession(settled, sinceNow());
-  }, [currentView, show, settled, sinceNow]);
+  const expiryOfRequest = useCallback(() => {
+    const showIfUnchanged = sinceNow();
+    return () => {
+      if (currentView().status !== 'signed-in' || !showIfUnchanged(EXPIRED)) return;
+      void renewAnonymousSession(settled, sinceNow());
+    };
+  }, [currentView, settled, sinceNow]);
 
-  const session = useMemo(() => ({ view, retry, logIn, logOut, expire }), [view, retry, logIn, logOut, expire]);
+  const session = useMemo(
+    () => ({ view, retry, logIn, logOut, expiryOfRequest }),
+    [view, retry, logIn, logOut, expiryOfRequest],
+  );
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
 

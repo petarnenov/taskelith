@@ -8,7 +8,7 @@
 - [x] 2.2 Board feed: snapshot, stream after its position, skipped events, resync, stream-ended, closed stream with retry delay, and reads during events
 - [x] 2.3 Board page: columns, merge gate, cards, session indicator with reduced motion, and the board states
 - [x] 2.4 Project picker in the header and the navbar, kept per browser
-- [x] 2.5 `expire` in the session provider and the routing of every unauthenticated board answer
+- [x] 2.5 `expiryOfRequest` in the session provider and the routing of every unauthenticated board answer
 - [x] 2.6 Reserved task-detail route
 - [x] 2.7 Contrast pairs of the board and the label-to-enum test
 - [x] 2.8 Tests committed before the implementation, with fail-before evidence for the base and targeted mutations

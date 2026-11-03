@@ -5,7 +5,7 @@ import type { Board, BoardCard, Project, ReadResult } from '../src/board/board';
 import type { SessionRead } from '../src/session/session';
 import { formatInstant } from '../src/board/board-labels';
 import { PROJECT_KEY } from '../src/board/ProjectsProvider';
-import { AUTHENTICATED, board, card, FakeBoardGateway, fakeGateway, ManualClock, OTHER_PROJECT, PROJECT, renderApp } from './fakes';
+import { ANONYMOUS, AUTHENTICATED, board, card, FakeBoardGateway, fakeGateway, ManualClock, OTHER_PROJECT, PROJECT, renderApp } from './fakes';
 
 beforeEach(() => localStorage.clear());
 
@@ -449,6 +449,29 @@ describe('an unauthenticated answer', () => {
     await act(async () => renewal.resolve(AUTHENTICATED));
     expect(await columns()).toHaveLength(7);
     expect(boardGateway.readBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it('of a request sent before a logout leaves the session of a later login signed in', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const renewal = deferred<SessionRead>();
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(ANONYMOUS).mockReturnValueOnce(renewal.promise);
+    const late = deferred<ReadResult<Board>>();
+    const boardGateway = boardGatewayWith(board());
+    boardGateway.readBoard.mockReturnValueOnce(late.promise);
+    renderApp('/app/', session, new ManualClock(), boardGateway);
+    expect(await screen.findByText('Loading the board…')).toBeDefined();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    await user.type(await screen.findByLabelText(/Login name/), 'operator');
+    await user.type(screen.getByLabelText(/Password/), 'fixture-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await columns()).toHaveLength(7);
+    await act(async () => late.resolve({ kind: 'unauthenticated' }));
+    expect(screen.queryByText('Your session expired')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Project board' })).toBeDefined();
+    expect(session.read).toHaveBeenCalledTimes(2);
   });
 
   it('reads a gateway that throws as an unreachable control plane', async () => {

@@ -8,7 +8,7 @@ G3 item 29 (`build-board-and-task-detail`, `docs/g3-plan.md`, row 29) builds the
 - Board states: loading, first run (a Mantine Alert that names how a project is created today, with no link to an unbuilt screen; decision Q3), empty, load error without task data and with a retry, no access and unknown project, live updates lost with the time of the last known state, no workers online, and read-only.
 - Project picker in the header (28b deferred it to item 29) from every page of `listProjects`, kept per browser; below Mantine's `sm` breakpoint it moves into the navbar.
 - Live updates: `streamProjectEvents` after the snapshot's `position`; events not above the view's position are skipped; `resync`, `stream-ended`, an unreadable event, or a stream that closed for good read the board again.
-- Session routing (28b follow-up): a 401 `unauthenticated` answer of any board request shows the sign-in page with the expired notice through the new `expire` of `SessionProvider`.
+- Session routing (28b follow-up): a 401 `unauthenticated` answer of any board request shows the sign-in page with the expired notice through the new `expiryOfRequest` of `SessionProvider`, bound to the session view under which the request started.
 - Task detail route reserved at `/app/projects/:projectId/cards/:runId` (decision Q2): its empty page names change 29b; no card links to it yet.
 - Contrast test: the pairs the board draws (gray alert, text and dimmed text on a card, dot badge text).
 - Records: the plan row's sub-changes and the README's SPA status.
