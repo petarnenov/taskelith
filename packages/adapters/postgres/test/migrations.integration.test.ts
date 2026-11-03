@@ -772,6 +772,11 @@ test('the webhook, project, event stream, SCM integration, and board migrations 
     assert.equal(await present(table), false, `${migration} removes ${table}`);
     for (const [, later] of steps.slice(index + 1)) assert.equal(await present(later), true, `${migration} keeps ${later}`);
   }
+  for (const table of ['reconciliation_answers', 'reconciliation_item_projections']) {
+    assert.equal(await present(table), false, `${INBOX_ANSWERS} removes ${table} after ${BOARD_CARDS}`);
+  }
+  const functions = "SELECT proname FROM pg_proc WHERE proname IN ('refuse_reconciliation_answer_change', 'touch_unrecorded_process')";
+  assert.deepEqual(await query(url, functions), [], `${INBOX_ANSWERS} removes its functions after ${BOARD_CARDS}`);
 });
 
 test('the SCM integrations migration checks its values and its down migration removes its tables', async () => {
