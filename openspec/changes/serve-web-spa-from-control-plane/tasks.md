@@ -15,7 +15,7 @@
 ## 3. Records and checks
 
 - [x] 3.1 Write the proposal, the design, the spec deltas, this task list, the README section, and the installation contract's listeners
-- [ ] 3.2 Route the change, run `make verify`, and write `verification.md`
+- [x] 3.2 Route the change, run `make verify`, and write `verification.md`
 
 ## 4. Review and archive
 
