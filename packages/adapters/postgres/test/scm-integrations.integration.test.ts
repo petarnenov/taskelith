@@ -133,8 +133,8 @@ test('of two concurrent updates at one revision exactly one wins and the other f
   assert.ok(attempts >= 3, 'the losing transaction was retried');
 });
 
-// The double writes the update's row with a kind outside the table's check,
-// so only a rollback of the whole transaction keeps the integration intact.
+// The double writes each row with a kind outside the table's check, whose
+// violation throws; only a rollback keeps the integration intact.
 test('an update whose audit row the table refuses rolls back with the integration, its secrets, and its revision intact', async () => {
   const stored = await added();
   const tampering = {
@@ -147,8 +147,9 @@ test('an update whose audit row the table refuses rolls back with the integratio
   };
   const failing = new PostgresScmIntegrations(tampering, cipher);
   const change = { expectedRevision: 1, label: 'Rolled back', secrets: secrets({ 'webhook-secret': 'synthetic-rolled-back' }) };
-  failed(await failing.update(stored.integrationId, change, ENTRY));
-  failed(await failing.add(integration(), secrets({ 'webhook-secret': SECRET }), ENTRY));
+  const refused = /scm_integration_audit_events_kind_check/;
+  await assert.rejects(failing.update(stored.integrationId, change, ENTRY), refused);
+  await assert.rejects(failing.add(integration(), secrets({ 'webhook-secret': SECRET }), ENTRY), refused);
   assert.deepEqual(value(await store.get(stored.integrationId)), stored);
   assert.deepEqual(value(await store.configurationOf(stored.integrationId))?.secrets.reveal(), { 'signing-key': SECRET, 'webhook-secret': SECRET });
   const rows = await query<{ integration_id: string; kind: string }>(url, 'SELECT integration_id, kind FROM scm_integration_audit_events');
