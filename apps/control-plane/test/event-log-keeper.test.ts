@@ -140,7 +140,7 @@ test('a numbering pass projects the card touches first, so their events are numb
   const calls: string[] = [];
   await numberingPass({
     keeper: { numberCommitted: async () => (calls.push('number'), ok(0)) },
-    projector: { project: async () => (calls.push('project'), ok(1)) },
+    projector: { project: async () => (calls.push('project'), ok({ touches: 1, skipped: [] })) },
     wakeUps: { listen: async () => true },
     streams: { wake: () => undefined },
     logger: new Logger(new InMemoryLogSink(), { now: () => AT }),
@@ -160,4 +160,16 @@ test('a projection that fails is logged, and the numbering still runs', async ()
   });
   assert.equal(numbered, true);
   assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code]), [['events.projection.failed', 'unavailable']]);
+});
+
+test('the cards a projection skipped are logged by identifier and count only', async () => {
+  const logs = new InMemoryLogSink();
+  await numberingPass({
+    keeper: { numberCommitted: async () => ok(0) },
+    projector: { project: async () => ok({ touches: 3, skipped: ['run-1', 'run-2'] as never }) },
+    wakeUps: { listen: async () => true },
+    streams: { wake: () => undefined },
+    logger: new Logger(logs, { now: () => AT }),
+  });
+  assert.deepEqual(logs.records.map((record) => [record.event, record.fields]), [['events.projection.skipped', { count: 2, runIds: 'run-1,run-2' }]]);
 });

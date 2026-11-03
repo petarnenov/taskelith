@@ -14,7 +14,7 @@ CREATE TABLE cards (
   projection text
 );
 
-CREATE INDEX cards_project ON cards (project_id, created_at, run_id);
+CREATE INDEX cards_project ON cards (project_id, created_at, run_id COLLATE "C");
 
 -- The workers online that each project's last `board-changed` carried.
 CREATE TABLE board_projections (
@@ -26,6 +26,7 @@ CREATE TABLE board_projections (
 -- order; a task's INSERT takes the next value, existing ones their id order.
 CREATE SEQUENCE tasks_admission_seq AS bigint;
 ALTER TABLE tasks ADD COLUMN admission_seq bigint;
+ALTER SEQUENCE tasks_admission_seq OWNED BY tasks.admission_seq;
 UPDATE tasks SET admission_seq = ordered.seq
   FROM (SELECT id, row_number() OVER (ORDER BY id COLLATE "C") AS seq FROM tasks) AS ordered
   WHERE tasks.id = ordered.id;
@@ -63,17 +64,18 @@ $$;
 
 CREATE TRIGGER cards_touch AFTER INSERT ON cards
   FOR EACH ROW EXECUTE FUNCTION touch_card('run', 'run_id');
-CREATE TRIGGER workflow_runs_touch AFTER INSERT OR UPDATE ON workflow_runs
+-- Every watched table but the cards also touches on a delete.
+CREATE TRIGGER workflow_runs_touch AFTER INSERT OR UPDATE OR DELETE ON workflow_runs
   FOR EACH ROW EXECUTE FUNCTION touch_card('run', 'id');
-CREATE TRIGGER gates_touch AFTER INSERT OR UPDATE ON gates
+CREATE TRIGGER gates_touch AFTER INSERT OR UPDATE OR DELETE ON gates
   FOR EACH ROW EXECUTE FUNCTION touch_card('run', 'run_id');
-CREATE TRIGGER task_lineage_touch AFTER INSERT ON task_lineage
+CREATE TRIGGER task_lineage_touch AFTER INSERT OR DELETE ON task_lineage
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
-CREATE TRIGGER tasks_touch AFTER INSERT OR UPDATE ON tasks
+CREATE TRIGGER tasks_touch AFTER INSERT OR UPDATE OR DELETE ON tasks
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'id');
-CREATE TRIGGER admissions_touch AFTER INSERT OR UPDATE ON admissions
+CREATE TRIGGER admissions_touch AFTER INSERT OR UPDATE OR DELETE ON admissions
   FOR EACH ROW EXECUTE FUNCTION touch_card('admission', 'id');
-CREATE TRIGGER assignments_touch AFTER INSERT OR UPDATE ON assignments
+CREATE TRIGGER assignments_touch AFTER INSERT OR UPDATE OR DELETE ON assignments
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
 -- A reservation held or released changes a worker's free slots.
 CREATE TRIGGER assignments_fleet_touch_insert AFTER INSERT ON assignments
@@ -81,22 +83,35 @@ CREATE TRIGGER assignments_fleet_touch_insert AFTER INSERT ON assignments
 CREATE TRIGGER assignments_fleet_touch_update AFTER UPDATE ON assignments
   FOR EACH ROW WHEN (OLD.reservation_state IS DISTINCT FROM NEW.reservation_state OR OLD.worker_id IS DISTINCT FROM NEW.worker_id)
   EXECUTE FUNCTION touch_fleet();
+CREATE TRIGGER assignments_fleet_touch_delete AFTER DELETE ON assignments
+  FOR EACH ROW WHEN (OLD.reservation_state = 'held') EXECUTE FUNCTION touch_fleet();
 CREATE TRIGGER placement_outcomes_touch AFTER INSERT OR UPDATE OR DELETE ON placement_outcomes
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
-CREATE TRIGGER agent_sessions_touch AFTER INSERT OR UPDATE ON agent_sessions
+CREATE TRIGGER agent_sessions_touch AFTER INSERT OR UPDATE OR DELETE ON agent_sessions
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
-CREATE TRIGGER session_inbox_items_touch AFTER INSERT OR UPDATE ON session_inbox_items
+CREATE TRIGGER session_inbox_items_touch AFTER INSERT OR UPDATE OR DELETE ON session_inbox_items
   FOR EACH ROW EXECUTE FUNCTION touch_card('session', 'session_id');
-CREATE TRIGGER auto_merge_settings_touch AFTER INSERT OR UPDATE ON auto_merge_settings
+CREATE TRIGGER auto_merge_settings_touch AFTER INSERT OR UPDATE OR DELETE ON auto_merge_settings
   FOR EACH ROW EXECUTE FUNCTION touch_card('project', 'project_id');
-CREATE TRIGGER workers_touch_insert AFTER INSERT ON workers
+CREATE TRIGGER workers_touch AFTER INSERT OR DELETE ON workers
   FOR EACH ROW EXECUTE FUNCTION touch_card('worker', 'worker_id');
--- A contact time alone changes no card; reachability and the rest do.
+-- A worker's placement record and whether it is enrolled, read through the
+-- row, so an earlier down migration can still drop a column.
+CREATE FUNCTION worker_board_fields(worker jsonb) RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT jsonb_build_object(
+    'enrolled', worker -> 'enrolled', 'revoked', worker -> 'revoked', 'draining', worker -> 'draining',
+    'reachable', worker -> 'reachable', 'pressure', worker -> 'admission_pressure_since',
+    'refused', worker -> 'capacity_refused_since', 'slots', worker -> 'slots', 'cpu', worker -> 'cpu_millicores',
+    'memory', worker -> 'memory_mebibytes', 'controls', worker -> 'controls', 'protocol', worker -> 'protocol_version',
+    'admission', worker -> 'worker_admission', 'enrollment', worker ->> 'enrollment' IS NOT NULL
+  )
+$$;
+-- Only those touch; a contact time alone changes no card.
 CREATE TRIGGER workers_touch_update AFTER UPDATE ON workers
-  FOR EACH ROW WHEN (to_jsonb(OLD) - 'last_contact_at' IS DISTINCT FROM to_jsonb(NEW) - 'last_contact_at')
+  FOR EACH ROW WHEN (worker_board_fields(to_jsonb(OLD)) IS DISTINCT FROM worker_board_fields(to_jsonb(NEW)))
   EXECUTE FUNCTION touch_card('worker', 'worker_id');
 
-CREATE TRIGGER installation_touch_insert AFTER INSERT ON installation
+CREATE TRIGGER installation_touch AFTER INSERT OR DELETE ON installation
   FOR EACH ROW EXECUTE FUNCTION touch_fleet();
 CREATE TRIGGER installation_touch_update AFTER UPDATE ON installation
   FOR EACH ROW WHEN (OLD.quarantined IS DISTINCT FROM NEW.quarantined OR OLD.recovery_epoch IS DISTINCT FROM NEW.recovery_epoch)
@@ -108,8 +123,9 @@ CREATE TRIGGER installation_touch_update AFTER UPDATE ON installation
 -- earlier down migration already removed with its triggers.
 DROP FUNCTION touch_fleet() CASCADE;
 DROP FUNCTION touch_card() CASCADE;
+DROP FUNCTION worker_board_fields(jsonb);
 DROP TABLE card_touches;
 DROP TABLE board_projections;
 DROP TABLE cards;
+-- The column owns its sequence, so dropping it drops the sequence.
 ALTER TABLE tasks DROP COLUMN admission_seq;
-DROP SEQUENCE tasks_admission_seq;

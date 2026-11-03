@@ -86,26 +86,77 @@ test('a worker touches only when more than its contact time changes, and the aut
   assert.deepEqual(await touches(), ['worker:w-1', 'worker:w-1', `project:p${'a'.repeat(32)}`]);
 });
 
-test('taking touches removes them and names each card once, through its lineage, sessions, project, or every card for a worker', async () => {
+const LAST_TOUCH = '9223372036854775807';
+const take = (through = LAST_TOUCH) => database.transaction((tx) => tx.cardProjections.take(100, through));
+const expand = () => database.transaction((tx) => tx.cardProjections.expand());
+const lastTouch = async () => (await query<{ id: string }>(url, 'SELECT max(touch_id)::text AS id FROM card_touches'))[0]!.id;
+
+test('a worker update of a column the board does not read touches nothing, and a delete of a watched row touches', async () => {
+  await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes, controls)
+    VALUES ('w-1', true, false, false, true, 1, 1000, 1024, '{}')`);
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "UPDATE workers SET self_check_sequence = 1, journal_id = 'journal-1' WHERE worker_id = 'w-1'");
+  assert.deepEqual(await touches(), [], 'a self-check sequence and a journal are no placement input');
+  await query(url, "UPDATE workers SET enrollment = '{}' WHERE worker_id = 'w-1'");
+  await query(url, "UPDATE workers SET enrollment = '{\"rotated\":true}' WHERE worker_id = 'w-1'");
+  assert.deepEqual(await touches(), ['worker:w-1'], 'an enrollment that starts touches, a rotated one does not');
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "INSERT INTO gates (id, run_id, generation, record) VALUES ('g-1', 'run-1', 1, '{}')");
+  await query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ('task-1', 'adm-1', 1, '{}')");
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "DELETE FROM gates WHERE id = 'g-1'");
+  await query(url, "DELETE FROM tasks WHERE id = 'task-1'");
+  await query(url, "DELETE FROM workers WHERE worker_id = 'w-1'");
+  assert.deepEqual(await touches(), ['run:run-1', 'task:task-1', 'worker:w-1']);
+});
+
+test('the card index sorts run identifiers as the board does, and the admission sequence belongs to its column', async () => {
+  const [index] = await query<{ indexdef: string }>(url, "SELECT indexdef FROM pg_indexes WHERE indexname = 'cards_project'");
+  assert.match(index!.indexdef, /run_id COLLATE "C"/);
+  const [owned] = await query<{ sequence: string | null }>(url, "SELECT pg_get_serial_sequence('tasks', 'admission_seq') AS sequence");
+  assert.match(owned!.sequence ?? '', /tasks_admission_seq$/);
+});
+
+test('taking touches removes the card-sized ones up to a touch and names each card once, through its lineage or sessions', async () => {
   await card('run-1');
   await card('run-2');
-  await card('run-3', 'beta');
   await lineage('task-1', 'run-1');
   await lineage('task-child', 'run-child', 'task-1', 1);
   await query(url, "INSERT INTO agent_sessions (session_id, task_id, version, record) VALUES ('s-2', 'task-child', 1, '{}')");
   await admit('task-1', 'task-child');
   await query(url, 'TRUNCATE card_touches');
-  const take = () => database.transaction((tx) => tx.cardProjections.take(100));
+  assert.deepEqual(await take(), { ok: true, value: { touches: 0, runIds: [] } });
   await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('run', 'run-child'), ('session', 's-2'), ('run', 'run-unknown')");
-  assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1'], workersChanged: false } });
+  assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1'] } });
   assert.deepEqual(await touches(), []);
-  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('project', 'beta'), ('task', 'task-1')");
-  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1', 'run-3'], workersChanged: false } });
-  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('worker', 'w-1')");
-  assert.deepEqual(await take(), { ok: true, value: { touches: 1, runIds: ['run-1', 'run-2', 'run-3'], workersChanged: true } });
+  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('project', 'alpha'), ('task', 'task-1')");
+  const through = await lastTouch();
+  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('run', 'run-2')");
+  assert.deepEqual(await take(through), { ok: true, value: { touches: 1, runIds: ['run-1'] } });
+  assert.deepEqual(await touches(), ['project:alpha', 'run:run-2'], 'a broad touch and a later one wait');
   assert.deepEqual(value(await database.readOnly((tx) => tx.cards.tasks('run-1' as never))), [
     { taskId: 'task-1', taskRunId: 'run-1', depth: 0 }, { taskId: 'task-child', taskRunId: 'run-child', parentTaskId: 'task-1', depth: 1 },
   ]);
+});
+
+test('expanding replaces a project touch with its cards, and a worker or fleet touch with every card', async () => {
+  await card('run-1');
+  await card('run-2');
+  await card('run-3', 'beta');
+  await query(url, 'TRUNCATE card_touches');
+  const none = value(await expand());
+  assert.deepEqual([none.touches, none.workersChanged, none.through], [0, false, '0']);
+  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('task', 'task-1'), ('project', 'beta')");
+  const project = value(await expand());
+  assert.deepEqual([project.touches, project.workersChanged, project.through], [1, false, await lastTouch()]);
+  assert.deepEqual(await touches(), ['task:task-1', 'run:run-3']);
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('worker', 'w-1'), ('fleet', 'installation')");
+  const fleet = value(await expand());
+  assert.deepEqual([fleet.touches, fleet.workersChanged], [2, true]);
+  assert.deepEqual(await touches(), ['run:run-1', 'run:run-2', 'run:run-3']);
+  value(await database.transaction((tx) => tx.cardProjections.retry(['run-2' as never])));
+  assert.deepEqual((await touches()).at(-1), 'run:run-2', 'a retried card is touched again');
 });
 
 test('the projections keep each card\'s last event and each board\'s workers online', async () => {
@@ -124,8 +175,6 @@ test('the projections keep each card\'s last event and each board\'s workers onl
   assert.deepEqual(await database.readOnly(async (tx) => tx.cardProjections.lastWorkersOnline('beta' as never)), { ok: true, value: undefined });
 });
 
-const take = () => database.transaction((tx) => tx.cardProjections.take(100));
-
 async function twoWaitingCards(): Promise<void> {
   await card('run-1');
   await card('run-2');
@@ -139,11 +188,16 @@ test('a reservation held or released on a worker touches every card, whose fleet
   await query(url, `INSERT INTO assignments (id, attempt_id, worker_id, reservation_state, generation, record,
     project_id, run_id, task_id, root_task_id, cpu_millicores, memory_mebibytes, state, changed_at)
     VALUES ('as-1', 'att-1', 'w-1', 'held', 1, '{}', 'alpha', 'run-1', 'task-1', 'task-1', 1000, 1024, 'offered', now())`);
-  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1', 'run-2'], workersChanged: false } });
-  await query(url, "UPDATE assignments SET reservation_state = 'released' WHERE id = 'as-1'");
-  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1', 'run-2'], workersChanged: false } });
-  await query(url, "UPDATE assignments SET generation = 2 WHERE id = 'as-1'");
-  assert.deepEqual(await take(), { ok: true, value: { touches: 1, runIds: ['run-1'], workersChanged: false } }, 'the occupancy stayed');
+  const since = async (write: string) => {
+    await query(url, 'TRUNCATE card_touches');
+    await query(url, write);
+    return (await touches()).sort();
+  };
+  assert.deepEqual(await touches(), ['fleet:assignments', 'task:task-1']);
+  assert.deepEqual(await since("UPDATE assignments SET reservation_state = 'released' WHERE id = 'as-1'"), ['fleet:assignments', 'task:task-1']);
+  assert.deepEqual(await since("UPDATE assignments SET generation = 2 WHERE id = 'as-1'"), ['task:task-1'], 'the occupancy stayed');
+  assert.deepEqual(await since("UPDATE assignments SET reservation_state = 'held' WHERE id = 'as-1'"), ['fleet:assignments', 'task:task-1']);
+  assert.deepEqual(await since("DELETE FROM assignments WHERE id = 'as-1'"), ['fleet:assignments', 'task:task-1'], 'a held one deleted');
 });
 
 test('an admission write touches the cards of the tasks it admits', async () => {
@@ -153,7 +207,7 @@ test('an admission write touches the cards of the tasks it admits', async () => 
   await query(url, "INSERT INTO admissions (id, generation, state, artifact_ids, record) VALUES ('adm-1', 1, 'admitted', '{}', '{}')");
   await query(url, "UPDATE admissions SET generation = 2, state = 'used' WHERE id = 'adm-1'");
   assert.deepEqual(await touches(), ['admission:adm-1', 'admission:adm-1']);
-  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1'], workersChanged: false } });
+  assert.deepEqual(await take(), { ok: true, value: { touches: 2, runIds: ['run-1'] } });
 });
 
 test('a change of the installation quarantine or recovery epoch touches every card, and of its identity none', async () => {
@@ -163,7 +217,8 @@ test('a change of the installation quarantine or recovery epoch touches every ca
   await query(url, 'UPDATE installation SET recovery_epoch = 1');
   await query(url, "UPDATE installation SET installation_id = 'inst-1'");
   assert.deepEqual(await touches(), ['fleet:installation', 'fleet:installation', 'fleet:installation']);
-  assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1', 'run-2'], workersChanged: false } });
+  assert.equal(value(await expand()).touches, 3);
+  assert.deepEqual(await touches(), ['run:run-1', 'run:run-2']);
 });
 
 test('a card lists its tasks in admission order, each delegated child under its parent', async () => {

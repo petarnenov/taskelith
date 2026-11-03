@@ -140,9 +140,12 @@ export {
   CardProjector,
   PROJECTION_BATCH,
   type CardProjections,
+  type ExpandedTouches,
+  type ProjectionPass,
   type ProjectionStore,
   type ProjectionTransaction,
   type TouchedCards,
+  type TouchHorizon,
 } from './application/card-projector.js';
 export { BoardApi, type BoardOperations } from './api/board-api.js';
 export { boardReadsOf, startBoardServices, type BoardServices, type InboxSourcesIn } from './composition/board-views.js';

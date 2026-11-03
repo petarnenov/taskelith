@@ -84,14 +84,22 @@ export class PostgresCardCatalog implements CardCatalog {
 }
 
 interface TouchRow {
-  readonly subject: 'run' | 'task' | 'admission' | 'session' | 'project' | 'worker' | 'fleet';
+  readonly subject: 'run' | 'task' | 'admission' | 'session';
   readonly subject_id: string;
+}
+
+// The touches of a project, a worker, or the fleet, which name many cards.
+const BROAD_SUBJECTS = "subject IN ('project', 'worker', 'fleet')";
+
+export interface ExpandedTouches {
+  readonly touches: number;
+  readonly through: string;
+  readonly workersChanged: boolean;
 }
 
 export interface TouchedCards {
   readonly touches: number;
   readonly runIds: readonly WorkflowRunId[];
-  readonly workersChanged: boolean;
 }
 
 // The card projector's touches and the last events it appended.
@@ -103,26 +111,53 @@ export class PostgresCardProjections {
     this.#session = session;
   }
 
-  // Removes the oldest touches and answers the cards they name; a worker's
-  // or the fleet's touch names every card, since the fleet shapes each.
-  async take(limit: number): Promise<Result<TouchedCards>> {
-    const { rows } = await this.#session.query<TouchRow>(
-      `DELETE FROM card_touches WHERE touch_id IN (SELECT touch_id FROM card_touches ORDER BY touch_id LIMIT $1)
-       RETURNING subject, subject_id`, [limit],
+  // Replaces each broad touch with a run touch per card it names, a worker's
+  // or the fleet's every card, and answers the last touch after them.
+  async expand(): Promise<Result<ExpandedTouches>> {
+    const { rows } = await this.#session.query<{ subject: string; subject_id: string }>(
+      `DELETE FROM card_touches WHERE ${BROAD_SUBJECTS} RETURNING subject, subject_id`,
     );
     if (rows.length > 0) this.projected = true;
-    const of = (subject: TouchRow['subject']) => rows.filter((row) => row.subject === subject).map((row) => row.subject_id);
-    const workersChanged = of('worker').length > 0;
-    const everyCard = workersChanged || of('fleet').length > 0;
-    const { rows: cards } = await this.#session.query<{ run_id: string }>(
-      `SELECT cards.run_id FROM cards WHERE cards.run_id = ANY($1) OR cards.project_id = ANY($2) OR $3
-       UNION SELECT cards.run_id FROM ${CARD_LINEAGE} WHERE lineage.run_id = ANY($1) OR lineage.task_id = ANY($4)
-         OR lineage.task_id IN (SELECT task_id FROM agent_sessions WHERE session_id = ANY($5))
-         OR lineage.task_id IN (SELECT id FROM tasks WHERE admission_id = ANY($6))
-       ORDER BY 1`,
-      [of('run'), of('project'), everyCard, of('task'), of('session'), of('admission')],
+    const projects = rows.filter((row) => row.subject === 'project').map((row) => row.subject_id);
+    const everyCard = rows.some((row) => row.subject !== 'project');
+    if (rows.length > 0) {
+      await this.#session.query(
+        `INSERT INTO card_touches (subject, subject_id)
+         SELECT 'run', run_id FROM cards WHERE project_id = ANY($1) OR $2 ORDER BY run_id COLLATE "C"`,
+        [projects, everyCard],
+      );
+    }
+    const { rows: [last] } = await this.#session.query<{ through: string }>(
+      "SELECT coalesce(max(touch_id), 0)::text AS through FROM card_touches",
     );
-    return ok(Object.freeze({ touches: rows.length, runIds: Object.freeze(cards.map((row) => row.run_id as WorkflowRunId)), workersChanged }));
+    return ok(Object.freeze({ touches: rows.length, through: last!.through, workersChanged: rows.some((row) => row.subject === 'worker') }));
+  }
+
+  // Removes the oldest card-sized touches up to `through` and answers the
+  // cards they name; a broad touch waits for the next expansion.
+  async take(limit: number, through: string): Promise<Result<TouchedCards>> {
+    const { rows } = await this.#session.query<TouchRow>(
+      `DELETE FROM card_touches WHERE touch_id IN (SELECT touch_id FROM card_touches
+         WHERE touch_id <= $2::bigint AND NOT ${BROAD_SUBJECTS} ORDER BY touch_id LIMIT $1)
+       RETURNING subject, subject_id`, [limit, through],
+    );
+    if (rows.length === 0) return ok(Object.freeze({ touches: 0, runIds: Object.freeze([]) }));
+    this.projected = true;
+    const of = (subject: TouchRow['subject']) => rows.filter((row) => row.subject === subject).map((row) => row.subject_id);
+    const { rows: cards } = await this.#session.query<{ run_id: string }>(
+      `SELECT cards.run_id FROM cards WHERE cards.run_id = ANY($1)
+       UNION SELECT cards.run_id FROM ${CARD_LINEAGE} WHERE lineage.run_id = ANY($1) OR lineage.task_id = ANY($2)
+         OR lineage.task_id IN (SELECT task_id FROM agent_sessions WHERE session_id = ANY($3))
+         OR lineage.task_id IN (SELECT id FROM tasks WHERE admission_id = ANY($4))
+       ORDER BY 1`,
+      [of('run'), of('task'), of('session'), of('admission')],
+    );
+    return ok(Object.freeze({ touches: rows.length, runIds: Object.freeze(cards.map((row) => row.run_id as WorkflowRunId)) }));
+  }
+
+  async retry(runIds: readonly WorkflowRunId[]): Promise<Result<void>> {
+    await this.#session.query("INSERT INTO card_touches (subject, subject_id) SELECT 'run', unnest($1::text[])", [runIds]);
+    return ok(undefined);
   }
 
   async lastCard(runId: WorkflowRunId): Promise<Result<string | undefined>> {

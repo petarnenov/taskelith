@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
-import { BoardViews, boardReadsOf, startBoardServices, type InboxSourcesIn } from '@taskelith/control-plane';
+import { BoardViews, PROJECTION_BATCH, boardReadsOf, startBoardServices, type InboxSourcesIn } from '@taskelith/control-plane';
 import { NoMergeQueue } from '@taskelith/integrations';
 import { err, failure, ok } from '@taskelith/kernel';
 import { PostgresDatabase, PostgresUiEventLog, migrate, type PostgresCrashPoint } from '@taskelith/postgres';
@@ -169,7 +169,7 @@ test('the projector appends a card-changed per changed card once, and a board-ch
   await sql(`INSERT INTO projects (project_id, name, created_at, revision) VALUES ($1, 'Alpha', now(), 1)`, [PROJECT]);
   await card('run-1');
   const { projector } = startBoardServices(database, NO_SOURCES);
-  assert.ok(value(await projector.project()) > 0);
+  assert.ok(value(await projector.project()).touches > 0);
   assert.deepEqual(await cardEvents(), [{ type: 'card-changed', column: 'implement' }]);
   assert.equal(await pendingTouches(), 0);
   await sql("UPDATE tasks SET generation = generation WHERE id = 'task-run-1'");
@@ -194,10 +194,30 @@ test('the projector appends a card-changed per changed card once, and a board-ch
   assert.deepEqual((await cardEvents()).at(-1), { type: 'board-changed', workersOnline: 0 });
 });
 
+const pendingSubjects = async () => (await sql<{ touch: string }>("SELECT subject || ':' || subject_id AS touch FROM card_touches ORDER BY touch_id")).map((row) => row.touch);
+
+test('a card whose read fails keeps its touch while the other cards emit, and emits once repaired', async () => {
+  await card('run-1');
+  value(await database.transaction((tx) => tx.cards.register({ runId: 'run-2' as never, projectId: 'alpha' as never, title: 'Card run-2', workType: 'feature', createdAt: EARLY })));
+  const { projector } = startBoardServices(database, NO_SOURCES);
+  const pass = value(await projector.project());
+  assert.deepEqual([await cardEvents(), pass.skipped], [[{ type: 'card-changed', column: 'implement' }], ['run-2']], 'a run is missing');
+  assert.deepEqual(await pendingSubjects(), ['run:run-2'], 'the unreadable card stays touched');
+  assert.deepEqual(value(await projector.project()).skipped, ['run-2']);
+  value(await database.transaction((tx) => tx.runs.add(run('run-2', { proposal: 'in-progress' }))));
+  assert.deepEqual(value(await projector.project()).skipped, []);
+  assert.deepEqual((await cardEvents()).map((each) => each.column), ['implement', 'propose']);
+  assert.equal(await pendingTouches(), 0);
+});
+
 // The process dies at the crash point: a hook that throws stands in for it,
 // and a new pool over the same database for the restart.
-function crashingAt(point: PostgresCrashPoint): PostgresDatabase {
-  return new PostgresDatabase(url, { crashPoints: { reach: (reached) => { if (reached === point) throw new Error(`crashed at ${point}`); } } });
+function crashingAt(point: PostgresCrashPoint, reach = 1): PostgresDatabase {
+  let reached = 0;
+  const crash = (at: PostgresCrashPoint) => {
+    if (at === point && ++reached === reach) throw new Error(`crashed at ${point}`);
+  };
+  return new PostgresDatabase(url, { crashPoints: { reach: crash } });
 }
 
 for (const [point, eventsAfterCrash, touchesAfterCrash] of [['CardProjectionCommit.before', 0, 1], ['CardProjectionCommit.after', 1, 0]] as const) {
@@ -219,6 +239,31 @@ for (const [point, eventsAfterCrash, touchesAfterCrash] of [['CardProjectionComm
       await restarted.close();
     }
     assert.deepEqual([await cardEvents(), await pendingTouches()], [[{ type: 'card-changed', column: 'implement' }], 0]);
+  });
+}
+
+// A fleet touch over more cards than a batch: the expansion commits first,
+// then each batch, so the second reach of the point is the first batch.
+for (const [point, eventsAfterCrash, touchesAfterCrash] of [['CardProjectionCommit.before', 0, PROJECTION_BATCH + 1], ['CardProjectionCommit.after', PROJECTION_BATCH, 1]] as const) {
+  test(`a fleet projection that crashes at ${point} of its first batch loses and repeats no event of the batches`, async () => {
+    const runIds = Array.from({ length: PROJECTION_BATCH + 1 }, (_, index) => `run-${String(index).padStart(3, '0')}`);
+    for (const runId of runIds) await card(runId);
+    value(await startBoardServices(database, NO_SOURCES).projector.project());
+    await sql('UPDATE cards SET projection = NULL');
+    await sql('TRUNCATE ui_events');
+    await sql("INSERT INTO card_touches (subject, subject_id) VALUES ('fleet', 'installation')");
+    const crashing = crashingAt(point, 2);
+    await assert.rejects(startBoardServices(crashing, NO_SOURCES).projector.project(), new RegExp(`crashed at ${point}`));
+    await crashing.close();
+    assert.deepEqual([(await cardEvents()).length, await pendingTouches()], [eventsAfterCrash, touchesAfterCrash]);
+    const restarted = new PostgresDatabase(url);
+    try {
+      value(await startBoardServices(restarted, NO_SOURCES).projector.project());
+    } finally {
+      await restarted.close();
+    }
+    const appended = await sql<{ run_id: string }>("SELECT record::jsonb #>> '{record,card,runId}' AS run_id FROM ui_events ORDER BY entry_id");
+    assert.deepEqual([appended.map((row) => row.run_id).sort(), await pendingTouches()], [runIds, 0]);
   });
 }
 

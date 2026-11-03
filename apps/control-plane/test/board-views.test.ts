@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BoardViews, CardProjector, mergeGate, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
+import { BoardViews, CardProjector, mergeGate, type BoardReads, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
 import type { BoardCard, UiEventRecord } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
@@ -119,12 +119,15 @@ test('a card that waits for a person shows no waiting obstacle, but still a reje
 });
 
 // A projector over the world whose touches always name `run-1`, with the
-// times of its batches; it collects the records it appends.
-function projectorOver(world: BoardWorld, times: string[]): { projector: CardProjector; appended: UiEventRecord[] } {
+// times of its batches; it collects the records it appends and retries.
+function projectorOver(world: BoardWorld, times: string[], reads: Partial<BoardReads> = {}) {
   const appended: UiEventRecord[] = [];
+  const retried: string[] = [];
   let last: string | undefined;
   const projections: CardProjections = {
-    take: async () => ok({ touches: 1, runIds: ['run-1' as never], workersChanged: false }),
+    expand: async () => ok({ touches: 0, through: '1', workersChanged: false }),
+    take: async () => ok({ touches: 1, runIds: ['run-1' as never] }),
+    retry: async (runIds) => (retried.push(...runIds), ok(undefined)),
     lastCard: async () => ok(last),
     recordCard: async (_runId, projection) => ((last = projection), ok(undefined)),
     lastWorkersOnline: async () => ok(undefined),
@@ -133,21 +136,33 @@ function projectorOver(world: BoardWorld, times: string[]): { projector: CardPro
   };
   const projector = new CardProjector({
     transaction: (work) => work({
-      ...world.reads(), now: async () => times.shift()! as never, projections,
+      ...world.reads(), ...reads, now: async () => times.shift()! as never, projections,
       outbox: { append: async (entry) => (appended.push(entry.record), ok(undefined)) },
     }),
   }, world.parts());
-  return { projector, appended };
+  return { projector, appended, retried };
 }
 
 test('a fleet obstacle observed again later appends no second card-changed', async () => {
   const world = new BoardWorld();
   await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
-  world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [] }]), 'apply');
+  await world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [] }]), 'apply');
   const { projector, appended } = projectorOver(world, [AS_OF, '2026-11-03T11:00:00.000Z']);
-  assert.deepEqual([await projector.project(), await projector.project()], [ok(1), ok(1)]);
+  const pass = ok({ touches: 1, skipped: [] });
+  assert.deepEqual([await projector.project(), await projector.project()], [pass, pass]);
   assert.equal(appended.length, 1);
   assert.equal(appended[0]?.type === 'card-changed' && appended[0].card.obstacle?.source, 'fleet');
+});
+
+test('a card whose record or run cannot be read is skipped and touched again, and appends nothing', async () => {
+  const world = await runningCard();
+  const failing = { ...world.reads().cards, get: async () => err(failure('unavailable', 'the catalog is down')) };
+  const unreadable = projectorOver(world, [AS_OF], { cards: failing });
+  assert.deepEqual(await unreadable.projector.project(), ok({ touches: 1, skipped: ['run-1'] }));
+  world.runs.delete('run-1');
+  const missing = projectorOver(world, [AS_OF]);
+  assert.deepEqual(await missing.projector.project(), ok({ touches: 1, skipped: ['run-1'] }));
+  assert.deepEqual([unreadable.retried, missing.retried, unreadable.appended, missing.appended], [['run-1'], ['run-1'], [], []]);
 });
 
 test('a change of the task detail alone appends a card-changed with the unchanged card', async () => {
