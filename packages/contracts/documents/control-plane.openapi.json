@@ -1597,7 +1597,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, it is absent while the project is bound, or the integration changed while its plugin resolved the remote URL.",
+            "description": "The expected revision is not the current one, it is absent while the project is bound, a revision is named while the project is unbound, or the integration changed while its plugin resolved the remote URL.",
             "content": {
               "application/json": {
                 "schema": {
