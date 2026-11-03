@@ -29,11 +29,11 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 - Secrecy: the nonce is not a credential and is never logged; the request log of an SPA answer holds the operation `web-app` and no path or query (test).
 - Spec deltas: `control-plane-api` adds five requirements (424, 235, 493, 475, and 418 characters, after the pass 1 fixes); `product-ui` modifies "Web SPA development server" (477, its scenario kept) and adds "Web SPA style nonce" (363). `npm run verify:archive` archives them into strictly valid specs.
 - Comments: `npm run verify:comments` passes; it does not check `.tsx`, so the comments of `App.tsx` and `style-nonce.test.tsx` were checked by hand; the Dockerfile comment is one line.
-- Coverage: `apps/control-plane/dist/api/web-app.js` 100% lines, 94.87% branches, 100% functions; `web-app-directory.js` 100% in each; `apps/web/src` statements 100% (330/330), branches 100% (172/172), functions 100% (107/107), lines 100% (275/275), Vitest tests 146.
+- Coverage (pass 1 fix round): `apps/control-plane/dist/api/web-app.js` 100% lines, 95.45% branches, 100% functions; `web-app-directory.js` 100% lines, 95.65% branches, 100% functions; `apps/web/src` statements 100% (330/330), branches 100% (172/172), functions 100% (107/107), lines 100% (275/275), Vitest tests 146.
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). The totals are from `verify-28c-2.log` in the session scratchpad, the second `make verify` on the tree of `0f34df27` (`05961f46`), unchanged between the runs. The first run, `verify-28c-1.log`, failed only `test/installation-script.test.ts` "a bound with a leading zero is read in base 10", whose timer measured 9.118 s for a 10 s bound (tests 4131, pass 4121, fail 1, skipped 9); this change does not touch `scripts/installation.sh` or that test, and the same test flaked on this host for 28b. The rerun passed.
+The generated part below matches the tree (`make record-check`). Its totals are from `verify-28c-p1-1.log` in the session scratchpad, the first `make verify` of the pass 1 fix round, on the tree of `72e58479` (`17656e3e`); it passed, so no rerun was needed. Before that round, the totals came from `verify-28c-2.log`, the second `make verify` on the tree of `0f34df27` (`05961f46`), unchanged between the runs. The first run, `verify-28c-1.log`, failed only `test/installation-script.test.ts` "a bound with a leading zero is read in base 10", whose timer measured 9.118 s for a 10 s bound (tests 4131, pass 4121, fail 1, skipped 9); this change does not touch `scripts/installation.sh` or that test, and the same test flaked on this host for 28b. The rerun passed.
 
 Browser check (logs in the session scratchpad under `browser/`): a plain HTTP `createApiServer` with `readWebAppDirectory('apps/web/dist')` on `127.0.0.1`, loaded in headless Chrome at `/app/sessions`. With the shipped policy, Chrome logged no console message (`chrome.log`, 0 `CONSOLE` lines), Mantine's two style elements applied with their nonce hidden as the browser does under a policy, and the shell rendered its retry page against the stub API. With the nonce stripped from `style-src` by a wrapper (`chrome-no-nonce.log`), Chrome logged two "Applying inline style violates the following Content Security Policy directive 'style-src 'self''" errors, so the nonce is what admits Mantine's styles.
 
@@ -79,11 +79,15 @@ Logs in the session scratchpad. `41e12b2e` holds the tests alone.
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `05961f46c6228cea95df8379c87fc6320f49d9c2`; tests 4131, pass 4122, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `17656e3ea35e0b50db994add3b210db051243650`; tests 4166, pass 4157, fail 0, skipped 9; all files 99.39% lines, 92.62% branches, 98.88% functions.
 - `npm run openspec -- validate serve-web-spa-from-control-plane --strict`: passed, `Change 'serve-web-spa-from-control-plane' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 100 file(s); every pass summary file is valid: 80 file(s); every route file is valid: 33 file(s).`.
-- Spec diff against the merge base `12dee8c7af80` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 101 file(s); every pass summary file is valid: 81 file(s); every route file is valid: 34 file(s).`.
+- Spec diff against the merge base `3341f8a82c2d` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a19f28-b5fd-7971-85cd-78597aad9656` | 0 | 0 | 5 | 3 |
 <!-- make record: end -->
 
 ## Independent review
