@@ -230,14 +230,27 @@ test('each resolver failure answers its declared status and stores nothing', asy
   const malformed = await call('PUT', path, MARIA, { binding: BINDING });
   assert.equal(malformed.status, 500);
   assert.ok(!malformed.text.includes(SECRET));
+  scm.resolver = async () => ok({ repository: 'acme/other', remoteUrl: 'https://scm.example/acme/other.git' });
+  const foreign = await call('PUT', path, MARIA, { binding: BINDING });
+  assert.deepEqual([foreign.status, foreign.body.code], [500, 'internal']);
+  assert.ok(!foreign.text.includes('acme/other'));
+  scm.resolver = async () => {
+    throw new Error(`the plugin leaked ${SECRET}`);
+  };
+  const thrown = await call('PUT', path, MARIA, { binding: BINDING });
+  assert.deepEqual([thrown.status, thrown.body.code], [500, 'internal']);
+  assert.ok(!thrown.text.includes(SECRET));
   assert.equal(await stored(), undefined);
 });
 
 test('an origin outside the integration and an undeclared merge method are typed 422s; an unknown integration is 404', async (t) => {
   const { call, path, stored, scm, MARIA } = await fixture(t);
-  assert.deepEqual(refusalOf(await call('PUT', path, MARIA, { binding: { ...BINDING, mergeMethod: 'rebase' } })), [422, 'merge-method-undeclared']);
+  const undeclared = await call('PUT', path, MARIA, { binding: { ...BINDING, mergeMethod: 'rebase' } });
+  assert.deepEqual(refusalOf(undeclared), [422, 'merge-method-undeclared']);
   scm.resolver = async (repository) => ok({ repository, remoteUrl: `https://elsewhere.example/${repository}.git` });
-  assert.deepEqual(refusalOf(await call('PUT', path, MARIA, { binding: BINDING })), [422, 'remote-origin-mismatch']);
+  const elsewhere = await call('PUT', path, MARIA, { binding: BINDING });
+  assert.deepEqual(refusalOf(elsewhere), [422, 'remote-origin-mismatch']);
+  for (const answer of [undeclared, elsewhere]) assert.ok(checkHttpSchema('BindingRefusal', answer.body).ok);
   assert.equal((await call('PUT', path, MARIA, { binding: { ...BINDING, integrationId: `i${'2'.repeat(32)}` } })).status, 404);
   assert.equal(await stored(), undefined);
 });
