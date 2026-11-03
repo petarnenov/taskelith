@@ -39,16 +39,19 @@ export const CARD_CATALOG_CONFORMANCE: readonly ConformanceCase<CardCatalog>[] =
     },
   },
   {
-    name: 'a title past 200 characters, with a control character, or an unknown work type is refused',
+    name: 'a title past 200 characters, with a control character or an unpaired surrogate, or an unknown work type is refused',
     async check(catalog) {
       const problems: string[] = [];
+      expectCode(problems, 'high surrogate', await catalog.register(card('run-s', ALPHA, FIRST.createdAt, 'a\uD800b')), 'invalid');
+      expectCode(problems, 'low surrogate', await catalog.register(card('run-t', ALPHA, FIRST.createdAt, '\uDC00')), 'invalid');
       expectCode(problems, 'long', await catalog.register(card('run-x', ALPHA, FIRST.createdAt, 'x'.repeat(201))), 'invalid');
       expectCode(problems, 'control', await catalog.register(card('run-y', ALPHA, FIRST.createdAt, 'a\nb')), 'invalid');
       expectCode(problems, 'empty', await catalog.register(card('run-z', ALPHA, FIRST.createdAt, '')), 'invalid');
       const kind = { ...card('run-w', ALPHA, FIRST.createdAt), workType: 'chore' } as unknown as CardRecord;
       expectCode(problems, 'work type', await catalog.register(kind), 'invalid');
-      expectSuccess(problems, 'longest', await catalog.register(card('run-v', ALPHA, FIRST.createdAt, 'é'.repeat(200))));
-      expectRead(problems, 'only the valid one', await catalog.listByProject(ALPHA), [card('run-v', ALPHA, FIRST.createdAt, 'é'.repeat(200))]);
+      const longest = card('run-v', ALPHA, FIRST.createdAt, `${'é'.repeat(198)}\u{1F600}\u{1F600}`);
+      expectSuccess(problems, 'longest', await catalog.register(longest));
+      expectRead(problems, 'only the valid one, read back as written', await catalog.listByProject(ALPHA), [longest]);
       return problems;
     },
   },
