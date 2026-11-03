@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import pg from 'pg';
-import { BoardViews, boardReadsOf, startBoardServices } from '@taskelith/control-plane';
+import { BoardViews, boardReadsOf, startBoardServices, type InboxSourcesIn } from '@taskelith/control-plane';
 import { NoMergeQueue } from '@taskelith/integrations';
 import { err, failure, ok } from '@taskelith/kernel';
 import { PostgresDatabase, migrate, type PostgresCrashPoint } from '@taskelith/postgres';
@@ -68,6 +68,23 @@ test('the board and the task detail read one snapshot over PostgreSQL, the head 
   assert.deepEqual(detail.tasks.map((each) => [each.taskId, each.taskRunId]), [['task-run-1', 'run-1']]);
   const counts = value(await views.counts({ kind: 'project', projectId: 'alpha' as never }));
   assert.deepEqual([counts.total, counts.byCard], [0, []]);
+});
+
+test('an inbox source takes its position from the head of the view snapshot', async () => {
+  await card('run-1');
+  value(await startBoardServices(database, NO_SOURCES).projector.project());
+  assert.equal(value(await database.transaction((tx) => tx.uiEvents.assign(10, EARLY))), 1);
+  const positions: string[] = [];
+  const recording: InboxSourcesIn = (_timeline, viewPositions) => [{
+    id: 'native-request' as never, kinds: ['input-request'],
+    openItems: async () => {
+      positions.push(value(await viewPositions.current()));
+      return ok({ items: [], position: positions.at(-1)! });
+    },
+    answer: async () => err(failure('unavailable', 'not answered here')),
+  }];
+  const list = value(await startBoardServices(database, recording).views.open({ kind: 'installation' }));
+  assert.deepEqual([positions, list.position, list.items], [['1'], '1', []]);
 });
 
 test('a card committed after a view read its head stays out of that view', async () => {
