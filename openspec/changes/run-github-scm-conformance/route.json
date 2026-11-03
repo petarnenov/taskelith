@@ -1,12 +1,13 @@
 {
   "change": "run-github-scm-conformance",
-  "generatedAt": "2026-11-03T09:10:22.664Z",
-  "devCommit": "f0ed0139b0f6177ad09762a36b214034d92fead5",
-  "headCommit": "537d76e77915440c8da9372e8f9c9d5e7e8ad72c",
+  "generatedAt": "2026-11-03T21:38:04.555Z",
+  "devCommit": "d0d59478235781b8b095852b9306fe3e76237de8",
+  "headCommit": "5795b6f30588d381ec20b0bfc12dc6699b0af425",
   "features": {
-    "linesChanged": 1170,
-    "filesChanged": 12,
+    "linesChanged": 4459,
+    "filesChanged": 39,
     "capabilities": [
+      "scm-port",
       "scm-qualification"
     ],
     "touches": {
@@ -15,15 +16,15 @@
       "contracts": true,
       "specs": true,
       "docker": false,
-      "security": false,
+      "security": true,
       "docsOnly": false
     },
     "externalFacts": false,
     "size": "M",
     "capabilityHistory": {
-      "changes": 0,
-      "thirdPassShare": null,
-      "mediumOrWorsePerChange": null
+      "changes": 8,
+      "thirdPassShare": 0.75,
+      "mediumOrWorsePerChange": 11.875
     }
   },
   "rule": {
@@ -31,6 +32,8 @@
     "tier": "elevated",
     "triggers": [
       "lines",
+      "files",
+      "security",
       "contracts"
     ],
     "passes": [
@@ -68,7 +71,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.67,
+    "thirdPassProbability": 0.8,
     "threshold": 0.4,
     "passes": [
       {
@@ -99,6 +102,6 @@
         }
       }
     ],
-    "latencyMs": 350
+    "latencyMs": 370
   }
 }
