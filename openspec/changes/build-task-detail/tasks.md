@@ -16,9 +16,10 @@
 - [x] 3.1 Write the proposal, the design, the spec delta, this task list, and the README status
 - [x] 3.2 Route the change, run `make verify`, and write `verification.md`
 - [x] 3.3 Fix the pass 1 findings with fail-before tests, route again, run `make verify`, and record them
+- [x] 3.4 Fix the pass 2 findings with fail-before tests, route again, run `make verify`, and record them
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review passes recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
+- [x] 4.1 Review passes recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
 - [ ] 4.2 Architect check by the coordinator of any unreviewed fixes
 - [ ] 4.3 Archive the change in the last commit of the branch

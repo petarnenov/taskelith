@@ -17,6 +17,8 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `70f5da18` `docs: record the build-task-detail verification`, then `24dfecef`, the `make record` of its `make verify`; pass 1 reviewed `d3dd09ed..24dfecef`.
 - Pass 1 fixes, each a test commit before its fix: finding 7 `3b09e5a1`, `147364ff`; finding 1 `7e2255ad`, `715e7418`; finding 2 `1b0cc68d`, `553a1048`; finding 3 `a92350cb`, `97674267`; finding 4 `c2085c8b`, `62700f6a`; finding 5 `eff35577`, `bdcb7e49`; finding 6 `0ceee162`, `3c095f4c`; findings 8 and 9 and the coordinator decisions `904eb798` (proposal, design, spec delta) and the record commits after it.
 - `be32f9f2` `docs: route the build-task-detail change after the pass 1 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `904eb798` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 1,943 lines in 32 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.65) and agrees.
+- Pass 2 fixes: `23789da3` (the tests), `49518eea` (the code fixes), and `0e5a0f33` (proposal and design), then the records below.
+- `977756d3` `docs: route the build-task-detail change after the pass 2 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `0e5a0f33` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,124 lines in 35 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
 
 ## Environment
 
@@ -32,13 +34,14 @@ macOS on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s npm 
 - Spec delta: `product-ui` removes "Web SPA task detail route", with a **Reason** and a **Migration** that names its replacement "Web SPA task detail address" (coordinator decision, 2026-11-03), and adds four requirements (424, 332, 163, and 368 characters before the pass 1 fixes; 461, 434, 163, and 435 after them); `npm run openspec -- validate build-task-detail --strict` passes, and the pinned CLI archived the delta into strictly valid specs in a scratch copy of the repository's `openspec/` (totals + 4, ~ 0, - 1; `openspec validate --specs --strict`: 71 passed), which was then deleted; `npm run verify:archive` passes too.
 - Comments: `npm run verify:comments` passes; the comments of the `.tsx` files of this change were checked with a script for at most two lines of at most 80 characters.
 - Type checks: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json`, which includes the tests, pass.
+- Coverage after the pass 2 fixes (Vitest, `apps/web`, 457 tests in 15 files): 100% lines; `apps/web` overall 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines.
 - Coverage after the pass 1 fixes (Vitest, `apps/web`, 450 tests in 15 files): 100% lines in every file; `TaskDetailDrawer.tsx` 93.1% branches, `TaskDetailView.tsx` 91.66%, `Breakable.tsx` 85.71%, `TaskList.tsx` 95%, `task-detail-feed.ts` 96.15%, `ProjectPicker.tsx` 92.85%; `apps/web` overall 98.87% statements, 97.5% branches, 99.67% functions, and 100% lines.
 - Coverage before the pass 1 fixes (Vitest, `apps/web`): 100% lines in every file; `TaskDetailView.tsx` 83.33% branches, `Breakable.tsx` 75% branches (the empty text), `TaskList.tsx` 95%, `task-detail-wire.ts` 98.13%, and every other new file 100%; `apps/web` overall 98.92% statements, 97.69% branches, 99.66% functions, and 100% lines over 339 tests.
 - Test authoring: no sleeps; the feed tests settle held reads and drain microtasks as the 29a feed tests do. A first draft of the live-update test raced the board's first render against the stream events (2 of 6 coverage runs red); it now waits for the shown board before it emits, and 8 runs in a row passed.
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). Before pass 1 it recorded `verify-29b-1.log` in the session scratchpad, the `make verify` of the tree of `70f5da18` (`f8f348de`); that log holds one run, which passed, and no other run was made, so no flake and no rerun belong to that record; the pass 1 prompt's mention of a rerun after an out-of-branch flake did not apply to this change (pass 1 finding 9). In it `apps/web` Vitest ran 339 tests in 14 files, all passing, with 98.91% statements, 97.68% branches, 99.66% functions, and 100% lines. After the pass 1 fixes it records the run named under "Pass 1 fixes".
+The generated part below matches the tree (`make record-check`). Before pass 1 it recorded `verify-29b-1.log` in the session scratchpad, the `make verify` of the tree of `70f5da18` (`f8f348de`); that log holds one run, which passed, and no other run was made, so no flake and no rerun belong to that record; the pass 1 prompt's mention of a rerun after an out-of-branch flake did not apply to this change (pass 1 finding 9). In it `apps/web` Vitest ran 339 tests in 14 files, all passing, with 98.91% statements, 97.68% branches, 99.66% functions, and 100% lines. After the pass 1 fixes it recorded the run named under "Pass 1 fixes"; after the pass 2 fixes it records the run named under "Pass 2 fixes".
 
 ## Fail-before
 
@@ -111,16 +114,53 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - `make verify` of the fixed tree (`9f29a899`, tree `55794397`), `verify-29b-p1.log` in the session scratchpad: passed at the first run, profile full, no rerun; in it `apps/web` Vitest ran 450 tests in 15 files, all passing, with 98.87% statements, 97.5% branches, 99.67% functions, and 100% lines. The generated part below records it.
 - Coordinator decisions of 2026-11-03 (Niki), in `904eb798`: `listAgentSessions` is a follow-up of item 31, and the Drawer keeps the session indicator from `readTaskDetail` (design, "Agent sessions"); the picker leads to the board only from a task detail address, now the scenario "Another project on another page"; the removed "Web SPA task detail route" has a **Reason** and a **Migration** that names "Web SPA task detail address", so that the archive reads as a rename (`npm run openspec -- validate build-task-detail --strict` passes); and the other departures and trade-offs of the reviewed design are accepted (design, "Proof of concept").
 
+### Pass 2
+
+- Reviewer B `claude claude-fable-5-1#medium`, run by the coordinator on the diff `d3dd09ed..3d3be9dd` with `env -u JEV_MAF_LAB make review CHANGE=build-task-detail PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' ...`: Claude Code reported model `claude-fable-5-1` and session `7f8cdce1-9d38-4e97-8154-06b4a778355c`; the worktree snapshot was `781ddeb0…` before and after the run, so the worktree remained unchanged. The report is in the coordinator's session scratchpad (`review-29b-p2-report.md`).
+- Findings: Critical 0, High 0, Medium 0, Low 8, as in `passes.jsonl`; one line per finding in `findings.jsonl`. The reviewer found all nine pass 1 fixes correct and complete. A pass with only Low findings ends the review (governance "Review sequence"), so pass 3 does not run and the fixes below are not reviewed.
+  1. Low, `useTaskDetail.ts`: a board feed restarted without the detail feed could repeat or skip a snapshot number that the hook still held.
+  2. Low, `design.md` risk 2: it named only a change of another card as the cause of a second detail read on a direct open.
+  3. Low, `TaskDetailView.tsx` and `TaskList.tsx`: `Paper` and `Text` blocks inside the `span` of Mantine's `List.Item`, invalid HTML.
+  4. Low, `TaskDetailView.tsx`: each section's `aria-label` repeated its own `h3`.
+  5. Low, `TaskDetailDrawer.tsx`: closing pushed the board, so Back after a card link opened the detail again.
+  6. Low, the spec delta: the scenario "Another project on another page" had no test.
+  7. Low, `screens.ts`: `identifierOf` decoded only uppercase hexadecimal escapes.
+  8. Low, `TaskDetailView.tsx` and `TaskList.tsx`: the detail views imported `stepOf` and `ObstacleText` from the card view.
+
+### Pass 2 fixes
+
+**Unreviewed.** No later pass reviews these fixes; the coordinator checks them as solution architect (governance "Architect check of unreviewed fixes"), and their `findings.jsonl` lines say `fixed-unreviewed`, the outcome of the finding schema for a fix that no later pass checked.
+
+Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789da3` over the sources before `49518eea`, 6 of 45 tests of `task-detail.test.tsx` fail; `fb-29b-p2-6.log`, the mutation for finding 6.
+
+- Finding 1 (`49518eea`): the feed-start effect of `useTaskDetail` forgets the snapshot and the card it saw (design, decision 7). Fail-before: "reads the detail once on a retry of both after a resync, whatever the snapshot numbers" fails, 4 reads instead of 3.
+- Finding 2 (`0e5a0f33`): risk 2 now states that a direct open reads the board and the detail concurrently, and reads the detail once more only when the board answers above the detail's position. The read is not skipped when the board's card equals the detail's, because wire contracts sections 8 and 10 announce a change of the detail alone, such as a stage, a gate, or a task, through a `card-changed` whose card can be unchanged, so the skip could hide a change; the brief allowed this alternative. No behaviour changed, so no test.
+- Finding 3 (`49518eea`): the lists are Mantine `Stack` elements rendered as `ol` or `ul` (`ItemList`), with `Paper` or `Text` items rendered as `li` (design, decision 5); no CSS, `style`, `styles`, or `classNames`, and no new color pair, so the tested contrast pairs stay. Fail-before: "writes valid lists: no block inside phrasing content, each item in a list" fails on a `p` inside a `span`.
+- Finding 4 (`49518eea`): each section is named by its `h3` through `aria-labelledby`. Fail-before: "names each section by its heading rather than by a second label" fails on the `aria-label` "Stages and gates".
+- Finding 5 (`49518eea`), with the coordinator's constraint of 2026-11-03: the card link marks its history entry with the page load (`board-entry.ts`, `performance.timeOrigin`), and closing a detail so opened calls `navigate(-1)`; a detail from a direct link or a reload, whose entry has no mark of this page load, closes with `navigate('/', { replace: true })`, so closing never leaves the app (design, decision 3). The Drawer's picker keeps its push to the board. Fail-before: "closes a detail opened from a card by going back, so Back does not open it again" and "closes a detail opened from a direct link" and "… from a reload by replacing its address with the board" fail, `PUSH` instead of `POP` or `REPLACE`. The going-back test expected `/app` in `23789da3`; going back returns to the board's own entry `/app/`, so `49518eea` corrects the expected path, and the history action carries the check.
+- Finding 6 (`23789da3`): "keeps that page when the operator chooses another project" renders `/app/sessions`, chooses another project in the header's picker, and expects the page to stay. It passes on the sources, which already implement the scenario; fail-before `fb-29b-p2-6.log`: with the picker made to lead to the board from every page (`detail === null ||`), it fails with `/app` instead of `/app/sessions`.
+- Finding 7, **declined** under the coordinator's rule of 2026-11-03 (lowercase only if the control plane also decodes it): the control plane decodes each segment only by percent-encoding (`apps/control-plane/src/api/web-app.ts:73`, `decodeURIComponent`) and knows no `~` form, and `taskDetailPath` writes uppercase (`screens.ts`, `hex`), so `identifierOf` stays strict and one task keeps one address (design, decision 10).
+- Finding 8 (`49518eea`): `stepOf` moved to `board-labels.ts` and `ObstacleText` to `ObstacleText.tsx`, which the card and the detail both import; covered by the existing card and detail tests.
+- Coordinator decision Q3 (`0e5a0f33`): design decision 4 says why the picker appears twice, the modal Drawer keeping its focus trap and Escape, and that both pickers read and write the one selection of `ProjectsProvider` (`useProjects`), so they cannot disagree; they already share it, so no test was added.
+- After the fixes the whole `apps/web` suite passes: 457 tests in 15 files, 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines; `tsc` of both `apps/web` configurations and `npm run verify:comments` pass.
+- `make verify` of the fixed tree: see "Generated checks" and the line below, written once it ran.
+- Architect check by the coordinator (Niki): _pending_.
+
 ## Limitations
 
-- No browser run: the Drawer was checked in jsdom only, with stubbed `ResizeObserver` and `matchMedia`; Mantine's transitions and focus trap, and the layout at 320 px, were not checked in a browser.
+- No browser run: the Drawer was checked in jsdom only, with stubbed `ResizeObserver` and `matchMedia`; Mantine's transitions and focus trap were not checked in a browser.
+- The 320 px check is jsdom-only (coordinator decision Q1 of pass 2): "fits the longest identifiers and text at phone width" bounds the longest run without a break to 24 characters and each table row to two cells. It does not cover long unbroken text that no `Breakable` wraps, tables wider than two columns that a later change might add, or the real layout, widths, and overflow of a browser at 320 px.
 - Until item 25 registers cards and traceability, a running control plane answers an empty board, so no card links to a detail outside tests, and traceability shows only its empty state.
 - `listAgentSessions` is not read; it is a follow-up of item 31 (design, "Agent sessions").
-- The route-safe address is checked against the server's refusal rule as read, not through the control plane's `webAppAnswer`.
+- The route-safe address is checked against the server's rule as read, not through the control plane's `webAppAnswer` (coordinator decision Q2 of pass 2). The rule's source is `apps/control-plane/src/api/web-app.ts`: lines 49-57 (`webAppAnswer`; line 54 answers `index.html` only for a path without an extension, so a last segment with a dot is looked up as a file and answers 404) and lines 68-80 (`buildPath`; line 73 percent-decodes each segment, lines 77-78 refuse an empty inner segment, `.`, `..`, and a decoded `/`, `\`, or NUL). The remaining risk is drift between the SPA's `taskDetailPath` and `webAppAnswer`: a later change of either could make an encoded address answer 404 without a failing test.
+- Closing goes back only from an entry that a card link marked in this page load; a reload gives a new page load, so its entry closes by replacing its address, and Back then leads to the entries before it.
+
+## Follow-ups
+
+- A browser-level layout check of the UI screens at 320 px, with the end-to-end item (coordinator decision Q1 of pass 2).
+- A later small task outside 29b: one control-plane test that feeds an SPA-encoded task address, as `taskDetailPath` writes it, through `webAppAnswer` and expects `index.html` (coordinator decision Q2 of pass 2).
 
 ## Remaining gates
 
-- Review pass 2 of the pass 1 fixes, because pass 1 reported a High and five Medium findings; pass 3 only if pass 2 reports a Medium or worse finding; the review stops at a pass with only Low findings or none.
-- Architect check by the coordinator of any fixes that no later pass reviews.
-- Archive of the change in the last commit of the branch.
+- Architect check by the coordinator of the pass 2 fixes, which no later pass reviews (see "Pass 2 fixes").
 - Integration into dev by the coordinator (single pull request).
