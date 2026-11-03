@@ -28,6 +28,17 @@ function resolvedProcess(id: NeedsYouItemId, reason = 'Stopped by hand'): NeedsY
   return { ...PROCESS_FIELDS, id, state: 'resolved', resolution: { resolvedBy: 'owner-1' as PrincipalId, resolvedAt: AT, answer } };
 }
 
+// Changes a read record's nested reason where it is not frozen, as a
+// caller could; a frozen record refuses the change.
+function tamper(item: NeedsYouItem | undefined): void {
+  const answer = item?.state === 'resolved' ? (item.resolution.answer as { reason?: string }) : undefined;
+  try {
+    if (answer !== undefined) answer.reason = 'Changed by a reader';
+  } catch {
+    // A frozen record is the other way to keep the store unchanged.
+  }
+}
+
 function keyOf(itemId: NeedsYouItemId, key: IdempotencyKey, digest = 'digest-1'): InboxAnswerKey {
   return { itemId, key, digest, outcome: resolvedProcess(itemId) };
 }
@@ -48,6 +59,17 @@ export const INBOX_ANSWER_KEYS_CONFORMANCE: readonly ConformanceCase<InboxAnswer
       return problems;
     },
   },
+  {
+    name: 'a read key is a copy that cannot change the stored outcome',
+    async check(keys) {
+      const problems: string[] = [];
+      expectSuccess(problems, 'record', await keys.record(keyOf(ITEM, KEY)));
+      const read = await keys.find(ITEM, KEY);
+      tamper(read.ok ? read.value?.outcome : undefined);
+      expectRead(problems, 'unchanged', await keys.find(ITEM, KEY), keyOf(ITEM, KEY));
+      return problems;
+    },
+  },
 ]);
 
 export const RECONCILIATION_ANSWERS_CONFORMANCE: readonly ConformanceCase<ReconciliationAnswers>[] = Object.freeze([
@@ -62,6 +84,17 @@ export const RECONCILIATION_ANSWERS_CONFORMANCE: readonly ConformanceCase<Reconc
       expectCode(problems, 'again', await answers.record(resolvedProcess(ITEM, 'Another reason')), 'conflict');
       expectRead(problems, 'unchanged', await answers.get(ITEM), resolvedProcess(ITEM));
       expectRead(problems, 'other', await answers.get(OTHER_ITEM), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'a read item is a copy that cannot change the audit record',
+    async check(answers) {
+      const problems: string[] = [];
+      expectSuccess(problems, 'record', await answers.record(resolvedProcess(ITEM)));
+      const read = await answers.get(ITEM);
+      tamper(read.ok ? read.value : undefined);
+      expectRead(problems, 'unchanged', await answers.get(ITEM), resolvedProcess(ITEM));
       return problems;
     },
   },

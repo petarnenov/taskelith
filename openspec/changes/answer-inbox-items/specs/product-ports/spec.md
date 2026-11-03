@@ -14,6 +14,10 @@ Execution SHALL define `InboxAnswerKeys`, one digest and first outcome per item 
 - **WHEN** a key that an item already holds is recorded again
 - **THEN** the store fails with `conflict` and keeps the first record
 
+#### Scenario: A read record is changed
+- **WHEN** a caller changes a key's outcome or a resolved item that a store returned
+- **THEN** the store's next read returns the record as it was recorded
+
 ### Requirement: Every unrecorded process
 `ReconciliationQueue.unrecordedProcesses` SHALL list every worker's unrecorded processes by record time, then worker and observation, for the installation inbox.
 

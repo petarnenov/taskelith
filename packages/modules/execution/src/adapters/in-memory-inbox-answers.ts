@@ -8,12 +8,12 @@ import {
 } from '../ports/inbox-answers.js';
 import type { NeedsYouItem, NeedsYouItemId } from '../ports/needs-you.js';
 
-// Keeps the answer keys in process memory.
+// Keeps the answer keys in process memory; a read is a copy.
 export class InMemoryInboxAnswerKeys implements InboxAnswerKeys {
   readonly #keys = new Map<string, InboxAnswerKey>();
 
   async find(itemId: NeedsYouItemId, key: IdempotencyKey): Promise<Result<InboxAnswerKey | undefined>> {
-    return ok(this.#keys.get(keyOf(itemId, key)));
+    return ok(copyOf(this.#keys.get(keyOf(itemId, key))));
   }
 
   async record(answer: InboxAnswerKey): Promise<Result<void>> {
@@ -24,12 +24,13 @@ export class InMemoryInboxAnswerKeys implements InboxAnswerKeys {
   }
 }
 
-// Keeps the resolved reconciliation items in process memory.
+// Keeps the resolved reconciliation items in process memory; a read is a
+// copy, so a reader cannot change the audit record.
 export class InMemoryReconciliationAnswers implements ReconciliationAnswers {
   readonly #items = new Map<NeedsYouItemId, NeedsYouItem>();
 
   async get(itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
-    return ok(this.#items.get(itemId));
+    return ok(copyOf(this.#items.get(itemId)));
   }
 
   async record(item: NeedsYouItem): Promise<Result<void>> {
@@ -38,6 +39,10 @@ export class InMemoryReconciliationAnswers implements ReconciliationAnswers {
     this.#items.set(item.id, structuredClone(item));
     return ok(undefined);
   }
+}
+
+function copyOf<Value>(held: Value | undefined): Value | undefined {
+  return held === undefined ? undefined : structuredClone(held);
 }
 
 function keyOf(itemId: NeedsYouItemId, key: IdempotencyKey): string {
