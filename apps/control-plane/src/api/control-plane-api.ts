@@ -229,8 +229,7 @@ export class ControlPlaneApi implements ApiHandlers {
     if (principalId === undefined) return err(unauthenticated());
     const projectId = await projectOf();
     if (!projectId.ok) return projectId;
-    // The temporary G2 bridge (Q5); require-existing-project-for-runs
-    // retires it.
+    // The temporary G2 bridge (Q5); sub-change 11c retires it.
     return this.#services.authorization.authorize(principalId, g2BridgeRequirement(projectId.value, role));
   }
 

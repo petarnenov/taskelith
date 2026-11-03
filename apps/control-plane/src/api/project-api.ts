@@ -81,8 +81,8 @@ export class ProjectApi {
     const target = { projectId, principalId, role };
     const assigned = await this.#operations.members.assignProjectMember(caller.value, target, invocationOf(caller.value, 'assignProjectMember'));
     if (!assigned.ok) return assigned;
-    const { loginName } = assigned.value;
-    return ok({ principal: { principalId: assigned.value.principalId, loginName }, role: assigned.value.role ?? role });
+    const member = assigned.value;
+    return ok({ principal: { principalId: member.principalId, loginName: member.loginName }, role: member.role });
   }
 
   async removeProjectMember(request: ApiRequest): Promise<Result<void>> {

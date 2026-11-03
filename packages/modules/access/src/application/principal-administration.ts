@@ -29,6 +29,8 @@ export interface ProjectRoleChange extends PrincipalSummary {
   readonly role?: ProjectRole;
 }
 
+export type ProjectRoleAssignment = ProjectRoleChange & { readonly role: ProjectRole };
+
 type Audited = Omit<AccessAuditEvent, 'actor' | 'reason' | 'occurredAt'>;
 
 // The installation-owner's commands over principals (decision 8). Each is
@@ -90,7 +92,7 @@ export class PrincipalAdministration {
     actor: PrincipalId,
     target: { readonly projectId: string; readonly loginName: string; readonly role: string },
     invocation: AdministrativeInvocation,
-  ): Promise<Result<ProjectRoleChange>> {
+  ): Promise<Result<ProjectRoleAssignment>> {
     const loginName = parseLoginName(target.loginName);
     if (!loginName.ok) return Promise.resolve(loginName);
     return this.#assign(actor, target, (tx) => principalNamed(tx, loginName.value), invocation);
@@ -101,7 +103,7 @@ export class PrincipalAdministration {
     actor: PrincipalId,
     target: { readonly projectId: string; readonly principalId: string; readonly role: string },
     invocation: AdministrativeInvocation,
-  ): Promise<Result<ProjectRoleChange>> {
+  ): Promise<Result<ProjectRoleAssignment>> {
     return this.#assign(actor, target, (tx) => principalWithId(tx, target.principalId), invocation);
   }
 
@@ -134,20 +136,21 @@ export class PrincipalAdministration {
     return this.#deps.store.transaction((tx) => authorizeIn(tx, actor, OWNER_ONLY));
   }
 
-  #assign(
+  async #assign(
     actor: PrincipalId,
     target: { readonly projectId: string; readonly role: string },
     principalOf: (tx: AccessTransaction) => Promise<Result<Principal>>,
     invocation: AdministrativeInvocation,
-  ): Promise<Result<ProjectRoleChange>> {
+  ): Promise<Result<ProjectRoleAssignment>> {
     const role = parseProjectRole(target.role);
-    if (!role.ok) return Promise.resolve(role);
+    if (!role.ok) return role;
     const scope = { projectIdText: target.projectId, check: existingProject };
-    return this.#roleCommand(actor, scope, invocation, principalOf, async (tx, principalId, projectId, at) => {
+    const assignment = await this.#roleCommand(actor, scope, invocation, principalOf, async (tx, principalId, projectId, at) => {
       const assigned = await tx.projectRoles.assign(projectId, principalId, role.value, at);
       if (!assigned.ok) return assigned;
-      return ok({ changed: true, role: role.value, event: { kind: 'access.project-role-assigned', principalId, projectId, role: role.value } });
+      return ok({ changed: true, event: { kind: 'access.project-role-assigned', principalId, projectId, role: role.value } });
     });
+    return assignment.ok ? ok({ ...assignment.value, role: role.value }) : assignment;
   }
 
   #roleCommand(

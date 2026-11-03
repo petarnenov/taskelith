@@ -14,6 +14,7 @@ export {
   PrincipalAdministration,
   type PrincipalAdministrationDependencies,
   type PrincipalSummary,
+  type ProjectRoleAssignment,
   type ProjectRoleChange,
 } from './application/principal-administration.js';
 export {

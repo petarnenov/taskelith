@@ -44,7 +44,7 @@ const PROJECT_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-fou
 const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409 };
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
-const BOTH: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
+const BROWSER_OR_OPERATOR: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
 
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
@@ -153,43 +153,43 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {
-    operationId: 'listProjects', method: 'GET', pattern: /^\/projects$/, security: BOTH, query: ['after'],
+    operationId: 'listProjects', method: 'GET', pattern: /^\/projects$/, security: BROWSER_OR_OPERATOR, query: ['after'],
     response: 'ProjectPage', success: 200, statuses: COMMON,
   },
   {
-    operationId: 'createProject', method: 'POST', pattern: /^\/projects$/, security: BOTH, body: 'ProjectCreation',
+    operationId: 'createProject', method: 'POST', pattern: /^\/projects$/, security: BROWSER_OR_OPERATOR, body: 'ProjectCreation',
     response: 'Project', success: 201, statuses: COMMON, reasons: ROLE_DENIAL,
   },
   {
-    operationId: 'readProject', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}$`), security: BOTH,
+    operationId: 'readProject', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}$`), security: BROWSER_OR_OPERATOR,
     response: 'Project', success: 200, statuses: PROJECT_READ,
   },
   {
-    operationId: 'updateProject', method: 'PATCH', pattern: new RegExp(`${PROJECT_PATH}$`), security: BOTH, body: 'ProjectUpdate',
+    operationId: 'updateProject', method: 'PATCH', pattern: new RegExp(`${PROJECT_PATH}$`), security: BROWSER_OR_OPERATOR, body: 'ProjectUpdate',
     response: 'Project', success: 200, statuses: PROJECT_UPDATE, reasons: ROLE_DENIAL,
   },
   {
-    operationId: 'listProjectMembers', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/members$`), security: BOTH, query: ['after'],
+    operationId: 'listProjectMembers', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/members$`), security: BROWSER_OR_OPERATOR, query: ['after'],
     response: 'ProjectMemberPage', success: 200, statuses: PROJECT_READ,
   },
   {
-    operationId: 'assignProjectMember', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BOTH,
+    operationId: 'assignProjectMember', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
     body: 'MemberAssignment', response: 'ProjectMember', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
   },
   {
-    operationId: 'removeProjectMember', method: 'DELETE', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BOTH,
+    operationId: 'removeProjectMember', method: 'DELETE', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
     response: 'empty', success: 204, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
   },
   {
-    operationId: 'readProjectDefaults', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BOTH,
+    operationId: 'readProjectDefaults', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BROWSER_OR_OPERATOR,
     response: 'ProjectDefaults', success: 200, statuses: PROJECT_READ,
   },
   {
-    operationId: 'updateProjectDefaults', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BOTH,
+    operationId: 'updateProjectDefaults', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BROWSER_OR_OPERATOR,
     body: 'ProjectDefaultsUpdate', response: 'ProjectDefaults', success: 200, statuses: PROJECT_UPDATE, reasons: ROLE_DENIAL,
   },
   {
-    operationId: 'readAutoMergeSetting', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/auto-merge$`), security: BOTH,
+    operationId: 'readAutoMergeSetting', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/auto-merge$`), security: BROWSER_OR_OPERATOR,
     response: 'AutoMergeSetting', success: 200, statuses: PROJECT_READ,
   },
   {

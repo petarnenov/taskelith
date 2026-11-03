@@ -30,7 +30,7 @@ export function projectRead(projectId: string | undefined): AccessRequirement {
 }
 
 // TEMPORARY G2 bridge (Q5): the owner also passes the G2 operator project
-// requirements until require-existing-project-for-runs removes it.
+// requirements until sub-change 11c removes it.
 export function g2BridgeRequirement(projectId: string | undefined, role: ProjectRole): AccessRequirement {
   return Object.freeze({ kind: 'project', projectId, role, ownerPass: 'g2-bridge' });
 }
