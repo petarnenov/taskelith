@@ -68,7 +68,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `ca7a33e32a7cca257e67b4f826c7f3cf611d5185`; tests 4113, pass 4104, fail 0, skipped 9; all files 99.39% lines, 92.61% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `c5a0d79d23a2db0cdc4923075d634dd81ffbb7b8`; tests 4113, pass 4104, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.87% functions.
 - `npm run openspec -- validate stabilize-fleet-token-expiry-test --strict`: passed, `Change 'stabilize-fleet-token-expiry-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`.
 - Spec diff against the merge base `c355525b1f11` with `origin/dev`: no change under `openspec/specs`.
@@ -77,6 +77,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19ec7-d61b-7fd0-bc83-7f8b618321e7` | 0 | 0 | 2 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `020f9514-9e97-4d64-a525-bf1a30b4d6a2` | 0 | 0 | 0 | 5 |
 <!-- make record: end -->
 
 ## Independent review
