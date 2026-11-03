@@ -267,3 +267,25 @@ test('a body that breaks its schema is 400 after the role check, and nothing is 
     assert.equal((await unchanged(() => call(method, path, headers, body))).status, 400, `${method} ${path}`);
   }
 });
+
+test('a denial by the command\'s own role check, after the server passed the caller, answers 403, never 401', async () => {
+  // The server's check passes everyone, as if the role was removed after it.
+  const lenient = createApiServer(new ControlPlaneApi({
+    operator: { authenticate: async () => err(failure('forbidden', 'no bearer in this test')) },
+    sessions, authorization: { authorize: async () => ok(undefined) }, projects: { setup, members: administration },
+  } as unknown as ApiServices));
+  await new Promise<void>((resolve) => lenient.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => lenient.close(() => resolve())));
+  const lenientBase = `http://127.0.0.1:${(lenient.address() as AddressInfo).port}`;
+  const commands = [...maintainerCommands(ALPHA), ...ownerCommands(ALPHA)];
+  for (const [method, path, body] of commands) {
+    const before = await state();
+    const response = await fetch(`${lenientBase}${path}`, {
+      method, headers: { ...VERA, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const answer = await response.json() as { details: Record<string, string> };
+    assert.deepEqual([response.status, answer.details.reason], [403, 'role-required'], `${method} ${path}`);
+    assert.deepEqual(await state(), before, 'nothing is recorded');
+  }
+});
