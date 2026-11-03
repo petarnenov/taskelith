@@ -85,6 +85,7 @@ Both mutations were reverted and the 35 tests of that file passed.
 | --- | --- | --- |
 | `env -u NODE_ENV make verify` (run 1, before the rebase) | `ea23f250`, clean | Failed in `verify:comments`: three new three-line comments, in `github-conformance-cleanup.ts`, `github-conformance-long-run.ts`, and `github-conformance.ts`. Fixed in `537d76e7`. |
 | `env -u NODE_ENV make verify` (run 2, before the rebase) | `2840a8e5`, tree `2a763a75`, clean | Passed, profile full, stamp written. Tests 4433, suites 49, pass 4386, fail 0, cancelled 0, skipped 47. All files: 99.39 % lines, 92.72 % branches, 98.89 % functions. No known flake failed, and nothing was rerun. |
+| `env -u NODE_ENV make verify` (run 3, after the rebase) | `fc1aa519`, tree `d2d35096`, clean | Passed at the first attempt, profile full, stamp written. Tests 4669, pass 4622, fail 0, skipped 47. All files: 99.41 % lines, 92.80 % branches, 98.84 % functions. No known flake failed, and nothing was rerun. |
 | `test/github-conformance.test.ts` | inside run 2 | 12 tests pass. |
 | `npm run openspec -- validate run-github-scm-conformance --strict` | `6b0dedf5` | `Change 'run-github-scm-conformance' is valid` |
 | CLI smoke without network | `be5f5567` (before the rebase) | Without the variables, exit 2 names all four. Without arguments, exit 2 prints the usage. With a throwaway generated key and `--out` inside the worktree, exit 2 is refused before any request. |
@@ -118,10 +119,10 @@ Route (`route.json`, rule version 5, routed again in `a018d996`): elevated (line
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `2a763a7555e6ddada46b3f53230cd0ec0ae12fba`; tests 4433, pass 4386, fail 0, skipped 47; all files 99.39% lines, 92.72% branches, 98.89% functions.
+- `make verify`: passed, profile full, tree `d2d350965c33cb325a561a0ccb9f1fe80144c651`; tests 4669, pass 4622, fail 0, skipped 47; all files 99.41% lines, 92.80% branches, 98.84% functions.
 - `npm run openspec -- validate run-github-scm-conformance --strict`: passed, `Change 'run-github-scm-conformance' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 106 file(s); every pass summary file is valid: 86 file(s); every route file is valid: 39 file(s).`.
-- Spec diff against the merge base `f0ed0139b0f6` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 111 file(s); every pass summary file is valid: 91 file(s); every route file is valid: 44 file(s).`.
+- Spec diff against the merge base `d0d594782357` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
