@@ -15,6 +15,10 @@ The control plane SHALL serve `answerInboxItem` and `answerInstallationInboxItem
 - **WHEN** another principal repeats the key of a resolved item with the same answer
 - **THEN** the answer is 409 `idempotency-key-reused`
 
+#### Scenario: A replay without the role or scope
+- **WHEN** a principal who answered an item repeats its key and answer after losing the item's role, or through another project's inbox
+- **THEN** the answer is refused 403 or 404 as a stranger's is, before any key is read, and never returns the stored outcome
+
 #### Scenario: A refused answer
 - **WHEN** a source refuses an answer with 422
 - **THEN** no key is recorded and nothing else changes

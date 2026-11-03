@@ -35,8 +35,8 @@ interface LocatedItem {
   readonly item: NeedsYouItem;
 }
 
-// Wire contracts section 8: a repeated key never reaches the item's source,
-// and the key, the answer, and its digest commit together (product ports).
+// Wire contracts section 8: the item's scope is checked before its key, a
+// repeated key never reaches the source, and all commit together.
 export class InboxAnswers {
   readonly #store: InboxAnswerStore;
   readonly #digest: InputDigest;
@@ -58,11 +58,11 @@ export class InboxAnswers {
     const { itemId, idempotencyKey: key } = submission;
     const digest = this.#digest.digest(answerInput(submission));
     return this.#store.transaction(async ({ keys, sources }) => {
+      const located = await locate(sources, scope, itemId);
+      if (!located.ok) return located;
       const held = await keys.find(itemId, key);
       if (!held.ok) return held;
       if (held.value !== undefined) return held.value.digest === digest ? ok(held.value.outcome) : keyReused(itemId);
-      const located = await locate(sources, scope, itemId);
-      if (!located.ok) return located;
       const answered = await located.value.source.answer({ ...submission, scope });
       if (!answered.ok) return answered;
       const recorded = await keys.record({ itemId, key, digest, outcome: answered.value });

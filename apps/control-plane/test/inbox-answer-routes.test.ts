@@ -38,6 +38,13 @@ for (const [loginName, role] of [['vera', 'project-viewer'], ['otto', 'project-o
   principals.set(loginName, value(await administration.createPrincipal(owner, loginName, INVOCATION)).principalId);
   value(await administration.assignProjectRole(owner, { projectId: 'alpha', loginName, role }, INVOCATION));
 }
+// `lena` loses her alpha role in a test; `sam` holds no role, `bea` beta's.
+for (const [loginName, projects] of [['lena', ['alpha', 'beta']], ['sam', []], ['bea', ['beta']]] as const) {
+  principals.set(loginName, value(await administration.createPrincipal(owner, loginName, INVOCATION)).principalId);
+  for (const projectId of projects) {
+    value(await administration.assignProjectRole(owner, { projectId, loginName, role: 'project-operator' }, INVOCATION));
+  }
+}
 const token = (name: string) => `tkop_${name.padEnd(43, 'x')}`;
 
 const PROCESS_ITEM = {
@@ -147,6 +154,18 @@ test('a principal below the item\'s role is refused 403 before its body is read,
   assert.equal((await answer('/projects/alpha/inbox/i-process/answer', 'otto', 'key-1')).status, 404, 'an installation item');
   assert.equal((await post('/projects/alpha/inbox/i-1/answer', 'otto', { idempotencyKey: 'key-1', answer: { kind: 'bogus' } })).status, 400);
   assert.equal(source.items.get('i-1')!.state, 'open');
+});
+
+test('a replay after its principal lost the item\'s scope or role is refused as a stranger is', async () => {
+  const path = '/projects/alpha/inbox/i-1/answer';
+  assert.equal((await answer(path, 'lena', 'key-1')).status, 200);
+  const outOfScope = await answer('/projects/beta/inbox/i-1/answer', 'lena', 'key-1');
+  assert.deepEqual(outOfScope, await answer('/projects/beta/inbox/i-1/answer', 'bea', 'key-1'));
+  assert.equal(outOfScope.status, 404);
+  value(await administration.removeProjectRole(owner, { projectId: 'alpha', loginName: 'lena' }, INVOCATION));
+  const roleLost = await answer(path, 'lena', 'key-1');
+  assert.deepEqual(roleLost, await answer(path, 'sam', 'key-1'));
+  assert.equal(roleLost.status, 403);
 });
 
 test('a refusal of the item\'s source answers 422 with its reason', async () => {

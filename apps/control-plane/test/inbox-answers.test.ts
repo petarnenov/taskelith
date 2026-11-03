@@ -104,6 +104,24 @@ test('an item outside the inbox\'s scope, or unknown, is not-found, and item rea
   assert.equal(value(await service.item(ALPHA, 'i-1' as never)).state, 'resolved');
 });
 
+test('a held key outside the inbox\'s scope is not-found, never the first outcome or a reused key', async () => {
+  const { service, source } = answers();
+  value(await service.answer(ALPHA, submission('key-1')));
+  for (const scope of [BETA, { kind: 'installation' } as const]) {
+    for (const repeat of [submission('key-1'), submission('key-1', ALLOW)]) {
+      assert.equal(failed(await service.answer(scope, repeat)).code, 'not-found', `${scope.kind} ${repeat.answer.kind}`);
+    }
+  }
+  assert.equal(source.requests.length, 1);
+});
+
+test('another principal repeating a key never receives the first principal\'s outcome', async () => {
+  const { service } = answers();
+  value(await service.answer(ALPHA, submission('key-1')));
+  const other = failed(await service.answer(ALPHA, submission('key-1', DENY, 'person-2')));
+  assert.deepEqual([other.code, other.details.reason], ['conflict', KEY_REUSED]);
+});
+
 test('a store failure fails the answer and the item read', async () => {
   const broken = { find: async () => err(failure('unavailable', 'down')), record: async () => ok(undefined) };
   const { service } = answers(new OneItemSource(), broken as never);

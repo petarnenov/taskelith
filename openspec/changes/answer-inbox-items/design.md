@@ -19,7 +19,7 @@ Until item 25 no writer registers a card, so in a running installation the recon
 
 ### 2. Idempotency keys (product ports section 4.2)
 
-`InboxAnswers` runs each answer in one `SERIALIZABLE` transaction of `PostgresDatabase`: it reads the key, and for a held key with the same digest it returns the stored first outcome, and with another digest it answers `conflict` `idempotency-key-reused`, before any source; for a new key it locates the item, calls its source, and records the key with its digest and outcome. A key is scoped to its item (primary key `item_id`, `idempotency_key`). A refused answer records no key, so the same key may answer again once the refusal no longer holds.
+`InboxAnswers` runs each answer in one `SERIALIZABLE` transaction of `PostgresDatabase`: it first locates the item in the answer's scope, so an item outside it is `not-found` before any key is read, then reads the key, and for a held key with the same digest it returns the stored first outcome, and with another digest it answers `conflict` `idempotency-key-reused`, before any source; for a new key it locates the item, calls its source, and records the key with its digest and outcome. A key is scoped to its item (primary key `item_id`, `idempotency_key`). A refused answer records no key, so the same key may answer again once the refusal no longer holds.
 
 The digest is the control plane's keyed `InputDigest` (`HmacInputDigest`, HMAC-SHA-256 under the key the session timeline uses) of the unredacted answer and its responder, serialized in a fixed field order per answer kind (`answerInput`). Naming the responder makes a key that another principal repeats `idempotency-key-reused`, never the first principal's outcome.
 
@@ -51,7 +51,7 @@ A view reads the same source in its read-only snapshot with the resolver `ANSWER
 
 ### 6. HTTP
 
-`answerInboxItem` and `answerInstallationInboxItem` are served with the routes' operation role (wire contracts section 3), then `InboxAnswerApi.authorizeItem`, still before the body: it reads the item in the path's scope, answers 404 for none or a malformed identifier, and authorizes the item's `answerableBy` role on its project, or the installation owner for an installation item, through `Access`. The body is then parsed to the port's answer; the handler answers the resolved item as `InboxItem`. The failures map to 400, 404, 409 `CommandConflict`, and 422 `AnswerRefusal` as section 8 declares.
+`answerInboxItem` and `answerInstallationInboxItem` are served with the routes' operation role (wire contracts section 3), then `InboxAnswerApi.authorizeItem`, still before the body: it reads the item in the path's scope, answers 404 for none or a malformed identifier, and authorizes the item's `answerableBy` role on its project, or the installation owner for an installation item, through `Access`. So the role and scope checks run before any key is read, and a replay by a principal who lost the item's role or scope gets a stranger's 403 or 404, never the stored outcome (coordinator constraint, Niki, 2026-11-03). The body is then parsed to the port's answer; the handler answers the resolved item as `InboxItem`. The failures map to 400, 404, 409 `CommandConflict`, and 422 `AnswerRefusal` as section 8 declares.
 
 ### 7. Migration `1792934200000`
 
