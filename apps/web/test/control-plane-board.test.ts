@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BoardStreamEvent } from '../src/board/board';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
-import { board, card, PROJECT } from './fakes';
+import { board, card, OTHER_PROJECT, PROJECT } from './fakes';
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -70,6 +70,15 @@ describe('listProjects', () => {
     const send = sendAnswers(json(200, page), json(200, page));
     expect(await createBoardGateway({ fetch: send }).listProjects()).toEqual({ kind: 'unavailable' });
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads pages whose cursors cycle as unreachable instead of looping', async () => {
+    const toB = { projects: [PROJECT], next: 'B' };
+    const toA = { projects: [OTHER_PROJECT], next: 'A' };
+    const last = { projects: [] };
+    const send = sendAnswers(json(200, toA), json(200, toB), json(200, toA), json(200, toB), json(200, last));
+    expect(await createBoardGateway({ fetch: send }).listProjects()).toEqual({ kind: 'unavailable' });
+    expect(send.mock.calls.map(([url]) => url)).toEqual(['/projects', '/projects?after=A', '/projects?after=B']);
   });
 
   it.each([

@@ -33,15 +33,17 @@ export function createBoardGateway({
 
   async function listProjects(): Promise<ReadResult<readonly Project[]>> {
     const projects: Project[] = [];
+    const visited = new Set<string>();
     let after: string | undefined;
     do {
       const result = await reachable(() => request('get', '/projects', { query: { after } }));
       if (result === undefined) return { kind: 'unavailable' };
       if (!hasStatus(result, 200)) return { kind: failureOf(result) };
       const page = projectPageOf(result.body);
-      if (page === undefined || (page.next !== undefined && page.next === after)) return { kind: 'unavailable' };
+      if (page === undefined || (page.next !== undefined && visited.has(page.next))) return { kind: 'unavailable' };
       projects.push(...page.projects);
       after = page.next;
+      if (after !== undefined) visited.add(after);
     } while (after !== undefined);
     return { kind: 'read', value: projects };
   }
