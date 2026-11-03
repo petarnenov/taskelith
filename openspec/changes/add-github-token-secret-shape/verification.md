@@ -13,7 +13,7 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), second change of its split, develop
 - `bd692f5b` `docs: record the verification of the add github token secret shape change`, the tree that `make verify` checked; the commit after it adds the `make record` output and is the head for review pass 1.
 - `05e1cc03` `docs: record review pass 1 of the add github token secret shape change`.
 - `d5f35cfc` `test: split the GitHub installation token tests and expect a token shape inside a word to stay` (the tests alone, for the fail-before runs of the pass 1 fixes).
-- The commit after it, `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, holds the rule and record fixes.
+- `f377a38f` `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, the tree that the second `make verify` checked; the commit after it adds the `make record` output.
 
 ## Environment
 
@@ -63,6 +63,7 @@ The synthetic token `ghs_` and nine times `A1b2` is shortened to `ghs_A1b2…A1b
 | Check | Revision | Result |
 | --- | --- | --- |
 | `env -u NODE_ENV make verify` | `bd692f5b`, tree `f2a68fb7` | Passed, profile full, stamp written: tests 4136, suites 49, pass 4089, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.68 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
+| `env -u NODE_ENV make verify` | `f377a38f`, tree `3cffe9d0` | First run failed one test outside this change, `test/installation-script.test.ts` "a bound with a leading zero is read in base 10" (`ended after 9.049s, before 10`), a timing bound; the rerun on the same tree passed, profile full, stamp written: tests 4144, suites 49, pass 4097, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.67 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
 | `npm run openspec -- validate add-github-token-secret-shape --strict` | `3b84d6a1` | `Change 'add-github-token-secret-shape' is valid` |
 | Focused runs | `3b84d6a1` | `logger.test.ts` and `secrets.test.ts`: 36 of 36 |
 
@@ -75,11 +76,15 @@ Route (`route.json`, rule version 5): elevated (security, contracts); pass 1 rev
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f2a68fb75d1f370f673f810a4428132481098d1e`; tests 4136, pass 4089, fail 0, skipped 47; all files 99.36% lines, 92.68% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `3cffe9d0455ea6944a2e6513e2cd8cd972d4d09c`; tests 4144, pass 4097, fail 0, skipped 47; all files 99.36% lines, 92.67% branches, 98.84% functions.
 - `npm run openspec -- validate add-github-token-secret-shape --strict`: passed, `Change 'add-github-token-secret-shape' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`.
 - Spec diff against the merge base `c355525b1f11` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a19eb6-b681-7e70-998b-c4458edb89e9` | 0 | 0 | 2 | 2 |
 <!-- make record: end -->
 
 ## Independent review
