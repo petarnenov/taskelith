@@ -122,7 +122,7 @@ The views map the ports of the [product ports contract](product-ports.md) one to
 | 400 | `Failure`, `invalid` | An answer of another kind than the item, `resolve-execution` for an `unrecorded-process` item or `acknowledge-process` for an `unknown-execution` one, or an input text over `MAX_INPUT_ANSWER_BYTES`, 65,536 bytes in UTF-8, the bound of `respondToNativeRequest` too (section 9) |
 | 404 | `Failure`, `not-found` | No such item in the project, or in the installation scope |
 | 409 | `CommandConflict` | `already-answered`: another answer resolved the item first; `idempotency-key-reused`: the key resolved the item with another answer |
-| 422 | `AnswerRefusal` | `item-closed`: the item is closed; `attempt-not-current`: the item's attempt has a newer generation; `subject-changed`: the subject's state no longer allows the answer, such as an execution that is no longer unknown or a gate that is no longer pending |
+| 422 | `AnswerRefusal` | `item-closed`: the item is closed, such as an unknown execution whose terminal fact arrived; `attempt-not-current`: the item's attempt has a newer generation; `subject-changed`: the subject's state no longer allows the answer, such as a gate that is no longer pending |
 
 An idempotency key is scoped to the item it answers. The repeat check comes before the refusal of a resolved item and compares the answer before redaction (section 7). A schema bound counts Unicode code points, while the byte bound of an input answer and the text bounds of section 9 count what their ports count, so a text within the schema can still answer 400.
 

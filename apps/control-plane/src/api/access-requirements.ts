@@ -32,7 +32,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   readBoard: PROJECT_READ, readTaskDetail: PROJECT_READ, readInbox: PROJECT_READ, readInboxCounts: PROJECT_READ,
   listAgentSessions: PROJECT_READ, readAgentSession: PROJECT_READ, listAgentSessionTurns: PROJECT_READ,
   listAgentSessionRequests: PROJECT_READ, readAgentSessionOutput: PROJECT_READ, streamProjectEvents: PROJECT_READ,
-  // The item's `answerableBy` role is checked by its handler (section 8).
+  // The item's `answerableBy` role is checked before the body (section 8).
   submitTurn: PROJECT_OPERATOR, respondToNativeRequest: PROJECT_OPERATOR, answerInboxItem: PROJECT_OPERATOR,
   openTerminal: PROJECT_OPERATOR,
   readInstallationInbox: OWNER, readInstallationInboxCounts: OWNER, answerInstallationInboxItem: OWNER,

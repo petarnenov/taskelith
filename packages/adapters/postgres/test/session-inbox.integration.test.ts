@@ -63,7 +63,8 @@ async function lineage(): Promise<void> {
 const source = requestSource;
 
 const answer = (itemId: string, key: string, given: object, responder: PrincipalId = PERSON) => ({
-  itemId: itemId as NeedsYouItemId, responder, answer: given as never, idempotencyKey: id('IdempotencyKey', key) as IdempotencyKey,
+  scope: { kind: 'project' as const, projectId: PROJECT }, itemId: itemId as NeedsYouItemId, responder, answer: given as never,
+  idempotencyKey: id('IdempotencyKey', key) as IdempotencyKey,
 });
 
 async function itemRows(): Promise<{ item_id: string; kind: string; state: string }[]> {

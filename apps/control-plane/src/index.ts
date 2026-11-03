@@ -132,14 +132,16 @@ export {
 } from './application/event-log-keeper.js';
 export { MAX_STREAM_BUFFER_BYTES, EventStreamApi, type EventStreamOperations } from './api/event-stream-api.js';
 export { eventData, frameText, inboxItemBody, type EventData } from './api/event-stream-wire.js';
-export type { BoardReads, BoardStore, FleetReads } from './application/board-reads.js';
+export type { BoardReads, BoardStore, FleetReads, ReconciliationRecordReads } from './application/board-reads.js';
 export { BoardViews, type BoardViewDependencies } from './application/board-views.js';
 export { CardReader, mergeGate, type CardView, type CardViewParts, type SnapshotSources } from './application/card-views.js';
 export { ACTIVITY_URGENCY, taskEnd, taskState, type TaskContext, type TaskState } from './application/card-tasks.js';
 export {
   CardProjector,
+  NO_DERIVED_ITEMS,
   PROJECTION_BATCH,
   type CardProjections,
+  type DerivedInboxItems,
   type ExpandedTouches,
   type ProjectionPass,
   type ProjectionStore,
@@ -148,4 +150,25 @@ export {
   type TouchHorizon,
 } from './application/card-projector.js';
 export { BoardApi, type BoardOperations } from './api/board-api.js';
-export { boardReadsOf, startBoardServices, type BoardServices, type InboxSourcesIn } from './composition/board-views.js';
+export { boardReadsOf, headPositions, startBoardServices, type BoardServices, type InboxSourcesIn } from './composition/board-views.js';
+export {
+  InboxAnswers,
+  answerInput,
+  type InboxAnswerStore,
+  type InboxAnswerSubmission,
+  type InboxAnswerTransaction,
+} from './application/inbox-answers.js';
+export {
+  ANSWERED_ELSEWHERE,
+  RECONCILIATION_PAGE_SIZE,
+  RECONCILIATION_SOURCE_ID,
+  ReconciliationSource,
+  type OpenReconciliation,
+  type ReconciliationReads,
+  type ReconciliationResolution,
+  type ReconciliationResolver,
+  type ReconciliationSourceParts,
+} from './application/reconciliation-source.js';
+export { SUBJECT_CHANGED, TransactionalReconciliationResolver, type ReconciliationTransaction } from './application/reconciliation-resolution.js';
+export { INBOX_ANSWER_OPERATIONS, InboxAnswerApi, type InboxAnswerOperations } from './api/inbox-answer-api.js';
+export { startInboxServices, type InboxServices } from './composition/inbox-answers.js';

@@ -3,6 +3,7 @@
 import { writeSync } from 'node:fs';
 import type { Result } from '@taskelith/kernel';
 import type { NeedsYouItemId, PrincipalId } from '@taskelith/execution';
+import type { ProjectId } from '@taskelith/sdlc';
 import { PostgresDatabase, PostgresSessionTimelineStore, PostgresUiEventLog } from '@taskelith/postgres';
 import { crashPointsFromEnvironment, value } from '@taskelith/testing';
 import {
@@ -35,6 +36,7 @@ async function acknowledge(): Promise<Result<unknown>> {
   const store = new PostgresSessionTimelineStore(database);
   const item = value(await store.transaction((tx) => tx.items.find(SESSION, 'delivery-acknowledgement', requestKey('request-1'))));
   return requestSource(store).answer({
+    scope: { kind: 'project', projectId: 'alpha' as ProjectId },
     itemId: item!.id as NeedsYouItemId, responder: (PERSON as { principalId: PrincipalId }).principalId,
     answer: { kind: 'delivery-acknowledgement', decision: 'acknowledge' }, idempotencyKey: key('ack-1'),
   });

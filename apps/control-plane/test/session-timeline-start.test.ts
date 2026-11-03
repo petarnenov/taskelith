@@ -55,6 +55,30 @@ test('the inbox source over one snapshot lists that snapshot\'s items at its pos
   assert.deepEqual(listed, ['alpha']);
 });
 
+test('the inbox source over one transaction answers through that transaction, never another', async () => {
+  const space = namespace();
+  value(new SessionInputDigestKeyFile(space).create());
+  value(new SessionOutputTailKeyFile(space).create());
+  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const reads: string[] = [];
+  const item = {
+    id: 'n-1', kind: 'permission-request', state: 'open', sessionId: 's-1', taskId: 'task-1', attemptId: 'a-1', attemptGeneration: 1,
+    request: { generation: 1, nativeRequestId: 'r-1' }, createdAt: CLOCK.now(),
+  };
+  const transaction = {
+    items: { get: async (itemId: string) => (reads.push(`item:${itemId}`), ok({ item, scope: { projectId: 'alpha', runId: 'run-1' } })) },
+    idempotency: { find: async () => (reads.push('key'), ok(undefined)) },
+    sessions: { get: async (sessionId: string) => (reads.push(`session:${sessionId}`), ok(undefined)) },
+  };
+  const source = services.sourceIn(transaction as never, { current: async () => ok('12') });
+  const answered = await source.answer({
+    scope: { kind: 'project', projectId: 'alpha' as never }, itemId: 'n-1' as never, responder: 'person-1' as never,
+    answer: { kind: 'permission-request', decision: 'allow' }, idempotencyKey: 'key-1' as never,
+  });
+  assert.equal(failed(answered).code, 'not-found', 'the session is read in the same transaction, which has none');
+  assert.deepEqual(reads, ['item:n-1', 'item:n-1', 'key', 'session:s-1']);
+});
+
 test('a missing digest key refuses the service start and names init, which creates it', () => {
   const refused = failed(startAgentSessionServices(namespace(), unusedDatabase(), CLOCK));
   assert.equal(refused.code, 'precondition-failed');

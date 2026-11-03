@@ -1,4 +1,4 @@
-import { projectRequirement, type AccessRequirement, type PrincipalId } from '@taskelith/access';
+import { projectRequirement } from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
 import {
   NEEDS_YOU_KINDS,
@@ -15,16 +15,16 @@ import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kerne
 import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 import type { ApiRequest } from './api-server.js';
 import { inboxItemBody } from './event-stream-wire.js';
+import type { InboxAnswerOperations } from './inbox-answer-api.js';
 
 type Wire<Name extends keyof HttpSchemas> = HttpSchemas[Name];
 
 const INSTALLATION: NeedsYouScope = Object.freeze({ kind: 'installation' });
 
-// What the views of wire contracts section 8 reach.
-export interface BoardOperations {
+// What the views and the answers of wire contracts section 8 reach.
+export interface BoardOperations extends InboxAnswerOperations {
   readonly views: NeedsYouInbox & { forCaller(callerMayAct: boolean): BoardReadModel };
   readonly projects: { readProject(projectId: string): Promise<Result<unknown>> };
-  readonly authorization: { authorize(principalId: PrincipalId, requirement: AccessRequirement): Promise<Result<void>> };
 }
 
 // The six reads of section 8. The server checked the read role first, so

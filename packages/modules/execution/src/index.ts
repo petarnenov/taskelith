@@ -577,7 +577,16 @@ export {
 } from './ports/ui-event-log.js';
 export { UI_EVENT_LOG_CONFORMANCE, type UiEventLogFixture } from './ports/ui-event-log-conformance.js';
 export { InMemoryUiEventLog, isSameScope } from './adapters/in-memory-ui-event-log.js';
-export { NATIVE_REQUEST_SOURCE_ID, nativeRequestItem } from './application/native-request-items.js';
+export { NATIVE_REQUEST_SOURCE_ID, nativeRequestItem, publishItem } from './application/native-request-items.js';
+export {
+  isResolvedReconciliation,
+  type InboxAnswerKey,
+  type InboxAnswerKeys,
+  type ReconciliationAnswers,
+  type ResolvedReconciliation,
+} from './ports/inbox-answers.js';
+export { INBOX_ANSWER_KEYS_CONFORMANCE, RECONCILIATION_ANSWERS_CONFORMANCE } from './ports/inbox-answers-conformance.js';
+export { InMemoryInboxAnswerKeys, InMemoryReconciliationAnswers } from './adapters/in-memory-inbox-answers.js';
 export { summaryOf } from './application/session-views.js';
 export {
   MAX_CARD_TITLE_LENGTH,

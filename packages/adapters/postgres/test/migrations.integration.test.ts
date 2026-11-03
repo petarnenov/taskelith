@@ -41,6 +41,7 @@ const PROJECT_SETUP = '1792933800000_project-setup';
 const UI_EVENT_STREAM = '1792933900000_ui-event-stream';
 const SCM_INTEGRATIONS = '1792934000000_scm-integrations';
 const BOARD_CARDS = '1792934100000_board-cards';
+const INBOX_ANSWERS = '1792934200000_inbox-answers';
 
 async function copiedMigrations(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
@@ -51,10 +52,10 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
@@ -62,9 +63,9 @@ test('migrations apply once, record their checksums, and create the schema', asy
   assert.deepEqual(tables.map((row) => row.table_name), [
     'access_audit_events', 'account_slots', 'admissions', 'agent_session_attempts', 'agent_session_output', 'agent_session_output_tails', 'agent_sessions', 'assignments', 'audit_events', 'auto_merge_settings', 'board_projections', 'broker_revocations', 'browser_sessions',
     'capacity_charges', 'capacity_quotas', 'card_touches', 'cards', 'current_revisions', 'delegation_requests', 'delegations', 'enrollment_tokens',
-    'evidence', 'gates', 'inbox', 'installation', 'installation_roles', 'inventory_report_parts', 'inventory_requests',
+    'evidence', 'gates', 'inbox', 'inbox_answer_keys', 'installation', 'installation_roles', 'inventory_report_parts', 'inventory_requests',
     'launch_authorizations', 'launch_rejections', 'operator_credentials', 'operator_principal', 'outbox', 'placement_outcomes',
-    'placement_rotation', 'principals', 'producer_cursors', 'project_defaults', 'project_roles', 'projects', 'schema_migration_checksums', 'schema_migrations', 'scm_integration_secrets', 'scm_integrations', 'scm_webhook_deliveries', 'session_audit_events', 'session_idempotency_keys', 'session_inbox_items',
+    'placement_rotation', 'principals', 'producer_cursors', 'project_defaults', 'project_roles', 'projects', 'reconciliation_answers', 'reconciliation_item_projections', 'schema_migration_checksums', 'schema_migrations', 'scm_integration_secrets', 'scm_integrations', 'scm_webhook_deliveries', 'session_audit_events', 'session_idempotency_keys', 'session_inbox_items',
     'slot_credential_counters', 'slot_credential_deliveries', 'slot_credentials', 'task_lineage', 'tasks', 'ui_event_sequence', 'ui_events', 'unrecorded_processes', 'worker_self_check_results', 'workers', 'workflow_runs',
   ]);
 });
@@ -73,7 +74,7 @@ test('the signals migration copies the state, change time, and unknown execution
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The signals migration and every later one wait, so they apply in order.
-  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -93,7 +94,7 @@ test('the signals migration copies the state, change time, and unknown execution
       [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const [row] = await query<{ state: string; changed_at: Date }>(url, 'SELECT state, changed_at FROM assignments');
   assert.deepEqual([row!.state, row!.changed_at.toISOString()], ['offered', AT]);
   const tasks = await query<{ unknown_executions: number }>(url, 'SELECT unknown_executions FROM tasks ORDER BY unknown_executions');
@@ -104,7 +105,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The bearer migration and every later one wait, so they apply in order.
-  const held = [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const held = [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -118,7 +119,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
     [worker.workerId, 'revokedAt' in worker, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null; enrollment: string }>(
     url, 'SELECT control_plane_hash, previous_control_plane_hash, enrollment FROM workers ORDER BY worker_id',
   );
@@ -132,7 +133,7 @@ test('the launch migration indexes the grants of stored task records', async () 
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The placement migration waits too, so they apply in order.
-  const held = [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const held = [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -152,7 +153,7 @@ test('the launch migration indexes the grants of stored task records', async () 
       [admission.id, JSON.stringify(admission)]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const rows = await query(url, `SELECT launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id, execution_id,
     run_id, relied_on_gates, artifact_ids, live FROM launch_authorizations`);
   assert.deepEqual(rows, [{
@@ -169,7 +170,7 @@ test('the launch migration indexes the grants of stored task records', async () 
 test('the placement migration derives the queue columns of stored tasks', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
-  const held = [EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const held = [EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -188,7 +189,7 @@ test('the placement migration derives the queue columns of stored tasks', async 
       [task.id, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [EXECUTION_PLACEMENT, OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const rows = await query<{ id: string; awaits_placement: boolean; active_attempt_id: string | null; placement_waiting_since: Date | null }>(
     url, 'SELECT id, awaits_placement, active_attempt_id, placement_waiting_since FROM tasks ORDER BY id',
   );
@@ -204,7 +205,7 @@ test('the observation migration finds each offered assignment\'s command in the 
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   const held = join(directory, `${OBSERVATION_CONSUMPTION}.sql`);
-  const later = [INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const later = [INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const [content, ...laterContents] = await Promise.all([held, ...later].map((path) => readFile(path, 'utf8')));
   await Promise.all([held, ...later].map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -225,7 +226,7 @@ test('the observation migration finds each offered assignment\'s command in the 
     VALUES ('worker-1', true, false, false, false, 2, 1000, 1024, '{}')`);
   await writeFile(held, content!);
   await Promise.all(later.map((path, index) => writeFile(path, laterContents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVATION_CONSUMPTION, INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const rows = await query<{ id: string; offer_command_id: string | null }>(url, 'SELECT id, offer_command_id FROM assignments');
   assert.deepEqual(new Map(rows.map((row) => [row.id, row.offer_command_id])), new Map([
     ['assignment\\1', 'offer-0'], ['assignment\\u0000', 'offer-1'], ['assignment"2"', 'offer-2'], ['assignment-3', null],
@@ -389,7 +390,7 @@ test('the inventory migration backfills no provenance, and its down migration re
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   const held = join(directory, `${INVENTORY_RECONCILIATION}.sql`);
-  const later = [LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const later = [LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const [content, ...laterContents] = await Promise.all([held, ...later].map((path) => readFile(path, 'utf8')));
   await Promise.all([held, ...later].map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -400,7 +401,7 @@ test('the inventory migration backfills no provenance, and its down migration re
   await query(url, "INSERT INTO producer_cursors (worker_id, journal_id, confirmed_through, applied_above) VALUES ('worker-1', 'journal-1', 4, '{}')");
   await writeFile(held, content!);
   await Promise.all(later.map((path, index) => writeFile(path, laterContents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [INVENTORY_RECONCILIATION, LAUNCH_RECONCILIATION, PLACEMENT_ROTATION, PLACEMENT_OUTCOMES, WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   assert.deepEqual(await query(url, 'SELECT accepted_journal_id, accepted_sequence FROM assignments'), [{ accepted_journal_id: null, accepted_sequence: null }]);
   assert.deepEqual(await query(url, 'SELECT retired_at, reported_snapshot FROM producer_cursors'), [{ retired_at: null, reported_snapshot: '0' }]);
   await query(url, content!.slice(content!.indexOf('-- Down Migration')));
@@ -448,14 +449,14 @@ test('the placement outcomes table rejects a disposition or source outside its v
 test('the worker admission migration leaves every existing worker awaiting its self-check', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
-  const held = [WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS].map((name) => join(directory, `${name}.sql`));
+  const held = [WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
   await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores,
     memory_mebibytes, controls, control_plane_hash, protocol_version) VALUES ('w1', true, false, false, true, 2, 4000, 8192, '{}', 'cp-1', 1)`);
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_ADMISSION, OPERATOR_ACCESS, ACCOUNT_POOL, SESSION_TIMELINE, SESSION_INBOX_ITEMS, SLOT_CREDENTIAL_DELIVERIES, SESSION_OUTPUT_TAIL, SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   assert.deepEqual(await query(url, 'SELECT worker_admission, self_check_sequence, self_check_reported_at FROM workers'),
     [{ worker_admission: 'awaiting-self-check', self_check_sequence: '0', self_check_reported_at: null }]);
   const database = new PostgresDatabase(url);
@@ -598,13 +599,14 @@ test('the stored-at migration dates existing and new credential versions, and it
   await rm(join(directory, `${UI_EVENT_STREAM}.sql`));
   await rm(join(directory, `${SCM_INTEGRATIONS}.sql`));
   await rm(join(directory, `${BOARD_CARDS}.sql`));
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url, directory)).ok, true);
   await query(url, "INSERT INTO slot_credential_counters (slot_id, last_version, destroyed) VALUES ('s', 2, false)");
   const insert = (version: number) => query(url, `INSERT INTO slot_credentials (slot_id, version, nonce, sealed)
     VALUES ('s', ${version}, 'n', 's')`);
   await insert(1);
-  assert.deepEqual(await migrate(url), { ok: true, value: [SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   await insert(2);
   const dated = await query<{ version: number; dated: boolean }>(url, `SELECT version, stored_at <= now() AS dated
     FROM slot_credentials ORDER BY version`);
@@ -648,6 +650,7 @@ test('the project setup migration keeps earlier roles, refuses new ones without 
   await rm(join(directory, `${UI_EVENT_STREAM}.sql`));
   await rm(join(directory, `${SCM_INTEGRATIONS}.sql`));
   await rm(join(directory, `${BOARD_CARDS}.sql`));
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url, directory)).ok, true);
   const owner = `u${'a'.repeat(32)}`;
@@ -655,7 +658,7 @@ test('the project setup migration keeps earlier roles, refuses new ones without 
   const role = (projectId: string) => query(url, `INSERT INTO project_roles (project_id, principal_id, role, assigned_at)
     VALUES ($1, $2, 'project-viewer', now())`, [projectId, owner]);
   await role('g2-project');
-  assert.deepEqual(await migrate(url), { ok: true, value: [PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   assert.deepEqual(await query(url, 'SELECT project_id FROM project_roles'), [{ project_id: 'g2-project' }], 'an earlier role stays');
   await assert.rejects(role('other-g2-project'), /project_roles_project/);
   const project = `p${'1'.repeat(32)}`;
@@ -687,6 +690,7 @@ test('a role kept on a G2 project identifier is revoked by the administrative re
   await rm(join(directory, `${UI_EVENT_STREAM}.sql`));
   await rm(join(directory, `${SCM_INTEGRATIONS}.sql`));
   await rm(join(directory, `${BOARD_CARDS}.sql`));
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url, directory)).ok, true);
   const [owner, vera] = [`u${'a'.repeat(32)}` as PrincipalId, `u${'b'.repeat(32)}` as PrincipalId];
@@ -695,7 +699,7 @@ test('a role kept on a G2 project identifier is revoked by the administrative re
   await query(url, "INSERT INTO installation_roles (principal_id, role, granted_at) VALUES ($1, 'installation-owner', now())", [owner]);
   await query(url, `INSERT INTO project_roles (project_id, principal_id, role, assigned_at)
     VALUES ('g2-project', $1, 'project-operator', now())`, [vera]);
-  assert.deepEqual(await migrate(url), { ok: true, value: [PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS] });
   const database = new PostgresDatabase(url);
   try {
     const store = new PostgresAccessStore(database);
@@ -754,19 +758,25 @@ test('the event stream down migration removes the log and its sequence', async (
   assert.deepEqual(await query(url, 'SELECT count(*)::int AS count FROM projects'), [{ count: 0 }], 'the earlier migrations stay');
 });
 
-test('the webhook, project, event stream, and SCM integration migrations go down over every later table', async () => {
+test('the webhook, project, event stream, SCM integration, and board migrations go down over every later table', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const applied = await migrate(url);
-  assert.deepEqual(applied.ok && applied.value.slice(-5), [SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS]);
+  assert.deepEqual(applied.ok && applied.value.slice(-6), [SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS, BOARD_CARDS, INBOX_ANSWERS]);
   const present = async (table: string) => (await query(url, 'SELECT 1 FROM information_schema.tables WHERE table_name = $1', [table])).length === 1;
   const steps: [string, string][] = [
     [SCM_WEBHOOK_DELIVERIES, 'scm_webhook_deliveries'], [PROJECT_SETUP, 'projects'], [UI_EVENT_STREAM, 'ui_events'], [SCM_INTEGRATIONS, 'scm_integrations'], [BOARD_CARDS, 'cards'],
+    [INBOX_ANSWERS, 'inbox_answer_keys'],
   ];
   for (const [index, [migration, table]] of steps.entries()) {
     await migratedDown(url, migration);
     assert.equal(await present(table), false, `${migration} removes ${table}`);
     for (const [, later] of steps.slice(index + 1)) assert.equal(await present(later), true, `${migration} keeps ${later}`);
   }
+  for (const table of ['reconciliation_answers', 'reconciliation_item_projections']) {
+    assert.equal(await present(table), false, `${INBOX_ANSWERS} removes ${table} after ${BOARD_CARDS}`);
+  }
+  const functions = "SELECT proname FROM pg_proc WHERE proname IN ('refuse_reconciliation_answer_change', 'touch_unrecorded_process')";
+  assert.deepEqual(await query(url, functions), [], `${INBOX_ANSWERS} removes its functions after ${BOARD_CARDS}`);
 });
 
 test('the SCM integrations migration checks its values and its down migration removes its tables', async () => {
@@ -800,11 +810,12 @@ test('the SCM integrations migration checks its values and its down migration re
 test('the board migration orders existing tasks by identifier, new ones after, and its down migration drops the order', async () => {
   const directory = await copiedMigrations();
   await rm(join(directory, `${BOARD_CARDS}.sql`));
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url, directory)).ok, true);
   const insert = (id: string) => query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, 'adm', 1, '{}')", [id]);
   for (const id of ['task-b', 'task-a', 'task-c']) await insert(id);
-  assert.deepEqual(await migrate(url), { ok: true, value: [BOARD_CARDS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [BOARD_CARDS, INBOX_ANSWERS] });
   await insert('task-0');
   const order = await query<{ id: string }>(url, 'SELECT id FROM tasks ORDER BY admission_seq');
   assert.deepEqual(order.map((row) => row.id), ['task-a', 'task-b', 'task-c', 'task-0']);
@@ -813,4 +824,51 @@ test('the board migration orders existing tasks by identifier, new ones after, a
   await migratedDown(url, BOARD_CARDS);
   assert.deepEqual(await query(url, column), []);
   assert.deepEqual(await query(url, "SELECT 1 FROM pg_class WHERE relname = 'tasks_admission_seq'"), []);
+});
+
+test('the inbox answers migration touches each worker whose unrecorded processes predate it', async () => {
+  const directory = await copiedMigrations();
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url, directory)).ok, true);
+  const process = (worker: string, observation: string) => query(url, `INSERT INTO unrecorded_processes
+    (worker_id, observation_id, journal_id, containment, process_count, recorded_at) VALUES ($1, $2, 'journal-1', 'cgroup x', 1, now())`,
+  [worker, observation]);
+  for (const [worker, observation] of [['worker-2', 'observation-1'], ['worker-1', 'observation-2'], ['worker-2', 'observation-3']]) {
+    await process(worker!, observation!);
+  }
+  await query(url, 'DELETE FROM card_touches');
+  assert.deepEqual(await migrate(url), { ok: true, value: [INBOX_ANSWERS] });
+  const touches = await query<{ subject_id: string }>(url, "SELECT subject_id FROM card_touches WHERE subject = 'unrecorded-process' ORDER BY 1");
+  assert.deepEqual(touches.map((row) => row.subject_id), ['worker-1', 'worker-2']);
+});
+
+test('the inbox answers migration keeps one key per item, immutable reconciliation answers, and process touches, and its down migration removes them', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url)).ok, true);
+  const key = (itemId: string, key: string) => query(url, `INSERT INTO inbox_answer_keys (item_id, idempotency_key, digest, outcome)
+    VALUES ($1, $2, 'digest', '{}')`, [itemId, key]);
+  await key('item-1', 'key-1');
+  await key('item-2', 'key-1');
+  await assert.rejects(key('item-1', 'key-1'), /inbox_answer_keys_pkey/);
+  const answer = (itemId: string, reason: string) => query(url, `INSERT INTO reconciliation_answers
+    (item_id, reconciliation_reason, item, resolved_at) VALUES ($1, $2, '{}', now())`, [itemId, reason]);
+  await assert.rejects(answer('item-1', 'escalation'), /reconciliation_answers_reconciliation_reason_check/);
+  await answer('item-1', 'unrecorded-process');
+  await assert.rejects(answer('item-1', 'unknown-execution'), /reconciliation_answers_pkey/);
+  await assert.rejects(query(url, "UPDATE reconciliation_answers SET item = '[]'"), /reconciliation answers are immutable/);
+  await assert.rejects(query(url, 'DELETE FROM reconciliation_answers'), /reconciliation answers are immutable/);
+  await query(url, `INSERT INTO unrecorded_processes (worker_id, observation_id, journal_id, containment, process_count, recorded_at)
+    VALUES ('worker-1', 'observation-1', 'journal-1', 'cgroup x', 1, now())`);
+  assert.deepEqual(await query(url, 'SELECT subject, subject_id FROM card_touches'), [{ subject: 'unrecorded-process', subject_id: 'worker-1' }]);
+  await query(url, "INSERT INTO reconciliation_item_projections (item_id, projection) VALUES ('item-1', '{}')");
+  await migratedDown(url, INBOX_ANSWERS);
+  const tables = await query(url, `SELECT 1 FROM information_schema.tables
+    WHERE table_name IN ('inbox_answer_keys', 'reconciliation_answers', 'reconciliation_item_projections')`);
+  assert.deepEqual(tables, []);
+  const functions = "SELECT 1 FROM pg_proc WHERE proname IN ('refuse_reconciliation_answer_change', 'touch_unrecorded_process')";
+  assert.deepEqual(await query(url, functions), []);
+  assert.deepEqual(await query(url, 'SELECT subject FROM card_touches'), [], 'the process touches go with their subject');
+  await assert.rejects(query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('unrecorded-process', 'w')"), /card_touches_subject_check/);
+  assert.equal((await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'cards'")).length, 1);
 });

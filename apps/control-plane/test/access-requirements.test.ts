@@ -82,7 +82,10 @@ const AGENT_SESSION_OPERATIONS = [
   'submitTurn',
 ];
 const EVENT_STREAM_OPERATIONS = ['streamInstallationEvents', 'streamProjectEvents'];
-const BOARD_OPERATIONS = ['readBoard', 'readInbox', 'readInboxCounts', 'readInstallationInbox', 'readInstallationInboxCounts', 'readTaskDetail'];
+const BOARD_OPERATIONS = [
+  'answerInboxItem', 'answerInstallationInboxItem', 'readBoard', 'readInbox', 'readInboxCounts', 'readInstallationInbox',
+  'readInstallationInboxCounts', 'readTaskDetail',
+];
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BoardViews, CardProjector, mergeGate, type BoardReads, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
+import { BoardViews, CardProjector, NO_DERIVED_ITEMS, mergeGate, type BoardReads, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
 import type { BoardCard, UiEventRecord } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
@@ -132,7 +132,7 @@ function projectorOver(world: BoardWorld, times: string[], reads: Partial<BoardR
   const retried: string[] = [];
   let last: string | undefined;
   const projections: CardProjections = {
-    expand: async () => ok({ touches: 0, through: '1', workersChanged: false }),
+    expand: async () => ok({ touches: 0, through: '1', workersChanged: false, processesChanged: false }),
     take: async () => ok({ touches: 1, runIds: ['run-1' as never] }),
     retry: async (runIds) => (retried.push(...runIds), ok(undefined)),
     lastCard: async () => ok(last),
@@ -140,13 +140,15 @@ function projectorOver(world: BoardWorld, times: string[], reads: Partial<BoardR
     lastWorkersOnline: async () => ok(undefined),
     recordWorkersOnline: async () => ok(undefined),
     projectIds: async () => ok([]),
+    lastItem: async () => ok(undefined),
+    recordItem: async () => ok(undefined),
   };
   const projector = new CardProjector({
     transaction: (work) => work({
       ...world.reads(), ...reads, now: async () => times.shift()! as never, projections,
       outbox: { append: async (entry) => (appended.push(entry.record), ok(undefined)) },
     }),
-  }, world.parts());
+  }, world.parts(), NO_DERIVED_ITEMS);
   return { projector, appended, retried };
 }
 

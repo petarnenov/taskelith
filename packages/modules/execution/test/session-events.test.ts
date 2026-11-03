@@ -147,6 +147,7 @@ test('an acknowledged uncertain delivery publishes its resolved item through its
   assert.deepEqual([opened.item.kind, opened.item.state], ['delivery-acknowledgement', 'open']);
   const before = (await published(log)).length;
   value(await source.answer({
+    scope: { kind: 'project', projectId: (opened.item.subject as { projectId: ProjectId }).projectId },
     itemId: opened.item.id as NeedsYouItemId, responder: AUTHOR, idempotencyKey: turnKey('ack-1'),
     answer: { kind: 'delivery-acknowledgement', decision: 'acknowledge' },
   }));

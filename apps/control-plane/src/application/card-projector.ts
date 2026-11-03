@@ -1,4 +1,13 @@
-import { projectScope, type PlacementObstacle, type UiEventOutbox, type UiEventRecord } from '@taskelith/execution';
+import {
+  projectScope,
+  publishItem,
+  type CardRecord,
+  type NeedsYouItem,
+  type NeedsYouItemId,
+  type PlacementObstacle,
+  type UiEventOutbox,
+  type UiEventRecord,
+} from '@taskelith/execution';
 import { ok, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 import type { BoardReads } from './board-reads.js';
@@ -14,6 +23,7 @@ export interface ExpandedTouches {
   readonly touches: number;
   readonly through: TouchHorizon;
   readonly workersChanged: boolean;
+  readonly processesChanged: boolean;
 }
 
 // The cards that a batch of card-sized touches names.
@@ -34,7 +44,22 @@ export interface CardProjections {
   lastWorkersOnline(projectId: ProjectId): Promise<Result<number | undefined>>;
   recordWorkersOnline(projectId: ProjectId, workersOnline: number): Promise<Result<void>>;
   projectIds(): Promise<Result<readonly ProjectId[]>>;
+  lastItem(itemId: NeedsYouItemId): Promise<Result<string | undefined>>;
+  // Keeps the time the item was first recorded closed.
+  recordItem(item: NeedsYouItem, projection: string): Promise<Result<void>>;
 }
+
+// The inbox items that reads derive rather than a writer records, whose
+// opening and closing only the projector sees: the reconciliation items.
+export interface DerivedInboxItems {
+  ofCard(reads: BoardReads, card: CardRecord): Promise<Result<readonly NeedsYouItem[]>>;
+  ofInstallation(reads: BoardReads): Promise<Result<readonly NeedsYouItem[]>>;
+}
+
+export const NO_DERIVED_ITEMS: DerivedInboxItems = Object.freeze({
+  ofCard: async () => ok([]),
+  ofInstallation: async () => ok([]),
+});
 
 export interface ProjectionTransaction extends BoardReads {
   readonly projections: CardProjections;
@@ -57,15 +82,17 @@ interface BatchResult extends TouchedCards {
   readonly skipped: readonly WorkflowRunId[];
 }
 
-// Wire contracts section 10: `card-changed` and `board-changed` carry what
-// the reads return at the projection's commit, once per change.
+// Wire contracts section 10: `card-changed`, `board-changed`, and a derived
+// item's `inbox-item-changed` carry what the reads return, once per change.
 export class CardProjector {
   readonly #store: ProjectionStore;
   readonly #parts: CardViewParts;
+  readonly #items: DerivedInboxItems;
 
-  constructor(store: ProjectionStore, parts: CardViewParts) {
+  constructor(store: ProjectionStore, parts: CardViewParts, items: DerivedInboxItems) {
     this.#store = store;
     this.#parts = parts;
+    this.#items = items;
   }
 
   // Expands the broad touches, then projects at most a batch of cards per
@@ -86,10 +113,16 @@ export class CardProjector {
 
   async #expand(transaction: ProjectionTransaction): Promise<Result<ExpandedTouches>> {
     const expanded = await transaction.projections.expand();
-    if (!expanded.ok || !expanded.value.workersChanged) return expanded;
+    if (!expanded.ok || !(expanded.value.workersChanged || expanded.value.processesChanged)) return expanded;
     const at = await transaction.now();
-    const boards = await this.#projectBoards(transaction, new CardReader(transaction, this.#parts, at), at);
-    return boards.ok ? expanded : boards;
+    if (expanded.value.workersChanged) {
+      const boards = await this.#projectBoards(transaction, new CardReader(transaction, this.#parts, at), at);
+      if (!boards.ok) return boards;
+    }
+    if (!expanded.value.processesChanged) return expanded;
+    const items = await this.#items.ofInstallation(transaction);
+    const projected = items.ok ? await projectItems(transaction, items.value, at) : items;
+    return projected.ok ? expanded : projected;
   }
 
   async #batch(transaction: ProjectionTransaction, through: TouchHorizon): Promise<Result<BatchResult>> {
@@ -118,6 +151,10 @@ export class CardProjector {
     const view = await reader.view(record.value);
     if (!view.ok) return ok('unreadable');
     const projection = projectionKey(view.value);
+    const items = await this.#items.ofCard(transaction, record.value);
+    if (!items.ok) return ok('unreadable');
+    const projected = await projectItems(transaction, items.value, at);
+    if (!projected.ok) return projected;
     const last = await transaction.projections.lastCard(runId);
     if (!last.ok) return last;
     if (last.value === projection) return ok('projected');
@@ -143,6 +180,22 @@ export class CardProjector {
     }
     return ok(undefined);
   }
+}
+
+// An item's `inbox-item-changed` once per change; a resolved item's event
+// came with its answer, so it is only recorded.
+async function projectItems(transaction: ProjectionTransaction, items: readonly NeedsYouItem[], at: Instant): Promise<Result<void>> {
+  for (const item of items) {
+    const projection = JSON.stringify(item);
+    const last = await transaction.projections.lastItem(item.id);
+    if (!last.ok) return last;
+    if (last.value === projection) continue;
+    const published = item.state === 'resolved' ? ok(undefined) : await publishItem(transaction.outbox, item, at);
+    if (!published.ok) return published;
+    const recorded = await transaction.projections.recordItem(item, projection);
+    if (!recorded.ok) return recorded;
+  }
+  return ok(undefined);
 }
 
 // The card and its task detail (wire contracts section 8, "Cards"); a fleet

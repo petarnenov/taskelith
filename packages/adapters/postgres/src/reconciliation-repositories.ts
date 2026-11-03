@@ -67,6 +67,13 @@ export class PostgresReconciliationQueue implements ReconciliationQueue {
     return rows.map(processOf);
   }
 
+  async unrecordedProcesses(): Promise<readonly UnrecordedProcess[]> {
+    const { rows } = await this.#session.query<ProcessRow>(
+      'SELECT * FROM unrecorded_processes ORDER BY recorded_at, worker_id COLLATE "C", observation_id COLLATE "C"',
+    );
+    return rows.map(processOf);
+  }
+
   async #unknown(where: string, values: readonly unknown[]): Promise<readonly UnknownExecution[]> {
     const { rows } = await this.#session.query<{ record: string }>(
       `SELECT record FROM tasks WHERE ${where} ORDER BY id COLLATE "C"`,

@@ -1,4 +1,12 @@
-import type { CardCatalog, SessionTimelineTransaction, Task, WorkerId } from '@taskelith/execution';
+import type {
+  CardCatalog,
+  NeedsYouItemId,
+  ReconciliationAnswers,
+  SessionTimelineTransaction,
+  Task,
+  UnrecordedProcess,
+  WorkerId,
+} from '@taskelith/execution';
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AssignmentRepository, PlacementOutcomeRecords, WorkerOccupancy, WorkerPlacementRecord } from '@taskelith/scheduling';
 import type { AdmissionRepository, GateRepository, ProjectId, WorkflowRunRepository } from '@taskelith/sdlc';
@@ -17,6 +25,7 @@ export interface BoardReads {
   readonly placementOutcomes: Pick<PlacementOutcomeRecords, 'get'>;
   readonly assignments: Pick<AssignmentRepository, 'listByAttempt'>;
   readonly fleet: FleetReads;
+  readonly reconciliation: ReconciliationRecordReads;
   autoMergeEnabled(projectId: ProjectId): Promise<Result<boolean>>;
 }
 
@@ -26,6 +35,15 @@ export interface FleetReads {
   quarantined(): Promise<boolean>;
   occupancy(workerId: WorkerId): Promise<WorkerOccupancy>;
   heldForAttempt(attemptId: Task['attempts'][number]['id']): Promise<boolean>;
+}
+
+// The reconciliation records beyond the cards' tasks: the queue's
+// unrecorded processes, the answers, and the projector's closing times.
+export interface ReconciliationRecordReads {
+  unrecordedProcesses(): Promise<readonly UnrecordedProcess[]>;
+  readonly answers: Pick<ReconciliationAnswers, 'get'>;
+  // The card projector's record: when it first saw the item closed, if it did.
+  closedAt(itemId: NeedsYouItemId): Promise<Result<Instant | undefined>>;
 }
 
 // Each view's reads run in one read-only REPEATABLE READ snapshot.

@@ -8,4 +8,6 @@ export interface ReconciliationQueue {
   unknownExecutionsOfWorker(workerId: WorkerId): Promise<readonly UnknownExecution[]>;
   unknownExecutionsOfTask(taskId: TaskId): Promise<readonly UnknownExecution[]>;
   unrecordedProcessesOfWorker(workerId: WorkerId): Promise<readonly UnrecordedProcess[]>;
+  // Every worker's, by time, then by worker and observation.
+  unrecordedProcesses(): Promise<readonly UnrecordedProcess[]>;
 }

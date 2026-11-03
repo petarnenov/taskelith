@@ -1,11 +1,13 @@
 import {
   parseCardRecord,
   type CardCatalog,
+  type NeedsYouItem,
+  type NeedsYouItemId,
   type CardRecord,
   type CardTask,
   type WorkType,
 } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
 import { instant } from './capacity-repositories.js';
 import type { Session } from './session.js';
@@ -88,13 +90,16 @@ interface TouchRow {
   readonly subject_id: string;
 }
 
-// The touches of a project, a worker, or the fleet, which name many cards.
-const BROAD_SUBJECTS = "subject IN ('project', 'worker', 'fleet')";
+// The touches of a project, a worker, or the fleet, which name many cards,
+// and of an unrecorded process, which names none.
+const BROAD_SUBJECTS = "subject IN ('project', 'worker', 'fleet', 'unrecorded-process')";
+const EVERY_CARD_SUBJECTS: ReadonlySet<string> = new Set(['worker', 'fleet']);
 
 export interface ExpandedTouches {
   readonly touches: number;
   readonly through: string;
   readonly workersChanged: boolean;
+  readonly processesChanged: boolean;
 }
 
 export interface TouchedCards {
@@ -119,7 +124,7 @@ export class PostgresCardProjections {
     );
     if (rows.length > 0) this.projected = true;
     const projects = rows.filter((row) => row.subject === 'project').map((row) => row.subject_id);
-    const everyCard = rows.some((row) => row.subject !== 'project');
+    const everyCard = rows.some((row) => EVERY_CARD_SUBJECTS.has(row.subject));
     if (rows.length > 0) {
       await this.#session.query(
         `INSERT INTO card_touches (subject, subject_id)
@@ -130,7 +135,10 @@ export class PostgresCardProjections {
     const { rows: [last] } = await this.#session.query<{ through: string }>(
       "SELECT coalesce(max(touch_id), 0)::text AS through FROM card_touches",
     );
-    return ok(Object.freeze({ touches: rows.length, through: last!.through, workersChanged: rows.some((row) => row.subject === 'worker') }));
+    const changed = (subject: string) => rows.some((row) => row.subject === subject);
+    return ok(Object.freeze({
+      touches: rows.length, through: last!.through, workersChanged: changed('worker'), processesChanged: changed('unrecorded-process'),
+    }));
   }
 
   // Removes the oldest card-sized touches up to `through` and answers the
@@ -184,6 +192,32 @@ export class PostgresCardProjections {
       [projectId, workersOnline],
     );
     return ok(undefined);
+  }
+
+  async lastItem(itemId: NeedsYouItemId): Promise<Result<string | undefined>> {
+    const { rows } = await this.#session.query<{ projection: string }>(
+      'SELECT projection FROM reconciliation_item_projections WHERE item_id = $1', [itemId],
+    );
+    return ok(rows[0]?.projection);
+  }
+
+  // The first closing time stays; a later projection never moves it.
+  async recordItem(item: NeedsYouItem, projection: string): Promise<Result<void>> {
+    await this.#session.query(
+      `INSERT INTO reconciliation_item_projections (item_id, projection, closed_at) VALUES ($1, $2, $3)
+       ON CONFLICT (item_id) DO UPDATE SET projection = EXCLUDED.projection,
+         closed_at = coalesce(reconciliation_item_projections.closed_at, EXCLUDED.closed_at)`,
+      [item.id, projection, item.state === 'closed' ? item.closedAt : null],
+    );
+    return ok(undefined);
+  }
+
+  async closedAt(itemId: NeedsYouItemId): Promise<Result<Instant | undefined>> {
+    const { rows } = await this.#session.query<{ closed_at: Date | null }>(
+      'SELECT closed_at FROM reconciliation_item_projections WHERE item_id = $1', [itemId],
+    );
+    const closedAt = rows[0]?.closed_at;
+    return ok(closedAt === undefined || closedAt === null ? undefined : instant(closedAt));
   }
 
   async projectIds(): Promise<Result<readonly ProjectId[]>> {

@@ -99,8 +99,8 @@ async function items({ store }: Timeline) {
 }
 
 const response = (key: string, submission = allow()): ResponseCommand => ({ key: turnKey(key) as IdempotencyKey, response: submission });
-const answer = (itemId: string, key: string, given: NeedsYouAnswer, responder = AUTHOR): AnswerRequest => ({
-  itemId: id('NeedsYouItemId', itemId) as NeedsYouItemId, responder, answer: given, idempotencyKey: turnKey(key) as IdempotencyKey,
+const answer = (itemId: string, key: string, given: NeedsYouAnswer, responder = AUTHOR, projectId = PROJECT): AnswerRequest => ({
+  scope: { kind: 'project', projectId }, itemId: id('NeedsYouItemId', itemId) as NeedsYouItemId, responder, answer: given, idempotencyKey: turnKey(key) as IdempotencyKey,
 });
 
 test('a TurnId is t and 32 lowercase hexadecimal digits, and a UUID or another form is refused', () => {
@@ -262,6 +262,26 @@ test('an inbox answer of another kind is invalid, of an unknown item not-found, 
   const closed = failed(await subject.source.answer(answer('item-1', 'inbox-2', { kind: 'permission-request', decision: 'allow' })));
   assert.deepEqual([closed.code, closed.details.reason], ['precondition-failed', ITEM_CLOSED]);
 });
+
+test('item reads an item of its project in any state, and none of another project or the installation', async () => {
+  const subject = timeline();
+  await withOpenRequest(subject);
+  const itemId = id('NeedsYouItemId', 'item-1') as NeedsYouItemId;
+  const open = value(await subject.source.item({ kind: 'project', projectId: PROJECT }, itemId));
+  assert.deepEqual([open?.id, open?.state], ['item-1', 'open']);
+  for (const scope of [{ kind: 'project', projectId: OTHER_CARD.projectId } as const, { kind: 'installation' } as const]) {
+    assert.equal(value(await subject.source.item(scope, itemId)), undefined, scope.kind);
+  }
+  assert.equal(value(await subject.source.item({ kind: 'project', projectId: PROJECT }, id('NeedsYouItemId', 'item-9') as NeedsYouItemId)), undefined);
+  const elsewhere = failed(await subject.source.answer(answer('item-1', 'inbox-1', allowAnswer(), AUTHOR, OTHER_CARD.projectId)));
+  assert.equal(elsewhere.code, 'not-found');
+  value(await subject.source.answer(answer('item-1', 'inbox-1', allowAnswer())));
+  assert.equal(value(await subject.source.item({ kind: 'project', projectId: PROJECT }, itemId))?.state, 'resolved');
+});
+
+function allowAnswer(): NeedsYouAnswer {
+  return { kind: 'permission-request', decision: 'allow' };
+}
 
 test('an acknowledgement resolves its item once, audited, and sends no response, turn, or delivery', async () => {
   const subject = timeline();
