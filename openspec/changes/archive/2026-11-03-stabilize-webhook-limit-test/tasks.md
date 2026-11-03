@@ -24,4 +24,4 @@
   - [x] 5.1.1 Pass 1 (codex gpt-6-astra, effort medium): fix its 2 High, 5 Medium, and 1 Low findings, with the coordinator's decisions on the drain's worst case and a no-buffering test
   - [x] 5.1.2 Pass 2 (claude claude-fable-5-1, effort medium): fix its Medium and four Low findings, decline one Low
   - [x] 5.1.3 Pass 3 (codex gpt-6.1-sol, effort medium, replacing agy gemini-4-argon-medium): fix its one Low finding
-- [ ] 5.2 Archive the change
+- [x] 5.2 Archive the change

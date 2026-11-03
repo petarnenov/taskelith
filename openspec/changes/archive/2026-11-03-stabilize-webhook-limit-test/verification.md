@@ -118,3 +118,15 @@ The pass 3 fix (`ce919611`, this record's self-check) has no later review pass. 
 
 - The coordinator's check, as solution architect, of the pass 3 fix, which no later pass reviews.
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run after review pass 3 and its fix. The checked state is the tree of the archive commit, which is the working tree these checks ran on after ticking every task and `npm run openspec -- archive stabilize-webhook-limit-test --yes` (archived as `2026-11-03-stabilize-webhook-limit-test`, `control-plane-api` updated with `+ 2, ~ 1`), on base `0e8d10e0`.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 71 passed, 0 failed (71 items)` |
+| `env -u NODE_ENV make verify` | Passed on the first run, no known flake, profile full, uncommitted working tree, so no stamp: tests 4649, suites 50, pass 4602, fail 0, cancelled 0, skipped 47; all files 99.41 % lines, 92.81 % branches, 98.82 % functions |
+| This change's line of `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-11-03-stabilize-webhook-limit-test` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only `openspec/specs/control-plane-api/spec.md`: the two ADDED requirements "Answer before the body ends" and "Bounded discards" with their scenarios, and "SCM webhook receiver served" with "discards aside", as intended |
+| Moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` | Both present; `Every findings file is valid: 109 file(s); every pass summary file is valid: 89 file(s); every route file is valid: 42 file(s).` |
