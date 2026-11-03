@@ -15,11 +15,12 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), sub-change 20f, the sixth change of
 - `33212169` `docs: specify the manage scm integrations change and update the contracts and the g3 plan` (with the regenerated dependency inventory).
 - `90ef6d65` `docs: record the review route of the manage scm integrations change` (`route.json` unedited). `make verify` run 1 on this tree failed in `access-requirements.test.ts` (see "Checks"), so:
 - `cb7cbbcb` `test: list the scm integration operations among the served control-plane operations` changes the diff, so `route.json` was deleted and routed again, as protocol worker step 4 requires:
-- `06851a35` `docs: route the manage scm integrations change again after the access requirements test fix` (`route.json` unedited, same recommendation): the tree `ec677ca1` that `make verify` run 2 checked; the commit after it adds this record and the `make record` output and is the head for review pass 1.
+- `06851a35` `docs: route the manage scm integrations change again after the access requirements test fix` (`route.json` unedited, same recommendation): the tree `ec677ca1` that `make verify` run 2 checked; the commit after it adds this record and the `make record` output and is the head for review pass 1 (`37aaf861`).
+- Pass 1 fix round: `c9ed4062` `docs: record review pass 1 of the manage scm integrations change` (its `passes.jsonl` line and four findings, recorded before any fix); `4e569972` `chore: name the scm setting or secret at fault when the schema refuses an integration body` (finding 1); `88d2698d` `chore: bound the stored scm integration origin port to 65535` (finding 2); `444e9878` `test: run one scm integrations store conformance suite against the postgresql and in-memory adapters` (finding 3); `b3a15bee` `chore: let only an app composition root import a plugin package` (coordinator condition Q4); `839758ff` `docs: specify the schema refusal names, the origin port bound, the store conformance suite, and the coordinator decisions of the manage scm integrations change`; the next commit, `docs: record the pass 1 fix round of the manage scm integrations change`, fixes finding 4 in this record and is the tree that the round's `make verify` checks. `route.json` is not routed again: later passes never route.
 
 ## Environment
 
-Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64. `make verify`, `make dependency-inventory`, and every focused run ran with Node.js v24.22.1, the `.nvmrc` pin that `scripts/with-pinned-node.sh` selects; the focused PostgreSQL runs used `scripts/services.sh run taskelith-zaki20f-verify` under `scripts/docker-slot.ts`.
+Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64. `make verify`, `make dependency-inventory`, and every focused run before review pass 1 ran with Node.js v24.22.1, the `.nvmrc` pin that `scripts/with-pinned-node.sh` selects; the focused PostgreSQL runs used `scripts/services.sh run taskelith-zaki20f-verify` under `scripts/docker-slot.ts`.
 
 ## Author self-check
 
@@ -37,12 +38,41 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64. `make verify`, `mak
 
 ## Fail-before
 
+### Historical test-first evidence (before review pass 1)
+
+Pass 1 finding 4 noted that most of these runs stopped at a missing export while loading, so they show that the API was absent, not that each behavior's assertion failed; the behavior negative controls of the pass 1 fix round below close that gap.
+
 Each group's tests were written before its implementation and run with `node --experimental-strip-types --test` after `npm run build`.
 
 - Module (`385cd38f`): `packages/modules/integrations/test/scm-integration-service.test.ts` failed to load with `SyntaxError: The requested module '@taskelith/integrations' does not provide an export named 'InMemoryScmIntegrations'` (tests 1, fail 1). After the implementation, and one fix of the test's own 300-character host arithmetic: 11 of 11 pass.
 - Plugin API and descriptor (`27cfc5b0`): the plugin SDK tests and the new `packages/plugins/scm-github/test/github-integration-plugin.test.ts` gave tests 19, pass 15, fail 4: "plugin API 0.4.0 carries version 1.0.0 of the SDLC framework port", "a plugin whose plugin API range excludes this SDK is rejected before admission", "a plugin built for plugin API 0.3.0, before the draft SCM plugin descriptor, is rejected", and the new file (`does not provide an export named 'githubSourceControlPlugin'`). A build with the SDK at `0.4.0` and the GitHub plugin's index not yet compiling also failed the unchanged `test/plugin-manifests.test.ts` and the plugin's manifest tests, which pass with both manifests at `^0.4.0`. After the implementation: the plugin SDK, `scm-github`, `sdlc-openspec`, and manifest tests pass, 127 of 127.
 - Adapters (`fa95a6ad`): with the new source and migration files stashed and the tests kept, the cipher, key file, store, and migration tests gave tests 46, pass 31, fail 15: the three new files failed to load (`SCM_SECRET_KEY_BYTES`, `SCM_INTEGRATION_SECRET_KEY_FILE`, `PostgresScmIntegrations` not exported), and twelve migration tests failed on the missing migration. Restored: 52 of 52 pass.
 - Control plane (`a91ec9a9`): with `apps/control-plane/src` stashed and the tests kept, `scm-integration-routes.test.ts` and `scm-integration-start.test.ts` failed to load (`scmIntegrationServices`, `startScmIntegrationServices` not exported), and `administration.integration.test.ts` failed "initialization, enrollment, rotation, revocation, and the operator reset work end to end" on the missing key and, as a consequence of the shared database that the first test leaves behind, "the owner exists from initialization, and only its credential manages principals and roles" (tests 10, pass 6, fail 4). Restored, with the receiver, decoy, API server, and module tests: 186 of 186 pass.
+
+### Pass 1 fix round: failing before, passing after
+
+Focused runs of the fix round used `node --experimental-strip-types --test` after `npm run build`: the finding 1 route runs and the boundary runs with Node.js v24.22.0 of the shell; the negative controls and every PostgreSQL run with the pinned v24.22.1 through `scripts/with-pinned-node.sh`, the PostgreSQL ones also under `scripts/docker-slot.ts` and `scripts/services.sh run taskelith-zaki20f-fix1`.
+
+- Finding 1: the new route test "a body that the schema refuses names the setting or secret at fault on create and update, never its value", written first, failed (tests 1, pass 0, fail 1): `actual: [ 400, 'invalid', undefined ]`, `expected: [ 400, 'invalid', 'Bad Name' ]`. After `4e569972`: `scm-integration-routes.test.ts` and `api-server.test.ts` 32 of 32 pass.
+- Finding 2: three port cases and an accepted `:65535` were added to "the SCM integrations migration checks its values and its down migration removes its tables" first; against the unchanged migration it failed (tests 1, pass 0, fail 1) with `AssertionError [ERR_ASSERTION]: Missing expected rejection.` After `88d2698d`: the migration and store tests 48 of 48 pass.
+- Coordinator condition Q4 (only a composition root imports a plugin): with a temporary probe `import { githubSourceControlPlugin } from '@taskelith/scm-github';` at the top of `apps/control-plane/src/api/routes.ts`, `npm run check:boundaries` printed `Workspace and hexagonal boundary checks passed.` (exit 0), so the rule was not enforced. The new test "only an app composition root imports a plugin package, so no module, adapter, handler, or API file names a plugin" failed first (tests 1, pass 0, fail 1). With the rule of `b3a15bee` and the probe still in place, `npm run check:boundaries` exited 1 with `Boundary violation: apps/control-plane/src/api/routes.ts: only an app composition root can import plugin "@taskelith/scm-github" (microkernel)`. Probe removed: `Workspace and hexagonal boundary checks passed.`, and `test/check-boundaries.test.ts` 14 of 14 pass; the worker-only fixture, whose adapter imports a plugin only to build a worker-only chain, now also expects that one violation.
+- Findings 3 and 4, behavior negative controls: each control applied one mutation to the committed implementation at `444e9878`, rebuilt, ran the named tests, and restored the file; `git status` afterwards showed no source change. Every control failed the assertions of the behavior it breaks; unmutated, the same tests pass (the in-memory conformance suite 5 of 5 and the PostgreSQL store file 9 of 9, also after `444e9878`).
+
+| Control | Mutation | Tests run | Result with the mutation |
+| --- | --- | --- | --- |
+| Default port | `normalized-origin.ts`: `match[2] ?? DEFAULT_HTTPS_PORT` becomes `match[2] ?? 0` | `scm-integration-service.test.ts` | tests 11, fail 2: "an origin is normalized to https, a lower-case host, and an explicit port", "a created integration starts at revision 1 and shows its secrets only by name" |
+| Lower-case host | `normalized-origin.ts`: `ORIGIN.exec(origin.toLowerCase())` becomes `ORIGIN.exec(origin)` | `scm-integration-service.test.ts` | tests 11, fail 9, the normalization test first |
+| IPv6 literal | `normalized-origin.ts`: the host pattern also admits `[` hex digits and colons `]` | `scm-integration-service.test.ts` | tests 11, fail 2: the normalization test, "an update checks what it changes and refuses an unknown integration with not-found" |
+| In-memory settings whole | `in-memory-scm-integrations.ts`: an update merges the settings into the stored ones | in-memory conformance, service test | tests 16, fail 1: "in-memory SCM integrations: an update replaces the settings whole and only the named secrets, ..." |
+| In-memory named secrets | `in-memory-scm-integrations.ts`: `stored.secrets.replacedBy(replacements)` becomes `replacements` | in-memory conformance, service test | tests 16, fail 2: that conformance case and "an update replaces the settings, replaces only the named secrets, and moves the revision" |
+| In-memory compare-and-set | `in-memory-scm-integrations.ts`: the revision check never refuses | in-memory conformance | tests 5, fail 1: "in-memory SCM integrations: a stale revision fails with conflict, and of two concurrent updates at one revision exactly one wins" |
+| PostgreSQL named secrets | `postgres/src/scm-integrations.ts`: `kept.value.replacedBy(change.secrets)` becomes `change.secrets` | `scm-integrations.integration.test.ts` | tests 9, fail 2: "PostgreSQL SCM integrations: an update replaces the settings whole and only the named secrets, ...", "an update replaces the named secrets, re-seals the others under the new revision, and fails at a stale one" |
+| Sealing context | `postgres/src/scm-integrations.ts`: the authenticated data omits the revision | `scm-integrations.integration.test.ts` | tests 9, fail 1: "a sealed secret put back from an earlier revision no longer opens" |
+| Verifier cache | `stored-integration-verifiers.ts`: a cached verifier is reused whatever the revision | service test, route test | tests 20, fail 2: "a stored integration verifies its webhooks, and a changed webhook secret applies to the next delivery", "stored verifiers serve the integration plugin, cached by revision, and none for an unknown integration" |
+| HTTP 409 | `routes.ts`: `updateScmIntegration` loses `conflict: 409` | route test | tests 9, fail 2: "an update replaces the settings and the named secrets, and a stale revision answers 409", "of two concurrent updates at one revision exactly one wins and the other answers 409" |
+| Plugin settings check | `github-plugin.ts`: an unknown setting is no longer refused | plugin test, route test | tests 16, fail 2: "the settings check names an unknown, missing, or invalid setting and never quotes a value", "an unknown plugin answers 404, and a bad origin, setting, or secret 400 naming it but never its value" |
+| No secret in JSON | `scm-integration.ts`: `ScmSecrets.toJSON` returns the values | service test | tests 11, fail 1: "secrets never show their values in a string, JSON, or inspection" |
+| Key at start | `composition/scm-integrations.ts`: a missing key falls back to a random one | `scm-integration-start.test.ts` | tests 3, fail 1: "a missing SCM secret key refuses the start and names init, which creates it" |
 
 ## Checks
 
@@ -83,11 +113,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   2. Medium, `contract-drift`: the migration's origin check admits ports above 65535.
   3. Medium, `missing-fail-before-test`: no shared store conformance suite for both adapters.
   4. Medium, `missing-fail-before-test`: most fail-before runs stopped at missing exports.
+- Resolutions (`findings.jsonl`, all `fixed`, for pass 2 to check):
+  1. Fixed in `4e569972`: the API server checks each entry of `settings` and `secrets` alone against `ScmSettings` or `ScmSecrets` and names the first refused one in `details.setting` (`apps/control-plane/src/api/api-server.ts`, `settingAtFault`; route flag `settingMaps`), with POST and PATCH tests for a bad name, an empty secret, and values that are no string.
+  2. Fixed in `88d2698d`: the migration's port pattern is that of `NormalizedOrigin`, 1 to 65535; the migration test refuses `0`, `65536`, and `99999` and accepts `65535`.
+  3. Fixed in `444e9878`: `SCM_INTEGRATIONS_CONFORMANCE` runs against `InMemoryScmIntegrations` (`packages/modules/integrations/test/scm-integrations-conformance.test.ts`) and `PostgresScmIntegrations`; the PostgreSQL-only pages test that the suite replaces is removed, and the sealing and overlap tests stay.
+  4. Fixed in this record: "Pass 1 fix round: failing before, passing after" gives behavior negative controls that run the assertions, apart from the historical test-first evidence.
+- Coordinator decisions applied in the same round (Niki, 2026-11-03): Q1, audit events for an integration's creation, update, and secret change are a named follow-up in the scope of 11b (proposal, design non-goals and risks); Q2, the single registered SCM plugin's decoy and eventless rule, and Q3, `SOURCE_CONTROL_PORT_VERSION` stays `0.2.0`, are accepted and stated in design decision 7 and the risks; Q4, only a composition root imports a plugin package, enforced by `npm run check:boundaries` (`b3a15bee`, evidence above).
 
 ## Limitations
 
-- The composition registers one SCM plugin, GitHub, whose decoy and eventless rule serve every integration (design, Risks).
-- No audit event records an integration's creation or change.
+- The composition registers one SCM plugin, GitHub, whose decoy and eventless rule serve every integration (design, Risks); the coordinator accepted it (Niki, 2026-11-03).
+- No audit event records an integration's creation, update, or secret change: a named follow-up in the scope of 11b (coordinator decision, Niki, 2026-11-03).
 - Settings are stored as `jsonb`, which cannot hold a NUL; the GitHub plugin refuses one first.
 - No live GitHub was called; the plugin's provider is exercised against the emulator and synthetic signatures.
 
