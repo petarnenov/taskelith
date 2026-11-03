@@ -57,7 +57,7 @@ import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
 import { readWebAppDirectory } from './web-app-directory.js';
-import { DecoyWebhookVerifier, InMemoryScmIntegrationVerifiers } from './scm-webhooks.js';
+import { GithubEventlessDeliveries, GithubWebhookDecoy, InMemoryScmIntegrationVerifiers } from './scm-webhooks.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -201,7 +201,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     scmWebhooks: new ScmWebhookReceiver({
       verifiers: new InMemoryScmIntegrationVerifiers(),
       deliveries: new CommittingScmWebhookDeliveries(database),
-      decoy: new DecoyWebhookVerifier(),
+      decoy: new GithubWebhookDecoy(),
+      eventless: new GithubEventlessDeliveries(),
     }),
   });
   // The session operations are served on the browser endpoint only, and a

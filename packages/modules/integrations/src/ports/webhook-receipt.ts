@@ -1,5 +1,5 @@
 import type { Identifier, Result } from '@taskelith/kernel';
-import type { WebhookEvent, WebhookVerifier } from './source-control.js';
+import type { WebhookDelivery, WebhookEvent, WebhookVerifier } from './source-control.js';
 
 // An SCM integration, whose plugin verifies the deliveries sent to it.
 export type ScmIntegrationId = Identifier<'ScmIntegrationId'>;
@@ -18,4 +18,10 @@ export type DeliveryRecording = 'recorded' | 'repeated';
 // also under concurrent redeliveries.
 export interface ScmWebhookDeliveries {
   record(integrationId: ScmIntegrationId, event: WebhookEvent): Promise<Result<DeliveryRecording>>;
+}
+
+// The verified deliveries that a service sends without an event of the
+// port, such as a ping, by their headers.
+export interface EventlessDeliveries {
+  isEventless(delivery: WebhookDelivery): boolean;
 }

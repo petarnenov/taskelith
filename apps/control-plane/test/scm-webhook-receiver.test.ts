@@ -4,7 +4,8 @@ import type { AddressInfo } from 'node:net';
 import { after, beforeEach, test } from 'node:test';
 import {
   ControlPlaneApi,
-  DecoyWebhookVerifier,
+  GithubEventlessDeliveries,
+  GithubWebhookDecoy,
   InMemoryScmIntegrationVerifiers,
   MAX_SCM_WEBHOOK_BODY_BYTES,
   createApiServer,
@@ -58,7 +59,8 @@ const deliveries = new InMemoryDeliveries();
 const receiver = new ScmWebhookReceiver({
   verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, counted]])),
   deliveries,
-  decoy: new DecoyWebhookVerifier(),
+  decoy: new GithubWebhookDecoy(),
+  eventless: new GithubEventlessDeliveries(),
 });
 const sink = new InMemoryLogSink();
 const logger = new Logger(sink, { now: () => '2026-11-03T09:00:00.000Z' as never });
@@ -113,8 +115,26 @@ test('a verified ping and installation delivery answer 202 without a record', as
   const before = deliveries.events.size;
   const ping = signed(Buffer.from('{"zen":"Keep it logically awesome.","hook_id":1}'), 'ping', 'ping-1');
   const installation = signed(Buffer.from('{"action":"created","installation":{"id":5678}}'), 'installation', 'installation-1');
+  const repositories = signed(Buffer.from('{"action":"added","installation":{"id":5678}}'), 'installation_repositories', 'installation-2');
   assert.deepEqual(await post(KNOWN, ping), { status: 202, text: '' });
   assert.deepEqual(await post(KNOWN, installation), { status: 202, text: '' });
+  assert.deepEqual(await post(KNOWN, repositories), { status: 202, text: '' });
+  assert.equal(deliveries.events.size, before);
+});
+
+test('a verified push without a repository is 400 invalid and not recorded', async () => {
+  const before = deliveries.events.size;
+  const answer = await post(KNOWN, signed(Buffer.from('{"ref":"refs/heads/main","after":"abc123"}'), 'push', 'push-1'));
+  assert.equal(answer.status, 400);
+  assert.equal(JSON.parse(answer.text).code, 'invalid');
+  assert.equal(deliveries.events.size, before);
+});
+
+test('a verified ping whose body is no JSON object is 400 invalid and not recorded', async () => {
+  const before = deliveries.events.size;
+  const answer = await post(KNOWN, signed(Buffer.from('["zen"]'), 'ping', 'ping-2'));
+  assert.equal(answer.status, 400);
+  assert.equal(JSON.parse(answer.text).code, 'invalid');
   assert.equal(deliveries.events.size, before);
 });
 

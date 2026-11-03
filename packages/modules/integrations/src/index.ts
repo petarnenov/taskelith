@@ -47,6 +47,7 @@ export type {
 } from './ports/source-control-fixture.js';
 export type {
   DeliveryRecording,
+  EventlessDeliveries,
   ScmIntegrationId,
   ScmIntegrationVerifiers,
   ScmWebhookDeliveries,

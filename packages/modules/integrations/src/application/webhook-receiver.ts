@@ -1,10 +1,16 @@
 import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import { readWebhookEvent } from '../ports/source-control-readers.js';
 import type { WebhookDelivery, WebhookEvent, WebhookVerifier } from '../ports/source-control.js';
-import type { DeliveryRecording, ScmIntegrationId, ScmIntegrationVerifiers, ScmWebhookDeliveries } from '../ports/webhook-receipt.js';
+import type {
+  DeliveryRecording,
+  EventlessDeliveries,
+  ScmIntegrationId,
+  ScmIntegrationVerifiers,
+  ScmWebhookDeliveries,
+} from '../ports/webhook-receipt.js';
 
-// `no-event`: a verified delivery that carries no event of the port, such
-// as a service's ping, which is accepted and not recorded.
+// `no-event`: a verified eventless delivery, such as a service's ping,
+// which is accepted and not recorded.
 export type WebhookReceipt = DeliveryRecording | 'no-event';
 
 export interface ScmWebhookReceiverPorts {
@@ -13,6 +19,7 @@ export interface ScmWebhookReceiverPorts {
   // Verifies, and refuses, every delivery of an unknown integration, so
   // that its answer takes the work of a known one's.
   readonly decoy: WebhookVerifier;
+  readonly eventless: EventlessDeliveries;
 }
 
 // Source control contract section 6: verify a delivery on its raw bytes,
@@ -32,8 +39,15 @@ export class ScmWebhookReceiver {
     if (!integrationId.ok || verifier.value === undefined) return err(signatureInvalid());
     if (verified.ok) return this.#record(integrationId.value, verified.value);
     if (verified.error.code === 'forbidden') return err(signatureInvalid());
-    if (verified.error.code === 'invalid') return unmappedPayload(delivery.rawBody);
+    if (verified.error.code === 'invalid') return this.#unmapped(delivery);
     return verified;
+  }
+
+  // A verified delivery the plugin maps to no event is accepted only when
+  // it is eventless and its payload a JSON object.
+  #unmapped(delivery: WebhookDelivery): Result<WebhookReceipt> {
+    if (this.#ports.eventless.isEventless(delivery) && isJsonObject(delivery.rawBody)) return ok('no-event');
+    return err(failure('invalid', 'the verified delivery carries no event that can be recorded'));
   }
 
   async #record(integrationId: ScmIntegrationId, event: WebhookEvent): Promise<Result<WebhookReceipt>> {
@@ -47,13 +61,6 @@ export class ScmWebhookReceiver {
 // missing or failed signature, which does not say which.
 function signatureInvalid(): Failure {
   return failure('forbidden', 'the delivery has no valid signature', { reason: 'signature-invalid' });
-}
-
-// A verified JSON object that the plugin maps to no event is accepted; a
-// payload that is no JSON object cannot be parsed.
-function unmappedPayload(rawBody: Uint8Array): Result<WebhookReceipt> {
-  if (isJsonObject(rawBody)) return ok('no-event');
-  return err(failure('invalid', 'the verified delivery has a payload that cannot be parsed'));
 }
 
 function isJsonObject(rawBody: Uint8Array): boolean {

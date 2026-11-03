@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   ScmWebhookReceiver,
   type DeliveryRecording,
+  type EventlessDeliveries,
   type ScmIntegrationVerifiers,
   type ScmWebhookDeliveries,
   type WebhookDelivery,
@@ -14,7 +15,8 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 const KNOWN = `i${'a'.repeat(32)}`;
 const EVENT: WebhookEvent = { deliveryId: 'd-1', kind: 'change-request', repository: 'owner/repository', changeRequest: '7' };
 const BODY = new TextEncoder().encode('{"repository":{}}');
-const DELIVERY: WebhookDelivery = { headers: { signature: 'valid' }, rawBody: BODY };
+const DELIVERY: WebhookDelivery = { headers: { signature: 'valid', event: 'ping' }, rawBody: BODY };
+const PUSH: WebhookDelivery = { ...DELIVERY, headers: { signature: 'valid', event: 'push' } };
 const REJECTION = { code: 'forbidden', message: 'the delivery has no valid signature', details: { reason: 'signature-invalid' } };
 
 // A verifier that answers what a test sets and remembers what it saw.
@@ -50,6 +52,9 @@ interface Testbed {
   readonly asked: string[];
 }
 
+// The service sends its pings without an event of the port.
+const PINGS_EVENTLESS: EventlessDeliveries = { isEventless: (delivery) => delivery.headers['event'] === 'ping' };
+
 function testbed(answer: () => Result<WebhookEvent>, lookup?: () => Result<WebhookVerifier | undefined>): Testbed {
   const verifier = new ScriptedVerifier(answer);
   const asked: string[] = [];
@@ -61,7 +66,8 @@ function testbed(answer: () => Result<WebhookEvent>, lookup?: () => Result<Webho
   };
   const deliveries = new RecordingDeliveries();
   const decoy = new ScriptedVerifier(() => err(failure('forbidden', 'decoy')));
-  return { receiver: new ScmWebhookReceiver({ verifiers, deliveries, decoy }), deliveries, decoy, asked };
+  const receiver = new ScmWebhookReceiver({ verifiers, deliveries, decoy, eventless: PINGS_EVENTLESS });
+  return { receiver, deliveries, decoy, asked };
 }
 
 test('a verified delivery is recorded once and a redelivery answers as a repeat', async () => {
@@ -91,9 +97,18 @@ test('a verified payload the plugin cannot parse is invalid and not recorded', a
   assert.equal(deliveries.recorded.size, 0);
 });
 
-test('a verified JSON object the plugin maps to no event is accepted without a record', async () => {
+test('a verified eventless JSON object the plugin maps to no event is accepted without a record', async () => {
   const { receiver, deliveries } = testbed(() => err(failure('invalid', 'The delivery body is not an event')));
   assert.deepEqual(await receiver.receive(KNOWN, DELIVERY), ok('no-event'));
+  assert.equal(deliveries.recorded.size, 0);
+});
+
+test('a verified delivery the plugin maps to no event is invalid unless eventless with a JSON object', async () => {
+  const { receiver, deliveries } = testbed(() => err(failure('invalid', 'The delivery body is not an event')));
+  const notEventless = await receiver.receive(KNOWN, PUSH);
+  assert.equal(!notEventless.ok && notEventless.error.code, 'invalid');
+  const notObject = await receiver.receive(KNOWN, { ...DELIVERY, rawBody: new TextEncoder().encode('[]') });
+  assert.equal(!notObject.ok && notObject.error.code, 'invalid');
   assert.equal(deliveries.recorded.size, 0);
 });
 

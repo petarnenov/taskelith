@@ -45,7 +45,12 @@ export { WEB_APP_DIR_VARIABLE, readWebAppDirectory, type WebAppEntryProbe } from
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
 export { MAX_SCM_WEBHOOK_BODY_BYTES } from './api/http-exchange.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
-export { DecoyWebhookVerifier, InMemoryScmIntegrationVerifiers } from './composition/scm-webhooks.js';
+export {
+  GITHUB_EVENTLESS_EVENTS,
+  GithubEventlessDeliveries,
+  GithubWebhookDecoy,
+  InMemoryScmIntegrationVerifiers,
+} from './composition/scm-webhooks.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
 export { HEARTBEAT_QUEUE, HeartbeatService, type HeartbeatMessage } from './application/heartbeat-service.js';
