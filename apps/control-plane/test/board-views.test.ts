@@ -3,6 +3,7 @@ import test from 'node:test';
 import { BoardViews, CardProjector, mergeGate, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
 import type { BoardCard, UiEventRecord } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
+import { value } from '@taskelith/testing';
 import { AS_OF, BINDING, BoardWorld, EARLY, LATE, execution, gate, item, run, task, worker } from './board-fixtures.ts';
 
 const IMPLEMENTING = { proposal: 'completed', specs: 'completed', apply: 'in-progress' } as const;
@@ -87,10 +88,9 @@ test('a task waiting for placement shows the fleet obstacle first, else the most
   assert.equal((await onlyCard(world)).obstacle, undefined, 'a held reservation is placed');
 });
 
-test('a fleet obstacle observed again later appends no second card-changed', async () => {
-  const world = new BoardWorld();
-  await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
-  world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [] }]), 'apply');
+// A projector over the world whose touches always name `run-1`, with the
+// times of its batches; it collects the records it appends.
+function projectorOver(world: BoardWorld, times: string[]): { projector: CardProjector; appended: UiEventRecord[] } {
   const appended: UiEventRecord[] = [];
   let last: string | undefined;
   const projections: CardProjections = {
@@ -101,16 +101,36 @@ test('a fleet obstacle observed again later appends no second card-changed', asy
     recordWorkersOnline: async () => ok(undefined),
     projectIds: async () => ok([]),
   };
-  const times = [AS_OF, '2026-11-03T11:00:00.000Z' as never];
   const projector = new CardProjector({
     transaction: (work) => work({
-      ...world.reads(), now: async () => times.shift()!, projections,
+      ...world.reads(), now: async () => times.shift()! as never, projections,
       outbox: { append: async (entry) => (appended.push(entry.record), ok(undefined)) },
     }),
   }, world.parts());
+  return { projector, appended };
+}
+
+test('a fleet obstacle observed again later appends no second card-changed', async () => {
+  const world = new BoardWorld();
+  await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
+  world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [] }]), 'apply');
+  const { projector, appended } = projectorOver(world, [AS_OF, '2026-11-03T11:00:00.000Z']);
   assert.deepEqual([await projector.project(), await projector.project()], [ok(1), ok(1)]);
   assert.equal(appended.length, 1);
   assert.equal(appended[0]?.type === 'card-changed' && appended[0].card.obstacle?.source, 'fleet');
+});
+
+test('a change of the task detail alone appends a card-changed with the unchanged card', async () => {
+  const world = await runningCard();
+  world.gates.set('run-1', [gate('g-review', 'review', 'pending')]);
+  const { projector, appended } = projectorOver(world, [AS_OF, AS_OF, AS_OF]);
+  value(await projector.project());
+  world.gates.set('run-1', [gate('g-review', 'review', 'blocked')]);
+  value(await projector.project());
+  world.admissions.set('adm-task-1', { ...world.admissions.get('adm-task-1')!, policyRevision: 'policy-2' as never });
+  value(await projector.project());
+  assert.equal(appended.length, 3, 'a later stage\'s gate and an admission are task detail');
+  assert.equal(new Set(appended.map((each) => JSON.stringify(each))).size, 1, 'the card itself is unchanged');
 });
 
 test('a rejected task shows the rejection and its end, and a re-admission hides both', async () => {

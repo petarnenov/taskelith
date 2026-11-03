@@ -1,8 +1,8 @@
-import { projectScope, type BoardCard, type UiEventOutbox, type UiEventRecord } from '@taskelith/execution';
+import { projectScope, type PlacementObstacle, type UiEventOutbox, type UiEventRecord } from '@taskelith/execution';
 import { ok, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 import type { BoardReads } from './board-reads.js';
-import { CardReader, type CardViewParts } from './card-views.js';
+import { CardReader, type CardView, type CardViewParts } from './card-views.js';
 
 export const PROJECTION_BATCH = 100;
 
@@ -75,12 +75,12 @@ export class CardProjector {
   async #projectCard(transaction: ProjectionTransaction, reader: CardReader, runId: WorkflowRunId, at: Instant): Promise<Result<void>> {
     const record = await transaction.cards.get(runId);
     if (!record.ok || record.value === undefined) return record.ok ? ok(undefined) : record;
-    const card = await reader.card(record.value);
-    if (!card.ok) return card;
-    const projection = projectionKey(card.value);
+    const view = await reader.view(record.value);
+    if (!view.ok) return view;
+    const projection = projectionKey(view.value);
     const last = await transaction.projections.lastCard(runId);
     if (!last.ok || last.value === projection) return last.ok ? ok(undefined) : last;
-    const appended = await append(transaction.outbox, record.value.projectId, { type: 'card-changed', card: card.value }, at);
+    const appended = await append(transaction.outbox, record.value.projectId, { type: 'card-changed', card: view.value.card }, at);
     return appended.ok ? transaction.projections.recordCard(runId, projection) : appended;
   }
 
@@ -102,12 +102,16 @@ export class CardProjector {
   }
 }
 
-// A fleet obstacle is observed at each read's time, which alone is no
-// change of the card.
-function projectionKey(card: BoardCard): string {
-  if (card.obstacle?.source !== 'fleet') return JSON.stringify(card);
-  const { observedAt: _observedAt, ...obstacle } = card.obstacle;
-  return JSON.stringify({ ...card, obstacle });
+// The card and its task detail (wire contracts section 8, "Cards"); a fleet
+// obstacle is observed at each read's time, which alone is no change.
+function projectionKey(view: CardView): string {
+  return JSON.stringify({ ...view, card: withoutFleetTime(view.card), tasks: view.tasks.map(withoutFleetTime) });
+}
+
+function withoutFleetTime(shown: { readonly obstacle?: PlacementObstacle }): object {
+  if (shown.obstacle?.source !== 'fleet') return shown;
+  const { observedAt: _observedAt, ...obstacle } = shown.obstacle;
+  return { ...shown, obstacle };
 }
 
 function append(outbox: UiEventOutbox, projectId: ProjectId, record: UiEventRecord, at: Instant): Promise<Result<void>> {
