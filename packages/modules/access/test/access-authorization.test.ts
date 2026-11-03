@@ -19,7 +19,7 @@ import {
 } from '@taskelith/access';
 import { err, failure, ok } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
-import { countingRandom, ManualClock } from './access-fixtures.ts';
+import { addProject, countingRandom, ManualClock } from './access-fixtures.ts';
 
 for (const conformance of ACCESS_STORE_CONFORMANCE) {
   test(`in-memory access store: ${conformance.name}`, async () => {
@@ -47,7 +47,10 @@ async function storeWith(roles: Record<string, ProjectRole>, owner = true): Prom
     value(await tx.principals.add({ principalId: ALICE, kind: 'operator', loginName: 'alice' as LoginName, createdAt }));
     value(await tx.principals.add({ principalId: OWNER, kind: 'operator', loginName: 'owner' as LoginName, createdAt }));
     if (owner) value(await tx.principals.grantInstallationOwner(OWNER, createdAt));
-    for (const [projectId, role] of Object.entries(roles)) value(await tx.projectRoles.assign(projectId, ALICE, role, createdAt));
+    for (const [projectId, role] of Object.entries(roles)) {
+      value(await addProject(tx, projectId, createdAt));
+      value(await tx.projectRoles.assign(projectId, ALICE, role, createdAt));
+    }
     return ok(undefined);
   }));
   return store;
@@ -148,7 +151,7 @@ test('a bootstrap with an invalid invocation, identifier, or store writes nothin
   const store = new InMemoryAccessStore();
   const clock = new ManualClock();
   assert.equal(failed(await new OwnerBootstrapService({ store, random: countingRandom(), clock }).ensureOwner({ actor: ' ', reason: 'x' })).code, 'invalid');
-  const badRandom = { sessionToken: () => 'x', principalId: () => 'not-an-id' };
+  const badRandom = { sessionToken: () => 'x', principalId: () => 'not-an-id', projectId: () => 'not-an-id' };
   assert.equal(failed(await new OwnerBootstrapService({ store, random: badRandom, clock }).ensureOwner(INVOCATION)).code, 'invalid');
   const taken = new InMemoryAccessStore();
   value(await taken.transaction((tx) => tx.principals.add({ principalId: ALICE, kind: 'operator', loginName: 'owner' as LoginName, createdAt: clock.now() })));

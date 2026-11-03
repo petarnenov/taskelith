@@ -21,7 +21,7 @@ import {
   type SecretHash,
 } from '@taskelith/access';
 import { failed, value } from '@taskelith/testing';
-import { countingRandom, ManualClock, recordingHasher } from './access-fixtures.ts';
+import { addProject, countingRandom, ManualClock, recordingHasher } from './access-fixtures.ts';
 
 const INVOCATION = { actor: 'root@control-plane-1', reason: 'onboarding' };
 
@@ -37,7 +37,8 @@ async function administration() {
 const trailKinds = async (store: InMemoryAccessStore) => value(await store.transaction((tx) => tx.audit.trail())).map((event) => event.kind);
 
 test('the owner creates a principal, sets its password, and assigns and removes its roles, each audited', async () => {
-  const { store, owner, admin } = await administration();
+  const { store, clock, owner, admin } = await administration();
+  value(await store.transaction((tx) => addProject(tx, 'project-1', clock.now())));
   const bob = value(await admin.createPrincipal(owner, 'Bob', INVOCATION));
   assert.deepEqual(bob.loginName, 'bob');
   assert.equal(failed(await admin.createPrincipal(owner, 'bob', INVOCATION)).code, 'conflict');

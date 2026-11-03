@@ -1,5 +1,7 @@
 import {
   LoginThrottle,
+  type AccessTransaction,
+  type ProjectDefaults,
   type LoginThrottleSettings,
   type PasswordHash,
   type PasswordHasher,
@@ -7,7 +9,8 @@ import {
   type SecretHash,
   type Secrets,
 } from '@taskelith/access';
-import { err, failure, instantFromEpochMilliseconds, ok, type Instant } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
+import type { ProjectId } from '@taskelith/sdlc';
 import { value } from '@taskelith/testing';
 
 // A clock the test moves by hand.
@@ -39,7 +42,21 @@ export function countingRandom(): RandomValues & { readonly issued: string[] } {
       count += 1;
       return `u${count.toString(16).padStart(32, '0')}`;
     },
+    projectId: () => {
+      count += 1;
+      return `p${count.toString(16).padStart(32, '0')}`;
+    },
   };
+}
+
+export const DEFAULTS: ProjectDefaults = Object.freeze({
+  frameworkPluginId: 'sdlc-openspec', implementers: Object.freeze(['agent-primary', 'agent-secondary']), reviewer: 'agent-secondary',
+  specApprover: 'delegated-reviewer', noEligibleSlot: 'wait',
+});
+
+// A project of any identifier, as a store fixture rather than a command.
+export function addProject(tx: AccessTransaction, projectId: string, createdAt: Instant): Promise<Result<void>> {
+  return tx.projects.add({ projectId: projectId as ProjectId, name: `Project ${projectId}`, createdAt, revision: 1 }, DEFAULTS);
 }
 
 export const plainSecrets: Pick<Secrets, 'hashOf' | 'matches'> = {
