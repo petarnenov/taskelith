@@ -3,12 +3,16 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ACTIVITY_LABELS,
+  ADMISSION_STATE_LABELS,
   COLUMN_LABELS,
   COLUMNS,
   END_LABELS,
+  EVIDENCE_KIND_LABELS,
+  FRESHNESS_LABELS,
   formatInstant,
   GATE_LABELS,
   MERGE_GATE_LABELS,
+  OUTCOME_LABELS,
   reasonLabel,
   STAGE_ORIGINS,
   STAGE_STATE_LABELS,
@@ -30,13 +34,14 @@ function enumOf(name: string): string[] {
   return [...(SCHEMAS[name]?.enum ?? [])].sort();
 }
 
-// SessionActivity is a oneOf of an enum and a const state.
-function activityStates(): string[] {
-  const states = (SCHEMAS.SessionActivity?.oneOf ?? []).flatMap(({ properties }) => {
-    const state = properties?.state;
-    return state?.enum ?? (state?.const === undefined ? [] : [state.const]);
+// SessionActivity is a oneOf of an enum and a const state, and
+// AttemptOutcome a oneOf of const kinds.
+function oneOfValues(name: string, property: string): string[] {
+  const values = (SCHEMAS[name]?.oneOf ?? []).flatMap(({ properties }) => {
+    const value = properties?.[property];
+    return value?.enum ?? (value?.const === undefined ? [] : [value.const]);
   });
-  return states.sort();
+  return values.sort();
 }
 
 const keys = (record: object) => Object.keys(record).sort();
@@ -50,13 +55,20 @@ describe('the board labels', () => {
     ['MergeGateState', MERGE_GATE_LABELS],
     ['TaskEndKind', END_LABELS],
     ['WorkType', WORK_TYPE_LABELS],
+    ['EvidenceKind', EVIDENCE_KIND_LABELS],
+    ['EvidenceFreshness', FRESHNESS_LABELS],
+    ['AdmissionState', ADMISSION_STATE_LABELS],
   ] as const)('label every value of %s in the OpenAPI document and no other', (name, record) => {
     expect(keys(record)).toEqual(enumOf(name));
   });
 
   it('label every session activity state and every stage origin', () => {
-    expect(keys(ACTIVITY_LABELS)).toEqual(activityStates());
+    expect(keys(ACTIVITY_LABELS)).toEqual(oneOfValues('SessionActivity', 'state'));
     expect([...STAGE_ORIGINS].sort()).toEqual(enumOf('StageOrigin'));
+  });
+
+  it('label every kind of attempt outcome', () => {
+    expect(keys(OUTCOME_LABELS)).toEqual(oneOfValues('AttemptOutcome', 'kind'));
   });
 
   it('keep the lifecycle order of the columns and their short labels', () => {

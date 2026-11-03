@@ -6,6 +6,7 @@ const MINIMUM = 4.5;
 const BODY = 'var(--mantine-color-body)';
 const TEXT = 'var(--mantine-color-text)';
 const DIMMED = 'var(--mantine-color-dimmed)';
+const ANCHOR = 'var(--mantine-color-anchor)';
 
 // Surfaces that Mantine's stylesheets set per scheme, not its resolvers:
 // Popover, Input, Card, and dot Badge backgrounds, and the hovers.
@@ -80,6 +81,7 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ['text on a board card', TEXT, surfaces.card],
     ['dimmed text on a board card', DIMMED, surfaces.card],
     ['text of a dot badge', surfaces.dotBadgeText, surfaces.dotBadge],
+    ['a card title link on a board card', ANCHOR, surfaces.card],
   ];
 }
 

@@ -38,7 +38,29 @@ async function openAccountMenu() {
   return user;
 }
 
+function sessionCheckLoader() {
+  const line = screen.getByText('Checking your session…').parentElement;
+  return line?.querySelector('.mantine-Loader-root') ?? null;
+}
+
 describe('the session check', () => {
+  it('shows a loader beside its status line', () => {
+    const gateway = fakeGateway();
+    gateway.read.mockReturnValueOnce(new Promise(() => {}));
+    renderApp('/app/', gateway);
+    expect(sessionCheckLoader()).not.toBeNull();
+  });
+
+  it('spins no loader when the system asks for reduced motion, and keeps its text', () => {
+    const matchMedia = window.matchMedia;
+    const reduced = (query: string) => ({ ...matchMedia(query), matches: query.includes('prefers-reduced-motion') });
+    vi.stubGlobal('matchMedia', reduced);
+    const gateway = fakeGateway();
+    gateway.read.mockReturnValueOnce(new Promise(() => {}));
+    renderApp('/app/', gateway);
+    expect(sessionCheckLoader()).toBeNull();
+  });
+
   it('shows nothing of the product until the control plane names a session', async () => {
     const read = deferred<SessionRead>();
     const gateway = fakeGateway();
