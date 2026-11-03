@@ -39,7 +39,7 @@ import {
   type NeedsYouItem,
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type CorrelationId } from '@taskelith/kernel';
-import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { InMemoryLogSink, Logger, type LogRecord } from '@taskelith/observability';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { Argon2idPasswordHasher, NodeSecrets, SecretOutputRedactor, outputTailCipher } from '@taskelith/secrets';
 import { sequentialIds, value } from '@taskelith/testing';
@@ -391,8 +391,61 @@ test('an inbox item without an attempt is skipped, logged by identifiers only, a
   assert.equal(JSON.stringify(skipped[0]!.fields).includes(item.title), false, 'no payload text reaches the log');
 });
 
+test('a client gone while the stream opened leaves no stream, timer, or log read, and a gone response takes no frame', async () => {
+  const log = new InMemoryUiEventLog();
+  const counted = {
+    reads: 0,
+    bounds: () => (counted.reads++, log.bounds()),
+    readAfter: (...args: Parameters<InMemoryUiEventLog['readAfter']>) => (counted.reads++, log.readAfter(...args)),
+  };
+  const scheduler = new ManualScheduler();
+  const hubLogs = new WaitingLogSink();
+  const hub = new EventStreamHub({ log: counted, scheduler, clock: { now: () => AT }, logger: new Logger(hubLogs, { now: () => AT }) });
+  let found!: () => void;
+  const projectFound = new Promise<void>((resolve) => { found = resolve; });
+  const streams = new EventStreamApi({
+    hub, projects: { readProject: async () => (await projectFound, ok(undefined)) },
+    authorization: { authorize: async () => ok(undefined) }, sessions: { liveUntil: async () => ok(undefined) },
+    logger: new Logger(new InMemoryLogSink(), { now: () => AT }),
+  });
+  const opening = streams.streamProjectEvents(request('owner-1' as PrincipalId, 'alpha'));
+  const response = new FakeResponse();
+  response.destroy();
+  response.emit('close');
+  found();
+  value(await opening).start(response as unknown as ServerResponse);
+  const reads = counted.reads;
+  log.commit([eventEntry(marked(71))]);
+  value(await log.assign(10, AT));
+  hub.wake();
+  assert.deepEqual([hub.openStreams(), scheduler.delays(), counted.reads - reads, response.written], [0, [], 0, []]);
+  const later = new FakeResponse();
+  value(await streams.streamProjectEvents(request('owner-1' as PrincipalId, 'alpha'))).start(later as unknown as ServerResponse);
+  later.destroyed = true;
+  log.commit([eventEntry(marked(72))]);
+  value(await log.assign(10, AT));
+  hub.wake();
+  await hubLogs.logged('events.stream.overflow');
+  assert.deepEqual([hub.openStreams(), later.written], [0, []], 'a response destroyed before its close event takes no frame');
+});
+
 function request(owner: PrincipalId, projectId: string): ApiRequest {
   return { parameters: [projectId], body: undefined, query: new URLSearchParams(), correlationId: 'c-1' as CorrelationId, principalId: owner };
+}
+
+// Log records, and a wait for the first record of an event.
+class WaitingLogSink extends InMemoryLogSink {
+  readonly #waiters: Array<{ event: string; resolve: () => void }> = [];
+
+  override write(record: LogRecord): void {
+    super.write(record);
+    for (const waiter of this.#waiters.filter((candidate) => candidate.event === record.event)) waiter.resolve();
+  }
+
+  logged(event: string): Promise<void> {
+    if (this.records.some((record) => record.event === event)) return Promise.resolve();
+    return new Promise((resolve) => this.#waiters.push({ event, resolve }));
+  }
 }
 
 // A response that never sends: what is written stays buffered.

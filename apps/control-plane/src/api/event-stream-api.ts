@@ -68,11 +68,17 @@ export class EventStreamApi {
     };
     const opened = await this.#operations.hub.open(subject, cursor);
     if (!opened.ok) return opened;
+    // A client that went away during the open already closed its response.
     return ok(new StreamAnswer((response) => {
+      if (isGone(response)) return;
       const detach = opened.value.attach(new ResponseSink(response, schema, logger));
       response.once('close', detach);
     }));
   }
+}
+
+function isGone(response: ServerResponse): boolean {
+  return response.destroyed || response.writableEnded;
 }
 
 // `Last-Event-ID` wins over `after`, and either one malformed is invalid;
@@ -100,6 +106,7 @@ class ResponseSink implements StreamSink {
   }
 
   send(frame: StreamFrame): boolean {
+    if (isGone(this.#response)) return false;
     const text = this.#text(frame);
     if (text !== undefined) this.#response.write(text);
     return this.#response.writableLength <= MAX_STREAM_BUFFER_BYTES;
@@ -107,6 +114,7 @@ class ResponseSink implements StreamSink {
 
   // A full buffer is dropped; otherwise the last frame is flushed first.
   close(): void {
+    if (isGone(this.#response)) return;
     if (this.#response.writableLength > MAX_STREAM_BUFFER_BYTES) this.#response.destroy();
     else this.#response.end();
   }
