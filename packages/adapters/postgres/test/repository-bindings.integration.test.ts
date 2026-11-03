@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { after, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   REPOSITORY_BINDINGS_CONFORMANCE, ScmSecrets, normalizeOrigin,
   type BindingPut, type RepositoryBinding, type ScmIntegration, type ScmIntegrationId,
@@ -52,10 +53,26 @@ function pausingAfterIntegrationRead(pause: () => Promise<void>): PostgresReposi
   });
 }
 
+const LOCK_WAIT_DEADLINE_MS = 30_000;
+const LOCK_POLL_MS = 10;
+
+// Polls for the update's backend blocked on the integration's row lock;
+// the deadline only bounds a store whose update never waits.
+async function untilUpdateWaits(): Promise<boolean> {
+  const deadline = performance.now() + LOCK_WAIT_DEADLINE_MS;
+  while (performance.now() < deadline) {
+    const [row] = await query<{ waiting: boolean }>(url, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+      WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'UPDATE scm_integrations %') AS waiting`);
+    if (row!.waiting) return true;
+    await delay(LOCK_POLL_MS);
+  }
+  return false;
+}
+
 for (const conformance of REPOSITORY_BINDINGS_CONFORMANCE) {
   test(`PostgreSQL repository bindings: ${conformance.name}`, async () => {
     await emptied();
-    const target = { bindings, integrations, projectIds: PROJECT_IDS, pausingAfterIntegrationRead };
+    const target = { bindings, integrations, projectIds: PROJECT_IDS, pausingAfterIntegrationRead, untilUpdateWaits };
     assert.deepEqual(await conformance.check(target), []);
   });
 }

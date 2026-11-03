@@ -14,6 +14,9 @@ export interface RepositoryBindingsTarget {
   // The same store, whose put awaits `pause` after its locking read of
   // the integration and before it writes.
   pausingAfterIntegrationRead(pause: () => Promise<void>): RepositoryBindings;
+  // True once a started integration update waits for the integration that
+  // a put holds; false when it never does.
+  untilUpdateWaits(): Promise<boolean>;
 }
 
 interface Deferred {
@@ -26,9 +29,6 @@ function deferred(): Deferred {
   const promise = new Promise<void>((settle) => { resolve = settle; });
   return { promise, resolve };
 }
-
-// Long enough for a store that does not wait to finish the update.
-const UPDATE_GRACE_MS = 50;
 
 function must<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`conformance fixture: ${result.error.message}`);
@@ -166,7 +166,7 @@ export const REPOSITORY_BINDINGS_CONFORMANCE: readonly ConformanceCase<Repositor
       await snapshot.promise;
       const updating = target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' })
         .finally(() => finished.push('update'));
-      await new Promise((resolve) => setTimeout(resolve, UPDATE_GRACE_MS));
+      expectSame(problems, 'the update waits for the put', await target.untilUpdateWaits(), true);
       expectSame(problems, 'while the put holds the integration', [...finished], []);
       gate.resolve();
       const [stored, updated] = await Promise.all([putting, updating]);
