@@ -111,6 +111,10 @@ Run `g1` (16:39:53–16:41:13) stopped during webhook processing after exposing 
 - **Large webhook delivery IDs.** Delivery IDs exceed 2^53; parsing them as JavaScript numbers rounded them, and the first detail request in `g1` returned 404. The plugin must treat these IDs as strings.
 - **Self-approval is impossible.** A pull request authored by the App cannot be approved by the same App.
 
+## Live conformance run
+
+`make conformance-github OUT=<dir>` runs the shared SCM conformance suite against GitHub.com with the `scm-github` plugin and the App's own credential (change `run-github-scm-conformance`). It is manual, run on SCM changes, and not part of `make verify`. It reads `TASKELITH_GITHUB_APP_KEY_FILE`, `TASKELITH_GITHUB_WEBHOOK_SECRET_FILE`, `TASKELITH_GITHUB_APP_ID`, and `TASKELITH_GITHUB_INSTALLATION_ID`; `LONG_RUN=1` adds the hour-long refresh case and `CLEANUP_ONLY=1` only resets the repositories. A guard refuses every repository except the private `petarnenov/taskelith-conformance-project`, `-foreign`, and `-hidden` before any call; the App is installed on the first two only. Each run ends with a cleanup and saves only redacted evidence. Status: built and tested without network; no live run yet.
+
 ## Consequences for the SCM port
 
 Stated in harness-neutral terms, so that a later Forgejo plugin maps onto the same port:
