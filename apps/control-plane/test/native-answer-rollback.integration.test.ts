@@ -47,8 +47,6 @@ async function sql<Row extends pg.QueryResultRow>(text: string, values: unknown[
 }
 
 const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
-const SESSION = id('SessionId', 'session-1') as SessionId;
-const TASK = id('TaskId', 'task-1') as TaskId;
 const PERSON = id('PrincipalId', 'person-1');
 const ALPHA: NeedsYouScope = { kind: 'project', projectId: 'alpha' as never };
 const CLOCK = { now: () => value(parseInstant('2026-11-03T09:00:00.000Z')) };
@@ -59,23 +57,25 @@ value(new SessionInputDigestKeyFile(space).create());
 value(new SessionOutputTailKeyFile(space).create());
 const sessions = value(startAgentSessionServices(space, database, CLOCK));
 
-// Alpha's card `run-alpha` with `task-1`, whose session's generation 1
-// holds the open native permission request `request-1`.
-async function openRequest(): Promise<string> {
-  await sql("INSERT INTO workflow_runs (id, generation, record, project_id, created_at) VALUES ('run-alpha', 1, '{}', 'alpha', now())");
+// Alpha's card `run-<n>` with `task-<n>`, whose session `session-<n>`
+// holds at generation 1 the open native permission request `request-1`.
+async function openRequest(n: number): Promise<string> {
+  const session = id('SessionId', `session-${n}`) as SessionId;
+  const task = id('TaskId', `task-${n}`) as TaskId;
+  await sql("INSERT INTO workflow_runs (id, generation, record, project_id, created_at) VALUES ($1, 1, '{}', 'alpha', now())", [`run-${n}`]);
   await sql(`INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id)
-    VALUES ('task-1', NULL, 'task-1', 0, 'alpha', 'run-alpha')`);
+    VALUES ($1, NULL, $1, 0, 'alpha', $2)`, [task, `run-${n}`]);
   const { timeline } = sessions;
-  value(await timeline.openSession({ id: SESSION, taskId: TASK, harness: id('HarnessPluginId', 'harness-a') }));
-  const attempt = { attemptId: id('AttemptId', 'attempt-1'), taskId: TASK, ownershipGeneration: value(parseOwnershipGeneration(1)) };
-  value(await timeline.bindAttempt(SESSION, attempt));
-  value(await timeline.startGeneration(SESSION, { generation: GENERATION, nativeSessionId: id('NativeSessionId', 'native-1') }));
+  value(await timeline.openSession({ id: session, taskId: task, harness: id('HarnessPluginId', 'harness-a') }));
+  const attempt = { attemptId: id('AttemptId', `attempt-${n}`), taskId: task, ownershipGeneration: value(parseOwnershipGeneration(1)) };
+  value(await timeline.bindAttempt(session, attempt));
+  value(await timeline.startGeneration(session, { generation: GENERATION, nativeSessionId: id('NativeSessionId', `native-${n}`) }));
   const author = { kind: 'principal' as const, principalId: PERSON };
-  const submitted = value(await timeline.submitTurn(SESSION, { key: id('IdempotencyKey', 'turn-1'), author, text: 'run it' }));
-  value(await timeline.deliverTurn(SESSION, { turnId: submitted.turn.id, generation: GENERATION }));
+  const submitted = value(await timeline.submitTurn(session, { key: id('IdempotencyKey', 'turn-1'), author, text: 'run it' }));
+  value(await timeline.deliverTurn(session, { turnId: submitted.turn.id, generation: GENERATION }));
   const key = { generation: GENERATION, nativeRequestId: id('NativeRequestId', 'request-1') };
-  value(await timeline.recordRequest(SESSION, { key, kind: 'permission-request', turnId: submitted.turn.id, text: 'may I' }));
-  const [row] = await sql<{ item_id: string }>('SELECT item_id FROM session_inbox_items');
+  value(await timeline.recordRequest(session, { key, kind: 'permission-request', turnId: submitted.turn.id, text: 'may I' }));
+  const [row] = await sql<{ item_id: string }>('SELECT item_id FROM session_inbox_items WHERE session_id = $1', [session]);
   return row!.item_id;
 }
 
@@ -101,7 +101,7 @@ function submission(itemId: string): InboxAnswerSubmission {
 }
 
 test('a native answer whose inbox key fails to record rolls back with it, and a retry answers once', async () => {
-  const itemId = await openRequest();
+  const itemId = await openRequest(1);
   const before = await answerState();
   assert.equal(failed(await failingKeyRecord().answer(ALPHA, submission(itemId))).code, 'unavailable');
   assert.deepEqual(await answerState(), before, 'the native consumption rolled back with the key');
@@ -109,6 +109,51 @@ test('a native answer whose inbox key fails to record rolls back with it, and a 
   const answered = value(await answers.answer(ALPHA, submission(itemId)));
   assert.equal(answered.state, 'resolved');
   assert.deepEqual(value(await answers.answer(ALPHA, submission(itemId))), answered, 'the retry\'s key replays it');
-  assert.deepEqual(await sql('SELECT state FROM session_inbox_items'), [{ state: 'resolved' }]);
-  assert.equal((await sql('SELECT 1 FROM inbox_answer_keys')).length, 1);
+  assert.deepEqual(await sql('SELECT state FROM session_inbox_items WHERE item_id = $1', [itemId]), [{ state: 'resolved' }]);
+  assert.equal((await sql('SELECT 1 FROM inbox_answer_keys WHERE item_id = $1', [itemId])).length, 1);
+});
+
+// Holds each of the first `parties` key reads until all of them read, so
+// every answer passes the key check before any commits.
+function barrier(parties: number): () => Promise<void> {
+  let arrived = 0;
+  let release!: () => void;
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return async () => {
+    arrived += 1;
+    if (arrived >= parties) release();
+    await open;
+  };
+}
+
+// The composed answers over the native source, with the key reads held.
+function racingAnswers(wait: () => Promise<void>): InboxAnswers {
+  return new InboxAnswers({
+    transaction: (work) => database.transaction((tx) => work({
+      keys: {
+        find: async (itemId, key) => {
+          const found = await tx.inboxAnswerKeys.find(itemId, key);
+          await wait();
+          return found;
+        },
+        record: (answer) => tx.inboxAnswerKeys.record(answer),
+      },
+      sources: [sessions.sourceIn(tx.sessionTimeline, headPositions(boardReadsOf(tx)))],
+    })),
+  }, sessions.digest);
+}
+
+test('two concurrent identical native answers commit one answer and one native key, and both return it', async () => {
+  const itemId = await openRequest(2);
+  const nativeKeys = "SELECT count(*)::int AS count FROM session_idempotency_keys WHERE session_id = 'session-2'";
+  const [before] = await sql<{ count: number }>(nativeKeys);
+  const answers = racingAnswers(barrier(2));
+  const [first, second] = await Promise.all([1, 2].map(() => answers.answer(ALPHA, submission(itemId))));
+  assert.equal(value(first!).state, 'resolved');
+  assert.deepEqual(value(second!), value(first!));
+  assert.deepEqual(await sql('SELECT state FROM session_inbox_items WHERE item_id = $1', [itemId]), [{ state: 'resolved' }]);
+  assert.equal((await sql('SELECT 1 FROM inbox_answer_keys WHERE item_id = $1', [itemId])).length, 1);
+  assert.deepEqual(await sql(nativeKeys), [{ count: before!.count + 1 }], 'the native source consumed the answer once');
 });
