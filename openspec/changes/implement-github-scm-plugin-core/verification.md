@@ -162,7 +162,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   7. Low, the refresh's `unavailable` cause is outside the contract (`docs/contracts/source-control.md`): rule 5 and the GitHub refresh row of section 7 name it.
   8. Low, verified deliveries without a `repository`, such as `ping`, fail `invalid` (`webhook-verifier.ts`): a port limit, recorded in decision 5 with the note that the 20e receiver must answer `ping` without the port.
   9. Low, ensuring an already ensured protection still writes (`change-requests.ts`): a protection that already requires exactly the contexts with `enforce_admins` is returned without a write.
-- The pass 2 fixes are not yet reviewed: pass 3 (role A) reviews them.
+- Pass 3 confirmed all nine fixes; their outcome is now `fixed`.
+
+### Pass 3, role A
+
+- Reviewer replacement: Argon unavailable on hpz600: agy binary needs PCLMUL, which the CPU lacks; pass 3 ran with codex gpt-6.1-sol#medium as the standing replacement per Unavailable reviewer, coordinator 2026-11-03.
+- Reviewer: Codex CLI, model `gpt-6.1-sol`, effort `medium`, sandbox `read-only`, run by Zaki with `make review` on head `a2b25149` against the merge base `3341f8a8`. Session `01a19f67-ce5d-71a1-ba28-cbbaf6f1fdef`. The reviewer reported that it modified no file.
+- Findings: Critical 0, High 1, Medium 1, Low 1 (the report file holds the report twice; its three unique findings match these counts). Pass 3 is the last pass, so every fix below is `fixed-unreviewed` and awaits the coordinator's architect check:
+  1. High, ensuring merge protection can replace the App bound to an existing required check (`change-requests.ts`, `weakenedSettings`): a PUT of `contexts` lets GitHub choose each check's App, so a write over `required_status_checks.checks` with an `app_id` could change which identity satisfies the check.
+  2. Medium, a failed installation listing after a 422 token refusal is swallowed (`installation-tokens.ts`, `mintRefusal`): the call reported the 422's terminal `invalid` instead of the listing's retryable failure.
+  3. Low, the design's refresh risk bullet still said a same-second refresh fails with `unavailable` (`design.md`, Risks).
 
 ## Limitations
 
