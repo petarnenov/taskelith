@@ -156,6 +156,27 @@ test('every conflicting setting is named', async () => {
   assert.equal(named, 'required_pull_request_reviews,restrictions,required_status_checks.strict');
 });
 
+const BOUND_APP = 999;
+
+test('a write that would drop an App bound to a required check is refused untouched', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.protectBranch(PROJECT, 'main', { contexts: [REVIEW], enforceAdmins: true, apps: { [REVIEW]: BOUND_APP } });
+  const before = emulator.protectionOf(PROJECT, 'main');
+  const refused = await provider.ensureMergeProtection({ ...MAIN, requiredStatuses: [REVIEW, 'ci'] });
+  assert.equal(refused.ok ? undefined : refused.error.code, 'precondition-failed');
+  assert.equal(refused.ok ? undefined : refused.error.details['settings'], 'required_status_checks.checks');
+  assert.equal(emulator.requests.some((request) => request.method === 'PUT'), false);
+  assert.equal(emulator.protectionOf(PROJECT, 'main'), before);
+});
+
+test('an ensured protection with an App bound to its check is kept as read', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.protectBranch(PROJECT, 'main', { contexts: [REVIEW], enforceAdmins: true, apps: { [REVIEW]: BOUND_APP } });
+  const protection = await value(provider.ensureMergeProtection(ENSURE));
+  assert.deepEqual(protection, { ...MAIN, requiredStatuses: [REVIEW], bindsProvider: true });
+  assert.equal(emulator.requests.some((request) => request.method === 'PUT'), false);
+});
+
 test('a remote URL outside the contract is refused', async () => {
   for (const url of ['https://[::1]/acme/project.git', 'https://github.test:0/acme/project.git', `https://github.test/${'a'.repeat(2048)}`]) {
     const { provider, emulator } = githubTestbed();

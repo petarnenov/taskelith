@@ -69,6 +69,8 @@ export interface Protection {
   readonly enforceAdmins: boolean;
   readonly reviews?: Readonly<Record<string, unknown>>;
   readonly restrictions?: Readonly<Record<string, unknown>>;
+  // The App each required context is bound to, by context.
+  readonly apps?: Readonly<Record<string, number>>;
   // Names of GitHub's `{ enabled }` settings that are on.
   readonly enabled: readonly string[];
 }
@@ -166,7 +168,7 @@ export class GithubEmulator {
     this.answerNext(method, path, status, { message: 'refused' });
   }
 
-  // The next matching request gets this answer instead of its route's.
+  // The next request whose path and query match gets this answer instead.
   answerNext(method: string, path: RegExp, status: number, data: unknown, headers?: Record<string, string>): void {
     this.answers.push({ method, path, reply: [status, data, headers] });
   }
@@ -237,7 +239,7 @@ export class GithubEmulator {
   }
 
   private route(request: RecordedRequest, path: string): Reply {
-    const answer = this.answers.findIndex((next) => next.method === request.method && next.path.test(path));
+    const answer = this.answers.findIndex((next) => next.method === request.method && next.path.test(request.path));
     if (answer !== -1) return this.answers.splice(answer, 1)[0]!.reply;
     for (const [method, pattern, route] of this.routes) {
       const match = pattern.exec(path);
@@ -468,7 +470,11 @@ function settingOf(name: 'reviews' | 'restrictions', value: unknown): Partial<Pr
 // GitHub's answer omits review and push settings that are off.
 function protectionData(protection: Protection): unknown {
   return {
-    required_status_checks: { strict: protection.strict, contexts: protection.contexts },
+    required_status_checks: {
+      strict: protection.strict,
+      contexts: protection.contexts,
+      checks: protection.contexts.map((context) => ({ context, app_id: protection.apps?.[context] ?? null })),
+    },
     enforce_admins: { enabled: protection.enforceAdmins },
     ...(protection.reviews === undefined ? {} : { required_pull_request_reviews: protection.reviews }),
     ...(protection.restrictions === undefined ? {} : { restrictions: protection.restrictions }),

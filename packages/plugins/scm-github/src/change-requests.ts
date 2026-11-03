@@ -58,12 +58,13 @@ export class GithubChangeRequests {
     const contexts = [...new Set(request.requiredStatuses)];
     const current = await this.currentProtection(branch);
     if (!current.ok) return current;
-    const conflicts = weakenedSettings(current.value, contexts);
+    const ensured = isEnsured(current.value, contexts);
+    const conflicts = [...weakenedSettings(current.value, contexts), ...(ensured ? [] : appBoundChecks(current.value))];
     if (conflicts.length > 0) {
       const settings = conflicts.join(',');
       return err(failure('precondition-failed', 'The branch protection has settings this plugin would weaken', { settings }));
     }
-    if (isEnsured(current.value, contexts)) return ok(protectionData(request, current.value));
+    if (ensured) return ok(protectionData(request, current.value));
     const protectedBranch = await this.api.asApp('PUT /repos/{owner}/{repo}/branches/{branch}/protection', {
       ...branch,
       required_status_checks: { strict: false, contexts },
@@ -191,6 +192,14 @@ function weakenedSettings(current: JsonRecord, contexts: readonly string[]): rea
   if (textsOf(checks['contexts']).some((context) => !ours.has(context))) conflicts.push('required_status_checks.contexts');
   conflicts.push(...DROPPED_SETTINGS.filter((setting) => recordOf(current[setting])['enabled'] === true));
   return conflicts;
+}
+
+// A PUT of contexts lets GitHub pick each check's App, so a write would
+// drop an App bound to a required check.
+function appBoundChecks(current: JsonRecord): readonly string[] {
+  const checks = recordOf(current['required_status_checks'])['checks'];
+  const bound = Array.isArray(checks) && checks.some((check) => typeof recordOf(check)['app_id'] === 'number');
+  return bound ? ['required_status_checks.checks'] : [];
 }
 
 // Unweakened protection that already requires exactly these contexts of

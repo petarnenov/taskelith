@@ -86,6 +86,23 @@ test('a refused token request reads the installation across pages', async () => 
   assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [FOREIGN] })), 'invalid');
 });
 
+const LISTING_ROUTE = /^\/installation\/repositories/;
+
+test('a refused token request whose installation listing fails reports the listing failure', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.refuseNext('GET', LISTING_ROUTE, 503);
+  const refused = await provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] });
+  assert.equal(refused.ok ? undefined : refused.error.code, 'unavailable');
+  assert.deepEqual(refused.ok ? undefined : refused.error.details, { status: '503' });
+});
+
+test('a refused token request whose later listing page fails reports the listing failure', async () => {
+  const { provider, emulator } = githubTestbed({}, { pageSize: 1 });
+  emulator.refuseNext('GET', /^\/installation\/repositories\?.*\bpage=2\b/, 503);
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'unavailable');
+  assert.equal(emulator.requests.filter((request) => LISTING_ROUTE.test(request.path)).length, 2);
+});
+
 test('a request outside the installation or malformed mints no token', async () => {
   const { provider, emulator } = githubTestbed();
   assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'not-found');

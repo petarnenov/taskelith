@@ -86,7 +86,8 @@ export class InstallationTokens {
     const failed = refusal(refused, 'issue an installation token');
     if (refused.status !== 422) return failed;
     const installed = await this.installedRepositories();
-    if (!installed.ok || repositories.every((repository) => installed.value.has(repositoryKey(repository)))) return failed;
+    if (!installed.ok) return installed.error;
+    if (repositories.every((repository) => installed.value.has(repositoryKey(repository)))) return failed;
     return outsideInstallation();
   }
 
