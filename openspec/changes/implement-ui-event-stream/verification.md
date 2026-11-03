@@ -125,17 +125,6 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 - **L1, a stale comment** (`72211095`). The comment of `BEFORE_ANY_EVENT` names the tests that wire no UI event log as its users, since the control plane reads its positions from the log.
 - Coordinator architect check: (pending).
 
-## Archive
-
-Checked on the tree of the archive commit `docs: archive the implement ui event stream change`, the working tree that the checks ran on, after every task in `tasks.md` was ticked. The branch's merge base with `origin/dev` stays `26bbb10f`; `origin/dev` is at `f0ed0139`, whose spec edits touch none of this change's requirements, so no merge was made.
-
-- `npm run openspec -- archive implement-ui-event-stream --yes`: `Change 'implement-ui-event-stream' archived as '2026-11-03-implement-ui-event-stream'.`
-- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
-- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-11-03-implement-ui-event-stream`.
-- `git diff 26bbb10f -- openspec/specs`: only this change's edits, in `control-plane-api` (50 lines changed), `control-plane-wire-contracts` (10), `postgres-state` (19), `session-turn-model` (7), and `trust-and-operational-foundation` (7); 83 insertions, 10 deletions, which are the removed "View position before the event stream" and the replaced text of "Event position after commit". Every other requirement keeps its text.
-- The moved change holds `findings.jsonl` (16 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"`: `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).`
-- `make verify` (`verify-14-archive.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4393, pass 4384, fail 0, skipped 9; all files 99.39% lines, 92.68% branches, 98.87% functions; the tree differed from the archive commit only by this line. A second run on the committed tree writes the stamp that the `pre-push` hook reuses.
-
 ## Limitations
 
 - `card-changed` and `board-changed` are typed and mapped but not emitted; item 15 emits them (Q2 and coordinator decision, 2026-11-03); likewise the `card-changed` that section 10 pairs with an item counting toward a card.
@@ -167,4 +156,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Architect check of the pass 3 fixes by the coordinator (section "Pass 3 fixes").
+- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).

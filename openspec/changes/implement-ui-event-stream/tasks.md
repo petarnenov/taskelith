@@ -31,4 +31,4 @@
 
 ## 7. Archive
 
-- [x] 7.1 Archive the change in the last commit of the branch and record the archive checks
+- [ ] 7.1 Archive the change in the last commit of the branch and record the archive checks
