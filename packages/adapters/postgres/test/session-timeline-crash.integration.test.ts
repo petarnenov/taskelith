@@ -17,7 +17,7 @@ import {
   sessionWithOpenRequest,
   turn,
 } from './session-timeline-fixtures.ts';
-import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { createMigratedDatabase, query, truncateAll, untilNumberable } from './test-database.ts';
 
 const STEP = join(import.meta.dirname, 'fixtures', 'session-timeline-step.ts');
 const url = await createMigratedDatabase();
@@ -327,10 +327,12 @@ const numbering = (count: number) => Array.from({ length: count }, (_, index) =>
 
 test('a change killed between its commit and the numbering keeps its events, which the next numbering gives positions once', async () => {
   await scopedSession();
+  await untilNumberable(url);
   const opened = stepResult(await runStep('number-events')).value as unknown as number;
   assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
   assert.deepEqual(await runStep('submit', 'SessionTimelineCommit.after'), KILLED);
   assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 1, head: opened, positions: numbering(opened) });
+  await untilNumberable(url);
   assert.equal(stepResult(await runStep('number-events')).value, 1);
   assert.deepEqual(await eventRows(), { numbered: opened + 1, unnumbered: 0, head: opened + 1, positions: numbering(opened + 1) });
   const [last] = await query<{ record: string }>(url, 'SELECT record FROM ui_events WHERE position = $1', [opened + 1]);
@@ -342,8 +344,10 @@ test('a change killed before its commit leaves no event, and a numbering killed 
   const opened = (await eventRows()).unnumbered;
   assert.deepEqual(await runStep('submit', 'SessionTimelineCommit.before'), KILLED);
   assert.deepEqual(await eventRows(), { numbered: 0, unnumbered: opened, head: 0, positions: '' });
+  await untilNumberable(url);
   assert.deepEqual(await runStep('number-events', 'EventNumberingCommit.before'), KILLED);
   assert.deepEqual(await eventRows(), { numbered: 0, unnumbered: opened, head: 0, positions: '' });
+  await untilNumberable(url);
   assert.equal(stepResult(await runStep('number-events')).value, opened);
   assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
 });
@@ -351,8 +355,10 @@ test('a change killed before its commit leaves no event, and a numbering killed 
 test('a numbering killed after its commit keeps its positions, and the rerun numbers nothing again', async () => {
   await scopedSession();
   const opened = (await eventRows()).unnumbered;
+  await untilNumberable(url);
   assert.deepEqual(await runStep('number-events', 'EventNumberingCommit.after'), KILLED);
   assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
+  await untilNumberable(url);
   assert.equal(stepResult(await runStep('number-events')).value, 0);
   assert.equal((await eventRows()).head, opened);
 });

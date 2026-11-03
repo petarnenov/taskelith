@@ -34,8 +34,8 @@ export interface StreamFilter {
   readonly principalId?: PrincipalId;
 }
 
-// The event log: entries committed without a position are numbered after
-// the commit, in commit order, from one sequence that never reuses one.
+// The event log: committed entries get positions from one sequence, never
+// reused; an entry follows every entry whose commit its transaction saw.
 export interface UiEventLog {
   // Numbers at most `limit` committed entries; answers how many.
   assign(limit: number, numberedAt: Instant): Promise<Result<number>>;

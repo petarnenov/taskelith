@@ -48,18 +48,21 @@ export class PostgresUiEventRecords implements UiEventOutbox, PrincipalChanges {
     return ok(undefined);
   }
 
+  // Numbers only entries whose transaction is older than every open one, so
+  // no transaction still open can insert an entry before them.
   async assign(limit: number, numberedAt: Instant): Promise<Result<number>> {
+    const horizon = await this.#oldestOpenTransaction();
     const head = await this.#lockedHead();
     const { rows } = await this.#session.query<{ numbered: string }>(
       `WITH next AS (
          SELECT entry_id, $1::bigint + row_number() OVER (ORDER BY entry_id) AS position
-         FROM ui_events WHERE position IS NULL ORDER BY entry_id LIMIT $2
+         FROM ui_events WHERE position IS NULL AND inserted_by < $4::xid8 ORDER BY entry_id LIMIT $2
        ), numbered AS (
          UPDATE ui_events SET position = next.position, numbered_at = $3 FROM next WHERE ui_events.entry_id = next.entry_id
          RETURNING 1
        )
        SELECT count(*) AS numbered FROM numbered`,
-      [head, limit, numberedAt],
+      [head, limit, numberedAt, horizon],
     );
     const count = Number(rows[0]!.numbered);
     if (count === 0) return ok(0);
@@ -111,6 +114,13 @@ export class PostgresUiEventRecords implements UiEventOutbox, PrincipalChanges {
     if (this.#notified) return;
     this.#notified = true;
     await this.#session.query('SELECT pg_notify($1, $2)', [APPENDED_CHANNEL, '']);
+  }
+
+  // Read before the row lock, while this transaction has no id of its own;
+  // a horizon older than the lock's grant only delays an entry.
+  async #oldestOpenTransaction(): Promise<string> {
+    const { rows } = await this.#session.query<{ horizon: string }>('SELECT pg_snapshot_xmin(pg_current_snapshot()) AS horizon');
+    return rows[0]!.horizon;
   }
 
   // Serializes numbering and pruning across processes.

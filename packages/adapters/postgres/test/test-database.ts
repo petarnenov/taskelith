@@ -115,6 +115,14 @@ export function assertNoPassword(text: string, password: string): void {
   for (const form of [password, encodeURIComponent(password)]) assert.ok(!text.includes(form), 'the password was logged');
 }
 
+// Settles once every unnumbered entry is below the assigner's horizon: the
+// cluster's other test files can hold transactions that delay numbering.
+export async function untilNumberable(url: URL): Promise<void> {
+  const statement = `SELECT pg_snapshot_xmin(pg_current_snapshot()) > coalesce(
+    (SELECT max(inserted_by) FROM ui_events WHERE position IS NULL), '0'::xid8) AS numberable`;
+  while (!(await query<{ numberable: boolean }>(url, statement))[0]!.numberable);
+}
+
 // The event sequence keeps its one row, set back to before any event.
 export async function truncateAll(url: URL): Promise<void> {
   await query(url, `TRUNCATE ${TABLES.join(', ')}`);

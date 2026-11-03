@@ -2,7 +2,8 @@
 
 -- The event log of the control-plane streams (G3 item 14): a change's
 -- transaction inserts its entries without a position; the assigner numbers
--- committed entries afterwards, in commit order, from `ui_event_sequence`.
+-- them from `ui_event_sequence` once every transaction that could still
+-- insert an earlier entry has ended, in insertion order.
 CREATE TABLE ui_events (
   entry_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   position bigint UNIQUE CHECK (position >= 1),
@@ -13,6 +14,8 @@ CREATE TABLE ui_events (
   -- A change's principal; null for an event.
   principal_id text,
   record text NOT NULL,
+  -- The inserting transaction, which the assigner waits for.
+  inserted_by xid8 NOT NULL DEFAULT pg_current_xact_id(),
   CONSTRAINT ui_events_numbered_pair CHECK ((position IS NULL) = (numbered_at IS NULL)),
   CONSTRAINT ui_events_principal_kind CHECK ((kind = 'event') = (principal_id IS NULL))
 );

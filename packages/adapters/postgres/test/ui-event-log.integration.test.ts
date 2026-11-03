@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { after, beforeEach, test, type TestContext } from 'node:test';
 import { OwnerBootstrapService, PrincipalAdministration, ProjectSetupService, type PasswordHasher, type PrincipalId } from '@taskelith/access';
 import { UI_EVENT_LOG_CONFORMANCE, projectScope, type CommittedEntry, type PrincipalId as ReaderId, type UiEvent } from '@taskelith/execution';
 import type { ProjectId } from '@taskelith/sdlc';
@@ -9,7 +9,7 @@ import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 import { AT } from './fixtures.ts';
-import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { createMigratedDatabase, query, truncateAll, untilNumberable } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const database = new PostgresDatabase(url);
@@ -26,7 +26,8 @@ function outputEvent(mark: number): UiEvent {
   return { scope: projectScope(ALPHA), occurredAt: AT, record: { type: 'output-appended', sessionId: 's-1' as never, entry } };
 }
 
-async function commit(entries: readonly CommittedEntry[]): Promise<void> {
+// Commits the entries in a transaction of their own.
+async function commitNow(entries: readonly CommittedEntry[]): Promise<void> {
   value(await database.transaction(async (tx) => {
     for (const entry of entries) {
       const written = entry.kind === 'event' ? await tx.uiEvents.append(entry.event) : await tx.access.changes.record(entry.change as never);
@@ -34,6 +35,12 @@ async function commit(entries: readonly CommittedEntry[]): Promise<void> {
     }
     return ok(undefined);
   }));
+}
+
+// Commits the entries and settles once the assigner can number them.
+async function commit(entries: readonly CommittedEntry[]): Promise<void> {
+  await commitNow(entries);
+  await untilNumberable(url);
 }
 
 async function marks(): Promise<readonly string[]> {
@@ -56,25 +63,54 @@ function gate(): { opened: Promise<void>; open(): void } {
   return { opened, open };
 }
 
-test('positions follow the order of commit, not of insertion: an entry committed later gets the higher position', async () => {
+// A transaction that appended its entries and stays open until released,
+// at the latest when the test ends.
+async function heldOpen(t: TestContext, ...marks: readonly number[]) {
   const inserted = gate();
   const release = gate();
-  const early = database.transaction(async (tx) => {
-    value(await tx.uiEvents.append(outputEvent(1)));
+  const done = database.transaction(async (tx) => {
+    for (const mark of marks) value(await tx.uiEvents.append(outputEvent(mark)));
     inserted.open();
     await release.opened;
     return ok(undefined);
   });
+  const commit = async () => (release.open(), value(await done));
+  t.after(commit);
   await inserted.opened;
-  await commit([{ kind: 'event', event: outputEvent(2) }]);
+  return { commit };
+}
+
+test('an entry committed while an earlier inserter is open waits for it, then both are numbered in insertion order', async (t) => {
+  const early = await heldOpen(t, 1);
+  await commitNow([{ kind: 'event', event: outputEvent(2) }]);
+  assert.equal(value(await log.assign(100, AT)), 0, 'the later commit is not numbered while the earlier inserter is open');
+  const seen = value(await log.bounds()).head;
+  await early.commit();
+  await untilNumberable(url);
+  assert.equal(value(await log.assign(100, AT)), 2);
+  assert.equal(seen, 0, 'a reader saw no position while the earlier inserter was open');
+  assert.deepEqual(await marks(), ['1:1', '2:2'], 'positions follow insertion, all above what the reader saw');
+});
+
+test('entries inserted in one order and committed in the other before any numbering are numbered in insertion order', async (t) => {
+  const early = await heldOpen(t, 1);
+  await commitNow([{ kind: 'event', event: outputEvent(2) }]);
+  await early.commit();
+  await untilNumberable(url);
   value(await log.assign(100, AT));
-  release.open();
-  value(await early);
-  value(await log.assign(100, AT));
-  assert.deepEqual(await marks(), ['1:2', '2:1']);
-  const [row] = await query<{ entry_order: string }>(url, 'SELECT string_agg(entry_id::text, \',\' ORDER BY position) AS entry_order FROM ui_events');
-  const [first, second] = row!.entry_order.split(',').map(Number);
-  assert.ok(first! > second!, 'the entry inserted first was numbered second');
+  assert.deepEqual(await marks(), ['1:1', '2:2']);
+});
+
+test('a long-open transaction delays numbering but neither blocks other writers\' inserts and commits nor loses their order', async (t) => {
+  const long = await heldOpen(t, 1);
+  for (const mark of [2, 3, 4]) {
+    await commitNow([{ kind: 'event', event: outputEvent(mark) }]);
+    assert.equal(value(await log.assign(100, AT)), 0, `commit ${mark} waits for the long transaction`);
+  }
+  await long.commit();
+  await untilNumberable(url);
+  assert.equal(value(await log.assign(100, AT)), 4);
+  assert.deepEqual(await marks(), ['1:1', '2:2', '3:3', '4:4']);
 });
 
 test('a rolled-back transaction leaves no entry, and concurrent numberings give each committed entry one position without gaps', async () => {
@@ -123,6 +159,7 @@ test('Access records role changes into the log in the transaction of the change,
   value(await admin.assignProjectMember(owner, { projectId, principalId: bob, role: 'project-viewer' }, INVOCATION));
   const refused = await admin.assignProjectMember(bob, { projectId, principalId: bob, role: 'project-maintainer' }, INVOCATION);
   assert.equal(refused.ok, false);
+  await untilNumberable(url);
   value(await log.assign(100, AT));
   assert.deepEqual(await changesOf(owner), [{ change: 'roles-changed', principalId: owner }]);
   assert.deepEqual(await changesOf(bob), [{ change: 'roles-changed', principalId: bob, projectId }]);
@@ -138,6 +175,7 @@ test('a commit that appends entries and a numbering each wake the listeners of t
   notifications.onNumbered(() => numbered.open());
   await commit([{ kind: 'event', event: outputEvent(1) }]);
   await appended.opened;
+  await untilNumberable(url);
   value(await log.assign(100, AT));
   await numbered.opened;
   await notifications.close();
@@ -166,6 +204,7 @@ test('a listener that cannot connect answers false and logs the loss, a close du
   assert.equal(await notifications.listen(), true);
   assert.equal(await notifications.listen(), true, 'an open listener stays open');
   await commit([{ kind: 'event', event: outputEvent(1) }]);
+  await untilNumberable(url);
   value(await log.assign(100, AT));
   await numbered.opened;
   assert.equal(heard, 0);
@@ -185,6 +224,7 @@ test('a listener whose connection is lost logs it, and the next listen reconnect
   notifications.onNumbered(() => numbered.open());
   assert.equal(await notifications.listen(), true);
   await commit([{ kind: 'event', event: outputEvent(1) }]);
+  await untilNumberable(url);
   value(await log.assign(100, AT));
   await numbered.opened;
 });
