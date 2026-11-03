@@ -26,13 +26,15 @@ interface Build {
 export function readWebAppDirectory(directory: string, probe: WebAppEntryProbe = () => undefined): Result<WebAppFiles> {
   const build: Build = { files: new Map(), leftOut: new Set(), directories: new Map() };
   try {
-    if (lstatSync(directory).isSymbolicLink()) return err(unusable('a directory that is not a symbolic link'));
+    if (lstatSync(directory).isSymbolicLink()) return err(unusable(directory, 'a directory that is not a symbolic link'));
     collect(directory, '', build, probe);
     confirmUnchanged(directory, build);
   } catch (error) {
-    return err(unusable(error instanceof BuildChanged ? 'a build that stays unchanged while it is read' : 'a readable directory'));
+    return err(error instanceof BuildChanged
+      ? unusable(directory, 'a build that stays unchanged while it is read')
+      : unusable(directory, 'a readable directory', { code: errorCode(error) }));
   }
-  if (!build.files.has(WEB_APP_INDEX)) return err(unusable(`a web build with ${WEB_APP_INDEX}`));
+  if (!build.files.has(WEB_APP_INDEX)) return err(unusable(directory, `a web build with ${WEB_APP_INDEX}`));
   return ok({ file: (path) => build.files.get(path), isLeftOut: (path) => isBelowLeftOut(build.leftOut, path) });
 }
 
@@ -93,6 +95,14 @@ function isBelowLeftOut(leftOut: ReadonlySet<string>, path: string): boolean {
   return segments.some((_, index) => leftOut.has(segments.slice(0, index + 1).join('/')));
 }
 
-function unusable(expected: string) {
-  return failure('precondition-failed', `${WEB_APP_DIR_VARIABLE} must name ${expected}`, { variable: WEB_APP_DIR_VARIABLE });
+// The directory is a setting, not a secret; no file content is named.
+function unusable(directory: string, expected: string, details: Readonly<Record<string, string>> = {}) {
+  const named = { variable: WEB_APP_DIR_VARIABLE, directory, ...details };
+  return failure('precondition-failed', `${WEB_APP_DIR_VARIABLE} must name ${expected}`, named);
+}
+
+// The system error's code, such as ENOENT, EACCES, or ENOTDIR.
+function errorCode(error: unknown): string {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return code ?? 'unknown';
 }
