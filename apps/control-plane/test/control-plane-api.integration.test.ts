@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { request as httpsRequest } from 'node:https';
 import { connect, type PeerCertificate } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { X509CertificateIssuer } from '@taskelith/certificates';
@@ -49,6 +50,17 @@ const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
 const ownerUid = process.getuid!();
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
+
+// Settles once the composition's assigner numbered every committed entry;
+// other test files' transactions can hold the numbering horizon back.
+async function untilAllNumbered(url: URL): Promise<void> {
+  const deadline = performance.now() + 20_000;
+  const statement = 'SELECT count(*)::int AS unnumbered FROM ui_events WHERE position IS NULL';
+  while ((await sql<{ unnumbered: number }>(url, statement))[0]!.unnumbered > 0) {
+    if (performance.now() > deadline) throw new Error('the assigner left entries unnumbered');
+    await delay(20);
+  }
+}
 
 async function sql<Row extends pg.QueryResultRow>(url: URL, text: string, values: unknown[] = []): Promise<Row[]> {
   const client = new pg.Client({ connectionString: url.href });
@@ -385,6 +397,8 @@ describe('event streams', () => {
     const [owner] = await sql<{ principal_id: string }>(database, 'SELECT principal_id FROM installation_roles');
     const memberPath = `/projects/${projectId}/members/${owner!.principal_id}`;
     assert.equal((await call('PUT', memberPath, { bearer: operator, body: { role: 'project-viewer' } })).status, 200);
+    // A role change numbered after the open would end the stream first.
+    await untilAllNumbered(database);
     const stream = await fetch(`https://127.0.0.1:${running.api.port}/projects/${projectId}/events`, {
       headers: { authorization: `Bearer ${operator}` }, signal: AbortSignal.timeout(STREAM_BOUND_MILLISECONDS),
     });
