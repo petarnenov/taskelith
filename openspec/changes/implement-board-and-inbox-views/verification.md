@@ -91,6 +91,22 @@ Pass 3 reviews these fixes. Each behaviour fix has a test that fails before it: 
 
 Not a pass 2 finding: the coordinator's decision of 2026-11-03 that the in-memory board world orders a card's tasks by the same root-to-task admission path as PostgreSQL, with interleaved admissions in the parity test. `15666f5e` makes the `BoardWorld` fixture admit through `InMemoryCardCatalog.admit`, and the parity test admits `task-b`, `task-a`, a child of `task-b`, a child of `task-a`, and another child of `task-b`. `fb-15-p2-parity.log`: with the fixture's insertion order, the in-memory detail lists `task-a` before the children of `task-b`, while PostgreSQL lists them under `task-b`. It overlaps finding 4, fixed in the same commit.
 
+## Review pass 3
+
+- Reviewer: role A, Antigravity CLI `gemini-4-argon-medium`, effort medium (`agy`, `gemini-4-argon-medium`, `medium`), session `41930d7a-fb45-4b15-a1c9-4425a79ae8ed`, run with `make review` under the coordinator's assignment; the developing subagent received the report (`review-15-p3-report.md` in the scratchpad) and did not see the run's model confirmation, which the worker session records. The reviewed range is `468783d9..f4bd9d11`; the report says that no file was edited and that `make record-check` passed on the tree `e9ab8ea1`. It verifies the pass 2 fixes and the coordinator parity constraint, finding 3 only in part (its finding 1).
+- Findings: Critical 0, High 0, Medium 0, Low 2, as its `passes.jsonl` line and the two pass 3 lines of `findings.jsonl` record.
+
+### Pass 3 fixes
+
+Architect check pending: these fixes were not reviewed by a later pass (governance "Architect check of unreviewed fixes"). Both claims were checked against the code before a change and hold. `fb-15-p3-base.log` in the scratchpad runs the two new tests over the sources of `f4bd9d11`: tests 36, pass 34, fail 2; `fb-15-p3-<n>.log` extracts each finding's failing test, and `fb-15-p3-after.log` runs the affected suites with the fixes: tests 110, pass 110.
+
+- **1, Low, lineage delete touch** (`a57477d3`, `postgres-state`). `task_lineage_touch` wrote `('task', task_id)`, which `take` resolves through the lineage row that the delete removed, so the card was never reprojected. The new trigger function `touch_lineage` touches a root row as the card's run and a delegated child through its root task, whose row the child's delete keeps; the root insert now writes a `run` touch. `fb-15-p3-1.log`: deleting a child's lineage row takes one touch and names no card.
+- **2, Low, missing card task records** (`2fc3eb02`, `control-plane-api`). `CardReader` maps `not-found` of a registered card's run, task, or admission to `internal` through one helper, so the board and the task detail answer `500`, not `404` (design decision 1). `fb-15-p3-2.log`: the task detail without the task's admission answers `not-found`.
+
+`34afcc8b` updates design decision 1 and the trigger paragraph.
+
+Coordinator architect check of `a57477d3`, `2fc3eb02`, and `34afcc8b`: pending.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -119,10 +135,10 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - An unreadable card is retried and logged once per pass until it can be read (design decision 11).
 - `cards.project_id` has no reference to `projects` until item 25 (design "Follow-ups").
 - The first worker touch after the migration appends one `board-changed` per project, a known one-time event (design decision 7).
-- Review passes 1 and 2 ran; the pass 2 fixes await pass 3. No deployment or browser check was made (backend only).
+- Review passes 1, 2, and 3 ran; the pass 3 fixes had no later review and await the coordinator's architect check. No deployment or browser check was made (backend only).
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A over the pass 2 fixes, which governance "Review sequence" requires after a pass 2 with Medium findings, and its fix round.
+- The coordinator's architect check of the pass 3 fixes (governance "Architect check of unreviewed fixes").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
