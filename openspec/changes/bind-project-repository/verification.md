@@ -99,6 +99,14 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | M3 | Medium | The stored origin went through `normalizeOrigin` and the resolved one through WHATWG `URL` first, so `https://127.1` failed to match itself, and some numeric hosts made `new URL` throw | `55fa93d8`; `fb-11b1-p1-3.log`: tests 15, pass 13, fail 2 (numeric hosts, and an origin that does not normalize) | `fe40c9c5`: `normalizeRemoteOrigin` takes the scheme and authority as written and normalizes them as an allowed origin; an origin that does not normalize is the plugin defect; wire section 4.1 and the spec delta say so |
 | L4 | Low | The record claimed HTTP evidence that the route suite lacked | Evidence only: `8044b747` adds the HTTP cases; negative control `fb-11b1-p1-4.log`: with the repository identity check removed the route suite fails 1 of 11 | `8044b747`, and the self-check above states the evidence per suite |
 
+### Both orders of a put and an integration update
+
+The coordinator accepted the M2 semantics: while a put holds the integration's share lock, an update waits; a put after a completed update answers 409. `7666867a` replaces `Promise.withResolvers`, which the ES2022 lib of `tsconfig.check.json` lacks (TS2550 in `check:boundaries` of the verify run after pass 1), with a local deferred. `48df27d5` moves the in-memory pause test into `REPOSITORY_BINDINGS_CONFORMANCE` as two cases, run against the in-memory store and `PostgresRepositoryBindings`: (1) an update that starts while a put, paused after its integration read, holds the integration has not finished after 50 ms, finishes after the put, and the put stores revision 1; (2) a first put at revision 1 after a completed update fails with `conflict` and stores nothing. The target's `pausingAfterIntegrationRead` wraps the integration read: in memory its `get` inside `exclusive`, in PostgreSQL `integrationRevision`, after its `FOR SHARE`, inside the put's transaction.
+
+- Results: the integrations module tests 159 of 159 pass; `repository-bindings.integration.test.ts` 10 of 10 pass, 5 runs in a row (`pg-bindings.log`, `pg-bindings-repeat.log`).
+- Negative controls: the in-memory put without `exclusive` fails case (1), tests 8, fail 1, with the order update, then put (`nc-11b1-order1-memory.log`); the PostgreSQL read without `FOR SHARE` fails case (1) and the existing overlap test, tests 10, fail 2 (`nc-11b1-order1-pg.log`). `git status` was clean after each.
+- Limit: the outcome of case (1) is deterministic in both stores, but the observation that the update waits is bounded by the 50 ms grace; a store that does not wait is caught when its update finishes within it, as both controls did. A store that waits correctly never fails it.
+
 ### Coordinator decisions after pass 1
 
 Decided by the coordinator (Niki) after pass 1 and committed apart from the findings, so that pass 2 reviews them:
