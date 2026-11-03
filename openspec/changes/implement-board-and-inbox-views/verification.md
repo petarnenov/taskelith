@@ -16,6 +16,8 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `1d70b59e` `docs: describe the implement board and inbox views change`: proposal, design, spec deltas, tasks, and this record's skeleton.
 - `c8f17b29` routed at head `1d70b59e` (unedited; tier `elevated`, 40 files and 2567 lines, triggers lines, files, capabilities, and size). Its `make verify` (`verify-15-1.log`) passed on the tree `fccba6ac` (tests 4531, pass 4522, fail 0, skipped 9; all files 99.41% lines, 92.66% branches, 98.75% functions), but the new `composition/board-views.js` had 72.73% branches, below the 75% that the brief asks of each new file: no test read an inbox source's position.
 - `fd1bb853` `test: cover the inbox source position of the board composition` adds that test, which changed the diff, so `cfe8d48d` deleted that `route.json` and `2b9f126b` routed again (unedited; tier `elevated`, 40 files and 2584 lines, the same triggers).
+- `7171b2f6` recorded these revisions. Its `make verify` (`verify-15-2.log`) passed on the tree `03adafdf` (tests 4532, pass 4523, fail 0, skipped 9; all files 99.42% lines, 92.66% branches, 98.78% functions), but `composition/board-views.js` still had 70.83% branches: no test reached the failure paths of the board reads.
+- `74e0739a` `test: cover the failure paths of the board reads composition` adds a unit test over a fake transaction, which changed the diff, so `e1b677e7` deleted the second `route.json` and `3b6c8719` routed a third time (unedited; tier `elevated`, 41 files and 2608 lines, the same triggers).
 - The `docs: ...` commit after it records this revision list; the commit after the next `make verify` records it with `make record`.
 
 ## Environment
@@ -36,6 +38,8 @@ Logs in the session scratchpad (`fb-15-*.log`). Each mutation was applied to one
 - `fb-15-close-column-survived.log` (`board-stages.ts`, no Close stage branch in `cardColumn`): 0 of 21 failed, since every tested Close stage had only `closure`; `a46f41b1` adds a Close stage with `implementation`, and `fb-15-close-column.log` at `a46f41b1`: 1 of 23 fails, that test.
 - `fb-15-fleet-observed-at.log` (`card-projector.ts`, `observedAt` kept in the projection key) at `a46f41b1`: 1 of 13 fails, the fleet obstacle test that `a46f41b1` adds. A first attempt at this mutation left unreachable code, failed the build, and ran the unmutated `dist`; its log was discarded.
 - `fb-15-source-position.log` (`composition/board-views.ts`, an inbox source's position fixed at `0`) at `fd1bb853`: 1 of 7 fails, the source position test that `fd1bb853` adds.
+- `fb-15-auto-merge-default.log` (`composition/board-views.ts`, a project without a setting starts with auto-merge off) at `74e0739a`: 1 of 1 fails, the composition test that `74e0739a` adds.
+- `fb-15-quarantine.log` (`composition/board-views.ts`, the installation's quarantine ignored) at `74e0739a`: 1 of 1 fails, the same test. A first mutation that dropped the skip of a worker without a record failed the build and ran the unmutated `dist`; its log was discarded.
 
 ## Limitations
 
