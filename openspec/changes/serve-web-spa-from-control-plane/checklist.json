@@ -1,0 +1,102 @@
+{
+  "change": "serve-web-spa-from-control-plane",
+  "generatedAt": "2026-11-03T01:34:02.945Z",
+  "devCommit": "12dee8c7af80e9064ac6ce4b6514207d845f07fa",
+  "query": {
+    "capabilities": [
+      "product-ui",
+      "control-plane-api",
+      "engineering-principles"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "apps/web/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 31
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 16
+      },
+      {
+        "category": "docs",
+        "count": 14
+      },
+      {
+        "category": "error-handling",
+        "count": 12
+      },
+      {
+        "category": "naming",
+        "count": 10
+      },
+      {
+        "category": "concurrency-race",
+        "count": 8
+      },
+      {
+        "category": "spec-wording",
+        "count": 8
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 793,
+        "inChecklist": 660
+      },
+      "mediumOrWorse": {
+        "findings": 383,
+        "inChecklist": 308
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 131
+      },
+      {
+        "category": "spec-wording",
+        "count": 94
+      },
+      {
+        "category": "docs",
+        "count": 68
+      },
+      {
+        "category": "stale-citation",
+        "count": 49
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 23
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 402,
+        "inChecklist": 395
+      },
+      "mediumOrWorse": {
+        "findings": 64,
+        "inChecklist": 64
+      }
+    }
+  }
+}
