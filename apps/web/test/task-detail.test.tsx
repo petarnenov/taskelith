@@ -85,6 +85,36 @@ describe('the task detail route', () => {
     expect(title.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
   });
 
+  it.each([
+    ['Escape', async () => userEvent.keyboard('{Escape}')],
+    ['the close button', async () => userEvent.click(screen.getByRole('button', { name: 'Close the task detail' }))],
+  ])('returns the focus to the card link on closing with %s', async (_way, close) => {
+    renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), gatewayWith());
+    const link = await screen.findByRole('link', { name: 'Add the board' });
+    await userEvent.click(link);
+    await drawer();
+    await close();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Add the board' })));
+  });
+
+  it('returns the focus to the card link when the browser goes back', async () => {
+    const view = renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), gatewayWith());
+    await userEvent.click(await screen.findByRole('link', { name: 'Add the board' }));
+    await drawer();
+    await act(() => view.router.navigate(-1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Add the board' })));
+  });
+
+  it('moves the focus to the board heading on closing a detail opened from its address', async () => {
+    openDetail();
+    await drawer();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Project board' })));
+  });
+
   it('shows that it loads until the detail answers', async () => {
     const gateway = gatewayWith();
     gateway.readTaskDetail.mockReturnValue(new Promise(() => {}));
