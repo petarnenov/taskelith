@@ -6,6 +6,7 @@ import type {
   LoginName,
   PasswordHash,
   Principal,
+  PrincipalChanges,
   PrincipalId,
   Principals,
   ProjectMembership,
@@ -32,8 +33,10 @@ export class PostgresAccessTransaction implements AccessTransaction {
   readonly projectRoles: ProjectRoles;
   readonly sessions: Sessions;
   readonly audit: AccessAudit;
+  readonly changes: PrincipalChanges;
 
-  constructor(session: Session) {
+  constructor(session: Session, changes: PrincipalChanges) {
+    this.changes = changes;
     this.principals = new PostgresPrincipals(session);
     this.projects = new PostgresProjects(session);
     this.projectRoles = new PostgresProjectRoles(session);

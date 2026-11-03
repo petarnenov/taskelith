@@ -19,6 +19,8 @@ import {
   InMemoryTaskLineage,
   InMemoryUnrecordedProcesses,
   TASK_REPOSITORY_CONFORMANCE,
+  UI_EVENT_LOG_CONFORMANCE,
+  InMemoryUiEventLog,
 } from '@taskelith/execution';
 import type { ConformanceCase } from '@taskelith/sdlc';
 
@@ -44,4 +46,8 @@ runSuite('in-memory session timeline', SESSION_TIMELINE_STORE_CONFORMANCE, () =>
 runSuite('in-memory session scopes', SESSION_SCOPES_CONFORMANCE, () => {
   const store = new InMemorySessionTimelineStore(new InMemoryTaskLineage(SCOPES_LINEAGE));
   return { scopes: store, store };
+});
+runSuite('in-memory UI event log', UI_EVENT_LOG_CONFORMANCE, () => {
+  const log = new InMemoryUiEventLog();
+  return { log, commit: async (entries) => log.commit(entries) };
 });

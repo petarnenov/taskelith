@@ -2,6 +2,7 @@ import { ok, type Instant, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import { OWNER_LOGIN_NAME, parsePrincipalId, type PrincipalId } from '../domain/principal.js';
 import { INSTALLATION_OWNER } from '../domain/roles.js';
+import { rolesChanged } from '../domain/principal-change.js';
 import type { AccessStore, AccessTransaction } from '../ports/access-store.js';
 import type { RandomValues } from '../ports/random-values.js';
 import { checkInvocation, type AdministrativeInvocation } from './operator-credential-service.js';
@@ -58,6 +59,7 @@ export class OwnerBootstrapService {
     const steps = [
       () => tx.principals.add(principal),
       () => tx.principals.grantInstallationOwner(principalId.value, at),
+      () => tx.changes.record(rolesChanged(principalId.value)),
       () => tx.principals.bindOperator(principalId.value),
       () => this.#audit(tx, 'access.owner-created', principalId.value, invocation, at),
     ];

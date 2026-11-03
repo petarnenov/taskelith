@@ -17,7 +17,7 @@ import {
   sessionWithOpenRequest,
   turn,
 } from './session-timeline-fixtures.ts';
-import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { createMigratedDatabase, query, truncateAll, untilNumberable } from './test-database.ts';
 
 const STEP = join(import.meta.dirname, 'fixtures', 'session-timeline-step.ts');
 const url = await createMigratedDatabase();
@@ -303,4 +303,62 @@ test('a generation end that releases a tail killed after its commit keeps the re
   const committed = await version();
   assert.equal(stepResult(await runStep('end-generation')).ok, true);
   assert.deepEqual([await outputState(), await version()], [{ entries: ['token ', '[redacted]'], tail: false }, committed]);
+});
+
+// Card `run-alpha` of project alpha holds `task-1`, so its session's
+// changes publish events.
+async function scopedSession(): Promise<void> {
+  await query(url, "INSERT INTO workflow_runs (id, generation, record, project_id, created_at) VALUES ('run-alpha', 1, '{}', 'alpha', now())");
+  await query(url, `INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id)
+    VALUES ('task-1', NULL, 'task-1', 0, 'alpha', 'run-alpha')`);
+  await runningSession(service);
+}
+
+async function eventRows(): Promise<{ numbered: number; unnumbered: number; head: number; positions: string }> {
+  const [row] = await query<{ numbered: number; unnumbered: number; head: number; positions: string | null }>(url, `SELECT
+    (SELECT count(*)::int FROM ui_events WHERE position IS NOT NULL) AS numbered,
+    (SELECT count(*)::int FROM ui_events WHERE position IS NULL) AS unnumbered,
+    (SELECT head::int FROM ui_event_sequence) AS head,
+    (SELECT string_agg(position::text, ',' ORDER BY position) FROM ui_events) AS positions`);
+  return { numbered: row!.numbered, unnumbered: row!.unnumbered, head: row!.head, positions: row!.positions ?? '' };
+}
+
+const numbering = (count: number) => Array.from({ length: count }, (_, index) => String(index + 1)).join(',');
+
+test('a change killed between its commit and the numbering keeps its events, which the next numbering gives positions once', async () => {
+  await scopedSession();
+  await untilNumberable(url);
+  const opened = stepResult(await runStep('number-events')).value as unknown as number;
+  assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
+  assert.deepEqual(await runStep('submit', 'SessionTimelineCommit.after'), KILLED);
+  assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 1, head: opened, positions: numbering(opened) });
+  await untilNumberable(url);
+  assert.equal(stepResult(await runStep('number-events')).value, 1);
+  assert.deepEqual(await eventRows(), { numbered: opened + 1, unnumbered: 0, head: opened + 1, positions: numbering(opened + 1) });
+  const [last] = await query<{ record: string }>(url, 'SELECT record FROM ui_events WHERE position = $1', [opened + 1]);
+  assert.equal((JSON.parse(last!.record) as { record: { type: string } }).record.type, 'turn-changed');
+});
+
+test('a change killed before its commit leaves no event, and a numbering killed before its commit numbers nothing', async () => {
+  await scopedSession();
+  const opened = (await eventRows()).unnumbered;
+  assert.deepEqual(await runStep('submit', 'SessionTimelineCommit.before'), KILLED);
+  assert.deepEqual(await eventRows(), { numbered: 0, unnumbered: opened, head: 0, positions: '' });
+  await untilNumberable(url);
+  assert.deepEqual(await runStep('number-events', 'EventNumberingCommit.before'), KILLED);
+  assert.deepEqual(await eventRows(), { numbered: 0, unnumbered: opened, head: 0, positions: '' });
+  await untilNumberable(url);
+  assert.equal(stepResult(await runStep('number-events')).value, opened);
+  assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
+});
+
+test('a numbering killed after its commit keeps its positions, and the rerun numbers nothing again', async () => {
+  await scopedSession();
+  const opened = (await eventRows()).unnumbered;
+  await untilNumberable(url);
+  assert.deepEqual(await runStep('number-events', 'EventNumberingCommit.after'), KILLED);
+  assert.deepEqual(await eventRows(), { numbered: opened, unnumbered: 0, head: opened, positions: numbering(opened) });
+  await untilNumberable(url);
+  assert.equal(stepResult(await runStep('number-events')).value, 0);
+  assert.equal((await eventRows()).head, opened);
 });

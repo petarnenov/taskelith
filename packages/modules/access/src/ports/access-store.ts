@@ -1,5 +1,6 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
+import type { PrincipalChange } from '../domain/principal-change.js';
 import type { LoginName, PasswordHash, Principal, PrincipalId } from '../domain/principal.js';
 import type { Project, ProjectDefaults, SettingChange, StoredAutoMergeSetting, StoredDefaults } from '../domain/project.js';
 import type { ProjectRole } from '../domain/roles.js';
@@ -18,6 +19,7 @@ export interface AccessTransaction {
   readonly projectRoles: ProjectRoles;
   readonly sessions: Sessions;
   readonly audit: AccessAudit;
+  readonly changes: PrincipalChanges;
 }
 
 // `add` is `conflict` for a taken identifier or login name; `bindOperator`
@@ -100,4 +102,10 @@ export interface Sessions {
 export interface AccessAudit {
   append(event: AccessAuditEvent): Promise<Result<void>>;
   trail(): Promise<Result<readonly AccessAuditEvent[]>>;
+}
+
+// The changes that end a principal's event streams, committed with the
+// change itself; the event log numbers them with the events.
+export interface PrincipalChanges {
+  record(change: PrincipalChange): Promise<Result<void>>;
 }

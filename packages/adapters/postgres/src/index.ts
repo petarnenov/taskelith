@@ -54,3 +54,5 @@ export {
   type SealedScmSecret,
 } from './scm-integrations.js';
 export { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
+export { APPENDED_CHANNEL, NUMBERED_CHANNEL, PostgresUiEventLog, PostgresUiEventRecords } from './ui-event-repositories.js';
+export { LISTEN_DEADLINE_MILLISECONDS, LISTEN_PROBE_MILLISECONDS, PostgresUiEventNotifications, type NotificationOptions } from './ui-event-notifications.js';

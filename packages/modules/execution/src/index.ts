@@ -556,3 +556,26 @@ export type {
   StoredOutputTail,
   StoredSession,
 } from './ports/session-timeline-store.js';
+export {
+  INSTALLATION_SCOPE,
+  projectScope,
+  type SessionSummary,
+  type UiEvent,
+  type UiEventOutbox,
+  type UiEventRecord,
+  type UiEventScope,
+  type UiEventType,
+} from './ports/ui-events.js';
+export {
+  BEFORE_FIRST_POSITION,
+  type CommittedEntry,
+  type LogBounds,
+  type LoggedEntry,
+  type PrincipalChange,
+  type StreamFilter,
+  type UiEventLog,
+} from './ports/ui-event-log.js';
+export { UI_EVENT_LOG_CONFORMANCE, type UiEventLogFixture } from './ports/ui-event-log-conformance.js';
+export { InMemoryUiEventLog, isSameScope } from './adapters/in-memory-ui-event-log.js';
+export { NATIVE_REQUEST_SOURCE_ID, nativeRequestItem } from './application/native-request-items.js';
+export { summaryOf } from './application/session-views.js';

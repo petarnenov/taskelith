@@ -1,12 +1,13 @@
 import type { HttpSchemas } from '@taskelith/contracts';
-import type {
-  NativeRequest,
-  PrincipalId,
-  SessionId,
-  SessionScope,
-  SessionScopes,
-  SessionTimelineService,
-  ViewPositions,
+import {
+  summaryOf,
+  type NativeRequest,
+  type PrincipalId,
+  type SessionId,
+  type SessionScope,
+  type SessionScopes,
+  type SessionTimelineService,
+  type ViewPositions,
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
@@ -51,14 +52,14 @@ export class AgentSessionApi {
     if (!page.ok) return page;
     const { sessions, more } = page.value;
     const next = more ? { next: sessions.at(-1)!.id } : {};
-    return ok({ ...stamp.value, sessions: sessions.map((session) => agentSessionBody(session, scope.value)), ...next });
+    return ok({ ...stamp.value, sessions: sessions.map((session) => agentSessionBody(summaryOf(session), scope.value)), ...next });
   }
 
   async readAgentSession(request: ApiRequest): Promise<Result<Wire<'AgentSessionView'>>> {
     const read = await this.#scopedRead(request);
     if (!read.ok) return read;
     const { stamp, session, scope } = read.value;
-    return ok({ ...stamp, session: agentSessionBody(session, scope) });
+    return ok({ ...stamp, session: agentSessionBody(summaryOf(session), scope) });
   }
 
   async listAgentSessionTurns(request: ApiRequest): Promise<Result<Wire<'TurnPage'>>> {

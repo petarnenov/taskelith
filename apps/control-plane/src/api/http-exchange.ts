@@ -38,7 +38,19 @@ export interface EmptyResponse extends ResponseExtras {
   readonly empty: true;
 }
 
-export type ApiResponse = JsonResponse | BinaryResponse | EmptyResponse;
+// A `text/event-stream`: `start` writes its frames after the headers.
+export interface StreamResponse extends ResponseExtras {
+  readonly status: number;
+  readonly stream: (response: ServerResponse) => void;
+}
+
+export type ApiResponse = JsonResponse | BinaryResponse | EmptyResponse | StreamResponse;
+
+// The success of an `event-stream` route, which the server answers with
+// the headers before it starts the stream.
+export class StreamAnswer {
+  constructor(readonly start: (response: ServerResponse) => void) {}
+}
 
 // The bearer token of the Authorization header, or undefined without one.
 export function bearerToken(request: IncomingMessage): string | undefined {
@@ -75,6 +87,7 @@ export function parseJson(bytes: Buffer): Result<unknown> {
 }
 
 export function writeResponse(response: ServerResponse, answer: ApiResponse, correlationId: string): void {
+  if ('stream' in answer) return writeStream(response, answer, correlationId);
   const binary = 'binary' in answer;
   const content = 'empty' in answer ? Buffer.alloc(0) : binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
   response.writeHead(answer.status, {
@@ -87,6 +100,19 @@ export function writeResponse(response: ServerResponse, answer: ApiResponse, cor
     'x-content-type-options': 'nosniff',
   });
   response.end(content);
+}
+
+// No content length, since the stream has no end that the server knows.
+function writeStream(response: ServerResponse, answer: StreamResponse, correlationId: string): void {
+  response.writeHead(answer.status, {
+    ...answer.headers,
+    'content-type': 'text/event-stream',
+    'x-correlation-id': correlationId,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  });
+  response.flushHeaders();
+  answer.stream(response);
 }
 
 // A failure leaves the process with its secrets redacted (trust model 5).

@@ -1,5 +1,6 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
+import type { PrincipalChange } from '../domain/principal-change.js';
 import type { LoginName, PasswordHash, Principal, PrincipalId } from '../domain/principal.js';
 import {
   AUTO_MERGE_STARTS_ON,
@@ -19,6 +20,7 @@ import type {
   AccessAudit,
   AccessStore,
   AccessTransaction,
+  PrincipalChanges,
   Principals,
   ProjectMembership,
   ProjectQuery,
@@ -56,20 +58,42 @@ function copy(state: State): State {
   };
 }
 
+// Where a store hands the principal changes of each commit, in order.
+export interface PrincipalChangeSink {
+  committed(changes: readonly PrincipalChange[]): void;
+}
+
+const NO_SINK: PrincipalChangeSink = Object.freeze({ committed: () => {} });
+
 // One transaction at a time over a copy of the state, which replaces the
-// state only when the work answers ok.
+// state only when the work answers ok; its changes then reach `sink`.
 export class InMemoryAccessStore implements AccessStore {
   #state: State = {
     principals: new Map(), projects: new Map(), owners: new Map(), operator: undefined, roles: new Map(), sessions: new Map(), audit: [],
   };
 
   #queue: Promise<unknown> = Promise.resolve();
+  readonly #sink: PrincipalChangeSink;
+  readonly #changes: PrincipalChange[] = [];
+
+  constructor(sink: PrincipalChangeSink = NO_SINK) {
+    this.#sink = sink;
+  }
+
+  // The principal changes committed so far, oldest first.
+  committedChanges(): readonly PrincipalChange[] {
+    return Object.freeze([...this.#changes]);
+  }
 
   transaction<Value>(work: (tx: AccessTransaction) => Promise<Result<Value>>): Promise<Result<Value>> {
     const run = async (): Promise<Result<Value>> => {
       const draft = copy(this.#state);
-      const result = await work(transactionOver(draft));
-      if (result.ok) this.#state = draft;
+      const changes = new MemoryChanges();
+      const result = await work(transactionOver(draft, changes));
+      if (!result.ok) return result;
+      this.#state = draft;
+      this.#changes.push(...changes.recorded);
+      this.#sink.committed(Object.freeze([...changes.recorded]));
       return result;
     };
     const next = this.#queue.then(run, run);
@@ -78,8 +102,9 @@ export class InMemoryAccessStore implements AccessStore {
   }
 }
 
-function transactionOver(state: State): AccessTransaction {
+function transactionOver(state: State, changes: PrincipalChanges): AccessTransaction {
   return {
+    changes,
     principals: new MemoryPrincipals(state),
     projects: new MemoryProjects(state),
     projectRoles: new MemoryProjectRoles(state),
@@ -313,5 +338,14 @@ class MemoryAudit implements AccessAudit {
 
   async trail(): Promise<Result<readonly AccessAuditEvent[]>> {
     return ok([...this.state.audit]);
+  }
+}
+
+class MemoryChanges implements PrincipalChanges {
+  readonly recorded: PrincipalChange[] = [];
+
+  async record(change: PrincipalChange): Promise<Result<void>> {
+    this.recorded.push(Object.freeze({ ...change }));
+    return ok(undefined);
   }
 }

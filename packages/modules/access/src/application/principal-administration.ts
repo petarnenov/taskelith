@@ -2,6 +2,7 @@ import { err, failure, ok, parseIdentifier, type Failure, type Instant, type Res
 import type { Clock } from '@taskelith/sdlc';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
 import { checkNewPassword } from '../domain/password-policy.js';
+import { rolesChanged, sessionsEnded } from '../domain/principal-change.js';
 import { parseLoginName, parsePrincipalId, type Principal, type PrincipalId } from '../domain/principal.js';
 import { unknownProject } from '../domain/project.js';
 import { OWNER_ONLY } from '../domain/requirement.js';
@@ -82,6 +83,8 @@ export class PrincipalAdministration {
       if (!stored.ok) return stored;
       const ended = await tx.sessions.endAllOf(principalId, at);
       if (!ended.ok) return ended;
+      const recorded = ended.value === 0 ? ok(undefined) : await tx.changes.record(sessionsEnded(principalId));
+      if (!recorded.ok) return recorded;
       const value = { principalId, loginName: loginName.value, sessionsEnded: ended.value };
       return ok({ value, event: { kind: 'access.password-set', principalId } });
     });
@@ -170,6 +173,8 @@ export class PrincipalAdministration {
       const { principalId, loginName } = principal.value;
       const changed = await change(tx, principalId, projectId.value, at);
       if (!changed.ok) return changed;
+      const recorded = changed.value.changed ? await tx.changes.record(rolesChanged(principalId, projectId.value)) : ok(undefined);
+      if (!recorded.ok) return recorded;
       const { role } = changed.value;
       const value = { principalId, loginName, projectId: projectId.value, ...(role === undefined ? {} : { role }) };
       return ok({ value, ...(changed.value.changed ? { event: changed.value.event } : {}) });

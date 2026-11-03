@@ -19,8 +19,8 @@ export interface SessionScopes {
   listByCard(scope: SessionScope, after: SessionId | undefined, limit: number): Promise<Result<readonly SessionId[]>>;
 }
 
-// The event stream position a view reflects; item 14 assigns positions,
-// and until then every view is before any event (coordinator answer Q2).
+// The event stream position a view reflects, taken before its read; the
+// control plane reads it from the event log (G3 item 14).
 export interface ViewPositions {
   current(): Promise<Result<string>>;
 }

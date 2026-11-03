@@ -9,7 +9,7 @@ import {
   type Responder,
   type ResponseCommand,
   type SessionScope,
-  type SessionView,
+  type SessionSummary,
   type Turn,
   type TurnAuthor,
 } from '@taskelith/execution';
@@ -20,7 +20,7 @@ type Wire<Name extends keyof HttpSchemas> = HttpSchemas[Name];
 
 // Control-plane wire contracts section 9: the module's session values in
 // the shapes of control-plane.openapi.json, and a response body back.
-export function agentSessionBody(session: SessionView, scope: SessionScope): Wire<'AgentSession'> {
+export function agentSessionBody(session: SessionSummary, scope: SessionScope): Wire<'AgentSession'> {
   const active = session.attempts.find((attempt) => !attempt.ended);
   const running = session.generations.find((run) => !run.ended);
   const { earliestRetained, lastPosition } = session.outputWindow;
@@ -29,14 +29,14 @@ export function agentSessionBody(session: SessionView, scope: SessionScope): Wir
     ...(session.limit === undefined ? {} : { limit: session.limit.resetsAt === undefined ? {} : { resetsAt: session.limit.resetsAt } }),
     ...(active === undefined ? {} : { activeAttempt: { attemptId: active.id, ownershipGeneration: active.ownershipGeneration } }),
     ...(running === undefined ? {} : { runningGeneration: running.generation }),
-    lastTurnPosition: session.turns.length,
-    lastRequestPosition: session.requests.length,
+    lastTurnPosition: session.turnCount,
+    lastRequestPosition: session.requestCount,
     output: { lastPosition, ...(earliestRetained === undefined ? {} : { earliestRetained }) },
     ...(session.handoff === undefined ? {} : { handoff: handoffBody(session.handoff) }),
   };
 }
 
-function handoffBody(handoff: NonNullable<SessionView['handoff']>): Wire<'AgentSessionHandoff'> {
+function handoffBody(handoff: NonNullable<SessionSummary['handoff']>): Wire<'AgentSessionHandoff'> {
   const { resetsAt, lastTurnWithOutcome, unresolvedRequests, evidence, takenBy } = handoff;
   return {
     ...(resetsAt === undefined ? {} : { resetsAt }),

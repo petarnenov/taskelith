@@ -26,9 +26,9 @@ export interface RouteDefinition {
   readonly settingMaps?: Readonly<Record<string, keyof HttpSchemas & string>>;
   // The response carries a secret, so it is answered only over TLS.
   readonly confidential?: true;
-  // The schema every success body is validated against before it leaves,
-  // `binary` for exact bytes, or `empty` for a success without a body.
-  readonly response: (keyof HttpSchemas & string) | 'binary' | 'empty';
+  // The schema of every success body, checked before it leaves; `binary`,
+  // `empty`, or `event-stream` (its operation checks each frame) for none.
+  readonly response: (keyof HttpSchemas & string) | 'binary' | 'empty' | 'event-stream';
   // The body is multipart: `body` validates its `record` part, and its
   // `content` part reaches the operation as exact bytes.
   readonly upload?: true;
@@ -162,6 +162,15 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'respondToNativeRequest', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/responses$`),
     security: ['browserSession', 'operatorToken'], body: 'NativeResponseSubmission', response: 'NativeRequest', success: 200,
     statuses: SESSION_COMMAND,
+  },
+  // Control-plane wire contracts section 10: the event streams.
+  {
+    operationId: 'streamProjectEvents', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/events$`), security: BROWSER_OR_OPERATOR,
+    query: ['after'], response: 'event-stream', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'streamInstallationEvents', method: 'GET', pattern: /^\/events$/, security: BROWSER_OR_OPERATOR,
+    query: ['after'], response: 'event-stream', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
   },
   // Control-plane wire contracts section 5.
   {

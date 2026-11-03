@@ -1,4 +1,5 @@
-export { InMemoryAccessStore } from './adapters/in-memory-access-store.js';
+export { InMemoryAccessStore, type PrincipalChangeSink } from './adapters/in-memory-access-store.js';
+export { rolesChanged, sessionsEnded, type PrincipalChange } from './domain/principal-change.js';
 export { InMemoryOperatorCredentials } from './adapters/in-memory-operator-credentials.js';
 export { AuthorizationService, authorizeIn } from './application/authorization-service.js';
 export { LOGIN_THROTTLE, LoginThrottle, throttleBusy, type LoginKeys, type LoginThrottleDependencies, type LoginThrottleSettings } from './application/login-throttle.js';
@@ -107,6 +108,7 @@ export type {
   AccessAudit,
   AccessStore,
   AccessTransaction,
+  PrincipalChanges,
   Principals,
   ProjectMembership,
   ProjectQuery,

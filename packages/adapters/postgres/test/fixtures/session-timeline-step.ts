@@ -3,7 +3,7 @@
 import { writeSync } from 'node:fs';
 import type { Result } from '@taskelith/kernel';
 import type { NeedsYouItemId, PrincipalId } from '@taskelith/execution';
-import { PostgresDatabase, PostgresSessionTimelineStore } from '@taskelith/postgres';
+import { PostgresDatabase, PostgresSessionTimelineStore, PostgresUiEventLog } from '@taskelith/postgres';
 import { crashPointsFromEnvironment, value } from '@taskelith/testing';
 import {
   HALF_JWT_CHUNK,
@@ -18,6 +18,7 @@ import {
   requestSource,
   turn,
 } from '../session-timeline-fixtures.ts';
+import { AT } from '../fixtures.ts';
 
 const [, , url, step] = process.argv;
 const database = new PostgresDatabase(new URL(url!), { crashPoints: crashPointsFromEnvironment() });
@@ -48,6 +49,7 @@ const steps: Readonly<Record<string, () => Promise<Result<unknown>>>> = {
   acknowledge,
   'append-half': async () => service.appendOutput(SESSION, { turnId: await turnOf('turn-1'), generation: generation(1), text: HALF_JWT_CHUNK }),
   refused: async () => service.recordTurnRefused(SESSION, { turnId: await turnOf('turn-1'), generation: generation(1) }),
+  'number-events': () => new PostgresUiEventLog(database).assign(1_000, AT),
 };
 
 const result = await steps[step!]!();

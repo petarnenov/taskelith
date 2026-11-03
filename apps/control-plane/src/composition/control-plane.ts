@@ -36,7 +36,13 @@ import {
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
-import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
+import {
+  CommittingFleetRegistry,
+  PostgresControlPlaneSignals,
+  PostgresOutboxRelay,
+  PostgresUiEventLog,
+  PostgresUiEventNotifications,
+} from '@taskelith/postgres';
 import { Administration, START_OWNER_INVOCATION, type AdministrationSettings } from '../admin/administration.js';
 import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
@@ -44,6 +50,8 @@ import { ROUTES } from '../api/routes.js';
 import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
+import { EventLogKeeper, WakeableLoop, numberingPass } from '../application/event-log-keeper.js';
+import { EventStreamHub, type Scheduler } from '../application/event-stream-hub.js';
 import { HEARTBEAT_QUEUE, HeartbeatService } from '../application/heartbeat-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
 import { LostContactCheck } from '../application/lost-contact-check.js';
@@ -69,6 +77,10 @@ export const LOST_CONTACT_CHECK_MILLISECONDS = 10_000;
 export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 });
 // How often ended and expired browser sessions are purged (provisional).
 export const SESSION_PURGE_MILLISECONDS = 60_000;
+// Provisional, in docs/operational-targets.md: the fallback poll of the
+// event numbering and the streams, and how often old events are pruned.
+export const EVENT_POLL_MILLISECONDS = 1_000;
+export const EVENT_PRUNE_MILLISECONDS = 60_000;
 // How long a stop waits for the loops before it cancels what still blocks.
 export const SHUTDOWN_DEADLINE_MILLISECONDS = 30_000;
 const CANCELLED_SETTLE_MILLISECONDS = 5_000;
@@ -101,6 +113,9 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly sessionLifetime?: SessionLifetime;
   readonly loginThrottle?: LoginThrottleSettings;
   readonly sessionPurgeMilliseconds?: number;
+  // How long the event log keeps a numbered event, in hours (Q5).
+  readonly eventRetentionHours?: number;
+  readonly eventPollMilliseconds?: number;
   // The built SPA that the browser endpoint serves under /app/; without
   // it, /app/ answers 404 like any other path without an operation.
   readonly webAppDirectory?: string;
@@ -183,6 +198,18 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const runs = new RunService(database, workflows);
   const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
   if (!agentSessions.ok) return agentSessions;
+  const authorization = new AuthorizationService(access.store);
+  const projectSetup = new ProjectSetupService({ store: access.store, random: access.secrets, clock });
+  const eventLog = new PostgresUiEventLog(database);
+  const hub = new EventStreamHub({ log: eventLog, scheduler: NODE_SCHEDULER, clock, logger });
+  const notifications = new PostgresUiEventNotifications(settings.postgres, { logger });
+  cleanup.push(() => notifications.close());
+  const numbering = new WakeableLoop(NODE_SCHEDULER);
+  notifications.onAppended(() => numbering.wake());
+  notifications.onNumbered(() => hub.wake());
+  const keeper = new EventLogKeeper({
+    log: eventLog, clock, ...(settings.eventRetentionHours === undefined ? {} : { retentionHours: settings.eventRetentionHours }),
+  });
   const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
   if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
@@ -192,7 +219,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     delegations: new DelegationService(database),
     operator: admin.value.operatorPrincipal,
     sessions,
-    authorization: new AuthorizationService(access.store),
+    authorization,
     runProjects: { projectOf: (runId) => runs.projectOf(runId) },
     logger,
     enrollment: enrollment.value.service,
@@ -204,9 +231,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     scmWebhooks: scm.value.webhooks,
     scmIntegrations: scm.value.integrations,
     projects: {
-      setup: new ProjectSetupService({ store: access.store, random: access.secrets, clock }),
+      setup: projectSetup,
       members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),
     },
+    events: { hub, projects: projectSetup, authorization, sessions, logger },
   });
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.
@@ -215,7 +243,9 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     logger, routes: ROUTES.filter((route) => !route.confidential), ...(webApp.value === undefined ? {} : { webApp: webApp.value }),
   });
   const servers = [createTlsApiServer(workerRequests, tls.value.worker), createTlsApiServer(browserRequests, tls.value.browser)];
+  // The streams end before their connections close.
   const closeApi = once(async () => {
+    hub.close();
     await Promise.all(servers.map((server) => close(server)));
   });
   cleanup.push(closeApi);
@@ -283,6 +313,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
     supervise('sessions', runPeriodically(async () => logFailure(logger, 'access.sessions.purge.failed', await sessions.purgeExpired()), controller.signal,
       settings.sessionPurgeMilliseconds ?? SESSION_PURGE_MILLISECONDS)),
+    supervise('event-numbering', numbering.run(() => numberingPass({ keeper, wakeUps: notifications, streams: hub, logger }), controller.signal,
+      settings.eventPollMilliseconds ?? EVENT_POLL_MILLISECONDS)),
+    supervise('event-pruning', runPeriodically(async () => logFailure(logger, 'events.pruning.failed', await keeper.prune()), controller.signal,
+      EVENT_PRUNE_MILLISECONDS)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
@@ -395,6 +429,15 @@ function listen(server: ApiServer, endpoint: ApiEndpoint): Promise<Result<ApiEnd
     });
   });
 }
+
+// Node.js timers that keep no process alive.
+const NODE_SCHEDULER: Scheduler = Object.freeze({
+  after(milliseconds: number, task: () => void) {
+    const timer = setTimeout(task, milliseconds);
+    timer.unref();
+    return () => clearTimeout(timer);
+  },
+});
 
 function logFailure(logger: Logger, event: string, result: Result<unknown>): void {
   if (!result.ok) logger.warn(event, { code: result.error.code, message: result.error.message });

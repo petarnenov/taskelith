@@ -36,6 +36,7 @@ import { PostgresSessionTimelineTransaction } from './session-timeline-repositor
 import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
+import { PostgresUiEventRecords } from './ui-event-repositories.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
 // read and write through it, and commit or roll back together.
@@ -78,6 +79,8 @@ export class PostgresTransaction {
   readonly slotCredentialRecords: PostgresSlotCredentialRecords;
   readonly slotCredentialDeliveries: PostgresSlotCredentialDeliveries;
   readonly sessionTimeline: PostgresSessionTimelineTransaction;
+  // The event log, which the timeline's events and Access's changes share.
+  readonly uiEvents: PostgresUiEventRecords;
   readonly scmWebhookDeliveries: PostgresScmWebhookDeliveryRecords;
   // Sealed secrets only; PostgresScmIntegrations seals and opens them.
   readonly scmIntegrations: PostgresScmIntegrationRecords;
@@ -87,6 +90,7 @@ export class PostgresTransaction {
 
   constructor(session: Session) {
     this.#session = session;
+    this.uiEvents = new PostgresUiEventRecords(session);
     this.admissions = new PostgresAdmissionRepository(session);
     this.runs = new PostgresWorkflowRunRepository(session);
     this.gates = new PostgresGateRepository(session);
@@ -107,7 +111,7 @@ export class PostgresTransaction {
     this.catalog = new PostgresRunCatalog(session);
     this.installationTable = new PostgresInstallationTable(session);
     this.operatorCredentials = new PostgresOperatorCredentials(session);
-    this.access = new PostgresAccessTransaction(session);
+    this.access = new PostgresAccessTransaction(session, this.uiEvents);
     this.signals = new PostgresSignalReadings(session);
     this.evidence = new PostgresEvidenceRecords(session);
     this.producers = new PostgresEvidenceProducers(session);
@@ -123,7 +127,7 @@ export class PostgresTransaction {
     this.accountSlots = new PostgresAccountSlots(session);
     this.slotCredentialRecords = new PostgresSlotCredentialRecords(session);
     this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
-    this.sessionTimeline = new PostgresSessionTimelineTransaction(session);
+    this.sessionTimeline = new PostgresSessionTimelineTransaction(session, this.uiEvents);
     this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
     this.scmIntegrations = new PostgresScmIntegrationRecords(session);
     this.outboxLookup = this.outbox;

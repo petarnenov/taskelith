@@ -21,6 +21,7 @@ import type {
   SessionTimelineTransaction,
   StoredOutputTail,
   StoredSession,
+  UiEventOutbox,
 } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
@@ -37,8 +38,10 @@ export class PostgresSessionTimelineTransaction implements SessionTimelineTransa
   readonly audit: PostgresSessionAuditRecords;
   readonly scopes: PostgresSessionScopeReads;
   readonly tails: PostgresSessionOutputTails;
+  readonly events: UiEventOutbox;
 
-  constructor(session: Session) {
+  constructor(session: Session, events: UiEventOutbox) {
+    this.events = events;
     this.sessions = new PostgresSessionRecords(session);
     this.idempotency = new PostgresIdempotencyRecords(session);
     this.items = new PostgresSessionInboxItems(session);

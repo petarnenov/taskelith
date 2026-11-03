@@ -20,6 +20,7 @@ import {
   parseJson,
   readBody,
   readJsonBody,
+  StreamAnswer,
   writeResponse,
   type ApiResponse,
 } from './http-exchange.js';
@@ -48,6 +49,8 @@ export interface ApiRequest extends Caller {
   readonly query: URLSearchParams;
   readonly correlationId: CorrelationId;
   readonly sourceAddress?: string;
+  // The Last-Event-ID header, which a reconnecting event stream sends.
+  readonly lastEventId?: string;
 }
 
 // The validated body of an `upload` route.
@@ -222,7 +225,11 @@ async function answerRoute(
     const body = await validatedBody(request, route);
     if (!body.ok) return failureResponse(bodyFailureStatus(route, body.error), body.error);
     const sourceAddress = request.socket.remoteAddress ?? 'unknown';
-    const validated = { parameters, body: body.value, query: url.searchParams, correlationId, sourceAddress, ...caller.value };
+    const lastEventId = request.headers['last-event-id'];
+    const validated = {
+      parameters, body: body.value, query: url.searchParams, correlationId, sourceAddress, ...caller.value,
+      ...(typeof lastEventId === 'string' ? { lastEventId } : {}),
+    };
     const outcome = await handlers.handle(route.operationId, validated, bearer);
     if (!outcome.ok) return failureResponse(statusOf(route, outcome.error), outcome.error);
     return successResponse(route, outcome.value);
@@ -265,6 +272,10 @@ function statusOf(route: RouteDefinition, failed: Failure): number {
 function successResponse(route: RouteDefinition, answer: unknown): ApiResponse {
   const [status, value, headers] = answer instanceof StatusAnswer ? [answer.status, answer.body, answer.headers] : [route.success, answer, {}];
   if (route.response === 'empty') return { status, empty: true, headers };
+  if (route.response === 'event-stream') {
+    if (value instanceof StreamAnswer) return { status, stream: value.start, headers };
+    return failureResponse(500, failure('internal', `the ${route.operationId} response is not a stream`));
+  }
   if (route.response === 'binary') {
     if (value instanceof Uint8Array) return { status, binary: value };
     return failureResponse(500, failure('internal', `the ${route.operationId} response is not bytes`));

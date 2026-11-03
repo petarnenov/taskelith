@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { request as httpsRequest } from 'node:https';
 import { connect, type PeerCertificate } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { X509CertificateIssuer } from '@taskelith/certificates';
@@ -33,12 +34,12 @@ import {
   TransportAddress,
   type ControlPlaneConnection,
 } from '@taskelith/nats';
-import { openAttempt, type AttemptId, type WorkerId } from '@taskelith/execution';
+import { openAttempt, projectScope, type AttemptId, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { createAssignment, parseResourceRequest } from '@taskelith/scheduling';
 import { ok, parseInstant } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
-import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
+import { parseWorkflowDefinition, type ProjectId, type TaskId } from '@taskelith/sdlc';
 import { authorityValidity, serverCertificateValidity } from '@taskelith/fleet';
 import {
   failed, integrationEndpoint, integrationSecret, integrationSecretPath, trustCertificateAuthority, value, withTestBrokerCa,
@@ -49,6 +50,17 @@ const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
 const ownerUid = process.getuid!();
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
+
+// Settles once the composition's assigner numbered every committed entry;
+// other test files' transactions can hold the numbering horizon back.
+async function untilAllNumbered(url: URL): Promise<void> {
+  const deadline = performance.now() + 20_000;
+  const statement = 'SELECT count(*)::int AS unnumbered FROM ui_events WHERE position IS NULL';
+  while ((await sql<{ unnumbered: number }>(url, statement))[0]!.unnumbered > 0) {
+    if (performance.now() > deadline) throw new Error('the assigner left entries unnumbered');
+    await delay(20);
+  }
+}
 
 async function sql<Row extends pg.QueryResultRow>(url: URL, text: string, values: unknown[] = []): Promise<Row[]> {
   const client = new pg.Client({ connectionString: url.href });
@@ -350,6 +362,76 @@ describe('agent sessions', () => {
     assert.deepEqual([answer.status, answer.body.code], [404, 'not-found']);
     assert.equal(answer.body.message, 'no agent session of the project has this identifier');
     assert.ok(checkHttpSchema('Failure', answer.body).ok);
+  });
+});
+
+describe('event streams', () => {
+  // A wide bound: the loaded iMac is slow, and a missed wake-up waits for
+  // the assigner's poll.
+  const STREAM_BOUND_MILLISECONDS = 60_000;
+  const DEFAULTS = {
+    framework: { pluginId: 'sdlc-openspec' }, implementers: ['agent-primary'], reviewer: 'agent-secondary',
+    specApprover: 'project-maintainer', noEligibleSlot: 'wait',
+  };
+
+  test('a project stream ends with stream-ended once a change of its reader\'s role commits, through the assigner', async () => {
+    const created = await call('POST', '/projects', { bearer: operator, body: { name: 'Streamed project', defaults: DEFAULTS } });
+    assert.equal(created.status, 201);
+    const projectId = String(created.body.projectId);
+    const [owner] = await sql<{ principal_id: string }>(database, 'SELECT principal_id FROM installation_roles');
+    const stream = await fetch(`https://127.0.0.1:${running.api.port}/projects/${projectId}/events`, {
+      headers: { authorization: `Bearer ${operator}` }, signal: AbortSignal.timeout(STREAM_BOUND_MILLISECONDS),
+    });
+    assert.deepEqual([stream.status, stream.headers.get('content-type'), stream.headers.get('cache-control')], [200, 'text/event-stream', 'no-store']);
+    const assigned = await call('PUT', `/projects/${projectId}/members/${owner!.principal_id}`, { bearer: operator, body: { role: 'project-viewer' } });
+    assert.equal(assigned.status, 200);
+    const frames = (await stream.text()).split('\n\n').filter((frame) => frame !== '' && !frame.startsWith(':'));
+    assert.deepEqual(frames, ['event: stream-ended\ndata: {"type":"stream-ended","reason":"role-changed"}']);
+    const [numbered] = await sql<{ unnumbered: number }>(database, 'SELECT count(*)::int AS unnumbered FROM ui_events WHERE position IS NULL');
+    assert.equal(numbered!.unnumbered, 0);
+  });
+
+  test('an event inserted before a role revocation commits but committed after it reaches the stream before stream-ended', async () => {
+    const created = await call('POST', '/projects', { bearer: operator, body: { name: 'Revoked project', defaults: DEFAULTS } });
+    const projectId = String(created.body.projectId) as ProjectId;
+    const [owner] = await sql<{ principal_id: string }>(database, 'SELECT principal_id FROM installation_roles');
+    const memberPath = `/projects/${projectId}/members/${owner!.principal_id}`;
+    assert.equal((await call('PUT', memberPath, { bearer: operator, body: { role: 'project-viewer' } })).status, 200);
+    // A role change numbered after the open would end the stream first.
+    await untilAllNumbered(database);
+    const stream = await fetch(`https://127.0.0.1:${running.api.port}/projects/${projectId}/events`, {
+      headers: { authorization: `Bearer ${operator}` }, signal: AbortSignal.timeout(STREAM_BOUND_MILLISECONDS),
+    });
+    assert.equal(stream.status, 200);
+    const writer = new PostgresDatabase(database);
+    after(() => writer.close());
+    let inserted!: () => void;
+    let release!: () => void;
+    const insertedFirst = new Promise<void>((resolve) => { inserted = resolve; });
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    // READ COMMITTED, so no serialization retry inserts the event again
+    // after the revocation, which would change the case under test.
+    let attempts = 0;
+    const concurrent = writer.readCommitted(async (tx) => {
+      attempts++;
+      const record = { type: 'board-changed', workersOnline: 7 } as const;
+      value(await tx.uiEvents.append({ scope: projectScope(projectId), occurredAt: now, record }));
+      inserted();
+      await released;
+      return ok(undefined);
+    });
+    await insertedFirst;
+    const revoked = await fetch(`https://127.0.0.1:${running.api.port}${memberPath}`, {
+      method: 'DELETE', headers: { authorization: `Bearer ${operator}` },
+    });
+    assert.equal(revoked.status, 204, 'the revocation commits while the event\'s transaction is open');
+    release();
+    value(await concurrent);
+    const frames = (await stream.text()).split('\n\n').filter((frame) => frame !== '' && !frame.startsWith(':'));
+    const types = frames.map((frame) => frame.split('\n').find((line) => line.startsWith('event: ')));
+    assert.equal(attempts, 1, 'the event\'s transaction ran once');
+    assert.deepEqual(types, ['event: board-changed', 'event: stream-ended']);
+    assert.match(frames[0]!, /"workersOnline":7/);
   });
 });
 
