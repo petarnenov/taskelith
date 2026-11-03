@@ -92,6 +92,7 @@ export class BoardWorld {
   items: NeedsYouItem[] = [];
   processes: UnrecordedProcess[] = [];
   readonly answered = new Map<string, NeedsYouItem>();
+  readonly closures = new Map<string, Instant>();
   head = 7;
   quarantined = false;
   failSource = false;
@@ -139,7 +140,10 @@ export class BoardWorld {
         occupancy: async (workerId) => ({ slots: this.occupied.get(workerId) ?? 0, cpuMillicores: 0, memoryMebibytes: 0 }),
         heldForAttempt: async (attemptId) => this.held.has(attemptId),
       },
-      reconciliation: { unrecordedProcesses: async () => this.processes, answers: { get: async (itemId) => ok(this.answered.get(itemId)) } },
+      reconciliation: {
+        unrecordedProcesses: async () => this.processes, answers: { get: async (itemId) => ok(this.answered.get(itemId)) },
+        closedAt: async (itemId) => ok(this.closures.get(itemId)),
+      },
       autoMergeEnabled: async (projectId) => ok(!this.autoMergeOff.has(projectId)),
     };
   }

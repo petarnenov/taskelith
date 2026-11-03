@@ -138,8 +138,10 @@ export { CardReader, mergeGate, type CardView, type CardViewParts, type Snapshot
 export { ACTIVITY_URGENCY, taskEnd, taskState, type TaskContext, type TaskState } from './application/card-tasks.js';
 export {
   CardProjector,
+  NO_DERIVED_ITEMS,
   PROJECTION_BATCH,
   type CardProjections,
+  type DerivedInboxItems,
   type ExpandedTouches,
   type ProjectionPass,
   type ProjectionStore,

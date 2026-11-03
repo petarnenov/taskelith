@@ -33,7 +33,7 @@ The native request source answered through its own session timeline service, out
 
 `ReconciliationSource` owns the kind `reconciliation`:
 
-- **Unknown executions.** For a project scope it reads the project's cards, their tasks, and every execution with evidence other than `cancellation-not-applied`. Such an execution is an item: `open` while it is unknown (G2 `isUnknownExecution`), `closed` once a terminal fact ended it, at the exit's record time or the task's change time. The card subject names the project, run, task, attempt, the task's ownership generation, and the execution, and the item carries the execution's evidence; `answerableBy` is `project-maintainer`.
+- **Unknown executions.** For a project scope it reads the project's cards, their tasks, and every execution with evidence other than `cancellation-not-applied`. Such an execution is an item: `open` while it is unknown (G2 `isUnknownExecution`), `closed` once a terminal fact ended it, at the exit's record time, else, for a `not-started` execution, which records no time, the time the card projector first recorded it closed (decision 9), else the task's change time until then. The card subject names the project, run, task, attempt, the ownership generation of the execution's grant, which the task keeps while the execution can run (G2 `claimOwnership`), so a later re-admission never changes it, and the execution, and the item carries the execution's evidence; `answerableBy` is `project-maintainer`.
 - **Unrecorded processes.** For the installation scope it reads `ReconciliationQueue.unrecordedProcesses()`, new in this change, every worker's in record order, and lists each one that no answer acknowledged. Its installation subject names the worker, journal, and observation; `answerableBy` is `installation-owner`.
 - **Identifiers.** An item's identifier is `r` and the first 32 hexadecimal digits of the SHA-256 of its subject's parts, so every read names the same item without storing it.
 - **Paging.** Open items are listed in identifier order, at most 100 per page, after the given identifier.
@@ -55,12 +55,16 @@ A view reads the same source in its read-only snapshot with the resolver `ANSWER
 
 ### 7. Migration `1792934200000`
 
-`inbox_answer_keys` holds the key, its digest, and the first outcome per item and key. `reconciliation_answers` holds one resolved item per item identifier with its reason and resolution time; a trigger with its own function refuses every update and delete. The migration takes no function of an earlier one, so an earlier down migration can still drop its own. Its down migration drops both tables and the function.
+`inbox_answer_keys` holds the key, its digest, and the first outcome per item and key. `reconciliation_answers` holds one resolved item per item identifier with its reason and resolution time; a trigger with its own function refuses every update and delete. `reconciliation_item_projections` holds each reconciliation item's last published projection and the first time it was recorded closed. `card_touches` admits the subject `unrecorded-process`, which a trigger with its own function writes for each new unrecorded process. The migration takes no function of an earlier one, so an earlier down migration can still drop its own. Its down migration drops the three tables, both functions, and their trigger, and, while `card_touches` remains, its `unrecorded-process` touches and that subject.
 
 ### 8. Deviations
 
 - Product ports section 4.1 named `ReconciliationQueue.unknownExecutionsOfTask` and `unrecordedProcessesOfWorker`; the source derives the execution items from the cards' tasks, which also gives the closed items that the queue does not list, and lists the processes through the new `unrecordedProcesses()`. Section 4.1 is updated to this.
 - Wire contracts section 8 gave an execution that is no longer unknown as an example of `subject-changed`; product ports section 4.1 closes such an item, so it answers `item-closed`. Section 8 is updated to this.
+
+### 9. Events of the derived items (wire contracts section 10)
+
+A reconciliation item opens and closes when a writer changes a task or records an unrecorded process, not when a source records it, so the card projector publishes those changes. For each card it projects it reads the card's reconciliation items (`DerivedInboxItems.ofCard`, the source's `cardItems`), and on an `unrecorded-process` touch, written by a trigger on `unrecorded_processes`, the installation's open items (`ofInstallation`). It compares each item with what its last `inbox-item-changed` carried, kept in `reconciliation_item_projections`, and publishes the item when it differs, in the projection's transaction; a resolved item is only recorded, because its answer published it. A failure to read a card's items leaves the card touched for the next pass.
 
 ## Coordinator decisions
 
@@ -75,6 +79,7 @@ A view reads the same source in its read-only snapshot with the resolver `ANSWER
 
 - Execution: the conformance cases of the answer keys and the reconciliation answers on the in-memory adapters; the queue's listing of every worker's unrecorded processes; the native source's item read in any state and its scope.
 - PostgreSQL: the same conformance cases; the migration's key per item, the immutability of the reconciliation answers, and its up and down steps.
+- Projector over PostgreSQL: an unknown execution's item is published as it opens and as its terminal fact closes it, once each; an unrecorded process's item as it opens; an answered item only by its answer; a closed item keeps its generation and closing time after a later task change.
 - Control plane: the answer service's repeat, reused key, responder in the digest, refused answer without a key, scope, and store failures; the reconciliation source's listing, paging, closed items, redaction, decisions, and failures; the native source bound to the answer's transaction; the HTTP statuses, the role checks before the body, and the installation scope.
 - Over PostgreSQL: an unknown execution's answer ends its attempt, releases its reservation, records the key and the answer, touches the card, publishes the event, and leaves the inbox and its counts; a refused answer changes nothing; two concurrent identical answers commit one answer that both return; two concurrent different answers commit one, the other refused as `idempotency-key-reused` or `already-answered`. The race tests hold both transactions at the key read with a barrier, a condition, never a sleep.
 - Fail-before: the tests against the base sources, and targeted mutations, each turning at least one test red.

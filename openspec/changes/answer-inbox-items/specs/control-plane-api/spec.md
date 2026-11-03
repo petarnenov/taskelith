@@ -33,3 +33,18 @@ Resolving an unknown execution SHALL end its attempt as operator-resolved and re
 #### Scenario: A terminal fact came first
 - **WHEN** an unknown execution's terminal fact arrived before the answer
 - **THEN** the item is closed, and the answer is 422 `item-closed`
+
+### Requirement: Reconciliation item events
+The card projector SHALL publish `inbox-item-changed` for a reconciliation item when it opens or closes, or otherwise changes, once per change, in the projection's transaction, comparing it with its last published projection; a resolved item SHALL be published by its answer alone. A closed item SHALL keep the generation of its execution's grant and the time it first closed.
+
+#### Scenario: An unknown execution opens and closes
+- **WHEN** a task's execution is reported uncertain, and later its terminal fact arrives
+- **THEN** the project's stream gets the item open once, then closed once
+
+#### Scenario: An unrecorded process
+- **WHEN** a worker's unrecorded process is recorded
+- **THEN** the installation stream gets its item open once
+
+#### Scenario: A closed item's task changes
+- **WHEN** a closed item's task changes or is re-admitted later
+- **THEN** the item keeps its subject's generation and its closing time

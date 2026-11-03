@@ -18,14 +18,18 @@ import {
   ITEM_CLOSED,
   KEY_REUSED,
   recordExecutionEvidence,
+  recordExit,
+  recordNotStarted,
   type InboxAnswerKeys,
   type NeedsYouAnswer,
   type NeedsYouItem,
   type NeedsYouScope,
   type NeedsYouSource,
+  type ObservationResult,
+  type Task,
 } from '@taskelith/execution';
 import { fleetToken, fleetWorker } from '@taskelith/fleet';
-import { ok, type Result } from '@taskelith/kernel';
+import { ok, type Instant, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import { NodeSecrets, SecretTextRedactor } from '@taskelith/secrets';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
@@ -83,7 +87,7 @@ function submission(itemId: string, key: string, answer: NeedsYouAnswer): InboxA
 beforeEach(async () => {
   await sql(`TRUNCATE workflow_runs, gates, admissions, tasks, assignments, outbox, inbox, task_lineage, capacity_charges, delegations,
     capacity_quotas, workers, installation, enrollment_tokens, broker_revocations, launch_authorizations, launch_rejections, current_revisions,
-    producer_cursors, worker_self_check_results, unrecorded_processes, cards, card_touches, ui_events, inbox_answer_keys, reconciliation_answers`);
+    producer_cursors, worker_self_check_results, unrecorded_processes, cards, card_touches, ui_events, inbox_answer_keys, reconciliation_answers, reconciliation_item_projections`);
   await sql('INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   const fleet = new LaunchRevokingFleetRegistry(database);
   value(await fleet.addToken(fleetToken('token-1')));
@@ -109,6 +113,24 @@ async function unknownExecution(): Promise<{ taskId: string; attemptId: string }
     return tx.cards.register({ runId: 'run-1' as never, projectId: 'project-1' as never, title: 'Card', workType: 'feature', createdAt: await tx.now() });
   }));
   return { taskId: placed.taskId, attemptId: placed.request.attemptId };
+}
+
+// Applies a worker's report to the task in its own transaction.
+async function report(taskId: string, change: (task: Task, at: Instant) => Result<ObservationResult>): Promise<void> {
+  value(await database.transaction(async (tx) => {
+    const task = await tx.tasks.get(taskId as never);
+    if (!task.ok) return task;
+    const changed = change(task.value, await tx.now());
+    return changed.ok ? tx.tasks.replace(changed.value.task, task.value.generation) : changed;
+  }));
+}
+
+// The inbox-item-changed events since the last call: each one's project,
+// or the installation, its item, and the item's state.
+async function itemEvents(): Promise<[string, string, string][]> {
+  const rows = await sql<{ project_id: string | null; record: string }>('DELETE FROM ui_events RETURNING project_id, record');
+  return rows.map((row) => ({ scope: row.project_id ?? 'installation', record: JSON.parse(row.record).record }))
+    .filter(({ record }) => record.type === 'inbox-item-changed').map(({ scope, record }) => [scope, record.item.id, record.item.state]);
 }
 
 async function count(table: string): Promise<number> {
@@ -243,4 +265,64 @@ test('two concurrent different answers commit one; the other is refused as a reu
     assert.deepEqual([failed(refused[0]!).code, failed(refused[0]!).details.reason], ['conflict', reason]);
     assert.deepEqual([await count('reconciliation_answers'), await count('inbox_answer_keys')], [1, 1], reason);
   }
+});
+
+test('the projector publishes an unknown execution\'s item as it opens and as a terminal fact closes it, once each', async () => {
+  const { taskId } = await unknownExecution();
+  const inbox = startInboxServices(database, SESSIONS);
+  const { views, projector } = startBoardServices(database, inbox.viewSources);
+  const [open] = value(await views.open(PROJECT)).items;
+  await sql('DELETE FROM ui_events');
+  value(await projector.project());
+  assert.deepEqual(await itemEvents(), [['project-1', open!.id, 'open']]);
+  value(await projector.project());
+  assert.deepEqual(await itemEvents(), [], 'an unchanged item is not published again');
+  const exit = { workerId: WORKER.workerId, executionId: (open!.subject as { executionId: string }).executionId as never };
+  await report(taskId, (task, at) => recordExit(task, { ...exit, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false }, at));
+  value(await projector.project());
+  assert.deepEqual(await itemEvents(), [['project-1', open!.id, 'closed']]);
+  assert.deepEqual(value(await views.open(PROJECT)).items, []);
+});
+
+test('the projector publishes an unrecorded process\'s item as it opens, and an answer\'s resolution only once', async () => {
+  const itemId = await processItemId();
+  const inbox = startInboxServices(database, SESSIONS);
+  const { projector } = startBoardServices(database, inbox.viewSources);
+  await sql('DELETE FROM ui_events');
+  value(await projector.project());
+  assert.deepEqual(await itemEvents(), [['installation', itemId, 'open']]);
+  value(await inbox.answers.answer(INSTALLATION, submission(itemId, 'key-1', acknowledge())));
+  value(await projector.project());
+  assert.deepEqual(await itemEvents(), [['installation', itemId, 'resolved']]);
+});
+
+test('a closed item keeps its generation and closing time when its task changes later', async () => {
+  const { taskId } = await unknownExecution();
+  const inbox = startInboxServices(database, SESSIONS);
+  const { views, projector } = startBoardServices(database, inbox.viewSources);
+  const [open] = value(await views.open(PROJECT)).items;
+  const subject = open!.subject as { executionId: string; attemptGeneration: number };
+  await report(taskId, (task, at) => recordNotStarted(task, { workerId: WORKER.workerId, executionId: subject.executionId as never }, at));
+  value(await projector.project());
+  const item = () => inbox.answers.item(PROJECT, open!.id);
+  const closed = value(await item());
+  assert.equal(closed.state, 'closed');
+  const later = `jsonb_set(jsonb_set(record::jsonb, '{changedAt}', '"2030-01-01T00:00:00.000Z"'), '{ownershipGeneration}', '9')`;
+  await sql(`UPDATE tasks SET record = ${later}::text`);
+  assert.deepEqual(value(await item()), closed);
+  assert.equal((value(await item()).subject as { attemptGeneration: number }).attemptGeneration, subject.attemptGeneration);
+});
+
+test('an answered execution\'s resolution is published by its answer alone, never again by the projector', async () => {
+  await unknownExecution();
+  const inbox = startInboxServices(database, SESSIONS);
+  const { views, projector } = startBoardServices(database, inbox.viewSources);
+  const [open] = value(await views.open(PROJECT)).items;
+  value(await projector.project());
+  await sql('DELETE FROM ui_events');
+  value(await inbox.answers.answer(PROJECT, submission(open!.id, 'key-1', RESOLVE)));
+  value(await projector.project());
+  value(await projector.project());
+  const events = await itemEvents();
+  assert.deepEqual(events, [['project-1', open!.id, 'resolved']]);
 });

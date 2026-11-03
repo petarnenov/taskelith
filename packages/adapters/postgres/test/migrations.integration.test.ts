@@ -65,7 +65,7 @@ test('migrations apply once, record their checksums, and create the schema', asy
     'capacity_charges', 'capacity_quotas', 'card_touches', 'cards', 'current_revisions', 'delegation_requests', 'delegations', 'enrollment_tokens',
     'evidence', 'gates', 'inbox', 'inbox_answer_keys', 'installation', 'installation_roles', 'inventory_report_parts', 'inventory_requests',
     'launch_authorizations', 'launch_rejections', 'operator_credentials', 'operator_principal', 'outbox', 'placement_outcomes',
-    'placement_rotation', 'principals', 'producer_cursors', 'project_defaults', 'project_roles', 'projects', 'reconciliation_answers', 'schema_migration_checksums', 'schema_migrations', 'scm_integration_secrets', 'scm_integrations', 'scm_webhook_deliveries', 'session_audit_events', 'session_idempotency_keys', 'session_inbox_items',
+    'placement_rotation', 'principals', 'producer_cursors', 'project_defaults', 'project_roles', 'projects', 'reconciliation_answers', 'reconciliation_item_projections', 'schema_migration_checksums', 'schema_migrations', 'scm_integration_secrets', 'scm_integrations', 'scm_webhook_deliveries', 'session_audit_events', 'session_idempotency_keys', 'session_inbox_items',
     'slot_credential_counters', 'slot_credential_deliveries', 'slot_credentials', 'task_lineage', 'tasks', 'ui_event_sequence', 'ui_events', 'unrecorded_processes', 'worker_self_check_results', 'workers', 'workflow_runs',
   ]);
 });
@@ -821,7 +821,7 @@ test('the board migration orders existing tasks by identifier, new ones after, a
   assert.deepEqual(await query(url, "SELECT 1 FROM pg_class WHERE relname = 'tasks_admission_seq'"), []);
 });
 
-test('the inbox answers migration keeps one key per item and immutable reconciliation answers, and its down migration removes them', async () => {
+test('the inbox answers migration keeps one key per item, immutable reconciliation answers, and process touches, and its down migration removes them', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url)).ok, true);
   const key = (itemId: string, key: string) => query(url, `INSERT INTO inbox_answer_keys (item_id, idempotency_key, digest, outcome)
@@ -836,9 +836,17 @@ test('the inbox answers migration keeps one key per item and immutable reconcili
   await assert.rejects(answer('item-1', 'unknown-execution'), /reconciliation_answers_pkey/);
   await assert.rejects(query(url, "UPDATE reconciliation_answers SET item = '[]'"), /reconciliation answers are immutable/);
   await assert.rejects(query(url, 'DELETE FROM reconciliation_answers'), /reconciliation answers are immutable/);
+  await query(url, `INSERT INTO unrecorded_processes (worker_id, observation_id, journal_id, containment, process_count, recorded_at)
+    VALUES ('worker-1', 'observation-1', 'journal-1', 'cgroup x', 1, now())`);
+  assert.deepEqual(await query(url, 'SELECT subject, subject_id FROM card_touches'), [{ subject: 'unrecorded-process', subject_id: 'worker-1' }]);
+  await query(url, "INSERT INTO reconciliation_item_projections (item_id, projection) VALUES ('item-1', '{}')");
   await migratedDown(url, INBOX_ANSWERS);
-  const tables = await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name IN ('inbox_answer_keys', 'reconciliation_answers')");
+  const tables = await query(url, `SELECT 1 FROM information_schema.tables
+    WHERE table_name IN ('inbox_answer_keys', 'reconciliation_answers', 'reconciliation_item_projections')`);
   assert.deepEqual(tables, []);
-  assert.deepEqual(await query(url, "SELECT 1 FROM pg_proc WHERE proname = 'refuse_reconciliation_answer_change'"), []);
+  const functions = "SELECT 1 FROM pg_proc WHERE proname IN ('refuse_reconciliation_answer_change', 'touch_unrecorded_process')";
+  assert.deepEqual(await query(url, functions), []);
+  assert.deepEqual(await query(url, 'SELECT subject FROM card_touches'), [], 'the process touches go with their subject');
+  await assert.rejects(query(url, "INSERT INTO card_touches (subject, subject_id) VALUES ('unrecorded-process', 'w')"), /card_touches_subject_check/);
   assert.equal((await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'cards'")).length, 1);
 });

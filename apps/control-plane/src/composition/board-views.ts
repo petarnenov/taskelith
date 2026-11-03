@@ -3,10 +3,12 @@ import type { NeedsYouSource, ViewPositions } from '@taskelith/execution';
 import { NoMergeQueue } from '@taskelith/integrations';
 import { ok } from '@taskelith/kernel';
 import type { PostgresDatabase, PostgresTransaction } from '@taskelith/postgres';
+import { SecretTextRedactor } from '@taskelith/secrets';
 import type { BoardReads, BoardStore } from '../application/board-reads.js';
 import { BoardViews } from '../application/board-views.js';
-import { CardProjector, type ProjectionStore, type ProjectionTransaction } from '../application/card-projector.js';
+import { CardProjector, type DerivedInboxItems, type ProjectionStore, type ProjectionTransaction } from '../application/card-projector.js';
 import type { CardViewParts } from '../application/card-views.js';
+import { ANSWERED_ELSEWHERE, ReconciliationSource } from '../application/reconciliation-source.js';
 
 export interface BoardServices {
   readonly views: BoardViews;
@@ -25,7 +27,7 @@ export function startBoardServices(database: PostgresDatabase, sourcesIn: InboxS
   };
   const views: BoardStore = { snapshot: (work) => database.readOnly((transaction) => work(boardReadsOf(transaction))) };
   const projections: ProjectionStore = { transaction: (work) => database.transaction((transaction) => work(projectionOf(transaction))) };
-  return { views: new BoardViews({ ...parts, store: views }), projector: new CardProjector(projections, parts) };
+  return { views: new BoardViews({ ...parts, store: views }), projector: new CardProjector(projections, parts, RECONCILIATION_ITEMS) };
 }
 
 export function boardReadsOf(transaction: PostgresTransaction): BoardReads {
@@ -57,12 +59,26 @@ export function boardReadsOf(transaction: PostgresTransaction): BoardReads {
     reconciliation: {
       unrecordedProcesses: () => transaction.reconciliation.unrecordedProcesses(),
       answers: transaction.reconciliationAnswers,
+      closedAt: (itemId) => transaction.cardProjections.closedAt(itemId),
     },
     autoMergeEnabled: async (projectId) => {
       const setting = await transaction.access.projects.autoMergeSetting(projectId);
       return setting.ok ? ok(setting.value?.enabled ?? AUTO_MERGE_STARTS_ON) : setting;
     },
   };
+}
+
+// The reconciliation items, which the projector publishes as they open and
+// close; it answers none.
+const REDACTOR = new SecretTextRedactor();
+
+const RECONCILIATION_ITEMS: DerivedInboxItems = Object.freeze<DerivedInboxItems>({
+  ofCard: (reads, card) => reconciliationOver(reads).cardItems(card),
+  ofInstallation: (reads) => reconciliationOver(reads).installationItems(),
+});
+
+function reconciliationOver(reads: BoardReads): ReconciliationSource {
+  return new ReconciliationSource({ reads, positions: headPositions(reads), redactor: REDACTOR, resolver: ANSWERED_ELSEWHERE });
 }
 
 // The log's head, as the snapshot that reads it sees it.

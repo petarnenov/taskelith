@@ -1,5 +1,6 @@
 import type {
   CardCatalog,
+  NeedsYouItemId,
   ReconciliationAnswers,
   SessionTimelineTransaction,
   Task,
@@ -40,6 +41,8 @@ export interface FleetReads {
 export interface ReconciliationQueueReads {
   unrecordedProcesses(): Promise<readonly UnrecordedProcess[]>;
   readonly answers: Pick<ReconciliationAnswers, 'get'>;
+  // When the card projector first recorded the item closed, if it did.
+  closedAt(itemId: NeedsYouItemId): Promise<Result<Instant | undefined>>;
 }
 
 // Each view's reads run in one read-only REPEATABLE READ snapshot.
