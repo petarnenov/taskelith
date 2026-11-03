@@ -82,6 +82,7 @@ The synthetic token `ghs_` and nine times `A1b2` is shortened to `ghs_A1b2…A1b
 | `env -u NODE_ENV make verify` | `bd692f5b`, tree `f2a68fb7` | Passed, profile full, stamp written: tests 4136, suites 49, pass 4089, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.68 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
 | `env -u NODE_ENV make verify` | `f377a38f`, tree `3cffe9d0` | First run failed one test outside this change, `test/installation-script.test.ts` "a bound with a leading zero is read in base 10" (`ended after 9.049s, before 10`), a timing bound; the rerun on the same tree passed, profile full, stamp written: tests 4144, suites 49, pass 4097, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.67 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
 | `env -u NODE_ENV make verify` | `d9781452`, tree `fa08ab86` | First run failed one timing-bound test, `packages/adapters/secrets/test/secrets.test.ts` "value redaction takes linear time on long runs" (`"a b" repeated took 206 ms`, limit 200 ms) at host load average 5 to 6; that run's exact-value path does not reach the GitHub rule, and ten timed runs of it on this host took 61 to 112 ms with the rule of the base `c355525b` and 64 to 110 ms with the fixed rule. The rerun on the same tree passed, profile full, stamp written: tests 4156, suites 49, pass 4109, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.68 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
+| `env -u NODE_ENV make verify` | `ef45dad8`, tree `499fb5c7` | Passed on the first run, profile full, stamp written: tests 4159, suites 49, pass 4112, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.68 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each |
 | `npm run openspec -- validate add-github-token-secret-shape --strict` | `3b84d6a1` | `Change 'add-github-token-secret-shape' is valid` |
 | Focused runs | `3b84d6a1` | `logger.test.ts` and `secrets.test.ts`: 36 of 36 |
 
@@ -94,7 +95,7 @@ Route (`route.json`, rule version 5): elevated (security, contracts); pass 1 rev
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `fa08ab86ca499099793b5a813df2105a2a0095cc`; tests 4156, pass 4109, fail 0, skipped 47; all files 99.36% lines, 92.68% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `499fb5c75793f5e861ad47723b06b988f12de68e`; tests 4159, pass 4112, fail 0, skipped 47; all files 99.36% lines, 92.68% branches, 98.84% functions.
 - `npm run openspec -- validate add-github-token-secret-shape --strict`: passed, `Change 'add-github-token-secret-shape' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`.
 - Spec diff against the merge base `c355525b1f11` with `origin/dev`: no change under `openspec/specs`.
@@ -104,6 +105,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19eb6-b681-7e70-998b-c4458edb89e9` | 0 | 0 | 2 | 2 |
 | 2 | B | `claude claude-fable-5-1#medium` | `ec7c975e-4e00-4f2d-a09a-dbe4b0df161c` | 0 | 0 | 1 | 4 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a19edc-ee94-7223-895c-7a6395066399` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Independent review
