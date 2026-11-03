@@ -1,4 +1,5 @@
 import { Alert, Drawer } from '@mantine/core';
+import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
@@ -17,6 +18,7 @@ export function TaskDetailRoute() {
   const outlet = useOutletContext<BoardOutlet>();
   const navigate = useNavigate();
   const board = outlet.projectId === projectId ? outlet.live : undefined;
+  useFocusReturnOnLeave(outlet.focusBoard);
   return (
     <TaskDetailDrawer
       key={`${projectId}/${runId}`}
@@ -25,6 +27,19 @@ export function TaskDetailRoute() {
       board={board}
       onClose={() => void navigate('/')}
     />
+  );
+}
+
+// The Drawer leaves with its route, so Mantine's own focus return, which
+// needs it to close while mounted, never runs; this one runs on leaving.
+function useFocusReturnOnLeave(focusBoard: () => void): void {
+  const [opener] = useState(() => document.activeElement);
+  useEffect(
+    () => () => {
+      if (opener instanceof HTMLElement && opener !== document.body && opener.isConnected) opener.focus();
+      else focusBoard();
+    },
+    [opener, focusBoard],
   );
 }
 

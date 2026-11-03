@@ -1,5 +1,5 @@
 import { Alert, Stack, Text, Title } from '@mantine/core';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Outlet, useParams } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { Project, ReadFailed, ReadFailure } from './board';
@@ -15,6 +15,8 @@ import { useLiveBoard, type LiveBoard } from './useLiveBoard';
 export interface BoardOutlet {
   readonly projectId?: string;
   readonly live: LiveBoard;
+  // Takes the focus to the board's heading, while the board is shown.
+  readonly focusBoard: () => void;
 }
 
 // The landing page: the board of the chosen project and its states
@@ -27,10 +29,17 @@ export function BoardPage() {
   }, [addressed, select]);
   const project = view.status === 'listed' ? view.selected : undefined;
   const live = useLiveBoard(project?.projectId);
-  const outlet = useMemo<BoardOutlet>(() => ({ projectId: project?.projectId, live }), [project?.projectId, live]);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusBoard = useCallback(() => heading.current?.focus(), []);
+  const outlet = useMemo<BoardOutlet>(
+    () => ({ projectId: project?.projectId, live, focusBoard }),
+    [project?.projectId, live, focusBoard],
+  );
   return (
     <Stack>
-      <Title order={1}>Project board</Title>
+      <Title order={1} ref={heading} tabIndex={-1}>
+        Project board
+      </Title>
       {view.status === 'loading' ? <LoadingStatus text="Loading your projects…" /> : null}
       {view.status === 'unavailable' ? (
         <LoadError title="The projects cannot be read" onRetry={retry}>
