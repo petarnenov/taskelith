@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { integrationEndpoint } from '@taskelith/testing';
 import { migrate } from '@taskelith/postgres';
@@ -115,12 +116,28 @@ export function assertNoPassword(text: string, password: string): void {
   for (const form of [password, encodeURIComponent(password)]) assert.ok(!text.includes(form), 'the password was logged');
 }
 
-// Settles once every unnumbered entry is below the assigner's horizon: the
-// cluster's other test files can hold transactions that delay numbering.
+// Settles once every unnumbered entry of this cluster is below the horizon:
+// the cluster's other test files can hold transactions that delay numbering.
 export async function untilNumberable(url: URL): Promise<void> {
-  const statement = `SELECT pg_snapshot_xmin(pg_current_snapshot()) > coalesce(
-    (SELECT max(inserted_by) FROM ui_events WHERE position IS NULL), '0'::xid8) AS numberable`;
-  while (!(await query<{ numberable: boolean }>(url, statement))[0]!.numberable);
+  await untilHorizonAbove(url, `coalesce((SELECT max(inserted_by) FROM ui_events
+    WHERE position IS NULL AND inserted_by < pg_snapshot_xmax(pg_current_snapshot())), '0'::xid8)`);
+}
+
+// Settles once the oldest open transaction is newer than the given one.
+export async function untilEnded(url: URL, transaction: string): Promise<void> {
+  await untilHorizonAbove(url, `'${BigInt(transaction)}'::xid8`);
+}
+
+const HORIZON_POLL_MILLISECONDS = 20;
+const HORIZON_WAIT_MILLISECONDS = 20_000;
+
+async function untilHorizonAbove(url: URL, transaction: string): Promise<void> {
+  const statement = `SELECT pg_snapshot_xmin(pg_current_snapshot()) > ${transaction} AS above`;
+  const deadline = performance.now() + HORIZON_WAIT_MILLISECONDS;
+  while (!(await query<{ above: boolean }>(url, statement))[0]!.above) {
+    if (performance.now() > deadline) throw new Error('the numbering horizon did not move past the transaction');
+    await delay(HORIZON_POLL_MILLISECONDS);
+  }
 }
 
 // The event sequence keeps its one row, set back to before any event.
