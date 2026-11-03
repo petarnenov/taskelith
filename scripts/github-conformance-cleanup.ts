@@ -2,9 +2,8 @@ import type { GithubNativeClient } from './github-conformance-client.ts';
 import { CONFORMANCE_BRANCH_PREFIX } from './github-conformance-fixture.ts';
 import { CONFORMANCE_BASE_BRANCH, CONFORMANCE_REPOSITORIES } from './github-conformance-settings.ts';
 
-// Resets the disposable repositories that the App can see: protection off
-// the base branch, the run's pull requests closed, its branches deleted.
-// Statuses and closed pull requests stay, as GitHub keeps them.
+// Resets the repositories the App sees: base protection off, the run's
+// pull requests closed, its branches deleted; GitHub keeps statuses.
 
 export interface OpenPull {
   readonly number: number;

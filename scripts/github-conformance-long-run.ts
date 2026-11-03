@@ -4,9 +4,8 @@ import type {
   SourceControlConformanceFixture,
 } from '@taskelith/integrations';
 
-// The opt-in long-run case (source control contract section 9, item 20):
-// a run refreshes and adopts its credential until it has outlived the
-// original version's expiry, which GitHub sets an hour after the mint.
+// Opt-in (source control contract section 9): refresh and adopt until the
+// run outlives the original expiry, an hour after GitHub's mint.
 
 export const LONG_RUN_CASE = 'long-run refresh';
 

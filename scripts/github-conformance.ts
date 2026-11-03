@@ -20,7 +20,6 @@ import {
 
 // The SCM conformance suite against GitHub.com with the plugin's own App,
 // on the disposable repositories only (`make conformance-github`).
-// usage: github-conformance.ts --out DIR [--long-run] [--cleanup-only]
 
 const USAGE = 'usage: github-conformance.ts --out DIR [--long-run] [--cleanup-only]';
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
