@@ -112,7 +112,18 @@ test('a numbering pass numbers and wakes the streams while the LISTEN connection
   assert.deepEqual([listens, value(await log.bounds()).head, wakes], [1, 1, 1]);
 });
 
-test('a numbering pass that cannot number logs it and still wakes the streams', async () => {
+test('a numbering pass that numbers nothing wakes no stream', async () => {
+  let wakes = 0;
+  await numberingPass({
+    keeper: new EventLogKeeper({ log: new InMemoryUiEventLog(), clock: new ManualClock() }),
+    wakeUps: { listen: async () => true },
+    streams: { wake: () => void wakes++ },
+    logger: new Logger(new InMemoryLogSink(), { now: () => AT }),
+  });
+  assert.equal(wakes, 0);
+});
+
+test('a numbering pass that cannot number logs it and wakes no stream', async () => {
   const logs = new InMemoryLogSink();
   let wakes = 0;
   await numberingPass({
@@ -121,6 +132,6 @@ test('a numbering pass that cannot number logs it and still wakes the streams', 
     streams: { wake: () => void wakes++ },
     logger: new Logger(logs, { now: () => AT }),
   });
-  assert.equal(wakes, 1);
+  assert.equal(wakes, 0);
   assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code]), [['events.numbering.failed', 'unavailable']]);
 });

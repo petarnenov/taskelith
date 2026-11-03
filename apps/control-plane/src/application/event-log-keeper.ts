@@ -53,13 +53,13 @@ export interface NumberingPassParts {
   readonly logger: Logger;
 }
 
-// One run of the numbering loop. The wake-up connection opens beside it,
-// so one that stalls never holds the poll.
+// One run of the numbering loop, which wakes the streams only when it
+// numbered; the wake-up connection opens beside it, never holding the poll.
 export async function numberingPass({ keeper, wakeUps, streams, logger }: NumberingPassParts): Promise<void> {
   void wakeUps.listen();
   const numbered = await keeper.numberCommitted();
   if (!numbered.ok) logger.warn('events.numbering.failed', { code: numbered.error.code, message: numbered.error.message });
-  streams.wake();
+  else if (numbered.value > 0) streams.wake();
 }
 
 // A view's position is the log's head when the read starts: what the view
