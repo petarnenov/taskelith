@@ -1,4 +1,4 @@
-import { Badge, Group, List, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Group, List, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import type { ReactNode } from 'react';
 import type { BoardCard, GateView, StageView, TaskDetail, TraceLink, WorkflowRunBinding } from './board';
 import {
@@ -25,7 +25,7 @@ export function TaskDetailView({ detail }: { readonly detail: TaskDetail }) {
       <CardSummary card={detail.card} />
       <Holdups detail={detail} />
       <Section title="Stages and gates">
-        <StageTable stages={detail.stages} />
+        <StageList stages={detail.stages} />
       </Section>
       <Section title="Traceability">
         <Traceability links={detail.traceability} />
@@ -55,8 +55,8 @@ function CardSummary({ card }: { readonly card: BoardCard }) {
   return (
     <Stack gap={6}>
       <Text size="sm" c="dimmed">
-        {WORK_TYPE_LABELS[card.workType]} · {card.framework.pluginId} {card.framework.pluginVersion} · run{' '}
-        {card.runId}
+        {WORK_TYPE_LABELS[card.workType]} · <Breakable text={card.framework.pluginId} />{' '}
+        <Breakable text={card.framework.pluginVersion} /> · run <Breakable text={card.runId} />
       </Text>
       <Text size="sm">
         {COLUMN_LABELS[card.column].label} · Step: {stepOf(card.stage)} · {STAGE_STATE_LABELS[card.stage.state]}
@@ -99,7 +99,8 @@ function Holdups({ detail }: { readonly detail: TaskDetail }) {
         )}
         {gates.map(({ stage, gate }) => (
           <List.Item key={`${stage.stageId}/${gate.gateId}`}>
-            Gate {gate.gateId} of {stepOf(stage)} is {GATE_LABELS[gate.state].label}: {gate.blockReason}
+            Gate <Breakable text={gate.gateId} /> of <Breakable text={stepOf(stage)} /> is{' '}
+            {GATE_LABELS[gate.state].label}: <Breakable text={gate.blockReason} />
           </List.Item>
         ))}
         {card.end === undefined ? null : <List.Item>Ended without a merge: {END_LABELS[card.end.kind]}</List.Item>}
@@ -108,33 +109,28 @@ function Holdups({ detail }: { readonly detail: TaskDetail }) {
   );
 }
 
-function StageTable({ stages }: { readonly stages: readonly StageView[] }) {
+// Stages and trace links stack rather than form a table, which could not
+// fit four columns of long identifiers at phone width ("Design rules").
+function StageList({ stages }: { readonly stages: readonly StageView[] }) {
   if (stages.length === 0) return <Text size="sm">The run has no stage yet.</Text>;
   return (
-    <Table withTableBorder verticalSpacing={6} fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Step</Table.Th>
-          <Table.Th>Column</Table.Th>
-          <Table.Th>State</Table.Th>
-          <Table.Th>Gates</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {stages.map((stage) => (
-          <Table.Tr key={stage.stageId}>
-            <Table.Td>
-              <Breakable text={stepOf(stage)} />
-            </Table.Td>
-            <Table.Td>{COLUMN_LABELS[stage.column].label}</Table.Td>
-            <Table.Td>{STAGE_STATE_LABELS[stage.state]}</Table.Td>
-            <Table.Td>
+    <List type="ordered" size="sm" spacing="xs">
+      {stages.map((stage) => (
+        <List.Item key={stage.stageId}>
+          <Paper withBorder p="xs" radius="md">
+            <Stack gap={4}>
+              <Text size="sm" fw={600}>
+                <Breakable text={stepOf(stage)} />
+              </Text>
+              <Text size="sm">
+                {COLUMN_LABELS[stage.column].label} · {STAGE_STATE_LABELS[stage.state]}
+              </Text>
               <Gates gates={stage.gates} />
-            </Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+            </Stack>
+          </Paper>
+        </List.Item>
+      ))}
+    </List>
   );
 }
 
@@ -145,8 +141,11 @@ function Gates({ gates }: { readonly gates: readonly GateView[] }) {
     <Stack gap={4}>
       {gates.map((gate) => (
         <Group key={gate.gateId} gap={6} wrap="wrap">
+          <Text size="sm" ff="monospace">
+            <Breakable text={gate.gateId} />
+          </Text>
           <Badge variant="dot" color={GATE_LABELS[gate.state].color} tt="none">
-            {gate.gateId} {GATE_LABELS[gate.state].label}
+            {GATE_LABELS[gate.state].label}
           </Badge>
           <Text size="xs" c="dimmed">
             needs {EVIDENCE_KIND_LABELS[gate.requiredEvidence]}
@@ -162,34 +161,28 @@ function Traceability({ links }: { readonly links: readonly TraceLink[] }) {
     return <Text size="sm">The control plane records no requirement traceability for this run yet.</Text>;
   }
   return (
-    <Table withTableBorder verticalSpacing={6} fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Requirement</Table.Th>
-          <Table.Th>Work items</Table.Th>
-          <Table.Th>Attempts</Table.Th>
-          <Table.Th>Evidence</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {links.map((link, index) => (
-          <Table.Tr key={index}>
-            <Table.Td>{link.requirement}</Table.Td>
-            <Table.Td>
-              <Breakable text={listed(link.workItemIds)} />
-            </Table.Td>
-            <Table.Td>
-              <Breakable text={listed(link.attemptIds)} />
-            </Table.Td>
-            <Table.Td>
+    <List size="sm" spacing="xs">
+      {links.map((link, index) => (
+        <List.Item key={index}>
+          <Paper withBorder p="xs" radius="md">
+            <Stack gap={4} align="flex-start">
+              <Text size="sm" fw={600}>
+                <Breakable text={link.requirement} />
+              </Text>
+              <Text size="sm">
+                Work items: <Breakable text={listed(link.workItemIds)} />
+              </Text>
+              <Text size="sm">
+                Attempts: <Breakable text={listed(link.attemptIds)} />
+              </Text>
               <Badge variant="dot" color={FRESHNESS_LABELS[link.evidence].color} tt="none">
                 {FRESHNESS_LABELS[link.evidence].label}
               </Badge>
-            </Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+            </Stack>
+          </Paper>
+        </List.Item>
+      ))}
+    </List>
   );
 }
 

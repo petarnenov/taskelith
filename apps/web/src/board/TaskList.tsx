@@ -33,15 +33,20 @@ function TaskItem({ task }: { readonly task: TaskView }) {
         </Text>
         {task.delegation === undefined ? null : (
           <Text size="sm">
-            Delegated by {task.delegation.parentTaskId}, depth {task.delegation.depth}
+            Delegated by <Breakable text={task.delegation.parentTaskId} />, depth {task.delegation.depth}
           </Text>
         )}
         <Text size="sm">
-          Admission {admission.admissionId}: {ADMISSION_STATE_LABELS[admission.state]} for stage {admission.stageId}
-          {admission.workItemId === undefined ? '' : `, work item ${admission.workItemId}`}, policy revision{' '}
-          {admission.policyRevision}
+          Admission <Breakable text={admission.admissionId} />: {ADMISSION_STATE_LABELS[admission.state]} for stage{' '}
+          <Breakable text={admission.stageId} />
+          {admission.workItemId === undefined ? null : (
+            <>
+              , work item <Breakable text={admission.workItemId} />
+            </>
+          )}
+          , policy revision <Breakable text={admission.policyRevision} />
           {admission.dispatchedGeneration === undefined
-            ? ''
+            ? null
             : `, dispatched generation ${admission.dispatchedGeneration}`}
         </Text>
         <SessionIndicator activity={task.session} />
@@ -56,7 +61,8 @@ function EndText({ end }: { readonly end: TaskEnd }) {
   const { outcome } = end;
   return (
     <Text size="sm">
-      Ended without a merge: {END_LABELS[end.kind]}; attempt {end.attemptId} {outcomeText(outcome)},{' '}
+      Ended without a merge: {END_LABELS[end.kind]}; attempt <Breakable text={end.attemptId} />{' '}
+      <Breakable text={outcomeText(outcome)} />,{' '}
       <time dateTime={outcome.endedAt}>{formatInstant(outcome.endedAt)}</time>
     </Text>
   );

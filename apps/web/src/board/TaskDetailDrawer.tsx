@@ -5,6 +5,7 @@ import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
+import { Breakable } from './Breakable';
 import type { BoardOutlet } from './BoardPage';
 import { LoadError, withRequiredRole } from './LoadError';
 import { ProjectPicker } from './ProjectPicker';
@@ -71,7 +72,7 @@ function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawer
       onClose={onClose}
       position="right"
       size="xl"
-      title={shown?.card.title ?? 'Task detail'}
+      title={<Breakable text={shown?.card.title ?? 'Task detail'} />}
       closeButtonProps={{ 'aria-label': 'Close the task detail' }}
     >
       {/* The modal Drawer hides the header's picker, so it has its own. */}
