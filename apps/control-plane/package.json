@@ -25,6 +25,7 @@
     "@taskelith/observability": "0.0.0",
     "@taskelith/postgres": "0.0.0",
     "@taskelith/scheduling": "0.0.0",
+    "@taskelith/scm-github": "0.0.0",
     "@taskelith/sdlc": "0.0.0",
     "@taskelith/secrets": "0.0.0",
     "cookie": "2.0.1"
@@ -34,7 +35,6 @@
     "@nats-io/nats-core": "3.4.0",
     "@nats-io/nkeys": "2.0.3",
     "@nats-io/transport-node": "3.4.0",
-    "@taskelith/scm-github": "0.0.0",
     "@taskelith/testing": "0.0.0",
     "@taskelith/worker": "0.0.0",
     "@taskelith/worker-journal": "0.0.0",

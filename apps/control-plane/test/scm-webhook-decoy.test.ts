@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import crypto, { createHmac, generateKeyPairSync } from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
 import { mock, test } from 'node:test';
-import { GithubEventlessDeliveries, GithubWebhookDecoy, InMemoryScmIntegrationVerifiers } from '@taskelith/control-plane';
 import { ScmWebhookReceiver, type WebhookDelivery } from '@taskelith/integrations';
 import { ok } from '@taskelith/kernel';
-import { createGithubSourceControl } from '@taskelith/scm-github';
+import { createGithubSourceControl, githubSourceControlPlugin } from '@taskelith/scm-github';
 import { value } from '@taskelith/testing';
 
-// The decoy of an unknown integration does the crypto work that the GitHub
-// plugin does for the same headers, counted through node:crypto.
+// The GitHub plugin's decoy for an unknown integration does the crypto work
+// of its verification for the same headers, counted through node:crypto.
 const KNOWN = `i${'a'.repeat(32)}`;
 const UNKNOWN = `i${'b'.repeat(32)}`;
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -17,11 +16,12 @@ const github = value(createGithubSourceControl({
   appId: '1234', installationId: '5678', privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
   mergeMethods: ['squash'], webhookSecret: 'synthetic-decoy-secret',
 }));
+const plugin = githubSourceControlPlugin();
 const receiver = new ScmWebhookReceiver({
-  verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, github]])),
+  verifiers: { verifierOf: async (integrationId) => ok(integrationId === KNOWN ? github : undefined) },
   deliveries: { record: async () => ok('recorded') },
-  decoy: new GithubWebhookDecoy(),
-  eventless: new GithubEventlessDeliveries(),
+  decoy: plugin.createDecoy(),
+  eventless: plugin,
 });
 
 const BODY = new Uint8Array(Buffer.from('{"repository":{"full_name":"acme/project"}}'));

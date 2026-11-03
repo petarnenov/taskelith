@@ -165,6 +165,25 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, keepsUndecodablePathParameters: true, response: 'empty', success: 202,
     statuses: COMMON, reasons: OVER_LIMIT,
   },
+  // Control-plane wire contracts section 4: SCM integrations, whose secrets
+  // are write-only.
+  {
+    operationId: 'listScmIntegrations', method: 'GET', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR, query: ['after'],
+    response: 'ScmIntegrationPage', success: 200, statuses: COMMON,
+  },
+  {
+    operationId: 'createScmIntegration', method: 'POST', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationCreation', writeOnlyBody: true, response: 'ScmIntegration', success: 201, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'readScmIntegration', method: 'GET', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    response: 'ScmIntegration', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'updateScmIntegration', method: 'PATCH', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationUpdate', writeOnlyBody: true, response: 'ScmIntegration', success: 200,
+    statuses: { ...COMMON, 'not-found': 404, conflict: 409 },
+  },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {
     operationId: 'listProjects', method: 'GET', pattern: /^\/projects$/, security: BROWSER_OR_OPERATOR, query: ['after'],

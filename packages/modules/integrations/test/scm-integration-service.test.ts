@@ -7,7 +7,9 @@ import {
   ScmSecrets,
   StoredScmIntegrationVerifiers,
   normalizeOrigin,
+  type ScmIntegrationCreation,
   type ScmIntegrationId,
+  type ScmIntegrationUpdate,
   type SourceControlPlugin,
   type WebhookDelivery,
   type WebhookVerifier,
@@ -63,7 +65,7 @@ function setup() {
   return { store, plugin, plugins, service: new ScmIntegrationService({ store, plugins, ids }) };
 }
 
-const CREATION = Object.freeze({
+const CREATION: ScmIntegrationCreation = Object.freeze({
   pluginId: 'scm-example', label: 'Example', allowedOrigin: 'HTTPS://Git.Example.COM', settings: SETTINGS,
   secrets: Object.freeze({ 'signing-key': SECRET, 'webhook-secret': SECRET }),
 });
@@ -102,7 +104,7 @@ test('a created integration starts at revision 1 and shows its secrets only by n
 test('creation refuses an unknown plugin with not-found and a bad origin, setting, or secret with invalid', async () => {
   const { service, store } = setup();
   assert.equal(failed(await service.create({ ...CREATION, pluginId: 'scm-other' })).code, 'not-found');
-  const cases: ReadonlyArray<readonly [Partial<typeof CREATION>, string]> = [
+  const cases: ReadonlyArray<readonly [Partial<ScmIntegrationCreation>, string]> = [
     [{ allowedOrigin: 'http://git.example.com' }, 'allowedOrigin'],
     [{ settings: {} }, 'account-id'],
     [{ settings: { 'account-id': 'bad' } }, 'account-id'],
@@ -153,7 +155,10 @@ test('an update checks what it changes and refuses an unknown integration with n
   assert.equal(failed(await service.update(`i${'f'.repeat(32)}`, { expectedRevision: 1, label: 'x' })).code, 'not-found');
   assert.equal(failed(await service.update('not an identifier', { expectedRevision: 1, label: 'x' })).code, 'not-found');
   assert.equal(failed(await service.read(`i${'f'.repeat(32)}`)).code, 'not-found');
-  for (const change of [{ settings: {} }, { secrets: { token: SECRET } }, { secrets: { 'webhook-secret': 'bad' } }, { allowedOrigin: 'https://[::1]' }]) {
+  const changes: ReadonlyArray<Partial<ScmIntegrationUpdate>> = [
+    { settings: {} }, { secrets: { token: SECRET } }, { secrets: { 'webhook-secret': 'bad' } }, { allowedOrigin: 'https://[::1]' },
+  ];
+  for (const change of changes) {
     assert.equal(failed(await service.update(id, { expectedRevision: 1, ...change })).code, 'invalid', JSON.stringify(change));
   }
   assert.equal(value(await service.read(id)).revision, 1);
