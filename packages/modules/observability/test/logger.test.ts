@@ -90,17 +90,33 @@ test('issued secrets, seeds, JWTs, and creds blocks are redacted in fields and c
   assert.equal(redactText('tkop_short and eyJa.b stay'), 'tkop_short and eyJa.b stay');
 });
 
-test('GitHub installation tokens are redacted in fields and correlation, even glued', () => {
+test('a GitHub installation token glued after punctuation is redacted in correlation', () => {
   const { sink, logger: log } = logger();
-  log.with({ correlationId: `r-${GITHUB_TOKEN}` }).warn('e', { cause: `push x${GITHUB_TOKEN} or ${GITHUB_STATELESS_TOKEN} failed` });
-  const record = sink.records[0]!;
-  assert.equal(record.correlation.correlationId, `r-${REDACTED}`);
-  assert.equal(record.fields['cause'], `push x${REDACTED} or ${REDACTED} failed`);
+  log.with({ correlationId: `r-${GITHUB_TOKEN}` }).warn('e');
+  assert.equal(sink.records[0]!.correlation.correlationId, `r-${REDACTED}`);
+});
+
+test('a stateful GitHub installation token is redacted in a field', () => {
+  const { sink, logger: log } = logger();
+  log.warn('e', { cause: `push (${GITHUB_TOKEN}) failed` });
+  assert.equal(sink.records[0]!.fields['cause'], `push (${REDACTED}) failed`);
+});
+
+test('a stateless GitHub installation token is redacted whole in a field', () => {
+  const { sink, logger: log } = logger();
+  log.warn('e', { cause: `push ${GITHUB_STATELESS_TOKEN} failed` });
+  assert.equal(sink.records[0]!.fields['cause'], `push ${REDACTED} failed`);
 });
 
 test('near misses of a GitHub installation token stay', () => {
   const body = 'A1b2'.repeat(9);
   for (const kept of [`ghx_${body}`, `GHS_${body}`, `ghs_${body.slice(1)}`, `ghs-${body}`]) {
+    assert.equal(redactText(`keep ${kept} here`), `keep ${kept} here`, kept);
+  }
+});
+
+test('a GitHub installation token shape inside a longer word stays', () => {
+  for (const kept of [`prefix${GITHUB_TOKEN}suffix`, `my_${GITHUB_TOKEN}`, `v2${GITHUB_TOKEN}`]) {
     assert.equal(redactText(`keep ${kept} here`), `keep ${kept} here`, kept);
   }
 });

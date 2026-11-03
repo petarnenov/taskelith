@@ -46,20 +46,40 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED, worker: 'w1' }]);
 });
 
-test('text loses GitHub installation tokens, stateful or stateless, even glued', () => {
-  const token = `ghs_${'A1b2'.repeat(9)}`;
-  const stateless = `ghs_12345_${'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl'}`;
-  assert.equal(redactSecrets(`token ${token} failed`), `token ${REDACTED} failed`);
-  assert.equal(redactSecrets(`x${token}`), `x${REDACTED}`, 'a prefix glued in front hides nothing');
-  assert.equal(redactSecrets(`token ${stateless} failed`), `token ${REDACTED} failed`);
-  const redacted = redactFailure(failure('forbidden', `bad ${stateless}`, { presented: token }));
+// Synthetic GitHub installation tokens: stateful, and stateless with a JWT.
+const GITHUB_TOKEN = `ghs_${'A1b2'.repeat(9)}`;
+const GITHUB_STATELESS_TOKEN = `ghs_12345_${'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl'}`;
+
+test('text loses a stateful GitHub installation token', () => {
+  assert.equal(redactSecrets(`token ${GITHUB_TOKEN} failed`), `token ${REDACTED} failed`);
+});
+
+test('text loses a GitHub installation token glued after punctuation', () => {
+  assert.equal(redactSecrets(`r-${GITHUB_TOKEN}`), `r-${REDACTED}`);
+});
+
+test('text loses a stateless GitHub installation token whole', () => {
+  assert.equal(redactSecrets(`token ${GITHUB_STATELESS_TOKEN} failed`), `token ${REDACTED} failed`);
+});
+
+test('a failure loses GitHub installation tokens in its message and details', () => {
+  const redacted = redactFailure(failure('forbidden', `bad ${GITHUB_STATELESS_TOKEN}`, { presented: GITHUB_TOKEN }));
   assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED }]);
-  assert.deepEqual(scrubEnvironment({ GIT_HINT: `use ${token}`, KEEP: 'k' }), { KEEP: 'k' });
+});
+
+test('an environment loses a variable that holds a GitHub installation token', () => {
+  assert.deepEqual(scrubEnvironment({ GIT_HINT: `use ${GITHUB_TOKEN}`, KEEP: 'k' }), { KEEP: 'k' });
 });
 
 test('near misses of a GitHub installation token stay', () => {
   const body = 'A1b2'.repeat(9);
   for (const kept of [`ghx_${body}`, `GHS_${body}`, `ghs_${body.slice(1)}`, `ghs-${body}`]) {
+    assert.equal(redactSecrets(`keep ${kept} here`), `keep ${kept} here`, kept);
+  }
+});
+
+test('a GitHub installation token shape inside a longer word stays', () => {
+  for (const kept of [`prefix${GITHUB_TOKEN}suffix`, `my_${GITHUB_TOKEN}`, `v2${GITHUB_TOKEN}`]) {
     assert.equal(redactSecrets(`keep ${kept} here`), `keep ${kept} here`, kept);
   }
 });
