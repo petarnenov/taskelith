@@ -729,6 +729,10 @@ test('the SCM integrations migration checks its values and its down migration re
   await assert.rejects(insert('github', 'https://github.com:443'), /scm_integrations_integration_id_check/);
   await assert.rejects(insert(integration, 'https://GitHub.com:443'), /scm_integrations_allowed_origin_check/);
   await assert.rejects(insert(integration, 'https://github.com'), /scm_integrations_allowed_origin_check/);
+  for (const port of ['0', '65536', '99999']) {
+    await assert.rejects(insert(integration, `https://github.com:${port}`), /scm_integrations_allowed_origin_check/);
+  }
+  await insert(`i${'3'.repeat(32)}`, 'https://github.com:65535');
   await assert.rejects(insert(integration, 'https://github.com:443', '[]'), /scm_integrations_settings_check/);
   await assert.rejects(insert(integration, 'https://github.com:443', '{}', ''), /scm_integrations_label_check/);
   await insert(integration, 'https://github.com:443');
