@@ -13,7 +13,9 @@ Assigned on 2026-11-03 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `f86d074a` `chore: bound and force the discard after an early answer` (the pass 1 fixes, with the pass 1 summary in `passes.jsonl`).
 - `130f59bb` `docs: record the pass 1 fix round of the stabilize webhook limit test change` (`findings.jsonl` and this record).
 - `ad68f928` `test: show that the drain retains none of the bytes it discards` (the coordinator's decisions).
-- The commit of this record and `make record` follows.
+- `4e21b578` and `07ebe518`, the coordinator's decisions and the `make verify` of the pass 1 fix round.
+- `ff0a16c8` `chore: flush an empty early answer and answer a bodiless request at once` (the pass 2 fixes, with the pass 2 summary in `passes.jsonl`).
+- The commit of the pass 2 records and `make record` follows.
 
 ## Environment
 
@@ -73,7 +75,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e`, reviewed `0e8d10e0..809228ce`: Critical 0, High 2, Medium 5, Low 1, all fixed in `f86d074a` (`findings.jsonl`). Pass 2 is next, since pass 1 had Medium or worse findings.
+Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e`, reviewed `0e8d10e0..809228ce`: Critical 0, High 2, Medium 5, Low 1, all fixed in `f86d074a` (`findings.jsonl`). Pass 2: Claude Code `claude-fable-5-1`, effort medium, session `34844afd-1dac-4b08-9356-c15e840c4a7c`, reviewed `0e8d10e0..07ebe518`: Critical 0, High 0, Medium 1, Low 5; five fixed in `ff0a16c8`, L4 declined as the reviewer's information only (`findings.jsonl`). Pass 3 is next, since pass 2 had a Medium finding.
 
 ## Pass 1 fix round
 
@@ -84,6 +86,13 @@ Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4
 - **Load.** The three files (`scm-webhook-receiver.test.ts`, `body-drain.test.ts`, `early-answer.test.ts`) at `ad68f928`, 20 consecutive runs with 16 busy-loop Node.js processes on the 8 logical CPUs: 20 of 20 runs passed 28 of 28 tests, load average 4.94 to 20.27, run duration 7178 to 19093 ms. An earlier series at `f86d074a`, before the no-buffering test, passed 27 of 27 in 20 of 20 runs.
 - **Scratch archive.** A copy of `openspec/` archived the change (`+ 2, ~ 1`), and `openspec validate --specs --strict` passed there: `Totals: 71 passed, 0 failed (71 items)`.
 
+## Pass 2 fix round
+
+- **Fixes.** M1: `BodyDrains.answer` flushes the head of an empty answer with `response.flushHeaders()` and writes other content (`apps/control-plane/src/api/body-drain.ts:36`). L1: `serve` answers a request with neither `transfer-encoding` nor a nonzero `content-length` at once (`bodyEnded`, `apps/control-plane/src/api/api-server.ts:205`), so it takes no drain slot; the fault test's requests now declare `content-length: 1` to keep the drain path. L2: the scope, the self-check, and the `shouldKeepAlive` citation (`api-server.ts:133`) are current. L3: contract section 5 and design "A bound really stops" state that the 32 MiB are body bytes without chunk framing and that the time bound limits the wire bytes; the spec delta speaks of the discarded body and is unchanged. L5: section 5 says "like every answer". L4: declined, no code change.
+- **Fail-before.** The new tests against the source of `07ebe518` (`git checkout apps/control-plane/src`, `npm run build`), with `body-drain.test.ts` and `early-answer.test.ts`: 12 passed and 3 failed. The unit case "an empty answer flushes its head at once instead of writing nothing" got `[ false, [ <Buffer > ] ]`; the wire test "an empty answer given before its body ends sends its head before the body ends" failed after 10009 ms with `the connection closed before any answer`; "a request without a body is answered at once and takes no drain slot" got `'drained'` for no headers. With the fixes restored and rebuilt, the two files passed 15 of 15.
+- **Load.** The three files at `ff0a16c8`, 20 consecutive runs with 16 busy-loop Node.js processes on the 8 logical CPUs: 20 of 20 runs passed 31 of 31 tests, load average 9.91 to 21.50, run duration 8081 to 18764 ms. An earlier series ran by mistake against the fail-before build, not rebuilt after the fixes were restored: in 20 of 20 runs exactly the three new tests failed and 28 passed, the no-buffering test included; it is not evidence for the fix.
+- **Scratch archive.** A copy of `openspec/` archived the change (`+ 2, ~ 1`), and `openspec validate --specs --strict` passed there: `Totals: 71 passed, 0 failed (71 items)`.
+
 ## Limitations
 
 - The intermittent failure was not reproduced on the iMac; the raw sender reproduces its mechanism deterministically on this host.
@@ -92,7 +101,7 @@ Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4
 
 ## Remaining gates
 
-- Independent review: pass 2, which runs because pass 1 had a Medium or worse finding, and pass 3 only if pass 2 has one; a pass with only Low findings or none ends the review.
+- Independent review: pass 3, which runs because pass 2 had a Medium finding; it is the last pass.
 - The coordinator's check, as solution architect, of every fix that no later pass reviews.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request).
