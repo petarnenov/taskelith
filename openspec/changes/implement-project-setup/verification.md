@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 11 (`docs/g3-plan.md`, row 11), sub-change 11a by the coordinator's split of 2026-11-03 (design, "Coordinator decisions" Q1 to Q3), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `a21913f1` (#426): projects, members, and defaults in `@taskelith/access` with the PostgreSQL store and migration `1792933800000_project-setup.sql`, and the control plane's `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` ([design](design.md), decisions 1 to 9). Out of scope and untouched: `readRepositoryBinding`, `bindRepository`, and the integration branch (11b); `updateAutoMergeSetting` (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); views and screens; the temporary G2 bridge, which the follow-up `require-existing-project-for-runs` removes (design, "Pass 1 coordinator decisions" (a)). The pass 1 fix round adds the 403 declarations of the G2 documents (decision (c)).
+G3 item 11 (`docs/g3-plan.md`, row 11), sub-change 11a by the coordinator's split of 2026-11-03 (design, "Coordinator decisions" Q1 to Q3), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `a21913f1` (#426): projects, members, and defaults in `@taskelith/access` with the PostgreSQL store and migration `1792933800000_project-setup.sql`, and the control plane's `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` ([design](design.md), decisions 1 to 9). Out of scope and untouched: `readRepositoryBinding`, `bindRepository`, and the integration branch (11b); `updateAutoMergeSetting` (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); views and screens; the temporary G2 bridge, which the follow-up sub-change 11c removes (design, "Pass 1 coordinator decisions" (a)). The pass 1 fix round adds the 403 declarations of the G2 documents (decision (c)).
 
 Commit type: `packages/modules/access`, `packages/adapters/*`, and `apps/control-plane` are private workspaces; the published `taskelith` package ships none of them (`package.json` `files`, checked by `scripts/verify-package.ts`), so every commit uses `chore`, `test`, or `docs`.
 
@@ -75,7 +75,7 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 ## Limitations
 
-- The temporary G2 bridge stays until the follow-up `require-existing-project-for-runs` (design, "Follow-ups"); the living requirement now names that change.
+- The temporary G2 bridge stays until the follow-up sub-change 11c (design, "Follow-ups"); the living requirement now names it.
 - Plugin identifiers in the defaults are stored and read as given, without a registration check, which the task creation of items 15 and 25 makes (decision (b)).
 - The G2 documents declare a 403 that no caller receives while the operator credential authenticates only the `installation-owner` and the bridge stands (decision (c)).
 - The `NOT VALID` foreign key leaves roles assigned before the migration on G2 project identifiers unchecked.
@@ -116,7 +116,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 Niki (architect), 2026-11-03, binding (design, "Pass 1 coordinator decisions"):
 
-- (a) The living requirement "Temporary G2 bridge" no longer says that item 11 removes it: a MODIFIED delta keeps its text and defers the removal to the follow-up `require-existing-project-for-runs`, in which `createRun` requires an existing project.
+- (a) The living requirement "Temporary G2 bridge" no longer says that item 11 removes it: a MODIFIED delta keeps its text and defers the removal to the follow-up, in which `createRun` requires an existing project.
 - (b) Plugin identifiers of the defaults are checked at task creation, later; until then the defaults may name an unregistered plugin, and `readProjectDefaults` returns them as stored, which module and HTTP tests check.
 - (c) Every operation that 11a answers with 403 declares it in `control-plane.openapi.json`; the G2 documents declare the 403 of their role-checked operator operations, approved as a contract fix, with the drift checks above and the minor versions `sdlc.openapi.json` 0.4.0 and `execution.openapi.json` 0.9.0; no served status stays undeclared, which `api-server.test.ts` checks for every route.
 

@@ -21,7 +21,7 @@ A project role SHALL be assigned only on an existing project, through `assignPro
 ## MODIFIED Requirements
 
 ### Requirement: Temporary G2 bridge
-Until `createRun` requires an existing project, an `installation-owner` SHALL also pass the project requirements of the G2 execution and SDLC operator operations, through one requirement kind of the `Access` module named as the bridge. This requirement is temporary; the change `require-existing-project-for-runs` SHALL remove it.
+Until `createRun` requires an existing project, an `installation-owner` SHALL also pass the project requirements of the G2 execution and SDLC operator operations, through one requirement kind of the `Access` module named as the bridge. This requirement is temporary; sub-change 11c of item 11 SHALL remove it.
 
 #### Scenario: Owner on a G2 operation
 - **WHEN** an `installation-owner` without a project role calls a G2 operation that requires `project-operator`

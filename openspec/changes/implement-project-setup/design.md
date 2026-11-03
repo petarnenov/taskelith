@@ -6,7 +6,7 @@ The coordinator split item 11 on 2026-11-03 (see "Coordinator decisions"): this 
 
 **Goals.** Projects created by an `installation-owner` with their defaults and an auto-merge setting that starts on; members and their roles assigned and removed by an `installation-owner`; the project name and the defaults changed only by a `project-maintainer`, by compare-and-set; `listProjects` and `readProject` for items 15 and 29; the foreign key from `project_roles` to projects.
 
-**Non-goals.** `readRepositoryBinding`, `bindRepository`, and the integration branch that ADR 0013 asks for (11b); `updateAutoMergeSetting` with its push standing rule (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); the board, task, and inbox views (items 15 and 29); any SPA screen (item 34); any new operation or contract change other than the 403 declarations of the G2 documents (coordinator decision (c), "Pass 1 coordinator decisions"); retiring the temporary G2 bridge, which the follow-up `require-existing-project-for-runs` does (coordinator decision (a)).
+**Non-goals.** `readRepositoryBinding`, `bindRepository`, and the integration branch that ADR 0013 asks for (11b); `updateAutoMergeSetting` with its push standing rule (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); the board, task, and inbox views (items 15 and 29); any SPA screen (item 34); any new operation or contract change other than the 403 declarations of the G2 documents (coordinator decision (c), "Pass 1 coordinator decisions"); retiring the temporary G2 bridge, which the follow-up sub-change 11c does (coordinator decision (a)).
 
 ## Sources
 
@@ -88,13 +88,20 @@ Niki answered the brief's questions on 2026-11-03:
 
 Niki decided on 2026-11-03, in the fix round of review pass 1, the questions that the first design left open:
 
-- **(a) G2 bridge.** The bridge stays in 11a. The living requirement "Temporary G2 bridge" no longer names item 11: this change modifies it so that the follow-up `require-existing-project-for-runs`, in which `createRun` requires an existing project, removes it. Removing it now would refuse the owner bearer on `createRun`, `submitTask`, `readAdmission`, and `readTaskResult`, whose G2 runs name project identifiers that are no projects.
+- **(a) G2 bridge.** The bridge stays in 11a. The living requirement "Temporary G2 bridge" no longer names item 11: this change modifies it so that the follow-up sub-change 11c, in which `createRun` requires an existing project, removes it. Removing it now would refuse the owner bearer on `createRun`, `submitTask`, `readAdmission`, and `readTaskResult`, whose G2 runs name project identifiers that are no projects.
 - **(b) Plugin identifiers.** Checked where a task is created from the defaults, later; until then the defaults may name an unregistered plugin, and `readProjectDefaults` returns the identifiers as stored (decision 4).
 - **(c) 403 declarations.** Every operation that 11a answers with 403 already declares it in `control-plane.openapi.json` 0.4.0; `listProjects` answers no 403, because any authenticated principal passes its role check, so that document is unchanged. A route test now checks, for every route of the three HTTP documents, that the document declares each status the route answers, the server's 403 of a role check before the body or of a session mutation's CSRF check included. It found `listQuarantine` and `redriveQuarantined` of `execution.openapi.json` able to answer an undeclared 403. As a contract fix approved by Niki, the G2 documents declare the 403 `AccessDenial` on their role-checked operator operations: `createRun`, `submitTask`, and `readAdmission` in `sdlc.openapi.json`, which gains `AccessDenial` as the control-plane document defines it, and `readTaskResult`, `listQuarantine`, and `redriveQuarantined` in `execution.openapi.json`. No server behaviour changes: only the owner reaches these operations, which it passes. `make contract-compatibility` reports no breaking change; the documents still raise their minor version, `sdlc.openapi.json` to 0.4.0 and `execution.openapi.json` to 0.9.0, as execution 0.6.0 did when a caller of the same request could be refused ([execution wire contracts](/docs/contracts/execution-wire-contracts.md) sections 7 and 8.2). The generated types follow from `npm run build`; the web API types derive from the control-plane document alone, which is unchanged.
 
+## Pass 2 coordinator decisions
+
+Niki decided on 2026-11-03, in the fix round of review pass 2:
+
+- **(a) Follow-up 11c.** The follow-up that retires the temporary G2 bridge is sub-change 11c of item 11, no longer a change named `require-existing-project-for-runs`. It comes after 11b, the repository binding, which waits for 20f `manage-scm-integrations` (owner decision, 2026-11-03). Its row of the G3 work plan lands with the edit of `docs/g3-plan.md` by 20f, so this change leaves the plan unchanged.
+- **(b) 403 as a superset.** The 403 that `createRun`, `submitTask`, `readAdmission`, and `readTaskResult` declare (decision (c) of pass 1) is a superset of what they answer until 11c switches the bridge's denial from 401 to 403. A declared response that is never sent is safe for a caller; an undeclared one that is sent is not.
+
 ## Follow-ups
 
-- `require-existing-project-for-runs`: `createRun` requires an existing project, the temporary G2 bridge is removed, and the denials of `createRun`, `submitTask`, `readAdmission`, and `readTaskResult` answer the declared 403 (coordinator decision (a)); not yet a row of the G3 work plan.
+- 11c: `createRun` requires an existing project, the temporary G2 bridge is removed, and the denials of `createRun`, `submitTask`, `readAdmission`, and `readTaskResult` answer the declared 403 (coordinator decision (a)). 11c follows 11b, the repository binding, which waits for 20f `manage-scm-integrations` (owner decision, 2026-11-03); its row of the G3 work plan lands with the edit of `docs/g3-plan.md` by 20f (pass 2 coordinator decision (a)).
 
 ## Test plan
 
@@ -112,5 +119,5 @@ The brief's checklist (`checklist.json`, dev `a21913f1`, size L) ranks contract-
 
 - The `NOT VALID` foreign key leaves earlier roles on G2 project identifiers unchecked until a later change validates or removes them.
 - The `Access` store writes the initial auto-merge row that item 23 moves behind the Integrations port; until then two modules' concepts share one transaction, deliberately and only at creation.
-- The G2 bridge stays until `require-existing-project-for-runs` ("Follow-ups"), so the owner bearer keeps its G2 reach.
+- The G2 bridge stays until 11c ("Follow-ups"), so the owner bearer keeps its G2 reach.
 - The G2 documents declare a 403 that no caller can receive yet (coordinator decision (c)).
