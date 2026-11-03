@@ -35,6 +35,7 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Evidence check
 
+- `verify-11a-3.log` (scratchpad, pass 1 fix round): `make verify: passed, profile full, tree f390638d8380e772f6bd4c91543691980c6e5957`, the tree of `9836ca9a`, clean; tests 4311, pass 4302, fail 0, skipped 9; all files 99.41% lines, 92.64% branches, 98.90% functions; no timing flake, no rerun. Per file (lines, branches, functions): `project-api.js` 100, 89.47, 100; `routes.js` 100, 100, 100; `project-repositories.js` 100, 100, 100; `in-memory-access-store.js` 100, 96.88, 100; `principal-administration.js` 100, 87.50, 100; `project-setup-service.js` 100, 88.06, 100; `project.js` 100, 100, 100. It supersedes `verify-11a-2.log` below, whose figures stay as the record of the pass 1 head.
 - `verify-11a-2.log` (scratchpad): `make verify: passed, profile full, tree 00e7462a65a2edd309c2baaad308671eee888b73`, the tree of `a3a3b889`, clean; tests 4294, pass 4285, fail 0, skipped 9; all files 99.40% lines, 92.62% branches, 98.91% functions; no timing flake, no rerun. Per file (lines, branches, functions): `project-api.js` 100, 89.47, 100; `routes.js` 100, 100, 100; `project-repositories.js` 100, 100, 100; `in-memory-access-store.js` 100, 96.77, 100; `principal-administration.js` 100, 86.17, 100; `project-setup-service.js` 100, 85.25, 100; `project.js` 100, 100, 100.
 - `verify-11a-1.log` (scratchpad): passed on tree `e797418dc48ff661a795d21df0fbda06994bbb41` (head `c5e5295e`), tests 4293, fail 0, but `project-api.js` had 73.44% branches, under the 75% bar per file; `9e35c606` added the handler failure test, so that run is superseded and not recorded.
 - The generated block below was written by `make record` from `verify-11a-2.log`; `make record-check` passes.
@@ -85,11 +86,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `00e7462a65a2edd309c2baaad308671eee888b73`; tests 4294, pass 4285, fail 0, skipped 9; all files 99.40% lines, 92.62% branches, 98.91% functions.
+- `make verify`: passed, profile full, tree `f390638d8380e772f6bd4c91543691980c6e5957`; tests 4311, pass 4302, fail 0, skipped 9; all files 99.41% lines, 92.64% branches, 98.90% functions.
 - `npm run openspec -- validate implement-project-setup --strict`: passed, `Change 'implement-project-setup' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 103 file(s); every pass summary file is valid: 83 file(s); every route file is valid: 36 file(s).`.
 - Spec diff against the merge base `a21913f13672` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a19fb5-18fc-7851-8d55-c567407d8851` | 0 | 1 | 4 | 2 |
 <!-- make record: end -->
 
 ## Independent review
