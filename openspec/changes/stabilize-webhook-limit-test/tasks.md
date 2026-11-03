@@ -21,4 +21,5 @@
 ## 5. Review and archive
 
 - [ ] 5.1 Independent review
+  - [x] 5.1.1 Pass 1 (codex gpt-6-astra, effort medium): fix its 2 High, 5 Medium, and 1 Low findings
 - [ ] 5.2 Archive the change

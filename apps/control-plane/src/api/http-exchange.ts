@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import { redactFailure } from '@taskelith/secrets';
+import type { BodyDrains } from './body-drain.js';
 
 // Every message of the execution and SDLC contracts is at most 1 MiB.
 export const MAX_BODY_BYTES = 1024 ** 2;
@@ -15,10 +16,6 @@ export const MAX_SCM_WEBHOOK_BODY_BYTES = 25 * 1024 ** 2;
 export const MAX_CONCURRENT_WEBHOOKS = 4;
 // The failure reason of a body over its route's limit.
 export const BODY_TOO_LARGE = 'body-too-large';
-// After an answer sent before its request's body ended: the body bytes and
-// the time a client still writing it gets before the connection closes.
-export const MAX_DRAINED_BODY_BYTES = 32 * 1024 ** 2;
-export const MAX_DRAIN_MILLISECONDS = 10_000;
 
 // Headers such as Set-Cookie; a failure keeps its redacted code and
 // details for the request log.
@@ -69,7 +66,8 @@ export function bearerToken(request: IncomingMessage): string | undefined {
 export async function readBody(request: IncomingMessage, limit: number): Promise<Result<Buffer>> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of request) {
+  // Past the limit the request stays open, so its answer can drain the rest.
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     size += (chunk as Buffer).length;
     if (size > limit) return err(failure('invalid', `the request body exceeds ${limit} bytes`));
     chunks.push(chunk as Buffer);
@@ -97,32 +95,11 @@ export function writeResponse(response: ServerResponse, answer: ApiResponse, cor
   response.end(startResponse(response, answer, correlationId));
 }
 
-// Closing with the body unread would reset the connection under a client
-// still writing it, so the answer goes first and the close waits a bound.
-export async function writeResponseBeforeBodyEnds(
-  request: IncomingMessage, response: ServerResponse, answer: CompleteResponse, correlationId: string,
-): Promise<void> {
-  response.write(startResponse(response, answer, correlationId));
-  await drained(request);
-  response.end();
-}
-
-// Discards the rest of a request's body until it ends or exceeds a bound.
-function drained(request: IncomingMessage): Promise<void> {
-  return new Promise((resolve) => {
-    let bytes = 0;
-    const timer = setTimeout(stop, MAX_DRAIN_MILLISECONDS);
-    function count(chunk: Buffer): void {
-      bytes += chunk.length;
-      if (bytes > MAX_DRAINED_BODY_BYTES) stop();
-    }
-    function stop(): void {
-      clearTimeout(timer);
-      request.off('data', count).off('end', stop).off('close', stop).off('error', stop);
-      resolve();
-    }
-    request.on('data', count).once('end', stop).once('close', stop).once('error', stop);
-  });
+// The answer goes first; `drains` closes the connection after the body.
+export function writeResponseBeforeBodyEnds(
+  request: IncomingMessage, response: ServerResponse, answer: CompleteResponse, correlationId: string, drains: BodyDrains,
+): void {
+  drains.answer(request, response, startResponse(response, answer, correlationId));
 }
 
 // Writes the head of an answer with a known length and returns its content.

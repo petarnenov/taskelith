@@ -4,9 +4,11 @@ The test "a body over the limit is 413 before any verification, and one at the l
 
 ## What Changes
 
-- An answer sent before its request's body ended keeps the connection open after it is written: the server reads and discards the rest of the body until it ends, at most `MAX_DRAINED_BODY_BYTES` (32 MiB) and `MAX_DRAIN_MILLISECONDS` (10 s), and only then ends the response, so the close is a FIN, not a reset. The answer carries `Connection: close`, as every answer already does.
-- Three tests: a sender that writes its whole oversized body before it reads gets the 413, which failed before the fix; a body past the byte bound and a body that stalls past the time bound get their connection closed.
-- The control-plane wire contracts section 5 and a new `control-plane-api` requirement state the behavior and its bounds.
+- An answer sent before its request's body ended is written at once with `Connection: close`; the server then discards the rest of the body unbuffered and closes gracefully when it ends, or by force once more than `MAX_DRAINED_BODY_BYTES` (32 MiB) were discarded or `MAX_DRAIN_MILLISECONDS` (10 s) passed since the answer.
+- At most `MAX_CONCURRENT_DRAINS` (16) connections discard at once; beyond them an early answer closes at once, as before.
+- The bounded body read no longer destroys the request past its limit, so a chunked oversized body is drained too.
+- Tests: raw senders, declared and chunked, that write their whole body before reading; an early 401 before an upload's body; each bound below and at exhaustion; discard saturation; and a failing answer write.
+- The control-plane wire contracts section 5 and the `control-plane-api` requirements state the behavior and its bounds.
 
 ## Capabilities
 
@@ -14,8 +16,8 @@ The test "a body over the limit is 413 before any verification, and one at the l
 
 ### Modified Capabilities
 
-- `control-plane-api`: ADDED requirement "Answer before the body ends".
+- `control-plane-api`: ADDED requirements "Answer before the body ends" and "Bounded discards"; MODIFIED requirement "SCM webhook receiver served", whose fixed number of deliveries leaves the discards aside.
 
 ## Impact
 
-`@taskelith/control-plane`, a private workspace package: every operation's answer that is sent before the request's body ended, such as a 413, a 401 before an upload, or a body limit refusal, now closes after the bounded drain instead of at once. The 25 MiB limit and the order of verification are unchanged.
+`@taskelith/control-plane`, a private workspace package: every operation's answer that is sent before the request's body ended, such as a 413, a 401 before an upload, or a body limit refusal, now closes after the bounded discard instead of at once, unless every discard slot is taken. The 25 MiB limit and the order of verification are unchanged.
