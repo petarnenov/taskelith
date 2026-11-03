@@ -67,9 +67,27 @@ The two minutes exceed the plugin's 60 s expiry margin. Findings use the suite's
 
 The run writes `report.json` into `OUT` (outside the worktree, created with mode 0700, file mode 0600): mode, times, repositories, case count, findings, whether the long run ran, a stop reason, the cleanup steps, and the guard's refusals. Its text is redacted with `redactWith(text, SECRET_SHAPE_RULES)` from `@taskelith/observability` (PEM keys, `ghs_` tokens, JWTs, `Basic` credentials, and the other shared shapes), then scanned with looser patterns (any `gh?_` token, a PEM private key marker, a JWT prefix, a bare `Basic` value) and the run's known secrets (the webhook secret, the key's body lines, every minted token). Any trace fails the run with the trace kinds only and saves nothing. The console prints counts only.
 
+### Revocation propagation window (live-run finding 2)
+
+The first live runs failed `adopted credential` and `credential isolation`: right after a revocation, GitHub's Git smart HTTP still accepted the revoked token. A probe on the project repository answered 200 at 0 and 2 seconds after the revocation and 401 from 5 seconds on; the REST API refused the token at once. This is GitHub's propagation delay, not a plugin defect: the plugin's revocation returned only after GitHub confirmed it.
+
+The coordinator Niki decided on 2026-11-03 (option B) that the contract states what GitHub guarantees instead of an end at once:
+
+- An adoption confirmation or a revocation requests the end before it returns, and every surface, Git's smart HTTP included, refuses an ended version within `REVOCATION_PROPAGATION_SECONDS`, 30 seconds (source control contract section 3, and section 7 for GitHub). The constant is in the port entry. The port is a draft, its operations are unchanged, and so is its version `0.2.0`. The contract compatibility check covers the OpenAPI and AsyncAPI documents only, so no breaking-changes entry applies.
+- The contract says that no consumer relies on an end alone to isolate runs; fencing and the workspace hand-off stay the isolation boundary.
+- `expectEnded` in the shared suite, and the long run, repeat each attempt with an ended version about once a second (`awaitRefusal`, `REVOCATION_POLL_MS`) until it is refused or the window has passed. Every attempt starts within the window. A success at the window's end, or a refusal with another code than `forbidden`, is a finding, as before. The report's `endings` record the slowest refusal of each ending, and the evidence keeps them.
+- The fixture supplies the clock (`SourceControlConformanceFixture.clock`), so the in-memory SCM and the emulated GitHub run the window on their own clocks without waiting. The in-memory SCM's `endingLagMs` keeps an ended version working for a set time; tests cover a lag just within and just past the window.
+
+No other check was loosened.
+
+### Narrowed tokens of the plugin's own identity (live-run finding 1)
+
+The first live run's guard refused the plugin's own installation token request, which named no repository: such a token covers every repository of the installation, `petarnenov/taskelith` included. `c57cc336` narrows each token of the plugin's own identity to the repository of the route that uses it, with a test that failed before the fix.
+
 ## Risks / Trade-offs
 
 - The App holds administration on its installation; the guard, not GitHub, keeps the run off `petarnenov/taskelith`. A separate installation for the conformance repositories would remove that reliance and is an owner choice.
 - Merges accumulate commits on the disposable repositories' `main`; this is expected for disposable repositories.
 - The run depends on the repositories' settings: a `main` branch with a commit, and merge commits, squash, and rebase all allowed.
 - The fixture's status codes for GitHub's Git HTTP refusals are assumptions until the live run confirms them.
+- The 30-second window is three to six times the delay seen on 2026-11-03; GitHub publishes no bound, so a slower propagation fails the run, which then needs a new decision rather than a longer wait.
