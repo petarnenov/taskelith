@@ -26,9 +26,8 @@ export class InstallationTokens {
     private readonly installationId: string,
   ) {}
 
-  // Every repository must be one of the installation's, so that a token is
-  // never minted for the installation's whole selection. A token whose
-  // grant `accepts` refuses is revoked at once.
+  // Only for repositories of the installation; a token whose grant
+  // `accepts` refuses is revoked at once.
   async mint(grant: TokenGrant, accepts: (granted: TokenGrant) => boolean): Promise<Result<InstallationToken>> {
     const requested = await this.tokenRequest(grant);
     if (!requested.ok) return requested;

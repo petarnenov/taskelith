@@ -1,9 +1,7 @@
 import { randomBytes, randomUUID, verify, type KeyObject } from 'node:crypto';
 
-// A test-only emulation of the GitHub REST API and Git's HTTP transport,
-// reached through an injected fetch. It models what the plugin relies on:
-// App JWTs, narrowed installation tokens, branch protection with
-// enforce_admins, pull requests, commit statuses, and merges.
+// A test-only GitHub REST API and Git HTTP transport behind an injected
+// fetch, modelling only what the plugin relies on (design decision 9).
 
 export const API_URL = 'https://api.github.test';
 export const GIT_URL = 'https://github.test';
