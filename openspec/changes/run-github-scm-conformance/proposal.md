@@ -13,18 +13,19 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20) requires the SCM conformance suite r
 - Evidence redacted by the shared `SECRET_SHAPE_RULES` and then scanned with looser patterns and the run's known secret values; any trace fails the run and saves nothing.
 - Network-free unit tests of the environment check, the guard, the cleanup planning, the redaction and scan, and the long run against the emulated GitHub.
 - The propagation window of a credential's end (live-run finding 2, coordinator decision of 2026-11-03): `REVOCATION_PROPAGATION_SECONDS` in the port, the suite and the long run waiting for the refusal within it on the fixture's clock, and the latencies in the report.
-- The plugin's own identity narrows each installation token to the route's repository (live-run finding 1).
+- The plugin's own identity narrows each installation token to the route's repository, and resolves a refused token request's repositories by the App's JWT, so it never requests an installation-wide token (live-run finding 1, review pass 1 finding 1).
+- The port's version rises to `0.3.0`, as the window changes the meaning of an end (coordinator decision).
 
 ## Capabilities
 
 ### Modified Capabilities
 
 - `scm-qualification`: the live GitHub conformance run, its repository allowlist, cleanup, long-run case, and redacted evidence.
-- `scm-port`: the propagation window within which every surface refuses an ended credential version.
+- `scm-port`: the propagation window within which every surface refuses an ended credential version, and the requirements that demanded an end at once.
 
 ## Impact
 
-- Code: `scripts/github-conformance*.ts` (new), `test/github-conformance.test.ts` (new), `Makefile`, the shared conformance suite and its fixture type in `@taskelith/integrations`, and the token requests of `@taskelith/scm-github`.
-- Docs: `docs/qualification/github.md` (live conformance section), `docs/contracts/source-control.md` sections 2, 3, 7, 8, and 9, and the Octokit rows of the dependency register.
-- No new dependency, OpenAPI, wire, migration, or published `taskelith` package change.
-- The live run, the long run, and the promotion of the Octokit dependencies followed the owner's setup in a later phase of this sub-change.
+- Code: `scripts/github-conformance*.ts` (new), `test/github-conformance.test.ts` (new), `Makefile`, the shared conformance suite, its fixture type, and the port version in `@taskelith/integrations`, and the token requests of `@taskelith/scm-github`, which no longer uses `@octokit/plugin-paginate-rest`.
+- Docs: `docs/qualification/github.md` (live conformance section), `docs/contracts/source-control.md` sections 2, 3, 7, 8, and 9, and the Octokit rows of the dependency register, which stay `candidate`.
+- Two exact root development dependencies for the tooling, `@octokit/core@7.0.8` and `@octokit/plugin-paginate-rest@16.0.0` (coordinator decision); no OpenAPI, wire, migration, or published `taskelith` package file change.
+- The live runs and the long runs followed the owner's setup in a later phase of this sub-change.
