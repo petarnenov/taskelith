@@ -1,5 +1,5 @@
 import type { Clock } from '../session/clock';
-import type { BoardChange, BoardGateway, BoardStreamEvent, ReadFailure } from './board';
+import type { BoardChange, BoardGateway, BoardStreamEvent, ReadFailed } from './board';
 import { applyChange, viewOf, type BoardView } from './board-model';
 
 // connecting: before the stream first opens; lost: from a drop or resync
@@ -8,7 +8,7 @@ export type Liveness = 'connecting' | 'live' | 'lost';
 
 export type BoardFeedState =
   | { readonly status: 'loading' }
-  | { readonly status: 'failed'; readonly failure: ReadFailure }
+  | { readonly status: 'failed'; readonly failure: ReadFailed }
   | { readonly status: 'shown'; readonly view: BoardView; readonly liveness: Liveness };
 
 // After a stream that closed for good, the board waits this long before it
@@ -58,7 +58,7 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
     if (result.kind !== 'read') {
       closeStream();
       view = undefined;
-      show({ status: 'failed', failure: result.kind });
+      show({ status: 'failed', failure: result });
       return false;
     }
     view = changes.reduce(applyChange, viewOf(result.value));

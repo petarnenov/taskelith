@@ -127,6 +127,13 @@ describe('readBoard', () => {
     expect(await createBoardGateway({ fetch: sendAnswers(answer) }).readBoard('p')).toEqual({ kind });
   });
 
+  it('reads a 403 with the role it needs', async () => {
+    const details = { reason: 'role-required', requiredRole: 'project-viewer' };
+    const answer = json(403, { code: 'forbidden', message: 'No role.', details });
+    const result = await createBoardGateway({ fetch: sendAnswers(answer) }).readBoard('p');
+    expect(result).toEqual({ kind: 'denied', requiredRole: 'project-viewer' });
+  });
+
   it.each([
     ['no cards array', { ...board(), cards: undefined }],
     ['a position that is not a decimal integer', board({ position: '01' })],

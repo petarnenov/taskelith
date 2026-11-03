@@ -26,7 +26,12 @@ export interface Project {
 
 export type ReadFailure = 'unauthenticated' | 'denied' | 'not-found' | 'unavailable';
 
-export type ReadResult<T> = { readonly kind: 'read'; readonly value: T } | { readonly kind: ReadFailure };
+// A 403 names the role it needs, when the control plane says which.
+export type ReadFailed =
+  | { readonly kind: Exclude<ReadFailure, 'denied'> }
+  | { readonly kind: 'denied'; readonly requiredRole?: string };
+
+export type ReadResult<T> = { readonly kind: 'read'; readonly value: T } | ReadFailed;
 
 export interface CardChange {
   readonly kind: 'card-changed';

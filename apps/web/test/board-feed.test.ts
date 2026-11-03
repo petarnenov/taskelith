@@ -122,7 +122,7 @@ describe('the board feed', () => {
     feed.gateway.readBoard.mockResolvedValueOnce({ kind: 'denied' });
     feed.gateway.lastStream().emit({ kind: 'failed' });
     await settled();
-    expect(feed.last()).toEqual({ status: 'failed', failure: 'denied' });
+    expect(feed.last()).toEqual({ status: 'failed', failure: { kind: 'denied' } });
     expect(feed.clock.pendingDelays()).toEqual([]);
     expect(feed.gateway.openStreams()).toEqual([]);
   });
@@ -293,7 +293,7 @@ describe('the board feed', () => {
     gateway.readBoard.mockResolvedValueOnce({ kind: 'unavailable' });
     const feed = start(gateway);
     await settled();
-    expect(feed.states).toEqual([{ status: 'failed', failure: 'unavailable' }]);
+    expect(feed.states).toEqual([{ status: 'failed', failure: { kind: 'unavailable' } }]);
     expect(feed.gateway.streams).toEqual([]);
   });
 

@@ -292,6 +292,14 @@ describe('the board states', () => {
     expect(within(await screen.findByRole('alert')).getByText(title)).toBeDefined();
   });
 
+  it('names the role a 403 answer says the board needs', async () => {
+    const boardGateway = boardGatewayWith(board());
+    boardGateway.readBoard.mockResolvedValueOnce({ kind: 'denied', requiredRole: 'project-viewer' });
+    renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), boardGateway);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Reading it needs the role project-viewer.');
+  });
+
   it('offers a retry when the projects cannot be read', async () => {
     const boardGateway = boardGatewayWith(board());
     boardGateway.listProjects.mockResolvedValueOnce({ kind: 'unavailable' });

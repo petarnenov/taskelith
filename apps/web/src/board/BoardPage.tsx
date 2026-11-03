@@ -1,6 +1,6 @@
 import { Alert, Button, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { useReducedMotion } from '@mantine/hooks';
-import type { Project, ReadFailure } from './board';
+import type { Project, ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
 import type { BoardView } from './board-model';
 import type { Liveness } from './board-feed';
@@ -102,13 +102,19 @@ const FAILURES: Readonly<Record<Exclude<ReadFailure, 'unauthenticated'>, { title
 };
 
 // An unauthenticated answer already shows the sign-in page.
-function BoardFailure({ failure, onRetry }: { readonly failure: ReadFailure; readonly onRetry: () => void }) {
-  const { title, text } = FAILURES[failure === 'unauthenticated' ? 'unavailable' : failure];
+function BoardFailure({ failure, onRetry }: { readonly failure: ReadFailed; readonly onRetry: () => void }) {
+  const { title, text } = FAILURES[failure.kind === 'unauthenticated' ? 'unavailable' : failure.kind];
   return (
     <LoadError title={title} onRetry={onRetry}>
-      {text}
+      {withRequiredRole(text, failure)}
     </LoadError>
   );
+}
+
+// Wire contracts section 2: a 403 names the role, so the SPA can show it.
+function withRequiredRole(text: string, failure: ReadFailed): string {
+  if (failure.kind !== 'denied' || failure.requiredRole === undefined) return text;
+  return `${text} Reading it needs the role ${failure.requiredRole}.`;
 }
 
 interface LoadErrorProps {

@@ -1,6 +1,6 @@
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
-import type { Board, BoardGateway, BoardStreamEvent, BoardStreamListener, Project, ReadFailure, ReadResult } from './board';
-import { boardOf, cardChangeOf, failureReason, projectPageOf, workersChangeOf } from './board-wire';
+import type { Board, BoardGateway, BoardStreamEvent, BoardStreamListener, Project, ReadFailed, ReadResult } from './board';
+import { boardOf, cardChangeOf, failureReason, projectPageOf, requiredRoleOf, workersChangeOf } from './board-wire';
 
 // The board's operations listProjects, readBoard, and streamProjectEvents
 // of the control plane, through the typed fetch and the browser's SSE.
@@ -41,7 +41,7 @@ export function createBoardGateway({
     do {
       const result = await reachable(() => request('get', '/projects', { query: { after } }));
       if (result === undefined) return { kind: 'unavailable' };
-      if (!hasStatus(result, 200)) return { kind: failureOf(result) };
+      if (!hasStatus(result, 200)) return failureOf(result);
       const page = projectPageOf(result.body);
       if (page === undefined || cannotFollow(page.next, visited)) return { kind: 'unavailable' };
       projects.push(...page.projects);
@@ -59,7 +59,7 @@ export function createBoardGateway({
   async function readBoard(projectId: string): Promise<ReadResult<Board>> {
     const result = await reachable(() => request('get', '/projects/{projectId}/board', { path: { projectId } }));
     if (result === undefined) return { kind: 'unavailable' };
-    if (!hasStatus(result, 200)) return { kind: failureOf(result) };
+    if (!hasStatus(result, 200)) return failureOf(result);
     const board = boardOf(result.body);
     return board === undefined ? { kind: 'unavailable' } : { kind: 'read', value: board };
   }
@@ -86,11 +86,15 @@ export function createBoardGateway({
   return { listProjects, readBoard, openEvents };
 }
 
-function failureOf({ status, body }: { readonly status: number; readonly body: unknown }): ReadFailure {
-  if (status === 401) return failureReason(body) === 'unauthenticated' ? 'unauthenticated' : 'unavailable';
-  if (status === 403) return 'denied';
-  if (status === 404) return 'not-found';
-  return 'unavailable';
+function failureOf({ status, body }: { readonly status: number; readonly body: unknown }): ReadFailed {
+  if (status === 401) return { kind: failureReason(body) === 'unauthenticated' ? 'unauthenticated' : 'unavailable' };
+  if (status === 403) return denialOf(requiredRoleOf(body));
+  if (status === 404) return { kind: 'not-found' };
+  return { kind: 'unavailable' };
+}
+
+function denialOf(requiredRole: string | undefined): ReadFailed {
+  return requiredRole === undefined ? { kind: 'denied' } : { kind: 'denied', requiredRole };
 }
 
 function dataOf(event: Event): unknown {

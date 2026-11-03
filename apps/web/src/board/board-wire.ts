@@ -47,7 +47,16 @@ export function workersChangeOf(data: unknown): WorkersChange | undefined {
 }
 
 export function failureReason(body: unknown): unknown {
-  return isRecord(body) && isRecord(body.details) ? body.details.reason : undefined;
+  return detailsOf(body)?.reason;
+}
+
+export function requiredRoleOf(body: unknown): string | undefined {
+  const role = detailsOf(body)?.requiredRole;
+  return isText(role) ? role : undefined;
+}
+
+function detailsOf(body: unknown): Record<string, unknown> | undefined {
+  return isRecord(body) && isRecord(body.details) ? body.details : undefined;
 }
 
 function isBoardCard(value: unknown): value is BoardCard {
