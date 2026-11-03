@@ -76,6 +76,7 @@ const PROJECT_OPERATIONS = [
   'assignProjectMember', 'createProject', 'listProjectMembers', 'listProjects', 'readAutoMergeSetting', 'readProject', 'readProjectDefaults',
   'removeProjectMember', 'updateProject', 'updateProjectDefaults',
 ];
+const SCM_INTEGRATION_OPERATIONS = ['createScmIntegration', 'listScmIntegrations', 'readScmIntegration', 'updateScmIntegration'];
 const AGENT_SESSION_OPERATIONS = [
   'listAgentSessionRequests', 'listAgentSessionTurns', 'listAgentSessions', 'readAgentSession', 'readAgentSessionOutput', 'respondToNativeRequest',
   'submitTurn',
@@ -83,7 +84,7 @@ const AGENT_SESSION_OPERATIONS = [
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
-  const expected = [...AGENT_SESSION_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS, 'receiveScmWebhook'];
+  const expected = [...AGENT_SESSION_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS, ...SCM_INTEGRATION_OPERATIONS, 'receiveScmWebhook'];
   assert.deepEqual(served.map((route) => route.operationId).sort(), expected.sort());
   for (const route of served) {
     const operation = operations.find((candidate) => candidate.operationId === route.operationId)!;

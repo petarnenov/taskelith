@@ -30,6 +30,7 @@ import { PostgresProducerCursors, PostgresWorkerReports } from './observation-re
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
+import { PostgresScmIntegrationRecords } from './scm-integrations.js';
 import { PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
 import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
@@ -78,6 +79,8 @@ export class PostgresTransaction {
   readonly slotCredentialDeliveries: PostgresSlotCredentialDeliveries;
   readonly sessionTimeline: PostgresSessionTimelineTransaction;
   readonly scmWebhookDeliveries: PostgresScmWebhookDeliveryRecords;
+  // Sealed secrets only; PostgresScmIntegrations seals and opens them.
+  readonly scmIntegrations: PostgresScmIntegrationRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -122,6 +125,7 @@ export class PostgresTransaction {
     this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
     this.sessionTimeline = new PostgresSessionTimelineTransaction(session);
     this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
+    this.scmIntegrations = new PostgresScmIntegrationRecords(session);
     this.outboxLookup = this.outbox;
   }
 

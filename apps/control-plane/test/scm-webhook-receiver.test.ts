@@ -5,9 +5,6 @@ import type { AddressInfo } from 'node:net';
 import { after, beforeEach, test } from 'node:test';
 import {
   ControlPlaneApi,
-  GithubEventlessDeliveries,
-  GithubWebhookDecoy,
-  InMemoryScmIntegrationVerifiers,
   MAX_SCM_WEBHOOK_BODY_BYTES,
   createApiServer,
   type ApiServices,
@@ -15,6 +12,7 @@ import {
 import {
   ScmWebhookReceiver,
   type DeliveryRecording,
+  type ScmIntegrationVerifiers,
   type ScmWebhookDeliveries,
   type WebhookDelivery,
   type WebhookEvent,
@@ -22,7 +20,7 @@ import {
 } from '@taskelith/integrations';
 import { ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
-import { createGithubSourceControl } from '@taskelith/scm-github';
+import { createGithubSourceControl, githubSourceControlPlugin } from '@taskelith/scm-github';
 import { value } from '@taskelith/testing';
 
 // The receiver over HTTP with the GitHub plugin's verifier, under a
@@ -56,12 +54,17 @@ class InMemoryDeliveries implements ScmWebhookDeliveries {
   }
 }
 
+// The GitHub plugin's decoy and eventless rule, as the composition uses.
+const plugin = githubSourceControlPlugin();
+const verifiersOf = (known: WebhookVerifier): ScmIntegrationVerifiers => ({
+  verifierOf: async (integrationId) => ok(integrationId === KNOWN ? known : undefined),
+});
 const deliveries = new InMemoryDeliveries();
 const receiver = new ScmWebhookReceiver({
-  verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, counted]])),
+  verifiers: verifiersOf(counted),
   deliveries,
-  decoy: new GithubWebhookDecoy(),
-  eventless: new GithubEventlessDeliveries(),
+  decoy: plugin.createDecoy(),
+  eventless: plugin,
 });
 const sink = new InMemoryLogSink();
 const logger = new Logger(sink, { now: () => '2026-11-03T09:00:00.000Z' as never });
@@ -273,10 +276,10 @@ test('deliveries beyond the concurrency limit wait for a free slot before their 
     },
   };
   const slotReceiver = new ScmWebhookReceiver({
-    verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, github]])),
+    verifiers: verifiersOf(github),
     deliveries: holdingDeliveries,
-    decoy: new GithubWebhookDecoy(),
-    eventless: new GithubEventlessDeliveries(),
+    decoy: plugin.createDecoy(),
+    eventless: plugin,
   });
   let admissions = 0;
   const api = new AdmissionSignallingApi({ scmWebhooks: slotReceiver } as unknown as ApiServices, () => {

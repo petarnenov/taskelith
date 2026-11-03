@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { draft } from '@taskelith/plugin-sdk';
 import { recordOf, textOf, type JsonRecord } from './github-data.js';
@@ -11,6 +11,10 @@ const DELIVERY_HEADER = 'x-github-delivery';
 const EVENT_HEADER = 'x-github-event';
 const SIGNATURE = /^sha256=([0-9a-fA-F]{64})$/;
 const MAX_IDENTIFIER_LENGTH = 1024;
+
+// GitHub's events without a repository, which the port's event cannot
+// carry; the receiver accepts them without recording them.
+export const GITHUB_EVENTLESS_EVENTS: ReadonlySet<string> = new Set(['ping', 'installation', 'installation_repositories']);
 
 // GitHub's events and their port kinds; other events are `other`.
 const EVENT_KINDS: Readonly<Record<string, string>> = Object.freeze({
@@ -35,15 +39,34 @@ export class GithubWebhookVerifier {
     return ok(eventOf(deliveryId, event, repository, payload));
   }
 
-  // The digests are compared as bytes, in constant time, once their
-  // lengths agree; the body is never turned into text for this.
   private isSigned(delivery: draft.WebhookDelivery): boolean {
-    const presented = SIGNATURE.exec(delivery.headers[SIGNATURE_HEADER] ?? '');
-    if (presented === null) return false;
-    const received = Buffer.from(presented[1]!, 'hex');
-    const expected = createHmac('sha256', this.secret).update(delivery.rawBody).digest();
-    return received.length === expected.length && timingSafeEqual(received, expected);
+    return isSignedWith(this.secret, delivery);
   }
+}
+
+export function isGithubEventless(delivery: draft.WebhookDelivery): boolean {
+  return GITHUB_EVENTLESS_EVENTS.has(delivery.headers[EVENT_HEADER] ?? '');
+}
+
+// The verifier's work under a random key, then a refusal: HMAC and the
+// comparison only for a well-formed signature, as the verifier does.
+export class GithubWebhookDecoy {
+  readonly #key = randomBytes(32);
+
+  async verifyWebhookDelivery(delivery: draft.WebhookDelivery): Promise<Result<draft.WebhookEvent>> {
+    isSignedWith(this.#key, delivery);
+    return err(failure('forbidden', 'The delivery has no valid signature'));
+  }
+}
+
+// The digests are compared as bytes, in constant time, once their lengths
+// agree; the body is never turned into text for this.
+function isSignedWith(secret: string | Buffer, delivery: draft.WebhookDelivery): boolean {
+  const presented = SIGNATURE.exec(delivery.headers[SIGNATURE_HEADER] ?? '');
+  if (presented === null) return false;
+  const received = Buffer.from(presented[1]!, 'hex');
+  const expected = createHmac('sha256', secret).update(delivery.rawBody).digest();
+  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
 function parsePayload(rawBody: Uint8Array): JsonRecord | undefined {

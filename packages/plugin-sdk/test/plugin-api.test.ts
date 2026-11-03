@@ -9,8 +9,8 @@ test('the plugin API version is a release version its own caret range accepts', 
 });
 
 // A port version change must change this pair and the plugin API version.
-test('plugin API 0.3.0 carries version 1.0.0 of the SDLC framework port', () => {
-  assert.deepEqual({ PLUGIN_API_VERSION, PLUGIN_API_PORT_VERSIONS }, { PLUGIN_API_VERSION: '0.3.0', PLUGIN_API_PORT_VERSIONS: { SdlcFramework: '1.0.0' } });
+test('plugin API 0.4.0 carries version 1.0.0 of the SDLC framework port', () => {
+  assert.deepEqual({ PLUGIN_API_VERSION, PLUGIN_API_PORT_VERSIONS }, { PLUGIN_API_VERSION: '0.4.0', PLUGIN_API_PORT_VERSIONS: { SdlcFramework: '1.0.0' } });
   assert.equal(PLUGIN_API_PORT_VERSIONS.SdlcFramework, SDLC_FRAMEWORK_PORT_VERSION);
   assert.ok(Object.isFrozen(PLUGIN_API_PORT_VERSIONS));
 });

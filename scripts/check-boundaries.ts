@@ -354,9 +354,19 @@ function checkWorkerOnlyReach(edges: ImportEdge[]): string[] {
   });
 }
 
+// Microkernel (ADR 0004): only an app's composition root loads a plugin, so
+// no module, adapter, handler, or API file names one.
+const COMPOSITION_ROOT = /^apps\/[^/]+\/src\/composition\//;
+
+function checkPluginReach({ rel, spec, target }: ImportEdge): string[] {
+  if (!target?.startsWith('packages/plugins/') || !isProductSource(rel) || COMPOSITION_ROOT.test(rel)) return [];
+  if (owningPackage(rel) === owningPackage(target)) return [];
+  return [`${rel}: only an app composition root can import plugin "${spec}" (microkernel)`];
+}
+
 const IMPORT_RULES = [
   checkDevelopmentImport, checkTestHarnessImport, checkTestHarnessSource, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
-  checkWebImport,
+  checkWebImport, checkPluginReach,
 ];
 
 export function checkWorkspaceBoundaries(root: string): string[] {

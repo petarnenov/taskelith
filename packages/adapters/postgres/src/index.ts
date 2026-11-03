@@ -47,4 +47,10 @@ export {
 export { PostgresTransaction } from './postgres-transaction.js';
 export { PostgresRunCatalog } from './run-catalog.js';
 export { CommittingScmWebhookDeliveries, PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
+export {
+  PostgresScmIntegrationRecords,
+  PostgresScmIntegrations,
+  type ScmSecretCipher,
+  type SealedScmSecret,
+} from './scm-integrations.js';
 export { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';

@@ -28,6 +28,7 @@ import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Sign
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
+import { ScmIntegrationApi, type ScmIntegrationOperations } from './scm-integration-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
 import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
@@ -82,6 +83,8 @@ export interface ApiServices {
   readonly scmWebhooks: Pick<ScmWebhookReceiver, 'receive'>;
   // Projects, their members, and their defaults (wire section 4).
   readonly projects: ProjectOperations;
+  // SCM integrations (wire section 4), whose secrets no answer carries.
+  readonly scmIntegrations: ScmIntegrationOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -90,11 +93,13 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #services: ApiServices;
   readonly #agentSessions: AgentSessionApi;
   readonly #projects: ProjectApi;
+  readonly #scmIntegrations: ScmIntegrationApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
     this.#agentSessions = new AgentSessionApi(services.agentSessions);
     this.#projects = new ProjectApi(services.projects);
+    this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -213,6 +218,14 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#projects.updateProjectDefaults(request);
       case 'readAutoMergeSetting':
         return this.#projects.readAutoMergeSetting(request);
+      case 'listScmIntegrations':
+        return this.#scmIntegrations.listScmIntegrations(request);
+      case 'createScmIntegration':
+        return this.#scmIntegrations.createScmIntegration(request);
+      case 'readScmIntegration':
+        return this.#scmIntegrations.readScmIntegration(request);
+      case 'updateScmIntegration':
+        return this.#scmIntegrations.updateScmIntegration(request);
       default:
         return Promise.resolve(err(failure('internal', `operation ${operationId} has no handler`)));
     }

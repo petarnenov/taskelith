@@ -21,6 +21,9 @@ export interface RouteDefinition {
   readonly query?: readonly string[];
   // The body reaches a `writeOnly` schema, so no failure names its values.
   readonly writeOnlyBody?: true;
+  // Body fields that map setting names to values, with each map's schema: a
+  // refused body names its first setting at fault in `details.setting`.
+  readonly settingMaps?: Readonly<Record<string, keyof HttpSchemas & string>>;
   // The response carries a secret, so it is answered only over TLS.
   readonly confidential?: true;
   // The schema every success body is validated against before it leaves,
@@ -53,6 +56,7 @@ const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, 
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
 const BROWSER_OR_OPERATOR: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
+const SCM_SETTING_MAPS: Readonly<Record<string, keyof HttpSchemas & string>> = Object.freeze({ settings: 'ScmSettings', secrets: 'ScmSecrets' });
 
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
@@ -164,6 +168,25 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'receiveScmWebhook', method: 'POST', pattern: new RegExp(`^/scm-integrations/${SEGMENT}/webhooks$`), security: ['none'],
     signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, keepsUndecodablePathParameters: true, response: 'empty', success: 202,
     statuses: COMMON, reasons: OVER_LIMIT,
+  },
+  // Control-plane wire contracts section 4: SCM integrations, whose secrets
+  // are write-only.
+  {
+    operationId: 'listScmIntegrations', method: 'GET', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR, query: ['after'],
+    response: 'ScmIntegrationPage', success: 200, statuses: COMMON,
+  },
+  {
+    operationId: 'createScmIntegration', method: 'POST', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationCreation', writeOnlyBody: true, settingMaps: SCM_SETTING_MAPS, response: 'ScmIntegration', success: 201, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'readScmIntegration', method: 'GET', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    response: 'ScmIntegration', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'updateScmIntegration', method: 'PATCH', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationUpdate', writeOnlyBody: true, settingMaps: SCM_SETTING_MAPS, response: 'ScmIntegration', success: 200,
+    statuses: { ...COMMON, 'not-found': 404, conflict: 409 },
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {

@@ -11,7 +11,6 @@ import {
   type SessionLifetime,
 } from '@taskelith/access';
 import { parseLaunchParameters, type LaunchParametersInput } from '@taskelith/execution';
-import { ScmWebhookReceiver } from '@taskelith/integrations';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
@@ -37,7 +36,7 @@ import {
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
-import { CommittingFleetRegistry, CommittingScmWebhookDeliveries, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
+import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, START_OWNER_INVOCATION, type AdministrationSettings } from '../admin/administration.js';
 import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
@@ -59,7 +58,7 @@ import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
 import { readWebAppDirectory } from './web-app-directory.js';
-import { GithubEventlessDeliveries, GithubWebhookDecoy, InMemoryScmIntegrationVerifiers } from './scm-webhooks.js';
+import { startScmIntegrationServices } from './scm-integrations.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -184,6 +183,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const runs = new RunService(database, workflows);
   const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
   if (!agentSessions.ok) return agentSessions;
+  const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
+  if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
     runs,
     tasks: new TaskService(database),
@@ -200,12 +201,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
     agentSessions: agentSessions.value,
-    scmWebhooks: new ScmWebhookReceiver({
-      verifiers: new InMemoryScmIntegrationVerifiers(),
-      deliveries: new CommittingScmWebhookDeliveries(database),
-      decoy: new GithubWebhookDecoy(),
-      eventless: new GithubEventlessDeliveries(),
-    }),
+    scmWebhooks: scm.value.webhooks,
+    scmIntegrations: scm.value.integrations,
     projects: {
       setup: new ProjectSetupService({ store: access.store, random: access.secrets, clock }),
       members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),

@@ -288,7 +288,9 @@ test('API and browser apps cannot reach worker-only code, directly or through a 
       "import { id } from '@taskelith/kernel';\nimport type { Launch } from '@taskelith/worker-process';\nimport { type Step, type Exit } from '@taskelith/worker';\nexport { type Bus } from '@taskelith/nats';\nexport const plane = id;\n",
     );
     writeFileSync(join(root, 'apps/control-plane/test/launch.test.ts'), "import { spawn } from 'node:child_process';\nimport { launch } from '@taskelith/worker-process';\n");
-    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+    // The adapter reaches the plugin only to build a worker-only chain.
+    const pluginReach = 'packages/adapters/nats/src/index.ts: only an app composition root can import plugin "@taskelith/sdlc-openspec" (microkernel)';
+    assert.deepEqual(checkWorkspaceBoundaries(root), [pluginReach]);
 
     writeFileSync(
       join(root, 'apps/control-plane/src/launch.ts'),
@@ -314,6 +316,7 @@ test('API and browser apps cannot reach worker-only code, directly or through a 
       ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "child_process"'],
       ['apps/control-plane/src/forms.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
       ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "execa"'],
+      ['packages/adapters/nats/src/index.ts', 'only an app composition root can import plugin "@taskelith/sdlc-openspec"'],
     ];
     for (const [file, message] of expected) {
       assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
@@ -480,6 +483,42 @@ test('web SPA source imports no file outside apps/web/src', () => {
     assert.deepEqual(checkWorkspaceBoundaries(root), [
       'apps/web/src/main.ts: web SPA source cannot import "../bridge" outside apps/web/src (R03)',
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('only an app composition root imports a plugin package, so no module, adapter, handler, or API file names a plugin', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-plugins-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/kernel', 'packages/adapters/*', 'packages/plugins/*', 'apps/*'] }));
+    const packages = {
+      'packages/kernel': '@taskelith/kernel',
+      'packages/adapters/postgres': '@taskelith/postgres',
+      'packages/plugins/scm-github': '@taskelith/scm-github',
+      'apps/control-plane': '@taskelith/control-plane',
+    };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      mkdirSync(join(root, dir, 'test'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    mkdirSync(join(root, 'apps/control-plane/src/composition'), { recursive: true });
+    mkdirSync(join(root, 'apps/control-plane/src/api'), { recursive: true });
+    writeFileSync(join(root, 'packages/plugins/scm-github/src/index.ts'), "export const github = 1;\n");
+    writeFileSync(join(root, 'apps/control-plane/src/composition/scm.ts'), "import { github } from '@taskelith/scm-github';\nexport const scm = github;\n");
+    writeFileSync(join(root, 'apps/control-plane/test/scm.test.ts'), "import { github } from '@taskelith/scm-github';\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(join(root, 'apps/control-plane/src/api/routes.ts'), "import { github } from '@taskelith/scm-github';\nexport const r = github;\n");
+    writeFileSync(join(root, 'apps/control-plane/src/handlers.ts'), "import type { github } from '@taskelith/scm-github';\n");
+    writeFileSync(join(root, 'packages/adapters/postgres/src/index.ts'), "export { github } from '@taskelith/scm-github';\n");
+    const violations = checkWorkspaceBoundaries(root);
+    const expected = ['apps/control-plane/src/api/routes.ts', 'apps/control-plane/src/handlers.ts', 'packages/adapters/postgres/src/index.ts'];
+    for (const file of expected) {
+      assert(violations.some((v) => v.includes(file) && v.includes('only an app composition root can import plugin "@taskelith/scm-github"')), violations.join('\n'));
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
