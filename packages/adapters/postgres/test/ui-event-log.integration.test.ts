@@ -142,6 +142,16 @@ test('an older transaction that wrote another table first and inserts after a yo
   assert.deepEqual(await marks(), ['1:2', '2:1'], 'positions follow the horizon, not insertion');
 });
 
+test('an unnumbered entry whose transaction is of another cluster, as after a restore, is numbered in entry order', async () => {
+  await commitNow([{ kind: 'event', event: outputEvent(1) }]);
+  await query(url, `INSERT INTO ui_events (kind, project_id, record, inserted_by)
+    VALUES ('event', $1, $2, (pg_current_xact_id()::text::bigint + 1000000000)::text::xid8)`, [ALPHA, JSON.stringify(outputEvent(2))]);
+  await commitNow([{ kind: 'event', event: outputEvent(3) }]);
+  await untilNumberable(url);
+  assert.equal(value(await log.assign(100, AT)), 3);
+  assert.deepEqual(await marks(), ['1:1', '2:2', '3:3']);
+});
+
 test('a rolled-back transaction leaves no entry, and concurrent numberings give each committed entry one position without gaps', async () => {
   const rolledBack = await database.transaction(async (tx) => {
     value(await tx.uiEvents.append(outputEvent(99)));

@@ -18,6 +18,10 @@ import type { Session } from './session.js';
 export const APPENDED_CHANNEL = 'taskelith_ui_events_appended';
 export const NUMBERED_CHANNEL = 'taskelith_ui_events_numbered';
 
+// A visible row's id is below its statement's snapshot xmax unless another
+// cluster wrote it, as before a restore; such a transaction has ended.
+const FOREIGN_TRANSACTION = 'inserted_by >= pg_snapshot_xmax(pg_current_snapshot())';
+
 interface EntryRow {
   readonly position: string;
   readonly kind: 'event' | 'principal-change';
@@ -56,7 +60,8 @@ export class PostgresUiEventRecords implements UiEventOutbox, PrincipalChanges {
     const { rows } = await this.#session.query<{ numbered: string }>(
       `WITH next AS (
          SELECT entry_id, $1::bigint + row_number() OVER (ORDER BY entry_id) AS position
-         FROM ui_events WHERE position IS NULL AND inserted_by < $4::xid8 ORDER BY entry_id LIMIT $2
+         FROM ui_events WHERE position IS NULL AND (inserted_by < $4::xid8 OR ${FOREIGN_TRANSACTION})
+         ORDER BY entry_id LIMIT $2
        ), numbered AS (
          UPDATE ui_events SET position = next.position, numbered_at = $3 FROM next WHERE ui_events.entry_id = next.entry_id
          RETURNING 1
