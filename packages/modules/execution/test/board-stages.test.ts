@@ -83,6 +83,13 @@ test('the current stage is the first not completed in graph order, and the Close
   assert.equal(cardColumn(done, true), 'archived');
 });
 
+test('a Close stage with another obligation is in review until the merge', () => {
+  const stages: StageSpec[] = [{ id: 'build', obligations: ['intake'] }, { id: 'ship', obligations: ['implementation', 'closure'], dependsOn: ['build'] }];
+  const done = stageGraph(progress(stages, completed(['build', 'ship'])));
+  assert.equal(columnOf(currentStage(done), done), 'implement');
+  assert.equal(cardColumn(done, false), 'review');
+});
+
 test('a stage listed before its dependency is ordered after it', () => {
   const graph = stageGraph(progress([{ id: 'b', obligations: ['closure'], dependsOn: ['a'] }, { id: 'a', obligations: ['intake'] }]));
   assert.deepEqual(graph.order.map((stage) => stage.id), ['a', 'b']);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BoardViews, mergeGate, type CardViewParts } from '@taskelith/control-plane';
-import type { BoardCard } from '@taskelith/execution';
+import { BoardViews, CardProjector, mergeGate, type CardProjections, type CardViewParts } from '@taskelith/control-plane';
+import type { BoardCard, UiEventRecord } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
 import { AS_OF, BINDING, BoardWorld, EARLY, LATE, execution, gate, item, run, task, worker } from './board-fixtures.ts';
 
@@ -85,6 +85,32 @@ test('a task waiting for placement shows the fleet obstacle first, else the most
   assert.deepEqual((await onlyCard(world)).obstacle, { source: 'worker', disposition: 'waiting', reason: 'worker-slots-exhausted', taskId: 'task-1', attemptId: 'att-2', observedAt: LATE });
   world.held.add('att-2');
   assert.equal((await onlyCard(world)).obstacle, undefined, 'a held reservation is placed');
+});
+
+test('a fleet obstacle observed again later appends no second card-changed', async () => {
+  const world = new BoardWorld();
+  await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
+  world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [] }]), 'apply');
+  const appended: UiEventRecord[] = [];
+  let last: string | undefined;
+  const projections: CardProjections = {
+    take: async () => ok({ touches: 1, runIds: ['run-1' as never], workersChanged: false }),
+    lastCard: async () => ok(last),
+    recordCard: async (_runId, projection) => ((last = projection), ok(undefined)),
+    lastWorkersOnline: async () => ok(undefined),
+    recordWorkersOnline: async () => ok(undefined),
+    projectIds: async () => ok([]),
+  };
+  const times = [AS_OF, '2026-11-03T11:00:00.000Z' as never];
+  const projector = new CardProjector({
+    transaction: (work) => work({
+      ...world.reads(), now: async () => times.shift()!, projections,
+      outbox: { append: async (entry) => (appended.push(entry.record), ok(undefined)) },
+    }),
+  }, world.parts());
+  assert.deepEqual([await projector.project(), await projector.project()], [ok(1), ok(1)]);
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0]?.type === 'card-changed' && appended[0].card.obstacle?.source, 'fleet');
 });
 
 test('a rejected task shows the rejection and its end, and a re-admission hides both', async () => {
