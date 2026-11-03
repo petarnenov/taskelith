@@ -2,9 +2,78 @@
 
 ## Scope and source
 
-To be completed after `make verify`.
+G3 item 11 (`docs/g3-plan.md`, row 11), sub-change 11a by the coordinator's split of 2026-11-03 (design, "Coordinator decisions" Q1 to Q3), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `a21913f1` (#426): projects, members, and defaults in `@taskelith/access` with the PostgreSQL store and migration `1792933800000_project-setup.sql`, and the control plane's `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` ([design](design.md), decisions 1 to 9). Out of scope and untouched: `readRepositoryBinding`, `bindRepository`, and the integration branch (11b); `updateAutoMergeSetting` (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); views and screens; the temporary G2 bridge (design, "Open questions").
+
+Commit type: `packages/modules/access`, `packages/adapters/*`, and `apps/control-plane` are private workspaces; the published `taskelith` package ships none of them (`package.json` `files`, checked by `scripts/verify-package.ts`), so every commit uses `chore`, `test`, or `docs`.
+
+## Revision
+
+- Base: `dev` `a21913f13672d87306b86b8f26cf474ef8264bba`, the brief's checklist base and the merge base with `origin/dev`.
+- `b14c0a45` `chore: start the implement-project-setup change`: `.openspec.yaml`, `checklist.json` saved with the brief's invocation `--save implement-project-setup --at a21913f13672d87306b86b8f26cf474ef8264bba --size L` (unedited), and the empty `findings.jsonl` and `passes.jsonl`.
+- `fb90b93c` `test: expect projects, members, and defaults in the access store, PostgreSQL, and over HTTP`: the tests alone, the base of the fail-before run.
+- `2cf22252` `chore: serve projects, members, and defaults from the control plane`: the module, the adapters, the migration, and the control plane.
+- `e87170e7` `docs: record the implement-project-setup proposal, design, and spec deltas`.
+- `7506a2b2` `test: expect a project command's own role denial to answer 403`.
+- `c5e5295e` `docs: start the implement-project-setup verification record`.
+- `22d00101` `docs: route the implement-project-setup change`, at head `c5e5295e`; its `make verify` (`verify-11a-1.log`) passed, then `9e35c606` added handler tests to raise the branch coverage of `project-api.js` from 73.44% to above 75%, which changed the diff, so `21185cb8` deleted that `route.json` and `a3a3b889` routed again, unedited, at head `21185cb8`: "route: elevated (lines, files, capabilities, security, size), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.83), agrees. Recommendation only: the brief routes effort medium.
+- The record commit after it holds the `make record` of the passing `make verify` on the tree of `a3a3b889`.
+
+## Environment
+
+macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s npm pin; Docker 29.5.2 for the services of `make test` and of the targeted PostgreSQL runs below, each taken through `scripts/docker-slot.ts run`.
+
+## Author self-check
+
+- Scope: only 11a. No change under `packages/contracts` (`git diff a21913f1 HEAD -- packages/contracts` is empty), so no OpenAPI operation, schema, or generated type changed, and no new operation was needed; no dependency changed (`package-lock.json` and every `package.json` unchanged); `ACCESS_REQUIREMENTS` is unchanged, since item 10 already named the rule of every operation.
+- Hexagonal boundaries: projects are a store of the existing `AccessStore` port with conformance cases that the in-memory adapter and PostgreSQL both pass; the module imports only the kernel and SDLC; `project-api.ts` maps wire shapes only; `npm run check:boundaries` passes in `make verify`.
+- Authorization: the server's check before the body is unchanged, and each command checks its actor again in its transaction; that denial answers 403 (`reasons`), tested with a server whose own check passes everyone.
+- Migration: `1792933800000` is the brief's timestamp; `1792933600000` (12f) and `1792933700000` (20e) stay unused. The foreign key is `NOT VALID` (design decision 7).
+- Spec deltas: `control-plane-api` adds five requirements (367, 205, 249, 297, and 264 characters), `trust-and-operational-foundation` two (283, 215), `postgres-state` one (309); `npm run verify:archive` archives them into strictly valid specs in `make verify`.
+- Comments: `npm run verify:comments` passes.
+- Coverage of the new and changed files (`verify-11a-2.log`): `project-api.js`, `project-repositories.js`, `project.js`, `project-setup-service.js`, `principal-administration.js`, `in-memory-access-store.js`, and `routes.js`, each at least 75% of lines, branches, and functions; the figures are in "Evidence check".
+
+## Evidence check
+
+- `verify-11a-2.log` (scratchpad): `make verify: passed, profile full, tree 00e7462a65a2edd309c2baaad308671eee888b73`, the tree of `a3a3b889`, clean; tests 4294, pass 4285, fail 0, skipped 9; all files 99.40% lines, 92.62% branches, 98.91% functions; no timing flake, no rerun. Per file (lines, branches, functions): `project-api.js` 100, 89.47, 100; `routes.js` 100, 100, 100; `project-repositories.js` 100, 100, 100; `in-memory-access-store.js` 100, 96.77, 100; `principal-administration.js` 100, 86.17, 100; `project-setup-service.js` 100, 85.25, 100; `project.js` 100, 100, 100.
+- `verify-11a-1.log` (scratchpad): passed on tree `e797418dc48ff661a795d21df0fbda06994bbb41` (head `c5e5295e`), tests 4293, fail 0, but `project-api.js` had 73.44% branches, under the 75% bar per file; `9e35c606` added the handler failure test, so that run is superseded and not recorded.
+- The generated block below was written by `make record` from `verify-11a-2.log`; `make record-check` passes.
+
+## Fail-before
+
+Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taskelith/72320a31-29ec-4dad-bb0b-5d2fa342f935/scratchpad/`).
+
+- Base (`fb-11a-base-unit.log`, `fb-11a-base-postgres.log`): the tests of `fb90b93c` against the sources of `a21913f1` (the implementation files of `2cf22252` removed and the rest checked out from `a21913f1`, then `npx tsc --build`), then restored and rebuilt (`git status` clean). Unit: tests 68, pass 57, fail 11; `project-setup.test.ts` and `project-routes.test.ts` fail to load (`does not provide an export named 'PROJECT_PAGE_SIZE'` and `'ProjectSetupService'`), `access-requirements.test.ts` fails "a served operation of the control-plane document accepts the schemes the document declares", the `NodeSecrets` test fails on `projectId`, and the tests whose fixtures now add projects fail on the missing `tx.projects`, which shows only that the fixtures need the store. PostgreSQL: tests 48, pass 36, fail 12, the two project setup migration tests and every migration test that lists `1792933800000`, which at the base show only the missing file; the mutations below show the migration's own statements.
+- Each guard broken on the implementation, one at a time, then restored and rebuilt (the mutation, the diff stat, and the test output are at the top of each log):
+  - `fb-11a-service-authorization.log`: the in-transaction `authorizeIn` of `ProjectSetupService` removed: fail 3, "only an installation-owner creates a project, and a refused or invalid creation writes nothing", "a maintainer renames a project and replaces its defaults by compare-and-set; others are refused", and the 403 HTTP test (the uncommitted test of `7506a2b2` was in the tree).
+  - `fb-11a-route-role-denial.log`: the routes' `role-required` 403 reason removed: fail 1, "a denial by the command's own role check, after the server passed the caller, answers 403, never 401".
+  - `fb-11a-list-membership.log`: `listProjects` without the membership filter: fail 2, the module's and the HTTP list tests.
+  - `fb-11a-role-project-check.log`: the project check of the member commands removed: fail 2, the module's member test (removal on an unknown project) and "an installation-owner learns 404 for a missing project".
+  - `fb-11a-creator-role.log`: the creator given `project-maintainer` at creation: fail 7, among them "a new project has its defaults and auto-merge on at revision 1, and no member, its creator included" and the HTTP creation test.
+  - `fb-11a-memory-compare-and-set.log`: the in-memory rename without its revision check: fail 3, the in-memory conformance case "a rename and a defaults change compare and set their own revisions" and both compare-and-set tests.
+  - `fb-11a-remove-unknown-principal.log`: removal of an unknown principal answered as a failure: fail 2, both member tests.
+  - `fb-11a-memory-assign-project.log`: the in-memory assignment without its project check: fail 1, the in-memory conformance case "a principal holds at most one role per project, replaced by an assignment" ("no project").
+  - `fb-11a-pg-not-valid.log`: the foreign key validated (`NOT VALID` removed): fail 1, "the project setup migration keeps earlier roles, refuses new ones without a project, and checks its values".
+  - `fb-11a-pg-down-constraint.log`: the down migration without `DROP CONSTRAINT`: fail 1, "the project setup down migration removes its tables and the foreign key of the project roles".
+  - `fb-11a-pg-rename-compare-and-set.log`: the PostgreSQL rename without `AND revision = $2`: fail 1, "PostgreSQL access store: a rename and a defaults change compare and set their own revisions".
+- `9e35c606` adds coverage of failure passthroughs; it guards no new behaviour.
+
+## Limitations
+
+- The temporary G2 bridge stays, although the living requirement says item 11 removes it (design, "Open questions", for Niki).
+- Plugin identifiers in the defaults are stored as given, without a registration check (design, "Open questions").
+- The `NOT VALID` foreign key leaves roles assigned before the migration on G2 project identifiers unchecked.
+- No independent review has run yet; no deployment or browser check was made (backend only).
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `00e7462a65a2edd309c2baaad308671eee888b73`; tests 4294, pass 4285, fail 0, skipped 9; all files 99.40% lines, 92.62% branches, 98.91% functions.
+- `npm run openspec -- validate implement-project-setup --strict`: passed, `Change 'implement-project-setup' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 103 file(s); every pass summary file is valid: 83 file(s); every route file is valid: 36 file(s).`.
+- Spec diff against the merge base `a21913f13672` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
@@ -13,4 +82,7 @@ Not started; the coordinator assigns the reviewers.
 
 ## Remaining gates
 
+- Independent review passes 1 to 3 in the fixed sequence (`route.json` recommends; the brief sets effort medium), each finding resolved and recorded in `findings.jsonl` and `passes.jsonl`.
+- Niki's answers to the open questions in the design: the G2 bridge, the plugin identifier check, and the undeclared 403 of the G2 documents.
+- Archive of the change after review.
 - Integration into dev by the coordinator (single pull request).
