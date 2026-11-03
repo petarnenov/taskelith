@@ -24,6 +24,8 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 
 macOS on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s npm pin; Docker for the services of `make test`.
 
+The host had no free Docker address pool; two empty Taskelith/Desi networks (taskelith-855429132-dev_default, desi-spike-explore_default) were removed; compose recreates them on demand.
+
 ## Author self-check
 
 - Scope: only the 29b scope of the brief and its three follow-ups. `git diff d3dd09ed HEAD -- packages apps/control-plane apps/worker package-lock.json` is empty: no OpenAPI document, generated type, contract, control-plane code, or dependency changed. Every operation used (`readTaskDetail`, and the 29a `listProjects`, `readBoard`, `streamProjectEvents`, and session operations) is in `control-plane.openapi.json` 0.4.0.
