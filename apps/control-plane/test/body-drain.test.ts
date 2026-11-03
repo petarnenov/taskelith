@@ -4,6 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import { PassThrough } from 'node:stream';
 import { afterEach, test } from 'node:test';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { BodyDrains, MAX_CONCURRENT_DRAINS, MAX_DRAIN_MILLISECONDS, MAX_DRAINED_BODY_BYTES } from '@taskelith/control-plane';
 
 const ANSWER = Buffer.from('{"code":"invalid"}');
@@ -67,6 +69,32 @@ test('the drain sends the answer at once and discards the body while it flows', 
   await discard(drained.body, 1024);
   assert.equal(drained.body.isPaused(), false);
   assert.equal(drained.response.ended, false);
+});
+
+// The collector, exposed at run time, so the test needs no node flag.
+setFlagsFromString('--expose-gc');
+const collectGarbage = runInNewContext('gc') as () => void;
+
+// Writes fresh chunks the test keeps no reference to, and watches them.
+function discardedUnreferenced(body: PassThrough, chunks: number): WeakRef<Buffer>[] {
+  return Array.from({ length: chunks }, () => {
+    const chunk = Buffer.alloc(1024 ** 2, 'a');
+    body.write(chunk);
+    return new WeakRef(chunk);
+  });
+}
+
+test('the drain retains none of the bytes it discards', async () => {
+  const drained = exchange();
+  answer(new BodyDrains(), drained);
+  const watched = discardedUnreferenced(drained.body, MAX_DRAINED_BODY_BYTES / 1024 ** 2);
+  await settled();
+  assert.equal(drained.body.writableLength + drained.body.readableLength, 0, 'nothing is buffered');
+  assert.equal(drained.socket.destroyed, false);
+  collectGarbage();
+  await settled();
+  collectGarbage();
+  assert.equal(watched.filter((chunk) => chunk.deref() !== undefined).length, 0, 'every chunk was collected');
 });
 
 test('a body that ends within the bounds ends the response, without forcing a close', async () => {

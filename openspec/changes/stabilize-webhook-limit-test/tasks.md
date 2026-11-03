@@ -21,5 +21,5 @@
 ## 5. Review and archive
 
 - [ ] 5.1 Independent review
-  - [x] 5.1.1 Pass 1 (codex gpt-6-astra, effort medium): fix its 2 High, 5 Medium, and 1 Low findings
+  - [x] 5.1.1 Pass 1 (codex gpt-6-astra, effort medium): fix its 2 High, 5 Medium, and 1 Low findings, with the coordinator's decisions on the drain's worst case and a no-buffering test
 - [ ] 5.2 Archive the change
