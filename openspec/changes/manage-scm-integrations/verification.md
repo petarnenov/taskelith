@@ -71,7 +71,18 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run: the worker Zaki runs the passes and records them here, in `passes.jsonl`, and in `findings.jsonl`.
+### Pass 1 (role A)
+
+- Reviewer: Codex CLI `gpt-6-astra`, effort `medium` (`codex gpt-6-astra#medium`), assigned by the coordinator; `route.json` recommends `high`, and the authorized `medium` applies (owner decision 2026-11-02).
+- Invocation, through `make review CHANGE=manage-scm-integrations PASS=1`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, environment `PATH HOME USER LANG TERM`, started 2026-11-03T07:25:44Z at head `37aaf861`; the route gate reported that `route.json` was made for this tree.
+- Confirmation: model `gpt-6-astra`, effort `medium`, sandbox `read-only` reported in the header; session `01a1a04c-b762-7452-8a9c-a3856c97fce8`; exit 0.
+- Snapshot before and after: both `ddecfc033e26015f7ecf3aaecf594aedb9a50979cc0cab41d4b47eb53e716f37`, unchanged, taken by the worker Zaki; the reviewer reported that it modified no file.
+- Counts: Critical 0, High 0, Medium 4, Low 0, as in `passes.jsonl`. The report file holds the report twice, with the same four findings and counts.
+- Findings, recorded before any fix (`findings.jsonl`):
+  1. Medium, `contract-drift`: schema failures of settings and secrets answer 400 without `details.setting`.
+  2. Medium, `contract-drift`: the migration's origin check admits ports above 65535.
+  3. Medium, `missing-fail-before-test`: no shared store conformance suite for both adapters.
+  4. Medium, `missing-fail-before-test`: most fail-before runs stopped at missing exports.
 
 ## Limitations
 

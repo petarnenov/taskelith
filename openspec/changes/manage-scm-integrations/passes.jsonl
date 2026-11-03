@@ -1,0 +1,1 @@
+{"change": "manage-scm-integrations", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1a04c-b762-7452-8a9c-a3856c97fce8", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 0}}
