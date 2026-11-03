@@ -16,7 +16,7 @@ G3 item 15 ([G3 work plan](/docs/g3-plan.md), row 15), sub-change 15a under the 
 
 ### 1. The card store (Q2 (a))
 
-`CardCatalog` (`packages/modules/execution/src/ports/card-catalog.ts`) holds a card per root run: `runId`, `projectId`, `title` (1 to 200 code points, no control character, no unpaired surrogate, which UTF-8 text in PostgreSQL cannot keep, so both adapters accept the same titles and read them back unchanged), `workType`, and `createdAt`; `register` answers `conflict` for a known run. `tasks(runId)` in the PostgreSQL adapter lists the card's tasks through the task lineage of its root, so a re-admitted task and a delegated child task belong to the card (product ports "One card per root run"), in task identifier order (decision 9). A run without a row is not a card, which keeps delegated child runs off the board. Item 25's intake writes the rows; until it lands no writer registers one, so every board is empty and every task detail answers `404`. Tests seed rows through the port.
+`CardCatalog` (`packages/modules/execution/src/ports/card-catalog.ts`) holds a card per root run: `runId`, `projectId`, `title` (1 to 200 code points, no control character, no unpaired surrogate, which UTF-8 text in PostgreSQL cannot keep, so both adapters accept the same titles and read them back unchanged), `workType`, and `createdAt`; `register` answers `conflict` for a known run. `tasks(runId)` in the PostgreSQL adapter lists the card's tasks through the task lineage of its root, so a re-admitted task and a delegated child task belong to the card (product ports "One card per root run"), in admission order, each delegated child under its parent (decision 10). A run without a row is not a card, which keeps delegated child runs off the board. Item 25's intake writes the rows; until it lands no writer registers one, so every board is empty and every task detail answers `404`. Tests seed rows through the port.
 
 ### 2. The stage rules
 
@@ -52,11 +52,18 @@ First touch. No `workersOnline` is stored before the projector's first worker to
 
 ### 9. Deviations
 
-Three deviations from the brief and the contracts, each with its follow-up:
+Two deviations from the brief and the contracts, each with its follow-up:
 
 - **Traceability.** `TaskDetail.traceability` is `[]`: no store holds requirement references and the links from them to work items and attempts. Item 25's intake owns the requirement links (coordinator, 2026-11-03).
-- **Task order.** Product ports section 3.7 and `TaskDetail.tasks` list the tasks in admission order, but no store keeps the order in which tasks were admitted: an admission keeps only its last change time. Until 15b or the first store that holds admission order, the detail lists the tasks in task identifier order (coordinator, 2026-11-03).
 - **Trigger-written touches.** The brief's Q4 (b) has each writer append its touch. Database triggers write it instead, in the same transaction as the writer's own statement, so the touch commits or rolls back with the write exactly as a writer's append would, and no module learns about the board. Every row write to a watched table fires its trigger, whichever module makes it; only a `TRUNCATE`, which no writer uses, bypasses them.
+
+### 10. Admission order (pass 1 finding 6)
+
+Reading. Product ports section 3.7 lists "every task of the run and every delegated child task of its lineage (`tasks`), in admission order", and `TaskDetail.tasks` in `packages/contracts/documents/control-plane.openapi.json` says "Every task of the run and every delegated child task of its lineage, in admission order". In both, "its admission" is a value each task holds, and a task is opened from its admission (`openTask`, `packages/modules/execution/src/domain/task.ts`); a re-admission (`rebindAdmission`) binds the same task to another admission. Admission order is therefore the order in which tasks were created, so the sequence attaches to the tasks INSERT, not to an admissions writer, which would move a re-admitted task.
+
+Sequence. Migration `1792934100000` adds `tasks.admission_seq bigint NOT NULL DEFAULT nextval('tasks_admission_seq')`, so the INSERT of `PostgresTaskRepository.add` takes the next value in its own transaction, with no counter row and no lock. The migration numbers the existing tasks in task identifier order (`COLLATE "C"`), moves the sequence past them, and then makes the column `NOT NULL`, so the read has no special case; the down migration drops the column and the sequence. The order is total and stable, not commit order: concurrent admissions may commit in another order than their values, and a rolled-back or conflicting INSERT leaves a gap.
+
+Read. `PostgresCardCatalog.tasks` orders the lineage by the path of admission sequences from the root task, so each delegated child follows its parent and its parent's earlier children, as section 3.7's "shown under its parent" requires. The in-memory board world lists the lineage in insertion order; an integration test shows that both give the same order for the same admissions.
 
 ## Coordinator decisions
 
@@ -73,8 +80,10 @@ Niki, 2026-11-03, after review pass 1:
 
 - (a) Follow-up: narrow the worker touches to that worker's cards, and measure on a large board; the design states the dedupe bound (decision 7).
 - (b) The first touch after the migration appends one `board-changed` per project, a known one-time event that the migration does not seed (decision 7).
-- (c) Traceability goes to item 25, whose intake owns the requirement links, and admission-order task ordering to 15b or the first store that holds admission order; the spec delta states that `traceability` is `[]` and the order is by task identifier until then (decision 9).
+- (c) Traceability goes to item 25, whose intake owns the requirement links, and admission-order task ordering to 15b or the first store that holds admission order; the spec delta states that `traceability` is `[]` and the order is by task identifier until then (decision 9). The decision on finding 6 below replaced the order part.
 - (d) The three deviations are recorded as decisions, the trigger-written touches justified by the writer's transaction (decision 9).
+
+Niki, 2026-11-03, on pass 1 finding 6: fix it in this change with a PostgreSQL sequence on the writer that admission names, backfilled in task identifier order, with each delegated child under its parent (decision 10).
 
 ## Review checklist
 
@@ -84,14 +93,14 @@ Niki, 2026-11-03, after review pass 1:
 
 - Execution: the card store conformance cases and record parsing; the stage rules (order, columns, the Close stage, readiness, gate urgency).
 - Integrations: `NoMergeQueue` answers.
-- PostgreSQL: the conformance cases, the check constraints, the touches of each trigger, including the admission touch and the fleet touches of a reservation and of the installation, and none after a rollback, for a contact-only worker update, or for an occupancy-neutral reservation update, the projection state, and the migration's up and down steps.
-- Control plane: the views over an in-memory world (snapshot order, columns, sessions, obstacles, ends, the merge gate, the task detail, the inbox, a failing source); the projector's dedupe and its event after a change of the task detail alone; the routes and their roles; the numbering pass's projection; over PostgreSQL, the snapshot, a card committed after the head, the numbering of a projected event only after every older transaction ended, waiting on that condition, the projector's events, the crash points, and a failing store.
+- PostgreSQL: the conformance cases, the check constraints, the touches of each trigger, including the admission touch and the fleet touches of a reservation and of the installation, and none after a rollback, for a contact-only worker update, or for an occupancy-neutral reservation update, the projection state, the admission order of a card's tasks with delegated children under their parents, and the migration's up and down steps, including the backfill of the admission sequence.
+- Control plane: the views over an in-memory world (snapshot order, columns, sessions, obstacles, ends, the merge gate, the task detail, the inbox, a failing source); the projector's dedupe and its event after a change of the task detail alone; the routes and their roles; the numbering pass's projection; over PostgreSQL, the snapshot, a card committed after the head, the numbering of a projected event only after every older transaction ended, waiting on that condition, the projector's events, the crash points, a failing store, and the same task order as in memory.
 - Fail-before: the tests against the base sources, and targeted mutations, each turning at least one test red.
 
 ## Risks / Trade-offs
 
 - A worker or fleet touch reprojects every card of the installation, and session output updates touch their task often; the batch dedupes the reads per card and the stored projection the events (decision 7), but the reads grow with the cards.
-- Task order in a card is by task identifier, not admission order (decision 9).
+- The admission order of concurrent admissions is the order of their sequence values, not of their commits (decision 10).
 - The first worker touch after the migration emits one `board-changed` per project (decision 7).
 - `traceability` stays empty until item 25 (decision 9).
 
@@ -99,4 +108,3 @@ Niki, 2026-11-03, after review pass 1:
 
 - Narrow the worker touches to that worker's cards, and measure the projection on a large board (coordinator, 2026-11-03).
 - Requirement traceability in the task detail: item 25, whose intake owns the requirement links.
-- Admission-order task ordering: 15b, or the first store that holds admission order.

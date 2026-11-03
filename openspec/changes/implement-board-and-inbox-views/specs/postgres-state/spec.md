@@ -21,3 +21,10 @@ The adapter SHALL report the crash point `CardProjectionCommit` before and after
 #### Scenario: Crash before the projection commits
 - **WHEN** the process dies at `CardProjectionCommit.before`
 - **THEN** the touches remain, and the restart appends the card's event once
+
+### Requirement: Task admission sequence
+Each task row SHALL hold `admission_seq`, which its INSERT takes from a PostgreSQL sequence in the writer's transaction. Migration `1792934100000` SHALL number the existing tasks in task identifier order before it makes the column required, and its down migration SHALL drop the column and the sequence.
+
+#### Scenario: Tasks stored before the migration
+- **WHEN** the migration runs over tasks `task-b`, `task-a`, and `task-c`, and task `task-0` is then admitted
+- **THEN** the admission order is `task-a`, `task-b`, `task-c`, `task-0`

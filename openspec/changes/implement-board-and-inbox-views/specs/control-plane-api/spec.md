@@ -30,9 +30,16 @@ A projector SHALL consume the card touches of committed changes in one `SERIALIZ
 - **WHEN** a worker's change raises the workers online
 - **THEN** each project gets one `board-changed` with the new count
 
-### Requirement: Task detail before traceability and admission order
-Until task intake records requirement links, the task detail SHALL return `traceability` empty, and until a store keeps the order in which tasks were admitted, it SHALL list the card's tasks in task identifier order.
+### Requirement: Task detail before traceability
+Until task intake records requirement links, the task detail SHALL return `traceability` empty.
 
 #### Scenario: A task detail read before intake
-- **WHEN** a task detail of a card with two tasks is read
-- **THEN** its `traceability` is empty and its tasks are listed in task identifier order
+- **WHEN** a task detail of a card with a task is read
+- **THEN** its `traceability` is empty
+
+### Requirement: Task detail in admission order
+The task detail SHALL list a card's tasks in the order in which they were admitted, each delegated child under its parent in its own admission order. The order SHALL be total and stable; it need not be the commit order of concurrent admissions.
+
+#### Scenario: A child admitted after a later task
+- **WHEN** task `b` of a card is admitted, then task `a`, then a child of `a`, then a child of `b`
+- **THEN** the detail lists `b`, the child of `b`, `a`, and the child of `a`

@@ -57,13 +57,13 @@ Each behaviour fix has a test that fails before it; the fail-before logs are `fb
 - **3, Medium, admissions** (`e13b58e2`, `postgres-state`). An `admissions` trigger writes an `admission` touch, mapped to the cards of the tasks that name it. `fb-15-p1-3.log`: no touch is written.
 - **4, Medium, installation state** (`e13b58e2`, `postgres-state`). `installation` triggers write a `fleet` touch on insert and on a change of `quarantined` or `recovery_epoch`, not of the identity. `fb-15-p1-4.log`: no touch is written.
 - **5, Medium, session activity** (`60cce934`, `control-plane-api`). A task is `working` only while a session binds its active attempt or still runs a generation of it (stopping, unconfirmed), else `stopped`; the test fixture's sessions now bind their task's attempts. `fb-15-p1-5.log`: a stopped session of an earlier attempt with a retry awaiting placement answers `working`.
-- **6, Medium, admission order: deferred.** No store keeps the order in which tasks were admitted (an admission keeps only its last change time), so under the coordinator decision of 2026-11-03 (c) the detail lists tasks in task identifier order until 15b or the first store that holds the order. `7f1475ca` corrects the `CardLineage` comment, which claimed admission order, and adds a PostgreSQL test of reverse-lexical admission; design decision 9 and the `control-plane-api` delta ("Task detail before traceability and admission order") state the order and the empty `traceability`. Because `TaskDetail.tasks` in `control-plane.openapi.json` and product ports section 3.7 require admission order, the worker reported the options to the coordinator instead of changing the contract or the store.
+- **6, Medium, admission order** (`4f00c1f4`, `control-plane-api`, `postgres-state`). Fixed under the coordinator decision of 2026-11-03 on finding 6, which replaced the deferral of `7f1475ca`. Admission order is the order in which tasks were created (design decision 10, product ports section 3.7, `TaskDetail.tasks`), so migration `1792934100000` adds `tasks.admission_seq` from a PostgreSQL sequence that the tasks INSERT takes, backfills existing tasks in task identifier order, and makes it `NOT NULL`; `PostgresCardCatalog.tasks` orders by the path of sequences from the root, each delegated child under its parent. `fb-15-p1-6.log`, at `c4eabd6c` with the new tests: 3 of 3 fail, the PostgreSQL order test (task identifier order), the PostgreSQL against in-memory test, and the migration test (no `admission_seq` column).
 - **7, Medium, card obstacle** (`b6386560`, `control-plane-api`). The card shows its first rejected obstacle, else its first waiting one only while `waitingFor` is capacity, which any waiting obstacle of the current stage now selects; each task in the detail keeps its own. `fb-15-p1-7.log`: a card waiting for a person carries the waiting `worker-capacity-exhausted` obstacle.
 - **8, Medium, numbering test** (`9b5f193f`, `control-plane-api`). The test waits on the numbering horizon condition (the query of item 14's `untilNumberable`) and numbers through the READ COMMITTED `PostgresUiEventLog`; a new test holds an older transaction open, sees `assign` answer 0, and numbers after it ends. `fb-15-p1-8.log`: the original test, with an older transaction open in another database of the cluster, fails `0 !== 1`; the probe file was not committed.
 - **9, Medium, titles** (`2ce1c0eb`, `product-ports`, `postgres-state`). `parseCardRecord` refuses an unpaired surrogate, so both adapters accept only titles that PostgreSQL text keeps; the shared conformance case also reads back an astral title unchanged. `fb-15-p1-9.log`: the case fails on both adapters (`high surrogate` and `low surrogate` accepted).
 - **10 and 11, Low, design** (`522f9217`). Decision 6 describes `total` and `byCard`; decision 3 names `unavailable` for `enqueue` and `recordManualMerge` and `not-found` for `transition` and `latestForRun`.
 
-The same commit `522f9217` applies the coordinator decisions of 2026-11-03 after pass 1: the dedupe bound and the one-time first events (decision 7), the three deviations, traceability, task order, and trigger-written touches (decision 9), and the follow-ups.
+The same commit `522f9217` applies the coordinator decisions of 2026-11-03 after pass 1: the dedupe bound and the one-time first events (decision 7), the three deviations, traceability, task order, and trigger-written touches (decision 9), and the follow-ups; `4f00c1f4` and the records after it remove the task order deviation (finding 6).
 
 <!-- make record: begin -->
 ## Generated checks
@@ -85,7 +85,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Until item 25 registers cards, no writer calls `CardCatalog.register`, so every board is empty and every task detail answers `404` (Q2 (a)).
 - The merge queue is the empty `NoMergeQueue` until item 23 (Q5 (a)); `integration` never reaches `queued`, `merging`, or `integrated` before it.
-- `traceability` of the task detail is empty until item 25; task order in a card is by task identifier until 15b or the first store that keeps the admission order, which `TaskDetail.tasks` and product ports section 3.7 require (finding 6, deferred, with the coordinator).
+- `traceability` of the task detail is empty until item 25.
+- The admission order of concurrent admissions is the order of their sequence values, not of their commits, and may have gaps (design decision 10).
 - The order of `waitingFor` and the session activity derivation follow the design (decision 4), which the contract does not fix.
 - A worker or fleet touch reprojects every card; the batch dedupes the reads per card and the stored projection the events (design decision 7); narrowing and measuring it is a follow-up.
 - The first worker touch after the migration appends one `board-changed` per project, a known one-time event (design decision 7).
@@ -94,6 +95,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Review pass 2 by reviewer B over the pass 1 fixes, and pass 3 when governance "Review sequence" requires it, with their fix rounds.
-- The coordinator's decision on finding 6 (admission order).
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
