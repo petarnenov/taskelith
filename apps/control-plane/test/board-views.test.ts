@@ -54,6 +54,20 @@ test('the session shows an unreachable worker with its last contact, and an unkn
   assert.deepEqual((await onlyCard(uncertain)).session, { state: 'process-uncertain' });
 });
 
+test('a stopped session of an earlier attempt leaves a retry awaiting placement stopped, not working', async () => {
+  const failed = { id: 'att-1', executions: [], outcome: { kind: 'exited', status: { kind: 'code', code: 1 }, startProven: true, cancelled: false, ownershipGeneration: 1, endedAt: EARLY, executionId: 'ex-1' } };
+  const world = await runningCard();
+  world.tasks.set('task-1', task('task-1', [failed, { id: 'att-2', retryOf: 'att-1', executions: [] }]));
+  world.sessions.set('task-1', [{ id: 'session-task-1', attempts: [{ id: 'att-1', ownershipGeneration: 1, ended: true }], generations: [{ generation: 1, attemptId: 'att-1', ended: true }] }]);
+  assert.deepEqual((await onlyCard(world)).session, { state: 'stopped' });
+  world.sessions.set('task-1', [{ id: 'session-task-1', attempts: [{ id: 'att-1', ownershipGeneration: 1, ended: true }], generations: [{ generation: 1, attemptId: 'att-1', ended: false }] }]);
+  assert.deepEqual((await onlyCard(world)).session, { state: 'stopped' }, 'a generation of an ended attempt is no session of the retry');
+  world.sessions.set('task-1', [{ id: 'session-task-1', attempts: [{ id: 'att-2', ownershipGeneration: 1, ended: false }], generations: [] }]);
+  assert.deepEqual((await onlyCard(world)).session, { state: 'working' });
+  world.sessions.set('task-1', [{ id: 'session-task-1', attempts: [{ id: 'att-2', ownershipGeneration: 1, ended: true }], generations: [{ generation: 2, attemptId: 'att-2', ended: false }] }]);
+  assert.deepEqual((await onlyCard(world)).session, { state: 'working' }, 'stopping until the worker confirms the end');
+});
+
 test('an open item of the card counts in needsYou and makes its task wait for a person', async () => {
   const world = await runningCard();
   world.items = [item('i-1', 'run-1', { taskId: 'task-1' }), item('i-2', 'run-other')];

@@ -3,11 +3,14 @@ import {
   PLACEMENT_WAITING_REASONS,
   WORKER_REFUSAL_REASONS,
   activeAttempt,
+  activeBoundAttempt,
   isUnknownExecution,
   owningExecution,
   placementNeed,
   type FleetObstacleReason,
+  type AttemptId,
   type PlacementObstacle,
+  type Session,
   type SessionActivity,
   type SessionActivityState,
   type Task,
@@ -80,8 +83,14 @@ async function sessionActivity(task: Task, end: TaskEnd | undefined, context: Ta
     }
   }
   if (context.hasOpenItem) return ok(activity('waiting-for-person'));
-  if (active !== undefined) return ok(activity('working'));
+  if (active !== undefined) return ok(activity(sessions.value.some((session) => runsAttempt(session, active.id)) ? 'working' : 'stopped'));
   return ok(activity(end === undefined ? 'waiting-for-admission' : 'stopped'));
+}
+
+// Section 3.6 `working`: a session is live in the attempt, or stopping and
+// the worker has not confirmed the end of its generation.
+function runsAttempt(session: Session, attemptId: AttemptId): boolean {
+  return activeBoundAttempt(session)?.id === attemptId || session.generations.some((run) => !run.ended && run.attemptId === attemptId);
 }
 
 function activity(state: Exclude<SessionActivityState, 'worker-unreachable'>): SessionActivity {

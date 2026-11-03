@@ -94,13 +94,14 @@ export class BoardWorld {
     this.runs.set(runId, stored);
   }
 
-  // A task of the card, in the stage `stageId`, with an optional session.
+  // A task of the card, in the stage `stageId`, with an optional session
+  // that binds the task's attempts, ended or not as they are.
   addTask(runId: string, stored: Task, stageId: string, options: { session?: boolean; parent?: string; depth?: number } = {}): void {
     const link = { taskId: stored.id, taskRunId: runId, ...(options.parent === undefined ? {} : { parentTaskId: options.parent }), depth: options.depth ?? 0 };
     this.lineage.set(runId, [...(this.lineage.get(runId) ?? []), link as never]);
     this.tasks.set(stored.id, stored);
     this.admissions.set(stored.admissionId, admission(stored.id, stageId));
-    if (options.session !== false) this.sessions.set(stored.id, [{ id: `session-${stored.id}` }]);
+    if (options.session !== false) this.sessions.set(stored.id, [sessionOf(stored)]);
   }
 
   reads(): BoardReads {
@@ -154,6 +155,11 @@ export class BoardWorld {
   parts(): CardViewParts {
     return { mergeQueue: { latestForRun: async () => err(failure('not-found', 'no request')) }, sources: () => [this.source()] };
   }
+}
+
+function sessionOf(stored: Task): object {
+  const attempts = stored.attempts.map((attempt) => ({ id: attempt.id, ownershipGeneration: stored.ownershipGeneration, ended: attempt.outcome !== undefined }));
+  return { id: `session-${stored.id}`, attempts, generations: [] };
 }
 
 function found<Value>(value: Value | undefined, id: string): Result<Value> {
