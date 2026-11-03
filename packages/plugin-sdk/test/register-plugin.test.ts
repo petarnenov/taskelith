@@ -86,7 +86,7 @@ test('a plugin for a port the host does not offer is rejected before admission',
 });
 
 test('a plugin whose plugin API range excludes this SDK is rejected before admission', () => {
-  for (const pluginApiRange of ['^1.0.0', '^0.2.0', '^0.4.0', '^0.0.1']) {
+  for (const pluginApiRange of ['^1.0.0', '^0.3.0', '^0.5.0', '^0.0.1']) {
     const error = failureOf(manifest({ pluginApiRange }));
     assert.equal(error.code, 'precondition-failed');
     assert.deepEqual(error.details, { pluginId: 'sdlc-example', pluginApiRange, pluginApiVersion: PLUGIN_API_VERSION });
@@ -100,6 +100,11 @@ test('a plugin built for the draft SDLC framework port is rejected', () => {
 
 test('a plugin built for plugin API 0.2.0, before the draft SCM port, is rejected', () => {
   const error = failureOf(manifest({ pluginApiRange: '^0.2.0' }));
+  assert.equal(error.code, 'precondition-failed');
+});
+
+test('a plugin built for plugin API 0.3.0, before the draft SCM plugin descriptor, is rejected', () => {
+  const error = failureOf(manifest({ pluginApiRange: '^0.3.0' }));
   assert.equal(error.code, 'precondition-failed');
 });
 

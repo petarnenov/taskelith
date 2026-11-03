@@ -46,6 +46,13 @@ export {
 } from './postgres-database.js';
 export { PostgresTransaction } from './postgres-transaction.js';
 export { PostgresRunCatalog } from './run-catalog.js';
+export { CommittingScmWebhookDeliveries, PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
+export {
+  PostgresScmIntegrationRecords,
+  PostgresScmIntegrations,
+  type ScmSecretCipher,
+  type SealedScmSecret,
+} from './scm-integrations.js';
 export { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 export { APPENDED_CHANNEL, NUMBERED_CHANNEL, PostgresUiEventLog, PostgresUiEventRecords } from './ui-event-repositories.js';
 export { LISTEN_DEADLINE_MILLISECONDS, LISTEN_PROBE_MILLISECONDS, PostgresUiEventNotifications, type NotificationOptions } from './ui-event-notifications.js';

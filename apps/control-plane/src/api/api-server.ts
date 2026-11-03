@@ -10,8 +10,10 @@ import { err, failure, ok, parseIdentifier, type CorrelationId, type Failure, ty
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
 import {
+  BODY_TOO_LARGE,
   MAX_BODY_BYTES,
   MAX_CONCURRENT_UPLOADS,
+  MAX_CONCURRENT_WEBHOOKS,
   MAX_EVIDENCE_BYTES,
   bearerToken,
   failureResponse,
@@ -57,6 +59,13 @@ export interface Upload {
   readonly content: Uint8Array;
 }
 
+// The body of a route with `signedBodyLimit`: exact bytes, never parsed,
+// with the request's headers, their names in lower case.
+export interface SignedBody {
+  readonly headers: Readonly<Record<string, string>>;
+  readonly rawBody: Uint8Array;
+}
+
 // A success whose status or headers the operation decides, such as 200 for
 // a repeat of a publication that its route answers with 201.
 export class StatusAnswer {
@@ -79,6 +88,7 @@ export interface ApiServerOptions {
   // The operations served; the contract's route table unless replaced.
   readonly routes?: readonly RouteDefinition[];
   readonly maxConcurrentUploads?: number;
+  readonly maxConcurrentWebhooks?: number;
   // Plain HTTP without it, which only unit tests of the handling use.
   readonly tls?: ServerTls;
   // The built SPA, served under /app/ to requests that no route matches.
@@ -104,7 +114,10 @@ export function createTlsApiServer(listener: ApiRequestListener, tls: ServerTls)
 export function createApiRequestListener(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiRequestListener {
   const context: ListenerContext = {
     handlers,
-    uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
+    slots: {
+      uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
+      signedBodies: new UploadSlots(options.maxConcurrentWebhooks ?? MAX_CONCURRENT_WEBHOOKS),
+    },
     routes: options.routes ?? ROUTES,
     logger: options.logger ?? SILENT_LOGGER,
     ...(options.webApp === undefined ? {} : { webApp: options.webApp }),
@@ -121,13 +134,20 @@ export function createApiRequestListener(handlers: ApiHandlers, options: ApiServ
 // What every request of one listener shares.
 interface ListenerContext {
   readonly handlers: ApiHandlers;
-  readonly uploads: UploadSlots;
+  readonly slots: BodySlots;
   readonly routes: readonly RouteDefinition[];
   readonly logger: Logger;
   readonly webApp?: WebAppFiles;
 }
 
-async function serve({ handlers, uploads, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+// Bound the large bodies buffered at once: uploads, and signed bodies,
+// which an unauthenticated sender can send.
+interface BodySlots {
+  readonly uploads: UploadSlots;
+  readonly signedBodies: UploadSlots;
+}
+
+async function serve({ handlers, slots, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
@@ -155,7 +175,7 @@ async function serve({ handlers, uploads, routes, logger, webApp }: ListenerCont
       ({ parameters } = matched.value);
       operationId = matched.value.route.operationId;
       declaredQuery = matched.value.route.query ?? [];
-      answer = await answerRoute(handlers, uploads, matched.value, request, url, correlationId);
+      answer = await answerRoute(handlers, slots, matched.value, request, url, correlationId);
     }
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
@@ -178,7 +198,7 @@ async function serve({ handlers, uploads, routes, logger, webApp }: ListenerCont
 // session-authenticated mutation, then the role, and only then the body.
 async function answerRoute(
   handlers: ApiHandlers,
-  uploads: UploadSlots,
+  slots: BodySlots,
   { route, parameters }: { route: RouteDefinition; parameters: readonly string[] },
   request: IncomingMessage,
   url: URL,
@@ -203,7 +223,7 @@ async function answerRoute(
   if (!resource.ok) return failureResponse(statusOf(route, resource.error), resource.error);
   const handled = async (): Promise<ApiResponse> => {
     const body = await validatedBody(request, route);
-    if (!body.ok) return failureResponse(400, body.error);
+    if (!body.ok) return failureResponse(bodyFailureStatus(route, body.error), body.error);
     const sourceAddress = request.socket.remoteAddress ?? 'unknown';
     const lastEventId = request.headers['last-event-id'];
     const validated = {
@@ -214,7 +234,13 @@ async function answerRoute(
     if (!outcome.ok) return failureResponse(statusOf(route, outcome.error), outcome.error);
     return successResponse(route, outcome.value);
   };
-  return route.upload ? uploads.run(handled) : handled();
+  const slot = slotOf(route, slots);
+  return slot === undefined ? handled() : slot.run(handled);
+}
+
+function slotOf(route: RouteDefinition, slots: BodySlots): UploadSlots | undefined {
+  if (route.upload) return slots.uploads;
+  return route.signedBodyLimit === undefined ? undefined : slots.signedBodies;
 }
 
 // The role check: 401 without a principal, 403 for a denial, and 503 when
@@ -298,28 +324,63 @@ async function authenticateSession(handlers: ApiHandlers, optional: boolean, req
   return optional ? ok({}) : err(unauthenticated());
 }
 
+// A body over its limit is 413 where the route declares that reason.
+function bodyFailureStatus(route: RouteDefinition, failed: Failure): number {
+  const reason = failed.details.reason;
+  return (reason === undefined ? undefined : route.reasons?.[reason]) ?? 400;
+}
+
 async function validatedBody(request: IncomingMessage, route: RouteDefinition): Promise<Result<unknown>> {
+  if (route.signedBodyLimit !== undefined) return signedBody(request, route.signedBodyLimit);
   if (route.body === undefined) return ok(undefined);
   if (route.upload) return validatedUpload(request, route.body);
   const body = await readJsonBody(request);
   if (!body.ok) return body;
   const checked = checkedBody(route.body, body.value);
-  return checked.ok || !route.writeOnlyBody ? checked : err(writeOnlyViolation(route.body, checked.error));
+  if (checked.ok || !route.writeOnlyBody) return checked;
+  return err(writeOnlyViolation(route.body, checked.error, settingAtFault(route.settingMaps ?? {}, body.value)));
 }
 
 // Names only the fields at fault: a validator message may quote a value or
 // a property name that the caller sent beside a password.
-function writeOnlyViolation(schema: string, violation: Failure): Failure {
+function writeOnlyViolation(schema: string, violation: Failure, setting: string | undefined): Failure {
   const paths = [...new Set(violation.message.split('; ').map((line) => /^\S+ (\/\S*) /.exec(line)?.[1] ?? '/'))];
   const rules = paths.flatMap((path) => FIELD_RULES[path] ?? []);
   const message = [`the ${schema} body is not valid at ${paths.join(', ')}`, ...rules].join('; ');
-  return failure('invalid', message, { violations: violation.details.violations ?? '1' });
+  const named: Readonly<Record<string, string>> = setting === undefined ? {} : { setting };
+  return failure('invalid', message, { violations: violation.details.violations ?? '1', ...named });
+}
+
+// The first setting whose entry its map's schema refuses on its own.
+function settingAtFault(maps: Readonly<Record<string, keyof HttpSchemas & string>>, body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  for (const [field, schema] of Object.entries(maps)) {
+    const entries = (body as Record<string, unknown>)[field];
+    if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) continue;
+    const refused = Object.entries(entries).find(([name, entry]) => !checkHttpSchema(schema, { [name]: entry }).ok);
+    if (refused !== undefined) return refused[0];
+  }
+  return undefined;
 }
 
 // Fixed texts of a field's rule, so a caller learns it without its value.
 const FIELD_RULES: Readonly<Record<string, string>> = Object.freeze({
   '/loginName': 'the login name must be lowercase: 1-64 letters, digits, ".", "_", or "-", starting with a letter or digit',
 });
+
+// Node gives the header names in lower case and joins repeated values. A
+// declared length over the limit is refused before any byte is read.
+async function signedBody(request: IncomingMessage, limit: number): Promise<Result<SignedBody>> {
+  const tooLarge = failure('invalid', `the request body exceeds ${limit} bytes`, { reason: BODY_TOO_LARGE });
+  if (Number(request.headers['content-length'] ?? 0) > limit) return err(tooLarge);
+  const body = await readBody(request, limit);
+  if (!body.ok) return err(tooLarge);
+  const headers = Object.entries(request.headers).flatMap(([name, value]) => {
+    if (value === undefined) return [];
+    return [[name, typeof value === 'string' ? value : value.join(', ')] as const];
+  });
+  return ok({ headers: Object.fromEntries(headers), rawBody: new Uint8Array(body.value) });
+}
 
 // Exactly a JSON `record` part, at most 1 MiB, and a `content` part.
 async function validatedUpload(request: IncomingMessage, schema: keyof HttpSchemas & string): Promise<Result<Upload>> {
@@ -359,6 +420,7 @@ function match(
     try {
       return ok({ route, parameters: found.slice(1).map((part) => decodeURIComponent(part)) });
     } catch {
+      if (route.keepsUndecodablePathParameters) return ok({ route, parameters: found.slice(1) });
       return err(failure('invalid', 'a path parameter is not valid percent-encoding'));
     }
   }

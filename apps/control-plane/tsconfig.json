@@ -11,6 +11,7 @@
     { "path": "../../packages/modules/access" },
     { "path": "../../packages/modules/execution" },
     { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/modules/integrations" },
     { "path": "../../packages/adapters/certificates" },
     { "path": "../../packages/adapters/control-plane-store" },
     { "path": "../../packages/adapters/data-root" },
@@ -20,6 +21,7 @@
     { "path": "../../packages/adapters/secrets" },
     { "path": "../../packages/adapters/worker-journal" },
     { "path": "../../packages/adapters/worker-supervisor" },
+    { "path": "../../packages/plugins/scm-github" },
     { "path": "../worker" }
   ]
 }

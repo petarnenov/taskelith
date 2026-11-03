@@ -38,3 +38,8 @@ export {
   type WebhookEventKind,
   type WebhookVerifier,
 } from './ports/source-control.js';
+export type {
+  ScmValues,
+  SourceControlConfiguration,
+  SourceControlPlugin,
+} from './ports/source-control-plugin.js';

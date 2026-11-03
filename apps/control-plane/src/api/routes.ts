@@ -1,5 +1,6 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { FailureCode } from '@taskelith/kernel';
+import { BODY_TOO_LARGE, MAX_SCM_WEBHOOK_BODY_BYTES } from './http-exchange.js';
 
 // `browserSession`: the session cookie, with the CSRF header on any method
 // but GET; `none`: no credential, so a public or optional-session operation.
@@ -20,6 +21,9 @@ export interface RouteDefinition {
   readonly query?: readonly string[];
   // The body reaches a `writeOnly` schema, so no failure names its values.
   readonly writeOnlyBody?: true;
+  // Body fields that map setting names to values, with each map's schema: a
+  // refused body names its first setting at fault in `details.setting`.
+  readonly settingMaps?: Readonly<Record<string, keyof HttpSchemas & string>>;
   // The response carries a secret, so it is answered only over TLS.
   readonly confidential?: true;
   // The schema of every success body, checked before it leaves; `binary`,
@@ -28,6 +32,12 @@ export interface RouteDefinition {
   // The body is multipart: `body` validates its `record` part, and its
   // `content` part reaches the operation as exact bytes.
   readonly upload?: true;
+  // The body reaches the operation unparsed, as bytes with the lower-case
+  // headers, read up to this limit: its signature authenticates it.
+  readonly signedBodyLimit?: number;
+  // A path parameter that is not valid percent-encoding reaches the
+  // operation as sent, where other routes answer 400.
+  readonly keepsUndecodablePathParameters?: true;
   readonly success: number;
   readonly statuses: Partial<Record<FailureCode, number>>;
   // Statuses by failure reason, which take precedence over those by code.
@@ -36,6 +46,7 @@ export interface RouteDefinition {
 
 const SEGMENT = '([^/]+)';
 const COMMON: Partial<Record<FailureCode, number>> = { invalid: 400, forbidden: 401, unavailable: 503, internal: 500 };
+const OVER_LIMIT: Readonly<Record<string, number>> = Object.freeze({ [BODY_TOO_LARGE]: 413 });
 const SESSION_PATH = `^/projects/${SEGMENT}/agent-sessions/${SEGMENT}`;
 const SESSION_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
 const SESSION_COMMAND: Partial<Record<FailureCode, number>> = { ...SESSION_READ, conflict: 409, 'precondition-failed': 422 };
@@ -45,6 +56,7 @@ const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, 
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
 const BROWSER_OR_OPERATOR: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
+const SCM_SETTING_MAPS: Readonly<Record<string, keyof HttpSchemas & string>> = Object.freeze({ settings: 'ScmSettings', secrets: 'ScmSecrets' });
 
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
@@ -159,6 +171,31 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'streamInstallationEvents', method: 'GET', pattern: /^\/events$/, security: BROWSER_OR_OPERATOR,
     query: ['after'], response: 'event-stream', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  // Control-plane wire contracts section 5.
+  {
+    operationId: 'receiveScmWebhook', method: 'POST', pattern: new RegExp(`^/scm-integrations/${SEGMENT}/webhooks$`), security: ['none'],
+    signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, keepsUndecodablePathParameters: true, response: 'empty', success: 202,
+    statuses: COMMON, reasons: OVER_LIMIT,
+  },
+  // Control-plane wire contracts section 4: SCM integrations, whose secrets
+  // are write-only.
+  {
+    operationId: 'listScmIntegrations', method: 'GET', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR, query: ['after'],
+    response: 'ScmIntegrationPage', success: 200, statuses: COMMON,
+  },
+  {
+    operationId: 'createScmIntegration', method: 'POST', pattern: /^\/scm-integrations$/, security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationCreation', writeOnlyBody: true, settingMaps: SCM_SETTING_MAPS, response: 'ScmIntegration', success: 201, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'readScmIntegration', method: 'GET', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    response: 'ScmIntegration', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'updateScmIntegration', method: 'PATCH', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    body: 'ScmIntegrationUpdate', writeOnlyBody: true, settingMaps: SCM_SETTING_MAPS, response: 'ScmIntegration', success: 200,
+    statuses: { ...COMMON, 'not-found': 404, conflict: 409 },
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {

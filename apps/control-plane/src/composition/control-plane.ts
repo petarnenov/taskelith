@@ -66,6 +66,7 @@ import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
 import { readWebAppDirectory } from './web-app-directory.js';
+import { startScmIntegrationServices } from './scm-integrations.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -209,6 +210,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const keeper = new EventLogKeeper({
     log: eventLog, clock, ...(settings.eventRetentionHours === undefined ? {} : { retentionHours: settings.eventRetentionHours }),
   });
+  const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
+  if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
     runs,
     tasks: new TaskService(database),
@@ -225,6 +228,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
     agentSessions: agentSessions.value,
+    scmWebhooks: scm.value.webhooks,
+    scmIntegrations: scm.value.integrations,
     projects: {
       setup: projectSetup,
       members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),

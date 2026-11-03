@@ -13,6 +13,7 @@ import {
 } from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
+import type { ScmWebhookReceiver } from '@taskelith/integrations';
 import type { ConfirmedCredentials, CredentialRenewalRequest, Enrollment, EnrollmentRequest, RenewedCredentials, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
@@ -23,11 +24,12 @@ import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../application/slot-credential-delivery.js';
 import type { TaskService } from '../application/task-service.js';
-import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
+import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type SignedBody, type Upload } from './api-server.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
+import { ScmIntegrationApi, type ScmIntegrationOperations } from './scm-integration-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
 import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
@@ -78,10 +80,14 @@ export interface ApiServices {
   readonly logger?: Logger;
   // The agent sessions of section 9, apart from the login `sessions`.
   readonly agentSessions: AgentSessionOperations;
+  // The webhook receiver of wire contracts section 5.
+  readonly scmWebhooks: Pick<ScmWebhookReceiver, 'receive'>;
   // Projects, their members, and their defaults (wire section 4).
   readonly projects: ProjectOperations;
   // The event streams of wire section 10.
   readonly events: EventStreamOperations;
+  // SCM integrations (wire section 4), whose secrets no answer carries.
+  readonly scmIntegrations: ScmIntegrationOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -91,12 +97,14 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #agentSessions: AgentSessionApi;
   readonly #projects: ProjectApi;
   readonly #events: EventStreamApi;
+  readonly #scmIntegrations: ScmIntegrationApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
     this.#agentSessions = new AgentSessionApi(services.agentSessions);
     this.#projects = new ProjectApi(services.projects);
     this.#events = new EventStreamApi(services.events);
+    this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -190,6 +198,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#events.streamProjectEvents(request);
       case 'streamInstallationEvents':
         return this.#events.streamInstallationEvents(request);
+      case 'receiveScmWebhook':
+        return this.#receiveScmWebhook(first, request.body as SignedBody);
       default:
         return this.#dispatchProject(operationId, request);
     }
@@ -217,6 +227,14 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#projects.updateProjectDefaults(request);
       case 'readAutoMergeSetting':
         return this.#projects.readAutoMergeSetting(request);
+      case 'listScmIntegrations':
+        return this.#scmIntegrations.listScmIntegrations(request);
+      case 'createScmIntegration':
+        return this.#scmIntegrations.createScmIntegration(request);
+      case 'readScmIntegration':
+        return this.#scmIntegrations.readScmIntegration(request);
+      case 'updateScmIntegration':
+        return this.#scmIntegrations.updateScmIntegration(request);
       default:
         return Promise.resolve(err(failure('internal', `operation ${operationId} has no handler`)));
     }
@@ -352,6 +370,12 @@ export class ControlPlaneApi implements ApiHandlers {
   async #requestDelegation({ worker, body, correlationId }: ApiRequest): Promise<Result<HttpSchemas['DelegationOutcome']>> {
     if (worker === undefined) return err(failure('internal', 'requestDelegation reached its handler without a worker'));
     return this.#services.delegations.requestDelegation(worker, body as HttpSchemas['DelegationRequest'], correlationId);
+  }
+
+  // Every accepted delivery answers 202 without a body, a repeat included.
+  async #receiveScmWebhook(integrationId: string, delivery: SignedBody): Promise<Result<void>> {
+    const received = await this.#services.scmWebhooks.receive(integrationId, delivery);
+    return received.ok ? ok(undefined) : received;
   }
 
   async #download(evidenceId: string): Promise<Result<Uint8Array>> {
