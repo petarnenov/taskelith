@@ -52,7 +52,9 @@ export {
   scmIntegrationServices,
   startScmIntegrationServices,
   type ScmIntegrationServices,
+  type StartedScmIntegrationServices,
 } from './composition/scm-integrations.js';
+export { bindableProjects, repositoryBindingService, type RepositoryBindingPorts } from './composition/repository-bindings.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
 export { HEARTBEAT_QUEUE, HeartbeatService, type HeartbeatMessage } from './application/heartbeat-service.js';
