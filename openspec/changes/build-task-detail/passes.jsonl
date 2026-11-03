@@ -1,0 +1,1 @@
+{"change": "build-task-detail", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1a2ea-05b9-7f43-9aec-8f59f720abd3", "counts": {"critical": 0, "high": 1, "medium": 5, "low": 3}}
