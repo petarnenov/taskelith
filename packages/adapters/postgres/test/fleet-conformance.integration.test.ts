@@ -73,19 +73,56 @@ test('an enrolled worker is placeable once reachable and admitted, and a revoked
 test('a token that expires while its use waits for the row lock enrolls nothing', { concurrency: false }, async () => {
   await truncateAll(url);
   const registry = new CommittingFleetRegistry(database);
-  const expiresAt = value(parseInstant(new Date(Date.now() + 1000).toISOString()));
+  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
+  await Promise.all([holder.connect(), observer.connect()]);
+  const expiresAt = await databaseClockIn(observer, TOKEN_LIFETIME_MILLISECONDS);
   value(await registry.addToken(fleetToken('t1', {}, expiresAt)));
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
   await holder.query('BEGIN');
   await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
   const enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.equal(await waitForWaitingEnrollment(observer, expiresAt), true, 'the enrollment waits before the token expires');
+  await waitForDatabaseClockPast(observer, expiresAt);
   await holder.query('COMMIT');
-  await holder.end();
+  await Promise.all([holder.end(), observer.end()]);
   const enrolled = await enrolling;
   assert.equal(!enrolled.ok && enrolled.error.details.reason, 'token-expired');
 });
+
+// Long enough for the setup to reach the lock wait on a loaded host.
+const TOKEN_LIFETIME_MILLISECONDS = 2000;
+
+// The adapter compares the expiry with the database clock, not the host's.
+async function databaseClockIn(client: pg.Client, milliseconds: number): Promise<Instant> {
+  const { rows } = await client.query<{ at: Date }>(
+    "SELECT date_trunc('milliseconds', clock_timestamp()) + $1::int * interval '1 millisecond' AS at", [milliseconds],
+  );
+  return value(parseInstant(rows[0]!.at.toISOString()));
+}
+
+// Whether the enrollment was seen waiting for the row lock before `instant`.
+async function waitForWaitingEnrollment(client: pg.Client, instant: Instant): Promise<boolean> {
+  for (let tries = 0; tries < 500; tries++) {
+    const { rows } = await client.query<{ waiting: boolean; early: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
+         AND pid <> pg_backend_pid() AND query LIKE 'UPDATE enrollment_tokens %') AS waiting,
+         clock_timestamp() < $1 AS early`,
+      [instant],
+    );
+    if (rows[0]!.waiting) return rows[0]!.early;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('the enrollment never waited for the row lock');
+}
+
+async function waitForDatabaseClockPast(client: pg.Client, instant: Instant): Promise<void> {
+  for (let tries = 0; tries < 1500; tries++) {
+    const { rows } = await client.query<{ past: boolean }>('SELECT clock_timestamp() > $1 AS past', [instant]);
+    if (rows[0]!.past) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error('the database clock never passed the expiry');
+}
 
 test('a publisher that waited for the lock pushes every entry committed meanwhile', { concurrency: false }, async () => {
   await truncateAll(url);
