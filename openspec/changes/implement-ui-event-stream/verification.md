@@ -22,6 +22,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `verify-14-p2.log` on the tree of `a864ded0` failed 1 test of the change (section "Pass 2 fixes"), so `6e84c16a` fixed the test and `e7cecce3` recorded it; that changed the diff, so `d832dbd2` deleted the ninth `route.json` and `62b9a3b2` routed a tenth time (unedited; tier `elevated`, 63 files and 3910 lines, otherwise as the ninth), then the `make verify` of that tree.
 - Pass 3 fixes (section "Review pass 3"): `2e0d0de2` (M1) and `72211095` (L1), then the records (`707b48bf`). The fixes changed the diff, so `2b1d62cf` deleted the tenth `route.json` and `1a458850` routed an eleventh time (unedited; tier `elevated`, 64 files and 3936 lines, triggers lines, files, capabilities, contracts, and size, the same reviewers, and the shadow router agreeing at P(third) 0.81), then the `make verify` of that tree.
 - Return and merge of dev (section "Merge of dev"): the archive commit `4470e56a` was pushed and the coordinator's integration conflicted, so `f95412c2` `docs: restore the active implement ui event stream change to merge dev` reverts it; `918f5475` `chore: merge dev into the implement ui event stream change` merges `origin/dev` `f0ed0139`; `7137e415` `test: ...` adds the migration order test. The merge changed the diff, so `3fec4329` deleted the eleventh `route.json` and `4fb9a89f` routed a twelfth time (unedited; tier `elevated`, 64 files and 3951 lines, the same triggers, the shadow router agreeing at P(third) 0.79), then the `make verify` of that tree.
+- `63de1a6f` `docs: record the make verify of the implement-ui-event-stream change after the merge of dev`, the head that the reconciliation review (pass 4) reviewed. `2c010a09` fixes its four Low record findings in this file; the commit after it records the review in `passes.jsonl`, `findings.jsonl`, and this file. Neither changes a checked input outside this change's records.
 
 ## Environment
 
@@ -125,7 +126,7 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 
 - **M1, a late role denial** (`2e0d0de2`, `control-plane-api`). The claim held: both stream routes lacked `reasons`, so a `role-required` denial of the hub's re-check after the bounds read answered 401 through `forbidden: 401`, and the project stream read its project before that re-check, so an unknown project answered 404 first. Both routes now map `role-required` to 403 as the project commands do, and the project stream's re-check checks the role, then reads the project, so the order stays 401, 403, 404. The new route test passes the server's check for everyone and leaves the re-check to the real roles. `fb-14-p3-M1.log`: on `df705c2b` it fails with 401 for `/projects/alpha/events`; with the route reasons alone it fails with 404 for the unknown `/projects/gamma/events`; with both parts it passes. The reviewer's snippet named `installation-Maintainer`; the routes keep their requirements, `projectRead` and `OWNER_ONLY`.
 - **L1, a stale comment** (`72211095`). The comment of `BEFORE_ANY_EVENT` names the tests that wire no UI event log as its users, since the control plane reads its positions from the log.
-- Coordinator architect check: (pending).
+- Coordinator architect check: passed, Niki, 2026-11-03, for `2e0d0de2` and `72211095`.
 
 ## Merge of dev
 
@@ -144,7 +145,24 @@ Migration order and down migrations: `1792933700000` (20e), `1792933800000` (11a
 
 Reconciliation: this change's only deltas that modify or remove a living requirement are `control-plane-wire-contracts` "Event position after commit" (MODIFIED) and `control-plane-api` "View position before the event stream" (REMOVED). `git diff 26bbb10f origin/dev -- openspec/specs` changes neither: #428 and #429 only add requirements to `control-plane-api` (seven, from "SCM webhook receiver served" to "SCM integration secret key at initialization") and `postgres-state` ("SCM webhook deliveries table", "SCM integration storage", "Sealed SCM secrets"), and edit `plugin-registration` and `scm-port`, which this change does not touch; `control-plane-wire-contracts`, `session-turn-model`, and `trust-and-operational-foundation` did not change on `dev`. So no delta needed rewriting, and the restored deltas are unchanged. No name this change adds equals a living requirement of the same capability (checked with `grep` over `openspec/specs`; "Event streams" exists only in `control-plane-wire-contracts`, while this change adds it to `control-plane-api`). `npm run openspec -- validate implement-ui-event-stream --strict` passes; in a scratch copy of the merged tree, `archive implement-ui-event-stream --yes` and then `validate --all --strict` pass. #428's and #429's edits of wire contracts sections 4 and 5 merged without a conflict and do not touch section 10.
 
-Reconciliation review: pending, by the reviewer of pass 1 (worker step 10 item 4), over the merge commit's resolved diff and the commits after it.
+### Reconciliation review (pass 4, role A)
+
+- Reviewer: Codex CLI `gpt-6-astra`, effort `medium` (`codex gpt-6-astra#medium`), the reviewer of pass 1, as worker step 10 item 4 requires for the merge of `dev`.
+- Invocation, through `make review CHANGE=implement-ui-event-stream PASS=4`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, environment `PATH HOME USER LANG TERM TMPDIR`, started 2026-11-03T10:45:39Z at head `63de1a6f`; the prompt limited the review to the resolved merge `918f5475` of `origin/dev` `f0ed0139`, its eight conflicted files, the reconciliation of the deltas, and the commits `918f5475..63de1a6f`.
+- Confirmation: model `gpt-6-astra`, effort `medium`, sandbox `read-only` reported in the header; session `01a1a103-bf45-7b93-812b-716bdbf76b85`; exit 0. The snapshot before the run is in `snap-14-recon-before.txt` (scratchpad).
+- Result (`review-14-recon-report.md` in the scratchpad): the merge keeps both branches' edits, among them the routes, dispatch, composition and shutdown, transaction repositories, access requirements, and migration tests; the migration order test matches its description; the added requirements collide with none of the same capability, and `dev` changed neither the modified nor the removed requirement. The reviewer ran no tests and read the existing verification logs.
+- Counts: Critical 0, High 0, Medium 0, Low 4, as in `passes.jsonl` and the four `findings.jsonl` lines, all in this record. The pass schema has no form for a reconciliation review, so `passes.jsonl` records it as pass 4, role A.
+- Scope: the review covered only the merge and the reconciliation, not the pass 3 fixes, whose architect check passed (section "Pass 3 fixes").
+
+### Reconciliation fixes for the architect check
+
+Unreviewed fixes, for the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"); their `findings.jsonl` outcome is `fixed-unreviewed`. `2c010a09` changes this record only:
+
+- L1: section "Revision" names `26bbb10f` the development and checklist base and `f0ed0139` the merge base since the merge of dev.
+- L2: section "Author self-check" keeps only `1792933600000` unused; 20e uses `1792933700000`.
+- L3: section "Evidence check" cites `verify-14-merge.log`, tree `df394999` of `eef15b3d`, as the source of the generated block, and marks `verify-14-p3.log` superseded.
+- L4: section "Merge of dev" names wire contracts sections 4 and 5.
+- Architect check: pending, by the coordinator.
 
 ## Limitations
 
@@ -152,7 +170,7 @@ Reconciliation review: pending, by the reviewer of pass 1 (worker step 10 item 4
 - The durable snapshot of output older than the retained window is not served: 14b, a separate change with its own operation, scheduled after item 15 unless item 29's board needs older output first (coordinator decision, 2026-11-03).
 - A change committed before a stream's open but numbered after its bounds read can end that new stream once; accepted as the safe direction, since a stream never outlives a role, and the reconnect stays open (coordinator decision, 2026-11-03; design, "Risks / Trade-offs").
 - An inbox item whose card subject has no attempt breaks `NativeRequestInboxSubject` and is skipped, logged with its type and violation only, and the stream goes on (coordinator decision, 2026-11-03).
-- Passes 1 to 3 ran; pass 2 reviewed the pass 1 fixes and pass 3 the pass 2 fixes. The pass 3 fixes are unreviewed and await the coordinator's architect check. No deployment or browser check was made (backend only).
+- Passes 1 to 3 ran; pass 2 reviewed the pass 1 fixes and pass 3 the pass 2 fixes. The pass 3 fixes are unreviewed; the coordinator's architect check passed them. The reconciliation review ran as pass 4; its record fixes await the architect check. No deployment or browser check was made (backend only).
 - Streams wake on the numbered notification and on a pass of their own process that numbered; a stream whose process missed a notification of another process's numbering waits for that process's next numbering or notification. One control-plane instance is the G6 target, so no cached-head poll was added.
 - The numbering horizon is cluster-wide; `idle_in_transaction_session_timeout` and the oldest transaction's age are operator settings and monitoring that Taskelith neither sets nor exports yet (design, "Risks / Trade-offs").
 
@@ -172,11 +190,11 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a05d-9a59-7f03-bfa4-ad152fe1020d` | 0 | 2 | 3 | 0 |
 | 2 | B | `claude claude-fable-5-1#medium` | `17ec590b-3b71-441c-acd6-934097e60b66` | 0 | 0 | 1 | 8 |
 | 3 | A | `agy gemini-4-argon-medium#medium` | `b62f1dbf-6aaf-43c4-aa14-25b9b8db4d61` | 0 | 0 | 1 | 1 |
+| 4 | A | `codex gpt-6-astra#medium` | `01a1a103-bf45-7b93-812b-716bdbf76b85` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
 ## Remaining gates
 
-- Architect check of the pass 3 fixes by the coordinator (section "Pass 3 fixes").
-- Reconciliation review of the merge of dev by the reviewer of pass 1 (section "Merge of dev").
+- The coordinator's architect check of the reconciliation fixes (section "Reconciliation fixes for the architect check").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
