@@ -37,6 +37,7 @@ import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.j
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
 import { PostgresUiEventRecords } from './ui-event-repositories.js';
+import { PostgresCardCatalog, PostgresCardProjections } from './card-repositories.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
 // read and write through it, and commit or roll back together.
@@ -82,6 +83,8 @@ export class PostgresTransaction {
   // The event log, which the timeline's events and Access's changes share.
   readonly uiEvents: PostgresUiEventRecords;
   readonly scmWebhookDeliveries: PostgresScmWebhookDeliveryRecords;
+  readonly cards: PostgresCardCatalog;
+  readonly cardProjections: PostgresCardProjections;
   // Sealed secrets only; PostgresScmIntegrations seals and opens them.
   readonly scmIntegrations: PostgresScmIntegrationRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
@@ -129,6 +132,8 @@ export class PostgresTransaction {
     this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
     this.sessionTimeline = new PostgresSessionTimelineTransaction(session, this.uiEvents);
     this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
+    this.cards = new PostgresCardCatalog(session);
+    this.cardProjections = new PostgresCardProjections(session);
     this.scmIntegrations = new PostgresScmIntegrationRecords(session);
     this.outboxLookup = this.outbox;
   }

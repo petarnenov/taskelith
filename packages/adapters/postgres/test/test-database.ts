@@ -20,7 +20,7 @@ const TABLES = [
   'agent_sessions', 'agent_session_output', 'agent_session_output_tails', 'agent_session_attempts', 'session_idempotency_keys', 'session_inbox_items',
   'session_audit_events',
   'account_slots', 'slot_credentials', 'slot_credential_counters', 'slot_credential_deliveries', 'scm_webhook_deliveries',
-  'ui_events',
+  'ui_events', 'cards', 'board_projections', 'card_touches',
 ];
 let created = 0;
 

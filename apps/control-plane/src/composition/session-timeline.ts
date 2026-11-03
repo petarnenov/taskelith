@@ -6,6 +6,8 @@ import {
   SessionTimelineService,
   parseTurnId,
   type NeedsYouItemId,
+  type NeedsYouSource,
+  type SessionTimelineTransaction,
   type SessionScopes,
   type TurnId,
   type ViewPositions,
@@ -27,6 +29,8 @@ export interface AgentSessionServices {
   readonly clock: Clock;
   // Built for item 15, which registers it with the inbox.
   readonly source: NativeRequestSource;
+  // The same source over one snapshot's timeline, which a view reads.
+  sourceIn(transaction: SessionTimelineTransaction, positions: ViewPositions): NeedsYouSource;
 }
 
 // The session timeline over PostgreSQL; a missing or malformed digest or
@@ -47,7 +51,11 @@ export function startAgentSessionServices(namespace: ControlPlaneNamespace, data
   });
   const positions = new LogViewPositions(new PostgresUiEventLog(database));
   const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions });
-  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, source });
+  const sourceIn = (transaction: SessionTimelineTransaction, snapshotPositions: ViewPositions) => new NativeRequestSource({
+    id: NATIVE_REQUEST_SOURCE_ID, timeline, digest: digest.value, clock,
+    store: { transaction: (work) => work(transaction) }, positions: snapshotPositions,
+  });
+  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, source, sourceIn });
 }
 
 // `t` and 32 lowercase hexadecimal digits from 128 random bits (wire

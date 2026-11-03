@@ -28,6 +28,7 @@ import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Sign
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
+import { BoardApi, type BoardOperations } from './board-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
 import { ScmIntegrationApi, type ScmIntegrationOperations } from './scm-integration-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
@@ -86,6 +87,8 @@ export interface ApiServices {
   readonly projects: ProjectOperations;
   // The event streams of wire section 10.
   readonly events: EventStreamOperations;
+  // The board, task detail, and inbox views of wire section 8.
+  readonly board: BoardOperations;
   // SCM integrations (wire section 4), whose secrets no answer carries.
   readonly scmIntegrations: ScmIntegrationOperations;
 }
@@ -97,6 +100,7 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #agentSessions: AgentSessionApi;
   readonly #projects: ProjectApi;
   readonly #events: EventStreamApi;
+  readonly #board: BoardApi;
   readonly #scmIntegrations: ScmIntegrationApi;
 
   constructor(services: ApiServices) {
@@ -104,6 +108,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#agentSessions = new AgentSessionApi(services.agentSessions);
     this.#projects = new ProjectApi(services.projects);
     this.#events = new EventStreamApi(services.events);
+    this.#board = new BoardApi(services.board);
     this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
   }
 
@@ -235,6 +240,25 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#scmIntegrations.readScmIntegration(request);
       case 'updateScmIntegration':
         return this.#scmIntegrations.updateScmIntegration(request);
+      default:
+        return this.#dispatchBoard(operationId, request);
+    }
+  }
+
+  #dispatchBoard(operationId: string, request: ApiRequest): Promise<Result<unknown>> {
+    switch (operationId) {
+      case 'readBoard':
+        return this.#board.readBoard(request);
+      case 'readTaskDetail':
+        return this.#board.readTaskDetail(request);
+      case 'readInbox':
+        return this.#board.readInbox(request);
+      case 'readInboxCounts':
+        return this.#board.readInboxCounts(request);
+      case 'readInstallationInbox':
+        return this.#board.readInstallationInbox(request);
+      case 'readInstallationInboxCounts':
+        return this.#board.readInstallationInboxCounts();
       default:
         return Promise.resolve(err(failure('internal', `operation ${operationId} has no handler`)));
     }

@@ -203,7 +203,9 @@ function statementOutcome<Value>(error: StatementError): Attempt<Value> {
 
 function ignoreConnectionError(): void {}
 
-type CommitPoint = 'OutboxCommit' | 'InboxCommit' | 'LaunchAuthorizationCommit' | 'SessionTimelineCommit' | 'EventNumberingCommit';
+type CommitPoint =
+  | 'OutboxCommit' | 'InboxCommit' | 'LaunchAuthorizationCommit' | 'SessionTimelineCommit' | 'EventNumberingCommit'
+  | 'CardProjectionCommit';
 
 function commitPoints(transaction: PostgresTransaction): CommitPoint[] {
   return [
@@ -212,6 +214,7 @@ function commitPoints(transaction: PostgresTransaction): CommitPoint[] {
     ...(transaction.tasks.grantRecorded ? ['LaunchAuthorizationCommit' as const] : []),
     ...(transaction.sessionTimeline.changed ? ['SessionTimelineCommit' as const] : []),
     ...(transaction.uiEvents.numbered ? ['EventNumberingCommit' as const] : []),
+    ...(transaction.cardProjections.projected ? ['CardProjectionCommit' as const] : []),
   ];
 }
 

@@ -579,3 +579,24 @@ export { UI_EVENT_LOG_CONFORMANCE, type UiEventLogFixture } from './ports/ui-eve
 export { InMemoryUiEventLog, isSameScope } from './adapters/in-memory-ui-event-log.js';
 export { NATIVE_REQUEST_SOURCE_ID, nativeRequestItem } from './application/native-request-items.js';
 export { summaryOf } from './application/session-views.js';
+export {
+  MAX_CARD_TITLE_LENGTH,
+  parseCardRecord,
+  type CardCatalog,
+  type CardRecord,
+  type CardTask,
+} from './ports/card-catalog.js';
+export { CARD_CATALOG_CONFORMANCE, CARD_LINEAGE_CONFORMANCE, type CardLineageSubject } from './ports/card-catalog-conformance.js';
+export { InMemoryCardCatalog, cardOrder } from './adapters/in-memory-card-catalog.js';
+export {
+  GATE_URGENCY,
+  cardColumn,
+  closeStage,
+  columnOf,
+  currentStage,
+  isMergeReady,
+  mostUrgentGate,
+  stageGraph,
+  stageSummary,
+  type StageGraph,
+} from './application/board-stages.js';

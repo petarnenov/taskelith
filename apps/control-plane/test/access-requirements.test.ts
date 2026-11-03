@@ -82,10 +82,11 @@ const AGENT_SESSION_OPERATIONS = [
   'submitTurn',
 ];
 const EVENT_STREAM_OPERATIONS = ['streamInstallationEvents', 'streamProjectEvents'];
+const BOARD_OPERATIONS = ['readBoard', 'readInbox', 'readInboxCounts', 'readInstallationInbox', 'readInstallationInboxCounts', 'readTaskDetail'];
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
-  const expected = [...AGENT_SESSION_OPERATIONS, ...EVENT_STREAM_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS, ...SCM_INTEGRATION_OPERATIONS, 'receiveScmWebhook'];
+  const expected = [...AGENT_SESSION_OPERATIONS, ...BOARD_OPERATIONS, ...EVENT_STREAM_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS, ...SCM_INTEGRATION_OPERATIONS, 'receiveScmWebhook'];
   assert.deepEqual(served.map((route) => route.operationId).sort(), expected.sort());
   for (const route of served) {
     const operation = operations.find((candidate) => candidate.operationId === route.operationId)!;
