@@ -102,6 +102,22 @@ test('a task waiting for placement shows the fleet obstacle first, else the most
   assert.equal((await onlyCard(world)).obstacle, undefined, 'a held reservation is placed');
 });
 
+test('a card that waits for a person shows no waiting obstacle, but still a rejected one', async () => {
+  const world = await runningCard();
+  world.items = [item('i-1', 'run-1', { taskId: 'task-1' })];
+  world.addTask('run-1', task('task-2', [{ id: 'att-2', executions: [] }]), 'apply', { session: false });
+  world.occupied.set('w-1', 1);
+  const person = await onlyCard(world);
+  assert.deepEqual([person.waitingFor, person.obstacle], ['person', undefined]);
+  const detail = await views(world).forCaller(true).taskDetail('alpha' as never, 'run-1' as never);
+  assert.equal(detail.ok && detail.value.tasks[1]!.obstacle?.reason, 'worker-capacity-exhausted', 'the task keeps its own obstacle');
+  const ended = { id: 'att-3', executions: [], outcome: { kind: 'not-started', cancelled: false, ownershipGeneration: 1, endedAt: LATE } };
+  world.addTask('run-1', task('task-3', [ended]), 'apply', { session: false });
+  world.outcomes.set('task-3', { taskId: 'task-3', attemptId: 'att-3', source: 'scheduler', disposition: 'rejected', reason: 'resource-ceiling-exceeded', recordedAt: LATE } as never);
+  const rejected = await onlyCard(world);
+  assert.deepEqual([rejected.waitingFor, rejected.obstacle?.disposition], ['person', 'rejected']);
+});
+
 // A projector over the world whose touches always name `run-1`, with the
 // times of its batches; it collects the records it appends.
 function projectorOver(world: BoardWorld, times: string[]): { projector: CardProjector; appended: UiEventRecord[] } {

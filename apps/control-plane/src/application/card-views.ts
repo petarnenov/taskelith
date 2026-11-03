@@ -17,6 +17,7 @@ import {
   type NeedsYouItem,
   type NeedsYouScope,
   type NeedsYouSource,
+  type PlacementObstacle,
   type StageGraph,
   type StageView,
   type Task,
@@ -226,11 +227,13 @@ function cardOf({ record, run, gates, graph, tasks, integration, needsYou }: Car
   const ofStage = tasksOfStage(tasks, current.id);
   const states = ofStage.map((each) => each.state);
   const session = ACTIVITY_URGENCY.map((state) => states.find((each) => each.session.state === state)?.session).find((found) => found !== undefined);
-  const obstacle = firstObstacle(states);
+  const rejected = firstObstacle(states, 'rejected');
+  const waiting = firstObstacle(states, 'waiting');
   const idle = ofStage.every((each) => activeAttempt(each.task) === undefined);
   const end = idle ? latestEnd(states) : undefined;
   const gate = mostUrgentGate(current.id, gates);
-  const waitingFor = waitOf({ needsYou, integration, obstacle, idle, archived: integration === 'integrated', review: current.obligations.includes('review'), stageDone: graph.states.get(current.id) === 'completed' });
+  const waitingFor = waitOf({ needsYou, integration, capacity: waiting !== undefined, idle, archived: integration === 'integrated', review: current.obligations.includes('review'), stageDone: graph.states.get(current.id) === 'completed' });
+  const obstacle = rejected ?? (waitingFor === 'capacity' ? waiting : undefined);
   return Object.freeze({
     runId: record.runId, title: record.title, workType: record.workType,
     framework: Object.freeze({ pluginId: run.binding.pluginId, pluginVersion: run.binding.pluginVersion }),
@@ -253,10 +256,11 @@ function tasksOfStage(tasks: readonly CardTaskState[], stageId: string): readonl
   return tasks.filter((each) => roots.has(rootOf(each.link.taskId) as never));
 }
 
-function firstObstacle(states: readonly TaskState[]): BoardCard['obstacle'] {
-  const obstacles = states.flatMap((state) => (state.obstacle === undefined ? [] : [state.obstacle]));
-  const byTask = [...obstacles].sort((left, right) => (left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0));
-  return byTask.find((obstacle) => obstacle.disposition === 'rejected') ?? byTask[0];
+// Section 3.3: the card shows a rejection, or a waiting obstacle only while
+// it waits for capacity; the first in task identifier order.
+function firstObstacle(states: readonly TaskState[], disposition: PlacementObstacle['disposition']): PlacementObstacle | undefined {
+  const obstacles = states.flatMap((state) => (state.obstacle?.disposition === disposition ? [state.obstacle] : []));
+  return obstacles.sort((left, right) => (left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0))[0];
 }
 
 function latestEnd(states: readonly TaskState[]): BoardCard['end'] {
@@ -267,7 +271,7 @@ function latestEnd(states: readonly TaskState[]): BoardCard['end'] {
 interface WaitInputs {
   readonly needsYou: number;
   readonly integration: MergeGateState;
-  readonly obstacle: BoardCard['obstacle'];
+  readonly capacity: boolean;
   readonly idle: boolean;
   readonly archived: boolean;
   readonly review: boolean;
@@ -276,10 +280,10 @@ interface WaitInputs {
 
 // The first that holds: a person, the merge queue, capacity, then a reviewer
 // or an admission for an idle stage that has not completed.
-function waitOf({ needsYou, integration, obstacle, idle, archived, review, stageDone }: WaitInputs): CardWait | undefined {
+function waitOf({ needsYou, integration, capacity, idle, archived, review, stageDone }: WaitInputs): CardWait | undefined {
   if (needsYou > 0 || FOR_A_PERSON.includes(integration)) return 'person';
   if (IN_QUEUE.includes(integration)) return 'merge-queue';
-  if (obstacle?.disposition === 'waiting') return 'capacity';
+  if (capacity) return 'capacity';
   if (!idle || archived || stageDone) return undefined;
   return review ? 'reviewer' : 'stage-admission';
 }
