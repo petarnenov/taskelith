@@ -144,6 +144,11 @@ const roleKey = (projectId: string, principalId: PrincipalId) => JSON.stringify(
 // Code-unit order, as wire contracts section 6 pages lists.
 const byCodeUnits = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 
+// A copy, so no caller changes stored defaults outside a transaction.
+function frozenDefaults(defaults: ProjectDefaults): ProjectDefaults {
+  return Object.freeze({ ...defaults, implementers: Object.freeze([...defaults.implementers]) });
+}
+
 class MemoryProjects implements Projects {
   constructor(private readonly state: State) {}
 
@@ -151,7 +156,7 @@ class MemoryProjects implements Projects {
     if (this.state.projects.has(project.projectId)) return err(failure('conflict', `the project ${project.projectId} exists`));
     this.state.projects.set(project.projectId, Object.freeze({
       project: Object.freeze({ ...project }),
-      defaults: Object.freeze({ defaults, revision: FIRST_REVISION }),
+      defaults: Object.freeze({ defaults: frozenDefaults(defaults), revision: FIRST_REVISION }),
       autoMerge: Object.freeze({ enabled: AUTO_MERGE_STARTS_ON, revision: FIRST_REVISION }),
     }));
     return ok(undefined);
@@ -188,7 +193,7 @@ class MemoryProjects implements Projects {
     const row = this.state.projects.get(projectId);
     if (row === undefined) return unknownProject();
     if (row.defaults.revision !== expectedRevision) return revisionConflict('project defaults');
-    const stored = Object.freeze({ defaults, revision: expectedRevision + 1, lastChange: Object.freeze({ ...lastChange }) });
+    const stored = Object.freeze({ defaults: frozenDefaults(defaults), revision: expectedRevision + 1, lastChange: Object.freeze({ ...lastChange }) });
     this.state.projects.set(projectId, Object.freeze({ ...row, defaults: stored }));
     return ok(stored);
   }

@@ -106,6 +106,7 @@ export class PrincipalAdministration {
   }
 
   // Succeeds for a principal that holds no role; only a removal is audited.
+  // Any identifier, so a G2 role on one that names no project stays revocable.
   removeProjectRole(
     actor: PrincipalId,
     target: { readonly projectId: string; readonly loginName: string },
@@ -113,7 +114,8 @@ export class PrincipalAdministration {
   ): Promise<Result<ProjectRoleChange>> {
     const loginName = parseLoginName(target.loginName);
     if (!loginName.ok) return Promise.resolve(loginName);
-    return this.#roleCommand(actor, target.projectId, invocation, (tx) => principalNamed(tx, loginName.value), removal);
+    const scope = { projectIdText: target.projectId, check: anyProject };
+    return this.#roleCommand(actor, scope, invocation, (tx) => principalNamed(tx, loginName.value), removal);
   }
 
   // `removeProjectMember`: also succeeds for an unknown principal, which
@@ -123,7 +125,8 @@ export class PrincipalAdministration {
     target: { readonly projectId: string; readonly principalId: string },
     invocation: AdministrativeInvocation,
   ): Promise<Result<void>> {
-    const removed = await this.#roleCommand(actor, target.projectId, invocation, (tx) => principalWithId(tx, target.principalId), removal);
+    const scope = { projectIdText: target.projectId, check: existingProject };
+    const removed = await this.#roleCommand(actor, scope, invocation, (tx) => principalWithId(tx, target.principalId), removal);
     return removed.ok || isUnknownPrincipal(removed.error) ? ok(undefined) : removed;
   }
 
@@ -139,7 +142,8 @@ export class PrincipalAdministration {
   ): Promise<Result<ProjectRoleChange>> {
     const role = parseProjectRole(target.role);
     if (!role.ok) return Promise.resolve(role);
-    return this.#roleCommand(actor, target.projectId, invocation, principalOf, async (tx, principalId, projectId, at) => {
+    const scope = { projectIdText: target.projectId, check: existingProject };
+    return this.#roleCommand(actor, scope, invocation, principalOf, async (tx, principalId, projectId, at) => {
       const assigned = await tx.projectRoles.assign(projectId, principalId, role.value, at);
       if (!assigned.ok) return assigned;
       return ok({ changed: true, role: role.value, event: { kind: 'access.project-role-assigned', principalId, projectId, role: role.value } });
@@ -148,17 +152,16 @@ export class PrincipalAdministration {
 
   #roleCommand(
     actor: PrincipalId,
-    projectIdText: string,
+    scope: RoleScope,
     invocation: AdministrativeInvocation,
     principalOf: (tx: AccessTransaction) => Promise<Result<Principal>>,
     change: RoleChange,
   ): Promise<Result<ProjectRoleChange>> {
-    const projectId = parseIdentifier('ProjectId', projectIdText);
+    const projectId = parseIdentifier('ProjectId', scope.projectIdText);
     if (!projectId.ok) return Promise.resolve(projectId);
     return this.#command(actor, invocation, async (tx, at) => {
-      const project = await tx.projects.get(projectId.value);
+      const project = await scope.check(tx, projectId.value);
       if (!project.ok) return project;
-      if (project.value === undefined) return unknownProject();
       const principal = await principalOf(tx);
       if (!principal.ok) return principal;
       const { principalId, loginName } = principal.value;
@@ -191,6 +194,23 @@ export class PrincipalAdministration {
       return ok(done.value.value);
     });
   }
+}
+
+// Which project identifiers a role command accepts.
+interface RoleScope {
+  readonly projectIdText: string;
+  readonly check: (tx: AccessTransaction, projectId: string) => Promise<Result<void>>;
+}
+
+async function existingProject(tx: AccessTransaction, projectId: string): Promise<Result<void>> {
+  const project = await tx.projects.get(projectId);
+  if (!project.ok) return project;
+  return project.value === undefined ? unknownProject() : ok(undefined);
+}
+
+// Roles assigned before projects existed name no project (design 7).
+async function anyProject(): Promise<Result<void>> {
+  return ok(undefined);
 }
 
 type RoleChange = (

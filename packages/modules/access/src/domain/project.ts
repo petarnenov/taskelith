@@ -61,8 +61,10 @@ export function parseMintedProjectId(text: string): Result<ProjectId> {
   return err(failure('internal', 'a minted project identifier is p and 32 lowercase hexadecimal digits'));
 }
 
+// Counts code points, as JSON Schema `maxLength` and `char_length` do.
 export function parseProjectName(text: string): Result<string> {
-  if (text.length >= 1 && text.length <= MAX_PROJECT_NAME_LENGTH && !CONTROL_CHARACTER.test(text)) return ok(text);
+  const length = [...text].length;
+  if (length >= 1 && length <= MAX_PROJECT_NAME_LENGTH && !CONTROL_CHARACTER.test(text)) return ok(text);
   return err(failure('invalid', `a project name is 1-${MAX_PROJECT_NAME_LENGTH} characters without control characters`, { field: 'name' }));
 }
 
