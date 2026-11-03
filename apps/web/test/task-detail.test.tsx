@@ -109,7 +109,7 @@ describe('the task detail route', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close the task detail' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(view.router.state.historyAction).toBe('POP');
-    expect(view.router.state.location.pathname).toBe('/app');
+    expect(view.router.state.location.pathname).toBe('/app/');
   });
 
   it.each([

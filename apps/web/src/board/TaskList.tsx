@@ -1,29 +1,28 @@
-import { List, Paper, Stack, Text } from '@mantine/core';
+import { Paper, Stack, Text } from '@mantine/core';
 import type { AttemptOutcome, TaskEnd, TaskView } from './board';
 import { ADMISSION_STATE_LABELS, END_LABELS, formatInstant, OUTCOME_LABELS } from './board-labels';
-import { ObstacleText } from './BoardCardView';
+import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
 import { Breakable } from './Breakable';
+import { ItemList } from './ItemList';
 
 // Every task of the run and its delegated children, in admission order,
 // each with its admission, ownership generation, and session.
 export function TaskList({ tasks }: { readonly tasks: readonly TaskView[] }) {
   if (tasks.length === 0) return <Text size="sm">No task of this run was admitted yet.</Text>;
   return (
-    <List type="ordered" size="sm" spacing="sm">
+    <ItemList component="ol" gap="sm">
       {tasks.map((task) => (
-        <List.Item key={task.taskId}>
-          <TaskItem task={task} />
-        </List.Item>
+        <TaskItem key={task.taskId} task={task} />
       ))}
-    </List>
+    </ItemList>
   );
 }
 
 function TaskItem({ task }: { readonly task: TaskView }) {
   const { admission } = task;
   return (
-    <Paper withBorder p="xs" radius="md">
+    <Paper component="li" withBorder p="xs" radius="md">
       <Stack gap={4}>
         <Text size="sm" fw={600} ff="monospace">
           <Breakable text={task.taskId} />

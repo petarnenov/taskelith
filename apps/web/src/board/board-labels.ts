@@ -11,6 +11,7 @@ import type {
   SessionActivityState,
   StageOrigin,
   StageState,
+  StageSummary,
   TaskEndKind,
   WorkType,
 } from './board';
@@ -135,6 +136,11 @@ export const OUTCOME_LABELS: Readonly<Record<AttemptOutcomeKind, string>> = {
   'operator-resolved': 'resolved by an operator',
   'not-started': 'never started',
 };
+
+// Product ports section 3.2: the native step, or a gap in the mapping.
+export function stepOf(stage: StageSummary): string {
+  return stage.origin === 'native' ? stage.stageId : 'platform-managed';
+}
 
 // An obstacle reason as words: its identifier without the hyphens.
 export function reasonLabel(reason: string): string {

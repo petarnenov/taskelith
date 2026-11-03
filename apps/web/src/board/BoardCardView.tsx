@@ -1,17 +1,18 @@
 import { Anchor, Badge, Card, Stack, Text } from '@mantine/core';
 import { Link } from 'react-router';
 import { taskDetailPath } from '../screens';
-import type { BoardCard, PlacementObstacle, StageSummary, TaskEndKind } from './board';
+import type { BoardCard, TaskEndKind } from './board';
+import { BOARD_ENTRY_STATE } from './board-entry';
 import {
   END_LABELS,
-  formatInstant,
   GATE_LABELS,
   MERGE_GATE_LABELS,
-  reasonLabel,
   STAGE_STATE_LABELS,
+  stepOf,
   WAIT_LABELS,
   WORK_TYPE_LABELS,
 } from './board-labels';
+import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
 
 interface BoardCardViewProps {
@@ -26,7 +27,14 @@ export function BoardCardView({ projectId, card }: BoardCardViewProps) {
   return (
     <Card withBorder padding="sm" radius="md" component="article" aria-labelledby={titleId}>
       <Stack gap={8}>
-        <Anchor id={titleId} component={Link} to={taskDetailPath(projectId, card.runId)} fw={600} size="sm">
+        <Anchor
+          id={titleId}
+          component={Link}
+          to={taskDetailPath(projectId, card.runId)}
+          state={BOARD_ENTRY_STATE}
+          fw={600}
+          size="sm"
+        >
           {card.title}
         </Anchor>
         <Text size="xs" c="dimmed">
@@ -50,22 +58,6 @@ export function BoardCardView({ projectId, card }: BoardCardViewProps) {
         {card.needsYou === 0 ? null : <Text size="sm">{openItems(card.needsYou)} in “Needs you”</Text>}
       </Stack>
     </Card>
-  );
-}
-
-// Product ports section 3.2: the native step, or a gap in the mapping.
-export function stepOf(stage: StageSummary): string {
-  return stage.origin === 'native' ? stage.stageId : 'platform-managed';
-}
-
-export function ObstacleText({ obstacle }: { readonly obstacle: PlacementObstacle }) {
-  const verdict = obstacle.disposition === 'rejected' ? 'Rejected' : 'Not placed';
-  const retry = 'retryNumber' in obstacle ? `, retry ${obstacle.retryNumber}` : '';
-  return (
-    <Text size="sm">
-      {verdict}: {reasonLabel(obstacle.reason)}
-      {retry} ({obstacle.source}, <time dateTime={obstacle.observedAt}>{formatInstant(obstacle.observedAt)}</time>)
-    </Text>
   );
 }
 

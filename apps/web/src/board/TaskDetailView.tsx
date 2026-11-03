@@ -1,5 +1,5 @@
-import { Badge, Group, List, Paper, Stack, Table, Text, Title } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { Badge, Box, Group, Paper, Stack, Table, Text, Title } from '@mantine/core';
+import { useId, type ReactNode } from 'react';
 import type { BoardCard, GateView, StageView, TaskDetail, TraceLink, WorkflowRunBinding } from './board';
 import {
   COLUMN_LABELS,
@@ -9,11 +9,13 @@ import {
   GATE_LABELS,
   MERGE_GATE_LABELS,
   STAGE_STATE_LABELS,
+  stepOf,
   WAIT_LABELS,
   WORK_TYPE_LABELS,
 } from './board-labels';
-import { ObstacleText, stepOf } from './BoardCardView';
 import { Breakable } from './Breakable';
+import { ItemList } from './ItemList';
+import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
 import { TaskList } from './TaskList';
 
@@ -41,9 +43,10 @@ export function TaskDetailView({ detail }: { readonly detail: TaskDetail }) {
 }
 
 function Section({ title, children }: { readonly title: string; readonly children: ReactNode }) {
+  const titleId = useId();
   return (
-    <Stack component="section" gap="xs" aria-label={title}>
-      <Title order={3} size="h5">
+    <Stack component="section" gap="xs" aria-labelledby={titleId}>
+      <Title id={titleId} order={3} size="h5">
         {title}
       </Title>
       {children}
@@ -90,22 +93,30 @@ function Holdups({ detail }: { readonly detail: TaskDetail }) {
   }
   return (
     <Section title="Why it does not move">
-      <List size="sm" spacing={6}>
-        {card.waitingFor === undefined ? null : <List.Item>Waits for {WAIT_LABELS[card.waitingFor]}</List.Item>}
+      <ItemList component="ul" gap={6}>
+        {card.waitingFor === undefined ? null : <ReasonItem>Waits for {WAIT_LABELS[card.waitingFor]}</ReasonItem>}
         {card.obstacle === undefined ? null : (
-          <List.Item>
+          <Box component="li">
             <ObstacleText obstacle={card.obstacle} />
-          </List.Item>
+          </Box>
         )}
         {gates.map(({ stage, gate }) => (
-          <List.Item key={`${stage.stageId}/${gate.gateId}`}>
+          <ReasonItem key={`${stage.stageId}/${gate.gateId}`}>
             Gate <Breakable text={gate.gateId} /> of <Breakable text={stepOf(stage)} /> is{' '}
             {GATE_LABELS[gate.state].label}: <Breakable text={gate.blockReason} />
-          </List.Item>
+          </ReasonItem>
         ))}
-        {card.end === undefined ? null : <List.Item>Ended without a merge: {END_LABELS[card.end.kind]}</List.Item>}
-      </List>
+        {card.end === undefined ? null : <ReasonItem>Ended without a merge: {END_LABELS[card.end.kind]}</ReasonItem>}
+      </ItemList>
     </Section>
+  );
+}
+
+function ReasonItem({ children }: { readonly children: ReactNode }) {
+  return (
+    <Text component="li" size="sm">
+      {children}
+    </Text>
   );
 }
 
@@ -114,23 +125,21 @@ function Holdups({ detail }: { readonly detail: TaskDetail }) {
 function StageList({ stages }: { readonly stages: readonly StageView[] }) {
   if (stages.length === 0) return <Text size="sm">The run has no stage yet.</Text>;
   return (
-    <List type="ordered" size="sm" spacing="xs">
+    <ItemList component="ol" gap="xs">
       {stages.map((stage) => (
-        <List.Item key={stage.stageId}>
-          <Paper withBorder p="xs" radius="md">
-            <Stack gap={4}>
-              <Text size="sm" fw={600}>
-                <Breakable text={stepOf(stage)} />
-              </Text>
-              <Text size="sm">
-                {COLUMN_LABELS[stage.column].label} · {STAGE_STATE_LABELS[stage.state]}
-              </Text>
-              <Gates gates={stage.gates} />
-            </Stack>
-          </Paper>
-        </List.Item>
+        <Paper component="li" key={stage.stageId} withBorder p="xs" radius="md">
+          <Stack gap={4}>
+            <Text size="sm" fw={600}>
+              <Breakable text={stepOf(stage)} />
+            </Text>
+            <Text size="sm">
+              {COLUMN_LABELS[stage.column].label} · {STAGE_STATE_LABELS[stage.state]}
+            </Text>
+            <Gates gates={stage.gates} />
+          </Stack>
+        </Paper>
       ))}
-    </List>
+    </ItemList>
   );
 }
 
@@ -161,28 +170,26 @@ function Traceability({ links }: { readonly links: readonly TraceLink[] }) {
     return <Text size="sm">The control plane records no requirement traceability for this run yet.</Text>;
   }
   return (
-    <List size="sm" spacing="xs">
+    <ItemList component="ul" gap="xs">
       {links.map((link, index) => (
-        <List.Item key={index}>
-          <Paper withBorder p="xs" radius="md">
-            <Stack gap={4} align="flex-start">
-              <Text size="sm" fw={600}>
-                <Breakable text={link.requirement} />
-              </Text>
-              <Text size="sm">
-                Work items: <Breakable text={listed(link.workItemIds)} />
-              </Text>
-              <Text size="sm">
-                Attempts: <Breakable text={listed(link.attemptIds)} />
-              </Text>
-              <Badge variant="dot" color={FRESHNESS_LABELS[link.evidence].color} tt="none">
-                {FRESHNESS_LABELS[link.evidence].label}
-              </Badge>
-            </Stack>
-          </Paper>
-        </List.Item>
+        <Paper component="li" key={index} withBorder p="xs" radius="md">
+          <Stack gap={4} align="flex-start">
+            <Text size="sm" fw={600}>
+              <Breakable text={link.requirement} />
+            </Text>
+            <Text size="sm">
+              Work items: <Breakable text={listed(link.workItemIds)} />
+            </Text>
+            <Text size="sm">
+              Attempts: <Breakable text={listed(link.attemptIds)} />
+            </Text>
+            <Badge variant="dot" color={FRESHNESS_LABELS[link.evidence].color} tt="none">
+              {FRESHNESS_LABELS[link.evidence].label}
+            </Badge>
+          </Stack>
+        </Paper>
       ))}
-    </List>
+    </ItemList>
   );
 }
 

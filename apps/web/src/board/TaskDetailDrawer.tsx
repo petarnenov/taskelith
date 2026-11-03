@@ -1,9 +1,10 @@
 import { Alert, Box, Drawer } from '@mantine/core';
 import { useEffect, useState } from 'react';
-import { useNavigate, useOutletContext, useParams } from 'react-router';
+import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router';
 import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
+import { isOpenedFromBoard } from './board-entry';
 import { formatInstant } from './board-labels';
 import { Breakable } from './Breakable';
 import type { BoardOutlet } from './BoardPage';
@@ -21,7 +22,7 @@ export function TaskDetailRoute() {
   const projectId = identifierOf(params.projectId ?? '');
   const runId = identifierOf(params.runId ?? '');
   const outlet = useOutletContext<BoardOutlet>();
-  const navigate = useNavigate();
+  const close = useClose();
   const board = outlet.projectId === projectId ? outlet.live : undefined;
   useFocusReturnOnLeave(outlet.focusBoard);
   return (
@@ -30,9 +31,17 @@ export function TaskDetailRoute() {
       projectId={projectId}
       runId={runId}
       board={board}
-      onClose={() => void navigate('/')}
+      onClose={close}
     />
   );
+}
+
+// Closing a detail opened from the board goes back, so Back does not open
+// it again; any other entry gives way to the board and stays in the app.
+function useClose(): () => void {
+  const navigate = useNavigate();
+  const fromBoard = isOpenedFromBoard(useLocation().state);
+  return () => void (fromBoard ? navigate(-1) : navigate('/', { replace: true }));
 }
 
 // The Drawer leaves with its route, so Mantine's own focus return, which

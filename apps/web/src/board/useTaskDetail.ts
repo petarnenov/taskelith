@@ -21,6 +21,10 @@ export function useTaskDetail(projectId: string, runId: string, board: ShownBoar
 
   useEffect(() => {
     setState({ status: 'loading' });
+    // A new feed compares with no board seen before it, whose snapshot
+    // numbers a restarted board feed may repeat.
+    seenSnapshot.current = undefined;
+    seenCard.current = undefined;
     const started = startTaskDetailFeed({ projectId, runId, gateway, show: setState });
     feed.current = started;
     return started.stop;
