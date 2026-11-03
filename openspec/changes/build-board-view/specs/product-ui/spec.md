@@ -38,7 +38,7 @@ The board SHALL show that it loads until its reads answer; a first-run notice, w
 - **THEN** the board says that the operator may view it but not act on its tasks
 
 ### Requirement: Web SPA live board updates
-While it shows a board, the SPA SHALL follow `streamProjectEvents` after the board's `position` and apply each `card-changed` and `board-changed` event above the board's position. It SHALL read the board again after `resync`, `stream-ended`, an unreadable event, or a stream that closed for good, open a new stream after a first resync at once, after a repeated one up to 10 s later, and after a closed stream 10 s later, and keep the events that arrive during a read.
+While it shows a board, the SPA SHALL follow `streamProjectEvents` after the board's `position` and apply each `card-changed` and `board-changed` event above it. It SHALL read the board again after `resync`, `stream-ended`, an unreadable event, or a stream that closed for good, open a new stream after a first resync at once, after a repeated one up to 10 s later, and after a closed stream 10 s later, and keep up to 1,000 events that arrive during a read, resyncing beyond that.
 
 #### Scenario: Live updates lost in the SPA
 - **WHEN** the event stream drops and the browser reconnects
