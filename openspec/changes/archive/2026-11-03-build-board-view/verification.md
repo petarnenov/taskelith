@@ -140,6 +140,16 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 - Coordinator decision (Niki, 2026-11-03): `Shell.tsx:19` of 28b shows a `Loader` without a reduced-motion check; 29b fixes it by reusing the reduced-motion helper that 29a adds, with its own test.
 - Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 264 tests pass; `make findings ARGS="validate"` passes; the new comments of the changed `.ts` and `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
 
+## Archive
+
+The archive commit `docs: archive the build board view change` applies the reviewed delta with the pinned CLI (`npm run openspec -- archive build-board-view --yes`, totals + 6, ~ 0, - 0) after every task was ticked; task 4.2, the coordinator's architect check of the pass 2 fixes, stays a remaining gate below. Checked on the tree of the archive commit, the working tree the checks ran on:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: the line `change/2026-11-03-build-board-view` passes.
+- `make findings ARGS="validate"`: passed; the moved change has its `findings.jsonl` (17 findings) and `passes.jsonl` (2 passes).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `0e8d10e0` (`origin/dev` unchanged after `git fetch`): only additions, the six requirements of this change in `product-ui`; no other text changes.
+- `make verify` on the archive commit's tree, for the `pre-push` stamp: `verify-29a-archive.log` in the session scratchpad.
+
 ## Limitations
 
 - No browser run: the board was checked in jsdom only, with a stubbed `ResizeObserver` and `matchMedia`; the `EventSource` adapter was tested with a fake source, not against the control plane's stream.
@@ -151,5 +161,4 @@ Architect check pending: these fixes were not reviewed by a later pass (governan
 - Follow-up for 29b `build-task-detail`: the route `/app/projects/:projectId/...` sets the project picker to its project.
 - Follow-up for 29b `build-task-detail` (Niki, 2026-11-03): the `Loader` of `Shell.tsx:19` (28b) leaves out its spin under reduced motion through the reduced-motion helper that 29a adds, with its own test.
 - Architect check by the coordinator of the pass 2 fixes, which no later pass reviewed: `8de31dca`, `94e9a869`, `bf3fafef`, `78384265`, `e0eb017d`, `41b846d3`, `e704ba26`, and `e5db172c`.
-- Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
