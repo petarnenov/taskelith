@@ -13,6 +13,7 @@ import {
   BODY_TOO_LARGE,
   MAX_BODY_BYTES,
   MAX_CONCURRENT_UPLOADS,
+  MAX_CONCURRENT_WEBHOOKS,
   MAX_EVIDENCE_BYTES,
   bearerToken,
   failureResponse,
@@ -84,6 +85,7 @@ export interface ApiServerOptions {
   // The operations served; the contract's route table unless replaced.
   readonly routes?: readonly RouteDefinition[];
   readonly maxConcurrentUploads?: number;
+  readonly maxConcurrentWebhooks?: number;
   // Plain HTTP without it, which only unit tests of the handling use.
   readonly tls?: ServerTls;
   // The built SPA, served under /app/ to requests that no route matches.
@@ -109,7 +111,10 @@ export function createTlsApiServer(listener: ApiRequestListener, tls: ServerTls)
 export function createApiRequestListener(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiRequestListener {
   const context: ListenerContext = {
     handlers,
-    uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
+    slots: {
+      uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
+      signedBodies: new UploadSlots(options.maxConcurrentWebhooks ?? MAX_CONCURRENT_WEBHOOKS),
+    },
     routes: options.routes ?? ROUTES,
     logger: options.logger ?? SILENT_LOGGER,
     ...(options.webApp === undefined ? {} : { webApp: options.webApp }),
@@ -126,13 +131,20 @@ export function createApiRequestListener(handlers: ApiHandlers, options: ApiServ
 // What every request of one listener shares.
 interface ListenerContext {
   readonly handlers: ApiHandlers;
-  readonly uploads: UploadSlots;
+  readonly slots: BodySlots;
   readonly routes: readonly RouteDefinition[];
   readonly logger: Logger;
   readonly webApp?: WebAppFiles;
 }
 
-async function serve({ handlers, uploads, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+// Bound the large bodies buffered at once: uploads, and signed bodies,
+// which an unauthenticated sender can send.
+interface BodySlots {
+  readonly uploads: UploadSlots;
+  readonly signedBodies: UploadSlots;
+}
+
+async function serve({ handlers, slots, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
@@ -160,7 +172,7 @@ async function serve({ handlers, uploads, routes, logger, webApp }: ListenerCont
       ({ parameters } = matched.value);
       operationId = matched.value.route.operationId;
       declaredQuery = matched.value.route.query ?? [];
-      answer = await answerRoute(handlers, uploads, matched.value, request, url, correlationId);
+      answer = await answerRoute(handlers, slots, matched.value, request, url, correlationId);
     }
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
@@ -183,7 +195,7 @@ async function serve({ handlers, uploads, routes, logger, webApp }: ListenerCont
 // session-authenticated mutation, then the role, and only then the body.
 async function answerRoute(
   handlers: ApiHandlers,
-  uploads: UploadSlots,
+  slots: BodySlots,
   { route, parameters }: { route: RouteDefinition; parameters: readonly string[] },
   request: IncomingMessage,
   url: URL,
@@ -215,7 +227,13 @@ async function answerRoute(
     if (!outcome.ok) return failureResponse(statusOf(route, outcome.error), outcome.error);
     return successResponse(route, outcome.value);
   };
-  return route.upload ? uploads.run(handled) : handled();
+  const slot = slotOf(route, slots);
+  return slot === undefined ? handled() : slot.run(handled);
+}
+
+function slotOf(route: RouteDefinition, slots: BodySlots): UploadSlots | undefined {
+  if (route.upload) return slots.uploads;
+  return route.signedBodyLimit === undefined ? undefined : slots.signedBodies;
 }
 
 // The role check: 401 without a principal, 403 for a denial, and 503 when
@@ -325,10 +343,13 @@ const FIELD_RULES: Readonly<Record<string, string>> = Object.freeze({
   '/loginName': 'the login name must be lowercase: 1-64 letters, digits, ".", "_", or "-", starting with a letter or digit',
 });
 
-// Node gives the header names in lower case and joins repeated values.
+// Node gives the header names in lower case and joins repeated values. A
+// declared length over the limit is refused before any byte is read.
 async function signedBody(request: IncomingMessage, limit: number): Promise<Result<SignedBody>> {
+  const tooLarge = failure('invalid', `the request body exceeds ${limit} bytes`, { reason: BODY_TOO_LARGE });
+  if (Number(request.headers['content-length'] ?? 0) > limit) return err(tooLarge);
   const body = await readBody(request, limit);
-  if (!body.ok) return err(failure('invalid', body.error.message, { reason: BODY_TOO_LARGE }));
+  if (!body.ok) return err(tooLarge);
   const headers = Object.entries(request.headers).flatMap(([name, value]) => {
     if (value === undefined) return [];
     return [[name, typeof value === 'string' ? value : value.join(', ')] as const];
@@ -374,8 +395,7 @@ function match(
     try {
       return ok({ route, parameters: found.slice(1).map((part) => decodeURIComponent(part)) });
     } catch {
-      // The receiver answers such an integration as unknown (section 5).
-      if (route.signedBodyLimit !== undefined) return ok({ route, parameters: found.slice(1) });
+      if (route.keepsUndecodablePathParameters) return ok({ route, parameters: found.slice(1) });
       return err(failure('invalid', 'a path parameter is not valid percent-encoding'));
     }
   }

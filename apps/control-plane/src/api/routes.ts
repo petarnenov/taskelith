@@ -32,6 +32,9 @@ export interface RouteDefinition {
   // The body reaches the operation unparsed, as bytes with the lower-case
   // headers, read up to this limit: its signature authenticates it.
   readonly signedBodyLimit?: number;
+  // A path parameter that is not valid percent-encoding reaches the
+  // operation as sent, where other routes answer 400.
+  readonly keepsUndecodablePathParameters?: true;
   readonly success: number;
   readonly statuses: Partial<Record<FailureCode, number>>;
   // Statuses by failure reason, which take precedence over those by code.
@@ -153,7 +156,7 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   // Control-plane wire contracts section 5.
   {
     operationId: 'receiveScmWebhook', method: 'POST', pattern: new RegExp(`^/scm-integrations/${SEGMENT}/webhooks$`), security: ['none'],
-    signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, response: 'empty', success: 202,
+    signedBodyLimit: MAX_SCM_WEBHOOK_BODY_BYTES, keepsUndecodablePathParameters: true, response: 'empty', success: 202,
     statuses: COMMON, reasons: OVER_LIMIT,
   },
   {

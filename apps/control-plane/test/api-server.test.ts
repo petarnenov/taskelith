@@ -111,6 +111,26 @@ test('a malformed percent-encoding is 400, and the server stays up', async () =>
   assert.equal((await call('GET', '/runs/r/tasks/t/result')).status, 200);
 });
 
+test('a route that keeps undecodable path parameters gets them as sent', async () => {
+  const probe: RouteDefinition = {
+    operationId: 'readTaskResult', method: 'GET', pattern: /^\/raw-probe\/([^/]+)$/, security: ['none'], keepsUndecodablePathParameters: true,
+    response: 'TaskResult', success: 200, statuses: { invalid: 400 },
+  };
+  const seen: ApiRequest[] = [];
+  const rawServer = createApiServer({
+    ...handlers,
+    handle: async (_operationId, request) => {
+      seen.push(request);
+      return ok({ state: 'pending', runId: 'r', taskId: 't' });
+    },
+  }, { routes: [probe] });
+  await new Promise<void>((resolve) => rawServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => rawServer.close(() => resolve())));
+  const port = (rawServer.address() as AddressInfo).port;
+  for (const segment of ['%ZZ', 'caf%C3%A9']) assert.equal((await fetch(`http://127.0.0.1:${port}/raw-probe/${segment}`)).status, 200);
+  assert.deepEqual(seen.map((request) => request.parameters), [['%ZZ'], ['café']]);
+});
+
 test('a success that breaks its schema is 500, never sent as is', async () => {
   answers = { readTaskResult: () => ok({ state: 'pending' }) };
   const broken = await call('GET', '/runs/r/tasks/t/result');

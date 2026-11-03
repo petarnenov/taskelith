@@ -13,7 +13,7 @@ import {
 } from '@taskelith/access';
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
-import type { WebhookDelivery, WebhookReceipt } from '@taskelith/integrations';
+import type { ScmWebhookReceiver } from '@taskelith/integrations';
 import type { ConfirmedCredentials, CredentialRenewalRequest, Enrollment, EnrollmentRequest, RenewedCredentials, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
@@ -78,7 +78,7 @@ export interface ApiServices {
   // The agent sessions of section 9, apart from the login `sessions`.
   readonly agentSessions: AgentSessionOperations;
   // The webhook receiver of wire contracts section 5.
-  readonly scmWebhooks: { receive(integrationId: string, delivery: WebhookDelivery): Promise<Result<WebhookReceipt>> };
+  readonly scmWebhooks: Pick<ScmWebhookReceiver, 'receive'>;
 }
 
 // Maps each operation of the route table to its use case, and the contract

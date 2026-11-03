@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync } from 'node:crypto';
+import { request as httpRequest, type ClientRequest, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, beforeEach, test } from 'node:test';
 import {
@@ -187,4 +188,85 @@ test('the request log names the operation and outcome, never the body or a signa
   assert.ok(lines.some((line) => line.fields['failureReason'] === 'signature-invalid'));
   const logged = JSON.stringify(sink.records);
   assert.doesNotMatch(logged, /sha256=|full_name|acme\/project|logged-1/);
+});
+
+// A delivery whose request stays open after `sent` bytes of its body.
+function openDelivery(url: string, { body, headers }: Delivery, sent: number, length = body.length): { request: ClientRequest; answer: Promise<IncomingMessage> } {
+  const request = httpRequest(url, { method: 'POST', headers: { ...headers, 'content-type': 'application/json', 'content-length': String(length) } });
+  const answer = new Promise<IncomingMessage>((resolve, reject) => {
+    request.on('response', resolve);
+    request.on('error', reject);
+  });
+  request.write(body.subarray(0, sent));
+  return { request, answer };
+}
+
+async function answeredWithin<Value>(answer: Promise<Value>, milliseconds: number): Promise<Value> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${milliseconds} ms`)), milliseconds);
+  });
+  try {
+    return await Promise.race([answer, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function textOf(response: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of response) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString();
+}
+
+test('a declared length over the limit is 413 before the body is read', async () => {
+  const delivery = pullRequest('declared-too-large-1');
+  const { request, answer } = openDelivery(`${base}/scm-integrations/${KNOWN}/webhooks`, delivery, 10, MAX_SCM_WEBHOOK_BODY_BYTES + 1);
+  request.on('error', () => undefined);
+  try {
+    const response = await answeredWithin(answer, 5_000);
+    assert.equal(response.statusCode, 413);
+    assert.equal(JSON.parse(await textOf(response)).details.reason, 'body-too-large');
+    assert.equal(verifications, 0);
+  } finally {
+    request.destroy();
+  }
+});
+
+test('deliveries beyond the concurrency limit wait for a free slot before their body is read', async () => {
+  let verified = 0;
+  const slotReceiver = new ScmWebhookReceiver({
+    verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, {
+      verifyWebhookDelivery: (delivery: WebhookDelivery) => {
+        verified += 1;
+        return github.verifyWebhookDelivery(delivery);
+      },
+    }]])),
+    deliveries: new InMemoryDeliveries(),
+    decoy: new GithubWebhookDecoy(),
+    eventless: new GithubEventlessDeliveries(),
+  });
+  const slotServer = createApiServer(new ControlPlaneApi({ scmWebhooks: slotReceiver } as unknown as ApiServices), { maxConcurrentWebhooks: 1 });
+  let received = 0;
+  slotServer.on('request', () => {
+    received += 1;
+  });
+  await new Promise<void>((resolve) => slotServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => slotServer.close(() => resolve())));
+  const url = `http://127.0.0.1:${(slotServer.address() as AddressInfo).port}/scm-integrations/${KNOWN}/webhooks`;
+  const holding = pullRequest('slot-1');
+  const waiting = pullRequest('slot-2');
+  const first = openDelivery(url, holding, 10);
+  const second = openDelivery(url, waiting, 0);
+  second.request.end(waiting.body);
+  try {
+    while (received < 2) await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(verified, 0, 'the second delivery waits while the first holds the only slot');
+  } finally {
+    first.request.end(holding.body.subarray(10));
+  }
+  const statuses = await Promise.all([first.answer, second.answer].map(async (answer) => (await answer).statusCode));
+  assert.deepEqual(statuses, [202, 202]);
+  assert.equal(verified, 2);
 });
