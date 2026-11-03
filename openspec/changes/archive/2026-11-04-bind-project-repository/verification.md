@@ -147,6 +147,16 @@ Decided by the coordinator (Niki) after pass 1 and committed apart from the find
 - `3f061c97` `chore: report each scm plugin defect of a repository binding as one sanitized error record` (L4 fix): port `ScmPluginDefects` with `ScmPluginDefect` (integration id, plugin id, operation `createProvider`, `resolveRemoteUrl`, or `capabilities`, and kind `threw`, `malformed-envelope`, `malformed-value`, `foreign-repository`, `unnormalizable-origin`, or `unexpected-failure-code`); the composition logs it as the error `scm.plugin.defect` with these four fields only, never the plugin's message, stack, or a value. A typed refusal, an unusable configuration, and a bind report nothing. The integrations module and both route suites pass, 183 of 183 (`l4-run.log`).
 - Architect check by the coordinator (Niki): _pending_.
 
+## Archive
+
+The archive commit `docs: archive the bind project repository change` applies the deltas with the pinned CLI (`npm run openspec -- archive bind-project-repository --yes`, totals + 7, ~ 2, - 0) after every task was ticked; the pass 2 fixes await the coordinator's architect check recorded above. Checked on the tree of the archive commit, the working tree the checks ran on:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: the line `change/2026-11-04-bind-project-repository` passes; the command fails as a whole on older archived changes.
+- `make findings ARGS="validate"`: passed; the moved change has its `findings.jsonl` (8 findings) and `passes.jsonl` (2 passes).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `634080a0`: only `control-plane-api`, `control-plane-wire-contracts` (two modified requirements, their added scenarios, and the added "Binding refusal reasons"), `postgres-state`, and `scm-port`, the requirements of this change; no other text changes.
+- `make verify` (`verify-11b1-archive.log` in the session scratchpad): passed, profile full, on the uncommitted working tree, so no stamp was written; 4,678 tests, 4,669 passed, 0 failed, 9 skipped; coverage 99.44% lines, 92.77% branches, 98.85% functions; `apps/web` Vitest 457 of 457 passed, 100% lines, 97.65% branches, 99.68% functions.
+
 ## Limitations
 
 - No live GitHub call: the resolver is a fake plugin in the module and route tests; the live conformance of `resolveRemoteUrl` is 20d.
