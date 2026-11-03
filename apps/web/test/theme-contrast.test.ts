@@ -8,13 +8,16 @@ const TEXT = 'var(--mantine-color-text)';
 const DIMMED = 'var(--mantine-color-dimmed)';
 
 // Surfaces that Mantine's stylesheets set per scheme, not its resolvers:
-// Popover and Input backgrounds and the Menu item and NavLink hovers.
+// Popover, Input, Card, and dot Badge backgrounds, and the hovers.
 interface Surfaces {
   readonly dropdown: string;
   readonly input: string;
   readonly menuHover: string;
   readonly navLinkHover: string;
   readonly alertText: string;
+  readonly card: string;
+  readonly dotBadge: string;
+  readonly dotBadgeText: string;
 }
 
 const SURFACES: Record<Scheme, Surfaces> = {
@@ -24,6 +27,9 @@ const SURFACES: Record<Scheme, Surfaces> = {
     menuHover: 'var(--mantine-color-gray-1)',
     navLinkHover: 'var(--mantine-color-gray-0)',
     alertText: 'var(--mantine-color-black)',
+    card: 'var(--mantine-color-white)',
+    dotBadge: 'var(--mantine-color-white)',
+    dotBadgeText: 'var(--mantine-color-black)',
   },
   dark: {
     dropdown: 'var(--mantine-color-dark-6)',
@@ -31,13 +37,16 @@ const SURFACES: Record<Scheme, Surfaces> = {
     menuHover: 'var(--mantine-color-dark-4)',
     navLinkHover: 'var(--mantine-color-dark-6)',
     alertText: 'var(--mantine-color-white)',
+    card: 'var(--mantine-color-dark-6)',
+    dotBadge: 'var(--mantine-color-dark-5)',
+    dotBadgeText: 'var(--mantine-color-white)',
   },
 };
 
 // Each pair is a foreground, its background, and the page beneath both.
 type Pair = readonly [name: string, foreground: string, background: string];
 
-function shellPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
+function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
   const surfaces = SURFACES[scheme];
   const variant = (name: string, kind: string, color: string): Pair[] => {
     const { color: foreground, background, hover, hoverColor } = colors.variant(kind, color);
@@ -67,13 +76,17 @@ function shellPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ...variant('default', 'default', 'gray'),
     ...alert('indigo'),
     ...alert('red'),
+    ...alert('gray'),
+    ['text on a board card', TEXT, surfaces.card],
+    ['dimmed text on a board card', DIMMED, surfaces.card],
+    ['text of a dot badge', surfaces.dotBadgeText, surfaces.dotBadge],
   ];
 }
 
 describe.each<Scheme>(['dark', 'light'])('the %s color scheme', (scheme) => {
   const colors = schemeColors(theme, scheme);
   const page = colors.resolve(BODY);
-  it.each(shellPairs(colors, scheme))('keeps %s at 4.5:1 or more', (_, foreground, background) => {
+  it.each(screenPairs(colors, scheme))('keeps %s at 4.5:1 or more', (_, foreground, background) => {
     const ratio = contrastRatio(colors.resolve(foreground), colors.resolve(background), page);
     expect(ratio).toBeGreaterThanOrEqual(MINIMUM);
   });

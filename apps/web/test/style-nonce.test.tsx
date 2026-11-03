@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { App } from '../src/App';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import { pageStyleNonce } from '../src/style-nonce';
-import { AUTHENTICATED, fakeGateway, ManualClock } from './fakes';
+import { AUTHENTICATED, FakeBoardGateway, fakeGateway, ManualClock } from './fakes';
 
 afterEach(cleanup);
 
@@ -30,7 +30,9 @@ describe('the style nonce', () => {
 
   it('reaches every style element that Mantine adds', async () => {
     const router = createMemoryRouter(appRoutes(), { basename: APP_BASENAME, initialEntries: ['/app/'] });
-    render(<App router={router} gateway={fakeGateway(AUTHENTICATED)} clock={new ManualClock()} styleNonce="bm9uY2U=" />);
+    const session = fakeGateway(AUTHENTICATED);
+    const board = new FakeBoardGateway();
+    render(<App router={router} gateway={session} board={board} clock={new ManualClock()} styleNonce="bm9uY2U=" />);
     await screen.findAllByRole('link', { name: /board/i });
     const styles = [...document.querySelectorAll('style[data-mantine-styles]')];
     expect(styles.length).toBeGreaterThan(0);

@@ -1,5 +1,5 @@
 // The screens of G3 decision D10 that the shell routes to, each with the G3
-// item that builds it; until then its page is empty and shows no data.
+// item and change that build it; until then its page shows no data.
 
 export interface PlannedScreen {
   readonly path: string;
@@ -14,7 +14,17 @@ export const BOARD: PlannedScreen = {
   label: 'Board',
   title: 'Project board',
   item: 29,
-  change: 'build-board-and-task-detail',
+  change: 'build-board-view',
+};
+
+// Reserved for the task detail of a card, which change 29b builds as a
+// Drawer over the board; it is not in the navigation.
+export const TASK_DETAIL: PlannedScreen = {
+  path: '/projects/:projectId/cards/:runId',
+  label: 'Task detail',
+  title: 'Task detail',
+  item: 29,
+  change: 'build-task-detail',
 };
 
 const SESSIONS: PlannedScreen = {
@@ -76,3 +86,6 @@ export const NEEDS_YOU: PlannedScreen = {
 export const MAIN_NAVIGATION: readonly PlannedScreen[] = [BOARD, SESSIONS, REVIEWS, WORKERS, INTEGRATIONS, PLUGINS];
 
 export const SCREENS: readonly PlannedScreen[] = [...MAIN_NAVIGATION, NEW_TASK, NEEDS_YOU];
+
+// The routed screens whose page is still the empty planned page.
+export const PLANNED_SCREENS: readonly PlannedScreen[] = [...SCREENS.filter((screen) => screen !== BOARD), TASK_DETAIL];
