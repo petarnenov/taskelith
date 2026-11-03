@@ -23,7 +23,7 @@ Until item 25 no writer registers a card, so in a running installation the recon
 
 The digest is the control plane's keyed `InputDigest` (`HmacInputDigest`, HMAC-SHA-256 under the key the session timeline uses) of the unredacted answer and its responder, serialized in a fixed field order per answer kind (`answerInput`). Naming the responder makes a key that another principal repeats `idempotency-key-reused`, never the first principal's outcome.
 
-Two concurrent answers both read no key and both reach the source; the database serializes them, the loser's transaction is rolled back and retried as a whole, and its retry finds the key (a repeat or `idempotency-key-reused`) or a resolved item (`already-answered`). The adapters insert with `ON CONFLICT DO NOTHING` and answer `conflict` for a row that is already there.
+Two concurrent answers both read no key and both reach the source; the database serializes them, the loser's transaction is rolled back and retried as a whole, and its retry finds the key (a repeat or `idempotency-key-reused`) or a resolved item (`already-answered`). The adapters insert with `ON CONFLICT DO NOTHING` and answer `conflict` for a row that is already there, with the reason `idempotency-key-reused` for a key and `already-answered` for a resolved item, as `CommandConflict` requires.
 
 ### 3. The native request source in the answer's transaction
 
@@ -79,6 +79,11 @@ Niki, 2026-11-03, after review pass 1:
 - **Key scope (Q2).** Product ports section 4.2 scopes a key to nothing narrower than its item and is silent on the responder, so a key stays scoped to its item (primary key `item_id`, `idempotency_key`) and the responder stays in the digest (decision 2). Section 4.2 now says so, and a key that another principal repeats is `idempotency-key-reused`, never the first principal's outcome; the service test and the spec scenario "Another principal repeats a key" cover it.
 - **Cards before item 25 (Q3).** An unknown execution is listed only through its task's card, and until item 25 registers cards no writer does, so in a running installation the project inboxes have no reconciliation item, the empty reconciliation state, while unrecorded processes are listed in the installation inbox. Item 25 registers the cards; this is accepted, and the follow-up is recorded below.
 
+Niki, 2026-11-03, after review pass 2:
+
+- **Closed items on deploy (a).** `reconciliation_item_projections` starts empty, so when the card projector first projects a card after the deploy, it publishes once each of the card's reconciliation items that a terminal fact already closed. This one-time publication is accepted.
+- **The unrecorded-process touch (b).** An `unrecorded-process` touch makes the projector read every unrecorded process of the installation that no answer acknowledged (`ofInstallation`), not only those of the touched worker. It stays so until scale shows a problem; narrowing it joins the G6 follow-up of 15a that narrows the worker touches (Follow-ups).
+
 ## Review checklist
 
 `checklist.json`, saved with the brief's invocation at `1c75f149`, size M-L. Review categories, most frequent first: contract-drift, error-handling, missing-fail-before-test, naming, docs, spec-wording, concurrency-race. Record quality: evidence-mismatch, spec-wording, docs, stale-citation, contract-drift, process, missing-fail-before-test.
@@ -98,6 +103,8 @@ Niki, 2026-11-03, after review pass 1:
 - The project scope reads every card's tasks to find its executions; the 15a reads already do so for the board, and a large board pays it once per view and per answer.
 - One task record that cannot be read fails the reconciliation source, and with it the view (503), never a partial inbox (product ports section 2, rule 2).
 - A resolved execution sends the worker no command of its own; `resolveByOperator` revokes its grants, as G2 defines.
+- After the deploy, each card's already-closed reconciliation items are published once as the projector first projects the card (coordinator decision (a) after pass 2).
+- Each `unrecorded-process` touch reads every unacknowledged unrecorded process of the installation (coordinator decision (b) after pass 2).
 
 ## Follow-ups
 
@@ -105,3 +112,4 @@ Niki, 2026-11-03, after review pass 1:
 - Card registration by task intake: item 25. Until then the project inboxes list no unknown execution (Q3).
 - The `spec-approval` and `escalation` sources: items 22, 23, and 24.
 - The inbox screen: item 32.
+- G6, next to 15a's follow-up that narrows the worker touches to that worker's cards: narrow the `unrecorded-process` touch to the touched worker's processes, once scale shows the need (coordinator decision (b) after pass 2).
