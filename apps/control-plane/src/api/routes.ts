@@ -163,6 +163,31 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     security: ['browserSession', 'operatorToken'], body: 'NativeResponseSubmission', response: 'NativeRequest', success: 200,
     statuses: SESSION_COMMAND,
   },
+  // Control-plane wire contracts section 8: the board and the inbox.
+  {
+    operationId: 'readBoard', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/board$`), security: BROWSER_OR_OPERATOR,
+    response: 'Board', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readTaskDetail', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/cards/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    response: 'TaskDetail', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readInbox', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/inbox$`), security: BROWSER_OR_OPERATOR,
+    query: ['kind', 'runId'], response: 'InboxView', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readInboxCounts', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/inbox/counts$`), security: BROWSER_OR_OPERATOR,
+    response: 'InboxCounts', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readInstallationInbox', method: 'GET', pattern: /^\/inbox$/, security: BROWSER_OR_OPERATOR,
+    query: ['kind'], response: 'InboxView', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readInstallationInboxCounts', method: 'GET', pattern: /^\/inbox\/counts$/, security: BROWSER_OR_OPERATOR,
+    response: 'InboxCounts', success: 200, statuses: { forbidden: 401, unavailable: 503, internal: 500 }, reasons: ROLE_DENIAL,
+  },
   // Control-plane wire contracts section 10: the event streams.
   {
     operationId: 'streamProjectEvents', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/events$`), security: BROWSER_OR_OPERATOR,

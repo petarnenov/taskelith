@@ -48,6 +48,8 @@ export class EventLogKeeper {
 
 export interface NumberingPassParts {
   readonly keeper: Pick<EventLogKeeper, 'numberCommitted'>;
+  // Appends the card events of committed touches before the numbering.
+  readonly projector?: { project(): Promise<Result<number>> };
   readonly wakeUps: { listen(): Promise<boolean> };
   readonly streams: { wake(): void };
   readonly logger: Logger;
@@ -55,8 +57,10 @@ export interface NumberingPassParts {
 
 // One run of the numbering loop, which wakes the streams only when it
 // numbered; the wake-up connection opens beside it, never holding the poll.
-export async function numberingPass({ keeper, wakeUps, streams, logger }: NumberingPassParts): Promise<void> {
+export async function numberingPass({ keeper, projector, wakeUps, streams, logger }: NumberingPassParts): Promise<void> {
   void wakeUps.listen();
+  const projected = await projector?.project();
+  if (projected?.ok === false) logger.warn('events.projection.failed', { code: projected.error.code, message: projected.error.message });
   const numbered = await keeper.numberCommitted();
   if (!numbered.ok) logger.warn('events.numbering.failed', { code: numbered.error.code, message: numbered.error.message });
   else if (numbered.value > 0) streams.wake();

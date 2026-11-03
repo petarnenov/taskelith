@@ -19,7 +19,7 @@ export function eventData(position: number, event: UiEvent): EventData {
       return { type: record.type, ...header, projectId, workersOnline: record.workersOnline };
     }
     case 'card-changed':
-      return { type: record.type, ...header, card: record.card as Wire<'BoardCard'> };
+      return { type: record.type, ...header, card: record.card };
     case 'inbox-item-changed':
       return { type: record.type, ...header, item: inboxItemBody(record.item) };
     case 'agent-session-changed':

@@ -76,3 +76,4 @@ export {
 export { StoredScmIntegrationVerifiers } from './application/stored-integration-verifiers.js';
 export { InMemoryScmIntegrations } from './adapters/in-memory-scm-integrations.js';
 export { SCM_INTEGRATIONS_CONFORMANCE } from './ports/scm-integrations-conformance.js';
+export { NoMergeQueue } from './adapters/no-merge-queue.js';
