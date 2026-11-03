@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -14,6 +14,7 @@ import {
   readWebAppDirectory,
   type ApiHandlers,
   type RouteDefinition,
+  type WebAppFiles,
 } from '@taskelith/control-plane';
 import { err, failure, ok } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -33,6 +34,7 @@ writeFileSync(join(build, 'assets', 'index-AbC123.css'), 'body{}');
 writeFileSync(join(build, 'favicon.svg'), '<svg/>');
 symlinkSync(join(root, 'secret.txt'), join(build, 'assets', 'leak.js'));
 symlinkSync(root, join(build, 'outside'));
+symlinkSync(join(root, 'secret.txt'), join(build, 'leak'));
 
 // A public operation moved under /app/, so the test shows that routes come
 // first; the access rules know it by its operation.
@@ -52,15 +54,28 @@ const server = createApiServer(handlers, {
   routes: [...ROUTES, PROBE], webApp: value(readWebAppDirectory(build)), logger: new Logger(sink, { now: () => '2026-11-03T09:00:00.000Z' as never }),
 });
 const bare = createApiServer(handlers, { routes: [...ROUTES, PROBE] });
+// The paths that the build is asked for, so a test can show no lookup.
+const lookups: string[] = [];
+const files = value(readWebAppDirectory(build));
+const spiedFiles: WebAppFiles = {
+  file: (path) => {
+    lookups.push(path);
+    return files.file(path);
+  },
+  isLeftOut: (path) => files.isLeftOut(path),
+};
+const spied = createApiServer(handlers, { routes: ROUTES, webApp: spiedFiles });
 let base: string;
 let bareBase: string;
+let spiedBase: string;
 
 before(async () => {
   base = await listen(server);
   bareBase = await listen(bare);
+  spiedBase = await listen(spied);
 });
 after(async () => {
-  await Promise.all([server, bare].map((each) => new Promise<void>((resolve) => each.close(() => resolve()))));
+  await Promise.all([server, bare, spied].map((each) => new Promise<void>((resolve) => each.close(() => resolve()))));
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -161,7 +176,9 @@ test('no API path is shadowed: routes come first, and paths outside /app/ never 
   }
 });
 
-test('no operation of the control-plane document lives under /app', () => {
+test('no operation of the control-plane document lives under /app, which the wire contracts reserve', () => {
+  const contract = readFileSync('docs/contracts/control-plane-wire-contracts.md', 'utf8');
+  assert.match(contract, /^The path `\/app` and every path below `\/app\/` are reserved for the built SPA/m);
   const document = JSON.parse(readFileSync('packages/contracts/documents/control-plane.openapi.json', 'utf8')) as { paths: Record<string, unknown> };
   const shadowed = Object.keys(document.paths).filter((path) => path === '/app' || path.startsWith('/app/'));
   assert.deepEqual(shadowed, []);
@@ -179,6 +196,45 @@ test('a path that leaves the build is refused and never answers a file outside i
     assert.equal(answer.status, 404, path);
     assert.doesNotMatch(answer.body, new RegExp(SECRET), path);
     assert.doesNotMatch(answer.body, /csp-nonce/, `${path} answers no page`);
+  }
+});
+
+test('a dot segment that the URL would remove is refused before any lookup', async () => {
+  const paths = [
+    '/app/%2e/sessions', '/app/./sessions', '/app/assets/../assets/index-AbC123.js', '/app/assets/%2E%2E/assets/index-AbC123.js',
+    '/app/assets/./index-AbC123.js', '/app/sessions/..', '/app/assets\\index-AbC123.js',
+  ];
+  for (const path of paths) {
+    lookups.length = 0;
+    const answer = await send(path, 'GET', spiedBase);
+    assert.equal(answer.status, 404, path);
+    assert.doesNotMatch(answer.body, /csp-nonce|console\.log/, `${path} answers neither the page nor the asset`);
+    assert.deepEqual(lookups, [], `${path} looks nothing up`);
+  }
+});
+
+test('a link of the build without an extension, and every path below a link, is a 404, never the page', async () => {
+  for (const path of ['/app/leak', '/app/outside', '/app/outside/', '/app/outside/sessions', '/app/outside/dist/assets']) {
+    const answer = await send(path);
+    assert.equal(answer.status, 404, path);
+    assert.doesNotMatch(answer.body, new RegExp(SECRET), path);
+    assert.doesNotMatch(answer.body, /csp-nonce/, `${path} answers no page`);
+  }
+});
+
+test('every failure of the web app carries the security headers and stays JSON and no-store', async () => {
+  const paths = ['/app/assets/index-missing.js', '/app/..%2Fsecret.txt', '/app/outside', '/app/%zz', '/app/%E0%A4%A'];
+  for (const method of ['GET', 'HEAD']) {
+    for (const path of paths) {
+      const answer = await send(path, method);
+      assert.ok(answer.status === 400 || answer.status === 404, `${method} ${path}`);
+      assert.deepEqual([
+        answer.headers['content-type'], answer.headers['cache-control'], answer.headers['x-content-type-options'],
+        answer.headers['referrer-policy'], answer.headers['x-frame-options'], answer.headers['cross-origin-opener-policy'],
+        answer.headers['cross-origin-resource-policy'],
+      ], ['application/json', 'no-store', 'nosniff', 'no-referrer', 'DENY', 'same-origin', 'same-origin'], `${method} ${path}`);
+      assert.match(String(answer.headers['content-security-policy']), /^default-src 'none'; script-src 'self'; style-src 'self'; /, `${method} ${path}`);
+    }
   }
 });
 
@@ -216,4 +272,61 @@ test('the request log names the web app as the operation and holds no path', asy
   const line = sink.records.filter((record) => record.event === 'api.request').at(-1);
   assert.equal(line?.fields.operationId, WEB_APP_OPERATION);
   assert.doesNotMatch(JSON.stringify(line), /index-AbC123|token|abc/);
+});
+
+// A fresh build with one asset, and the file and directory outside it that
+// a replaced entry would point to.
+function replaceableBuild(): { build: string; outside: string } {
+  const each = mkdtempSync(join(root, 'replaced-'));
+  const fresh = join(each, 'dist');
+  mkdirSync(join(fresh, 'assets'), { recursive: true });
+  writeFileSync(join(fresh, 'index.html'), INDEX);
+  writeFileSync(join(fresh, 'assets', 'index-AbC123.js'), SCRIPT);
+  const outside = join(each, 'outside');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'index-AbC123.js'), SECRET);
+  return { build: fresh, outside };
+}
+
+function assertChanged(read: ReturnType<typeof readWebAppDirectory>): void {
+  const refused = failed(read);
+  assert.deepEqual([refused.code, refused.details.variable], ['precondition-failed', WEB_APP_DIR_VARIABLE]);
+  assert.match(refused.message, /stays unchanged while it is read/);
+}
+
+test('a file replaced by a link after the directory listed it fails the read', () => {
+  const { build: fresh, outside } = replaceableBuild();
+  const asset = join(fresh, 'assets', 'index-AbC123.js');
+  assertChanged(readWebAppDirectory(fresh, (path) => {
+    if (path !== 'assets/index-AbC123.js') return;
+    rmSync(asset);
+    symlinkSync(join(outside, 'index-AbC123.js'), asset);
+  }));
+});
+
+test('a directory replaced by a link after the listing fails the read', () => {
+  const { build: fresh, outside } = replaceableBuild();
+  assertChanged(readWebAppDirectory(fresh, (path) => {
+    if (path !== 'assets') return;
+    renameSync(join(fresh, 'assets'), join(fresh, '..', 'kept'));
+    symlinkSync(outside, join(fresh, 'assets'));
+  }));
+});
+
+test('a directory replaced by a link while its files are read fails the read', () => {
+  const { build: fresh, outside } = replaceableBuild();
+  assertChanged(readWebAppDirectory(fresh, (path) => {
+    if (path !== 'assets/index-AbC123.js') return;
+    renameSync(join(fresh, 'assets'), join(fresh, '..', 'kept'));
+    symlinkSync(outside, join(fresh, 'assets'));
+  }));
+});
+
+test('a build root that is a symbolic link fails the read and names the variable', () => {
+  const { build: fresh } = replaceableBuild();
+  const linked = join(fresh, '..', 'linked');
+  symlinkSync(fresh, linked);
+  const refused = failed(readWebAppDirectory(linked));
+  assert.deepEqual([refused.code, refused.details.variable], ['precondition-failed', WEB_APP_DIR_VARIABLE]);
+  assert.match(refused.message, /not a symbolic link/);
 });
