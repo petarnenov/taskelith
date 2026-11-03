@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BoardCard } from './board';
-import type { BoardView } from './board-model';
+import type { ShownBoard } from './board-feed';
 import { startTaskDetailFeed, type TaskDetailFeed, type TaskDetailState } from './task-detail-feed';
 import { useBoardServices } from './BoardServices';
 
@@ -10,13 +10,14 @@ export interface LiveTaskDetail {
 }
 
 // The card's task detail, read again when the live board under it shows a
-// new state of the card; without a board view it is one snapshot.
-export function useTaskDetail(projectId: string, runId: string, board: BoardView | undefined): LiveTaskDetail {
+// new state of the card or a new snapshot; without a board, one snapshot.
+export function useTaskDetail(projectId: string, runId: string, board: ShownBoard | undefined): LiveTaskDetail {
   const { gateway } = useBoardServices();
   const [state, setState] = useState<TaskDetailState>({ status: 'loading' });
   const [loads, setLoads] = useState(0);
   const feed = useRef<TaskDetailFeed | undefined>(undefined);
   const seenCard = useRef<BoardCard | undefined>(undefined);
+  const seenSnapshot = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     setState({ status: 'loading' });
@@ -25,13 +26,22 @@ export function useTaskDetail(projectId: string, runId: string, board: BoardView
     return started.stop;
   }, [projectId, runId, gateway, loads]);
 
-  const card = board?.board.cards.find((known) => known.runId === runId);
-  const position = board?.board.position;
+  const card = board?.view.board.cards.find((known) => known.runId === runId);
+  const position = board?.view.board.position;
+  const snapshot = board?.snapshot;
   useEffect(() => {
-    if (card === undefined || position === undefined || card === seenCard.current) return;
-    seenCard.current = card;
-    feed.current?.cardChanged(position);
-  }, [card, position]);
+    if (snapshot === undefined || position === undefined) return;
+    const firstSnapshot = seenSnapshot.current === undefined;
+    const newSnapshot = !firstSnapshot && snapshot !== seenSnapshot.current;
+    seenSnapshot.current = snapshot;
+    if (newSnapshot) {
+      seenCard.current = card;
+      feed.current?.boardReread();
+    } else if (card !== undefined && card !== seenCard.current) {
+      seenCard.current = card;
+      feed.current?.cardChanged(position);
+    }
+  }, [card, position, snapshot]);
 
   const retry = useCallback(() => setLoads((count) => count + 1), []);
   return { state, retry };

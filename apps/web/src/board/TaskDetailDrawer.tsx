@@ -39,7 +39,7 @@ interface TaskDetailDrawerProps {
 function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawerProps) {
   const boardState = board?.state;
   const shownBoard = boardState?.status === 'shown' ? boardState : undefined;
-  const detail = useTaskDetail(projectId, runId, shownBoard?.view);
+  const detail = useTaskDetail(projectId, runId, shownBoard);
   const boardFailure = boardState?.status === 'failed' ? boardState.failure : undefined;
   const shown = boardFailure === undefined && detail.state.status === 'shown' ? detail.state.detail : undefined;
   const retryBoth = () => {

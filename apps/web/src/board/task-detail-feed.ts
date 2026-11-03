@@ -9,6 +9,9 @@ export type TaskDetailState =
 export interface TaskDetailFeed {
   // The board saw the card change at this position.
   readonly cardChanged: (position: string) => void;
+  // The board read a new snapshot, whose positions may lie below the
+  // detail's after a restore (wire contracts section 10).
+  readonly boardReread: () => void;
   readonly stop: () => void;
 }
 
@@ -27,6 +30,7 @@ export function startTaskDetailFeed({ projectId, runId, gateway, show }: TaskDet
   let detail: TaskDetail | undefined;
   // The latest change the board saw while a read ran.
   let changedDuringRead: string | undefined;
+  let rereadDuringRead = false;
 
   async function read(): Promise<void> {
     reading = true;
@@ -34,7 +38,9 @@ export function startTaskDetailFeed({ projectId, runId, gateway, show }: TaskDet
     reading = false;
     if (stopped) return;
     const changedAt = changedDuringRead;
+    const reread = rereadDuringRead;
     changedDuringRead = undefined;
+    rereadDuringRead = false;
     if (result.kind !== 'read') {
       detail = undefined;
       show({ status: 'failed', failure: result });
@@ -42,7 +48,8 @@ export function startTaskDetailFeed({ projectId, runId, gateway, show }: TaskDet
     }
     detail = result.value;
     show({ status: 'shown', detail });
-    if (changedAt !== undefined) cardChanged(changedAt);
+    if (reread) void read();
+    else if (changedAt !== undefined) cardChanged(changedAt);
   }
 
   // A failed read drops the detail, so only a retry, a new feed, reads.
@@ -52,9 +59,18 @@ export function startTaskDetailFeed({ projectId, runId, gateway, show }: TaskDet
     else if (detail !== undefined && isAfter(position, detail.position)) void read();
   }
 
+  // Positions before the new snapshot no longer compare with its own.
+  function boardReread(): void {
+    if (stopped) return;
+    changedDuringRead = undefined;
+    if (reading) rereadDuringRead = true;
+    else if (detail !== undefined) void read();
+  }
+
   void read();
   return {
     cardChanged,
+    boardReread,
     stop: () => {
       stopped = true;
     },
