@@ -1,4 +1,4 @@
-import { Alert, Drawer, Title } from '@mantine/core';
+import { Alert, Drawer } from '@mantine/core';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
@@ -49,11 +49,7 @@ function TaskDetailDrawer({ projectId, runId, live, onClose }: TaskDetailDrawerP
       onClose={onClose}
       position="right"
       size="xl"
-      title={
-        <Title order={2} size="h3">
-          {title}
-        </Title>
-      }
+      title={title}
       closeButtonProps={{ 'aria-label': 'Close the task detail' }}
     >
       {state.status === 'loading' ? <LoadingStatus text="Loading the task detail…" /> : null}
