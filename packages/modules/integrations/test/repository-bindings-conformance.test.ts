@@ -13,6 +13,17 @@ import { value } from '@taskelith/testing';
 
 const PROJECT_IDS = [`p${'1'.repeat(32)}`, `p${'2'.repeat(32)}`] as const;
 
+interface Deferred {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+}
+
+function deferred(): Deferred {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
+
 for (const conformance of REPOSITORY_BINDINGS_CONFORMANCE) {
   test(`in-memory repository bindings: ${conformance.name}`, async () => {
     const integrations = new InMemoryScmIntegrations();
@@ -30,8 +41,8 @@ test('in-memory repository bindings: an integration update after the put snapsho
     integrationId, pluginId: 'scm-example', label: 'Example', allowedOrigin: value(normalizeOrigin('https://git.example.com')),
     settings: {}, secretNames: [], revision: 1,
   }, value(ScmSecrets.of({}))));
-  const snapshot = Promise.withResolvers<void>();
-  const gate = Promise.withResolvers<void>();
+  const snapshot = deferred();
+  const gate = deferred();
   const pausing = {
     exclusive: <T>(work: () => Promise<T>) => integrations.exclusive(work),
     get: async (id: ScmIntegrationId) => {
