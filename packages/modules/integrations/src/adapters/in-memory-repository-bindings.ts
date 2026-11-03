@@ -1,6 +1,5 @@
 import { err, ok, type Result } from '@taskelith/kernel';
-import type { RepositoryBinding } from '../domain/repository-binding.js';
-import { integrationMoved, nextBinding, type BindingPut, type RepositoryBindings } from '../ports/repository-bindings.js';
+import { integrationMoved, nextBinding, type BindingPut, type RepositoryBinding, type RepositoryBindings } from '../ports/repository-bindings.js';
 import type { ScmIntegrations } from '../ports/scm-integrations.js';
 
 // The store in memory, for tests and tools: each put checks and writes with

@@ -1,9 +1,8 @@
 import { parseIdentifier, type Result } from '@taskelith/kernel';
 import { expectCode, expectOneWinner, expectRead, expectSame, type ConformanceCase } from '@taskelith/sdlc';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
-import type { RepositoryBinding, RepositoryBindingValues } from '../domain/repository-binding.js';
 import { ScmSecrets, type ScmIntegration, type ScmIntegrationId } from '../domain/scm-integration.js';
-import type { BindingPut, RepositoryBindings } from './repository-bindings.js';
+import type { BindingPut, RepositoryBinding, RepositoryBindings, RepositoryBindingValues } from './repository-bindings.js';
 import type { ScmIntegrations } from './scm-integrations.js';
 
 // A store under test with the integrations it checks against and two

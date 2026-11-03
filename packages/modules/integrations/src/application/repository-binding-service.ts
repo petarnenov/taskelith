@@ -1,8 +1,7 @@
 import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
-import type { RepositoryBinding } from '../domain/repository-binding.js';
 import type { ScmIntegration, ScmIntegrationId } from '../domain/scm-integration.js';
-import type { BindableProjects, RepositoryBindings } from '../ports/repository-bindings.js';
+import type { BindableProjects, RepositoryBinding, RepositoryBindings } from '../ports/repository-bindings.js';
 import type { ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
 import type { MergeMethod, RepositoryRemote, SourceControlProvider } from '../ports/source-control.js';
 import { readCapabilities, readRepositoryRemote } from '../ports/source-control-readers.js';

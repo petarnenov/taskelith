@@ -1,5 +1,22 @@
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
-import { sameBindingValues, type RepositoryBinding, type RepositoryBindingValues } from '../domain/repository-binding.js';
+import type { ScmIntegrationId } from '../domain/scm-integration.js';
+import type { MergeMethod } from './source-control.js';
+
+// What a project is bound to (wire contracts section 4): the remote URL is
+// the one the integration's plugin resolved for the repository.
+export interface RepositoryBindingValues {
+  readonly integrationId: ScmIntegrationId;
+  readonly repository: string;
+  readonly remoteUrl: string;
+  readonly integrationBranch: string;
+  readonly mergeMethod: MergeMethod;
+}
+
+// One binding per project, changed by compare-and-set on its revision.
+export interface RepositoryBinding extends RepositoryBindingValues {
+  readonly projectId: string;
+  readonly revision: number;
+}
 
 // A bind of `projectId` against the integration revision that its remote
 // URL was resolved at; a first bind names no `expectedRevision`.
@@ -38,4 +55,9 @@ export function nextBinding(current: RepositoryBinding | undefined, put: Binding
 
 export function integrationMoved(): Failure {
   return failure('conflict', 'the integration changed while its remote URL was resolved');
+}
+
+function sameBindingValues(left: RepositoryBindingValues, right: RepositoryBindingValues): boolean {
+  return left.integrationId === right.integrationId && left.repository === right.repository && left.remoteUrl === right.remoteUrl
+    && left.integrationBranch === right.integrationBranch && left.mergeMethod === right.mergeMethod;
 }
