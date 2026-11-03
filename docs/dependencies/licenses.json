@@ -6,14 +6,14 @@
   },
   "provenance": {
     "package.json": "8db3674a50da66ac16b59b38d453fe87494d18601fe3f19f72732ed76e92a14b",
-    "package-lock.json": "4b5147b6a298adc536010be19843dc03ad879ed11ceff5bdad39369cab0469df",
+    "package-lock.json": "78a83b53ce5c4edf5353f7ef3ef09dd5983c730b497ffeb31d1db2218f9cb561",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "0901ee7cc6d1e69888723ee259925f8deae87083e60951d8395665855c77ad38",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
-  "packageCount": 918,
+  "packageCount": 927,
   "packagesWithGaps": 70,
   "packages": [
     {
@@ -1742,11 +1742,87 @@
       "gaps": []
     },
     {
+      "path": "node_modules/@octokit/auth-app",
+      "name": "@octokit/auth-app",
+      "version": "8.3.1",
+      "integrity": "sha512-XHWxZsF4mvGTQCv7AOxgby9t9OjVO19FBuKq+QmyBxFrf+B2hR/P5j/MTF8g95bITf8cRtR17KIXThpFNqiKbg==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "b3462d500188f68c755bc0c546782b06f0a261b246128606e77e0d7314c3bc8f",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/auth-app/LICENSE",
+          "sha256": "304e4a73f6212adaf242c78fcbe1dfcebd78d8bab53b007fe69b39fc968292b7"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@octokit/auth-oauth-app",
+      "name": "@octokit/auth-oauth-app",
+      "version": "9.0.5",
+      "integrity": "sha512-Hn2yAlIDjFLGjAz7t+CRu7e9VYoFW1W3LLyOLyahFoJGlCf4PtDkHKtRET8w/2CJpsrC0FxIF5g5Xtx9E4O78w==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "560aacb450eda3720886bdf3b7bf84e17f197aa23187fef63f979baee7c31ac0",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/auth-oauth-app/LICENSE",
+          "sha256": "304e4a73f6212adaf242c78fcbe1dfcebd78d8bab53b007fe69b39fc968292b7"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@octokit/auth-oauth-device",
+      "name": "@octokit/auth-oauth-device",
+      "version": "8.0.5",
+      "integrity": "sha512-kdJtjRhykMLJrMdcoC56XUBDfoUAuWEFKpkDxwYim+bNwYw1MreLolk+PLnwEYT8djm589YepeMuJ8+ECAIzVQ==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "deeac7100efdf070c764455ad1181da228b8133907a0ba132d569c0a751c7062",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/auth-oauth-device/LICENSE",
+          "sha256": "2de16f3f6fe7543f2ab7b6d4efadec99aa7db09b6f4f959c15569479dd9d0f8a"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@octokit/auth-oauth-user",
+      "name": "@octokit/auth-oauth-user",
+      "version": "6.0.4",
+      "integrity": "sha512-eya2pMJ9pCBq1jrm1Rf6J3NI+NemEpzDMLo9J/GpRoK0KgdxIVXWX4LESIfwJ+GYeoq6QFIlUJNi1lVp5FBgmw==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "3d1bdc6d86b71bae0b6a0248fd4072e2c5033dc1123fba7450d89cea051e5a83",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/auth-oauth-user/LICENSE",
+          "sha256": "2de16f3f6fe7543f2ab7b6d4efadec99aa7db09b6f4f959c15569479dd9d0f8a"
+        }
+      ],
+      "gaps": []
+    },
+    {
       "path": "node_modules/@octokit/auth-token",
       "name": "@octokit/auth-token",
       "version": "6.0.0",
       "integrity": "sha512-P4YJBPdPSpWTQ1NU4XYdvHvXJJDxM6YwpS0FZHRgP7YFkdVxsWcpWGy/NVqlAA7PcPCnMacXlRm1y2PFZRWL/w==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -1765,7 +1841,7 @@
       "name": "@octokit/core",
       "version": "7.0.8",
       "integrity": "sha512-L7y8eYc+AwxGr2PWI4WFt1VG4TiJ66c26BD16mXpYIlXxG0SMigM1+m4aTSlYyBr5BlQsGAlz8uDCoZN4SEMcg==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -1784,7 +1860,7 @@
       "name": "@octokit/endpoint",
       "version": "11.0.5",
       "integrity": "sha512-iXa654H3yFafF/ieHkukfbgWo2rmXD2ceD0ZOtrPhw1bc3FDch1d9N/TNs0FQ1/cIbwb7kspUX8jzIs8nzb9DQ==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -1803,7 +1879,7 @@
       "name": "@octokit/graphql",
       "version": "9.0.5",
       "integrity": "sha512-bt/hm03LeU6Vy7FwTrkkC9p3XGT/lBwClglMqxBSe5/q0E5CdJTXeAqEI0vlw89/LF/G6tryTIH8HirZ3prMVg==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -1818,11 +1894,49 @@
       "gaps": []
     },
     {
+      "path": "node_modules/@octokit/oauth-authorization-url",
+      "name": "@octokit/oauth-authorization-url",
+      "version": "8.0.0",
+      "integrity": "sha512-7QoLPRh/ssEA/HuHBHdVdSgF8xNLz/Bc5m9fZkArJE5bb6NmVkDm3anKxXPmN1zh6b5WKZPRr3697xKT/yM3qQ==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "e1f2bb67ad417ce175a9ba9a57e3a7221e985a2c8cb692dac021062fa72a226d",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/oauth-authorization-url/LICENSE",
+          "sha256": "304e4a73f6212adaf242c78fcbe1dfcebd78d8bab53b007fe69b39fc968292b7"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@octokit/oauth-methods",
+      "name": "@octokit/oauth-methods",
+      "version": "6.0.5",
+      "integrity": "sha512-/mAz7taDZD7DcV4zcG6TDw3Kr6TOldmYBRpvA62C3WIxRMmcgX8XxsTvVQomqKE7VEk/BgYhUao1aR2tYGyIKg==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "63a9dcf0ec8fd94e916ebf97a1c499f82c52bac4cd2f453394586ad4a020444e",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@octokit/oauth-methods/LICENSE",
+          "sha256": "2de16f3f6fe7543f2ab7b6d4efadec99aa7db09b6f4f959c15569479dd9d0f8a"
+        }
+      ],
+      "gaps": []
+    },
+    {
       "path": "node_modules/@octokit/openapi-types",
       "name": "@octokit/openapi-types",
       "version": "29.0.1",
       "integrity": "sha512-9qWOMFNxxLokERcms42rU0PTLqQmVs7g5E41TI4mCOxmpFayD1rfC7XxOL55cG9MBZLFlC31BrR37myMKardwg==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -2012,7 +2126,7 @@
       "name": "@octokit/request",
       "version": "10.0.16",
       "integrity": "sha512-A0zWGjHzISIb+9ccG8s0dq7LKO5zVpJLRICjgUb+sJxEWqn8RUHB1rD3AE51+PECvXHIxqZ1VVvs4fHTSD9nUQ==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -2031,7 +2145,7 @@
       "name": "@octokit/request-error",
       "version": "7.1.2",
       "integrity": "sha512-XZRuT3xZ84D3gYErI1DZvhJ33dCWVV6uzBtWkaBB4TvA/L6eOeTZodxLFVB44bBEEo3vEx7y00UfX1tBLrtLRg==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -2050,7 +2164,7 @@
       "name": "@octokit/types",
       "version": "18.0.0",
       "integrity": "sha512-l6bAF43PNxkJp6g+W4PjoUSSkxHomXw2nOum5CTftJz1NlV3vu93NImgOYtLf6CbBUb5j+fiuzW0PPQ5JTSvZA==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -7646,7 +7760,7 @@
       "name": "before-after-hook",
       "version": "4.0.0",
       "integrity": "sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "Apache-2.0",
@@ -8463,7 +8577,7 @@
       "name": "content-type",
       "version": "3.1.1",
       "integrity": "sha512-GW4qUsfFo59d0HbUibDlWv5wPz+vAAcaTWbKIuKCf0JkC7wWkSyf8f13IpXn5JkeMlB2P8iTSSIjwXljorg2vA==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -11919,7 +12033,7 @@
       "name": "json-with-bigint",
       "version": "3.5.12",
       "integrity": "sha512-uwbF/wSSuOgC7qqlq27Xp5B6a2MHVug3t0idZdTqu0JnlFvgJuH7ju+KAk/J06C7GfhoYy2gnb9wz2INqcne7w==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "MIT",
@@ -16568,6 +16682,25 @@
       "gaps": []
     },
     {
+      "path": "node_modules/toad-cache",
+      "name": "toad-cache",
+      "version": "3.7.4",
+      "integrity": "sha512-m1TdR/rvT7kgGJZhspNtXdsdYk0fddFpJJFlG5s+UkPFo6lkLoZ3YLOaovPYjq1R75NP5JfeTlSHaOsE09peCg==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "9a5432cd1cbf647e5ea89ed66938566437dae04c65c286c0459fb1e7152f55d6",
+      "licenseFiles": [
+        {
+          "path": "node_modules/toad-cache/LICENSE",
+          "sha256": "644304c533dee96438937c0bdcbb49897d80fd8df3be4573f3c57b9c2ca22587"
+        }
+      ],
+      "gaps": []
+    },
+    {
       "path": "node_modules/tough-cookie",
       "name": "tough-cookie",
       "version": "6.0.2",
@@ -16949,11 +17082,30 @@
       "gaps": []
     },
     {
+      "path": "node_modules/universal-github-app-jwt",
+      "name": "universal-github-app-jwt",
+      "version": "2.2.2",
+      "integrity": "sha512-dcmbeSrOdTnsjGjUfAlqNDJrhxXizjAz94ija9Qw8YkZ1uu0d+GoZzyH+Jb9tIIqvGsadUfwg+22k5aDqqwzbw==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "23f75669895401604ba97e31e60a6231b29c6195a08a6ac3127f736c622c7154",
+      "licenseFiles": [
+        {
+          "path": "node_modules/universal-github-app-jwt/LICENSE",
+          "sha256": "c7295737b5306642cfa9cd4d1ddfed7642e3d04d79da131d0aabf77f6be97c98"
+        }
+      ],
+      "gaps": []
+    },
+    {
       "path": "node_modules/universal-user-agent",
       "name": "universal-user-agent",
       "version": "7.0.3",
       "integrity": "sha512-TmnEAEAsBJVZM/AADELsK76llnwcf9vMKuPz8JflO1frO8Lchitr0fNaN9d+Ap0BjKtqWqd/J17qeDnXh8CL2A==",
-      "development": true,
+      "development": false,
       "bundled": false,
       "optional": false,
       "declaration": "ISC",
@@ -17704,6 +17856,25 @@
         {
           "path": "node_modules/zod/LICENSE",
           "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "packages/plugins/scm-github/node_modules/@octokit/plugin-paginate-rest",
+      "name": "@octokit/plugin-paginate-rest",
+      "version": "16.0.0",
+      "integrity": "sha512-7RtUeGZypAK4EA4LrjTCnsLALNOoUcYh5vOnCNXpdIQVTQCPh4OFu7324iPqAls3KGgVnZktKUnNKZCOKyHrlA==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "8d8849e4dc96a84de3c52588e695e77b80b63d4f6a04b8cd05edbfa7a1161b86",
+      "licenseFiles": [
+        {
+          "path": "packages/plugins/scm-github/node_modules/@octokit/plugin-paginate-rest/LICENSE",
+          "sha256": "8cd41c03a45ebf957a00d335d9dfab638b7ddba797a7d2f23bc1c4157a50db72"
         }
       ],
       "gaps": []
