@@ -1,3 +1,8 @@
+import { configure } from '@testing-library/react';
+
+// Cold Mantine renders on loaded hosts exceed the 1 s default query timeout.
+configure({ asyncUtilTimeout: 5000 });
+
 // jsdom has no matchMedia, which Mantine's color scheme manager reads, and
 // no ResizeObserver, which Mantine's ScrollArea creates.
 if (typeof window !== 'undefined') {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BoardStreamEvent } from '../src/board/board';
 import { RESYNC_DELAY_MILLISECONDS, startBoardFeed } from '../src/board/board-feed';
 import { createBoardGateway, MAX_PROJECT_PAGES, type EventSourceLike } from '../src/board/control-plane-board';
-import { board, card, ManualClock, OTHER_PROJECT, PROJECT } from './fakes';
+import { board, card, ManualClock, OTHER_PROJECT, PROJECT, task, taskDetail } from './fakes';
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -157,6 +157,88 @@ describe('readBoard', () => {
     const reached = card({ obstacle: obstacleOf(), session: { state: 'worker-unreachable', lastContactAt: '2026-11-03T08:00:00.000Z' } });
     const snapshot = board({ cards: [reached] });
     expect(await createBoardGateway({ fetch: sendAnswers(json(200, snapshot)) }).readBoard('p')).toEqual({ kind: 'read', value: snapshot });
+  });
+});
+
+describe('readTaskDetail', () => {
+  const read = (answer: Response, runId = 'run-1') => createBoardGateway({ fetch: sendAnswers(answer) }).readTaskDetail('p', runId);
+  const exited = (status: unknown) => ({ ...endOf(), outcome: { kind: 'exited', ownershipGeneration: 1, cancelled: false, endedAt: '2026-11-03T08:00:00.000Z', executionId: 'exec-1', status, startProven: true } });
+  const withTask = (overrides: Record<string, unknown>) => taskDetail({ tasks: [{ ...task(), ...overrides } as never] });
+  const withGate = (gate: Record<string, unknown>) =>
+    taskDetail({ stages: [{ stageId: 'a', origin: 'native', state: 'completed', column: 'propose', gates: [gate as never] }] });
+
+  it('reads the detail of the card at its encoded path', async () => {
+    const detail = taskDetail({
+      card: card({ runId: 'run/1' }),
+      traceability: [{ requirement: 'Board', workItemIds: ['w-1'], attemptIds: ['a-1'], evidence: 'stale' }],
+      tasks: [
+        task({ end: endOf(), obstacle: obstacleOf(), delegation: { parentTaskId: 'task-0', depth: 1 } }),
+        task({ taskId: 'task-2', end: exited({ kind: 'signal', signal: 'SIGKILL' }) as never }),
+        task({ taskId: 'task-3', end: exited({ kind: 'code', code: 1 }) as never }),
+        task({ taskId: 'task-4', end: exited({ kind: 'unknown' }) as never }),
+      ],
+    });
+    const send = sendAnswers(json(200, detail));
+    expect(await createBoardGateway({ fetch: send }).readTaskDetail('project/1', 'run/1')).toEqual({ kind: 'read', value: detail });
+    expect(send.mock.calls[0]![0]).toBe('/projects/project%2F1/cards/run%2F1');
+    expect(send.mock.calls[0]![1]).toMatchObject({ method: 'GET' });
+  });
+
+  it.each([
+    ['401 unauthenticated', json(401, UNAUTHENTICATED), { kind: 'unauthenticated' }],
+    ['403 with its role', json(403, { code: 'forbidden', message: 'No.', details: { reason: 'role-required', requiredRole: 'project-viewer' } }), { kind: 'denied', requiredRole: 'project-viewer' }],
+    ['404', json(404, { code: 'not-found', message: 'No card.', details: {} }), { kind: 'not-found' }],
+    ['503', json(503, { code: 'unavailable', message: 'Later.', details: {} }), { kind: 'unavailable' }],
+  ])('reads %s', async (_, answer, result) => {
+    expect(await read(answer)).toEqual(result);
+  });
+
+  it('reads a network failure as unreachable', async () => {
+    const send = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'));
+    expect(await createBoardGateway({ fetch: send }).readTaskDetail('p', 'run-1')).toEqual({ kind: 'unavailable' });
+  });
+
+  it('reads the detail of another card than the one asked for as unreachable', async () => {
+    expect(await read(json(200, taskDetail()), 'run-2')).toEqual({ kind: 'unavailable' });
+  });
+
+  it.each([
+    ['no stages array', { ...taskDetail(), stages: undefined }],
+    ['an unreadable asOf', taskDetail({ asOf: 'now' })],
+    ['a card without a title', taskDetail({ card: card({ title: '' }) })],
+    ['a stage in an unknown column', taskDetail({ stages: [{ ...taskDetail().stages[0]!, column: 'done' as never }] })],
+    ['a stage of an unknown origin', taskDetail({ stages: [{ ...taskDetail().stages[0]!, origin: 'x' as never }] })],
+    ['a gate of an unknown state', withGate({ gateId: 'g', state: 'green', requiredEvidence: 'platform-record' })],
+    ['a gate of an unknown evidence kind', withGate({ gateId: 'g', state: 'passed', requiredEvidence: 'vibes' })],
+    ['a gate with an empty block reason', withGate({ gateId: 'g', state: 'blocked', requiredEvidence: 'platform-record', blockReason: '' })],
+    ['a trace link of unknown freshness', taskDetail({ traceability: [{ requirement: 'R', workItemIds: [], attemptIds: [], evidence: 'old' as never }] })],
+    ['a trace link without attempts', taskDetail({ traceability: [{ requirement: 'R', workItemIds: [], evidence: 'current' } as never] })],
+    ['a run binding without its digest', taskDetail({ runBinding: { ...taskDetail().runBinding, workflowDigest: undefined as never } })],
+    ['a task without its run', withTask({ taskRunId: undefined })],
+    ['a task of ownership generation 0', withTask({ ownershipGeneration: 0 })],
+    ['an admission of an unknown state', withTask({ admission: { ...task().admission, state: 'open' } })],
+    ['an admission with an empty work item', withTask({ admission: { ...task().admission, workItemId: '' } })],
+    ['an admission dispatched at generation 0', withTask({ admission: { ...task().admission, dispatchedGeneration: 0 } })],
+    ['a task with an unknown session state', withTask({ session: { state: 'asleep' } })],
+    ['a delegation four levels deep', withTask({ delegation: { parentTaskId: 'task-0', depth: 4 } })],
+    ['a delegation zero levels deep', withTask({ delegation: { parentTaskId: 'task-0', depth: 0 } })],
+    ['a task with a broken obstacle', withTask({ obstacle: { ...obstacleOf(), source: '' } })],
+    ['a task end without its attempt', withTask({ end: { ...endOf(), attemptId: undefined } })],
+    ['an outcome of an unknown kind', withTask({ end: { ...endOf(), outcome: { ...endOf().outcome, kind: 'vanished' } } })],
+    ['an outcome without its end time', withTask({ end: { ...endOf(), outcome: { ...endOf().outcome, endedAt: 'later' } } })],
+    ['an exit of an unknown status', withTask({ end: exited({ kind: 'mystery' }) })],
+    ['an exit with a negative code', withTask({ end: exited({ kind: 'code', code: -1 }) })],
+    ['an exit on an empty signal', withTask({ end: exited({ kind: 'signal', signal: '' }) })],
+    ['an exit without a status', withTask({ end: exited(undefined) })],
+    ['an operator resolution without its evidence', withTask({ end: { ...endOf(), outcome: { kind: 'operator-resolved', ownershipGeneration: 1, cancelled: false, endedAt: '2026-11-03T08:00:00.000Z', executionId: 'e' } } })],
+  ])('reads a detail with %s as unreachable', async (_, body) => {
+    expect(await read(json(200, body))).toEqual({ kind: 'unavailable' });
+  });
+
+  it('reads an operator resolution with its evidence', async () => {
+    const outcome = { kind: 'operator-resolved', ownershipGeneration: 1, cancelled: false, endedAt: '2026-11-03T08:00:00.000Z', executionId: 'e', evidence: 'Process gone' };
+    const detail = withTask({ end: { ...endOf(), outcome } });
+    expect(await read(json(200, detail))).toEqual({ kind: 'read', value: detail });
   });
 });
 

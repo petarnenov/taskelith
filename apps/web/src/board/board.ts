@@ -11,6 +11,7 @@ export type BoardColumn = Schemas['BoardColumn'];
 export type GateState = Schemas['GateState'];
 export type StageOrigin = Schemas['StageOrigin'];
 export type StageState = Schemas['StageState'];
+export type StageSummary = Schemas['StageSummary'];
 export type CardWait = Schemas['CardWait'];
 export type MergeGateState = Schemas['MergeGateState'];
 export type TaskEndKind = Schemas['TaskEndKind'];
@@ -18,6 +19,18 @@ export type WorkType = Schemas['WorkType'];
 export type SessionActivity = Schemas['SessionActivity'];
 export type SessionActivityState = SessionActivity['state'];
 export type PlacementObstacle = Schemas['PlacementObstacle'];
+export type TaskDetail = Schemas['TaskDetail'];
+export type StageView = Schemas['StageView'];
+export type GateView = Schemas['GateView'];
+export type EvidenceKind = Schemas['EvidenceKind'];
+export type TraceLink = Schemas['TraceLink'];
+export type EvidenceFreshness = Schemas['EvidenceFreshness'];
+export type WorkflowRunBinding = Schemas['WorkflowRunBinding'];
+export type TaskView = Schemas['TaskView'];
+export type AdmissionState = Schemas['AdmissionState'];
+export type TaskEnd = Schemas['TaskEnd'];
+export type AttemptOutcome = Schemas['AttemptOutcome'];
+export type AttemptOutcomeKind = AttemptOutcome['kind'];
 
 export interface Project {
   readonly projectId: string;
@@ -60,6 +73,7 @@ export type BoardStreamListener = (event: BoardStreamEvent) => void;
 export interface BoardGateway {
   readonly listProjects: () => Promise<ReadResult<readonly Project[]>>;
   readonly readBoard: (projectId: string) => Promise<ReadResult<Board>>;
+  readonly readTaskDetail: (projectId: string, runId: string) => Promise<ReadResult<TaskDetail>>;
   // Opens the project's event stream after a position; returns its close.
   readonly openEvents: (projectId: string, after: string, listener: BoardStreamListener) => () => void;
 }

@@ -1,9 +1,19 @@
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
-import type { Board, BoardGateway, BoardStreamEvent, BoardStreamListener, Project, ReadFailed, ReadResult } from './board';
+import type {
+  Board,
+  BoardGateway,
+  BoardStreamEvent,
+  BoardStreamListener,
+  Project,
+  ReadFailed,
+  ReadResult,
+  TaskDetail,
+} from './board';
 import { boardOf, cardChangeOf, failureReason, projectPageOf, requiredRoleOf, workersChangeOf } from './board-wire';
+import { taskDetailOf } from './task-detail-wire';
 
-// The board's operations listProjects, readBoard, and streamProjectEvents
-// of the control plane, through the typed fetch and the browser's SSE.
+// The board's operations listProjects, readBoard, readTaskDetail, and
+// streamProjectEvents, through the typed fetch and the browser's SSE.
 
 export interface EventSourceLike {
   readonly readyState: number;
@@ -64,6 +74,16 @@ export function createBoardGateway({
     return board === undefined ? { kind: 'unavailable' } : { kind: 'read', value: board };
   }
 
+  // A detail of another card than the one asked for is a wrong answer.
+  async function readTaskDetail(projectId: string, runId: string): Promise<ReadResult<TaskDetail>> {
+    const path = { projectId, runId };
+    const result = await reachable(() => request('get', '/projects/{projectId}/cards/{runId}', { path }));
+    if (result === undefined) return { kind: 'unavailable' };
+    if (!hasStatus(result, 200)) return failureOf(result);
+    const detail = taskDetailOf(result.body);
+    return detail?.card.runId === runId ? { kind: 'read', value: detail } : { kind: 'unavailable' };
+  }
+
   function openEvents(projectId: string, after: string, listener: BoardStreamListener): () => void {
     const url = `/projects/${encodeURIComponent(projectId)}/events?after=${encodeURIComponent(after)}`;
     const source = openEventSource(url);
@@ -83,7 +103,7 @@ export function createBoardGateway({
     };
   }
 
-  return { listProjects, readBoard, openEvents };
+  return { listProjects, readBoard, readTaskDetail, openEvents };
 }
 
 function failureOf({ status, body }: { readonly status: number; readonly body: unknown }): ReadFailed {

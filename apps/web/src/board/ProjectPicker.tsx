@@ -1,5 +1,7 @@
 import { Button, Menu, Text, type MantineBreakpoint } from '@mantine/core';
+import { useMatch, useNavigate } from 'react-router';
 import { CheckIcon, ChevronIcon } from '../icons';
+import { identifierOf, TASK_DETAIL } from '../screens';
 import { useProjects } from './ProjectsProvider';
 
 interface ProjectPickerProps {
@@ -11,6 +13,7 @@ interface ProjectPickerProps {
 // The header's project menu; it shows once the operator has a project.
 export function ProjectPicker({ visibleFrom, hiddenFrom, fullWidth }: ProjectPickerProps) {
   const { view, select } = useProjects();
+  const choose = useChoice(select);
   if (view.status !== 'listed' || view.selected === undefined) return null;
   const { projects, selected } = view;
   return (
@@ -40,7 +43,7 @@ export function ProjectPicker({ visibleFrom, hiddenFrom, fullWidth }: ProjectPic
               key={project.projectId}
               leftSection={isSelected ? <CheckIcon /> : undefined}
               aria-current={isSelected ? 'true' : undefined}
-              onClick={() => select(project.projectId)}
+              onClick={() => choose(project.projectId)}
             >
               {project.name}
             </Menu.Item>
@@ -49,4 +52,15 @@ export function ProjectPicker({ visibleFrom, hiddenFrom, fullWidth }: ProjectPic
       </Menu.Dropdown>
     </Menu>
   );
+}
+
+// Another project closes a task detail of the one before, which the
+// address would otherwise show over the new project's board.
+function useChoice(select: (projectId: string) => void): (projectId: string) => void {
+  const detail = useMatch(TASK_DETAIL.path);
+  const navigate = useNavigate();
+  return (projectId) => {
+    select(projectId);
+    if (detail !== null && identifierOf(detail.params.projectId ?? '') !== projectId) void navigate('/');
+  };
 }

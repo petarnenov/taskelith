@@ -48,7 +48,7 @@ function Column({ board, column }: { readonly board: Board; readonly column: Boa
       <Paper withBorder p={6} radius="md" mih={120}>
         <Stack gap={8}>
           {cards.map((card) => (
-            <BoardCardView key={card.runId} card={card} />
+            <BoardCardView key={card.runId} projectId={board.projectId} card={card} />
           ))}
         </Stack>
       </Paper>

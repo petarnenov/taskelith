@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { createMemoryRouter } from 'react-router';
+import { createMemoryRouter, type InitialEntry } from 'react-router';
 import { vi } from 'vitest';
 import { App } from '../src/App';
 import type {
@@ -10,6 +10,8 @@ import type {
   BoardStreamListener,
   Project,
   ReadResult,
+  TaskDetail,
+  TaskView,
 } from '../src/board/board';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
@@ -101,6 +103,50 @@ export function board(overrides: Partial<Board> = {}): Board {
   };
 }
 
+export function task(overrides: Partial<TaskView> = {}): TaskView {
+  return {
+    taskId: 'task-1',
+    taskRunId: 'task-run-1',
+    ownershipGeneration: 2,
+    admission: { admissionId: 'admission-1', stageId: 'apply', state: 'used', policyRevision: 'policy-3' },
+    session: { state: 'working' },
+    ...overrides,
+  };
+}
+
+export const DIGEST = `sha256:${'ab'.repeat(32)}`;
+
+export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
+  return {
+    asOf: '2026-11-03T09:00:00.000Z',
+    position: '40',
+    card: card(),
+    stages: [
+      {
+        stageId: 'propose',
+        origin: 'native',
+        state: 'completed',
+        column: 'propose',
+        gates: [{ gateId: 'proposal-valid', state: 'passed', requiredEvidence: 'structural-validation' }],
+      },
+      { stageId: 'apply', origin: 'native', state: 'in-progress', column: 'implement', gates: [] },
+    ],
+    traceability: [],
+    runBinding: {
+      pluginId: 'openspec',
+      pluginVersion: '1.3.0',
+      upstreamToolVersion: '0.9.1',
+      workflowId: 'spec-driven',
+      workflowVersion: '2',
+      workflowDigest: DIGEST,
+      configurationRevision: 'config-7',
+      policyRevision: 'policy-3',
+    },
+    tasks: [task()],
+    ...overrides,
+  };
+}
+
 export interface FakeStream {
   readonly projectId: string;
   readonly after: string;
@@ -116,6 +162,10 @@ export class FakeBoardGateway implements BoardGateway {
   readonly listProjects = vi.fn(async (): Promise<ReadResult<readonly Project[]>> => ({ kind: 'read', value: [PROJECT] }));
 
   readonly readBoard = vi.fn(async (_projectId: string): Promise<ReadResult<Board>> => ({ kind: 'read', value: board() }));
+
+  readonly readTaskDetail = vi.fn(
+    async (_projectId: string, _runId: string): Promise<ReadResult<TaskDetail>> => ({ kind: 'read', value: taskDetail() }),
+  );
 
   readonly openEvents = (projectId: string, after: string, listener: BoardStreamListener) => {
     let closed = false;
@@ -144,7 +194,7 @@ export class FakeBoardGateway implements BoardGateway {
 }
 
 export function renderApp(
-  path: string,
+  path: InitialEntry,
   gateway: SessionGateway = fakeGateway(AUTHENTICATED),
   clock = new ManualClock(),
   boardGateway: BoardGateway = new FakeBoardGateway(),

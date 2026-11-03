@@ -1,6 +1,7 @@
-import { Alert, Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Button, Center, Stack } from '@mantine/core';
 import { useSession } from '../session/SessionProvider';
 import { AppLayout } from './AppLayout';
+import { LoadingStatus } from './LoadingStatus';
 import { SignInPage } from './SignInPage';
 
 // Nothing of the product shows before the control plane names a session.
@@ -15,10 +16,7 @@ export function Shell() {
 function SessionCheck() {
   return (
     <Center component="main" mih="100vh">
-      <Group gap="sm">
-        <Loader size="sm" />
-        <Text c="dimmed">Checking your session…</Text>
-      </Group>
+      <LoadingStatus text="Checking your session…" />
     </Center>
   );
 }

@@ -59,7 +59,7 @@ function detailsOf(body: unknown): Record<string, unknown> | undefined {
   return isRecord(body) && isRecord(body.details) ? body.details : undefined;
 }
 
-function isBoardCard(value: unknown): value is BoardCard {
+export function isBoardCard(value: unknown): value is BoardCard {
   if (!isRecord(value) || !isText(value.runId) || !isText(value.title) || !isCount(value.needsYou)) return false;
   if (!isKey(WORK_TYPE_LABELS, value.workType) || !isKey(COLUMN_LABELS, value.column)) return false;
   if (!isKey(MERGE_GATE_LABELS, value.integration) || !isFramework(value.framework)) return false;
@@ -83,12 +83,12 @@ function isStage(value: unknown): boolean {
   return STAGE_ORIGINS.includes(value.origin as never) && isKey(STAGE_STATE_LABELS, value.state);
 }
 
-function isActivity(value: unknown): boolean {
+export function isActivity(value: unknown): boolean {
   if (!isRecord(value) || !isKey(ACTIVITY_LABELS, value.state)) return false;
   return value.state !== 'worker-unreachable' || isInstant(value.lastContactAt);
 }
 
-function isObstacle(value: unknown): boolean {
+export function isObstacle(value: unknown): boolean {
   if (!isRecord(value) || !isText(value.reason) || !isText(value.source)) return false;
   if (value.disposition !== 'waiting' && value.disposition !== 'rejected') return false;
   return isInstant(value.observedAt) && (value.retryNumber === undefined || isCount(value.retryNumber));
@@ -98,26 +98,26 @@ function isStamped(value: Fields): boolean {
   return isPosition(value.position) && isInstant(value.occurredAt);
 }
 
-function isKey(record: object, value: unknown): boolean {
+export function isKey(record: object, value: unknown): boolean {
   return typeof value === 'string' && Object.hasOwn(record, value);
 }
 
-function isPosition(value: unknown): value is string {
+export function isPosition(value: unknown): value is string {
   return typeof value === 'string' && POSITION.test(value);
 }
 
-function isInstant(value: unknown): value is string {
+export function isInstant(value: unknown): value is string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value));
 }
 
-function isText(value: unknown): value is string {
+export function isText(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }
 
-function isCount(value: unknown): value is number {
+export function isCount(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
 
-function isRecord(value: unknown): value is Fields {
+export function isRecord(value: unknown): value is Fields {
   return typeof value === 'object' && value !== null;
 }
