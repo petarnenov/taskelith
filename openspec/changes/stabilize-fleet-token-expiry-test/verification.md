@@ -54,6 +54,7 @@ All runs on this iMac with Node.js 24.22.1, from the worktree, against `bash scr
 | Targeted command, 5 consecutive runs | `de7f8327` | 5 of 5 passed, 119 to 173 ms, load average 5.0 to 5.1 |
 | The same, 5 consecutive runs with 16 busy-loop Node.js processes on the 16 logical CPUs | `de7f8327` | 5 of 5 passed, 158 to 202 ms, load average 38.4 to 41.7 |
 | Targeted command, first version, 5 consecutive runs, and 5 more with the 16 busy loops | `3dcc1fd6` | 10 of 10 passed, 2050 to 2111 ms, load average 3.2 to 13.2 |
+| `make verify` after the pass 1 fixes | `7c7236c1` | A first run failed outside this change: `test/installation-script.test.ts:570`, "a bound with a leading zero is read in base 10", `ended after 9.112s, before 10`, a known timing flake on this host at load average about 40; this change's test passed in it (143 ms). The rerun on the same tree passed (see "Generated checks"; this test 121 ms). |
 | `npm run verify:comments` | `de7f8327` | "Every comment is within the comment length rule." |
 
 ### Route
@@ -65,11 +66,15 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `957beaccc187ae086eee316d3080c7e3d6d7c64e`; tests 4113, pass 4104, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `ca7a33e32a7cca257e67b4f826c7f3cf611d5185`; tests 4113, pass 4104, fail 0, skipped 9; all files 99.39% lines, 92.61% branches, 98.87% functions.
 - `npm run openspec -- validate stabilize-fleet-token-expiry-test --strict`: passed, `Change 'stabilize-fleet-token-expiry-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`.
 - Spec diff against the merge base `c355525b1f11` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a19ec7-d61b-7fd0-bc83-7f8b618321e7` | 0 | 0 | 2 | 3 |
 <!-- make record: end -->
 
 ## Independent review
