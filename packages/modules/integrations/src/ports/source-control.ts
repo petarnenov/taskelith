@@ -2,7 +2,7 @@ import type { Result } from '@taskelith/kernel';
 
 // The port an SCM plugin implements, a draft until a second SCM maps onto it.
 // Plain text shapes, which the module checks: plugin output is untrusted.
-export const SOURCE_CONTROL_PORT_VERSION = '0.2.0';
+export const SOURCE_CONTROL_PORT_VERSION = '0.3.0';
 
 // Permissions a run may need, in SCM-neutral terms; a plugin maps each one to
 // its service's narrowest native permission.

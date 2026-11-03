@@ -36,6 +36,6 @@ test('the port entry carries only the port constants, at version 0.2.0', () => {
     'SOURCE_CONTROL_PORT_VERSION',
     'WEBHOOK_EVENT_KINDS',
   ]);
-  assert.equal(portEntry.SOURCE_CONTROL_PORT_VERSION, '0.2.0');
+  assert.equal(portEntry.SOURCE_CONTROL_PORT_VERSION, '0.3.0');
   assert.equal(portEntry.MERGE_METHODS, MERGE_METHODS);
 });
