@@ -142,8 +142,20 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The first worker touch after the migration appends one `board-changed` per project, a known one-time event (design decision 7).
 - Review passes 1, 2, and 3 ran; the pass 3 fixes had no later review and await the coordinator's architect check. No deployment or browser check was made (backend only).
 
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the implement board and inbox views change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive implement-board-and-inbox-views --yes` on `ba4c60e1`, with every task of `tasks.md` ticked.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-11-03-implement-board-and-inbox-views` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `468783d9`, after `git fetch`) | Only this change's deltas, 10 added requirements and no other edit: `control-plane-api` 5, `postgres-state` 3, `product-ports` 2; 106 insertions, 0 deletions |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 107 file(s); every pass summary file is valid: 87 file(s); every route file is valid: 40 file(s).` |
+
+`make verify` runs on the committed archive tree after this commit (log `verify-15-archive.log` in the session scratchpad), so that the `pre-push` hook has a stamp of it; its result goes to the coordinator with the handoff.
+
 ## Remaining gates
 
 - The coordinator's architect check of the pass 3 fixes (governance "Architect check of unreviewed fixes").
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
