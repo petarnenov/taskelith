@@ -10,7 +10,7 @@ The SPA reads centrally aggregated views and sends commands through the control 
 | --- | --- | --- |
 | `BoardReadModel`: the board and the task detail | Execution | The item 15 aggregate over SDLC, Execution, Fleet, and Integrations records |
 | `NeedsYouInbox`: the inbox and its counts | Execution | The item 15 aggregate over every registered `NeedsYouSource` |
-| `NeedsYouSource`: one source of inbox items | Execution | Native requests (Execution, item 18), spec approvals (the item 22 adapter over SDLC gate records, outside the SDLC module), escalations (Integrations, items 23 and 24), reconciliation (Execution, over the G2 `ReconciliationQueue`, item 44 `implement-readmission-and-reconciliation-surface` of the [G3 work plan](../g3-plan.md)) |
+| `NeedsYouSource`: one source of inbox items | Execution | Native requests (Execution, item 18), spec approvals (the item 22 adapter over SDLC gate records, outside the SDLC module), escalations (Integrations, items 23 and 24), reconciliation (the control plane over the G2 `ReconciliationQueue`, sub-change 15b `answer-inbox-items` of the [G3 work plan](../g3-plan.md) item 15; its own surface and re-admission are item 44 `implement-readmission-and-reconciliation-surface`) |
 | `StandingApprovalRules`: maintainer rules that answer native requests | Execution | The item 23 PostgreSQL adapter |
 | `IntakeSource`: imports a card from an external source | Integrations | Source plugins; in G3 only GitHub issues, through the item 20 plugin (G3 decision D9 (a)) |
 | `WriteBack`: progress, links, and resolution at the source | Integrations | The plugin that implements the item's `IntakeSource` |
