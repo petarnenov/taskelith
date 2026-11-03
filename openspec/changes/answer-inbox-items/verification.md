@@ -39,6 +39,31 @@ Fail-before of the fixes, logs in the session scratchpad:
 - `fb-15b-p1-3.log` (finding 3): the new conformance cases at `6c5cbb5a`: 2 of 8 fail, both in-memory stores; the PostgreSQL adapters pass.
 - `fb-15b-p1-5.log` (finding 5): the rollback test with `sourceIn` answering through the unbound timeline service: 1 of 1 fails, the state changed after the failed key record.
 
+## Pass 2 fixes
+
+Review pass 2 (role B, `claude claude-fable-5-1#medium`, session `9f964100-5197-4275-b912-82f36763342f`) confirmed every pass 1 fix and reported 0 Critical, 0 High, 0 Medium, and 8 Low findings; `9d412f9b` records the pass and its eight findings, all `fixed-unreviewed`, none declined. The pass is Low-only, so the review ends without pass 3 (governance "Review sequence").
+
+**Architect check pending: these fixes were not reviewed by a later pass.** The coordinator checks them as solution architect before integration (governance "Architect check of unreviewed fixes").
+
+- Finding 1 (migration and events): `1e629e3e`, the up migration touches each worker whose unrecorded processes predate it; design decision 7 and the postgres-state scenario "Unrecorded processes predate the migration".
+- Finding 2 (efficiency): `a9df1043`, the item read before the body runs in a read-only snapshot of the view sources, and a reconciliation source hands the item its last item read found to the answer that follows, so an answer derives it once; design decisions 1 and 6. The source port and product ports section 4.3 are unchanged.
+- Finding 3 (conflict reasons): `45caab12`, `idempotency-key-reused` and `already-answered` on both adapters of each port, checked by the conformance cases; design decision 2.
+- Finding 4 (native race): `6679d534`, a PostgreSQL race of two identical native answers over the composed native source.
+- Finding 5 (down order): `f5ee5fa5`, the down step also checks the other two tables and both functions.
+- Finding 6 (naming): `9fbfd484`, `ReconciliationQueueReads` renamed `ReconciliationRecordReads`, since the suggested `ReconciliationReads` already names the source's reads.
+- Finding 7 (decision 2 wording): `fdb1e8d1`.
+- Finding 8 (tasks): `9d412f9b` ticks tasks 6.1, 6.2, and 6.3.
+- Coordinator decisions of 2026-11-03 (Niki) after pass 2: `9d412f9b`, design "Coordinator decisions": the one-time publication of the already-closed reconciliation items as the projector first projects each card after the deploy, accepted; and the `unrecorded-process` touch that reads every unacknowledged process, kept until scale shows a problem and added to the G6 follow-up next to 15a's worker-touch narrowing.
+- The fixes changed the diff, so `8ee523ba` deleted the route of `2066e0d5` and `8173a7e3` routed again at head `8ee523ba` (unedited; tier `elevated`, 52 files and 2716 lines, triggers lines, files, capabilities, contracts, and size; recommended effort high for passes 1 and 2, advisory).
+
+Fail-before of the fixes, logs in the session scratchpad:
+
+- `fb-15b-p2-1.log` (finding 1): the new migration test at `45caab12`, before the migration's backfill: 1 of 2 fails, no touch for the earlier processes.
+- `fb-15b-p2-2.log` (finding 2): the new service and source tests at `9fbfd484`: 2 of 19 fail, the item read in a transaction and the item derived twice.
+- `fb-15b-p2-3.log` (finding 3): the conformance cases with the reason check at `1b68d5f5`: 2 of 4 fail on the in-memory adapters and 2 of 4 on the PostgreSQL adapters.
+- `fb-15b-p2-5.log` (finding 5): the extended down step at `1e629e3e` with a down migration that keeps `reconciliation_item_projections`: 1 of 1 fails; the mutation was reverted.
+- Findings 4, 6, 7, and 8 change no behaviour: a test, a name, and records.
+
 ## Environment
 
 macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`); Docker 29.5.2 for the services of `make verify` and of the targeted PostgreSQL runs (`scripts/services.sh run taskelith-answers-dev`).
@@ -90,9 +115,10 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The digest names the responder, so another principal that repeats a key gets `idempotency-key-reused` (design decision 2).
 - A key repeated by another principal is refused, never replayed: the key is scoped to its item and the responder is in the digest (coordinator Q2).
 - Before item 25, the card projector publishes no project reconciliation item, since none is listed (coordinator Q3).
-- Review pass 1 ran; no deployment or browser check was made (backend only).
+- After the deploy, each card's already-closed reconciliation items are published once as the projector first projects the card, and each `unrecorded-process` touch reads every unacknowledged process (coordinator decisions after pass 2).
+- Review passes 1 and 2 ran; the pass 2 fixes await the coordinator's architect check. No deployment or browser check was made (backend only).
 
 ## Remaining gates
 
-- Review pass 2 of the pass 1 fixes, and pass 3 if pass 2 reports a Medium or worse finding, with their fixes and records.
+- The coordinator's architect check of the pass 2 fixes.
 - The archive of the change, and integration into dev by the coordinator (single pull request).
