@@ -4,7 +4,7 @@
 The control plane SHALL serve `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` as `control-plane.openapi.json` declares them, with the roles of control-plane wire contracts section 3, checked before the body.
 
 #### Scenario: Missing and existing project alike
-- **WHEN** a principal without a role on a project calls a project operation, once for an existing project and once for a missing one
+- **WHEN** a principal that lacks the role an operation requires on a project calls it, once for an existing project and once for a missing one, the principal being no `installation-owner` on a read
 - **THEN** both answers are the identical 403 `role-required` denial, and nothing is recorded
 
 #### Scenario: Owner learns a missing project

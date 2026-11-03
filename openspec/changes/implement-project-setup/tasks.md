@@ -25,9 +25,9 @@
 ## 6. Verification and review
 
 - [x] 6.1 Route the change, run `make verify`, and record `verification.md` with `make record` and `make record-check`
-- [ ] 6.2 Review pass 1 by reviewer A
+- [x] 6.2 Review pass 1 by reviewer A, and its fix round with the coordinator's decisions (a) to (c)
 - [ ] 6.3 Review pass 2 by reviewer B, unless pass 1 is Low-only
-- [ ] 6.4 Review pass 3 by reviewer A, if governance "Conditional third pass" requires it
+- [ ] 6.4 Review pass 3 by reviewer A, which governance "Review sequence" runs when pass 2 reports a Medium-or-higher finding
 
 ## 7. Archive
 
