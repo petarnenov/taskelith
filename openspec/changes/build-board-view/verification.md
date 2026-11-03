@@ -14,7 +14,9 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `615e7f81` `chore: build the web board with its states, project picker, live updates, and expired-session routing`.
 - `77bee22d` `docs: record the build-board-view proposal, design, spec delta, plan row, and SPA status`.
 - `89f1ed93` `docs: route the build-board-view change` (`route.json`, unedited, at head `77bee22d`): "route: elevated (lines, files, size), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.70) and agrees; recommendation only, the brief's effort medium applies.
-- Then this record and the `make record` of its `make verify`.
+- `ab35acb9`, `82d64c11`, and `3d0a083b`: this record, the `make record` of its `make verify`, and the evidence check; pass 1 reviewed `0e8d10e0..3d0a083b`.
+- Pass 1 fixes: `7a1e4cb7`, `bc7dcbb3`, `2f501ccb`, `530e0df0`, and `6d310f92`; `11a810ee`, the test of the coordinator's localStorage decision; `d41c54a4` and `64cc2551`, the record of pass 1 and its fixes; `d3f7ce31`, the re-route after the fixes; and `4efdbca2`, the `make record` of their `make verify`, the head that pass 2 reviewed (`0e8d10e0..4efdbca2`).
+- Pass 2 fixes and their records: listed under "Pass 2 fixes", then the archive commit.
 
 ## Environment
 
@@ -31,7 +33,7 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 - Spec delta: `product-ui` adds six requirements (454, 279, 390, 422, 283, and 244 characters); `npm run openspec -- validate build-board-view --strict` passes, and `npm run verify:archive` archives the delta into strictly valid specs in a temporary copy.
 - Comments: `npm run verify:comments` passes; it does not read `.tsx`, so the comments of the `.tsx` files of this change were checked with a script for at most two lines of at most 80 characters.
 - Type checks: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json`, which includes the tests, pass.
-- Coverage of the new files (Vitest, `apps/web/src/board`): 100% lines in every file; statements 97.32%, branches 95.74%, functions 99.09% for the directory; the lowest file is `BoardServices.tsx` with 75% branches (the missing-provider throw).
+- Coverage of the new files (Vitest, `apps/web/src/board`) before the pass 1 fixes: 100% lines in every file; statements 97.32%, branches 95.74%, functions 99.09% for the directory; the lowest file is `BoardServices.tsx` with 75% branches (the missing-provider throw). After the pass 1 fixes the tree gave 97.24%, 95.91%, and 99.13%; after the pass 2 fixes it gives 97.31% statements, 96.38% branches, 99.18% functions, and 100% lines, with `BoardServices.tsx` still the lowest at 75% branches.
 
 ## Evidence check
 
