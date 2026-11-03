@@ -1,0 +1,1 @@
+{"change": "receive-scm-webhooks", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a19fb8-59e6-7ef3-b2f9-cc2d2e520bff", "counts": {"critical": 0, "high": 1, "medium": 3, "low": 0}}
