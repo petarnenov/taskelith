@@ -118,7 +118,7 @@ describe('the board columns', () => {
     await cardNamed('Draft');
     expect(column('Propose').getByRole('article', { name: 'Draft' })).toBeDefined();
     expect(column('Archived').getByRole('article', { name: 'Done' })).toBeDefined();
-    expect(column('Propose').getByLabelText('1 cards')).toBeDefined();
+    expect(column('Propose').getByLabelText('1 card')).toBeDefined();
     expect(screen.queryByText(/No card yet\./)).toBeNull();
     expect(screen.getByRole('main').textContent).toContain('Project Taskelith');
   });

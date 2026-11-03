@@ -38,7 +38,7 @@ function Column({ board, column }: { readonly board: Board; readonly column: Boa
         <Title order={2} size="h5" id={headingId}>
           {label}
         </Title>
-        <Badge variant="default" aria-label={`${cards.length} cards`}>
+        <Badge variant="default" aria-label={cardCount(cards.length)}>
           {cards.length}
         </Badge>
       </Group>
@@ -83,4 +83,8 @@ function MergeGate({ board }: { readonly board: Board }) {
       </Paper>
     </Stack>
   );
+}
+
+function cardCount(count: number): string {
+  return count === 1 ? '1 card' : `${count} cards`;
 }
