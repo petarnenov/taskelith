@@ -132,7 +132,7 @@ export {
 } from './application/event-log-keeper.js';
 export { MAX_STREAM_BUFFER_BYTES, EventStreamApi, type EventStreamOperations } from './api/event-stream-api.js';
 export { eventData, frameText, inboxItemBody, type EventData } from './api/event-stream-wire.js';
-export type { BoardReads, BoardStore, FleetReads, ReconciliationQueueReads } from './application/board-reads.js';
+export type { BoardReads, BoardStore, FleetReads, ReconciliationRecordReads } from './application/board-reads.js';
 export { BoardViews, type BoardViewDependencies } from './application/board-views.js';
 export { CardReader, mergeGate, type CardView, type CardViewParts, type SnapshotSources } from './application/card-views.js';
 export { ACTIVITY_URGENCY, taskEnd, taskState, type TaskContext, type TaskState } from './application/card-tasks.js';

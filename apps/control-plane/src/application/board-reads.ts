@@ -25,7 +25,7 @@ export interface BoardReads {
   readonly placementOutcomes: Pick<PlacementOutcomeRecords, 'get'>;
   readonly assignments: Pick<AssignmentRepository, 'listByAttempt'>;
   readonly fleet: FleetReads;
-  readonly reconciliation: ReconciliationQueueReads;
+  readonly reconciliation: ReconciliationRecordReads;
   autoMergeEnabled(projectId: ProjectId): Promise<Result<boolean>>;
 }
 
@@ -37,11 +37,12 @@ export interface FleetReads {
   heldForAttempt(attemptId: Task['attempts'][number]['id']): Promise<boolean>;
 }
 
-// What the reconciliation source lists beyond the cards' tasks.
-export interface ReconciliationQueueReads {
+// The reconciliation records beyond the cards' tasks: the queue's
+// unrecorded processes, the answers, and the projector's closing times.
+export interface ReconciliationRecordReads {
   unrecordedProcesses(): Promise<readonly UnrecordedProcess[]>;
   readonly answers: Pick<ReconciliationAnswers, 'get'>;
-  // When the card projector first recorded the item closed, if it did.
+  // The card projector's record: when it first saw the item closed, if it did.
   closedAt(itemId: NeedsYouItemId): Promise<Result<Instant | undefined>>;
 }
 
