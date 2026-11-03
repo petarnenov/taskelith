@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { BoardViews, boardReadsOf, startBoardServices, type InboxSourcesIn } from '@taskelith/control-plane';
 import { NoMergeQueue } from '@taskelith/integrations';
 import { err, failure, ok } from '@taskelith/kernel';
-import { PostgresDatabase, migrate, type PostgresCrashPoint } from '@taskelith/postgres';
+import { PostgresDatabase, PostgresUiEventLog, migrate, type PostgresCrashPoint } from '@taskelith/postgres';
 import { integrationEndpoint, value } from '@taskelith/testing';
 import { EARLY, admission, run, task } from './board-fixtures.ts';
 
@@ -57,6 +58,22 @@ async function cardEvents(): Promise<{ type: string; column?: string; workersOnl
   });
 }
 
+// The production numbering pass, READ COMMITTED.
+const log = new PostgresUiEventLog(database);
+
+// Settles once every unnumbered entry is below the numbering horizon, which
+// the cluster's other test databases' transactions can hold back.
+async function untilNumberable(): Promise<void> {
+  const deadline = performance.now() + 20_000;
+  for (;;) {
+    const [row] = await sql<{ above: boolean }>(`SELECT pg_snapshot_xmin(pg_current_snapshot()) > coalesce((SELECT max(inserted_by)
+      FROM ui_events WHERE position IS NULL AND inserted_by < pg_snapshot_xmax(pg_current_snapshot())), '0'::xid8) AS above`);
+    if (row!.above) return;
+    if (performance.now() > deadline) throw new Error('the numbering horizon did not move past the events');
+    await delay(20);
+  }
+}
+
 const pendingTouches = async () => (await sql<{ count: number }>('SELECT count(*)::int AS count FROM card_touches'))[0]!.count;
 
 test('the board and the task detail read one snapshot over PostgreSQL, the head first', async () => {
@@ -73,7 +90,8 @@ test('the board and the task detail read one snapshot over PostgreSQL, the head 
 test('an inbox source takes its position from the head of the view snapshot', async () => {
   await card('run-1');
   value(await startBoardServices(database, NO_SOURCES).projector.project());
-  assert.equal(value(await database.transaction((tx) => tx.uiEvents.assign(10, EARLY))), 1);
+  await untilNumberable();
+  assert.equal(value(await log.assign(10, EARLY)), 1);
   const positions: string[] = [];
   const recording: InboxSourcesIn = (_timeline, viewPositions) => [{
     id: 'native-request' as never, kinds: ['input-request'],
@@ -85,6 +103,23 @@ test('an inbox source takes its position from the head of the view snapshot', as
   }];
   const list = value(await startBoardServices(database, recording).views.open({ kind: 'installation' }));
   assert.deepEqual([positions, list.position, list.items], [['1'], '1', []]);
+});
+
+test('a projected event is numbered only once every older transaction has ended', async () => {
+  await card('run-1');
+  const older = new pg.Client({ connectionString: url.href });
+  await older.connect();
+  try {
+    await older.query('BEGIN');
+    await older.query('SELECT pg_current_xact_id()');
+    value(await startBoardServices(database, NO_SOURCES).projector.project());
+    assert.equal(value(await log.assign(10, EARLY)), 0, 'the older transaction holds the numbering');
+  } finally {
+    await older.query('COMMIT');
+    await older.end();
+  }
+  await untilNumberable();
+  assert.equal(value(await log.assign(10, EARLY)), 1);
 });
 
 test('a card committed after a view read its head stays out of that view', async () => {
