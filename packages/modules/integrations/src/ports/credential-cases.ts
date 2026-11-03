@@ -1,7 +1,7 @@
 import { parseInstant, type Result } from '@taskelith/kernel';
 import { failsWith, fixtureResult, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
 import { isSameSet, isSubset } from './conformance-steps.js';
-import { awaitRefusal } from './revocation-window.js';
+import { awaitRefusals } from './revocation-window.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
 import {
@@ -63,7 +63,7 @@ export async function checkAdoptedCredential(run: ConformanceCase, fixture: Sour
   const second = await refresh(run, fixture, first);
   const third = await refresh(run, fixture, second);
   const secondAdoptedAt = await confirmAdoption(run, fixture, second);
-  await expectEnded(run, fixture, first, 'after the adoption of a later version', secondAdoptedAt);
+  await expectEnded(run, fixture, [{ credential: first, when: 'after the adoption of a later version' }], secondAdoptedAt);
   await expectReads(run, fixture, third, 'after the adoption of an earlier version');
   await confirmAdoption(run, fixture, second);
   await expectReads(run, fixture, second, 'after its adoption was repeated');
@@ -74,7 +74,7 @@ export async function checkAdoptedCredential(run: ConformanceCase, fixture: Sour
     'not-found',
   );
   const thirdAdoptedAt = await confirmAdoption(run, fixture, third);
-  await expectEnded(run, fixture, second, 'after the adoption of a later version', thirdAdoptedAt);
+  await expectEnded(run, fixture, [{ credential: second, when: 'after the adoption of a later version' }], thirdAdoptedAt);
   await confirmAdoption(run, fixture, second);
   await expectRefused(run, fixture, readProbe(fixture, second, 'after a stale adoption'));
   await expectReads(run, fixture, third, 'after its adoption');
@@ -103,8 +103,11 @@ export async function checkRevokedCredential(run: ConformanceCase, fixture: Sour
   await expectGrantedAccess(run, fixture, credential);
   const refreshed = await refresh(run, fixture, credential);
   const revokedAt = await revoke(run, fixture, refreshed);
-  await expectEnded(run, fixture, credential, 'after the revocation of its credential', revokedAt);
-  await expectEnded(run, fixture, refreshed, 'after its revocation', revokedAt);
+  const versions = [
+    { credential, when: 'after the revocation of its credential' },
+    { credential: refreshed, when: 'after its revocation' },
+  ];
+  await expectEnded(run, fixture, versions, revokedAt);
   await expectMissing(run, fixture, 'a revoked credential', refreshed.credentialId);
   await expectMissing(run, fixture, 'an unknown credential', UNKNOWN_CREDENTIAL);
 }
@@ -138,7 +141,7 @@ export async function checkCredentialIsolation(run: ConformanceCase, fixture: So
   const laterWriter = await issueCredential(run, fixture, 'conformance-isolation-later-writer', READ_WRITE);
   await expectAllowed(run, fixture, { permission: 'read-code', credential: laterReader, repository: project });
   const laterRevokedAt = await revoke(run, fixture, laterReader);
-  await expectEnded(run, fixture, laterReader, 'after its revocation', laterRevokedAt);
+  await expectEnded(run, fixture, [{ credential: laterReader, when: 'after its revocation' }], laterRevokedAt);
   await expectAllowed(run, fixture, { permission: 'write-code', credential: laterWriter, repository: project, when: afterRevocation });
 }
 
@@ -153,7 +156,7 @@ async function expectRefreshed(
   await expectGrantedAccess(run, fixture, original, 'before the adoption of its successor');
   await expectGrantedAccess(run, fixture, refreshed);
   const adoptedAt = await confirmAdoption(run, fixture, refreshed);
-  await expectEnded(run, fixture, original, 'after the adoption of its successor', adoptedAt);
+  await expectEnded(run, fixture, [{ credential: original, when: 'after the adoption of its successor' }], adoptedAt);
   await expectGrantedAccess(run, fixture, refreshed, 'after its adoption');
 }
 
@@ -276,23 +279,31 @@ function readProbe(fixture: SourceControlConformanceFixture, credential: RunCred
   return { permission: 'read-code', credential, repository: fixture.projectRepository, when };
 }
 
-// Every permission must be refused within the propagation window after
-// the ending; the slowest refusal is recorded.
+interface EndedVersion {
+  readonly credential: RunCredential;
+  readonly when: string;
+}
+
+// Every permission of every version must be refused with forbidden within
+// the propagation window of their shared ending; each slowest is recorded.
 async function expectEnded(
   run: ConformanceCase,
   fixture: SourceControlConformanceFixture,
-  credential: RunCredential,
-  when: string,
+  versions: readonly EndedVersion[],
   endedAt: number,
 ): Promise<void> {
-  let slowestMs = 0;
-  for (const permission of SCM_PERMISSIONS) {
-    const probe = { permission, credential, repository: fixture.projectRepository, when };
-    const ending = await awaitRefusal(() => attempt(run, fixture, probe), fixture.clock, endedAt);
-    expectForbidden(run, fixture, probe, ending.result);
-    slowestMs = Math.max(slowestMs, ending.latencyMs);
+  const probes = versions.flatMap(({ credential, when }) =>
+    SCM_PERMISSIONS.map((permission) => ({ permission, credential, repository: fixture.projectRepository, when })));
+  const endings = await awaitRefusals(probes.map((probe) => () => attempt(run, fixture, probe)), fixture.clock, endedAt);
+  for (const [index, ending] of endings.entries()) {
+    // No refusal within the window counts as the version still working.
+    const answer: Result<unknown> = ending.refusal === undefined ? { ok: true, value: undefined } : { ok: false, error: ending.refusal };
+    expectForbidden(run, fixture, probes[index]!, answer);
   }
-  run.recordEnding(when, slowestMs);
+  for (const { when, credential } of versions) {
+    const latencies = endings.filter((_, index) => probes[index]!.credential === credential).map((ending) => ending.latencyMs);
+    run.recordEnding(when, Math.max(0, ...latencies));
+  }
 }
 
 async function expectAllowed(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<void> {

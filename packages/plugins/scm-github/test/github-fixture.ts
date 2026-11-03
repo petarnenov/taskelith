@@ -54,7 +54,12 @@ export function githubTestbed(
 }
 
 function emulatorClock(emulator: GithubEmulator) {
-  return { now: () => emulator.now(), sleep: async (milliseconds: number) => emulator.advance(milliseconds) };
+  return {
+    now: () => emulator.now(),
+    sleep: async (milliseconds: number) => emulator.advance(milliseconds),
+    // Every emulated request answers, so none needs a bound.
+    timeout: () => new Promise<void>(() => {}),
+  };
 }
 
 export function conformanceFixture({ emulator, provider }: GithubTestbed): SourceControlConformanceFixture {

@@ -181,6 +181,8 @@ export class InMemoryScm {
         sleep: async (milliseconds) => {
           this.sleptMs += milliseconds;
         },
+        // Every attempt of this service answers, so none needs a bound.
+        timeout: () => new Promise<void>(() => {}),
       },
       attemptAction: async (credential, repository, permission) => this.act(credential, repository, permission),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),

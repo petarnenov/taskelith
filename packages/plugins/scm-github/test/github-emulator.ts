@@ -27,7 +27,6 @@ export interface EmulatorSetup {
   readonly installed: readonly string[];
   // GitHub's names of the merge methods the repositories allow.
   readonly allowedMergeMethods?: readonly string[];
-  readonly pageSize?: number;
   // How far the clock moves per token; by default none, as GitHub's
   // second-precision expiries repeat within one second.
   readonly mintClockStepMs?: number;
@@ -130,7 +129,7 @@ export class GithubEmulator {
     for (const repository of setup.installed) this.branches.set(branchKey(repository, 'main'), this.nextCommit());
     this.routes = [
       ['POST', /^\/app\/installations\/([^/]+)\/access_tokens$/, (request, match) => this.mintToken(request, match[1]!)],
-      ['GET', /^\/installation\/repositories$/, (request) => this.listRepositories(request)],
+      ['GET', /^\/repos\/([^/]+\/[^/]+)\/installation$/, (request, match) => this.readInstallation(request, match[1]!)],
       ['DELETE', /^\/installation\/token$/, (request) => this.revokeToken(request)],
       ['GET', /^\/repos\/([^/]+\/[^/]+)$/, (request, match) => this.readRepository(request, match[1]!)],
       ['GET', /^\/repos\/([^/]+\/[^/]+)\/branches\/([^/]+)\/protection$/, (request, match) => this.readProtection(request, match[1]!, match[2]!)],
@@ -273,16 +272,10 @@ export class GithubEmulator {
     }];
   }
 
-  private listRepositories(request: RecordedRequest): Reply {
-    const token = this.tokenOf(request);
-    if (token === undefined) return [401, { message: 'Bad credentials' }];
-    const url = new URL(request.path, API_URL);
-    const page = Number(url.searchParams.get('page') ?? '1');
-    const size = this.setup.pageSize ?? Number(url.searchParams.get('per_page') ?? '30');
-    const all = [...token.repositories].map((full_name) => ({ full_name }));
-    const repositories = all.slice((page - 1) * size, page * size);
-    const next = page * size < all.length ? { link: `<${API_URL}/installation/repositories?per_page=${size}&page=${page + 1}>; rel="next"` } : undefined;
-    return [200, { total_count: all.length, repositories }, next];
+  private readInstallation(request: RecordedRequest, repository: string): Reply {
+    if (!this.isAppJwt(request.headers['authorization'] ?? '')) return [401, { message: 'Bad credentials' }];
+    if (this.installedName(repository) === undefined) return [404, { message: 'Not Found' }];
+    return [200, { id: Number(this.setup.installationId), account: { login: repository.split('/')[0] } }];
   }
 
   private revokeToken(request: RecordedRequest): Reply {

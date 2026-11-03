@@ -238,10 +238,12 @@ test('a native bypass probe that fails for another reason is a fixture finding',
 });
 
 // A service's propagation delay: an ended version still works for a while.
+// The service clock is fixed; only the fixture's sleeps move it.
 async function withEndingLag(lagMs: number) {
-  return runSourceControlConformance(new InMemoryScm({ endingLagMs: lagMs }).fixture());
+  return runSourceControlConformance(new InMemoryScm({ endingLagMs: lagMs }, { now: () => FIXED_NOW }).fixture());
 }
 
+const FIXED_NOW = Date.now();
 const WINDOW_MS = REVOCATION_PROPAGATION_SECONDS * 1000;
 
 test('a version refused within the propagation window passes, with each latency', async () => {
@@ -256,7 +258,7 @@ test('a version refused within the propagation window passes, with each latency'
     'revoked credential',
     'credential isolation',
   ]);
-  assert.ok(report.endings.every((ending) => ending.latencyMs >= WINDOW_MS - 1000 && ending.latencyMs < WINDOW_MS));
+  assert.ok(report.endings.every((ending) => ending.latencyMs === WINDOW_MS - 1000));
 });
 
 test('a version that still works after the propagation window is reported', async () => {
@@ -269,14 +271,15 @@ test('a version that still works after the propagation window is reported', asyn
     'credential isolation outcome',
   ]);
   assert.ok(lines.every((line) => line.endsWith('must fail with forbidden')));
-  assert.ok(lines.includes('credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden'));
-  assert.ok(report.endings.every((ending) => ending.latencyMs >= WINDOW_MS));
+  const isolation = 'credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden';
+  assert.ok(lines.includes(isolation));
+  assert.ok(report.endings.every((ending) => ending.latencyMs === WINDOW_MS));
 });
 
 test('a conforming provider ends every version at once', async () => {
-  const report = await runSourceControlConformance(new InMemoryScm().fixture());
+  const report = await runSourceControlConformance(new InMemoryScm({}, { now: () => FIXED_NOW }).fixture());
   assert.equal(report.endings.length, 7);
-  assert.ok(Object.isFrozen(report.endings) && report.endings.every((ending) => ending.latencyMs < 1000));
+  assert.ok(Object.isFrozen(report.endings) && report.endings.every((ending) => ending.latencyMs === 0));
 });
 
 test('the wait for a refusal stops at once on any failure, without loosening', async () => {
@@ -286,12 +289,12 @@ test('the wait for a refusal stops at once on any failure, without loosening', a
     sleep: async (milliseconds: number) => {
       slept += milliseconds;
     },
+    timeout: () => new Promise<void>(() => {}),
   };
-  const unavailable = err(failure('unavailable', 'down'));
-  const ending = await awaitRefusal(async () => unavailable, clock, 0);
-  assert.deepEqual(ending, { result: unavailable, latencyMs: 0 });
+  const unavailable = failure('unavailable', 'down');
+  assert.deepEqual(await awaitRefusal(async () => err(unavailable), clock, 0), { refusal: unavailable, latencyMs: 0 });
   const allowed = await awaitRefusal(async () => ok(undefined), clock, 0);
-  assert.equal(allowed.result.ok, true);
+  assert.equal(allowed.refusal, undefined);
   assert.equal(slept, WINDOW_MS);
   assert.equal(slept / REVOCATION_POLL_MS, REVOCATION_PROPAGATION_SECONDS);
 });
