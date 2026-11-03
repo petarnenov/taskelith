@@ -295,3 +295,14 @@ test('a plugin envelope whose getter throws answers 500 and its message reaches 
   assert.ok(!JSON.stringify(sink.records).includes(SECRET));
   assert.equal(await stored(), undefined);
 });
+
+test('an integration whose plugin cannot build a provider from its stored configuration answers 503 without the plugin message', async (t) => {
+  const { call, path, stored, scm, sink, MARIA } = await fixture(t);
+  scm.factory = () => err(failure('invalid', `the plugin refused ${SECRET}`));
+  const answer = await call('PUT', path, MARIA, { binding: BINDING });
+  assert.deepEqual(refusalOf(answer), [503, 'integration-configuration-unusable']);
+  assert.ok(checkHttpSchema('Failure', answer.body).ok);
+  assert.ok(!answer.text.includes(SECRET));
+  assert.ok(!JSON.stringify(sink.records).includes(SECRET));
+  assert.equal(await stored(), undefined);
+});

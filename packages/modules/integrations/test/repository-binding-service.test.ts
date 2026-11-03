@@ -184,8 +184,9 @@ test('a provider factory envelope whose getter throws or that breaks its shape i
 test('an integration without a registered plugin, or whose plugin cannot build it, is unavailable', async () => {
   const unregistered = await fixture({ registered: false });
   assert.equal(failed(await unregistered.service.bind(PROJECT_ID, first())).code, 'unavailable');
-  const refusing = await fixture({ createProvider: () => err(failure('invalid', 'the configuration is refused')) });
-  assert.equal(failed(await refusing.service.bind(PROJECT_ID, first())).code, 'unavailable');
+  const refusing = await fixture({ createProvider: () => err(failure('invalid', `the configuration is refused: ${SECRET}`)) });
+  const unusable = failed(await refusing.service.bind(PROJECT_ID, first()));
+  assert.deepEqual(unusable, failure('unavailable', "the integration's stored configuration is unusable", { reason: 'integration-configuration-unusable' }));
 });
 
 test('a remote URL outside the allowed origin, and then an undeclared merge method, are typed refusals', async () => {
