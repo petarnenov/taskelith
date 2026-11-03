@@ -86,7 +86,11 @@ function FirstRun() {
   );
 }
 
-const FAILURES: Readonly<Record<Exclude<ReadFailure, 'unauthenticated'>, { title: string; text: string }>> = {
+const FAILURES: Readonly<Record<ReadFailure, { title: string; text: string }>> = {
+  unauthenticated: {
+    title: 'Your session ended',
+    text: 'The control plane answered this read as one without a session, which may have ended before a newer one began. Retry reads the board again.',
+  },
   unavailable: {
     title: 'The board cannot be loaded',
     text: 'The control plane did not answer with the board, so no task data is shown rather than data that may be wrong.',
@@ -101,9 +105,10 @@ const FAILURES: Readonly<Record<Exclude<ReadFailure, 'unauthenticated'>, { title
   },
 };
 
-// An unauthenticated answer already shows the sign-in page.
+// An unauthenticated answer shows the sign-in page unless a newer session
+// showed since the read started, and then this failure stays.
 function BoardFailure({ failure, onRetry }: { readonly failure: ReadFailed; readonly onRetry: () => void }) {
-  const { title, text } = FAILURES[failure.kind === 'unauthenticated' ? 'unavailable' : failure.kind];
+  const { title, text } = FAILURES[failure.kind];
   return (
     <LoadError title={title} onRetry={onRetry}>
       {withRequiredRole(text, failure)}

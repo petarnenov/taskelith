@@ -5,7 +5,22 @@ import type { Board, BoardCard, Project, ReadResult } from '../src/board/board';
 import type { SessionRead } from '../src/session/session';
 import { formatInstant } from '../src/board/board-labels';
 import { PROJECT_KEY } from '../src/board/ProjectsProvider';
-import { ANONYMOUS, AUTHENTICATED, board, card, FakeBoardGateway, fakeGateway, ManualClock, OTHER_PROJECT, PROJECT, renderApp } from './fakes';
+import { EXPIRY_MARGIN_MILLISECONDS } from '../src/session/SessionProvider';
+import {
+  ANONYMOUS,
+  AUTHENTICATED,
+  board,
+  card,
+  FakeBoardGateway,
+  fakeGateway,
+  HOUR,
+  ManualClock,
+  NOW,
+  OPERATOR,
+  OTHER_PROJECT,
+  PROJECT,
+  renderApp,
+} from './fakes';
 
 beforeEach(() => localStorage.clear());
 
@@ -491,6 +506,24 @@ describe('an unauthenticated answer', () => {
     expect(screen.queryByText('Your session expired')).toBeNull();
     expect(screen.getByRole('heading', { level: 1, name: 'Project board' })).toBeDefined();
     expect(session.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('says that the session ended when a late 401 of a renewed session leaves the board', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const renewed: SessionRead = { kind: 'authenticated', operator: { ...OPERATOR, expiresAt: NOW + 2 * HOUR } };
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(renewed);
+    const late = deferred<ReadResult<Board>>();
+    const boardGateway = boardGatewayWith(board());
+    boardGateway.readBoard.mockReturnValueOnce(late.promise);
+    const clock = new ManualClock();
+    renderApp('/app/', session, clock, boardGateway);
+    expect(await screen.findByText('Loading the board…')).toBeDefined();
+    await act(async () => clock.advance(HOUR + EXPIRY_MARGIN_MILLISECONDS));
+    await waitFor(() => expect(session.read).toHaveBeenCalledTimes(2));
+    await act(async () => late.resolve({ kind: 'unauthenticated' }));
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText('Your session ended')).toBeDefined();
+    expect(screen.queryByText('Your session expired')).toBeNull();
   });
 
   it('reads a gateway that throws as an unreachable control plane', async () => {
