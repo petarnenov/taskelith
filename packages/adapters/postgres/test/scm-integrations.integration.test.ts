@@ -30,7 +30,7 @@ function integration(): ScmIntegration {
 
 for (const conformance of SCM_INTEGRATIONS_CONFORMANCE) {
   test(`PostgreSQL SCM integrations: ${conformance.name}`, async () => {
-    await query(url, 'TRUNCATE scm_integration_secrets, scm_integrations');
+    await query(url, 'TRUNCATE project_repository_bindings, scm_integration_secrets, scm_integrations');
     assert.deepEqual(await conformance.check(store), []);
   });
 }

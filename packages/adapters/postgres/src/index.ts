@@ -58,3 +58,4 @@ export { APPENDED_CHANNEL, NUMBERED_CHANNEL, PostgresUiEventLog, PostgresUiEvent
 export { LISTEN_DEADLINE_MILLISECONDS, LISTEN_PROBE_MILLISECONDS, PostgresUiEventNotifications, type NotificationOptions } from './ui-event-notifications.js';
 export { PostgresCardCatalog, PostgresCardProjections, type ExpandedTouches, type TouchedCards } from './card-repositories.js';
 export { PostgresInboxAnswerKeys, PostgresReconciliationAnswers } from './inbox-answer-repositories.js';
+export { PostgresRepositoryBindingRecords, PostgresRepositoryBindings } from './repository-bindings.js';

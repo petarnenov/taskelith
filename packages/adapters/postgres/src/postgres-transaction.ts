@@ -30,6 +30,7 @@ import { PostgresProducerCursors, PostgresWorkerReports } from './observation-re
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
+import { PostgresRepositoryBindingRecords } from './repository-bindings.js';
 import { PostgresScmIntegrationRecords } from './scm-integrations.js';
 import { PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
 import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
@@ -90,6 +91,7 @@ export class PostgresTransaction {
   readonly reconciliationAnswers: PostgresReconciliationAnswers;
   // Sealed secrets only; PostgresScmIntegrations seals and opens them.
   readonly scmIntegrations: PostgresScmIntegrationRecords;
+  readonly repositoryBindings: PostgresRepositoryBindingRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -140,6 +142,7 @@ export class PostgresTransaction {
     this.inboxAnswerKeys = new PostgresInboxAnswerKeys(session);
     this.reconciliationAnswers = new PostgresReconciliationAnswers(session);
     this.scmIntegrations = new PostgresScmIntegrationRecords(session);
+    this.repositoryBindings = new PostgresRepositoryBindingRecords(session);
     this.outboxLookup = this.outbox;
   }
 
