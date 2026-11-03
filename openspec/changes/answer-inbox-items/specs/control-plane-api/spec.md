@@ -13,7 +13,7 @@ The control plane SHALL serve `answerInboxItem` and `answerInstallationInboxItem
 
 #### Scenario: Another principal repeats a key
 - **WHEN** another principal repeats the key of a resolved item with the same answer
-- **THEN** the answer is 409 `idempotency-key-reused`
+- **THEN** the answer is 409 `idempotency-key-reused`, and that principal never receives the first principal's outcome
 
 #### Scenario: A replay without the role or scope
 - **WHEN** a principal who answered an item repeats its key and answer after losing the item's role, or through another project's inbox
@@ -48,3 +48,10 @@ The card projector SHALL publish `inbox-item-changed` for a reconciliation item 
 #### Scenario: A closed item's task changes
 - **WHEN** a closed item's task changes or is re-admitted later
 - **THEN** the item keeps its subject's generation and its closing time
+
+### Requirement: Reconciliation items listed
+The reconciliation source SHALL list an unknown execution only through its task's registered card, in the card's project inbox, and every worker's unrecorded process that no answer acknowledged in the installation inbox.
+
+#### Scenario: No card registered yet
+- **WHEN** an unknown execution's task belongs to no registered card, as before item 25 registers cards
+- **THEN** no project inbox lists its item, while the installation inbox lists the unrecorded processes

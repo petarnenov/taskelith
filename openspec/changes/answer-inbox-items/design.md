@@ -71,6 +71,14 @@ A reconciliation item opens and closes when a writer changes a task or records a
 - Q3 (a), 2026-11-03: the reconciliation source over the G2 `ReconciliationQueue` belongs to 15b, its HTTP and CLI surface and re-admission to item 44.
 - The brief of 2026-11-03: migration `1792934200000`; no new OpenAPI operation or changed response; authorization through `Access`; an answered item touches its card through the 15a touches.
 
+Niki, 2026-11-03, after review pass 1:
+
+- **Product ports section 4.1, the queue listings (a).** Section 4.1 no longer names `ReconciliationQueue.unknownExecutionsOfTask` and `unrecordedProcessesOfWorker` as the items' sources (decision 8). The per-task listing gives only the executions that are still unknown, so it cannot give the closed items that `item-closed` and their closing events need, and no inbox read starts from one task; the per-worker listing needs a worker, while the installation inbox lists every worker's processes. Both listings stay in the port for their G2 callers. `ReconciliationQueue` is a module port inside Execution that no wire contract or OpenAPI operation exposes, so the change of its documented use is internal.
+- **Wire contracts section 8, `item-closed` (b).** The edit of the 422 row is kept: `item-closed` was already declared before this change, in the `AnswerRefusal` schema's `reason` enumeration that the 422 responses of `answerInboxItem` and `answerInstallationInboxItem` name in `packages/contracts/documents/control-plane.openapi.json`, and in the 422 row of section 8. The edit only moves the example of an execution that is no longer unknown from `subject-changed` to `item-closed`. No schema, response, or operation changes, and this change does not touch `packages/contracts`, so `packages/contracts/breaking-changes.json` needs no entry: it records breaking changes of the OpenAPI document, and the document is unchanged.
+- **Review effort (Q1).** The reviews run at effort medium, the effort that governance and the brief authorize. `route.json` recommends high for passes 1 and 2; that recommendation is advisory (governance "Routed effort") and was not followed.
+- **Key scope (Q2).** Product ports section 4.2 scopes a key to nothing narrower than its item and is silent on the responder, so a key stays scoped to its item (primary key `item_id`, `idempotency_key`) and the responder stays in the digest (decision 2). Section 4.2 now says so, and a key that another principal repeats is `idempotency-key-reused`, never the first principal's outcome; the service test and the spec scenario "Another principal repeats a key" cover it.
+- **Cards before item 25 (Q3).** An unknown execution is listed only through its task's card, and until item 25 registers cards no writer does, so in a running installation the project inboxes have no reconciliation item, the empty reconciliation state, while unrecorded processes are listed in the installation inbox. Item 25 registers the cards; this is accepted, and the follow-up is recorded below.
+
 ## Review checklist
 
 `checklist.json`, saved with the brief's invocation at `1c75f149`, size M-L. Review categories, most frequent first: contract-drift, error-handling, missing-fail-before-test, naming, docs, spec-wording, concurrency-race. Record quality: evidence-mismatch, spec-wording, docs, stale-citation, contract-drift, process, missing-fail-before-test.
@@ -94,5 +102,6 @@ A reconciliation item opens and closes when a writer changes a task or records a
 ## Follow-ups
 
 - The reconciliation queue's own surface and re-admission after a resolved execution: item 44.
+- Card registration by task intake: item 25. Until then the project inboxes list no unknown execution (Q3).
 - The `spec-approval` and `escalation` sources: items 22, 23, and 24.
 - The inbox screen: item 32.
