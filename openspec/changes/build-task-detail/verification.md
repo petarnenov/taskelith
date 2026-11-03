@@ -19,6 +19,8 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `be32f9f2` `docs: route the build-task-detail change after the pass 1 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `904eb798` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 1,943 lines in 32 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.65) and agrees.
 - Pass 2 fixes: `23789da3` (the tests), `49518eea` (the code fixes), and `0e5a0f33` (proposal and design), then the records below.
 - `977756d3` `docs: route the build-task-detail change after the pass 2 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `0e5a0f33` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,124 lines in 35 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
+- `1053a645` `test: widen the async query timeout for apps/web` and `f728e434`, its record (see "Pass 2 fixes").
+- `a463504c` `docs: route the build-task-detail change after the async query timeout`: the timeout commit changed the diff, so the old `route.json` was deleted and the change routed again at head `f728e434` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,130 lines in 37 files; the tier stayed elevated, with the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
 
 ## Environment
 
@@ -71,7 +73,7 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `557943973cc6e582766268d12b4fedd5c4681c37`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.70% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `fed39a908ef94dbc3a2e08183357846d6f8685bd`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.72% branches, 98.87% functions.
 - `npm run openspec -- validate build-task-detail --strict`: passed, `Change 'build-task-detail' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 110 file(s); every pass summary file is valid: 90 file(s); every route file is valid: 43 file(s).`.
 - Spec diff against the merge base `d3dd09ed86b5` with `origin/dev`: no change under `openspec/specs`.
@@ -80,6 +82,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a2ea-05b9-7f43-9aec-8f59f720abd3` | 0 | 1 | 5 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `7f8cdce1-9d38-4e97-8154-06b4a778355c` | 0 | 0 | 0 | 8 |
 <!-- make record: end -->
 
 ## Independent review
@@ -146,7 +149,7 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 - Coordinator decision Q3 (`0e5a0f33`): design decision 4 says why the picker appears twice, the modal Drawer keeping its focus trap and Escape, and that both pickers read and write the one selection of `ProjectsProvider` (`useProjects`), so they cannot disagree; they already share it, so no test was added.
 - After the fixes the whole `apps/web` suite passes: 457 tests in 15 files, 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines; `tsc` of both `apps/web` configurations and `npm run verify:comments` pass.
 - Timing margin (`1053a645` `test: widen the async query timeout for apps/web`), approved by the coordinator (Niki) on 2026-11-03: the `make verify` of the fixed tree, `verify-29b-p2c.log` in the session scratchpad, failed one `apps/web` test, the `findByRole` of the link "Add the board" at `test/task-detail.test.tsx` line 68, which took 1337 ms against the 1000 ms default of Testing Library; a cold Mantine render on the loaded iMac, and the file passed 3 times on its own. `apps/web/test/setup.ts` now sets `configure({ asyncUtilTimeout: 5000 })`, and `apps/web/vitest.config.ts` sets `testTimeout: 15000`, above the Vitest default of 5000 ms, so a test leaves room above its query timeout. Fail-before does not apply to a timing margin. This commit is unreviewed too and awaits the coordinator's architect check.
-- `make verify` of the fixed tree: see "Generated checks" and the line below, written once it ran.
+- `make verify` of the fixed tree (`a463504c`, tree `fed39a90`), `verify-29b-p2e.log` in the session scratchpad: passed at the first run, profile full, no rerun; in it `apps/web` Vitest ran 457 tests, all passing, with 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines. The generated part above records it.
 - Architect check by the coordinator (Niki): _pending_.
 
 ## Limitations
