@@ -170,3 +170,21 @@ test('a listener that cannot connect answers false and logs the loss, a close du
   await numbered.opened;
   assert.equal(heard, 0);
 });
+
+test('a listener whose connection is lost logs it, and the next listen reconnects and hears again', async () => {
+  const logs = new InMemoryLogSink();
+  const notifications = new PostgresUiEventNotifications(url, new Logger(logs, { now: () => AT }));
+  after(() => notifications.close());
+  assert.equal(await notifications.listen(), true);
+  const lost = gate();
+  const watch = setInterval(() => { if (logs.records.some((record) => record.event === 'postgres.events.listen.lost')) lost.open(); }, 50);
+  await query(url, "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE 'LISTEN %' AND pid <> pg_backend_pid()");
+  await lost.opened;
+  clearInterval(watch);
+  const numbered = gate();
+  notifications.onNumbered(() => numbered.open());
+  assert.equal(await notifications.listen(), true);
+  await commit([{ kind: 'event', event: outputEvent(1) }]);
+  value(await log.assign(100, AT));
+  await numbered.opened;
+});
