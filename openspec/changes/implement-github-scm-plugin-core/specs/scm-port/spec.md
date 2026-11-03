@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: GitHub plugin credentials
-The `scm-github` plugin SHALL issue each run credential as an installation access token that it requests for exactly the run's repositories, each one of its App installation's, and the narrowest App permissions, SHALL revoke a token whose repositories or permissions differ from the request beyond GitHub's implied `metadata: read`, and SHALL form `authorization` as `Basic` with the base64 of `x-access-token:<secret>`. Every request SHALL name GitHub API version `2022-11-28`.
+The `scm-github` plugin SHALL issue each run credential as an installation token for exactly the run's repositories of its App installation, named in any case, and the narrowest App permissions, SHALL revoke a token whose grant differs from the request beyond GitHub's implied `metadata: read`, and SHALL form `authorization` as `Basic` with the base64 of `x-access-token:<secret>`. Every request SHALL name GitHub API version `2022-11-28`.
 
 #### Scenario: Read-only run credential
 - **WHEN** a run asks for `read-code` in one repository of the installation
@@ -9,7 +9,11 @@ The `scm-github` plugin SHALL issue each run credential as an installation acces
 
 #### Scenario: Repository outside the installation
 - **WHEN** a run asks for a repository that the installation does not include
-- **THEN** issuing fails with `not-found` and no token is requested
+- **THEN** issuing fails with `not-found` and no token stays live
+
+#### Scenario: Repository named in another case
+- **WHEN** a run names an installed repository in another case than GitHub's
+- **THEN** the credential is issued without listing the installation's repositories
 
 #### Scenario: Wider grant than requested
 - **WHEN** GitHub grants a token `write-code` that the run did not request
@@ -24,7 +28,7 @@ The `scm-github` plugin SHALL issue each run credential as an installation acces
 - **THEN** the plugin revokes it again before its next token request or revocation
 
 ### Requirement: GitHub plugin branch protection
-The `scm-github` plugin SHALL protect a base branch with exactly the requested contexts and `enforce_admins` enabled, and report `bindsProvider` from GitHub's answer. When the current protection has required reviews, push restrictions, strict checks, other contexts, or a setting that the write would turn off, the plugin SHALL fail with `precondition-failed`, name those settings, and change nothing.
+The `scm-github` plugin SHALL protect a base branch with exactly the requested contexts and `enforce_admins` enabled, write nothing when the protection already is so, and report `bindsProvider` from GitHub's answer. When the current protection has required reviews, push restrictions, strict checks, other contexts, or a setting that the write would turn off, the plugin SHALL fail with `precondition-failed`, name those settings, and change nothing.
 
 #### Scenario: Protection without enforced administrators
 - **WHEN** GitHub answers a protection request with `enforce_admins` disabled
@@ -33,6 +37,10 @@ The `scm-github` plugin SHALL protect a base branch with exactly the requested c
 #### Scenario: Operator protection
 - **WHEN** the base branch's protection requires an approving review
 - **THEN** ensuring merge protection fails with `precondition-failed` naming `required_pull_request_reviews`, and the protection is unchanged
+
+#### Scenario: Protection already ensured
+- **WHEN** merge protection is ensured twice with the same contexts
+- **THEN** only the first call writes the protection
 
 ### Requirement: GitHub plugin merges and webhooks
 The `scm-github` plugin SHALL declare `required-status` review evidence and fail with `precondition-failed` for a merge that GitHub refuses with status 405 or 409. It SHALL verify `X-Hub-Signature-256` as HMAC-SHA256 over the raw body bytes, compared in constant time, and SHALL take `X-GitHub-Delivery` as a string.
@@ -69,11 +77,22 @@ The `scm-github` plugin SHALL keep credential versions in its process's memory o
 - **THEN** the refresh fails with `not-found`, and the revocation ends the new token too or fails with `unavailable` until a retry does
 
 ### Requirement: GitHub refresh expiry
-A refresh by the `scm-github` plugin SHALL succeed only with an expiry later than the newest version's. Otherwise it SHALL revoke the new token and fail with `unavailable`, because GitHub states expiry in whole seconds and two tokens of one second share it.
+A refresh by the `scm-github` plugin SHALL succeed only with an expiry later than the newest version's. Because GitHub states expiry in whole seconds, a token without a later expiry SHALL be revoked and, after a wait of one second past the shortfall, minted once more; when that one also expires no later, the refresh SHALL fail with `unavailable` and leave no new token.
 
-#### Scenario: Two refreshes in one second
-- **WHEN** two refreshes of one credential receive tokens with the same expiry
-- **THEN** one succeeds with a later expiry than the version before, and the other fails with `unavailable` and leaves no new token
+#### Scenario: Refresh in the second of its version
+- **WHEN** a credential is refreshed in the same second as it was issued
+- **THEN** the refresh waits, succeeds with a later expiry, and leaves only the two versions' tokens live
+
+#### Scenario: No later expiry after the wait
+- **WHEN** the token minted after the wait still expires no later than the newest version
+- **THEN** the refresh fails with `unavailable` and leaves no new token
+
+### Requirement: GitHub expired credential versions
+The `scm-github` plugin SHALL end a credential version a minute after GitHub's expiry without asking GitHub, and SHALL forget a credential whose every version has ended, so that a credential never revoked keeps no token in memory. An operation on a forgotten credential SHALL fail with `not-found`.
+
+#### Scenario: Credential never revoked
+- **WHEN** every version of a credential is past its expiry
+- **THEN** a revocation of it fails with `not-found` without a request to GitHub
 
 ## MODIFIED Requirements
 
