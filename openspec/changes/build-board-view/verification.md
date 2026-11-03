@@ -33,6 +33,10 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 - Type checks: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json`, which includes the tests, pass.
 - Coverage of the new files (Vitest, `apps/web/src/board`): 100% lines in every file; statements 97.32%, branches 95.74%, functions 99.09% for the directory; the lowest file is `BoardServices.tsx` with 75% branches (the missing-provider throw).
 
+## Evidence check
+
+The generated part below matches the tree (`make record-check`). Its totals are from `verify-29a-2.log` in the session scratchpad, the second `make verify` on the tree of `ab35acb9` (`6bfd91d0`), unchanged between the runs. The first run, `verify-29a-1.log`, failed only the control-plane test "a body over the limit is 413 before any verification, and one at the limit is read", whose request ended in `fetch failed` with `write ECONNRESET` (tests 4610, pass 4600, fail 1, skipped 9); this change touches no file under `apps/control-plane`, so the run was repeated once on the same tree without a change, and it passed. In both runs `apps/web` Vitest ran 246 tests, all passing, with 98.52% statements, 97.13% branches, 99.54% functions, and 100% lines.
+
 ## Fail-before
 
 Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taskelith/72320a31-29ec-4dad-bb0b-5d2fa342f935/scratchpad`).
