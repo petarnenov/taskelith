@@ -15,7 +15,9 @@ Assigned on 2026-11-03 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `ad68f928` `test: show that the drain retains none of the bytes it discards` (the coordinator's decisions).
 - `4e21b578` and `07ebe518`, the coordinator's decisions and the `make verify` of the pass 1 fix round.
 - `ff0a16c8` `chore: flush an empty early answer and answer a bodiless request at once` (the pass 2 fixes, with the pass 2 summary in `passes.jsonl`).
-- The commit of the pass 2 records and `make record` follows.
+- `cb579025` `docs: record the make verify of the pass 2 fix round` and the commits before it record the pass 2 fix round.
+- `ce919611` `docs: describe the current spec delta in the self-check` (the pass 3 fix).
+- The commit of the pass 3 records and `make record` follows, then the archive commit.
 
 ## Environment
 
@@ -77,7 +79,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e`, reviewed `0e8d10e0..809228ce`: Critical 0, High 2, Medium 5, Low 1, all fixed in `f86d074a` (`findings.jsonl`). Pass 2: Claude Code `claude-fable-5-1`, effort medium, session `34844afd-1dac-4b08-9356-c15e840c4a7c`, reviewed `0e8d10e0..07ebe518`: Critical 0, High 0, Medium 1, Low 5; five fixed in `ff0a16c8`, L4 declined as the reviewer's information only (`findings.jsonl`). Pass 3 is next, since pass 2 had a Medium finding.
+Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e`, reviewed `0e8d10e0..809228ce`: Critical 0, High 2, Medium 5, Low 1, all fixed in `f86d074a` (`findings.jsonl`). Pass 2: Claude Code `claude-fable-5-1`, effort medium, session `34844afd-1dac-4b08-9356-c15e840c4a7c`, reviewed `0e8d10e0..07ebe518`: Critical 0, High 0, Medium 1, Low 5; five fixed in `ff0a16c8`, L4 declined as the reviewer's information only (`findings.jsonl`). Pass 3 ran, since pass 2 had a Medium finding.
+
+Pass 3: role A, Codex CLI `gpt-6.1-sol`, effort medium (owner decision 2026-11-02), read-only sandbox, session `01a1a2ea-5427-7653-a56b-3a79023bfb6a`, head `cb579025`, reviewed `0e8d10e0..cb579025`; model, effort, and sandbox as reported in the output header. Invocation: `make review` with `REVIEWER='codex gpt-6.1-sol#medium'`, which ran `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" -s read-only -C <worktree> -`. Unavailable reviewer: the assigned pass 3 reviewer, Antigravity CLI `gemini-4-argon-medium`, is unavailable on `hpz600`, because the `agy` binary needs PCLMUL, which the CPU lacks; Codex CLI `gpt-6.1-sol` is its standing replacement, and `route.json` still names `agy gemini-4-argon-medium#medium`. The reviewer checked every pass 2 resolution, ran the 11 body-drain unit tests (all passed; the wire tests could not listen on `127.0.0.1` in its sandbox, `EPERM`), and modified no file.
+
+- Counts: Critical 0, High 0, Medium 0, Low 1, as in `passes.jsonl`. A Low-only pass ends the review: no further pass runs, and its fix is unreviewed (outcome `fixed-unreviewed`).
+- Low, evidence-mismatch (`verification.md:45`): the author self-check still described one ADDED requirement of 325 characters. Fixed in `ce919611`: it names the two ADDED requirements, "Answer before the body ends" (466 characters) and "Bounded discards" (326), and the MODIFIED "SCM webhook receiver served" (477), measured as each requirement's text without heading and scenarios.
+
+### Architect check of unreviewed fixes
+
+The pass 3 fix (`ce919611`, this record's self-check) has no later review pass. Coordinator's architect check: pending.
 
 ## Pass 1 fix round
 
@@ -103,7 +114,5 @@ Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4
 
 ## Remaining gates
 
-- Independent review: pass 3, which runs because pass 2 had a Medium finding; it is the last pass.
-- The coordinator's check, as solution architect, of every fix that no later pass reviews.
-- Archive of the change.
+- The coordinator's check, as solution architect, of the pass 3 fix, which no later pass reviews.
 - Integration into dev by the coordinator (single pull request).
