@@ -102,6 +102,28 @@ describe('the task detail route', () => {
     expect(screen.getByRole('article', { name: 'Add the board' })).toBeDefined();
   });
 
+  it('closes a detail opened from a card by going back, so Back does not open it again', async () => {
+    const view = renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), gatewayWith());
+    await userEvent.click(await screen.findByRole('link', { name: 'Add the board' }));
+    await drawer();
+    await userEvent.click(screen.getByRole('button', { name: 'Close the task detail' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(view.router.state.historyAction).toBe('POP');
+    expect(view.router.state.location.pathname).toBe('/app');
+  });
+
+  it.each([
+    ['a direct link', DETAIL_PATH],
+    ['a reload', { pathname: DETAIL_PATH, state: { openedFromBoard: 'an earlier page load' } }],
+  ])('closes a detail opened from %s by replacing its address with the board', async (_way, entry) => {
+    const view = renderApp(entry, fakeGateway(AUTHENTICATED), new ManualClock(), gatewayWith());
+    await drawer();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(view.router.state.historyAction).toBe('REPLACE');
+    expect(view.router.state.location.pathname).toBe('/app');
+  });
+
   it('titles the dialog with one heading of level 2 and no heading inside it', async () => {
     openDetail();
     const detail = await drawer();
@@ -180,6 +202,18 @@ describe('the project of a task detail address', () => {
     await user.keyboard('{Enter}');
     await user.click(await screen.findByRole('menuitem', { name: 'Taskelith' }));
     expect(view.router.state.location.pathname).toBe(DETAIL_PATH);
+  });
+});
+
+describe('the header picker on another page', () => {
+  it('keeps that page when the operator chooses another project', async () => {
+    const view = openDetail(undefined, '/app/sessions');
+    const user = userEvent.setup();
+    const pickers = await screen.findAllByRole('button', { name: 'Project: Taskelith' });
+    await user.click(pickers[0]!);
+    await user.click(await screen.findByRole('menuitem', { name: 'Website' }));
+    expect((await screen.findAllByRole('button', { name: 'Project: Website' })).length).toBeGreaterThan(0);
+    expect(view.router.state.location.pathname).toBe('/app/sessions');
   });
 });
 
@@ -390,6 +424,37 @@ describe('the task detail', () => {
     }
   });
 
+  it('writes valid lists: no block inside phrasing content, each item in a list', async () => {
+    const obstacle = {
+      taskId: 'task-1',
+      observedAt: '2026-11-03T08:30:00.000Z',
+      source: 'scheduler',
+      disposition: 'waiting',
+      reason: 'worker-not-eligible',
+    } as const;
+    const traceability = [{ requirement: 'Board columns', workItemIds: ['1.1'], attemptIds: [], evidence: 'current' as const }];
+    const detail = taskDetail({ card: card({ waitingFor: 'reviewer', obstacle }), traceability, tasks: [task({ obstacle })] });
+    openDetail(detail);
+    const dialog = await screen.findByRole('dialog', { name: 'Add the board' });
+    expect(dialog.querySelectorAll('span div, span p')).toHaveLength(0);
+    const items = Array.from(dialog.querySelectorAll('li'));
+    expect(items.length).toBeGreaterThanOrEqual(5);
+    for (const item of items) expect(['OL', 'UL']).toContain(item.parentElement?.tagName);
+  });
+
+  it('names each section by its heading rather than by a second label', async () => {
+    openDetail();
+    const dialog = await screen.findByRole('dialog', { name: 'Add the board' });
+    const sections = within(dialog).getAllByRole('region');
+    expect(sections.length).toBeGreaterThanOrEqual(4);
+    for (const region of sections) {
+      expect(region.getAttribute('aria-label')).toBeNull();
+      const heading = document.getElementById(region.getAttribute('aria-labelledby') ?? '');
+      expect(heading?.tagName).toBe('H3');
+      expect(region.contains(heading)).toBe(true);
+    }
+  });
+
   it('says when the run has no stage and no task yet', async () => {
     openDetail(taskDetail({ stages: [], tasks: [] }));
     await drawer();
@@ -518,6 +583,23 @@ describe('live updates of the task detail', () => {
     expect(await screen.findByRole('article', { name: 'Add the board' })).toBeDefined();
     expect(gateway.readBoard).toHaveBeenCalledTimes(3);
     expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the detail once on a retry of both after a resync, whatever the snapshot numbers', async () => {
+    const gateway = gatewayWith();
+    openDetail(undefined, DETAIL_PATH, gateway);
+    await drawer();
+    await screen.findByRole('article', { name: 'Add the board' });
+    act(() => gateway.lastStream().emit({ kind: 'resync' }));
+    await waitFor(() => expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2));
+    gateway.readBoard.mockResolvedValueOnce({ kind: 'unavailable' });
+    act(() => gateway.lastStream().emit({ kind: 'failed' }));
+    const detail = within(screen.getByRole('dialog'));
+    await userEvent.click(await detail.findByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('dialog', { name: 'Add the board' })).toBeDefined();
+    expect(await screen.findByRole('article', { name: 'Add the board' })).toBeDefined();
+    await act(async () => {});
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(3);
   });
 
   it('shows the time of its state while the live updates are lost', async () => {

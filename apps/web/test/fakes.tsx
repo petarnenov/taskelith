@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { createMemoryRouter } from 'react-router';
+import { createMemoryRouter, type InitialEntry } from 'react-router';
 import { vi } from 'vitest';
 import { App } from '../src/App';
 import type {
@@ -194,7 +194,7 @@ export class FakeBoardGateway implements BoardGateway {
 }
 
 export function renderApp(
-  path: string,
+  path: InitialEntry,
   gateway: SessionGateway = fakeGateway(AUTHENTICATED),
   clock = new ManualClock(),
   boardGateway: BoardGateway = new FakeBoardGateway(),
