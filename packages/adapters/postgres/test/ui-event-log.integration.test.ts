@@ -63,12 +63,12 @@ function gate(): { opened: Promise<void>; open(): void } {
   return { opened, open };
 }
 
-// A transaction that appended its entries and stays open until released,
-// at the latest when the test ends.
+// A READ COMMITTED transaction, which no serialization retry repeats, that
+// appended its events and stays open until released or the test ends.
 async function heldOpen(t: TestContext, ...events: readonly UiEvent[]) {
   const inserted = gate();
   const release = gate();
-  const done = database.transaction(async (tx) => {
+  const done = database.readCommitted(async (tx) => {
     for (const event of events) value(await tx.uiEvents.append(event));
     inserted.open();
     await release.opened;

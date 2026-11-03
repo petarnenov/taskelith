@@ -395,7 +395,11 @@ describe('event streams', () => {
     let release!: () => void;
     const insertedFirst = new Promise<void>((resolve) => { inserted = resolve; });
     const released = new Promise<void>((resolve) => { release = resolve; });
-    const concurrent = writer.transaction(async (tx) => {
+    // READ COMMITTED, so no serialization retry inserts the event again
+    // after the revocation, which would change the case under test.
+    let attempts = 0;
+    const concurrent = writer.readCommitted(async (tx) => {
+      attempts++;
       const record = { type: 'board-changed', workersOnline: 7 } as const;
       value(await tx.uiEvents.append({ scope: projectScope(projectId), occurredAt: now, record }));
       inserted();
@@ -411,6 +415,7 @@ describe('event streams', () => {
     value(await concurrent);
     const frames = (await stream.text()).split('\n\n').filter((frame) => frame !== '' && !frame.startsWith(':'));
     const types = frames.map((frame) => frame.split('\n').find((line) => line.startsWith('event: ')));
+    assert.equal(attempts, 1, 'the event\'s transaction ran once');
     assert.deepEqual(types, ['event: board-changed', 'event: stream-ended']);
     assert.match(frames[0]!, /"workersOnline":7/);
   });
