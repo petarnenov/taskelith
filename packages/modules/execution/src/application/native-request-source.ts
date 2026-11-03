@@ -12,7 +12,7 @@ import type {
   SourcePage,
 } from '../ports/needs-you.js';
 import type { InputDigest } from '../ports/session-input.js';
-import { SESSION_ITEM_KINDS, type ScopedInboxItem, type SessionItemKind } from '../ports/session-inbox-items.js';
+import { SESSION_ITEM_KINDS, type ScopedInboxItem } from '../ports/session-inbox-items.js';
 import type { ViewPositions } from '../ports/session-scopes.js';
 import type { SessionTimelineStore, SessionTimelineTransaction } from '../ports/session-timeline-store.js';
 import {
@@ -22,15 +22,9 @@ import {
   itemKeyScope,
   type SessionTimelineService,
 } from './session-timeline-service.js';
+import { nativeRequestItem, publishItem } from './native-request-items.js';
 
 export const SOURCE_PAGE_SIZE = 100;
-
-// Fixed titles: no session text, which only members may read, reaches one.
-const TITLES: Readonly<Record<SessionItemKind, string>> = Object.freeze({
-  'permission-request': 'An agent session asks for a permission',
-  'input-request': 'An agent session asks for input',
-  'delivery-acknowledgement': 'A response may not have reached its agent session',
-});
 
 export interface NativeRequestSourceDependencies {
   readonly id: NeedsYouSourceId;
@@ -134,7 +128,10 @@ export class NativeRequestSource implements NeedsYouSource {
     const settled = await tx.items.settle(item);
     if (!settled.ok) return settled;
     const audited = await tx.audit.append({ kind: 'session.delivery-acknowledged', subject: item.id, actor: request.responder, occurredAt: at });
-    return audited.ok ? ok({ ...scoped, item }) : audited;
+    if (!audited.ok) return audited;
+    const resolved = { ...scoped, item };
+    const published = await publishItem(tx.events, nativeRequestItem(this.id, resolved), at);
+    return published.ok ? ok(resolved) : published;
   }
 
   #found(scoped: ScopedInboxItem): Result<NeedsYouItem> {
@@ -142,23 +139,8 @@ export class NativeRequestSource implements NeedsYouSource {
     return item === undefined ? unknownItem(scoped.item.id) : ok(item);
   }
 
-  #itemOf({ item, scope }: ScopedInboxItem): NeedsYouItem | undefined {
-    if (scope === undefined) return undefined;
-    const { id, kind, sessionId, taskId, request, attemptId, attemptGeneration, createdAt } = item;
-    const subject = {
-      scope: 'card' as const, projectId: scope.projectId, runId: scope.runId, taskId,
-      ...(attemptId === undefined ? {} : { attemptId }), ...(attemptGeneration === undefined ? {} : { attemptGeneration }),
-      sessionId, sessionGeneration: request.generation, nativeRequestId: request.nativeRequestId,
-    };
-    const fields = { id, sourceId: this.id, kind, subject, title: TITLES[kind], createdAt, answerableBy: 'project-operator' as const };
-    switch (item.state) {
-      case 'open':
-        return Object.freeze({ ...fields, state: item.state });
-      case 'resolved':
-        return Object.freeze({ ...fields, state: item.state, resolution: item.resolution });
-      case 'closed':
-        return Object.freeze({ ...fields, state: item.state, closedAt: item.closedAt });
-    }
+  #itemOf(scoped: ScopedInboxItem): NeedsYouItem | undefined {
+    return nativeRequestItem(this.id, scoped);
   }
 }
 

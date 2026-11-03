@@ -4,6 +4,7 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type TransportLimits } from '@taskelith/nats';
 import { parseWorkflowDefinition, type WorkflowDefinitionInput } from '@taskelith/sdlc';
 import type { ServerTls } from '../api/server-tls.js';
+import { DEFAULT_EVENT_RETENTION_HOURS } from '../application/event-log-keeper.js';
 import type { KnownWorkflow } from '../application/workflow-registry.js';
 import { readBrokerTls } from '../broker-tls.js';
 import { readServiceEndpoints, type Environment } from '../service-endpoints.js';
@@ -34,6 +35,8 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
   if (!natsTls.ok) return natsTls;
   const transportLimits = readTransportLimits(environment.TASKELITH_STREAM_MAX_BYTES);
   if (!transportLimits.ok) return transportLimits;
+  const eventRetentionHours = readRetentionHours(environment[EVENT_RETENTION_VARIABLE]);
+  if (!eventRetentionHours.ok) return eventRetentionHours;
   return ok({
     dataRoot: dataRoot.value, ownerUid, postgres: endpoints.value.postgres, nats: endpoints.value.nats,
     api: { host: environment.TASKELITH_API_HOST || DEFAULT_API_HOST, port: port.value },
@@ -43,6 +46,7 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
     },
     workflows: workflows.value,
     transportLimits: transportLimits.value,
+    eventRetentionHours: eventRetentionHours.value,
     ...(environment[WEB_APP_DIR_VARIABLE] ? { webAppDirectory: environment[WEB_APP_DIR_VARIABLE] } : {}),
     ...(natsTls.value === undefined ? {} : { natsTls: natsTls.value }),
   });
@@ -83,6 +87,16 @@ function readTransportLimits(text: string | undefined): Result<TransportLimits> 
   const streamMaxBytes = Number(text);
   if (Number.isSafeInteger(streamMaxBytes) && streamMaxBytes > 0) return ok({ ...TRANSPORT_LIMITS, streamMaxBytes });
   return err(failure('invalid', 'TASKELITH_STREAM_MAX_BYTES must be a positive whole number of bytes', { variable: 'TASKELITH_STREAM_MAX_BYTES' }));
+}
+
+// The event log's retention window, in whole hours (Q5).
+export const EVENT_RETENTION_VARIABLE = 'TASKELITH_EVENT_RETENTION_HOURS';
+
+function readRetentionHours(text: string | undefined): Result<number> {
+  if (text === undefined || text === '') return ok(DEFAULT_EVENT_RETENTION_HOURS);
+  const hours = Number(text);
+  if (Number.isSafeInteger(hours) && hours > 0) return ok(hours);
+  return err(failure('invalid', `${EVENT_RETENTION_VARIABLE} must be a positive whole number of hours`, { variable: EVENT_RETENTION_VARIABLE }));
 }
 
 function readPort(environment: Environment, variable: string, fallback: number): Result<number> {

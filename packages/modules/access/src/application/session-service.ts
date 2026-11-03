@@ -1,6 +1,7 @@
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import { normalizePassword } from '../domain/password-policy.js';
+import { sessionsEnded } from '../domain/principal-change.js';
 import { parseLoginName, type LoginName, type PasswordHash, type Principal } from '../domain/principal.js';
 import { INSTALLATION_OWNER, type InstallationRole } from '../domain/roles.js';
 import {
@@ -13,6 +14,7 @@ import {
   type SessionLifetime,
   type StoredSession,
 } from '../domain/session.js';
+import type { SecretHash } from '../domain/secret-hash.js';
 import type { AccessStore, AccessTransaction } from '../ports/access-store.js';
 import type { PasswordHasher } from '../ports/password-hasher.js';
 import type { RandomValues } from '../ports/random-values.js';
@@ -138,9 +140,25 @@ export class SessionService {
 
   // Ends only this session; a repeat is `unauthenticated`.
   async logOut(live: LiveSession): Promise<Result<void>> {
-    const ended = await this.#deps.store.transaction((tx) => tx.sessions.end(live.session.idHash, this.#deps.clock.now()));
+    const ended = await this.#deps.store.transaction(async (tx) => {
+      const done = await tx.sessions.end(live.session.idHash, this.#deps.clock.now());
+      return done.ok ? recordSessionEnd(tx, live.session) : done;
+    });
     if (ended.ok || ended.error.code !== 'not-found') return ended;
     return err(unauthenticated());
+  }
+
+  // When the authenticated session that the hash names ends unless renewed,
+  // read without renewing it; undefined once it ended (for a stream).
+  liveUntil(idHash: SecretHash): Promise<Result<Instant | undefined>> {
+    return this.#deps.store.transaction(async (tx) => {
+      const stored = await tx.sessions.get(idHash);
+      if (!stored.ok) return stored;
+      if (stored.value === undefined || !isLive(stored.value, this.#deps.clock.now())) return ok(undefined);
+      const live = await liveSession(tx, stored.value);
+      if (live.ok) return ok(live.value.principal === undefined ? undefined : expiresAt(stored.value));
+      return live.error.code === 'forbidden' ? ok(undefined) : live;
+    });
   }
 
   // Deletes ended and expired sessions, then the oldest anonymous ones
@@ -196,6 +214,8 @@ export class SessionService {
       if (!confirmed.ok) return confirmed;
       const replaced = await tx.sessions.replace(previous.idHash, next);
       if (!replaced.ok) return replaced;
+      const recorded = await recordSessionEnd(tx, previous);
+      if (!recorded.ok) return recorded;
       if (rehash !== undefined) {
         const stored = await tx.principals.setPasswordHash(principal.principalId, rehash);
         if (!stored.ok) return stored;
@@ -218,6 +238,13 @@ async function confirmLogin(tx: AccessTransaction, previous: StoredSession, prin
   const unchanged = current.value !== undefined && current.value.disabledAt === undefined
     && current.value.passwordHash === principal.passwordHash;
   return unchanged ? ok(undefined) : err(loginFailed());
+}
+
+// The streams of an ended session's principal end with it; an anonymous
+// session has no principal and no stream.
+function recordSessionEnd(tx: AccessTransaction, session: StoredSession): Promise<Result<void>> {
+  if (session.principalId === undefined) return Promise.resolve(ok(undefined));
+  return tx.changes.record(sessionsEnded(session.principalId));
 }
 
 // A session whose principal is gone or disabled authenticates nothing.

@@ -26,6 +26,7 @@ import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type Upload } from './api-server.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
+import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
@@ -79,6 +80,8 @@ export interface ApiServices {
   readonly agentSessions: AgentSessionOperations;
   // Projects, their members, and their defaults (wire section 4).
   readonly projects: ProjectOperations;
+  // The event streams of wire section 10.
+  readonly events: EventStreamOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -87,11 +90,13 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #services: ApiServices;
   readonly #agentSessions: AgentSessionApi;
   readonly #projects: ProjectApi;
+  readonly #events: EventStreamApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
     this.#agentSessions = new AgentSessionApi(services.agentSessions);
     this.#projects = new ProjectApi(services.projects);
+    this.#events = new EventStreamApi(services.events);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -181,6 +186,10 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#agentSessions.submitTurn(request);
       case 'respondToNativeRequest':
         return this.#agentSessions.respondToNativeRequest(request);
+      case 'streamProjectEvents':
+        return this.#events.streamProjectEvents(request);
+      case 'streamInstallationEvents':
+        return this.#events.streamInstallationEvents(request);
       default:
         return this.#dispatchProject(operationId, request);
     }

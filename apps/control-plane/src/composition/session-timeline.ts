@@ -1,22 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { SessionInputDigestKeyFile, SessionOutputTailKeyFile, type ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import {
-  BEFORE_ANY_EVENT,
+  NATIVE_REQUEST_SOURCE_ID,
   NativeRequestSource,
   SessionTimelineService,
   parseTurnId,
   type NeedsYouItemId,
-  type NeedsYouSourceId,
   type SessionScopes,
   type TurnId,
   type ViewPositions,
 } from '@taskelith/execution';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
-import { PostgresSessionScopes, PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
+import { PostgresSessionScopes, PostgresSessionTimelineStore, PostgresUiEventLog, type PostgresDatabase } from '@taskelith/postgres';
 import type { Clock } from '@taskelith/sdlc';
 import { HmacInputDigest, SecretOutputRedactor, SecretTextRedactor, outputTailCipher } from '@taskelith/secrets';
+import { LogViewPositions } from '../application/event-log-keeper.js';
 
-export const NATIVE_REQUEST_SOURCE_ID = 'native-requests' as NeedsYouSourceId;
+// The timeline's own source of items, which its events name.
+export { NATIVE_REQUEST_SOURCE_ID };
 
 // What the agent session operations and the inbox reach.
 export interface AgentSessionServices {
@@ -44,8 +45,9 @@ export function startAgentSessionServices(namespace: ControlPlaneNamespace, data
     store, digest: digest.value, redactor: new SecretTextRedactor(), outputRedactor: new SecretOutputRedactor(), tailCipher: tailCipher.value,
     turnIds: { next: mintTurnId }, clock, itemIds: { next: mintItemId },
   });
-  const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions: BEFORE_ANY_EVENT });
-  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions: BEFORE_ANY_EVENT, clock, source });
+  const positions = new LogViewPositions(new PostgresUiEventLog(database));
+  const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions });
+  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, source });
 }
 
 // `t` and 32 lowercase hexadecimal digits from 128 random bits (wire

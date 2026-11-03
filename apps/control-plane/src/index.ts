@@ -96,3 +96,27 @@ export {
   readControlPlaneSettings,
 } from './composition/settings.js';
 export { controlPlaneMain, serveUntilStopped, type ServiceProcess } from './main.js';
+export {
+  EventStreamHub,
+  KEEP_ALIVE_MILLISECONDS,
+  STREAM_READ_PAGE,
+  type EventStreamDependencies,
+  type LoginSession,
+  type OpenedStream,
+  type ResyncReason,
+  type Scheduler,
+  type StreamFrame,
+  type StreamSink,
+  type StreamSubject,
+} from './application/event-stream-hub.js';
+export {
+  DEFAULT_EVENT_RETENTION_HOURS,
+  EventLogKeeper,
+  LogViewPositions,
+  NUMBERING_BATCH,
+  PRUNING_BATCH,
+  WakeableLoop,
+  type EventLogKeeperDependencies,
+} from './application/event-log-keeper.js';
+export { MAX_STREAM_BUFFER_BYTES, EventStreamApi, type EventStreamOperations } from './api/event-stream-api.js';
+export { eventData, frameText, inboxItemBody, type EventData } from './api/event-stream-wire.js';

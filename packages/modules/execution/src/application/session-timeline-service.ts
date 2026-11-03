@@ -48,7 +48,7 @@ import {
   submitTurn,
 } from '../domain/session-turns.js';
 import { MAX_INPUT_ANSWER_BYTES, type NeedsYouItemId } from '../ports/needs-you.js';
-import type { ScopedInboxItem } from '../ports/session-inbox-items.js';
+import type { ScopedInboxItem, SessionInboxItem } from '../ports/session-inbox-items.js';
 import type { InputDigest, OutputTailCipher, SessionOutputRedactor, SessionTextRedactor, TurnIdSource } from '../ports/session-input.js';
 import type { SessionScope } from '../ports/session-scopes.js';
 import type {
@@ -60,6 +60,11 @@ import type {
 } from '../ports/session-timeline-store.js';
 import { NOTHING_HELD, SealedOutputTails, type TailOwner } from './sealed-output-tails.js';
 import { itemChanges, type ItemChange } from './session-item-changes.js';
+import { NATIVE_REQUEST_SOURCE_ID, nativeRequestItem, publishItem } from './native-request-items.js';
+import { sessionEvents } from './session-events.js';
+import { viewOf, type SessionView } from './session-views.js';
+
+export type { OutputBounds, SessionView } from './session-views.js';
 
 // `clock` and `itemIds` stamp the native request items that each change
 // opens or settles in its own transaction.
@@ -72,16 +77,6 @@ export interface SessionTimelineDependencies {
   readonly turnIds: TurnIdSource;
   readonly clock: Clock;
   readonly itemIds: { next(): NeedsYouItemId };
-}
-
-// A session as the service shows it: only its output window's bounds show,
-// and `readOutput` pages the entries.
-export type SessionView = Omit<Session, 'output'> & { readonly outputWindow: OutputBounds };
-
-export interface OutputBounds {
-  readonly lastPosition: number;
-  // Absent while the window holds no entry.
-  readonly earliestRetained?: number;
 }
 
 // A page of retained output after a cursor (wire contracts, section 9).
@@ -149,7 +144,9 @@ export class SessionTimelineService {
     return this.#store.transaction(async (tx) => {
       const session = openSession(start);
       const added = await tx.sessions.add(session);
-      return added.ok ? ok(viewOf(session)) : added;
+      if (!added.ok) return added;
+      const published = await this.#published(tx, undefined, session);
+      return published.ok ? ok(viewOf(session)) : published;
     });
   }
 
@@ -415,33 +412,59 @@ export class SessionTimelineService {
     });
   }
 
-  // Writes the changed session and, in the same transaction, the items its
-  // requests open or settle; an unchanged session writes nothing.
+  // Writes the changed session, the items its requests open or settle, and
+  // the events of both in one transaction; an unchanged one writes nothing.
   async #written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
     if (!changed.ok) return changed;
     if (changed.value === stored.session) return ok(viewOf(changed.value));
     const replaced = await tx.sessions.replace(stored, changed.value);
     if (!replaced.ok) return replaced;
+    const published = await this.#published(tx, stored.session, changed.value);
+    if (!published.ok) return published;
     for (const item of itemChanges(stored.session, changed.value, this.#clock.now())) {
-      const applied = await this.#applyItemChange(tx, changed.value, item);
+      const applied = await this.#applyItemChange(tx, changed.value, item, published.value);
       if (!applied.ok) return applied;
     }
     return ok(viewOf(changed.value));
   }
 
-  async #applyItemChange(tx: SessionTimelineTransaction, session: Session, item: ItemChange): Promise<Result<void>> {
+  // The session's events, none for a session outside any project's scope;
+  // answers the scope for the events of its items.
+  async #published(tx: SessionTimelineTransaction, before: Session | undefined, after: Session): Promise<Result<SessionScope | undefined>> {
+    const scope = await tx.scopes.scopeOf(after.id);
+    if (!scope.ok || scope.value === undefined) return scope;
+    for (const event of sessionEvents(before, after, scope.value, this.#clock.now())) {
+      const appended = await tx.events.append(event);
+      if (!appended.ok) return appended;
+    }
+    return scope;
+  }
+
+  async #applyItemChange(
+    tx: SessionTimelineTransaction, session: Session, item: ItemChange, scope: SessionScope | undefined,
+  ): Promise<Result<void>> {
+    const written = await this.#writtenItem(tx, session, item);
+    if (!written.ok) return written;
+    return publishItem(tx.events, nativeRequestItem(NATIVE_REQUEST_SOURCE_ID, { item: written.value, scope }), this.#clock.now());
+  }
+
+  async #writtenItem(tx: SessionTimelineTransaction, session: Session, item: ItemChange): Promise<Result<SessionInboxItem>> {
     if (item.change === 'open') {
       const { kind, request, attemptId, attemptGeneration } = item;
-      return tx.items.add({
+      const opened: SessionInboxItem = Object.freeze({
         id: this.#itemIds.next(), kind, sessionId: session.id, taskId: session.taskId, request, createdAt: this.#clock.now(), state: 'open',
         ...(attemptId === undefined ? {} : { attemptId }), ...(attemptGeneration === undefined ? {} : { attemptGeneration }),
       });
+      const added = await tx.items.add(opened);
+      return added.ok ? ok(opened) : added;
     }
     const open = await tx.items.find(session.id, item.kind, item.request);
     if (!open.ok) return open;
     if (open.value === undefined) return err(failure('internal', `session ${session.id} lost the item of a request`, { session: session.id }));
     const { state: _state, ...fields } = open.value;
-    return tx.items.settle({ ...fields, ...item.state });
+    const settled = { ...fields, ...item.state } as SessionInboxItem;
+    const written = await tx.items.settle(settled);
+    return written.ok ? ok(settled) : written;
   }
 
   // Redaction may lengthen a text past its bound, so only its tail is cut,
@@ -547,12 +570,6 @@ function keyReused(sessionId: SessionId, key: HeldKey): Result<never> {
   return err(failure('conflict', `session ${sessionId} holds the key ${key} with other input`, { session: sessionId, reason: KEY_REUSED }));
 }
 
-function viewOf(session: Session): SessionView {
-  const { output, ...view } = session;
-  const earliest = output.entries[0]?.position;
-  const outputWindow = Object.freeze({ lastPosition: output.lastPosition, ...(earliest === undefined ? {} : { earliestRetained: earliest }) });
-  return Object.freeze({ ...view, outputWindow });
-}
 
 // An input answer is also bounded in UTF-8 bytes (MAX_INPUT_ANSWER_BYTES).
 function isAnswerWithinServiceBounds(answer: Answer): boolean {

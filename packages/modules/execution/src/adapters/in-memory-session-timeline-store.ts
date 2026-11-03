@@ -24,6 +24,7 @@ import type {
   StoredOutputTail,
   StoredSession,
 } from '../ports/session-timeline-store.js';
+import { InMemoryUiEventLog, PendingUiEvents } from './in-memory-ui-event-log.js';
 
 // Scheduling's runs and task lineage in memory, read by the rules of the
 // PostgreSQL scopes (product ports, section 3.3).
@@ -75,26 +76,31 @@ function copy(state: State): State {
   };
 }
 
-// One transaction at a time over a copy of the state, which replaces the
-// state only when the work answers ok. Its scopes come from `lineage`.
+// One transaction at a time over a copy of the state, kept only when the
+// work answers ok; scopes from `lineage`, committed events into `log`.
 export class InMemorySessionTimelineStore implements SessionTimelineStore, SessionScopes {
   #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [], tails: new Map() };
   #queue: Promise<unknown> = Promise.resolve();
   readonly #lineage: InMemoryTaskLineage;
+  readonly #log: InMemoryUiEventLog;
 
-  constructor(lineage: InMemoryTaskLineage = new InMemoryTaskLineage()) {
+  constructor(lineage: InMemoryTaskLineage = new InMemoryTaskLineage(), log: InMemoryUiEventLog = new InMemoryUiEventLog()) {
     this.#lineage = lineage;
+    this.#log = log;
   }
 
   transaction<Value>(work: (tx: SessionTimelineTransaction) => Promise<Result<Value>>): Promise<Result<Value>> {
     const run = async (): Promise<Result<Value>> => {
       const draft = copy(this.#state);
       const scopes = new MemorySessionScopes(draft, this.#lineage);
+      const events = new PendingUiEvents();
       const result = await work({
         sessions: new MemorySessionRecords(draft), idempotency: new MemoryIdempotencyRecords(draft),
-        items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes, tails: new MemoryOutputTails(draft),
+        items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes, tails: new MemoryOutputTails(draft), events,
       });
-      if (result.ok) this.#state = draft;
+      if (!result.ok) return result;
+      this.#state = draft;
+      this.#log.commit(events.entries);
       return result;
     };
     const next = this.#queue.then(run, run);
