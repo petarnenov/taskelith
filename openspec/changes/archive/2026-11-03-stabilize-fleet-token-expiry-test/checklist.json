@@ -1,0 +1,101 @@
+{
+  "change": "stabilize-fleet-token-expiry-test",
+  "generatedAt": "2026-11-03T00:01:53.444Z",
+  "devCommit": "c355525b1f11e1af151efe0afb9045205056df48",
+  "query": {
+    "capabilities": [
+      "postgres-state",
+      "installation-enrollment",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "packages/adapters/postgres/**"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 6
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 6
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      },
+      {
+        "category": "concurrency-race",
+        "count": 5
+      },
+      {
+        "category": "naming",
+        "count": 5
+      },
+      {
+        "category": "redaction",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 781,
+        "inChecklist": 571
+      },
+      "mediumOrWorse": {
+        "findings": 376,
+        "inChecklist": 328
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 124
+      },
+      {
+        "category": "spec-wording",
+        "count": 92
+      },
+      {
+        "category": "docs",
+        "count": 66
+      },
+      {
+        "category": "stale-citation",
+        "count": 47
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 23
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 389,
+        "inChecklist": 382
+      },
+      "mediumOrWorse": {
+        "findings": 64,
+        "inChecklist": 64
+      }
+    }
+  }
+}
