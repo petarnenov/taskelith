@@ -83,6 +83,32 @@ export async function pinnedClockCredentials(url: URL, at: string): Promise<URL>
   return credentials;
 }
 
+export interface SteppedClock {
+  readonly credentials: URL;
+  // Moves the clock to `at` plus the given milliseconds.
+  stepTo(milliseconds: number): Promise<void>;
+}
+
+// Sentinel credentials whose `clock_timestamp()` stands at `at` plus a
+// sequence's value, which a step changes at once, outside any snapshot.
+export async function steppedClockCredentials(url: URL, at: string): Promise<SteppedClock> {
+  const credentials = await sentinelCredentials(url);
+  const role = credentials.username;
+  await query(url, 'CREATE SCHEMA stepped_clock');
+  await query(url, 'CREATE SEQUENCE stepped_clock.offset_milliseconds MINVALUE 0 START 0');
+  await query(url, `CREATE FUNCTION stepped_clock.clock_timestamp() RETURNS timestamptz LANGUAGE sql VOLATILE AS $$
+    SELECT '${at}'::timestamptz + last_value * interval '1 millisecond' FROM stepped_clock.offset_milliseconds $$`);
+  await query(url, `GRANT USAGE ON SCHEMA stepped_clock TO ${role}`);
+  await query(url, `GRANT SELECT ON stepped_clock.offset_milliseconds TO ${role}`);
+  await query(url, `ALTER ROLE ${role} SET search_path = stepped_clock, pg_catalog, "$user", public`);
+  return {
+    credentials,
+    stepTo: async (milliseconds) => {
+      await query(url, "SELECT setval('stepped_clock.offset_milliseconds', $1, true)", [milliseconds]);
+    },
+  };
+}
+
 export function assertNoPassword(text: string, password: string): void {
   for (const form of [password, encodeURIComponent(password)]) assert.ok(!text.includes(form), 'the password was logged');
 }

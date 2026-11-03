@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,7 +27,8 @@ const DEVELOPMENT_ONLY_MARKERS: readonly [string, string][] = [
   ['dev-server.ts', 'TASKELITH_WEB_DEV_'],
   ['test/client.test.ts', 'csrf-fixture'],
   ['test/client.test.ts', 'fixture-password'],
-  ['test/app.test.tsx', 'names the scaffold honestly'],
+  ['test/app.test.tsx', 'shows nothing of the product until'],
+  ['test/fakes.tsx', '2026-11-02T10:00:00.000Z'],
 ];
 const SPA_FILE = /^(?:index\.html|assets\/index-[A-Za-z0-9_-]+\.(?:js|css))$/;
 
@@ -54,6 +56,20 @@ test('the built web SPA holds neither dev-server.ts nor a web test', () => {
   for (const [source, marker] of DEVELOPMENT_ONLY_MARKERS) {
     assert(readFileSync(join('apps/web', source), 'utf8').includes(marker), `${source} no longer holds ${marker}`);
     assert(!bundle.includes(marker), `the dist holds ${marker} of ${source}`);
+  }
+});
+
+// A shell that exports NODE_ENV=development once built React's development
+// bundle, whose diagnostics name external origins.
+test('the web build yields the production bundle whatever NODE_ENV says', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'taskelith-web-node-env-'));
+  try {
+    const vite = join(process.cwd(), 'node_modules/.bin/vite');
+    const env = { ...process.env, NODE_ENV: 'development' };
+    execFileSync(vite, ['build', '--outDir', outDir, '--logLevel', 'error'], { cwd: 'apps/web', env, stdio: 'pipe' });
+    assert.deepEqual(webBundleProblems(outDir), []);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
   }
 });
 
@@ -117,11 +133,26 @@ test('only the listed namespace names and error links pass, and only in scripts'
 
 test('every allowed URL is an exact string with a one-line reason', () => {
   for (const [url, reason] of ALLOWED_URLS) {
-    assert.match(url, /^https?:\/\/\S+$/);
+    assert.match(url, /^(?:[a-z]+:)?\/\/\S+$/);
     assert.match(reason, /^[^\n]{20,}\.$/);
     assert.deepEqual(textProblems('assets/a.js', `u="${url}"`), []);
     for (const variant of [`${url}x`, url.slice(0, -1)]) {
       assert.deepEqual(textProblems('assets/a.js', `u="${variant}"`), [`assets/a.js: references the external origin of ${variant}`]);
+    }
+  }
+});
+
+const REACT_ROUTER_URLS = ['http://localhost', 'server://singlefetch/', 'https://reactrouter.com/en/main/routers/picking-a-router.', '//g,'];
+
+test('the React Router texts pass only exactly and only in scripts', () => {
+  const nearMisses = ['http://localhost:1234', 'http://localhost.example.com', 'https://localhost', 'server://singlefetch/x', '//g.example'];
+  for (const url of nearMisses) {
+    assert.deepEqual(textProblems('assets/a.js', `u="${url}"`), [`assets/a.js: references the external origin of ${url}`]);
+  }
+  for (const url of REACT_ROUTER_URLS) {
+    assert.ok(ALLOWED_URLS.has(url), url);
+    for (const name of ['index.html', 'assets/index.css']) {
+      assert.deepEqual(textProblems(name, `u="${url}"`), [`${name}: references the external origin of ${url}`]);
     }
   }
 });
