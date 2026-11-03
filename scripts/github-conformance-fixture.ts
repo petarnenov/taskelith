@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type {
+  ConformanceClock,
   RunCredential,
   SignedChangeRequestEvent,
   SourceControlConformanceFixture,
@@ -25,6 +26,7 @@ export interface LiveFixtureOptions {
   readonly provider: SourceControlProvider;
   readonly client: GithubNativeClient;
   readonly webhookSecret: string;
+  readonly clock: ConformanceClock;
 }
 
 interface CommitRef {
@@ -32,7 +34,7 @@ interface CommitRef {
   readonly tree: string;
 }
 
-export function liveConformanceFixture({ provider, client, webhookSecret }: LiveFixtureOptions): SourceControlConformanceFixture {
+export function liveConformanceFixture({ provider, client, webhookSecret, clock }: LiveFixtureOptions): SourceControlConformanceFixture {
   const repository = new DisposableRepository(client);
   const project = CONFORMANCE_REPOSITORIES.project;
   return {
@@ -44,6 +46,7 @@ export function liveConformanceFixture({ provider, client, webhookSecret }: Live
     baseBranch: CONFORMANCE_BASE_BRANCH,
     mergeMethod: 'squash',
     signatureHeader: SIGNATURE_HEADER,
+    clock,
     prepareHeadBranch: () => repository.prepareHeadBranch(project),
     advanceHead: (branch) => repository.advanceHead(project, branch),
     readBranchHead: (branch) => repository.readBranchHead(project, branch),

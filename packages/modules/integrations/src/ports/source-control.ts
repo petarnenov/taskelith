@@ -15,6 +15,10 @@ export const SCM_PERMISSIONS = Object.freeze([
 
 export type ScmPermission = (typeof SCM_PERMISSIONS)[number];
 
+// An ended version is refused by every surface of the service, Git's
+// included, within this window of its revocation or adoption (section 3).
+export const REVOCATION_PROPAGATION_SECONDS = 30;
+
 export const MERGE_METHODS = Object.freeze(['merge-commit', 'squash', 'rebase'] as const);
 
 export type MergeMethod = (typeof MERGE_METHODS)[number];

@@ -231,10 +231,11 @@ test('the evidence scan fails on a secret trace that the redaction leaves', () =
 test('the long run outlives the original expiry with refreshed and adopted versions', async () => {
   const testbed = githubTestbed();
   const fixture = conformanceFixture(testbed);
-  const clock = testbed.options.clock!;
-  const startedAt = clock.now();
-  const findings = await runLongRefresh(fixture, LONG_RUN_TIMING, clock);
+  const startedAt = fixture.clock.now();
+  const { findings, endings } = await runLongRefresh(fixture, LONG_RUN_TIMING);
   assert.deepEqual(findings, []);
+  assert.ok(endings.length > 0 && endings.every((ending) => ending.latencyMs === 0));
+  const clock = fixture.clock;
   assert.ok(clock.now() - startedAt > 60 * 60_000, 'the run did not outlive the hour-long token');
   assert.equal(testbed.emulator.liveRunTokens(), 0);
 });
@@ -246,11 +247,11 @@ test('the long run reports a refresh that fails and a version that outlives its 
     ...fixture.provider,
     refreshRunCredential: async () => ({ ok: false, error: { code: 'unavailable', message: 'down', details: {} } }) as never,
   };
-  const failed = await runLongRefresh({ ...fixture, provider: failing }, LONG_RUN_TIMING, testbed.options.clock!);
-  assert.deepEqual(failed.map((finding) => finding.message), ['refreshRunCredential of version 1 failed with unavailable']);
+  const failed = await runLongRefresh({ ...fixture, provider: failing }, LONG_RUN_TIMING);
+  assert.deepEqual(failed.findings.map((finding) => finding.message), ['refreshRunCredential of version 1 failed with unavailable']);
   const lax: SourceControlProvider = { ...fixture.provider, confirmRunCredentialAdoption: async () => ok(undefined) };
-  const kept = await runLongRefresh({ ...fixture, provider: lax }, LONG_RUN_TIMING, testbed.options.clock!);
-  assert.ok(kept.some((finding) => finding.message === 'version 1 after the adoption of 2 still reads'));
+  const kept = await runLongRefresh({ ...fixture, provider: lax }, LONG_RUN_TIMING);
+  assert.ok(kept.findings.some((finding) => finding.message === 'version 1 after the adoption of 2 still reads'));
 });
 
 interface GithubSetup {

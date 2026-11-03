@@ -1,7 +1,10 @@
-import type {
-  RunCredential,
-  SourceControlConformanceFinding,
-  SourceControlConformanceFixture,
+import type { Result } from '@taskelith/kernel';
+import {
+  awaitRefusal,
+  type RunCredential,
+  type SourceControlConformanceEnding,
+  type SourceControlConformanceFinding,
+  type SourceControlConformanceFixture,
 } from '@taskelith/integrations';
 
 // Opt-in (source control contract section 9): refresh and adopt until the
@@ -18,30 +21,28 @@ export interface LongRunTiming {
 // About 62 minutes for GitHub's hour-long tokens, with four refreshes.
 export const LONG_RUN_TIMING: LongRunTiming = Object.freeze({ refreshEveryMs: 20 * 60_000, outliveByMs: 2 * 60_000 });
 
-export interface LongRunClock {
-  now(): number;
-  sleep(milliseconds: number): Promise<void>;
+export interface LongRunOutcome {
+  readonly findings: readonly SourceControlConformanceFinding[];
+  readonly endings: readonly SourceControlConformanceEnding[];
 }
 
 const RUN_ID = 'conformance-long-run';
 const READ_ONLY = Object.freeze(['read-code']);
 
-export async function runLongRefresh(
-  fixture: SourceControlConformanceFixture,
-  timing: LongRunTiming,
-  clock: LongRunClock,
-): Promise<readonly SourceControlConformanceFinding[]> {
+export async function runLongRefresh(fixture: SourceControlConformanceFixture, timing: LongRunTiming): Promise<LongRunOutcome> {
   const run = new LongRun(fixture);
   try {
-    await run.outlive(timing, clock);
+    await run.outlive(timing);
   } catch (error) {
     run.report('threw', `the case stopped: ${error instanceof Error ? error.message : 'a non-error value'}`);
   }
-  return run.findings;
+  return { findings: run.findings, endings: run.endings };
 }
 
 class LongRun {
   readonly findings: SourceControlConformanceFinding[] = [];
+
+  readonly endings: SourceControlConformanceEnding[] = [];
 
   private readonly fixture: SourceControlConformanceFixture;
 
@@ -53,8 +54,8 @@ class LongRun {
     this.findings.push(Object.freeze({ caseName: LONG_RUN_CASE, check, message }));
   }
 
-  async outlive(timing: LongRunTiming, clock: LongRunClock): Promise<void> {
-    const { provider, projectRepository } = this.fixture;
+  async outlive(timing: LongRunTiming): Promise<void> {
+    const { provider, projectRepository, clock } = this.fixture;
     const issued = await provider.issueRunCredential({ runId: RUN_ID, repositories: [projectRepository], permissions: [...READ_ONLY] });
     if (!issued.ok) return this.report('result', `issueRunCredential failed with ${issued.error.code}`);
     const originalExpiry = Date.parse(issued.value.expiresAt);
@@ -65,11 +66,11 @@ class LongRun {
       if (next === undefined) return;
       current = next;
     }
-    await this.expectReads(issued.value, false, 'the original version past its expiry');
-    await this.expectReads(current, true, 'the latest version past the original expiry');
+    await this.expectRefused(issued.value, 'the original version past its expiry');
+    await this.expectReads(current, 'the latest version past the original expiry');
     const revoked = await provider.revokeRunCredential({ credentialId: current.credentialId });
     if (!revoked.ok) this.report('result', `revokeRunCredential failed with ${revoked.error.code}`);
-    await this.expectReads(current, false, 'the latest version after the revocation');
+    await this.expectEnded(current, 'the latest version after the revocation', clock.now());
   }
 
   // The previous secret works until the run confirms the new one.
@@ -82,16 +83,31 @@ class LongRun {
     }
     const next = refreshed.value;
     if (Date.parse(next.expiresAt) <= Date.parse(current.expiresAt)) this.report('outcome', 'a refresh gave no later expiry');
-    await this.expectReads(current, true, `version ${current.version} before the adoption of ${next.version}`);
-    await this.expectReads(next, true, `version ${next.version} before its adoption`);
+    await this.expectReads(current, `version ${current.version} before the adoption of ${next.version}`);
+    await this.expectReads(next, `version ${next.version} before its adoption`);
     const adopted = await provider.confirmRunCredentialAdoption({ credentialId: next.credentialId, version: next.version });
     if (!adopted.ok) this.report('result', `confirmRunCredentialAdoption failed with ${adopted.error.code}`);
-    await this.expectReads(current, false, `version ${current.version} after the adoption of ${next.version}`);
+    const adoptedAt = this.fixture.clock.now();
+    await this.expectEnded(current, `version ${current.version} after the adoption of ${next.version}`, adoptedAt);
     return next;
   }
 
-  private async expectReads(credential: RunCredential, allowed: boolean, subject: string): Promise<void> {
-    const read = await this.fixture.attemptAction(credential, this.fixture.projectRepository, 'read-code');
-    if (read.ok !== allowed) this.report('outcome', `${subject} ${allowed ? 'was refused a read' : 'still reads'}`);
+  private async expectReads(credential: RunCredential, subject: string): Promise<void> {
+    if (!(await this.read(credential)).ok) this.report('outcome', `${subject} was refused a read`);
+  }
+
+  private async expectRefused(credential: RunCredential, subject: string): Promise<void> {
+    if ((await this.read(credential)).ok) this.report('outcome', `${subject} still reads`);
+  }
+
+  // Within the propagation window of the port (contract section 3).
+  private async expectEnded(credential: RunCredential, subject: string, endedAt: number): Promise<void> {
+    const ending = await awaitRefusal(() => this.read(credential), this.fixture.clock, endedAt);
+    if (ending.result.ok) this.report('outcome', `${subject} still reads`);
+    this.endings.push(Object.freeze({ caseName: LONG_RUN_CASE, when: subject, latencyMs: ending.latencyMs }));
+  }
+
+  private read(credential: RunCredential): Promise<Result<void>> {
+    return this.fixture.attemptAction(credential, this.fixture.projectRepository, 'read-code');
   }
 }

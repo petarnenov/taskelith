@@ -34,6 +34,8 @@ export interface ScmDefects {
   readonly fabricatedMergeCommit?: boolean;
   readonly readsOutsideProject?: boolean;
   readonly endedCanRead?: boolean;
+  // How long an ended version keeps working, as a service's propagation.
+  readonly endingLagMs?: number;
   readonly refusesPermission?: string;
   readonly grantsOnPaper?: string;
   readonly onlyPendingBlocksFor?: string;
@@ -86,7 +88,8 @@ interface Protection {
 
 interface StoredCredential {
   readonly credential: RunCredential;
-  ended: boolean;
+  // When the version ended, on the service's clock.
+  endedAt: number | undefined;
   unscoped: boolean;
 }
 
@@ -115,14 +118,20 @@ export class InMemoryScm {
   private readonly mergeMethods: readonly string[];
   private readonly existingRequiredStatuses: readonly string[];
   private readonly alsoGrants: readonly string[];
-  private readonly now: () => number;
+  private readonly serviceNow: () => number;
+  // Time that the fixture's clock slept, added to the service's clock.
+  private sleptMs = 0;
 
   constructor(defects: ScmDefects = {}, setup: ScmSetup = {}) {
     this.defects = defects;
     this.mergeMethods = setup.mergeMethods ?? DEFAULT_MERGE_METHODS;
     this.existingRequiredStatuses = setup.existingRequiredStatuses ?? [];
     this.alsoGrants = setup.alsoGrants === undefined ? [] : [setup.alsoGrants];
-    this.now = setup.now ?? Date.now;
+    this.serviceNow = setup.now ?? Date.now;
+  }
+
+  private now(): number {
+    return this.serviceNow() + this.sleptMs;
   }
 
   provider(): SourceControlProvider {
@@ -167,6 +176,12 @@ export class InMemoryScm {
       advanceHead: async (branch) => this.push(PROJECT, branch),
       readBranchHead: async (branch) => this.branches.get(branchKey(PROJECT, branch))!,
       signatureHeader: SIGNATURE,
+      clock: {
+        now: () => this.now(),
+        sleep: async (milliseconds) => {
+          this.sleptMs += milliseconds;
+        },
+      },
       attemptAction: async (credential, repository, permission) => this.act(credential, repository, permission),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),
       observeMergeMethod: async (mergeCommit) => this.mergedBy.get(mergeCommit) ?? 'none',
@@ -213,7 +228,7 @@ export class InMemoryScm {
       expiresAt: this.defects.refreshKeepsExpiry ? previous.expiresAt : this.extendedExpiry(previous.expiresAt),
       permissions: this.defects.refreshWidens ? [...SCM_PERMISSIONS] : previous.permissions,
     };
-    if (this.defects.refreshEndsPrevious) latest.ended = true;
+    if (this.defects.refreshEndsPrevious) this.end(latest);
     this.store(credential, Boolean(this.defects.refreshUnscopes));
     return ok(credential);
   }
@@ -228,8 +243,8 @@ export class InMemoryScm {
       return err(failure('not-found', 'unknown version'));
     }
     for (const stored of versions) {
-      if (this.endsOnAdoption(stored.credential.version, version)) stored.ended = true;
-      else if (this.defects.staleAdoptionRestores && stored.credential.version === version) stored.ended = false;
+      if (this.endsOnAdoption(stored.credential.version, version)) this.end(stored);
+      else if (this.defects.staleAdoptionRestores && stored.credential.version === version) stored.endedAt = undefined;
     }
     this.adopted.add(credentialId);
     return ok(undefined);
@@ -258,8 +273,17 @@ export class InMemoryScm {
     if (versions.length === 0) return err(failure('not-found', 'unknown credential'));
     this.revoked.add(credentialId);
     const ended = this.defects.revocationKeepsEarlier ? versions.slice(-1) : versions;
-    for (const stored of ended) stored.ended = true;
+    for (const stored of ended) this.end(stored);
     return ok(undefined);
+  }
+
+  // An ended version keeps its first end.
+  private end(stored: StoredCredential): void {
+    stored.endedAt ??= this.now();
+  }
+
+  private hasEnded(stored: StoredCredential): boolean {
+    return stored.endedAt !== undefined && this.now() >= stored.endedAt + (this.defects.endingLagMs ?? 0);
   }
 
   // The versions of a credential that is not revoked, oldest first.
@@ -274,7 +298,7 @@ export class InMemoryScm {
   }
 
   private store(credential: RunCredential, unscoped: boolean): void {
-    this.credentials.set(credential.secret, { credential, ended: false, unscoped });
+    this.credentials.set(credential.secret, { credential, endedAt: undefined, unscoped });
     if (!this.defects.unusableAuthorization) this.authorizations.set(credential.authorization, credential.secret);
   }
 
@@ -310,7 +334,7 @@ export class InMemoryScm {
     const stored = this.credentials.get(secret);
     if (!stored || this.defects.unusableCredentials) return forbidden();
     const reads = permission === 'read-code';
-    if (stored.ended && !(reads && this.defects.endedCanRead)) return forbidden();
+    if (this.hasEnded(stored) && !(reads && this.defects.endedCanRead)) return forbidden();
     if (Date.parse(stored.credential.expiresAt) <= this.now()) return forbidden();
     const { permissions, repositories } = stored.credential;
     if (!permissions.includes(permission) || this.defects.grantsOnPaper === permission) return forbidden();

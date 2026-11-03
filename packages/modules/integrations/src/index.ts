@@ -38,7 +38,12 @@ export type {
   WriteBack,
 } from './ports/write-back.js';
 export * from './port.js';
-export type { SourceControlConformanceCheck, SourceControlConformanceFinding } from './ports/conformance-case.js';
+export type {
+  SourceControlConformanceCheck,
+  SourceControlConformanceEnding,
+  SourceControlConformanceFinding,
+} from './ports/conformance-case.js';
+export { awaitRefusal, REVOCATION_POLL_MS, type ConformanceClock, type ObservedEnding } from './ports/revocation-window.js';
 export { runSourceControlConformance, type SourceControlConformanceReport } from './ports/source-control-conformance.js';
 export type {
   PreparedHead,

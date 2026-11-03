@@ -9,13 +9,22 @@ export interface SourceControlConformanceFinding {
   readonly message: string;
 }
 
+// How long after a revocation or adoption the ended version was refused.
+export interface SourceControlConformanceEnding {
+  readonly caseName: string;
+  readonly when: string;
+  readonly latencyMs: number;
+}
+
 // Ends a case early when a later step would only repeat the same failure.
 // Known by identity, as a thrown value's prototype may run plugin code.
 const abortions = new WeakSet<object>();
 
-// One running case: it collects the case's findings.
+// One running case: it collects the case's findings and endings.
 export class ConformanceCase {
   readonly findings: SourceControlConformanceFinding[] = [];
+
+  readonly endings: SourceControlConformanceEnding[] = [];
 
   constructor(readonly name: string) {}
 
@@ -25,6 +34,10 @@ export class ConformanceCase {
 
   expect(condition: boolean, message: string): void {
     if (!condition) this.report('outcome', message);
+  }
+
+  recordEnding(when: string, latencyMs: number): void {
+    this.endings.push(Object.freeze({ caseName: this.name, when, latencyMs }));
   }
 
   abort(check: SourceControlConformanceCheck, message: string): never {

@@ -31,6 +31,7 @@ test('the port entry carries only the port constants, at version 0.2.0', () => {
     'COMMIT_STATUS_STATES',
     'MERGE_METHODS',
     'REVIEW_EVIDENCE_KINDS',
+    'REVOCATION_PROPAGATION_SECONDS',
     'SCM_PERMISSIONS',
     'SOURCE_CONTROL_PORT_VERSION',
     'WEBHOOK_EVENT_KINDS',

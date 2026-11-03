@@ -1,4 +1,8 @@
-import { ConformanceCase, type SourceControlConformanceFinding } from './conformance-case.js';
+import {
+  ConformanceCase,
+  type SourceControlConformanceEnding,
+  type SourceControlConformanceFinding,
+} from './conformance-case.js';
 import {
   checkAdoptedCredential,
   checkChangeRequestAndStatusCredentials,
@@ -28,6 +32,7 @@ import { checkWebhookDelivery } from './webhook-cases.js';
 export interface SourceControlConformanceReport {
   readonly cases: number;
   readonly findings: readonly SourceControlConformanceFinding[];
+  readonly endings: readonly SourceControlConformanceEnding[];
 }
 
 type CaseBody = (run: ConformanceCase, fixture: SourceControlConformanceFixture) => Promise<void>;
@@ -58,8 +63,11 @@ export async function runSourceControlConformance(
   fixture: SourceControlConformanceFixture,
 ): Promise<SourceControlConformanceReport> {
   const findings: SourceControlConformanceFinding[] = [];
+  const endings: SourceControlConformanceEnding[] = [];
   for (const [name, body] of CASES) {
-    findings.push(...(await new ConformanceCase(name).run((run) => body(run, fixture))));
+    const run = new ConformanceCase(name);
+    findings.push(...(await run.run((current) => body(current, fixture))));
+    endings.push(...run.endings);
   }
-  return Object.freeze({ cases: CASES.length, findings: Object.freeze(findings) });
+  return Object.freeze({ cases: CASES.length, findings: Object.freeze(findings), endings: Object.freeze(endings) });
 }

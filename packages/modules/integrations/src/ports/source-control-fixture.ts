@@ -1,4 +1,5 @@
 import type { Result } from '@taskelith/kernel';
+import type { ConformanceClock } from './revocation-window.js';
 import type { ChangeRequestData, RunCredential, SourceControlProvider, WebhookDelivery } from './source-control.js';
 
 export interface PreparedHead {
@@ -27,6 +28,8 @@ export interface SourceControlConformanceFixture {
   readonly mergeMethod: string;
   // The lower-case name of the header that carries a delivery's signature.
   readonly signatureHeader: string;
+  // Times the wait for an ended version's refusal.
+  readonly clock: ConformanceClock;
   prepareHeadBranch(): Promise<PreparedHead>;
   advanceHead(branch: string): Promise<string>;
   readBranchHead(branch: string): Promise<string>;

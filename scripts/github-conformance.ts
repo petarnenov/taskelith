@@ -2,7 +2,11 @@ import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { runSourceControlConformance, type SourceControlConformanceFinding } from '@taskelith/integrations';
+import {
+  runSourceControlConformance,
+  type SourceControlConformanceEnding,
+  type SourceControlConformanceFinding,
+} from '@taskelith/integrations';
 import { createGithubSourceControl } from '@taskelith/scm-github';
 import { cleanUp, isClean, type CleanupReport } from './github-conformance-cleanup.ts';
 import { GithubNativeClient } from './github-conformance-client.ts';
@@ -46,6 +50,7 @@ interface Evidence {
   readonly repositories: typeof CONFORMANCE_REPOSITORIES;
   readonly cases: number;
   readonly findings: readonly SourceControlConformanceFinding[];
+  readonly endings: readonly SourceControlConformanceEnding[];
   readonly longRun: 'not run' | 'run';
   readonly stopped: string | undefined;
   readonly cleanup: CleanupReport;
@@ -145,9 +150,10 @@ async function run(options: Options, settings: ConformanceSettings, secrets: Con
   let cases = 0;
   let stopped: string | undefined;
   const findings: SourceControlConformanceFinding[] = [];
+  const endings: SourceControlConformanceEnding[] = [];
   let cleanup: CleanupReport = { steps: [], unobserved: [] };
   try {
-    if (!options.cleanupOnly) cases = await runSuite(options, { ...identity, ...secrets, fetch: guard.fetch }, client, findings);
+    if (!options.cleanupOnly) cases = await runSuite(options, { ...identity, ...secrets, fetch: guard.fetch }, client, { findings, endings });
   } catch (error) {
     stopped = error instanceof Error ? error.message : 'a non-error value';
   } finally {
@@ -161,6 +167,7 @@ async function run(options: Options, settings: ConformanceSettings, secrets: Con
     repositories: CONFORMANCE_REPOSITORIES,
     cases,
     findings,
+    endings,
     longRun: options.longRun && !options.cleanupOnly ? 'run' : 'not run',
     stopped,
     cleanup,
@@ -175,19 +182,32 @@ interface PluginConnection extends ConformanceSecrets {
   readonly fetch: typeof fetch;
 }
 
+interface SuiteOutcome {
+  readonly findings: SourceControlConformanceFinding[];
+  readonly endings: SourceControlConformanceEnding[];
+}
+
 async function runSuite(
   options: Options,
   connection: PluginConnection,
   client: GithubNativeClient,
-  findings: SourceControlConformanceFinding[],
+  outcome: SuiteOutcome,
 ): Promise<number> {
   const provider = createGithubSourceControl({ ...connection, mergeMethods: [...MERGE_METHODS] });
   if (!provider.ok) throw new Error(`the plugin refused its settings: ${provider.error.code}`);
-  const fixture = liveConformanceFixture({ provider: provider.value, client, webhookSecret: connection.webhookSecret });
+  const fixture = liveConformanceFixture({
+    provider: provider.value,
+    client,
+    webhookSecret: connection.webhookSecret,
+    clock: SYSTEM_CLOCK,
+  });
   const report = await runSourceControlConformance(fixture);
-  findings.push(...report.findings);
+  outcome.findings.push(...report.findings);
+  outcome.endings.push(...report.endings);
   if (!options.longRun) return report.cases;
-  findings.push(...(await runLongRefresh(fixture, LONG_RUN_TIMING, SYSTEM_CLOCK)));
+  const longRun = await runLongRefresh(fixture, LONG_RUN_TIMING);
+  outcome.findings.push(...longRun.findings);
+  outcome.endings.push(...longRun.endings);
   return report.cases + 1;
 }
 
@@ -199,10 +219,14 @@ function summary(record: Evidence, path: string): string {
   const failedSteps = record.cleanup.steps.filter((step) => !step.done).length;
   return [
     `github-conformance: ${passed(record) ? 'PASS' : 'FAIL'} (${record.mode})`,
-    `cases ${record.cases}; findings ${record.findings.length}; cleanup steps ${record.cleanup.steps.length}, failed ${failedSteps}`,
+    `cases ${record.cases}; findings ${record.findings.length}; slowest ending ${slowestEnding(record)} ms; cleanup steps ${record.cleanup.steps.length}, failed ${failedSteps}`,
     `unobserved repositories ${record.cleanup.unobserved.length}; guard refusals ${record.guardRefusals.length}`,
     `evidence ${path}`,
   ].join('\n');
+}
+
+function slowestEnding(record: Evidence): number {
+  return Math.max(0, ...record.endings.map((ending) => ending.latencyMs));
 }
 
 function fail(message: string, code: number): number {

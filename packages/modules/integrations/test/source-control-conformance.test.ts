@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {
+  awaitRefusal,
+  REVOCATION_POLL_MS,
+  REVOCATION_PROPAGATION_SECONDS,
+  runSourceControlConformance,
+} from '@taskelith/integrations';
+import { err, failure, ok } from '@taskelith/kernel';
 import { defective, findings, headings } from './conformance-findings.ts';
 import { InMemoryScm } from './in-memory-source-control.ts';
 
@@ -228,4 +235,63 @@ test('a native bypass probe that fails for another reason is a fixture finding',
   const lines = await defective({ bypassFailsWith: 'internal' });
   assert.ok(lines.length > 1 && lines.every((line) => line.includes(' fixture: attemptBypassMerge')));
   assert.ok(lines.includes('native merge control fixture: attemptBypassMerge of a passing change request failed with internal'));
+});
+
+// A service's propagation delay: an ended version still works for a while.
+async function withEndingLag(lagMs: number) {
+  return runSourceControlConformance(new InMemoryScm({ endingLagMs: lagMs }).fixture());
+}
+
+const WINDOW_MS = REVOCATION_PROPAGATION_SECONDS * 1000;
+
+test('a version refused within the propagation window passes, with each latency', async () => {
+  const report = await withEndingLag(WINDOW_MS - 1000);
+  assert.deepEqual(report.findings, []);
+  assert.deepEqual(report.endings.map((ending) => ending.caseName), [
+    'refreshed credential',
+    'refreshed credential',
+    'adopted credential',
+    'adopted credential',
+    'revoked credential',
+    'revoked credential',
+    'credential isolation',
+  ]);
+  assert.ok(report.endings.every((ending) => ending.latencyMs >= WINDOW_MS - 1000 && ending.latencyMs < WINDOW_MS));
+});
+
+test('a version that still works after the propagation window is reported', async () => {
+  const report = await withEndingLag(WINDOW_MS + 1000);
+  const lines = report.findings.map((entry) => `${entry.caseName} ${entry.check}: ${entry.message}`);
+  assert.deepEqual(cases(lines), [
+    'refreshed credential outcome',
+    'adopted credential outcome',
+    'revoked credential outcome',
+    'credential isolation outcome',
+  ]);
+  assert.ok(lines.every((line) => line.endsWith('must fail with forbidden')));
+  assert.ok(lines.includes('credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden'));
+  assert.ok(report.endings.every((ending) => ending.latencyMs >= WINDOW_MS));
+});
+
+test('a conforming provider ends every version at once', async () => {
+  const report = await runSourceControlConformance(new InMemoryScm().fixture());
+  assert.equal(report.endings.length, 7);
+  assert.ok(Object.isFrozen(report.endings) && report.endings.every((ending) => ending.latencyMs < 1000));
+});
+
+test('the wait for a refusal stops at once on any failure, without loosening', async () => {
+  let slept = 0;
+  const clock = {
+    now: () => slept,
+    sleep: async (milliseconds: number) => {
+      slept += milliseconds;
+    },
+  };
+  const unavailable = err(failure('unavailable', 'down'));
+  const ending = await awaitRefusal(async () => unavailable, clock, 0);
+  assert.deepEqual(ending, { result: unavailable, latencyMs: 0 });
+  const allowed = await awaitRefusal(async () => ok(undefined), clock, 0);
+  assert.equal(allowed.result.ok, true);
+  assert.equal(slept, WINDOW_MS);
+  assert.equal(slept / REVOCATION_POLL_MS, REVOCATION_PROPAGATION_SECONDS);
 });
