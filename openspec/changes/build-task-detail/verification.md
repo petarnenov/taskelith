@@ -22,6 +22,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `1053a645` `test: widen the async query timeout for apps/web` and `f728e434`, its record (see "Pass 2 fixes").
 - `a463504c` `docs: route the build-task-detail change after the async query timeout`: the timeout commit changed the diff, so the old `route.json` was deleted and the change routed again at head `f728e434` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 2,130 lines in 37 files; the tier stayed elevated, with the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.67) and agrees.
 - Merged origin/dev d0d59478 (#434) before the archive, because the archive verify hit the 413 flake that #434 stabilizes (verify-29b-archive.log:5485).
+- The first make verify after the dev merge failed only on the out-of-branch timing flake installation-script.test.ts:570 (verify-29b-merge.log); the rerun (verify-29b-merge-b.log) passed.
 
 ## Environment
 
@@ -74,10 +75,10 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `fed39a908ef94dbc3a2e08183357846d6f8685bd`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.72% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `6130e9e6abf52684fdc63beb59d0dcdc59de0375`; tests 4630, pass 4621, fail 0, skipped 9; all files 99.44% lines, 92.73% branches, 98.87% functions.
 - `npm run openspec -- validate build-task-detail --strict`: passed, `Change 'build-task-detail' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 110 file(s); every pass summary file is valid: 90 file(s); every route file is valid: 43 file(s).`.
-- Spec diff against the merge base `d3dd09ed86b5` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 111 file(s); every pass summary file is valid: 91 file(s); every route file is valid: 44 file(s).`.
+- Spec diff against the merge base `d0d594782357` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
