@@ -66,11 +66,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f8f348de3c496f2a23a1e9e6894f9e84cad6c57b`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.73% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `557943973cc6e582766268d12b4fedd5c4681c37`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.70% branches, 98.85% functions.
 - `npm run openspec -- validate build-task-detail --strict`: passed, `Change 'build-task-detail' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 110 file(s); every pass summary file is valid: 90 file(s); every route file is valid: 43 file(s).`.
 - Spec diff against the merge base `d3dd09ed86b5` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a2ea-05b9-7f43-9aec-8f59f720abd3` | 0 | 1 | 5 | 3 |
 <!-- make record: end -->
 
 ## Independent review
@@ -104,6 +108,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 7 (`147364ff`): the Drawer's title is plain text in Mantine's `h2`. Fail-before `fb-29b-p1-7.log`: "titles the dialog with one heading of level 2 and no heading inside it" fails on two headings.
 - Finding 8 (`904eb798`): design decision 7 says that the detail's first read starts with the Drawer, independently of the board, and "Risks and trade-offs" calls a missing `card-changed` a violation of wire contracts sections 8 and 10, which 15a emits.
 - Finding 9 (this record): the evidence check resolves the rerun mention, task 3.2 is ticked, and the remaining gates follow the stop rule.
+- `make verify` of the fixed tree (`9f29a899`, tree `55794397`), `verify-29b-p1.log` in the session scratchpad: passed at the first run, profile full, no rerun; in it `apps/web` Vitest ran 450 tests in 15 files, all passing, with 98.87% statements, 97.5% branches, 99.67% functions, and 100% lines. The generated part below records it.
 - Coordinator decisions of 2026-11-03 (Niki), in `904eb798`: `listAgentSessions` is a follow-up of item 31, and the Drawer keeps the session indicator from `readTaskDetail` (design, "Agent sessions"); the picker leads to the board only from a task detail address, now the scenario "Another project on another page"; the removed "Web SPA task detail route" has a **Reason** and a **Migration** that names "Web SPA task detail address", so that the archive reads as a rename (`npm run openspec -- validate build-task-detail --strict` passes); and the other departures and trade-offs of the reviewed design are accepted (design, "Proof of concept").
 
 ## Limitations
