@@ -40,7 +40,7 @@ export {
   type Upload,
 } from './api/api-server.js';
 export { WEB_APP_NONCE_PLACEHOLDER, WEB_APP_OPERATION, type WebAppFiles } from './api/web-app.js';
-export { WEB_APP_DIR_VARIABLE, readWebAppDirectory } from './composition/web-app-directory.js';
+export { WEB_APP_DIR_VARIABLE, readWebAppDirectory, type WebAppEntryProbe } from './composition/web-app-directory.js';
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';

@@ -12,6 +12,8 @@ It lives in `@taskelith/contracts` beside the SDLC and execution documents, and 
 
 The control plane serves the document on the browser endpoint over HTTPS, same-origin with the SPA ([architecture section 11](../architecture.md#11-spa-authentication-and-live-traffic); [installation contract](installation-and-enrollment.md) section 7).
 
+The path `/app` and every path below `/app/` are reserved for the built SPA, which the browser endpoint serves as static files outside the API; they are not API paths, and no operation of the document may take one (test `no operation of the control-plane document lives under /app, which the wire contracts reserve`).
+
 ## 2. Authentication and CSRF
 
 | Scheme | Kind | Used by |

@@ -137,8 +137,10 @@ async function serve({ handlers, uploads, routes, logger, webApp }: Listener, re
     query = url.searchParams;
     const method = request.method ?? 'GET';
     const matched = match(routes, method, url.pathname);
-    // Every route comes first, so the SPA never shadows an operation.
-    const page = matched === undefined && webApp !== undefined ? webAppAnswer(webApp, method, url.pathname) : undefined;
+    // Every route comes first, so the SPA never shadows an operation; the
+    // SPA checks the path as sent, before the URL removes its dot segments.
+    const requestPath = (request.url ?? '/').split('?')[0]!;
+    const page = matched === undefined && webApp !== undefined ? webAppAnswer(webApp, method, requestPath) : undefined;
     if (page !== undefined) {
       operationId = WEB_APP_OPERATION;
       answer = page;

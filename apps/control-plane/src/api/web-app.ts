@@ -1,13 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { posix } from 'node:path';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import { failureResponse, type JsonResponse } from './http-exchange.js';
 
 // The built SPA by its paths below the build root, such as
 // `assets/index-abc.js`; the composition reads it once at start.
 export interface WebAppFiles {
   file(path: string): Uint8Array | undefined;
+  // True for an entry the build left out, such as a link, or a path below it.
+  isLeftOut(path: string): boolean;
 }
 
 // What Vite's `html.cspNonce` writes into index.html (apps/web).
@@ -42,12 +44,13 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = Object.freeze({
   '.woff2': 'font/woff2',
 });
 
-// GET or HEAD under /app/: the build's file at the path, or index.html for
-// a path without a file extension; undefined for any other request.
-export function webAppAnswer(files: WebAppFiles, method: string, pathname: string): WebAppAnswer | undefined {
-  if (!isWebAppPath(pathname) || (method !== 'GET' && method !== 'HEAD')) return undefined;
-  const path = buildPath(pathname);
-  if (!path.ok) return failureResponse(path.error.code === 'invalid' ? 400 : 404, path.error);
+// GET or HEAD whose path, as sent and before URL normalization, is under
+// /app/: the build's file, or index.html for a path without an extension.
+export function webAppAnswer(files: WebAppFiles, method: string, requestPath: string): WebAppAnswer | undefined {
+  if (!isWebAppPath(requestPath) || (method !== 'GET' && method !== 'HEAD')) return undefined;
+  const path = buildPath(requestPath);
+  if (!path.ok) return webAppFailure(path.error.code === 'invalid' ? 400 : 404, path.error);
+  if (files.isLeftOut(path.value)) return webAppFailure(404, failure('not-found', 'the web app refuses this path'));
   if (path.value === WEB_APP_INDEX || posix.extname(path.value) === '') return indexPage(files);
   const content = files.file(path.value);
   return content === undefined ? noFile() : filePage(path.value, content);
@@ -64,10 +67,10 @@ export function writeWebAppPage(response: ServerResponse, page: WebAppPage, corr
 
 // The decoded path below /app/. A segment that is empty before the last,
 // `.`, `..`, or holds a separator or NUL is refused, never looked up.
-function buildPath(pathname: string): Result<string> {
+function buildPath(requestPath: string): Result<string> {
   let segments: string[];
   try {
-    segments = pathname.slice(WEB_APP_BASE.length + 1).split('/').map((segment) => decodeURIComponent(segment));
+    segments = requestPath.slice(WEB_APP_BASE.length + 1).split('/').map((segment) => decodeURIComponent(segment));
   } catch {
     return err(failure('invalid', 'the path is not valid percent-encoding'));
   }
@@ -82,21 +85,26 @@ function indexPage(files: WebAppFiles): WebAppAnswer {
   if (index === undefined) return noFile();
   const nonce = randomBytes(16).toString('base64');
   const page = Buffer.from(Buffer.from(index).toString('utf8').replaceAll(WEB_APP_NONCE_PLACEHOLDER, nonce));
-  return { status: 200, page, headers: { ...pageHeaders(nonce), 'content-type': CONTENT_TYPES['.html']!, 'cache-control': 'no-cache' } };
+  return { status: 200, page, headers: { ...securityHeaders(nonce), 'content-type': CONTENT_TYPES['.html']!, 'cache-control': 'no-cache' } };
 }
 
 function filePage(path: string, content: Uint8Array): WebAppPage {
   const contentType = CONTENT_TYPES[posix.extname(path)] ?? 'application/octet-stream';
   const cacheControl = path.startsWith(HASHED_DIRECTORY) ? IMMUTABLE : 'no-cache';
-  return { status: 200, page: content, headers: { ...pageHeaders(undefined), 'content-type': contentType, 'cache-control': cacheControl } };
+  return { status: 200, page: content, headers: { ...securityHeaders(undefined), 'content-type': contentType, 'cache-control': cacheControl } };
 }
 
 function noFile(): JsonResponse {
-  return failureResponse(404, failure('not-found', 'the web app has no file at this path'));
+  return webAppFailure(404, failure('not-found', 'the web app has no file at this path'));
+}
+
+// The API's JSON failure, which keeps its no-store, with the SPA's headers.
+function webAppFailure(status: number, failed: Failure): JsonResponse {
+  return { ...failureResponse(status, failed), headers: securityHeaders(undefined) };
 }
 
 // Scripts only from the origin; Mantine's style elements carry the nonce.
-function pageHeaders(nonce: string | undefined): Record<string, string> {
+function securityHeaders(nonce: string | undefined): Record<string, string> {
   const styles = nonce === undefined ? "'self'" : `'self' 'nonce-${nonce}'`;
   return {
     'content-security-policy': [
