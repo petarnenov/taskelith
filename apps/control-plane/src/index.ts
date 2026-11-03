@@ -44,6 +44,7 @@ export { WEB_APP_NONCE_PLACEHOLDER, WEB_APP_OPERATION, type WebAppFiles } from '
 export { WEB_APP_DIR_VARIABLE, readWebAppDirectory, type WebAppEntryProbe } from './composition/web-app-directory.js';
 export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
 export { MAX_SCM_WEBHOOK_BODY_BYTES } from './api/http-exchange.js';
+export { BodyDrains, MAX_CONCURRENT_DRAINS, MAX_DRAIN_MILLISECONDS, MAX_DRAINED_BODY_BYTES } from './api/body-drain.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export {
   SCM_PLUGIN_HOST,

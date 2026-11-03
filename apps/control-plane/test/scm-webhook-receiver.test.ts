@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync } from 'node:crypto';
 import { request as httpRequest, type ClientRequest, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { after, beforeEach, test } from 'node:test';
+import { after, afterEach, beforeEach, test } from 'node:test';
 import {
   ControlPlaneApi,
+  MAX_DRAIN_MILLISECONDS,
+  MAX_DRAINED_BODY_BYTES,
   MAX_SCM_WEBHOOK_BODY_BYTES,
   createApiServer,
   type ApiServices,
@@ -22,6 +24,7 @@ import { ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { createGithubSourceControl, githubSourceControlPlugin } from '@taskelith/scm-github';
 import { value } from '@taskelith/testing';
+import { answeredWithin, destroyRawSenders, firstData, jsonBodyOf, nextConnection, rawSend, type RawSender } from './raw-sender.ts';
 
 // The receiver over HTTP with the GitHub plugin's verifier, under a
 // synthetic secret; GitHub itself is never called.
@@ -71,11 +74,15 @@ const logger = new Logger(sink, { now: () => '2026-11-03T09:00:00.000Z' as never
 const server = createApiServer(new ControlPlaneApi({ scmWebhooks: receiver } as unknown as ApiServices), { logger });
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+after(() => {
+  server.closeAllConnections();
+  return new Promise<void>((resolve) => server.close(() => resolve()));
+});
 
 beforeEach(() => {
   verifications = 0;
 });
+afterEach(destroyRawSenders);
 
 interface Delivery {
   readonly body: Uint8Array;
@@ -204,18 +211,6 @@ function openDelivery(url: string, { body, headers }: Delivery, sent: number, le
   return { request, answer };
 }
 
-async function answeredWithin<Value>(answer: Promise<Value>, milliseconds: number): Promise<Value> {
-  let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(`no answer within ${milliseconds} ms`)), milliseconds);
-  });
-  try {
-    return await Promise.race([answer, late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function textOf(response: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of response) chunks.push(chunk as Buffer);
@@ -233,6 +228,90 @@ test('a declared length over the limit is 413 before the body is read', async ()
     assert.equal(verifications, 0);
   } finally {
     request.destroy();
+  }
+});
+
+const port = Number(new URL(base).port);
+
+function webhookHead(framing: string): string {
+  return `POST /scm-integrations/${KNOWN}/webhooks HTTP/1.1\r\nhost: control-plane\r\ncontent-type: application/json\r\n${framing}\r\n\r\n`;
+}
+
+// A delivery that declares `length` body bytes and writes `sent` of them.
+function declaredDelivery(serverPort: number, length: number, sent = length): RawSender {
+  return rawSend({ port: serverPort, head: webhookHead(`content-length: ${length}`), body: 'declared', sent });
+}
+
+function assertTooLarge(received: string): void {
+  assert.match(received, /^HTTP\/1\.1 413 /);
+  assert.match(received, /\r\nconnection: close\r\n/i);
+  assert.equal(jsonBodyOf(received).details.reason, 'body-too-large');
+}
+
+test('a sender that writes its whole oversized body before reading still gets the 413', async () => {
+  const { exchange } = declaredDelivery(port, MAX_SCM_WEBHOOK_BODY_BYTES + 1);
+  const { received, failure } = await answeredWithin(exchange, 60_000);
+  assertTooLarge(received);
+  assert.equal(failure, undefined);
+  assert.equal(verifications, 0);
+});
+
+test('a chunked sender that writes its whole oversized body before reading gets the whole 413', async () => {
+  const sent = MAX_SCM_WEBHOOK_BODY_BYTES + 8 * 1024 ** 2;
+  const { exchange } = rawSend({ port, head: webhookHead('transfer-encoding: chunked'), body: 'chunked', sent });
+  const { received, written, failure } = await answeredWithin(exchange, 60_000);
+  assertTooLarge(received);
+  assert.deepEqual([written, failure], [sent, undefined]);
+  assert.equal(verifications, 0);
+});
+
+test('after an early answer the server discards past its byte bound, then closes', async () => {
+  const declared = 1024 ** 3;
+  const { written } = await answeredWithin(declaredDelivery(port, declared).exchange, 60_000);
+  assert.ok(written > MAX_DRAINED_BODY_BYTES, `the server closed after ${written} bytes, within its byte bound`);
+  assert.ok(written < 2 * MAX_DRAINED_BODY_BYTES, `the sender wrote ${written} bytes before the close`);
+});
+
+test('after an early answer a stalled body keeps its connection until the drain time, then loses it', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const accepted = nextConnection(server);
+  const { socket, exchange } = declaredDelivery(port, MAX_SCM_WEBHOOK_BODY_BYTES + 1, 10);
+  assert.match(await answeredWithin(firstData(socket), 60_000), /^HTTP\/1\.1 413 /);
+  const serverSide = await accepted;
+  context.mock.timers.tick(MAX_DRAIN_MILLISECONDS - 1);
+  assert.equal(serverSide.destroyed, false, 'the connection stays open before the deadline');
+  context.mock.timers.tick(1);
+  assert.equal(serverSide.destroyed, true);
+  assert.equal((await answeredWithin(exchange, 60_000)).written, 10);
+});
+
+test('beyond its drain slots an early answer closes at once, a valid delivery is still served, and a close frees the slot', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const drainServer = createApiServer(new ControlPlaneApi({ scmWebhooks: receiver } as unknown as ApiServices), { maxConcurrentDrains: 1 });
+  await new Promise<void>((resolve) => drainServer.listen(0, '127.0.0.1', () => resolve()));
+  const drainPort = (drainServer.address() as AddressInfo).port;
+  try {
+    const accepted = nextConnection(drainServer);
+    const holding = declaredDelivery(drainPort, MAX_SCM_WEBHOOK_BODY_BYTES + 1, 10);
+    await answeredWithin(firstData(holding.socket), 60_000);
+    const holdingServerSide = await accepted;
+    const refused = await answeredWithin(declaredDelivery(drainPort, MAX_SCM_WEBHOOK_BODY_BYTES + 1, 10).exchange, 60_000);
+    assertTooLarge(refused.received);
+    assert.equal(holdingServerSide.destroyed, false, 'the first drain still holds the only slot');
+    const valid = pullRequest('drain-slot-1');
+    const delivery = openDelivery(`http://127.0.0.1:${drainPort}/scm-integrations/${KNOWN}/webhooks`, valid, valid.body.length);
+    delivery.request.end();
+    assert.equal((await answeredWithin(delivery.answer, 60_000)).statusCode, 202);
+    const holdingClosed = new Promise((resolve) => holdingServerSide.once('close', resolve));
+    holding.socket.destroy();
+    await answeredWithin(holdingClosed, 60_000);
+    const admitted = await answeredWithin(declaredDelivery(drainPort, MAX_SCM_WEBHOOK_BODY_BYTES + 1).exchange, 60_000);
+    assertTooLarge(admitted.received);
+    assert.deepEqual([admitted.written, admitted.failure], [MAX_SCM_WEBHOOK_BODY_BYTES + 1, undefined]);
+  } finally {
+    destroyRawSenders();
+    drainServer.closeAllConnections();
+    await new Promise<void>((resolve) => drainServer.close(() => resolve()));
   }
 });
 
@@ -289,10 +368,10 @@ test('deliveries beyond the concurrency limit wait for a free slot before their 
   const slotServer = createApiServer(api, { maxConcurrentWebhooks: 1 });
   const bodiesRead: string[] = [];
   slotServer.on('request', (request: IncomingMessage) => {
-    const iterate = request[Symbol.asyncIterator].bind(request);
-    request[Symbol.asyncIterator] = () => {
+    const iterate = request.iterator.bind(request);
+    request.iterator = (options) => {
       bodiesRead.push(String(request.headers['x-github-delivery']));
-      return iterate();
+      return iterate(options);
     };
   });
   await new Promise<void>((resolve) => slotServer.listen(0, '127.0.0.1', () => resolve()));

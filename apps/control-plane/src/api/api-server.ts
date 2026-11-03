@@ -22,9 +22,11 @@ import {
   readJsonBody,
   StreamAnswer,
   writeResponse,
+  writeResponseBeforeBodyEnds,
   type ApiResponse,
 } from './http-exchange.js';
 import { requirementBeforeBody } from './access-requirements.js';
+import { BodyDrains } from './body-drain.js';
 import { multipartBoundary, parseMultipart } from './multipart.js';
 import { requestLogFields } from './request-log.js';
 import { MINIMUM_TLS_VERSION, type ServerTls } from './server-tls.js';
@@ -89,6 +91,8 @@ export interface ApiServerOptions {
   readonly routes?: readonly RouteDefinition[];
   readonly maxConcurrentUploads?: number;
   readonly maxConcurrentWebhooks?: number;
+  // Connections discarding a body after an early answer.
+  readonly maxConcurrentDrains?: number;
   // Plain HTTP without it, which only unit tests of the handling use.
   readonly tls?: ServerTls;
   // The built SPA, served under /app/ to requests that no route matches.
@@ -118,6 +122,7 @@ export function createApiRequestListener(handlers: ApiHandlers, options: ApiServ
       uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
       signedBodies: new UploadSlots(options.maxConcurrentWebhooks ?? MAX_CONCURRENT_WEBHOOKS),
     },
+    drains: new BodyDrains(options.maxConcurrentDrains),
     routes: options.routes ?? ROUTES,
     logger: options.logger ?? SILENT_LOGGER,
     ...(options.webApp === undefined ? {} : { webApp: options.webApp }),
@@ -135,6 +140,7 @@ export function createApiRequestListener(handlers: ApiHandlers, options: ApiServ
 interface ListenerContext {
   readonly handlers: ApiHandlers;
   readonly slots: BodySlots;
+  readonly drains: BodyDrains;
   readonly routes: readonly RouteDefinition[];
   readonly logger: Logger;
   readonly webApp?: WebAppFiles;
@@ -147,7 +153,7 @@ interface BodySlots {
   readonly signedBodies: UploadSlots;
 }
 
-async function serve({ handlers, slots, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function serve({ handlers, slots, drains, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
@@ -183,7 +189,8 @@ async function serve({ handlers, slots, routes, logger, webApp }: ListenerContex
   const failed = 'content' in answer ? undefined : answer.failure;
   if (!response.headersSent) {
     if ('content' in answer) writeWebAppFile(response, answer, correlationId);
-    else writeResponse(response, answer, correlationId);
+    else if ('stream' in answer || bodyEnded(request)) writeResponse(response, answer, correlationId);
+    else writeResponseBeforeBodyEnds(request, response, answer, correlationId, drains);
   }
   const fields = requestLogFields({
     method: redactSecrets(request.method ?? ''), operationId, parameters, query, declaredQuery, status: answer.status,
@@ -192,6 +199,12 @@ async function serve({ handlers, slots, routes, logger, webApp }: ListenerContex
   const log = logger.with({ correlationId });
   if (answer.status >= 500) log.error('api.request', fields);
   else log.info('api.request', fields);
+}
+
+// A request without a body is complete before its parser says so.
+function bodyEnded(request: IncomingMessage): boolean {
+  const { 'content-length': length, 'transfer-encoding': encoding } = request.headers;
+  return request.complete || (encoding === undefined && Number(length ?? 0) === 0);
 }
 
 // Wire contracts section 2: authenticate, then the CSRF header of a
