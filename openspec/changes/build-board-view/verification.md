@@ -72,7 +72,7 @@ Review plan of the brief (governance v11, effort medium, `env -u JEV_MAF_LAB` be
 
 ### Pass 1
 
-- Reviewer A `codex gpt-6-astra#medium` through `make review` on `0e8d10e0..3d0a083b`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, started 2026-11-03T17:55:10Z, exit 0; model `gpt-6-astra`, effort `medium`, and sandbox `read-only` as reported by the CLI; session `01a1a28c-fb8e-7173-966a-655865635f91`. The report and logs are in the session scratchpad (`review-29a-p1-report.md`, `review-29a-p1.make.log`), and the reviewer changed no file.
+- Reviewer A `codex gpt-6-astra#medium` through `make review` on `0e8d10e0..3d0a083b`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, started 2026-11-03T17:55:10Z, exit 0; model `gpt-6-astra`, effort `medium`, and sandbox `read-only` as reported by the CLI; session `01a1a28c-fb8e-7173-966a-655865635f91`. The report and logs are in the session scratchpad (`review-29a-p1-report.md`, `review-29a-p1.make.log`), and the report says that the reviewer changed no file.
 - Findings: Critical 0, High 0, Medium 6, Low 2, as in `passes.jsonl`; one line per finding in `findings.jsonl`. Every finding was checked against the code and the logs before its fix, and every claim held; none was declined.
   1. Medium, `board-feed.ts`: every change was kept between reads, so a long healthy stream grew without bound.
   2. Medium, `BoardServices.tsx`: a late 401 of a request sent before a logout could end the session of a later login.
