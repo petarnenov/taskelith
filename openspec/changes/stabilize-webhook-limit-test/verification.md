@@ -42,7 +42,7 @@ First round, at `7ebb61f1`; the pass 1 fix round has its own below.
 - The fix keys on `request.complete`, so it also covers other answers sent before their body ended (design "Every early answer"); requests whose body was read and event streams are written as before.
 - The time bound test uses the test runner's mock `setTimeout`, and the other new tests wait on socket events with 60 s outer bounds; no fixed sleeps.
 - `npm run verify:comments`: "Every comment is within the comment length rule." No AI attribution in commits.
-- Spec: one ADDED requirement, "Answer before the body ends", of 325 characters; an archive of a scratch copy of `openspec/` archived it and `openspec validate --specs --strict` passed there (`Totals: 71 passed, 0 failed (71 items)`).
+- Spec: two ADDED requirements, "Answer before the body ends" (466 characters) and "Bounded discards" (326), and one MODIFIED requirement, "SCM webhook receiver served" (477), each counted as its requirement text without the heading and scenarios; an archive of a scratch copy of `openspec/` archived them (`+ 2, ~ 1`) and `openspec validate --specs --strict` passed there (`Totals: 71 passed, 0 failed (71 items)`).
 
 ## Checks
 
