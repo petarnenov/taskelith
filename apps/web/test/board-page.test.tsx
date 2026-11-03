@@ -381,6 +381,17 @@ describe('the project picker', () => {
     const { boardGateway } = showBoard(board(), [PROJECT, OTHER_PROJECT]);
     await columns();
     expect(boardGateway.readBoard).toHaveBeenCalledWith(PROJECT.projectId);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows the first run, without an error, when the kept project is gone and none is listed', async () => {
+    localStorage.setItem(PROJECT_KEY, 'gone');
+    const boardGateway = boardGatewayWith(board(), []);
+    renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), boardGateway);
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText('No project yet')).toBeDefined();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(boardGateway.readBoard).not.toHaveBeenCalled();
   });
 
   it('marks the chosen project in its menu', async () => {
