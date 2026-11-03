@@ -1,10 +1,10 @@
 {
   "change": "implement-github-scm-plugin-core",
-  "generatedAt": "2026-11-03T02:11:59.147Z",
+  "generatedAt": "2026-11-03T02:13:09.795Z",
   "devCommit": "3341f8a82c2d64d60238e512e0471b25f2b456a5",
-  "headCommit": "c31be6f65b0e39e0750bef6753ff5f7af49160aa",
+  "headCommit": "646c1063e19afb019b8ce5803cc1d44b57e3f4bc",
   "features": {
-    "linesChanged": 2757,
+    "linesChanged": 2754,
     "filesChanged": 45,
     "capabilities": [
       "execution-observability",
@@ -75,7 +75,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.78,
+    "thirdPassProbability": 0.79,
     "threshold": 0.4,
     "passes": [
       {
@@ -106,6 +106,6 @@
         }
       }
     ],
-    "latencyMs": 363
+    "latencyMs": 314
   }
 }
