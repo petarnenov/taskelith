@@ -44,11 +44,13 @@ interface FixtureOptions {
   readonly provider?: (scm: Provider) => Provider;
   readonly createProvider?: () => Result<Provider>;
   readonly registered?: boolean;
+  readonly allowedOrigin?: string;
 }
 
 async function fixture(options: FixtureOptions = {}) {
   const integrations = new InMemoryScmIntegrations();
-  value(await integrations.add(INTEGRATION, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
+  const allowedOrigin = options.allowedOrigin === undefined ? INTEGRATION.allowedOrigin : value(normalizeOrigin(options.allowedOrigin));
+  value(await integrations.add({ ...INTEGRATION, allowedOrigin }, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
   const bindings = new InMemoryRepositoryBindings(integrations);
   const scm = new InMemoryScm().provider();
   const provider = options.provider?.(scm) ?? scm;
@@ -195,6 +197,29 @@ test('a remote URL outside the allowed origin, and then an undeclared merge meth
   const upperCase = async ({ repository }: { repository: string }) => ok({ repository, remoteUrl: `https://SCM.Example:443/${repository}.git` });
   const normalized = await fixture({ provider: (scm) => ({ ...scm, resolveRemoteUrl: upperCase }) });
   assert.equal(value(await normalized.service.bind(PROJECT_ID, first())).revision, 1);
+});
+
+// Resolves every repository under `origin`, as written.
+const resolvingUnder = (origin: string) => (scm: Provider): Provider => ({
+  ...scm, resolveRemoteUrl: async ({ repository }) => ok({ repository, remoteUrl: `${origin}/${repository}.git` }),
+});
+
+test('both origins are normalized as written, so numeric hosts that URL parsing rewrites or refuses still match', async () => {
+  for (const origin of ['https://127.1', 'https://999.1', 'https://0x7f.1:8443']) {
+    const { service } = await fixture({ allowedOrigin: origin, provider: resolvingUnder(origin) });
+    const bound = value(await service.bind(PROJECT_ID, first()));
+    assert.equal(bound.remoteUrl, `${origin}/${PROJECT}.git`, origin);
+  }
+  const { service } = await fixture({ allowedOrigin: 'https://127.0.0.1', provider: resolvingUnder('https://127.1') });
+  assert.deepEqual(refusal(await service.bind(PROJECT_ID, first())), ['precondition-failed', 'remote-origin-mismatch']);
+});
+
+test('a resolved remote URL whose origin does not normalize is internal and never quoted', async () => {
+  const host = Array.from({ length: 5 }, () => 'a'.repeat(63)).join('.');
+  const { service } = await fixture({ provider: resolvingUnder(`https://${host}`) });
+  const refused = failed(await service.bind(PROJECT_ID, first()));
+  assert.equal(refused.code, 'internal');
+  assert.ok(!JSON.stringify(refused).includes(host));
 });
 
 test('capabilities that break their shape are internal', async () => {
