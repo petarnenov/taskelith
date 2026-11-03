@@ -586,7 +586,7 @@ export {
   type CardRecord,
   type CardTask,
 } from './ports/card-catalog.js';
-export { CARD_CATALOG_CONFORMANCE } from './ports/card-catalog-conformance.js';
+export { CARD_CATALOG_CONFORMANCE, CARD_LINEAGE_CONFORMANCE, type CardLineageSubject } from './ports/card-catalog-conformance.js';
 export { InMemoryCardCatalog, cardOrder } from './adapters/in-memory-card-catalog.js';
 export {
   GATE_URGENCY,

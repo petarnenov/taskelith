@@ -1,6 +1,6 @@
-import type { Instant } from '@taskelith/kernel';
-import { expectCode, expectRead, expectSuccess, type ConformanceCase, type ProjectId, type WorkflowRunId } from '@taskelith/sdlc';
-import type { CardCatalog, CardRecord } from './card-catalog.js';
+import type { Instant, Result } from '@taskelith/kernel';
+import { expectCode, expectRead, expectSuccess, type ConformanceCase, type ProjectId, type TaskId, type WorkflowRunId } from '@taskelith/sdlc';
+import type { CardCatalog, CardRecord, CardTask } from './card-catalog.js';
 
 const ALPHA = 'alpha' as ProjectId;
 const BETA = 'beta' as ProjectId;
@@ -52,6 +52,34 @@ export const CARD_CATALOG_CONFORMANCE: readonly ConformanceCase<CardCatalog>[] =
       const longest = card('run-v', ALPHA, FIRST.createdAt, `${'é'.repeat(198)}\u{1F600}\u{1F600}`);
       expectSuccess(problems, 'longest', await catalog.register(longest));
       expectRead(problems, 'only the valid one, read back as written', await catalog.listByProject(ALPHA), [longest]);
+      return problems;
+    },
+  },
+]);
+
+// A catalog with its adapter's way to admit a task into a card's lineage,
+// each task in its own transaction, in the order of the calls.
+export interface CardLineageSubject {
+  readonly catalog: CardCatalog;
+  admit(task: CardTask): Promise<Result<void>>;
+}
+
+function cardTask(taskId: string, parent?: string): CardTask {
+  const base = { taskId: taskId as TaskId, taskRunId: (parent === undefined ? 'run-b' : `run-${taskId}`) as WorkflowRunId };
+  return parent === undefined ? { ...base, depth: 0 } : { ...base, parentTaskId: parent as TaskId, depth: 1 };
+}
+
+export const CARD_LINEAGE_CONFORMANCE: readonly ConformanceCase<CardLineageSubject>[] = Object.freeze([
+  {
+    name: 'a card lists its tasks in admission order, a child admitted after a later task under its parent',
+    async check({ catalog, admit }) {
+      const problems: string[] = [];
+      expectSuccess(problems, 'register', await catalog.register(FIRST));
+      const admitted = [cardTask('task-b'), cardTask('task-a'), cardTask('task-b-child', 'task-b'), cardTask('task-a-child', 'task-a')];
+      for (const each of admitted) expectSuccess(problems, `admit ${each.taskId}`, await admit(each));
+      const [rootB, rootA, childB, childA] = admitted;
+      expectRead(problems, 'card', await catalog.tasks(FIRST.runId), [rootB, childB, rootA, childA]);
+      expectRead(problems, 'no card', await catalog.tasks('run-none' as WorkflowRunId), []);
       return problems;
     },
   },

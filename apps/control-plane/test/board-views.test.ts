@@ -24,7 +24,7 @@ async function runningCard(attempt: object = { id: 'att-1', executions: [executi
   const world = new BoardWorld();
   world.workers.push(worker('w-1'));
   await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
-  world.addTask('run-1', task('task-1', [attempt]), 'apply');
+  await world.addTask('run-1', task('task-1', [attempt]), 'apply');
   return world;
 }
 
@@ -80,7 +80,7 @@ test('an open item of the card counts in needsYou and makes its task wait for a 
 test('a task waiting for placement shows the fleet obstacle first, else the most recent observation', async () => {
   const world = new BoardWorld();
   await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
-  world.addTask('run-1', task('task-1', [{ id: 'att-2', retryOf: 'att-1', executions: [] }, { id: 'att-1', executions: [], outcome: { kind: 'not-started', cancelled: false, ownershipGeneration: 1, endedAt: EARLY } }].reverse()), 'apply');
+  await world.addTask('run-1', task('task-1', [{ id: 'att-2', retryOf: 'att-1', executions: [] }, { id: 'att-1', executions: [], outcome: { kind: 'not-started', cancelled: false, ownershipGeneration: 1, endedAt: EARLY } }].reverse()), 'apply');
   const fleet = await onlyCard(world);
   assert.deepEqual(fleet.obstacle, { source: 'fleet', disposition: 'waiting', reason: 'no-candidate', taskId: 'task-1', attemptId: 'att-2', observedAt: AS_OF });
   assert.equal(fleet.waitingFor, 'capacity');
@@ -105,14 +105,14 @@ test('a task waiting for placement shows the fleet obstacle first, else the most
 test('a card that waits for a person shows no waiting obstacle, but still a rejected one', async () => {
   const world = await runningCard();
   world.items = [item('i-1', 'run-1', { taskId: 'task-1' })];
-  world.addTask('run-1', task('task-2', [{ id: 'att-2', executions: [] }]), 'apply', { session: false });
+  await world.addTask('run-1', task('task-2', [{ id: 'att-2', executions: [] }]), 'apply', { session: false });
   world.occupied.set('w-1', 1);
   const person = await onlyCard(world);
   assert.deepEqual([person.waitingFor, person.obstacle], ['person', undefined]);
   const detail = await views(world).forCaller(true).taskDetail('alpha' as never, 'run-1' as never);
   assert.equal(detail.ok && detail.value.tasks[1]!.obstacle?.reason, 'worker-capacity-exhausted', 'the task keeps its own obstacle');
   const ended = { id: 'att-3', executions: [], outcome: { kind: 'not-started', cancelled: false, ownershipGeneration: 1, endedAt: LATE } };
-  world.addTask('run-1', task('task-3', [ended]), 'apply', { session: false });
+  await world.addTask('run-1', task('task-3', [ended]), 'apply', { session: false });
   world.outcomes.set('task-3', { taskId: 'task-3', attemptId: 'att-3', source: 'scheduler', disposition: 'rejected', reason: 'resource-ceiling-exceeded', recordedAt: LATE } as never);
   const rejected = await onlyCard(world);
   assert.deepEqual([rejected.waitingFor, rejected.obstacle?.disposition], ['person', 'rejected']);
@@ -209,7 +209,7 @@ test('a task end is cancelled, uncertain, or out of retries, and a clean exit or
   for (const [attempts, kind] of cases) {
     const world = new BoardWorld();
     await world.card('run-1', 'alpha', EARLY, run('run-1', IMPLEMENTING));
-    world.addTask('run-1', task('task-1', attempts), 'apply');
+    await world.addTask('run-1', task('task-1', attempts), 'apply');
     assert.equal((await onlyCard(world)).end?.kind, kind, JSON.stringify(attempts));
   }
 });
@@ -240,7 +240,7 @@ test('the merge gate follows readiness and the auto-merge setting, and an in-fli
 test('a task detail shows every stage with its gates, the binding, and the tasks with a delegated child', async () => {
   const world = await runningCard();
   world.gates.set('run-1', [gate('g-1', 'apply', 'blocked')]);
-  world.addTask('run-1', task('task-2'), 'apply', { parent: 'task-1', depth: 1, session: false });
+  await world.addTask('run-1', task('task-2'), 'apply', { parent: 'task-1', depth: 1, session: false });
   const detail = await views(world).forCaller(false).taskDetail('alpha' as never, 'run-1' as never);
   assert.ok(detail.ok);
   assert.equal(detail.value.position, '7');

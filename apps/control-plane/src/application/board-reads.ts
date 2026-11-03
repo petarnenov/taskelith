@@ -1,14 +1,14 @@
-import type { CardCatalog, CardTask, SessionTimelineTransaction, Task, WorkerId } from '@taskelith/execution';
+import type { CardCatalog, SessionTimelineTransaction, Task, WorkerId } from '@taskelith/execution';
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AssignmentRepository, PlacementOutcomeRecords, WorkerOccupancy, WorkerPlacementRecord } from '@taskelith/scheduling';
-import type { AdmissionRepository, GateRepository, ProjectId, WorkflowRunId, WorkflowRunRepository } from '@taskelith/sdlc';
+import type { AdmissionRepository, GateRepository, ProjectId, WorkflowRunRepository } from '@taskelith/sdlc';
 
 // What the board's views read in one snapshot, the event log's head
 // included; PostgreSQL serves it from one transaction.
 export interface BoardReads {
   head(): Promise<Result<number>>;
   now(): Promise<Instant>;
-  readonly cards: Pick<CardCatalog, 'get' | 'listByProject'> & CardLineage;
+  readonly cards: Pick<CardCatalog, 'get' | 'listByProject' | 'tasks'>;
   readonly runs: Pick<WorkflowRunRepository, 'get'>;
   readonly gates: Pick<GateRepository, 'listByRun'>;
   readonly tasks: { get(id: Task['id']): Promise<Result<Task>> };
@@ -18,12 +18,6 @@ export interface BoardReads {
   readonly assignments: Pick<AssignmentRepository, 'listByAttempt'>;
   readonly fleet: FleetReads;
   autoMergeEnabled(projectId: ProjectId): Promise<Result<boolean>>;
-}
-
-// Every task of a card's lineage in admission order, each delegated child
-// under its parent in its own admission order.
-export interface CardLineage {
-  tasks(runId: WorkflowRunId): Promise<Result<readonly CardTask[]>>;
 }
 
 export interface FleetReads {

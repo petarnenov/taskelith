@@ -32,6 +32,8 @@ export interface CardCatalog {
   register(card: CardRecord): Promise<Result<void>>;
   get(runId: WorkflowRunId): Promise<Result<CardRecord | undefined>>;
   listByProject(projectId: ProjectId): Promise<Result<readonly CardRecord[]>>;
+  // In admission order, each delegated child under its parent.
+  tasks(runId: WorkflowRunId): Promise<Result<readonly CardTask[]>>;
 }
 
 export function parseCardRecord(card: CardRecord): Result<CardRecord> {

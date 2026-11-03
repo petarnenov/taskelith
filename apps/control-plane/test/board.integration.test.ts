@@ -97,18 +97,18 @@ async function admitted(taskId: string, parent?: string): Promise<void> {
     [taskId, parent ?? null, parent ?? taskId, parent === undefined ? 0 : 1, parent === undefined ? 'run-1' : `run-${taskId}`]);
 }
 
-test('the task detail lists the tasks in the same order over PostgreSQL as in memory, not by task identifier', async () => {
-  const admissions: [string, string?][] = [['task-b'], ['task-b-child', 'task-b'], ['task-a'], ['task-a-z', 'task-a'], ['task-a-y', 'task-a']];
+test('the task detail lists the tasks in the same order over PostgreSQL as in memory, a child admitted after a later task under its parent', async () => {
+  const admissions: [string, string?][] = [['task-b'], ['task-a'], ['task-b-child', 'task-b'], ['task-a-z', 'task-a'], ['task-b-later', 'task-b']];
   await card('run-1');
   for (const [taskId, parent] of admissions) await admitted(taskId, parent);
   const world = new BoardWorld();
   await world.card('run-1', 'alpha', EARLY, run('run-1', { proposal: 'completed', specs: 'completed', apply: 'in-progress' }));
-  world.addTask('run-1', task('task-run-1'), 'apply', { session: false });
+  await world.addTask('run-1', task('task-run-1'), 'apply', { session: false });
   for (const [taskId, parent] of admissions) {
-    world.addTask('run-1', task(taskId), 'apply', { session: false, ...(parent === undefined ? {} : { parent, depth: 1 }) });
+    await world.addTask('run-1', task(taskId), 'apply', { session: false, ...(parent === undefined ? {} : { parent, depth: 1 }) });
   }
   const order = async (views: BoardViews) => value(await views.forCaller(false).taskDetail('alpha' as never, 'run-1' as never)).tasks.map((each) => each.taskId);
-  const expected = ['task-run-1', 'task-b', 'task-b-child', 'task-a', 'task-a-z', 'task-a-y'];
+  const expected = ['task-run-1', 'task-b', 'task-b-child', 'task-b-later', 'task-a', 'task-a-z'];
   assert.deepEqual(await order(startBoardServices(database, NO_SOURCES).views), expected);
   assert.deepEqual(await order(new BoardViews({ ...world.parts(), store: world.store() })), expected);
 });

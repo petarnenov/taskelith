@@ -38,7 +38,7 @@ const as = (name: string) => ({ authorization: `Bearer ${token(name)}` });
 const world = new BoardWorld();
 world.workers.push(worker('w-1'));
 await world.card('run-1', 'alpha', EARLY, run('run-1', { proposal: 'completed', specs: 'completed', apply: 'in-progress' }));
-world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [execution('ex-1', 'w-1')] }]), 'apply');
+await world.addTask('run-1', task('task-1', [{ id: 'att-1', executions: [execution('ex-1', 'w-1')] }]), 'apply');
 world.items = [item('i-1', 'run-1', { taskId: 'task-1' })];
 
 const api = new ControlPlaneApi({

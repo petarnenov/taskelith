@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CARD_CATALOG_CONFORMANCE,
+  CARD_LINEAGE_CONFORMANCE,
   InMemoryCardCatalog,
   cardColumn,
   closeStage,
@@ -127,3 +128,20 @@ for (const conformance of CARD_CATALOG_CONFORMANCE) {
     assert.deepEqual(await conformance.check(new InMemoryCardCatalog()), []);
   });
 }
+
+for (const conformance of CARD_LINEAGE_CONFORMANCE) {
+  test(`in-memory card lineage: ${conformance.name}`, async () => {
+    const catalog = new InMemoryCardCatalog();
+    assert.deepEqual(await conformance.check({ catalog, admit: (task) => catalog.admit(task) }), []);
+  });
+}
+
+test('the in-memory catalog admits a task once and only under a known parent', async () => {
+  const catalog = new InMemoryCardCatalog();
+  const root = { taskId: 'task-1' as never, taskRunId: 'run-1' as never, depth: 0 };
+  assert.deepEqual(await catalog.admit(root), { ok: true, value: undefined });
+  const again = await catalog.admit(root);
+  assert.equal(again.ok || again.error.code, 'conflict');
+  const orphan = await catalog.admit({ taskId: 'task-2' as never, taskRunId: 'run-2' as never, parentTaskId: 'task-0' as never, depth: 1 });
+  assert.equal(orphan.ok || orphan.error.code, 'not-found');
+});

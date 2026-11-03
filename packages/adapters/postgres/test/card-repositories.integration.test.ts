@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
-import { CARD_CATALOG_CONFORMANCE, type CardCatalog } from '@taskelith/execution';
+import { CARD_CATALOG_CONFORMANCE, CARD_LINEAGE_CONFORMANCE, type CardCatalog, type CardTask } from '@taskelith/execution';
+import { ok, type Result } from '@taskelith/kernel';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { value } from '@taskelith/testing';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -15,11 +16,28 @@ const catalog: CardCatalog = {
   register: (card) => database.transaction((tx) => tx.cards.register(card)),
   get: (runId) => database.readOnly((tx) => tx.cards.get(runId)),
   listByProject: (projectId) => database.readOnly((tx) => tx.cards.listByProject(projectId)),
+  tasks: (runId) => database.readOnly((tx) => tx.cards.tasks(runId)),
 };
 
 for (const conformance of CARD_CATALOG_CONFORMANCE) {
   test(`PostgreSQL card catalog: ${conformance.name}`, async () => {
     assert.deepEqual(await conformance.check(catalog), []);
+  });
+}
+
+// A task row, whose INSERT takes the next admission sequence value, and its
+// lineage under the root of its parent.
+async function admitTask(task: CardTask): Promise<Result<void>> {
+  await query(url, "INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, '{}')", [task.taskId, `adm-${task.taskId}`]);
+  await query(url, `INSERT INTO task_lineage (task_id, parent_task_id, root_task_id, depth, project_id, run_id)
+    VALUES ($1, $2, coalesce((SELECT root_task_id FROM task_lineage WHERE task_id = $2), $1), $3, 'alpha', $4)`,
+  [task.taskId, task.parentTaskId ?? null, task.depth, task.taskRunId]);
+  return ok(undefined);
+}
+
+for (const conformance of CARD_LINEAGE_CONFORMANCE) {
+  test(`PostgreSQL card lineage: ${conformance.name}`, async () => {
+    assert.deepEqual(await conformance.check({ catalog, admit: admitTask }), []);
   });
 }
 

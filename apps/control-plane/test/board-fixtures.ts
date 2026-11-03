@@ -73,7 +73,6 @@ export class BoardWorld {
   readonly calls: string[] = [];
   readonly runs = new Map<string, WorkflowRun>();
   readonly gates = new Map<string, Gate[]>();
-  readonly lineage = new Map<string, CardTask[]>();
   readonly tasks = new Map<string, Task>();
   readonly admissions = new Map<string, TaskAdmission>();
   readonly sessions = new Map<string, readonly object[]>();
@@ -94,11 +93,12 @@ export class BoardWorld {
     this.runs.set(runId, stored);
   }
 
-  // A task of the card, in the stage `stageId`, with an optional session
-  // that binds the task's attempts, ended or not as they are.
-  addTask(runId: string, stored: Task, stageId: string, options: { session?: boolean; parent?: string; depth?: number } = {}): void {
+  // A task of the card admitted now, in the stage `stageId`, with an
+  // optional session that binds the task's attempts, ended or not.
+  async addTask(runId: string, stored: Task, stageId: string, options: { session?: boolean; parent?: string; depth?: number } = {}): Promise<void> {
     const link = { taskId: stored.id, taskRunId: runId, ...(options.parent === undefined ? {} : { parentTaskId: options.parent }), depth: options.depth ?? 0 };
-    this.lineage.set(runId, [...(this.lineage.get(runId) ?? []), link as never]);
+    const admitted = await this.catalog.admit(link as CardTask);
+    if (!admitted.ok) throw new Error(admitted.error.message);
     this.tasks.set(stored.id, stored);
     this.admissions.set(stored.admissionId, admission(stored.id, stageId));
     if (options.session !== false) this.sessions.set(stored.id, [sessionOf(stored)]);
@@ -115,7 +115,7 @@ export class BoardWorld {
       cards: {
         get: (runId) => this.catalog.get(runId),
         listByProject: (projectId) => this.catalog.listByProject(projectId),
-        tasks: async (runId) => ok(this.lineage.get(runId) ?? []),
+        tasks: (runId) => this.catalog.tasks(runId),
       },
       runs: { get: async (id) => found(this.runs.get(id), id) },
       gates: { listByRun: async (runId) => this.gates.get(runId) ?? [] },
