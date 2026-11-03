@@ -23,7 +23,10 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `45df01f8` recorded the pass 1 fixes. Its first `make verify` (`verify-15-p1.log`) failed before `make test` started: Docker could not create the network of the verify services (`all predefined address pools have been fully subnetted`), an environment failure outside the change. The worker removed the containers and network of its own manual-run services (project `taskelith-464544771-dev`, volumes kept) and reran `make verify` once on the same tree (`verify-15-p1b.log`), which passed and is the run that `make record` records.
 - The fix of finding 6, `4f00c1f4`, with its records in `742175b1`, changed the diff, so `e6870934` deleted the fourth `route.json` and `d7b55ea0` routed a fifth time (unedited; tier `elevated`, 41 files and 2879 lines, the same triggers). Its `make verify` (`verify-15-p1c.log`) passed on the tree `cbdbd6b1` (tests 4543, pass 4534, fail 0, skipped 9). Review pass 2 reviewed `468783d9..8ac154a2`.
 - Pass 2 fixes (section "Pass 2 fixes"): `de0b6f98`, `15666f5e`, `a2200926`, and the design and delta commit `abf17bd4`; `edd8d92a` records pass 2 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `035a334d` deleted the fifth `route.json` and `70c4c9b8` routed a sixth time (unedited; tier `elevated`, 41 files and 3211 lines, the same triggers). Its `make verify` (`verify-15-p2.log`) passed on the tree `e9ab8ea1`.
-- Pass 3 fixes (section "Pass 3 fixes"): `a57477d3`, `2fc3eb02`, and the design commit `34afcc8b`; `c858ed90` records pass 3 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `943ac57c` deleted the sixth `route.json` and `9e48cfcb` routed a seventh time (unedited; tier `elevated`, 41 files and 3259 lines, the same triggers). Its `make verify` (`verify-15-p3.log`) is the run that `make record` records.
+- Pass 3 fixes (section "Pass 3 fixes"): `a57477d3`, `2fc3eb02`, and the design commit `34afcc8b`; `c858ed90` records pass 3 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `943ac57c` deleted the sixth `route.json` and `9e48cfcb` routed a seventh time (unedited; tier `elevated`, 41 files and 3259 lines, the same triggers). `c85071cf` recorded that route. Three `make verify` runs followed on its tree `4122b5c9`, the last under the coordinator's decision of 2026-11-03 to allow a third run once the host load dropped. Both failures are in tests outside the branch and came under host load from containers of other projects; the coordinator owns the follow-up of the webhook test.
+  - `verify-15-p3.log` failed one test, `apps/control-plane/test/scm-webhook-receiver.test.ts:171` "a body over the limit is 413 before any verification, and one at the limit is read": the client got `fetch failed` (`write ECONNRESET`), since the server answers `413` and closes while the client still writes (tests 4557, pass 4547, fail 1, skipped 9).
+  - `verify-15-p3b.log` failed the same test and `test/installation-script.test.ts:570` "a bound with a leading zero is read in base 10", which ended after 9.114 s against its bound of 10 s (tests 4557, pass 4546, fail 2, skipped 9).
+  - `verify-15-p3c.log` passed on the unchanged tree `4122b5c9` after the 1-minute load fell below 4; it is the run that `make record` records, and the commit that records it changes no checked input other than this file.
 
 ## Environment
 
@@ -113,7 +116,7 @@ Coordinator architect check of `a57477d3`, `2fc3eb02`, and `34afcc8b`: pending.
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e9ab8ea1d89812a99ee5429492cc401c935a7077`; tests 4555, pass 4546, fail 0, skipped 9; all files 99.42% lines, 92.69% branches, 98.82% functions.
+- `make verify`: passed, profile full, tree `4122b5c905ff4660070b85a28d074a006fe33495`; tests 4557, pass 4548, fail 0, skipped 9; all files 99.42% lines, 92.69% branches, 98.79% functions.
 - `npm run openspec -- validate implement-board-and-inbox-views --strict`: passed, `Change 'implement-board-and-inbox-views' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 107 file(s); every pass summary file is valid: 87 file(s); every route file is valid: 40 file(s).`.
 - Spec diff against the merge base `468783d9f2e5` with `origin/dev`: no change under `openspec/specs`.
@@ -123,6 +126,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a15e-ae75-7220-8a24-a46c374d3bc0` | 0 | 2 | 7 | 2 |
 | 2 | B | `claude claude-fable-5-1#medium` | `641a57eb-d171-444b-9af5-7f399819adf2` | 0 | 0 | 2 | 6 |
+| 3 | A | `agy gemini-4-argon-medium#medium` | `41930d7a-fb45-4b15-a1c9-4425a79ae8ed` | 0 | 0 | 0 | 2 |
 <!-- make record: end -->
 
 ## Limitations
