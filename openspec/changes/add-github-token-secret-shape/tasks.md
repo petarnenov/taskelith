@@ -5,9 +5,9 @@
 
 ## 2. Implementation and tests
 
-- [x] 2.1 Tests in `@taskelith/observability` and `@taskelith/secrets` for stateful and stateless tokens, text glued after punctuation, near misses, a token shape inside a longer word, and linear time, failing before the rule
+- [x] 2.1 Tests in `@taskelith/observability` and `@taskelith/secrets` for stateful and stateless tokens, text glued after punctuation, near misses, a token inside a longer word or after a serialized escape, and linear time, failing before the rule
 - [x] 2.2 `redactGithubInstallationTokens` in `TOKEN_SHAPE_RULES`, before the JWT rule
-- [x] 2.3 The source control contract, section 3
+- [x] 2.3 The source control contract, section 3, and the installation and enrollment contract, section 8
 
 ## 3. Records and checks
 

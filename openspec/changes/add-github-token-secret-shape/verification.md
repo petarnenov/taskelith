@@ -13,7 +13,8 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), second change of its split, develop
 - `bd692f5b` `docs: record the verification of the add github token secret shape change`, the tree that `make verify` checked; the commit after it adds the `make record` output and is the head for review pass 1.
 - `05e1cc03` `docs: record review pass 1 of the add github token secret shape change`.
 - `d5f35cfc` `test: split the GitHub installation token tests and expect a token shape inside a word to stay` (the tests alone, for the fail-before runs of the pass 1 fixes).
-- `f377a38f` `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, the tree that the second `make verify` checked; the commit after it adds the `make record` output.
+- `f377a38f` `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, the tree that the second `make verify` checked; the commit after it adds the `make record` output and is the head for review pass 2.
+- `a6a1435e` `test: expect a GitHub installation token inside a word or after an escape to be redacted` (the tests alone, for the fail-before run of the pass 2 fixes).
 
 ## Environment
 
@@ -23,13 +24,13 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 - Scope: only the brief's items. `git diff c355525b --stat` lists `docs/contracts/source-control.md`, `packages/modules/observability/src/domain/redaction-rules.ts`, `packages/modules/observability/test/logger.test.ts`, `packages/adapters/secrets/test/secrets.test.ts`, and this change. No plugin, Octokit, `PLUGIN_API_VERSION`, `scrubEnvironment` call site, wire, OpenAPI, or migration change.
 - Shape (checklist `redaction`): `ghs_[A-Za-z0-9._-]{36,}`, GitHub's recommended pattern for its stateful and stateless installation token formats, with the length and character set justified in design decision 1. Other GitHub token prefixes are not added, because no fetched source documents their length or character set (design decision 2). [GitHub qualification](/docs/qualification/github.md) records no token length (design decision 3).
-- Boundaries: a word boundary before `ghs_` since the fix of pass 1 finding 1 (design decision 1): a token after a space or punctuation is replaced, and a token shape inside a longer word, after a letter, digit, or `_`, stays, tested in both users.
+- Boundaries: no boundary before `ghs_` (design decision 1): a token is replaced wherever it starts, after a space or punctuation, inside a longer word, or after a serialized escape such as a literal `\n`, tested in both users. Pass 1's word boundary was reversed by coordinator decision 2026-11-03 (pass 2 below).
 - Order: the rule precedes `redactJwts` in `TOKEN_SHAPE_RULES`, so a stateless token is replaced whole; before the rule the JWT rule alone left `ghs_12345_[redacted]` (fail-before below).
-- Contract (checklist `contract-drift`): source control contract section 3 now states the shape rule as in place and keeps item 21's `scrubEnvironment` obligation open; the `scm-port` requirement "Run credential secret" says the same. No other document names the item 20 shape obligation as open; `docs/g3-plan.md` row 20 describes the item's scope and stays.
+- Contract (checklist `contract-drift`): source control contract section 3 now states the shape rule as in place and keeps item 21's `scrubEnvironment` obligation open; the `scm-port` requirement "Run credential secret" says the same. No other document names the item 20 shape obligation as open; `docs/g3-plan.md` row 20 describes the item's scope and stays. [Installation and enrollment contract](/docs/contracts/installation-and-enrollment.md) section 8 and the `installation-enrollment` requirement "Secret scrubbing", which list the shapes `@taskelith/secrets` redacts, now name the token.
 - Secrets in tests: the tokens are built at run time (`` `ghs_${'A1b2'.repeat(9)}` `` and `` `ghs_12345_${JWT}` `` with the tests' existing synthetic JWT), as `test/review-findings.test.ts` builds its `ghp_` value; no real token was printed or committed.
-- Requirement texts: `execution-observability` "Logs without secrets" 441 characters, `scm-port` "Run credential secret" 374; each MODIFIED delta copies the living requirement with all its scenarios and adds one.
+- Requirement texts: `execution-observability` "Logs without secrets" 441 characters, `scm-port` "Run credential secret" 374, `installation-enrollment` "Secret scrubbing" 225. Each MODIFIED delta copies the living requirement with all its scenarios; the `execution-observability` delta also edits the scenarios "A secret of a known shape in text" and "Pathological log text" and adds "Near miss of a GitHub installation token", the `scm-port` delta adds "GitHub installation token in text", and the `installation-enrollment` delta changes only the requirement text.
 - Commit types: the published `taskelith` package compiles only `src/` (`tsconfig.json` `rootDir` `src`, `files` `dist/`), and `src/cli.ts` imports no workspace package, so neither private package ships in it; the commits use `test`, `chore`, and `docs`.
-- Comments: three new comments of two lines each, under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
+- Comments: one new two-line comment (the GitHub rule), two one-line comments (the tests' synthetic tokens), and one modified two-line comment (`TOKEN_SHAPE_RULES`), all under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
 
 ## Fail-before
 
@@ -55,6 +56,13 @@ Pass 1 finding 2 found that each positive test stopped at its first failing asse
   - "a stateless GitHub installation token is redacted whole in a field": actual `'push ghs_12345_[redacted] failed'`, expected `'push [redacted] failed'`.
 - Tests of `d5f35cfc` with the rule of pass 1's head `b7935aeb`, no boundary: `tests 44`, `pass 42`, `fail 2`, both "a GitHub installation token shape inside a longer word stays" (actual `'keep prefix[redacted] here'`, expected `'keep prefixghs_A1b2…A1b2suffix here'`).
 - Tests of `d5f35cfc` with the fixed rule: `tests 44`, `pass 44`, `fail 0`.
+
+### Fail-before of the pass 2 fixes
+
+Pass 2 finding 1 found that the word boundary leaves a token after a serialized escape unredacted; by coordinator decision 2026-11-03 the boundary is dropped and a token inside a longer word is redacted too. `a6a1435e` replaces the inside-a-word negative of both users with one positive test per case, after the words `prefix`, `my_`, and `v2` and after the escapes `\n`, `\t`, `\r`, and `\"` (literal backslash sequences). Same build and command as above, with `--test-reporter=tap`:
+
+- Tests of `a6a1435e` with the rule of `f377a38f`, `/\bghs_[A-Za-z0-9._-]{36,}/g`: `tests 56`, `pass 44`, `fail 12`, each of these six tests failing in both users: "a GitHub installation token after the word prefix is redacted" (actual `'keep prefixghs_A1b2…A1b2 here'`, expected `'keep prefix[redacted] here'`), "… after the word my_ …" (actual `'keep my_ghs_A1b2…A1b2 here'`), "… after the word v2 …" (actual `'keep v2ghs_A1b2…A1b2 here'`), "… after the escape \\n …" (actual `'line\\nghs_A1b2…A1b2'`, expected `'line\\n[redacted]'`), "… after the escape \\t …" and "… after the escape \\r …" alike. The `\"` case passes before and after, because `"` is no word character; it guards the escape form that already worked.
+- Tests of `a6a1435e` with the fixed rule, `/ghs_[A-Za-z0-9._-]{36,}/g`: `tests 56`, `pass 56`, `fail 0`.
 
 The synthetic token `ghs_` and nine times `A1b2` is shortened to `ghs_A1b2…A1b2` above.
 
@@ -95,14 +103,25 @@ Every pass runs at effort medium per owner decision.
 
 - Reviewer: Codex CLI `gpt-6-astra`, role A, through `make review`, at head `b7935aeb` against `c355525b`; session `01a19eb6-b681-7e70-998b-c4458edb89e9`; model `gpt-6-astra`, effort `medium`, and sandbox `read-only`, each reported in the header.
 - Result: Critical 0, High 0, Medium 2, Low 2, recorded in `passes.jsonl` and `findings.jsonl`.
-- Finding 1 (Medium, `redaction`): the brief's near-miss negative for a token shape embedded in a longer word was a match. Fixed: the rule takes a word boundary before `ghs_`; design decision 1 and its risks, both deltas, the proposal, and contract section 3 say so; a negative test in both users.
+- Finding 1 (Medium, `redaction`): the brief's near-miss negative for a token shape embedded in a longer word was a match. Fixed at first with a word boundary before `ghs_`; reversed after pass 2 by coordinator decision 2026-11-03 (pass 2 finding 1), so its outcome is `declined`.
 - Finding 2 (Medium, `missing-fail-before-test`): the fail-before run did not show every positive behavior failing. Fixed: one test per behavior and the fail-before runs above.
 - Finding 3 (Low, `stale-citation`): the route section called the pass 3 reviewer of `route.json` a departure from governance. Fixed in the route section.
 - Finding 4 (Low, `evidence-mismatch`): E1 and E4 linked raw `main` and the other pages had no unversioned label. Fixed: E1 and E4 link their pinned commit, checked to serve both files (HTTP 200), and E1's rendered page, E2, E3, and E5 are labelled unversioned.
 
+### Pass 2
+
+- Reviewer: Claude Code `claude-fable-5-1`, role B, at effort `medium`, at head `15064783` against `c355525b`; session `ec7c975e-4e00-4f2d-a09a-dbe4b0df161c`.
+- Result: Critical 0, High 0, Medium 1, Low 4, recorded in `passes.jsonl` and `findings.jsonl`. It confirmed the fixes of pass 1 findings 2 to 4 (outcome `fixed`).
+- Finding 1 (Medium, `redaction`): the word boundary left a token after a serialized escape such as a literal `\n` unredacted. Fixed by coordinator decision 2026-11-03, which replaced the reviewer's escape lookbehind: when a boundary and redaction conflict, redact, because a missed secret is worse than an over-redacted word. The rule takes no left boundary, which reverses the pass 1 fix; positive tests for a token inside a word and after each escape in both users (fail-before above); design decision 1 and its risks, the proposal, the `execution-observability` and `scm-port` deltas, and contract section 3 say so. The negatives for a wrong prefix and a too-short token stay.
+- Finding 2 (Low, `contract-drift`): two lists of the shapes `@taskelith/secrets` redacts lacked the token. Fixed: installation and enrollment contract section 8 and a MODIFIED `installation-enrollment` delta of "Secret scrubbing" name it.
+- Finding 3 (Low, `docs`): this record misdescribed the edited scenarios and the comments. Fixed in the author self-check.
+- Finding 4 (Low, `naming`): the secrets tests interpolated a string literal and duplicated the JWT literal. Fixed: a module-level `JWT` constant serves both tests.
+- Finding 5 (Low, `docs`): the group comment "Shapes without word boundaries" no longer fit the GitHub rule. Fixed by dropping the boundary; the rule's comment no longer says "not inside a word".
+- These fixes are unreviewed until pass 3, the coordinator's architect check covers any it does not review.
+
 ## Limitations
 
-- A token glued after a letter, digit, or `_`, for example after a literal `\n` escape in serialized text, stays unless a marked-position rule covers it (design decision 1, "Risks").
+- An identifier that holds `ghs_` and 36 more token characters is redacted even inside a longer word, although it may be no token (design, "Risks").
 - No live GitHub token was redacted: the tests use synthetic tokens in the documented formats. Both formats come from GitHub's documentation and changelog, not from an observed token.
 - The rule replaces a trailing `.`, `-`, or `_` glued to a token with it, such as a sentence's final period (design decision 1).
 - Tokens of other SCM services, and GitHub's `ghp_`, `gho_`, `ghu_`, `ghr_`, and `github_pat_` tokens, have no shape rule.

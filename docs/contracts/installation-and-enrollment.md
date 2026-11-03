@@ -109,7 +109,7 @@ G3 item 26a implements decision D11 (b) of the [G3 plan](../g3-plan.md#owner-dec
 
 ## 8. Secret scrubbing
 
-`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), NKey seeds, NATS JWTs, whole `.creds` blocks, PEM private-key blocks of any type, also cut ones, and the user information of URLs, such as a database password, percent-encoded or not. PEM certificates stay.
+`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), GitHub App installation tokens, NKey seeds, NATS JWTs, whole `.creds` blocks, PEM private-key blocks of any type, also cut ones, and the user information of URLs, such as a database password, percent-encoded or not. PEM certificates stay.
 - `redactSecrets` and `redactFailure` also take the credentials revealed to a run and redact each by its exact text, with one `[redacted]` for each run of overlapping or touching occurrences, because a slot credential has no known shape; `redactFailure` redacts detail keys too ([account pool contract](account-pool.md) section 7.4).
 - The administrative entry redacts every failure before printing it.
 - `scrubEnvironment` drops every variable named like a secret, including the names of TLS key files (`TLS_KEY`, `SSL_KEY`), or holding one, from a child process's environment, a service URL with user information included.

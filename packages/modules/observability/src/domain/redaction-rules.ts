@@ -60,8 +60,8 @@ export const redactIssuedSecrets = textRule(
 );
 export const redactNkeySeeds = textRule(/S[OAU][A-Z2-7]{56}/g, REDACTED);
 // A GitHub App installation token, stateful or `ghs_APPID_JWT`, by GitHub's
-// pattern, not inside a word (design of add-github-token-secret-shape).
-export const redactGithubInstallationTokens = textRule(/\bghs_[A-Za-z0-9._-]{36,}/g, REDACTED);
+// pattern (design of add-github-token-secret-shape).
+export const redactGithubInstallationTokens = textRule(/ghs_[A-Za-z0-9._-]{36,}/g, REDACTED);
 // Tried once per run of JWT characters, keeping the run before `eyJ`.
 export const redactJwts = textRule(
   /(?<![A-Za-z0-9_-])((?:(?!eyJ)[A-Za-z0-9_-])*)eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
