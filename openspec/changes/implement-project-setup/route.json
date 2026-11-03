@@ -1,0 +1,109 @@
+{
+  "change": "implement-project-setup",
+  "generatedAt": "2026-11-03T04:23:58.611Z",
+  "devCommit": "a21913f13672d87306b86b8f26cf474ef8264bba",
+  "headCommit": "c5e5295e05bcd614528890060bb09cb3dbe18994",
+  "features": {
+    "linesChanged": 1772,
+    "filesChanged": 31,
+    "capabilities": [
+      "control-plane-api",
+      "postgres-state",
+      "trust-and-operational-foundation"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": true,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "L",
+    "capabilityHistory": {
+      "changes": 10,
+      "thirdPassShare": 0.8,
+      "mediumOrWorsePerChange": 9.3
+    }
+  },
+  "rule": {
+    "version": 5,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "capabilities",
+      "security",
+      "size"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.82,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ],
+    "latencyMs": 332
+  }
+}
