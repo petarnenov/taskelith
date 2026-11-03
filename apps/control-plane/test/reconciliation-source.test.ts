@@ -172,3 +172,25 @@ test('a view\'s source answers nothing, and a store that fails fails the listing
   board.tasks.delete('task-1');
   assert.equal(failed(await source(board).openItems(ALPHA)).code, 'not-found');
 });
+
+test('an unknown execution of a task without a registered card is in no project inbox, the processes still listed', async () => {
+  const board = new BoardWorld();
+  board.tasks.set('task-1', task('task-1', [{ id: 'att-1', executions: [execution('ex-1', 'w-1', { evidence: UNCERTAIN })] }]));
+  board.processes = [process('obs-1')];
+  assert.deepEqual(value(await source(board).openItems(ALPHA)).items, []);
+  assert.equal(value(await source(board).openItems(INSTALLATION)).items.length, 1);
+});
+
+test('an item names its execution\'s grant generation, and a not-started one closes at its recorded closing time', async () => {
+  const board = await world();
+  const granted = execution('ex-1', 'w-1', { evidence: UNCERTAIN, grants: [{ ownershipGeneration: 2 }] });
+  board.tasks.set('task-1', task('task-1', [{ id: 'att-1', executions: [granted] }], 5));
+  const [open] = value(await source(board).openItems(ALPHA)).items.filter((each) => each.subject.scope === 'card' && each.subject.executionId === 'ex-1');
+  assert.equal(open!.subject.scope === 'card' && open!.subject.attemptGeneration, 2);
+  board.tasks.set('task-1', task('task-1', [{ id: 'att-1', executions: [{ ...granted, state: 'not-started' }] }], 5));
+  board.closures.set(open!.id, AS_OF);
+  const closed = value(await source(board).item(ALPHA, open!.id));
+  assert.deepEqual([closed?.state, closed?.state === 'closed' && closed.closedAt], ['closed', AS_OF]);
+  const [item] = value(await source(board).cardItems(value(await board.reads().cards.get('run-1' as never))!));
+  assert.equal(item!.state, 'closed');
+});
