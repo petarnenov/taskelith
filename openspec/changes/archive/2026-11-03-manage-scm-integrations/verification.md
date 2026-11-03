@@ -169,6 +169,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   8. Low, `contract-drift`: both adapters duplicate how a change merges over the current integration.
 - Resolutions (`findings.jsonl`, all `fixed-unreviewed`): findings 1 to 4 and 6 to 8 in `d0c51844`, finding 5 in `cb4ea8b4`; "Pass 2 fixes for the architect check" gives each fix and its failing-first test. None was declined or deferred, and none needed an OpenAPI or receiver change.
 
+## Archive
+
+Checked on the tree of the archive commit `docs: archive the manage scm integrations change`, the working tree that the checks ran on, after every task in `tasks.md` was ticked; `origin/dev` was still `4b89aa6e`, so no merge was needed. A scratch copy of `openspec/` archived the change first and validated strictly (71 passed, 0 failed) and was deleted.
+
+- `npm run openspec -- archive manage-scm-integrations --yes`: `Change 'manage-scm-integrations' archived as '2026-11-03-manage-scm-integrations'.`
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-11-03-manage-scm-integrations`.
+- `git diff 4b89aa6e -- openspec/specs`: only this change's edits, in `control-plane-api` (35 lines changed), `plugin-registration` (10), `postgres-state` (18), and `scm-port` (33); 92 insertions, 4 deletions.
+- The moved change holds `findings.jsonl` (12 findings) and `passes.jsonl` (2 passes); `make findings ARGS="validate"`: `Every findings file is valid: 105 file(s); every pass summary file is valid: 85 file(s); every route file is valid: 38 file(s).`
+- `env -u NODE_ENV make verify`: passed, profile full, uncommitted working tree, no stamp written: tests 4421, pass 4374, fail 0, skipped 47; all files 99.39 % lines, 92.75 % branches, 98.91 % functions.
+
 ## Limitations
 
 - The composition registers one SCM plugin, GitHub, whose decoy and eventless rule serve every integration (design, Risks); the coordinator accepted it (Niki, 2026-11-03).
@@ -179,5 +190,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - The coordinator's architect check of the pass 2 fixes (the review ended after the Low-only pass 2).
-- The archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
