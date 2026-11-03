@@ -9,7 +9,8 @@ import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 import { AT } from './fixtures.ts';
-import { createMigratedDatabase, query, truncateAll, untilNumberable } from './test-database.ts';
+import pg from 'pg';
+import { createMigratedDatabase, query, truncateAll, untilEnded, untilNumberable } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const database = new PostgresDatabase(url);
@@ -80,7 +81,7 @@ async function heldOpen(t: TestContext, ...events: readonly UiEvent[]) {
   return { commit };
 }
 
-test('an entry committed while an earlier inserter is open waits for it, then both are numbered in insertion order', async (t) => {
+test('an entry committed while an earlier inserter is open waits for it, then both are numbered in entry order', async (t) => {
   const early = await heldOpen(t, outputEvent(1));
   await commitNow([{ kind: 'event', event: outputEvent(2) }]);
   assert.equal(value(await log.assign(100, AT)), 0, 'the later commit is not numbered while the earlier inserter is open');
@@ -92,7 +93,7 @@ test('an entry committed while an earlier inserter is open waits for it, then bo
   assert.deepEqual(await marks(), ['1:1', '2:2'], 'positions follow insertion, all above what the reader saw');
 });
 
-test('entries inserted in one order and committed in the other before any numbering are numbered in insertion order', async (t) => {
+test('entries inserted in one order and committed in the other before any numbering are numbered in entry order', async (t) => {
   const early = await heldOpen(t, outputEvent(1));
   await commitNow([{ kind: 'event', event: outputEvent(2) }]);
   await early.commit();
@@ -111,6 +112,34 @@ test('a long-open transaction delays numbering but neither blocks other writers\
   await untilNumberable(url);
   assert.equal(value(await log.assign(100, AT)), 4);
   assert.deepEqual(await marks(), ['1:1', '2:2', '3:3', '4:4']);
+});
+
+// A READ COMMITTED transaction on its own connection whose first write goes
+// to another table, so its id predates the insert of its event.
+async function writerOfAnotherTableFirst(t: TestContext) {
+  const client = new pg.Client({ connectionString: url.href });
+  await client.connect();
+  t.after(() => client.end());
+  await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+  await client.query('CREATE TABLE IF NOT EXISTS other_writes (id integer)');
+  await client.query('INSERT INTO other_writes VALUES (1)');
+  const { rows } = await client.query<{ id: string }>('SELECT pg_current_xact_id() AS id');
+  return {
+    append: (event: UiEvent) => client.query("INSERT INTO ui_events (kind, project_id, record) VALUES ('event', $1, $2)", [ALPHA, JSON.stringify(event)]),
+    commit: async () => (await client.query('COMMIT'), await untilEnded(url, rows[0]!.id)),
+  };
+}
+
+test('an older transaction that wrote another table first and inserts after a younger open one is numbered first', async (t) => {
+  const older = await writerOfAnotherTableFirst(t);
+  const younger = await heldOpen(t, outputEvent(1));
+  await older.append(outputEvent(2));
+  await older.commit();
+  assert.equal(value(await log.assign(100, AT)), 1, 'the older transaction\'s later insert does not wait');
+  await younger.commit();
+  await untilNumberable(url);
+  assert.equal(value(await log.assign(100, AT)), 1);
+  assert.deepEqual(await marks(), ['1:2', '2:1'], 'positions follow the horizon, not insertion');
 });
 
 test('a rolled-back transaction leaves no entry, and concurrent numberings give each committed entry one position without gaps', async () => {
@@ -253,3 +282,4 @@ test('a listener whose connection is lost logs it, and the next listen reconnect
   value(await log.assign(100, AT));
   await numbered.opened;
 });
+
