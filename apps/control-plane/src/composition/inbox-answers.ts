@@ -22,6 +22,10 @@ export function startInboxServices(database: PostgresDatabase, sessions: Pick<Ag
     new ReconciliationSource({ reads, positions, redactor, resolver: ANSWERED_ELSEWHERE }),
   ];
   const answers = new InboxAnswers({
+    snapshot: (work) => database.readOnly((transaction) => {
+      const reads = boardReadsOf(transaction);
+      return work(viewSources(reads, headPositions(reads)));
+    }),
     transaction: (work) => database.transaction((transaction) => {
       const reads = boardReadsOf(transaction);
       const positions = headPositions(reads);

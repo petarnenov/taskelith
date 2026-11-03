@@ -20,6 +20,8 @@ export interface InboxAnswerTransaction {
 }
 
 export interface InboxAnswerStore {
+  // A read-only snapshot of the sources, as a view reads them.
+  snapshot<Value>(work: (sources: readonly NeedsYouSource[]) => Promise<Result<Value>>): Promise<Result<Value>>;
   transaction<Value>(work: (transaction: InboxAnswerTransaction) => Promise<Result<Value>>): Promise<Result<Value>>;
 }
 
@@ -48,7 +50,7 @@ export class InboxAnswers {
 
   // The item in any state, which the answer's role check reads first.
   item(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem>> {
-    return this.#store.transaction(async ({ sources }) => {
+    return this.#store.snapshot(async (sources) => {
       const located = await locate(sources, scope, itemId);
       return located.ok ? ok(located.value.item) : located;
     });

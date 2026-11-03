@@ -57,12 +57,20 @@ export interface ReconciliationSourceParts {
   readonly resolver: ReconciliationResolver;
 }
 
-// The source over the G2 reconciliation queue (product ports section 4.1):
-// an unknown execution of a card's task, or a worker's unrecorded process.
+interface FoundItem {
+  readonly scope: NeedsYouScope;
+  readonly itemId: NeedsYouItemId;
+  readonly item: NeedsYouItem | undefined;
+}
+
+// The source over the G2 reconciliation queue (product ports section 4.1),
+// one instance per snapshot or transaction, whose last item read it keeps.
 export class ReconciliationSource implements NeedsYouSource {
   readonly id = RECONCILIATION_SOURCE_ID;
   readonly kinds = Object.freeze(['reconciliation'] as const);
   readonly #parts: ReconciliationSourceParts;
+  // The last item read, which the answer that follows it takes.
+  #found: FoundItem | undefined;
 
   constructor(parts: ReconciliationSourceParts) {
     this.#parts = parts;
@@ -78,9 +86,16 @@ export class ReconciliationSource implements NeedsYouSource {
     return ok(Object.freeze({ items: Object.freeze(page), position: position.value }));
   }
 
+  // The item in any state, kept for an answer to it that follows.
+  async item(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
+    const read = await this.#readItem(scope, itemId);
+    this.#found = read.ok ? { scope, itemId, item: read.value } : undefined;
+    return read;
+  }
+
   // A resolved item stays readable; an open or closed one is read from the
   // queue and the cards' tasks.
-  async item(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
+  async #readItem(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
     const answered = await this.#parts.reads.reconciliation.answers.get(itemId);
     if (!answered.ok) return answered;
     if (answered.value !== undefined) return ok(isInScope(answered.value, scope) ? answered.value : undefined);
@@ -89,7 +104,7 @@ export class ReconciliationSource implements NeedsYouSource {
   }
 
   async answer(request: AnswerRequest): Promise<Result<NeedsYouItem>> {
-    const item = await this.item(request.scope, request.itemId);
+    const item = await this.#takeFound(request.scope, request.itemId);
     if (!item.ok) return item;
     if (item.value === undefined) return err(failure('not-found', `no inbox item ${request.itemId}`));
     if (item.value.kind !== 'reconciliation') return err(failure('internal', `item ${request.itemId} is not a reconciliation item`));
@@ -98,6 +113,15 @@ export class ReconciliationSource implements NeedsYouSource {
     const answer = this.#recordedAnswer(item.value, request.answer);
     if (!answer.ok) return answer;
     return this.#parts.resolver.resolve(item.value, { resolvedBy: request.responder, answer: answer.value });
+  }
+
+  // The item that the last item read found for this scope and identifier,
+  // taken once, else a new read.
+  #takeFound(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
+    const found = this.#found;
+    this.#found = undefined;
+    const same = found !== undefined && found.itemId === itemId && sameScope(found.scope, scope);
+    return same ? Promise.resolve(ok(found.item)) : this.#readItem(scope, itemId);
   }
 
   // The answer as recorded: its texts redacted, as session text is.
@@ -230,6 +254,10 @@ function processItem({ workerId, journalId, observationId, containment, processC
 // is the same item in every read.
 function itemIdOf(subject: readonly string[]): NeedsYouItemId {
   return `r${createHash('sha256').update(JSON.stringify(subject)).digest('hex').slice(0, 32)}` as NeedsYouItemId;
+}
+
+function sameScope(left: NeedsYouScope, right: NeedsYouScope): boolean {
+  return left.kind === 'installation' ? right.kind === 'installation' : right.kind === 'project' && left.projectId === right.projectId;
 }
 
 function isInScope({ subject }: NeedsYouItem, scope: NeedsYouScope): boolean {

@@ -50,9 +50,15 @@ class OneItemSource implements NeedsYouSource {
   }
 }
 
+// The store over the sources, naming each snapshot and transaction it runs.
 function answers(source = new OneItemSource(), keys = new InMemoryInboxAnswerKeys()) {
-  const service = new InboxAnswers({ transaction: (work) => work({ keys, sources: [emptySource(), source] }) }, { digest: (input) => `digest:${input}` });
-  return { service, source, keys };
+  const runs: string[] = [];
+  const sources = [emptySource(), source];
+  const service = new InboxAnswers({
+    snapshot: (work) => (runs.push('snapshot'), work(sources)),
+    transaction: (work) => (runs.push('transaction'), work({ keys, sources })),
+  }, { digest: (input) => `digest:${input}` });
+  return { service, source, keys, runs };
 }
 
 function emptySource(): NeedsYouSource {
@@ -102,6 +108,13 @@ test('an item outside the inbox\'s scope, or unknown, is not-found, and item rea
   assert.equal(value(await service.item(ALPHA, 'i-1' as never)).state, 'open');
   value(await service.answer(ALPHA, submission('key-1')));
   assert.equal(value(await service.item(ALPHA, 'i-1' as never)).state, 'resolved');
+});
+
+test('the item read runs in a read-only snapshot, and an answer in one transaction', async () => {
+  const { service, runs } = answers();
+  assert.equal(value(await service.item(ALPHA, 'i-1' as never)).state, 'open');
+  value(await service.answer(ALPHA, submission('key-1')));
+  assert.deepEqual(runs, ['snapshot', 'transaction']);
 });
 
 test('a held key outside the inbox\'s scope is not-found, never the first outcome or a reused key', async () => {

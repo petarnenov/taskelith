@@ -10,6 +10,7 @@ import {
   headPositions,
   startAgentSessionServices,
   startInboxServices,
+  type InboxAnswerStore,
   type InboxAnswerSubmission,
 } from '@taskelith/control-plane';
 import { ControlPlaneNamespace, SessionInputDigestKeyFile, SessionOutputTailKeyFile } from '@taskelith/control-plane-store';
@@ -86,9 +87,16 @@ async function answerState(): Promise<unknown> {
   return Promise.all(tables.map((table) => sql(`SELECT * FROM ${table} ORDER BY 1`)));
 }
 
+// The native source in a read-only snapshot, as the item read takes it.
+const nativeSnapshot: InboxAnswerStore['snapshot'] = (work) => database.readOnly((tx) => {
+  const reads = boardReadsOf(tx);
+  return work([sessions.sourceIn(reads.timeline, headPositions(reads))]);
+});
+
 // The composed answers, whose key recording fails after the source answered.
 function failingKeyRecord(): InboxAnswers {
   return new InboxAnswers({
+    snapshot: nativeSnapshot,
     transaction: (work) => database.transaction((tx) => work({
       keys: { find: (itemId, key) => tx.inboxAnswerKeys.find(itemId, key), record: async () => err(failure('unavailable', 'the key store failed')) },
       sources: [sessions.sourceIn(tx.sessionTimeline, headPositions(boardReadsOf(tx)))],
@@ -131,6 +139,7 @@ function barrier(parties: number): () => Promise<void> {
 // The composed answers over the native source, with the key reads held.
 function racingAnswers(wait: () => Promise<void>): InboxAnswers {
   return new InboxAnswers({
+    snapshot: nativeSnapshot,
     transaction: (work) => database.transaction((tx) => work({
       keys: {
         find: async (itemId, key) => {

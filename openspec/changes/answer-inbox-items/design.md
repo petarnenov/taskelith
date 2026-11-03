@@ -15,7 +15,7 @@ Until item 25 no writer registers a card, so in a running installation the recon
 
 ### 1. The source's item read and the answer's scope
 
-`NeedsYouSource` gains `item(scope, itemId)`, which reads an item of the scope in any state, or none. The answer service locates an item by asking each registered source in turn, and the HTTP handler reads it before the body to check its `answerableBy` role. `AnswerRequest` gains the `scope` of the inbox that is answered, and a source answers `not-found` for an item outside it, so a project's path never answers another project's item or an installation item. Both are port changes inside Execution; no OpenAPI operation or schema changes.
+`NeedsYouSource` gains `item(scope, itemId)`, which reads an item of the scope in any state, or none. The answer service locates an item by asking each registered source in turn, and the HTTP handler reads it before the body, in a read-only snapshot of the sources as a view reads them, to check its `answerableBy` role. A reconciliation source serves one snapshot or transaction, and an answer takes the item that the source's item read just found for it instead of deriving it again. `AnswerRequest` gains the `scope` of the inbox that is answered, and a source answers `not-found` for an item outside it, so a project's path never answers another project's item or an installation item. Both are port changes inside Execution; no OpenAPI operation or schema changes.
 
 ### 2. Idempotency keys (product ports section 4.2)
 
@@ -51,7 +51,7 @@ A view reads the same source in its read-only snapshot with the resolver `ANSWER
 
 ### 6. HTTP
 
-`answerInboxItem` and `answerInstallationInboxItem` are served with the routes' operation role (wire contracts section 3), then `InboxAnswerApi.authorizeItem`, still before the body: it reads the item in the path's scope, answers 404 for none or a malformed identifier, and authorizes the item's `answerableBy` role on its project, or the installation owner for an installation item, through `Access`. So the role and scope checks run before any key is read, and a replay by a principal who lost the item's role or scope gets a stranger's 403 or 404, never the stored outcome (coordinator constraint, Niki, 2026-11-03). The body is then parsed to the port's answer; the handler answers the resolved item as `InboxItem`. The failures map to 400, 404, 409 `CommandConflict`, and 422 `AnswerRefusal` as section 8 declares.
+`answerInboxItem` and `answerInstallationInboxItem` are served with the routes' operation role (wire contracts section 3), then `InboxAnswerApi.authorizeItem`, still before the body: it reads the item in the path's scope in a read-only snapshot, answers 404 for none or a malformed identifier, and authorizes the item's `answerableBy` role on its project, or the installation owner for an installation item, through `Access`. So the role and scope checks run before any key is read, and a replay by a principal who lost the item's role or scope gets a stranger's 403 or 404, never the stored outcome (coordinator constraint, Niki, 2026-11-03). The body is then parsed to the port's answer; the handler answers the resolved item as `InboxItem`. The failures map to 400, 404, 409 `CommandConflict`, and 422 `AnswerRefusal` as section 8 declares.
 
 ### 7. Migration `1792934200000`
 

@@ -100,7 +100,10 @@ beforeEach(() => {
   source.reset();
   keys = new InMemoryInboxAnswerKeys();
 });
-const answers = new InboxAnswers({ transaction: (work) => work({ keys, sources: [source] }) }, { digest: (input) => `digest:${input}` });
+const answers = new InboxAnswers({
+  snapshot: (work) => work([source]),
+  transaction: (work) => work({ keys, sources: [source] }),
+}, { digest: (input) => `digest:${input}` });
 
 const authorization = new AuthorizationService(store);
 const api = new ControlPlaneApi({

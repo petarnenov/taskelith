@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import pg from 'pg';
 import {
+  ANSWERED_ELSEWHERE,
   InboxAnswers,
   LaunchRevokingFleetRegistry,
   ReconciliationSource,
@@ -146,6 +147,7 @@ test('an unknown execution\'s answer ends its attempt, releases its reservation,
     'reconciliation', 'unknown-execution', 'project-maintainer',
   ]);
   assert.equal(value(await views.counts(PROJECT)).total, 1);
+  assert.deepEqual(value(await inbox.answers.item(PROJECT, open!.id)), open, 'the item read sees it in a snapshot');
   await sql('DELETE FROM card_touches');
   await sql('DELETE FROM ui_events');
   const resolved = value(await inbox.answers.answer(PROJECT, submission(open!.id, 'key-1', RESOLVE)));
@@ -220,6 +222,10 @@ function barrier(parties: number): () => Promise<void> {
 function racingAnswers(wait: () => Promise<void>): InboxAnswers {
   const redactor = new SecretTextRedactor();
   return new InboxAnswers({
+    snapshot: (work) => database.readOnly((tx) => {
+      const reads = boardReadsOf(tx);
+      return work([new ReconciliationSource({ reads, positions: headPositions(reads), redactor, resolver: ANSWERED_ELSEWHERE })]);
+    }),
     transaction: (work) => database.transaction((tx) => {
       const reads = boardReadsOf(tx);
       const keys: InboxAnswerKeys = {

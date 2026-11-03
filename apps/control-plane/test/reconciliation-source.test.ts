@@ -126,6 +126,23 @@ test('an answer reaches the resolver redacted, with the decision of the item\'s 
   assert.equal(resolver.resolved.length, 2);
 });
 
+test('an answer takes the item that the item read found for it, and reads any other item again', async () => {
+  const board = await world();
+  const reads = board.reads();
+  let listings = 0;
+  const cards = { ...reads.cards, listByProject: (projectId: never) => ((listings += 1), reads.cards.listByProject(projectId)) };
+  const counted = new ReconciliationSource({
+    reads: { ...reads, cards }, positions: { current: async () => ok('7') }, redactor: { redact: (text) => text }, resolver: new RecordingResolver(),
+  });
+  const [first, second] = value(await source(board).openItems(ALPHA)).items;
+  assert.equal(value(await counted.item(ALPHA, first!.id))?.state, 'open');
+  assert.equal(value(await counted.answer(request(ALPHA, first!.id, RESOLVE))).state, 'resolved');
+  assert.equal(listings, 1, 'the answer derived the found item once');
+  value(await counted.item(ALPHA, first!.id));
+  assert.equal(value(await counted.answer(request(ALPHA, second!.id, RESOLVE))).state, 'resolved');
+  assert.equal(listings, 3, 'another item is read again');
+});
+
 test('a mismatched decision or kind is invalid, a resolved item already-answered, and an unknown one not-found', async () => {
   const board = await world();
   const [execution] = value(await source(board).openItems(ALPHA)).items;
