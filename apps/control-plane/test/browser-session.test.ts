@@ -23,6 +23,7 @@ import { err, failure, instantFromEpochMilliseconds, ok } from '@taskelith/kerne
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
+import { addProjects } from './project-fixtures.ts';
 
 const OPERATOR = `tkop_${'B'.repeat(43)}`;
 const OWNER_PASSWORD = 'owner password of this test';
@@ -43,6 +44,7 @@ const owner = value(await new OwnerBootstrapService({ store, random: secrets, cl
 value(await administration.setPassword(owner, 'owner', OWNER_PASSWORD, INVOCATION));
 const alice = value(await administration.createPrincipal(owner, 'alice', INVOCATION)).principalId;
 value(await administration.setPassword(owner, 'alice', ALICE_PASSWORD, INVOCATION));
+await addProjects(store, ['alpha', 'beta'], clock.now());
 value(await administration.assignProjectRole(owner, { projectId: 'alpha', loginName: 'alice', role: 'project-viewer' }, INVOCATION));
 
 // Evidence and runs of two projects; `e-down` fails, and any other

@@ -94,13 +94,27 @@ function refusal(reason: string) {
   return { code: 'precondition-failed', message: `refused: ${reason}`, details: { reason } };
 }
 
-test('the execution document is OpenAPI 3.1.0 at version 0.8.0 with the 9c operations', () => {
+test('the execution document is OpenAPI 3.1.0 at version 0.9.0 with the 9c operations', () => {
   assert.equal(EXECUTION.openapi, '3.1.0');
-  assert.equal(EXECUTION.info.version, '0.8.0');
+  assert.equal(EXECUTION.info.version, '0.9.0');
   for (const reference of referencesIn(EXECUTION)) assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
   for (const id of NEW_OPERATIONS) operation(id);
   assert.equal(operation('retireEvidence').method, 'delete');
   assert.equal(operation('readmitTask').method, 'post');
+});
+
+test('the role-checked G2 operator operations declare the 403 AccessDenial, the SDLC document at version 0.4.0', () => {
+  const sdlc = document('sdlc.openapi.json');
+  assert.equal(sdlc.info.version, '0.4.0');
+  assert.deepEqual(sdlc.components.schemas.AccessDenial, CONTROL_PLANE.components.schemas.AccessDenial);
+  const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
+  for (const id of ['createRun', 'submitTask', 'readAdmission']) {
+    const found = sdlcOperations.find((candidate) => candidate.operationId === id)!;
+    assert.deepEqual(found.responses['403']?.content?.['application/json']?.schema, { $ref: '#/components/schemas/AccessDenial' }, id);
+  }
+  for (const id of ['readTaskResult', 'listQuarantine', 'redriveQuarantined']) {
+    assert.deepEqual(responseSchema(id, '403'), { $ref: '#/components/schemas/AccessDenial' }, id);
+  }
 });
 
 test('the session schemes and the shared failures are those of the control-plane document', () => {

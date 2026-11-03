@@ -8,28 +8,34 @@ import type {
   Principal,
   PrincipalId,
   Principals,
+  ProjectMembership,
   ProjectRole,
   ProjectRoleGrant,
   ProjectRoles,
+  Projects,
   Role,
   SecretHash,
   Sessions,
   StoredSession,
 } from '@taskelith/access';
+import { unknownProject } from '@taskelith/access';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { instant } from './capacity-repositories.js';
 import type { PostgresDatabase } from './postgres-database.js';
+import { PostgresProjects } from './project-repositories.js';
 import type { Session } from './session.js';
 
 // The Access module's stores over one transaction's session.
 export class PostgresAccessTransaction implements AccessTransaction {
   readonly principals: Principals;
+  readonly projects: Projects;
   readonly projectRoles: ProjectRoles;
   readonly sessions: Sessions;
   readonly audit: AccessAudit;
 
   constructor(session: Session) {
     this.principals = new PostgresPrincipals(session);
+    this.projects = new PostgresProjects(session);
     this.projectRoles = new PostgresProjectRoles(session);
     this.sessions = new PostgresSessions(session);
     this.audit = new PostgresAccessAudit(session);
@@ -161,11 +167,13 @@ class PostgresProjectRoles implements ProjectRoles {
   async assign(projectId: string, principalId: PrincipalId, role: ProjectRole, assignedAt: Instant): Promise<Result<void>> {
     const { rowCount } = await this.#session.query(
       `INSERT INTO project_roles (project_id, principal_id, role, assigned_at)
-       SELECT $1, principal_id, $3, $4 FROM principals WHERE principal_id = $2
+       SELECT p.project_id, u.principal_id, $3, $4 FROM projects p, principals u WHERE p.project_id = $1 AND u.principal_id = $2
        ON CONFLICT (project_id, principal_id) DO UPDATE SET role = EXCLUDED.role, assigned_at = EXCLUDED.assigned_at`,
       [projectId, principalId, role, assignedAt],
     );
-    return rowCount === 0 ? unknownPrincipal(principalId) : ok(undefined);
+    if (rowCount !== 0) return ok(undefined);
+    const { rows } = await this.#session.query('SELECT 1 FROM principals WHERE principal_id = $1', [principalId]);
+    return rows.length === 0 ? unknownPrincipal(principalId) : unknownProject();
   }
 
   async remove(projectId: string, principalId: PrincipalId): Promise<Result<boolean>> {
@@ -179,6 +187,18 @@ class PostgresProjectRoles implements ProjectRoles {
       [principalId],
     );
     return ok(rows.map((row) => Object.freeze({ projectId: row.project_id, role: row.role })));
+  }
+
+  async members(projectId: string, after: string | undefined, limit: number): Promise<Result<readonly ProjectMembership[]>> {
+    const { rows } = await this.#session.query<{ principal_id: string; login_name: string; role: ProjectRole }>(
+      `SELECT r.principal_id, u.login_name, r.role FROM project_roles r JOIN principals u USING (principal_id)
+       WHERE r.project_id = $1 AND ($2::text IS NULL OR r.principal_id COLLATE "C" > $2::text COLLATE "C")
+       ORDER BY r.principal_id COLLATE "C" LIMIT $3`,
+      [projectId, after ?? null, limit],
+    );
+    return ok(rows.map((row) => Object.freeze({
+      principalId: row.principal_id as PrincipalId, loginName: row.login_name as LoginName, role: row.role,
+    })));
   }
 }
 

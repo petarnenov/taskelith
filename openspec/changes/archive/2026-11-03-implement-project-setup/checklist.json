@@ -1,0 +1,104 @@
+{
+  "change": "implement-project-setup",
+  "generatedAt": "2026-11-03T04:05:39.481Z",
+  "devCommit": "a21913f13672d87306b86b8f26cf474ef8264bba",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "control-plane-wire-contracts",
+      "trust-and-operational-foundation",
+      "postgres-state"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/access/**",
+      "packages/adapters/postgres/**"
+    ],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 38
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 23
+      },
+      {
+        "category": "docs",
+        "count": 16
+      },
+      {
+        "category": "error-handling",
+        "count": 16
+      },
+      {
+        "category": "concurrency-race",
+        "count": 15
+      },
+      {
+        "category": "spec-wording",
+        "count": 15
+      },
+      {
+        "category": "naming",
+        "count": 13
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 826,
+        "inChecklist": 688
+      },
+      "mediumOrWorse": {
+        "findings": 405,
+        "inChecklist": 325
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 135
+      },
+      {
+        "category": "spec-wording",
+        "count": 95
+      },
+      {
+        "category": "docs",
+        "count": 72
+      },
+      {
+        "category": "stale-citation",
+        "count": 51
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 24
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 414,
+        "inChecklist": 407
+      },
+      "mediumOrWorse": {
+        "findings": 64,
+        "inChecklist": 64
+      }
+    }
+  }
+}

@@ -378,9 +378,12 @@ test('the owner exists from initialization, and only its credential manages prin
   assert.deepEqual([set.status, (set.output as { sessionsEnded: number }).sessionsEnded], [0, 0]);
   const weak = await adminWithSecret(['set-password', '--login-name', 'bob', ...ADMIN], token, 'short');
   assert.equal(weak.status, 1);
-  const role = ['--project', 'alpha', '--login-name', 'bob', ...ADMIN];
+  const alpha = `p${'a'.repeat(32)}`;
+  const role = ['--project', alpha, '--login-name', 'bob', ...ADMIN];
+  assert.equal((await adminWithSecret(['assign-project-role', ...role, '--role', 'project-operator'], token, '')).status, 1, 'no project yet');
+  await rows(database, `INSERT INTO projects (project_id, name, created_at, revision) VALUES ('${alpha}', 'Alpha', now(), 1)`);
   assert.equal((await adminWithSecret(['assign-project-role', ...role, '--role', 'project-operator'], token, '')).status, 0);
-  assert.deepEqual(await rows(database, 'SELECT project_id, role FROM project_roles'), [{ project_id: 'alpha', role: 'project-operator' }]);
+  assert.deepEqual(await rows(database, 'SELECT project_id, role FROM project_roles'), [{ project_id: alpha, role: 'project-operator' }]);
   assert.equal((await adminWithSecret(['remove-project-role', ...role], token, '')).status, 0);
   assert.deepEqual(await rows(database, 'SELECT project_id FROM project_roles'), []);
   const audit = await rows(database, 'SELECT kind, actor FROM access_audit_events ORDER BY position') as Array<{ kind: string; actor: string }>;

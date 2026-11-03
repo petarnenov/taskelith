@@ -37,6 +37,10 @@ export class NodeSecrets implements Secrets, RandomValues {
   principalId(): string {
     return `u${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
   }
+
+  projectId(): string {
+    return `p${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
+  }
 }
 
 // Hexadecimal, so an identifier is a valid NATS subject token and stream name.

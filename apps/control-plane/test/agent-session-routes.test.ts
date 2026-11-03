@@ -25,6 +25,7 @@ import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from 
 import { parseOwnershipGeneration, type ProjectId, type TaskId, type WorkflowRunId } from '@taskelith/sdlc';
 import { Argon2idPasswordHasher, NodeSecrets, SecretOutputRedactor, outputTailCipher, redactSecrets } from '@taskelith/secrets';
 import { sequentialIds, value } from '@taskelith/testing';
+import { addProjects } from './project-fixtures.ts';
 
 const OPERATOR = `tkop_${'C'.repeat(43)}`;
 const PASSWORD = 'password of the agent session test';
@@ -40,6 +41,7 @@ const sessions = new SessionService({ store, hasher, secrets, random: secrets, c
 const administration = new PrincipalAdministration({ store, hasher, random: secrets, clock });
 const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
 value(await administration.setPassword(owner, 'owner', PASSWORD, INVOCATION));
+await addProjects(store, ['alpha', 'beta'], clock.now());
 for (const [loginName, projectId, role] of [
   ['vera', 'alpha', 'project-viewer'], ['otto', 'alpha', 'project-operator'], ['bob', 'beta', 'project-operator'], ['nora', undefined, undefined],
 ] as const) {
