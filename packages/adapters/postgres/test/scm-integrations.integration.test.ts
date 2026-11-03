@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { after, test } from 'node:test';
-import { ScmSecrets, normalizeOrigin, type ScmIntegration, type ScmIntegrationId } from '@taskelith/integrations';
+import { SCM_INTEGRATIONS_CONFORMANCE, ScmSecrets, normalizeOrigin, type ScmIntegration, type ScmIntegrationId } from '@taskelith/integrations';
 import { parseIdentifier } from '@taskelith/kernel';
 import { PostgresDatabase, PostgresScmIntegrations, type TransactionWork } from '@taskelith/postgres';
 import { scmSecretCipher } from '@taskelith/secrets';
@@ -26,6 +26,13 @@ function integration(): ScmIntegration {
     pluginId: 'scm-example', label: 'Example', allowedOrigin: value(normalizeOrigin('https://git.example.com')),
     settings: { 'account-id': '42' }, secretNames: ['signing-key', 'webhook-secret'], revision: 1,
   };
+}
+
+for (const conformance of SCM_INTEGRATIONS_CONFORMANCE) {
+  test(`PostgreSQL SCM integrations: ${conformance.name}`, async () => {
+    await query(url, 'TRUNCATE scm_integration_secrets, scm_integrations');
+    assert.deepEqual(await conformance.check(store), []);
+  });
 }
 
 async function added(): Promise<ScmIntegration> {
@@ -62,13 +69,6 @@ test('a sealed secret put back from an earlier revision no longer opens', async 
     [stored.integrationId, before!.nonce, before!.sealed]);
   const refused = failed(await store.configurationOf(stored.integrationId));
   assert.deepEqual([refused.code, refused.details], ['internal', { setting: 'signing-key' }]);
-});
-
-test('pages follow the identifier in code-unit order after the given key', async () => {
-  const first = await added();
-  const second = await added();
-  const page = value(await store.page(first.integrationId, 1));
-  assert.deepEqual(page.map((found) => found.integrationId), [second.integrationId]);
 });
 
 // Both transactions read the revision before either writes, so the second

@@ -72,3 +72,4 @@ export {
 } from './application/scm-integration-service.js';
 export { StoredScmIntegrationVerifiers } from './application/stored-integration-verifiers.js';
 export { InMemoryScmIntegrations } from './adapters/in-memory-scm-integrations.js';
+export { SCM_INTEGRATIONS_CONFORMANCE } from './ports/scm-integrations-conformance.js';
