@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith SDLC API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
   },
   "paths": {
@@ -52,6 +52,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks `project-operator` or above on the project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
                 }
               }
             }
@@ -156,6 +166,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks `project-operator` or above on the run's project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
                 }
               }
             }
@@ -269,6 +289,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks `project-viewer` or above on the run's project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessDenial"
                 }
               }
             }
@@ -620,6 +650,40 @@
           },
           "details": {
             "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AccessDenial": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Status 403: the authenticated principal lacks the role the operation requires.",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "forbidden"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "const": "role-required"
+              }
+            },
             "additionalProperties": {
               "type": "string"
             }

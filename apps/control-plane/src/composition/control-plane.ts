@@ -4,6 +4,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import {
   AuthorizationService,
   LoginThrottle,
+  PrincipalAdministration,
+  ProjectSetupService,
   SessionService,
   type LoginThrottleSettings,
   type SessionLifetime,
@@ -204,6 +206,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
       decoy: new GithubWebhookDecoy(),
       eventless: new GithubEventlessDeliveries(),
     }),
+    projects: {
+      setup: new ProjectSetupService({ store: access.store, random: access.secrets, clock }),
+      members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),
+    },
   });
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.

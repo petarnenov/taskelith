@@ -158,4 +158,5 @@ test('session tokens and principal identifiers have their contract shapes', () =
   assert.match(secrets.sessionToken(), /^[A-Za-z0-9_-]{43}$/);
   assert.notEqual(secrets.sessionToken(), secrets.sessionToken());
   assert.match(secrets.principalId(), /^u[0-9a-f]{32}$/);
+  assert.match(secrets.projectId(), /^p[0-9a-f]{32}$/);
 });

@@ -27,6 +27,7 @@ import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type SignedBody, type Upload } from './api-server.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf } from './access-requirements.js';
+import { ProjectApi, type ProjectOperations } from './project-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
 import { expiredSessionCookie, sessionSetCookie } from './session-cookie.js';
@@ -79,6 +80,8 @@ export interface ApiServices {
   readonly agentSessions: AgentSessionOperations;
   // The webhook receiver of wire contracts section 5.
   readonly scmWebhooks: Pick<ScmWebhookReceiver, 'receive'>;
+  // Projects, their members, and their defaults (wire section 4).
+  readonly projects: ProjectOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -86,10 +89,12 @@ export interface ApiServices {
 export class ControlPlaneApi implements ApiHandlers {
   readonly #services: ApiServices;
   readonly #agentSessions: AgentSessionApi;
+  readonly #projects: ProjectApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
     this.#agentSessions = new AgentSessionApi(services.agentSessions);
+    this.#projects = new ProjectApi(services.projects);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -182,7 +187,34 @@ export class ControlPlaneApi implements ApiHandlers {
       case 'receiveScmWebhook':
         return this.#receiveScmWebhook(first, request.body as SignedBody);
       default:
-        return err(failure('internal', `operation ${operationId} has no handler`));
+        return this.#dispatchProject(operationId, request);
+    }
+  }
+
+  #dispatchProject(operationId: string, request: ApiRequest): Promise<Result<unknown>> {
+    switch (operationId) {
+      case 'listProjects':
+        return this.#projects.listProjects(request);
+      case 'createProject':
+        return this.#projects.createProject(request);
+      case 'readProject':
+        return this.#projects.readProject(request);
+      case 'updateProject':
+        return this.#projects.updateProject(request);
+      case 'listProjectMembers':
+        return this.#projects.listProjectMembers(request);
+      case 'assignProjectMember':
+        return this.#projects.assignProjectMember(request);
+      case 'removeProjectMember':
+        return this.#projects.removeProjectMember(request);
+      case 'readProjectDefaults':
+        return this.#projects.readProjectDefaults(request);
+      case 'updateProjectDefaults':
+        return this.#projects.updateProjectDefaults(request);
+      case 'readAutoMergeSetting':
+        return this.#projects.readAutoMergeSetting(request);
+      default:
+        return Promise.resolve(err(failure('internal', `operation ${operationId} has no handler`)));
     }
   }
 
@@ -202,7 +234,7 @@ export class ControlPlaneApi implements ApiHandlers {
     if (principalId === undefined) return err(unauthenticated());
     const projectId = await projectOf();
     if (!projectId.ok) return projectId;
-    // The temporary G2 bridge (Q5), which item 11 retires.
+    // The temporary G2 bridge (Q5); sub-change 11c retires it.
     return this.#services.authorization.authorize(principalId, g2BridgeRequirement(projectId.value, role));
   }
 

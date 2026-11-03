@@ -4,7 +4,10 @@ import {
   ACCESS_STORE_CONFORMANCE,
   LoginThrottle,
   OwnerBootstrapService,
+  PrincipalAdministration,
+  ProjectSetupService,
   SessionService,
+  type AccessAuditEvent,
   type AccessStore,
   type AccessTransaction,
   type LoginName,
@@ -16,6 +19,7 @@ import { instantFromEpochMilliseconds, ok } from '@taskelith/kernel';
 import { PostgresAccessStore, PostgresDatabase } from '@taskelith/postgres';
 import { NodeSecrets } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
+import { rendezvous } from './gated-transactions.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -129,4 +133,123 @@ test('a principal row of an unknown kind is refused, not read as an operator', {
     await query(url, 'DELETE FROM principals');
     await query(url, `ALTER TABLE principals ADD CONSTRAINT principals_kind_check CHECK (kind IN ('operator'))`);
   }
+});
+
+// The first attempt of each transaction waits after its owner read until
+// every racer has read, so the racers' transactions overlap.
+function overlapping(inner: AccessStore, arrive: () => Promise<void>): { store: AccessStore; retried: () => boolean } {
+  let retried = false;
+  const store: AccessStore = {
+    transaction: (work) => {
+      let runs = 0;
+      return inner.transaction((tx) => {
+        runs += 1;
+        retried ||= runs > 1;
+        if (runs > 1) return work(tx);
+        let waited = false;
+        const ownerRead = async (principalId: PrincipalId) => {
+          const read = await tx.principals.isInstallationOwner(principalId);
+          if (!waited) {
+            waited = true;
+            await arrive();
+          }
+          return read;
+        };
+        const principals = new Proxy(tx.principals, {
+          get: (target, key) => (key === 'isInstallationOwner' ? ownerRead : Reflect.get(target, key).bind(target)),
+        });
+        return work(new Proxy(tx, { get: (target, key) => (key === 'principals' ? principals : Reflect.get(target, key)) }));
+      });
+    },
+  };
+  return { store, retried: () => retried };
+}
+
+const INVOCATION = { actor: 'root@control-plane-1', reason: 'overlapping project commands' };
+const DEFAULTS = Object.freeze({
+  frameworkPluginId: 'sdlc-openspec', implementers: ['agent-primary'], reviewer: 'agent-secondary',
+  specApprover: 'project-maintainer', noEligibleSlot: 'wait',
+} as const);
+
+async function projectWithMembers() {
+  const store = new PostgresAccessStore(database);
+  const secrets = new NodeSecrets();
+  const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
+  const admin = new PrincipalAdministration({ store, hasher: plainHasher, random: secrets, clock });
+  const setup = new ProjectSetupService({ store, random: secrets, clock });
+  const { projectId } = value(await setup.createProject(owner, { name: 'Alpha', defaults: DEFAULTS }, INVOCATION));
+  const [maria, bob] = [value(await admin.createPrincipal(owner, 'maria', INVOCATION)), value(await admin.createPrincipal(owner, 'bob', INVOCATION))];
+  value(await admin.assignProjectMember(owner, { projectId, principalId: maria.principalId, role: 'project-maintainer' }, INVOCATION));
+  return { owner, projectId, maria: maria.principalId, bob: bob.principalId };
+}
+
+function racers() {
+  const { store, retried } = overlapping(new PostgresAccessStore(database), rendezvous(2));
+  const secrets = new NodeSecrets();
+  return {
+    admin: new PrincipalAdministration({ store, hasher: plainHasher, random: secrets, clock }),
+    setup: new ProjectSetupService({ store, random: secrets, clock }),
+    retried,
+  };
+}
+
+async function auditTrail(): Promise<readonly AccessAuditEvent[]> {
+  return value(await new PostgresAccessStore(database).transaction((tx) => tx.audit.trail()));
+}
+
+// The role that the last role event of the trail leaves, as a list.
+function roleByTrail(events: readonly AccessAuditEvent[], projectId: string, principalId: PrincipalId): string[] {
+  const last = events.filter((event) => event.projectId === projectId && event.principalId === principalId)
+    .filter((event) => event.kind === 'access.project-role-assigned' || event.kind === 'access.project-role-removed').at(-1);
+  return last?.kind === 'access.project-role-assigned' && last.role !== undefined ? [last.role] : [];
+}
+
+async function rolesOf(projectId: string, principalId: PrincipalId): Promise<string[]> {
+  const rows = await query(url, 'SELECT role FROM project_roles WHERE project_id = $1 AND principal_id = $2', [projectId, principalId]);
+  return rows.map((row) => String(row.role));
+}
+
+test('of two overlapping defaults changes on PostgreSQL one wins, the other is a conflict after its retry, with one audit event', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const { projectId, maria } = await projectWithMembers();
+  const { setup, retried } = racers();
+  const candidates = [['agent-primary'], ['agent-secondary']].map((implementers) => ({ ...DEFAULTS, implementers }));
+  const changes = await Promise.all(candidates.map((defaults) =>
+    setup.replaceDefaults(maria, projectId, { expectedRevision: 1, value: defaults }, INVOCATION)));
+  assert.equal(retried(), true, 'the transactions overlapped');
+  assert.deepEqual(changes.map((change) => (change.ok ? 'ok' : change.error.code)).sort(), ['conflict', 'ok']);
+  const winner = candidates[changes.findIndex((change) => change.ok)]!;
+  assert.deepEqual(await query(url, 'SELECT implementers, revision FROM project_defaults'), [{ implementers: winner.implementers, revision: 2 }]);
+  assert.equal((await auditTrail()).filter((event) => event.kind === 'access.project-defaults-changed').length, 1);
+});
+
+test('two overlapping assignments of one member on PostgreSQL both succeed, and the role is the last audit event\'s', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const { owner, projectId, bob } = await projectWithMembers();
+  const { admin, retried } = racers();
+  const assigned = await Promise.all(['project-operator', 'project-viewer'].map((role) =>
+    admin.assignProjectMember(owner, { projectId, principalId: bob, role }, INVOCATION)));
+  assert.equal(retried(), true, 'the transactions overlapped');
+  for (const assignment of assigned) value(assignment);
+  const roles = await rolesOf(projectId, bob);
+  assert.equal(roles.length, 1);
+  assert.deepEqual(roles, roleByTrail(await auditTrail(), projectId, bob));
+});
+
+test('an assignment overlapping a removal of one member on PostgreSQL ends as the last audit event says', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const { owner, projectId, bob } = await projectWithMembers();
+  value(await new PrincipalAdministration({ store: new PostgresAccessStore(database), hasher: plainHasher, random: new NodeSecrets(), clock })
+    .assignProjectMember(owner, { projectId, principalId: bob, role: 'project-viewer' }, INVOCATION));
+  const { admin } = racers();
+  const target = { projectId, principalId: bob };
+  const [assigned, removed] = await Promise.all([
+    admin.assignProjectMember(owner, { ...target, role: 'project-operator' }, INVOCATION), admin.removeProjectMember(owner, target, INVOCATION),
+  ]);
+  value(assigned);
+  value(removed);
+  const trail = await auditTrail();
+  assert.deepEqual(await rolesOf(projectId, bob), roleByTrail(trail, projectId, bob));
+  const removal = trail.find((event) => event.kind === 'access.project-role-removed');
+  assert.ok(removal !== undefined, 'a role was held, so the removal is audited');
 });
