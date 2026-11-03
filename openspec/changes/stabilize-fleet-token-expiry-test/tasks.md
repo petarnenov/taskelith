@@ -19,5 +19,5 @@
 
 ## 5. Review and archive
 
-- [ ] 5.1 Independent review (pass 1 done)
+- [x] 5.1 Independent review (passes 1 and 2; pass 2 Low only)
 - [ ] 5.2 Archive the change

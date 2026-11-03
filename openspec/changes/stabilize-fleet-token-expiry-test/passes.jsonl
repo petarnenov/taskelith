@@ -1,1 +1,2 @@
 {"change": "stabilize-fleet-token-expiry-test", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a19ec7-d61b-7fd0-bc83-7f8b618321e7", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 3}}
+{"change": "stabilize-fleet-token-expiry-test", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "020f9514-9e97-4d64-a525-bf1a30b4d6a2", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 5}}
