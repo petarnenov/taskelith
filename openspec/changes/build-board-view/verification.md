@@ -51,6 +51,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
   - Merge gate (`fb-29a-gate-column.log`): every Review card at the gate: fail 2, the two merge gate tests.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `6bfd91d0c822443241bd0db961c4d3af1c507bba`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.70% branches, 98.87% functions.
+- `npm run openspec -- validate build-board-view --strict`: passed, `Change 'build-board-view' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 109 file(s); every pass summary file is valid: 89 file(s); every route file is valid: 42 file(s).`.
+- Spec diff against the merge base `0e8d10e0a7bd` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
