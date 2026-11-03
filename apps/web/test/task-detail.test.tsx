@@ -77,6 +77,14 @@ describe('the task detail route', () => {
     expect(screen.getByRole('article', { name: 'Add the board' })).toBeDefined();
   });
 
+  it('titles the dialog with one heading of level 2 and no heading inside it', async () => {
+    openDetail();
+    const detail = await drawer();
+    const title = detail.getByRole('heading', { level: 2 });
+    expect(title.textContent).toBe('Add the board');
+    expect(title.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
+  });
+
   it('shows that it loads until the detail answers', async () => {
     const gateway = gatewayWith();
     gateway.readTaskDetail.mockReturnValue(new Promise(() => {}));
