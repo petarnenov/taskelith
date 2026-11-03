@@ -204,7 +204,19 @@ Unreviewed fixes, for the coordinator's check as solution architect (governance 
 - No external sender can reach the receiver before items 26 and 37; the tests use synthetic secrets, the plugin's verifier, and the emulated GitHub of 20c, never GitHub.com.
 - Recorded events have no consumer yet (items 23 and the board).
 
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the receive scm webhooks change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive receive-scm-webhooks --yes` on `991f9519`, with every task of `tasks.md` ticked (4.1 with the review ending after pass 3, the cap, and the reconciliation review as pass 4; 4.2 with the merge `24c8c37a`), and only this section changed afterward. `origin/dev` was `26bbb10f` (#427) after `git fetch origin`; the merge base stays `26bbb10f`. A trial archive in a scratch copy of `openspec/` at `991f9519` passed `validate --all --strict` (71 passed, 0 failed) first.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-11-03-receive-scm-webhooks` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `26bbb10f`) | Only this change's deltas, 9 added requirements and no other edit: `control-plane-api` 4, `scm-port` 4, `postgres-state` 1; 103 insertions, 0 deletions |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).` |
+| `env -u NODE_ENV make verify` on the archive working tree (log `20e/verify-archive-r1.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; tests 4362, suites 49, pass 4315, fail 0, cancelled 0, skipped 47; all files 99.38% lines, 92.72% branches, 98.87% functions |
+
 ## Remaining gates
 
 - The coordinator's architect check of the pass 3 fixes ("Pass 3 fixes for the architect check").
-- Integration into dev by the coordinator (single pull request)
+- Integration into dev by the coordinator (single pull request).
