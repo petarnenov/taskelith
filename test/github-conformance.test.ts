@@ -4,12 +4,14 @@ import test from 'node:test';
 import { ok } from '@taskelith/kernel';
 import type { SourceControlProvider } from '@taskelith/integrations';
 import { conformanceFixture, githubTestbed } from '../packages/plugins/scm-github/test/github-fixture.ts';
-import { isClean, isDone, planCleanup, type RepositoryState } from '../scripts/github-conformance-cleanup.ts';
+import { cleanUp, isClean, isDone, planCleanup, type CleanupClient, type RepositoryState } from '../scripts/github-conformance-cleanup.ts';
+import { GithubNativeClient } from '../scripts/github-conformance-client.ts';
 import { discoverInstallation, type Requester } from '../scripts/github-conformance-discovery.ts';
 import { checkedEvidence, findSecretTraces, redactEvidence, revealedKeyLines } from '../scripts/github-conformance-evidence.ts';
 import { CONFORMANCE_BRANCH_PREFIX, statusOutcome } from '../scripts/github-conformance-fixture.ts';
 import { checkRequest, RequestGuard } from '../scripts/github-conformance-guard.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from '../scripts/github-conformance-long-run.ts';
+import { isRevocationClean, revokeTokens } from '../scripts/github-conformance-revocation.ts';
 import {
   loadPrivateKey,
   loadSecrets,
@@ -182,7 +184,7 @@ test('a cleanup step is done when GitHub reports it done or already done', () =>
   const branch = { kind: 'delete-branch', repository: PROJECT, branch: `${CONFORMANCE_BRANCH_PREFIX}a` } as const;
   const pull = { kind: 'close-pull', repository: PROJECT, number: 3 } as const;
   assert.deepEqual([isDone(protection, 204), isDone(protection, 404), isDone(protection, 403)], [true, true, false]);
-  assert.deepEqual([isDone(branch, 204), isDone(branch, 422), isDone(branch, 500)], [true, true, false]);
+  assert.deepEqual([isDone(branch, 204), isDone(branch, 422), isDone(branch, 500)], [true, false, false]);
   assert.deepEqual([isDone(pull, 200), isDone(pull, 404)], [true, false]);
   assert.equal(isClean({ steps: [{ action: pull, status: 200, done: true }], unobserved: [] }), true);
   assert.equal(isClean({ steps: [{ action: pull, status: 0, done: false }], unobserved: [] }), false);
@@ -217,7 +219,7 @@ test('the evidence scan fails on a secret trace that the redaction leaves', () =
   assert.deepEqual(findSecretTraces('-----BEGIN RSA PRIVATE KEY-----', []), ['pem-private-key']);
   assert.deepEqual(findSecretTraces('eyJhbGci.eyJpc3Mi', []), ['jwt']);
   assert.deepEqual(findSecretTraces(`the secret is ${WEBHOOK_SECRET}`, [WEBHOOK_SECRET]), ['revealed-value']);
-  assert.deepEqual(findSecretTraces('Basic authentication and short', ['short']), []);
+  assert.deepEqual(findSecretTraces('Basic authentication and more', ['absent-value']), []);
   const keyLine = revealedKeyLines(PRIVATE_KEY)[1]!;
   assert.deepEqual(findSecretTraces(`a key line ${keyLine}`, revealedKeyLines(PRIVATE_KEY)), ['revealed-value']);
   assert.ok(revealedKeyLines(PRIVATE_KEY).every((line) => !line.startsWith('-----')));
@@ -253,6 +255,172 @@ test('the long run reports a refresh that fails and a version that outlives its 
   const kept = await runLongRefresh({ ...fixture, provider: lax }, LONG_RUN_TIMING);
   assert.ok(kept.findings.some((finding) => finding.message === 'version 1 after the adoption of 2 still reads'));
 });
+
+test('the guarded fetch follows no redirect, to any host', async () => {
+  const chain = [`${API}/repos/${PROJECT}/a`, `${API}/repos/${FOREIGN}/b`, `${API}/repos/petarnenov/taskelith/c`];
+  const cases = [
+    [`${API}/repos/${PROJECT}`, `${API}/repos/petarnenov/taskelith`],
+    [`${API}/repos/${PROJECT}/pulls`, 'https://example.com/collect'],
+    chain,
+  ];
+  for (const hops of cases) {
+    const { inner, calls } = redirectingFetch(hops);
+    const guard = new RequestGuard(inner);
+    await assert.rejects(guard.fetch(hops[0]!), /refused a redirect/);
+    assert.deepEqual([calls, guard.refusals.length], [[hops[0]], 1]);
+  }
+});
+
+test('the long run reports a refusal check that fails with another code than forbidden', async () => {
+  for (const code of ['unavailable', 'internal'] as const) {
+    const { findings } = await runLongRefresh(refusingWith(failedWith(code)), LONG_RUN_TIMING);
+    const messages = findings.map((finding) => finding.message);
+    for (const subject of ['after the adoption of 2', 'the original version past its expiry', 'after the revocation']) {
+      assert.ok(messages.some((message) => message.includes(subject) && message.endsWith(`failed with ${code}, not forbidden`)), subject);
+    }
+  }
+});
+
+test('the long run stops on a malformed probe result', async () => {
+  const { findings } = await runLongRefresh(refusingWith({ ok: 'no' }), LONG_RUN_TIMING);
+  assert.deepEqual(findings.map((finding) => finding.check), ['fixture']);
+});
+
+test('the long run names no payload of a thrown value', async () => {
+  const fixture = conformanceFixture(githubTestbed());
+  const throwing: SourceControlProvider = {
+    ...fixture.provider,
+    issueRunCredential: async () => { throw new Error(`payload ${GITHUB_TOKEN}`); },
+  };
+  const { findings } = await runLongRefresh({ ...fixture, provider: throwing }, LONG_RUN_TIMING);
+  assert.deepEqual(findings.map((finding) => finding.check), ['threw']);
+  assert.ok(findings.every((finding) => !finding.message.includes('payload')));
+});
+
+test('the evidence scan finds a known secret of any accepted length and through JSON escaping', async () => {
+  assert.deepEqual(findSecretTraces('a value abc12345', ['abc12345']), ['revealed-value']);
+  const escaped = 'synthetic"secret\nwith escapes';
+  assert.equal(checkedEvidence(JSON.stringify({ message: `leaked ${escaped}` }), [escaped]).ok, false);
+  const settings = readSettings(ENVIRONMENT);
+  assert.ok(settings.ok);
+  const short = await loadSecrets(settings.value, async (path) => (path.endsWith('app.pem') ? PRIVATE_KEY : 'abc123'));
+  assert.deepEqual(short, { ok: false, error: 'TASKELITH_GITHUB_WEBHOOK_SECRET_FILE names a secret shorter than 8 characters' });
+});
+
+test('the evidence redacts and scans every GitHub token family', () => {
+  const classic = ['ghp', 'gho', 'ghu', 'ghs', 'ghr'].map((prefix) => `${prefix}_${'A1b2'.repeat(9)}`);
+  for (const token of [...classic, `github_pat_${'A1'.repeat(11)}_${'b2'.repeat(29)}c`]) {
+    assert.ok(findSecretTraces(`payload ${token}`, []).includes('github-token'), token.slice(0, 4));
+    const checked = checkedEvidence(`error payload ${token}`, []);
+    assert.ok(checked.ok && !checked.value.includes(token), token.slice(0, 4));
+  }
+});
+
+test('the outer cleanup revokes every minted token once and records each failure', async () => {
+  const answers: Record<string, number> = { a: 204, b: 401, c: 500 };
+  const revoked: string[] = [];
+  const report = await revokeTokens(['a', 'b', 'a', 'c', 'd'], async (token) => {
+    revoked.push(token);
+    if (token === 'd') throw new Error('down');
+    return answers[token]!;
+  });
+  assert.deepEqual(revoked, ['a', 'b', 'c', 'd']);
+  assert.deepEqual(report, { revoked: 1, alreadyEnded: 1, failedStatuses: [500, 0] });
+  assert.equal(isRevocationClean(report), false);
+  assert.equal(isRevocationClean(await revokeTokens([], async () => 204)), true);
+});
+
+test('the fixture client mints a new token on renewal and the guard witnesses both', async () => {
+  let now = Date.parse('2026-11-03T10:00:00Z');
+  let minted = 0;
+  const guard = new RequestGuard(async () => {
+    minted += 1;
+    const expiresAt = new Date(now + 60 * 60_000).toISOString();
+    return Response.json({ token: `ghs_${String(minted).repeat(36)}`, expires_at: expiresAt }, { status: 201 });
+  });
+  const identity = { appId: '1', installationId: '2', privateKey: PRIVATE_KEY };
+  const client = new GithubNativeClient(identity, guard.fetch, () => now);
+  await client.request('GET', `/repos/${PROJECT}`);
+  now += 56 * 60_000;
+  await client.request('GET', `/repos/${PROJECT}`);
+  assert.equal(new Set(guard.mintedTokens).size, 2);
+});
+
+test('a branch deletion refused with 422 is done only when the ref is gone', async () => {
+  for (const [refStatus, done] of [[404, true], [200, false]] as const) {
+    const report = await cleanUp(branchCleanupClient(refStatus));
+    const deletion = report.steps.find((step) => step.action.kind === 'delete-branch');
+    assert.deepEqual([deletion?.status, deletion?.done], [422, done]);
+  }
+});
+
+test('a listing beyond the page limit fails instead of returning a part', async () => {
+  const fetch = pagingFetch(51);
+  const client = new GithubNativeClient({ appId: '1', installationId: '2', privateKey: PRIVATE_KEY }, fetch);
+  await assert.rejects(client.listOpenPulls(PROJECT), /more than 50 pages/);
+  const shorter = new GithubNativeClient({ appId: '1', installationId: '2', privateKey: PRIVATE_KEY }, pagingFetch(50));
+  assert.equal((await shorter.listOpenPulls(PROJECT)).length, 5000);
+});
+
+function redirectingFetch(hops: readonly string[]): { inner: typeof fetch; calls: string[] } {
+  const calls: string[] = [];
+  const inner = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    let url = input instanceof Request ? input.url : String(input);
+    for (;;) {
+      calls.push(url);
+      const next = hops[hops.indexOf(url) + 1];
+      if (next === undefined) return Response.json({});
+      if (init?.redirect === 'error') throw new TypeError('fetch failed');
+      if (init?.redirect === 'manual') return new Response(null, { status: 302, headers: { location: next } });
+      url = next;
+    }
+  };
+  return { inner, calls };
+}
+
+function failedWith(code: string): unknown {
+  return { ok: false, error: { code, message: 'synthetic', details: {} } };
+}
+
+// The emulated fixture, with every refused probe answered by `answer`.
+function refusingWith(answer: unknown) {
+  const fixture = conformanceFixture(githubTestbed());
+  return {
+    ...fixture,
+    attemptAction: async (...probe: Parameters<typeof fixture.attemptAction>) => {
+      const result = await fixture.attemptAction(...probe);
+      return (result.ok ? result : answer) as typeof result;
+    },
+  };
+}
+
+function branchCleanupClient(refStatus: number): CleanupClient {
+  const branch = `${CONFORMANCE_BRANCH_PREFIX}a`;
+  return {
+    request: async (method, path) => {
+      if (path.includes('/git/matching-refs/')) return { status: 200, data: [{ ref: `refs/heads/${branch}` }] };
+      if (path.includes('/pulls')) return { status: 200, data: [] };
+      if (path.endsWith('/protection')) return { status: 404, data: null };
+      if (method === 'DELETE') return { status: 422, data: null };
+      return { status: path.endsWith(`/git/ref/heads/${branch}`) ? refStatus : 500, data: null };
+    },
+    listOpenPulls: async () => [],
+  };
+}
+
+function pagingFetch(pages: number): typeof fetch {
+  return async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith('/access_tokens')) {
+      return Response.json({ token: GITHUB_TOKEN, expires_at: new Date(Date.now() + 3_600_000).toISOString() }, { status: 201 });
+    }
+    const page = Number(url.searchParams.get('page') ?? '1');
+    const next = new URL(url);
+    next.searchParams.set('page', String(page + 1));
+    const headers: Record<string, string> = page < pages ? { link: `<${next.href}>; rel="next"` } : {};
+    return Response.json(Array.from({ length: 100 }, (_, index) => ({ number: page * 100 + index })), { headers });
+  };
+}
 
 interface GithubSetup {
   readonly projectMissing?: boolean;

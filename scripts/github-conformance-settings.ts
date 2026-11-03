@@ -68,6 +68,9 @@ function checkVariables(environment: Environment, required: readonly string[], i
 
 export type FileReader = (path: string) => Promise<string>;
 
+// A shorter secret would match ordinary evidence text by chance.
+const MIN_WEBHOOK_SECRET_LENGTH = 8;
+
 const readText: FileReader = (path) => readFile(path, 'utf8');
 
 export async function loadSecrets(settings: ConformanceSettings, read: FileReader = readText): Promise<Checked<ConformanceSecrets>> {
@@ -75,6 +78,9 @@ export async function loadSecrets(settings: ConformanceSettings, read: FileReade
   if (!privateKey.ok) return privateKey;
   const webhookSecret = await secretFile(read, settings.webhookSecretFile, WEBHOOK_SECRET_FILE);
   if (!webhookSecret.ok) return webhookSecret;
+  if (webhookSecret.value.length < MIN_WEBHOOK_SECRET_LENGTH) {
+    return refused(`${WEBHOOK_SECRET_FILE} names a secret shorter than ${MIN_WEBHOOK_SECRET_LENGTH} characters`);
+  }
   return { ok: true, value: { privateKey: privateKey.value, webhookSecret: webhookSecret.value } };
 }
 

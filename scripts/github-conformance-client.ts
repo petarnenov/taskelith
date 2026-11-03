@@ -1,4 +1,6 @@
 import { createSign } from 'node:crypto';
+import { Octokit } from '@octokit/core';
+import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { CONFORMANCE_REPOSITORIES } from './github-conformance-settings.ts';
 
 // The fixture's own way to GitHub, outside the plugin: the App's JWT and an
@@ -13,6 +15,11 @@ const MINUTE_MS = 60_000;
 const JWT_BACKDATE_S = 60;
 const JWT_LIFETIME_S = 9 * 60;
 const TOKEN_RENEWAL_MS = 5 * MINUTE_MS;
+const PAGE_SIZE = 100;
+export const MAX_LISTING_PAGES = 50;
+const PaginatingOctokit = Octokit.plugin(paginateRest);
+// Octokit logs GitHub's messages to the console; none escape.
+const SILENT_LOG = Object.freeze({ debug: discard, info: discard, warn: discard, error: discard });
 
 export interface AppIdentity {
   readonly appId: string;
@@ -47,6 +54,29 @@ export class GithubNativeClient {
     return this.requestWithToken(await this.token(), method, path, body);
   }
 
+  // Every page of a repository's open pull requests as the installation;
+  // a listing longer than the limit fails instead of returning a part.
+  async listOpenPulls(repository: string): Promise<unknown[]> {
+    const octokit = new PaginatingOctokit({
+      auth: await this.token(),
+      baseUrl: API_URL,
+      userAgent: USER_AGENT,
+      log: SILENT_LOG,
+      request: { fetch: this.fetch },
+    });
+    const [owner = '', repo = ''] = repository.split('/');
+    const headers = { 'x-github-api-version': API_VERSION };
+    let pages = 0;
+    const query = { owner, repo, state: 'open', per_page: PAGE_SIZE, headers } as const;
+    return octokit.paginate('GET /repos/{owner}/{repo}/pulls', query, (response) => {
+      pages += 1;
+      if (pages >= MAX_LISTING_PAGES && /rel="next"/.test(response.headers.link ?? '')) {
+        throw new Error(`the listing has more than ${MAX_LISTING_PAGES} pages`);
+      }
+      return response.data as unknown[];
+    });
+  }
+
   // As the App itself, by its JWT, for calls about its installations.
   async requestAsApp(method: string, path: string): Promise<ApiReply> {
     return this.call(`Bearer ${this.appJwt()}`, method, path);
@@ -62,13 +92,6 @@ export class GithubNativeClient {
     const response = await this.fetch(url, { headers: { authorization, 'user-agent': USER_AGENT } });
     await response.body?.cancel();
     return response.status;
-  }
-
-  // Revokes the fixture's token; GitHub ends it within the hour anyway.
-  async close(): Promise<void> {
-    const cached = this.cached;
-    this.cached = undefined;
-    if (cached !== undefined) await this.requestWithToken(cached.token, 'DELETE', '/installation/token');
   }
 
   private async token(): Promise<string> {
@@ -111,6 +134,8 @@ export class GithubNativeClient {
 export function shortName(repository: string): string {
   return repository.slice(repository.indexOf('/') + 1);
 }
+
+function discard(): void {}
 
 function base64Url(text: string): string {
   return Buffer.from(text).toString('base64url');

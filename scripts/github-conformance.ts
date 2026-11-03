@@ -1,9 +1,11 @@
 import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import {
   runSourceControlConformance,
+  type ConformanceClock,
   type SourceControlConformanceEnding,
   type SourceControlConformanceFinding,
 } from '@taskelith/integrations';
@@ -14,6 +16,7 @@ import { discoverInstallation } from './github-conformance-discovery.ts';
 import { revealedKeyLines, saveEvidence } from './github-conformance-evidence.ts';
 import { liveConformanceFixture } from './github-conformance-fixture.ts';
 import { RequestGuard } from './github-conformance-guard.ts';
+import { isRevocationClean, revokeTokens, type RevocationReport } from './github-conformance-revocation.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from './github-conformance-long-run.ts';
 import {
   CONFORMANCE_REPOSITORIES,
@@ -31,9 +34,10 @@ import {
 const USAGE = 'usage: github-conformance.ts --out DIR [--long-run | --cleanup-only | --discover]';
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MERGE_METHODS = Object.freeze(['merge-commit', 'squash', 'rebase']);
-const SYSTEM_CLOCK = Object.freeze({
+const SYSTEM_CLOCK: ConformanceClock = Object.freeze({
   now: () => Date.now(),
-  sleep: (milliseconds: number) => new Promise<void>((done) => setTimeout(done, milliseconds)),
+  sleep: (milliseconds: number) => delay(milliseconds),
+  timeout: (milliseconds: number, signal: AbortSignal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
 });
 
 interface Options {
@@ -54,6 +58,7 @@ interface Evidence {
   readonly longRun: 'not run' | 'run';
   readonly stopped: string | undefined;
   readonly cleanup: CleanupReport;
+  readonly revocation: RevocationReport;
   readonly guardRefusals: readonly string[];
 }
 
@@ -112,10 +117,8 @@ async function discover(options: Options): Promise<number> {
   const guard = new RequestGuard(globalThis.fetch);
   const identity = (installationId: string) => ({ appId: settings.value.appId, installationId, privateKey: privateKey.value });
   const app = new GithubNativeClient(identity(''), guard.fetch);
-  const clients: GithubNativeClient[] = [];
   const asInstallation = (installationId: string) => {
     const client = new GithubNativeClient(identity(installationId), guard.fetch);
-    clients.push(client);
     return (method: string, path: string) => client.request(method, path);
   };
   try {
@@ -128,7 +131,7 @@ async function discover(options: Options): Promise<number> {
     console.log(await readFile(saved.value, 'utf8'));
     return found.problems.length === 0 && guard.refusals.length === 0 ? 0 : 1;
   } finally {
-    for (const client of clients) await client.close().catch(() => undefined);
+    await revokeTokens(guard.mintedTokens, revokerOf(app));
   }
 }
 
@@ -152,13 +155,14 @@ async function run(options: Options, settings: ConformanceSettings, secrets: Con
   const findings: SourceControlConformanceFinding[] = [];
   const endings: SourceControlConformanceEnding[] = [];
   let cleanup: CleanupReport = { steps: [], unobserved: [] };
+  let revocation: RevocationReport = { revoked: 0, alreadyEnded: 0, failedStatuses: [] };
   try {
     if (!options.cleanupOnly) cases = await runSuite(options, { ...identity, ...secrets, fetch: guard.fetch }, client, { findings, endings });
   } catch (error) {
     stopped = error instanceof Error ? error.message : 'a non-error value';
   } finally {
     cleanup = await cleanUp(client);
-    await client.close().catch(() => undefined);
+    revocation = await revokeTokens(guard.mintedTokens, revokerOf(client));
   }
   const record: Evidence = {
     mode: options.cleanupOnly ? 'cleanup-only' : 'run',
@@ -171,6 +175,7 @@ async function run(options: Options, settings: ConformanceSettings, secrets: Con
     longRun: options.longRun && !options.cleanupOnly ? 'run' : 'not run',
     stopped,
     cleanup,
+    revocation,
     guardRefusals: guard.refusals,
   };
   return { record, revealed: guard.mintedTokens };
@@ -212,7 +217,13 @@ async function runSuite(
 }
 
 function passed(record: Evidence): boolean {
-  return record.stopped === undefined && record.findings.length === 0 && isClean(record.cleanup) && record.guardRefusals.length === 0;
+  const reset = isClean(record.cleanup) && isRevocationClean(record.revocation);
+  return record.stopped === undefined && record.findings.length === 0 && reset && record.guardRefusals.length === 0;
+}
+
+// Every minted token, the fixture's own included, as its own holder.
+function revokerOf(client: GithubNativeClient) {
+  return async (token: string) => (await client.requestWithToken(token, 'DELETE', '/installation/token')).status;
 }
 
 function summary(record: Evidence, path: string): string {
@@ -221,6 +232,7 @@ function summary(record: Evidence, path: string): string {
     `github-conformance: ${passed(record) ? 'PASS' : 'FAIL'} (${record.mode})`,
     `cases ${record.cases}; findings ${record.findings.length}; slowest ending ${slowestEnding(record)} ms; cleanup steps ${record.cleanup.steps.length}, failed ${failedSteps}`,
     `unobserved repositories ${record.cleanup.unobserved.length}; guard refusals ${record.guardRefusals.length}`,
+    `tokens revoked ${record.revocation.revoked}, already ended ${record.revocation.alreadyEnded}, failed ${record.revocation.failedStatuses.length}`,
     `evidence ${path}`,
   ].join('\n');
 }

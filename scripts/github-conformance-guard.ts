@@ -60,6 +60,10 @@ function decodeSegment(segment: string): string {
   }
 }
 
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
 function refuse(subject: string): GuardVerdict {
   return { allowed: false, reason: `the conformance guard refused ${subject}` };
 }
@@ -79,14 +83,21 @@ export class RequestGuard {
   readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const verdict = checkRequest(url, init?.body);
-    if (!verdict.allowed) {
-      this.refusals.push(verdict.reason);
-      throw new Error(verdict.reason);
+    if (!verdict.allowed) this.refuse(verdict.reason);
+    // Redirects stay unfollowed, so no hop escapes the check above.
+    const response = await this.inner(input, { ...init, redirect: 'manual' });
+    if (isRedirect(response.status)) {
+      await response.body?.cancel();
+      return this.refuse(`the conformance guard refused a redirect from ${url.pathname}`);
     }
-    const response = await this.inner(input, init);
     if (TOKEN_REQUEST.test(url.pathname) && response.ok) await this.witnessToken(response.clone());
     return response;
   };
+
+  private refuse(reason: string): never {
+    this.refusals.push(reason);
+    throw new Error(reason);
+  }
 
   private async witnessToken(response: Response): Promise<void> {
     const token = parseBody(await response.text())?.['token'];

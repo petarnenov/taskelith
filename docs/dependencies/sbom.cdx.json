@@ -3478,9 +3478,14 @@
       "type": "library",
       "name": "@octokit/plugin-paginate-rest",
       "version": "16.0.0",
-      "scope": "required",
+      "scope": "optional",
       "purl": "pkg:npm/%40octokit/plugin-paginate-rest@16.0.0",
-      "properties": [],
+      "properties": [
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
       "externalReferences": [
         {
           "type": "distribution",
@@ -28763,7 +28768,6 @@
       "dependsOn": [
         "@octokit/auth-app@8.3.1",
         "@octokit/core@7.0.8",
-        "@octokit/plugin-paginate-rest@16.0.0",
         "@taskelith/integrations@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/plugin-sdk@0.0.0"
@@ -32457,6 +32461,8 @@
         "@asyncapi/diff@0.6.0",
         "@asyncapi/parser@3.6.6",
         "@fission-ai/openspec@1.14.3",
+        "@octokit/core@7.0.8",
+        "@octokit/plugin-paginate-rest@16.0.0",
         "@semantic-release/commit-analyzer@13.0.1",
         "@semantic-release/github@12.0.10",
         "@semantic-release/npm@13.2.0",
