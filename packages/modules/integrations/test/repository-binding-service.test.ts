@@ -277,6 +277,7 @@ const leaking = () => {
 test('each plugin defect is reported once by its operation and kind, never with a plugin message or value', async () => {
   const host = Array.from({ length: 5 }, () => 'a'.repeat(63)).join('.');
   const resolving = (resolveRemoteUrl: Provider['resolveRemoteUrl']) => ({ provider: (scm: Provider) => ({ ...scm, resolveRemoteUrl }) });
+  const throwingCapabilities = (scm: Provider) => Object.defineProperty({ ...scm }, 'capabilities', { get: leaking });
   const capabilities = Object.defineProperty({}, 'mergeMethods', { enumerable: true, get: leaking });
   const cases: ReadonlyArray<readonly [FixtureOptions, ScmPluginDefect]> = [
     [{ createProvider: leaking }, defectOf('createProvider', 'threw')],
@@ -288,7 +289,8 @@ test('each plugin defect is reported once by its operation and kind, never with 
     [resolving(async () => ok({ repository: 'acme/other', remoteUrl: 'https://scm.example/acme/other.git' })), defectOf('resolveRemoteUrl', 'foreign-repository')],
     [resolving(async () => err(failure('conflict', SECRET))), defectOf('resolveRemoteUrl', 'unexpected-failure-code')],
     [{ provider: resolvingUnder(`https://${host}`) }, defectOf('resolveRemoteUrl', 'unnormalizable-origin')],
-    [{ provider: (scm) => ({ ...scm, capabilities: capabilities as never }) }, defectOf('capabilities', 'threw')],
+    [{ provider: throwingCapabilities }, defectOf('capabilities', 'threw')],
+    [{ provider: (scm) => ({ ...scm, capabilities: capabilities as never }) }, defectOf('capabilities', 'malformed-value')],
     [{ provider: (scm) => ({ ...scm, capabilities: { mergeMethods: SECRET } as never }) }, defectOf('capabilities', 'malformed-value')],
   ];
   for (const [options, expected] of cases) {

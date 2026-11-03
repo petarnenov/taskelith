@@ -296,7 +296,7 @@ test('a plugin envelope whose getter throws answers 500 and its message reaches 
   assert.ok(!JSON.stringify(sink.records).includes(SECRET));
   const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
   assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), ['resolveRemoteUrl', 'createProvider'].map((operation) => [
-    'error', { integrationId: INTEGRATION_ID, pluginId: 'scm-fake', operation, kind: 'threw' },
+    'error', { integrationId: INTEGRATION_ID, pluginId: 'scm-fake', operation, kind: 'malformed-envelope' },
   ]));
   assert.equal(await stored(), undefined);
 });
