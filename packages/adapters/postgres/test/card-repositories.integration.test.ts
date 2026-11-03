@@ -86,7 +86,7 @@ test('each writer of a card input touches its run, task, session, project, or wo
   await query(url, `INSERT INTO session_inbox_items (item_id, session_id, kind, generation, native_request_id, state, record)
     VALUES ('i-1', 's-1', 'permission-request', 1, 'n-1', 'open', '{}')`);
   assert.deepEqual(await touches(), [
-    'run:run-1', 'run:run-1', 'run:run-1', 'task:task-1', 'task:task-1', 'task:task-1', 'task:task-1', 'task:task-1', 'session:s-1',
+    'run:run-1', 'run:run-1', 'run:run-1', 'run:run-1', 'task:task-1', 'task:task-1', 'task:task-1', 'task:task-1', 'session:s-1',
   ]);
   await query(url, 'TRUNCATE card_touches');
   await query(url, "BEGIN; INSERT INTO gates (id, run_id, generation, record) VALUES ('g-2', 'run-1', 1, '{}'); ROLLBACK");
@@ -155,6 +155,17 @@ test('taking touches removes the card-sized ones up to a touch and names each ca
   assert.deepEqual(value(await database.readOnly((tx) => tx.cards.tasks('run-1' as never))), [
     { taskId: 'task-1', taskRunId: 'run-1', depth: 0 }, { taskId: 'task-child', taskRunId: 'run-child', parentTaskId: 'task-1', depth: 1 },
   ]);
+});
+
+test('a deleted lineage row touches its card, through its surviving root or as the root run', async () => {
+  await card('run-1');
+  await lineage('task-1', 'run-1');
+  await lineage('task-child', 'run-child', 'task-1', 1);
+  await query(url, 'TRUNCATE card_touches');
+  await query(url, "DELETE FROM task_lineage WHERE task_id = 'task-child'");
+  assert.deepEqual(await take(), { ok: true, value: { touches: 1, runIds: ['run-1'] } }, 'a delegated child');
+  await query(url, "DELETE FROM task_lineage WHERE task_id = 'task-1'");
+  assert.deepEqual(await take(), { ok: true, value: { touches: 1, runIds: ['run-1'] } }, 'the root');
 });
 
 test('expanding replaces a project touch with its cards, and a worker or fleet touch with every card', async () => {

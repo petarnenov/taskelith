@@ -62,6 +62,21 @@ BEGIN
 END
 $$;
 
+-- A lineage row names its card through its root, whose row a child's delete
+-- keeps; a root row names the card's run, which its own delete keeps.
+CREATE FUNCTION touch_lineage() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  lineage jsonb := to_jsonb(CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END);
+  root boolean := (lineage ->> 'depth')::integer = 0;
+BEGIN
+  INSERT INTO card_touches (subject, subject_id) VALUES (
+    CASE WHEN root THEN 'run' ELSE 'task' END,
+    lineage ->> CASE WHEN root THEN 'run_id' ELSE 'root_task_id' END
+  );
+  RETURN NULL;
+END
+$$;
+
 CREATE TRIGGER cards_touch AFTER INSERT ON cards
   FOR EACH ROW EXECUTE FUNCTION touch_card('run', 'run_id');
 -- Every watched table but the cards also touches on a delete.
@@ -70,7 +85,7 @@ CREATE TRIGGER workflow_runs_touch AFTER INSERT OR UPDATE OR DELETE ON workflow_
 CREATE TRIGGER gates_touch AFTER INSERT OR UPDATE OR DELETE ON gates
   FOR EACH ROW EXECUTE FUNCTION touch_card('run', 'run_id');
 CREATE TRIGGER task_lineage_touch AFTER INSERT OR DELETE ON task_lineage
-  FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'task_id');
+  FOR EACH ROW EXECUTE FUNCTION touch_lineage();
 CREATE TRIGGER tasks_touch AFTER INSERT OR UPDATE OR DELETE ON tasks
   FOR EACH ROW EXECUTE FUNCTION touch_card('task', 'id');
 CREATE TRIGGER admissions_touch AFTER INSERT OR UPDATE OR DELETE ON admissions
@@ -121,6 +136,7 @@ CREATE TRIGGER installation_touch_update AFTER UPDATE ON installation
 
 -- CASCADE drops every trigger of the function, also on a table that an
 -- earlier down migration already removed with its triggers.
+DROP FUNCTION touch_lineage() CASCADE;
 DROP FUNCTION touch_fleet() CASCADE;
 DROP FUNCTION touch_card() CASCADE;
 DROP FUNCTION worker_board_fields(jsonb);
