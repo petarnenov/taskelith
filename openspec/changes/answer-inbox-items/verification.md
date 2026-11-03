@@ -64,6 +64,8 @@ Fail-before of the fixes, logs in the session scratchpad:
 - `fb-15b-p2-5.log` (finding 5): the extended down step at `1e629e3e` with a down migration that keeps `reconciliation_item_projections`: 1 of 1 fails; the mutation was reverted.
 - Findings 4, 6, 7, and 8 change no behaviour: a test, a name, and records.
 
+The `make verify` of the fixes (`verify-15b-p2.log`), at head `718e5094`, passed on the first run on the tree `c5741cfc` (tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.71% branches, 98.85% functions); it is the run that `make record` records, and the commit that records it changes no checked input other than this file.
+
 ## Environment
 
 macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`); Docker 29.5.2 for the services of `make verify` and of the targeted PostgreSQL runs (`scripts/services.sh run taskelith-answers-dev`).
@@ -96,7 +98,7 @@ Logs in the session scratchpad (`fb-15b-*.log`). Each mutation was applied to on
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `0f46f206e1349d2a5bc2a74e154e2d78a178152d`; tests 4606, pass 4597, fail 0, skipped 9; all files 99.43% lines, 92.71% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `c5741cfcd26900cd0286450c956cd3208cb7da6c`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.71% branches, 98.85% functions.
 - `npm run openspec -- validate answer-inbox-items --strict`: passed, `Change 'answer-inbox-items' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 108 file(s); every pass summary file is valid: 88 file(s); every route file is valid: 41 file(s).`.
 - Spec diff against the merge base `1c75f149484f` with `origin/dev`: no change under `openspec/specs`.
@@ -105,6 +107,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a221-d5d0-7172-8ad0-1f95cc21f513` | 0 | 1 | 4 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `9f964100-5197-4275-b912-82f36763342f` | 0 | 0 | 0 | 8 |
 <!-- make record: end -->
 
 ## Limitations
