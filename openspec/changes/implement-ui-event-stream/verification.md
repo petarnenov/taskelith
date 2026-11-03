@@ -35,8 +35,9 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Evidence check
 
-- `verify-14-p1.log` (scratchpad), after the pass 1 fixes: `make verify: passed, profile full, tree e2ffbd521ea4a1194a3f7487c44918cb311110f9`, the tree of the commit that records the sixth route, clean; tests 4385, pass 4376, fail 0, skipped 9; all files 99.40% lines, 92.67% branches, 98.86% functions; no rerun. Its new files: `event-stream-hub.js` 100, 94.44, 97.06; `event-stream-api.js` 100, 92.16, 100; `event-log-keeper.js` 100, 96.55, 100; `ui-event-notifications.js` 97.00, 97.22, 85.71; `ui-event-repositories.js` 100, 100, 100. The generated block below is written from it by `make record`; `make record-check` passes.
-- Superseded by it: `verify-14-6.log` (passed on the tree `a10bffd…` of `50eb65d1`, before pass 1).
+- `verify-14-p1c.log` (scratchpad), after the coordinator decision on section 10: `make verify: passed, profile full, tree 99801341afb5f41efc444fa97e56bf441cb0553b`, the tree of `1beba464`, which records the eighth route, clean; tests 4387, pass 4378, fail 0, skipped 9; all files 99.39% lines, 92.67% branches, 98.86% functions; both new tests pass. Its new files: `event-stream-hub.js` 100, 94.39, 97.06; `event-stream-api.js` 100, 92.31, 100; `event-log-keeper.js` 100, 96.55, 100; `ui-event-notifications.js` 97.00, 97.22, 85.71; `ui-event-repositories.js` 100, 100, 100. The generated block below is written from it by `make record`; `make record-check` passes.
+- Superseded by it: `verify-14-p1c-1.log` (failed 1 on the tree of `e83f6641`, section "Revision"), and `verify-14-p1.log` (scratchpad), after the pass 1 fixes: `make verify: passed, profile full, tree e2ffbd521ea4a1194a3f7487c44918cb311110f9`, the tree of the commit that records the sixth route, clean; tests 4385, pass 4376, fail 0, skipped 9; all files 99.40% lines, 92.67% branches, 98.86% functions; no rerun. Its new files: `event-stream-hub.js` 100, 94.44, 97.06; `event-stream-api.js` 100, 92.16, 100; `event-log-keeper.js` 100, 96.55, 100; `ui-event-notifications.js` 97.00, 97.22, 85.71; `ui-event-repositories.js` 100, 100, 100..
+- Superseded by `verify-14-p1.log`: `verify-14-6.log` (passed on the tree `a10bffd…` of `50eb65d1`, before pass 1).
 - Superseded: `verify-14-1.log` (comment rule), `verify-14-2.log` (tree `3ee1085…` of `58fda845`: one timing failure outside the change, `test/installation-script.test.ts` "a bound with a leading zero is read in base 10", "ended after 9.113s, before 10"), `verify-14-3.log` (the one rerun on the same tree: passed, tests 4370, fail 0), `verify-14-4.log` (passed on the tree of `eeaf5509`, superseded by the listener test), and `verify-14-5.log` (passed on the tree `cace440d…` of `6c762264`, tests 4372, fail 0, superseded by the tests of `b3c30f8a`).
 
 ## Fail-before
@@ -98,7 +99,7 @@ Niki, coordinator decision, 2026-11-03, after H1 (design, "Coordinator decisions
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e2ffbd521ea4a1194a3f7487c44918cb311110f9`; tests 4385, pass 4376, fail 0, skipped 9; all files 99.40% lines, 92.67% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `99801341afb5f41efc444fa97e56bf441cb0553b`; tests 4387, pass 4378, fail 0, skipped 9; all files 99.39% lines, 92.67% branches, 98.86% functions.
 - `npm run openspec -- validate implement-ui-event-stream --strict`: passed, `Change 'implement-ui-event-stream' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).`.
 - Spec diff against the merge base `26bbb10fecea` with `origin/dev`: no change under `openspec/specs`.
