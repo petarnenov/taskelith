@@ -16,6 +16,9 @@ export interface Session {
   readonly retry: () => void;
   readonly logIn: (credentials: Credentials) => Promise<LoginOutcome>;
   readonly logOut: () => Promise<LogoutOutcome>;
+  // Called as a request starts; the function it returns ends that session
+  // after a 401, unless a newer view showed since, as after a new login.
+  readonly expiryOfRequest: () => () => void;
 }
 
 // The session is read again this long after its end, so that a client
@@ -38,7 +41,7 @@ interface SessionProviderProps {
 
 export function SessionProvider({ gateway, clock, children }: SessionProviderProps) {
   const settled = useMemo(() => settledGateway(gateway), [gateway]);
-  const { view, show, sinceNow } = useSessionView();
+  const { view, currentView, show, sinceNow } = useSessionView();
   const [checks, setChecks] = useState(0);
   useInitialCheck(settled, checks, sinceNow);
   useExpiryCheck(settled, clock, view, sinceNow);
@@ -72,11 +75,25 @@ export function SessionProvider({ gateway, clock, children }: SessionProviderPro
     return outcome;
   }, [settled, sinceNow]);
 
-  const session = useMemo(() => ({ view, retry, logIn, logOut }), [view, retry, logIn, logOut]);
+  // Only a signed-in view ends; the read that follows fetches the token
+  // of the next anonymous session, or takes over another tab's login.
+  const expiryOfRequest = useCallback(() => {
+    const showIfUnchanged = sinceNow();
+    return () => {
+      if (currentView().status !== 'signed-in' || !showIfUnchanged(EXPIRED)) return;
+      void renewAnonymousSession(settled, sinceNow());
+    };
+  }, [currentView, settled, sinceNow]);
+
+  const session = useMemo(
+    () => ({ view, retry, logIn, logOut, expiryOfRequest }),
+    [view, retry, logIn, logOut, expiryOfRequest],
+  );
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
 
 const SIGNED_OUT: SessionView = { status: 'signed-out', notice: 'signed-out' };
+const EXPIRED: SessionView = { status: 'signed-out', notice: 'expired' };
 
 // Shows the view only if no other view showed since the request was sent,
 // so that a late answer never undoes a newer one; reports whether it did.
@@ -84,9 +101,12 @@ type ShowIfUnchanged = (view: SessionView) => boolean;
 
 function useSessionView() {
   const [view, setView] = useState<SessionView>({ status: 'checking' });
+  const latest = useRef(view);
   const changes = useRef(0);
+  const currentView = useCallback(() => latest.current, []);
   const show = useCallback((next: SessionView) => {
     changes.current += 1;
+    latest.current = next;
     setView(next);
   }, []);
   const sinceNow = useCallback((): ShowIfUnchanged => {
@@ -97,7 +117,7 @@ function useSessionView() {
       return true;
     };
   }, [show]);
-  return { view, show, sinceNow };
+  return { view, currentView, show, sinceNow };
 }
 
 function useInitialCheck(gateway: SessionGateway, checks: number, sinceNow: () => ShowIfUnchanged): void {

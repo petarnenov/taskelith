@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CheckIcon, ChevronIcon, InboxIcon, LogoIcon, MoonIcon, PlusIcon, SunIcon } from '../src/icons';
-import { MAIN_NAVIGATION, SCREENS } from '../src/screens';
+import { MAIN_NAVIGATION, PLANNED_SCREENS } from '../src/screens';
 import { TARGET_SIZE, theme } from '../src/theme';
 import { renderApp } from './fakes';
 
@@ -16,7 +16,8 @@ function navigation(name: string) {
 }
 
 describe('the routes', () => {
-  it.each(SCREENS.map((planned) => [planned.path, planned] as const))(
+  const address = (path: string) => path.replace(':projectId', 'project-1').replace(':runId', 'run-1');
+  it.each(PLANNED_SCREENS.map((planned) => [address(planned.path), planned] as const))(
     'shows an empty page at /app%s that names the item that builds it',
     async (path, planned) => {
       renderApp(`/app${path}`);
