@@ -8,11 +8,11 @@ Commit type: `apps/control-plane`, `apps/web`, and `infra/` are private workspac
 
 ## Revision
 
-- Base: `dev` `12dee8c7af80e9064ac6ce4b6514207d845f07fa`, the brief's checklist base and the merge base. `git fetch origin` before routing showed `origin/dev` at `3341f8a8` (#424, `add-github-token-secret-shape`); the pass 1 fix round merges it.
+- Base: `dev` `12dee8c7af80e9064ac6ce4b6514207d845f07fa`, the brief's checklist base; the merge base with `origin/dev` is `3341f8a8` since `6b390339`. `git fetch origin` before routing showed `origin/dev` at `3341f8a8` (#424, `add-github-token-secret-shape`); the pass 1 fix round merges it.
 - `08cf9a07` `chore: start the serve-web-spa-from-control-plane change`: `.openspec.yaml`, the brief's `checklist.json` saved with `--save serve-web-spa-from-control-plane --at 12dee8c7af80e9064ac6ce4b6514207d845f07fa --size M` (unedited), and the empty `findings.jsonl` and `passes.jsonl`.
 - `dde56498` `chore: serve the built web SPA under /app/ on the browser endpoint`: the control plane, the SPA nonce, the image, and their tests.
 - `3e96d94d` `docs: record the serve-web-spa-from-control-plane design, spec deltas, and SPA status`, with the README, the `Makefile` `web-dev` comment, and the installation contract's listeners.
-- `0f34df27` `docs: route the serve-web-spa-from-control-plane change` (`route.json`, unedited, at head `3e96d94d`): "route: elevated (lines, files, contracts, docker), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.76) and agrees; recommendation only.
+- `0f34df27` `docs: route the serve-web-spa-from-control-plane change` (`route.json`, unedited, at head `3e96d94d`): "route: elevated (lines, files, contracts, docker), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.76) and agrees; recommendation only.
 - `8f8367f1` `docs: record the make verify of serve-web-spa-from-control-plane`, the `make record` of the passing `make verify` on the tree of `0f34df27`; pass 1 reviewed this head.
 - Pass 1 fix round: `6b390339` merges `origin/dev` `3341f8a8` (#424, no conflict); `41e12b2e` `test: expect the SPA to refuse raw dot segments, links, and replaced entries, with headers on failures and on the browser endpoint only`; `da8aa6d4` `chore: check the SPA path as sent, remember left-out links, read the build without following links, and reserve /app/ in the wire contracts`; then the docs and records commits of the round and the `make record` of its `make verify`.
 
@@ -22,12 +22,12 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Author self-check
 
-- Scope: only the brief's 28c scope. No OpenAPI document, wire contract, or generated type changed (`git diff 12dee8c7 HEAD -- packages` is empty); no dependency changed (`package-lock.json` unchanged). The SPA change is wiring only: `pageStyleNonce` and the `styleNonce` prop of `App`.
+- Scope: only the brief's 28c scope. No change under `packages/contracts`, so no OpenAPI document or generated type changed (`git diff 12dee8c7 HEAD -- packages` is empty); the wire contracts gain the `/app` reservation and the installation contract's listeners name `TASKELITH_WEB_APP_DIR`; no dependency changed (`package-lock.json` unchanged). The SPA change is wiring only: `pageStyleNonce` and the `styleNonce` prop of `App`.
 - Library choice: no static plugin fits, because the control plane has no HTTP framework; `serve-static` and `send` were rejected for per-request file-system resolution and a new runtime dependency (design, decision 1).
 - Hexagonal boundaries: the HTTP side depends on the `WebAppFiles` port (`src/api/web-app.ts`, `file` and `isLeftOut`); only `src/composition/web-app-directory.ts` touches the file system, at start; its optional `WebAppEntryProbe` is the tests' barrier between the listing and each open; `npm run check:boundaries` passes.
 - API non-shadowing: every route is matched before the SPA, the SPA is passed only to the browser listener, and no path of `control-plane.openapi.json` lies under `/app` (test).
 - Secrecy: the nonce is not a credential and is never logged; the request log of an SPA answer holds the operation `web-app` and no path or query (test).
-- Spec deltas: `control-plane-api` adds five requirements (424, 235, 493, 475, and 418 characters, after the pass 1 fixes); `product-ui` modifies "Web SPA development server" (477, its scenario kept) and adds "Web SPA style nonce" (363). `npm run verify:archive` archives them into strictly valid specs.
+- Spec deltas: `control-plane-api` adds five requirements (452, 235, 493, 475, and 436 characters, after the pass 2 fixes); `product-ui` modifies "Web SPA development server" (477, its scenario kept) and adds "Web SPA style nonce" (363). `npm run verify:archive` archives them into strictly valid specs.
 - Comments: `npm run verify:comments` passes; it does not check `.tsx`, so the comments of `App.tsx` and `style-nonce.test.tsx` were checked by hand; the Dockerfile comment is one line.
 - Coverage (pass 1 fix round): `apps/control-plane/dist/api/web-app.js` 100% lines, 95.45% branches, 100% functions; `web-app-directory.js` 100% lines, 95.65% branches, 100% functions; `apps/web/src` statements 100% (330/330), branches 100% (172/172), functions 100% (107/107), lines 100% (275/275), Vitest tests 146.
 

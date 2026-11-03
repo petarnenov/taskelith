@@ -26,4 +26,4 @@ No requirement is removed.
 
 ## Impact
 
-Private workspaces, the installation image, tests, and docs only; the published `taskelith` package, which ships only `dist/cli.js`, is unchanged. No dependency, OpenAPI operation, or contract document change: the SPA is served outside the API's paths, and no operation of `control-plane.openapi.json` lies under `/app`, which a test checks. Out of scope: every screen's content (items 29 to 34 and 40) and the regex-literal decoder of the bundle check.
+Private workspaces, the installation image, tests, and docs only; the published `taskelith` package, which ships only `dist/cli.js`, is unchanged. No dependency, OpenAPI operation, or change under `packages/contracts`: the SPA is served outside the API's paths, and no operation of `control-plane.openapi.json` lies under `/app`, which a test checks. The wire contracts gain the `/app` reservation, and the installation contract's listeners name `TASKELITH_WEB_APP_DIR`. Out of scope: every screen's content (items 29 to 34 and 40) and the regex-literal decoder of the bundle check.

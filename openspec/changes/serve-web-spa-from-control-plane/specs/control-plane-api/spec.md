@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Web SPA served under /app/
-The browser endpoint SHALL answer GET and HEAD under `/app/` that no operation matches with the built SPA: the file at the path with its content type, or `index.html` for a path without a file extension. A missing file with an extension SHALL be a 404 `not-found`, never the page. Every operation SHALL be matched first; the worker endpoint SHALL serve no SPA. The request log SHALL name the operation `web-app` and no path.
+The browser endpoint SHALL answer GET and HEAD of `/app` and of every path under `/app/` that no operation matches with the built SPA: the file at the path with its content type, or `index.html` for a path without a file extension. A missing file with an extension SHALL be a 404 `not-found`, never the page. Every operation SHALL be matched first; the worker endpoint SHALL serve no SPA. The request log SHALL name the operation `web-app` and no path.
 
 #### Scenario: Screen address
 - **WHEN** a browser opens `/app/sessions` or another path under `/app/` without a file extension
@@ -61,7 +61,7 @@ The control plane SHALL answer only regular files read at start from the build, 
 - **THEN** the start fails with `precondition-failed` and names `TASKELITH_WEB_APP_DIR`
 
 ### Requirement: Web SPA build at start
-The control plane SHALL read the build from the directory that `TASKELITH_WEB_APP_DIR` names once at start; a directory that cannot be read or has no `index.html` SHALL fail the start with `precondition-failed` and name the variable. Without the variable the browser endpoint SHALL serve no SPA, so `/app/` answers 404 `not-found`. The control-plane image SHALL set the variable to the SPA that its build stage builds.
+The control plane SHALL read the build from the directory that `TASKELITH_WEB_APP_DIR` names once at start; a directory that cannot be read or has no `index.html` SHALL fail the start with `precondition-failed` and name the variable and the directory. Without the variable the browser endpoint SHALL serve no SPA, so `/app/` answers 404 `not-found`. The control-plane image SHALL set the variable to the SPA that its build stage builds.
 
 #### Scenario: Build missing
 - **WHEN** `TASKELITH_WEB_APP_DIR` names a directory without `index.html`
