@@ -607,15 +607,20 @@ test('the stored-at migration dates existing and new credential versions, and it
 test('the SCM webhook deliveries migration checks its values and its down migration removes its table', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url)).ok, true);
-  const insert = (deliveryId: string, kind: string, optional = 'NULL, NULL') => query(url, `INSERT INTO scm_webhook_deliveries
-    (integration_id, delivery_id, kind, repository, change_request, commit_id) VALUES ('i1', '${deliveryId}', '${kind}', 'o/r', ${optional})`);
-  await assert.rejects(insert('', 'push'), /scm_webhook_deliveries_delivery_id_check/);
-  await assert.rejects(insert('d'.repeat(1025), 'push'), /scm_webhook_deliveries_delivery_id_check/);
-  await assert.rejects(insert('d1', 'ping'), /scm_webhook_deliveries_kind_check/);
-  await assert.rejects(insert('d1', 'push', "'', NULL"), /scm_webhook_deliveries_change_request_check/);
-  await assert.rejects(insert('d1', 'push', "NULL, ''"), /scm_webhook_deliveries_commit_id_check/);
-  await insert('d1', 'push');
-  await assert.rejects(insert('d1', 'other'), /scm_webhook_deliveries_pkey/);
+  // A literal of an identifier's UTF-16LE bytes, or of raw bytes.
+  const units = (identifier: string) => `'\\x${Buffer.from(identifier, 'utf16le').toString('hex')}'`;
+  const insert = (deliveryId: string, kind: string, rest = `${units('o/r')}, NULL, NULL`) => query(url, `INSERT INTO scm_webhook_deliveries
+    (integration_id, delivery_id, kind, repository, change_request, commit_id) VALUES ('i1', ${deliveryId}, '${kind}', ${rest})`);
+  await assert.rejects(insert(units(''), 'push'), /scm_webhook_deliveries_delivery_id_check/);
+  await assert.rejects(insert(units('d'.repeat(1025)), 'push'), /scm_webhook_deliveries_delivery_id_check/);
+  await assert.rejects(insert("'\\x640000'", 'push'), /scm_webhook_deliveries_delivery_id_check/);
+  await assert.rejects(insert(units('d1'), 'ping'), /scm_webhook_deliveries_kind_check/);
+  await assert.rejects(insert(units('d1'), 'push', `${units('')}, NULL, NULL`), /scm_webhook_deliveries_repository_check/);
+  await assert.rejects(insert(units('d1'), 'push', `${units('o/r')}, ${units('')}, NULL`), /scm_webhook_deliveries_change_request_check/);
+  await assert.rejects(insert(units('d1'), 'push', `${units('o/r')}, NULL, ${units('c'.repeat(1025))}`), /scm_webhook_deliveries_commit_id_check/);
+  await insert(units('d'.repeat(1024)), 'push');
+  await insert(units('d1'), 'push');
+  await assert.rejects(insert(units('d1'), 'other'), /scm_webhook_deliveries_pkey/);
   const [received] = await query<{ dated: boolean }>(url, 'SELECT received_at <= now() AS dated FROM scm_webhook_deliveries');
   assert.deepEqual(received, { dated: true });
   const content = await readFile(join(MIGRATIONS_DIRECTORY, `${SCM_WEBHOOK_DELIVERIES}.sql`), 'utf8');
