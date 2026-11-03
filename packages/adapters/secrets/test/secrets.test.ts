@@ -68,6 +68,19 @@ test('a failure loses GitHub installation tokens in its message and details', ()
   assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED }]);
 });
 
+// An issued secret glued in front of a stateless GitHub installation token.
+const ISSUED_THEN_GITHUB = `tkop_${'A'.repeat(20)}${GITHUB_STATELESS_TOKEN}`;
+
+test('text loses an issued secret and a stateless GitHub token glued after it', () => {
+  assert.equal(redactSecrets(`token ${ISSUED_THEN_GITHUB} failed`), `token ${REDACTED}${REDACTED} failed`);
+});
+
+test('a failure loses an issued secret and a stateless GitHub token glued after it', () => {
+  const redacted = redactFailure(failure('forbidden', `bad ${ISSUED_THEN_GITHUB}`, { presented: ISSUED_THEN_GITHUB }));
+  const both = `${REDACTED}${REDACTED}`;
+  assert.deepEqual([redacted.message, redacted.details], [`bad ${both}`, { presented: both }]);
+});
+
 test('an environment loses a variable that holds a GitHub installation token', () => {
   assert.deepEqual(scrubEnvironment({ GIT_HINT: `use ${GITHUB_TOKEN}`, KEEP: 'k' }), { KEEP: 'k' });
 });

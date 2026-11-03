@@ -108,6 +108,11 @@ test('a stateless GitHub installation token is redacted whole in a field', () =>
   assert.equal(sink.records[0]!.fields['cause'], `push ${REDACTED} failed`);
 });
 
+test('an issued secret and a stateless GitHub token glued after it are redacted', () => {
+  const glued = `tkop_${'A'.repeat(20)}${GITHUB_STATELESS_TOKEN}`;
+  assert.equal(redactText(`push ${glued} failed`), `push ${REDACTED}${REDACTED} failed`);
+});
+
 test('near misses of a GitHub installation token stay', () => {
   const body = 'A1b2'.repeat(9);
   for (const kept of [`ghx_${body}`, `GHS_${body}`, `ghs_${body.slice(1)}`, `ghs-${body}`]) {
