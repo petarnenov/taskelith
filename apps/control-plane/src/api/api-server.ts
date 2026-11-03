@@ -326,16 +326,30 @@ async function validatedBody(request: IncomingMessage, route: RouteDefinition): 
   const body = await readJsonBody(request);
   if (!body.ok) return body;
   const checked = checkedBody(route.body, body.value);
-  return checked.ok || !route.writeOnlyBody ? checked : err(writeOnlyViolation(route.body, checked.error));
+  if (checked.ok || !route.writeOnlyBody) return checked;
+  return err(writeOnlyViolation(route.body, checked.error, settingAtFault(route.settingMaps ?? {}, body.value)));
 }
 
 // Names only the fields at fault: a validator message may quote a value or
 // a property name that the caller sent beside a password.
-function writeOnlyViolation(schema: string, violation: Failure): Failure {
+function writeOnlyViolation(schema: string, violation: Failure, setting: string | undefined): Failure {
   const paths = [...new Set(violation.message.split('; ').map((line) => /^\S+ (\/\S*) /.exec(line)?.[1] ?? '/'))];
   const rules = paths.flatMap((path) => FIELD_RULES[path] ?? []);
   const message = [`the ${schema} body is not valid at ${paths.join(', ')}`, ...rules].join('; ');
-  return failure('invalid', message, { violations: violation.details.violations ?? '1' });
+  const named: Readonly<Record<string, string>> = setting === undefined ? {} : { setting };
+  return failure('invalid', message, { violations: violation.details.violations ?? '1', ...named });
+}
+
+// The first setting whose entry its map's schema refuses on its own.
+function settingAtFault(maps: Readonly<Record<string, keyof HttpSchemas & string>>, body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  for (const [field, schema] of Object.entries(maps)) {
+    const entries = (body as Record<string, unknown>)[field];
+    if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) continue;
+    const refused = Object.entries(entries).find(([name, entry]) => !checkHttpSchema(schema, { [name]: entry }).ok);
+    if (refused !== undefined) return refused[0];
+  }
+  return undefined;
 }
 
 // Fixed texts of a field's rule, so a caller learns it without its value.

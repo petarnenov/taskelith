@@ -157,6 +157,31 @@ test('an unknown plugin answers 404, and a bad origin, setting, or secret 400 na
   assert.equal(((await call('GET', '/scm-integrations', BEARER)).body.integrations as unknown[]).length, 0);
 });
 
+test('a body that the schema refuses names the setting or secret at fault on create and update, never its value', async (t) => {
+  const { call, created } = await fixture(t);
+  const integrationId = await created();
+  const faults: ReadonlyArray<readonly [Record<string, unknown>, string | undefined]> = [
+    [{ secrets: { ...CREATION.secrets, 'Bad Name': ROTATED_SECRET } }, 'Bad Name'],
+    [{ secrets: { ...CREATION.secrets, 'webhook-secret': '' } }, 'webhook-secret'],
+    [{ settings: { ...CREATION.settings, 'app-id': 1234 } }, 'app-id'],
+    [{ secrets: { ...CREATION.secrets, 'private-key': ['not', 'a', 'string'] } }, 'private-key'],
+    [{ settings: ['app-id'] }, undefined],
+  ];
+  for (const [override, setting] of faults) {
+    const refusals = [
+      await call('POST', '/scm-integrations', BEARER, { ...CREATION, ...override }),
+      await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, ...override }),
+    ];
+    for (const refused of refusals) {
+      assert.deepEqual([refused.status, refused.body.code, (refused.body.details as Record<string, unknown>).setting], [400, 'invalid', setting], refused.text);
+      assert.ok(holdsNoSecret(refused.text), refused.text);
+    }
+  }
+  const notAnObject = await call('POST', '/scm-integrations', BEARER, [CREATION]);
+  assert.deepEqual([notAnObject.status, (notAnObject.body.details as Record<string, unknown>).setting], [400, undefined]);
+  assert.equal((await call('GET', `/scm-integrations/${integrationId}`, BEARER)).body.revision, 1);
+});
+
 test('an update replaces the settings and the named secrets, and a stale revision answers 409', async (t) => {
   const { call, created } = await fixture(t);
   const integrationId = await created();
