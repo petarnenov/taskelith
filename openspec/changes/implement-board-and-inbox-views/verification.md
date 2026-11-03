@@ -21,6 +21,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `18d889a2` recorded this revision list; `f7f56f95` recorded `verify-15-3.log` (tree `35bb6db1`) with `make record`. Review pass 1 reviewed `468783d9..f7f56f95`.
 - Pass 1 fixes (section "Pass 1 fixes"): `e13b58e2`, `2ce1c0eb`, `9b5f193f`, `bec6dcd9`, `60cce934`, `b6386560`, `7f1475ca`, and the design and delta commit `522f9217`. `f313b9a5` records pass 1 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `44f5ecf6` deleted the third `route.json` and `50afde6e` routed a fourth time (unedited; tier `elevated`, 41 files and 2799 lines, the same triggers).
 - `45df01f8` recorded the pass 1 fixes. Its first `make verify` (`verify-15-p1.log`) failed before `make test` started: Docker could not create the network of the verify services (`all predefined address pools have been fully subnetted`), an environment failure outside the change. The worker removed the containers and network of its own manual-run services (project `taskelith-464544771-dev`, volumes kept) and reran `make verify` once on the same tree (`verify-15-p1b.log`), which passed and is the run that `make record` records.
+- The fix of finding 6, `4f00c1f4`, with its records in `742175b1`, changed the diff, so `e6870934` deleted the fourth `route.json` and `d7b55ea0` routed a fifth time (unedited; tier `elevated`, 41 files and 2879 lines, the same triggers).
 
 ## Environment
 
