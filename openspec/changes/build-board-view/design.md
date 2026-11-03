@@ -58,6 +58,7 @@ The change follows `docs/ui-poc/src/screens/Board.tsx` (columns, card), `States.
 - A stream that closes for good is opened again only after 10 s, so the board may show the lost notice that long after the control plane recovers; a first resync reopens at once, and a repeated one waits up to 10 s.
 - After `stream-ended` the browser reconnects on its own schedule, so the lost notice may show for its reconnect delay.
 - The kept project is a browser convenience, not an address: a link to the board does not name a project. Change 29b's task-detail route carries the project in its path.
-- The board reads all projects on every authenticated page because the picker sits in the header; a large installation with many pages of projects pays that on each sign-in.
+- The board reads all projects on every authenticated page because the picker sits in the header; a large installation with many pages of projects pays that on each sign-in. An installation with more than `MAX_PROJECT_PAGES` (100) pages of projects reads as unreachable.
+- The shell's `Loader` of 28b (`Shell.tsx`) still spins under reduced motion; 29b leaves it out through the reduced-motion helper of 29a, with its own test (Niki, 2026-11-03).
 - `formatInstant` uses the browser's locale and time zone, so a screenshot or report shows local times.
 - The audited reconciliation of an uncertain process (product UI "Session activity indicator", scenario "Process state uncertain") is not offered: the card shows the state in the danger color, and the action belongs to the inbox (product ports section 4.1, items 15b and 32).

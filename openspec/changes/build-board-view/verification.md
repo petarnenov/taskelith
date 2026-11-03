@@ -107,6 +107,37 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad; each
 - Route: the fixes changed the diff, so `route.json` was deleted and the change routed again on the fixed head; the new record is committed unedited.
 - Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 260 tests pass; `npm run openspec -- validate build-board-view --strict` passes; the new and changed comments of the `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
 
+### Pass 2
+
+- Reviewer B `claude claude-fable-5-1#medium` through `make review` on `0e8d10e0..4efdbca2`: `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, started 2026-11-03T18:19:04.157Z, exit 0; model `claude-fable-5-1` as reported by the CLI; session `e1c1b848-c6e9-4b1c-ad86-b68bd1353183`. The report and logs are in the session scratchpad (`review-29a-p2-report.md`, `review-29a-p2.make.log`, `review-29a-p2.log`), with the tree hash before the pass in `snap-29a-p2-before.txt`; the worktree was clean at `4efdbca2` after the pass, so the reviewer changed no file.
+- The pass checked the pass 1 fixes and the coordinator's decisions as correct and complete, and the event-stream client against wire contracts section 10 and the OpenAPI document.
+- Findings: Critical 0, High 0, Medium 0, Low 9, as in `passes.jsonl`; one line per finding in `findings.jsonl`, finding 3 and findings 7 to 9 about the pass 1 fixes and their records, the other five missed by pass 1. Every claim was checked against the code before its fix and held; none was declined. A Low-only pass ends the review, so no pass 3 runs (governance "Review sequence").
+  1. Low, `control-plane-board.ts`: `listProjects` stopped a cycle of cursors but not a server that keeps naming new ones.
+  2. Low, `BoardPage.tsx`: the 403 notice ignored `AccessDenial.details.requiredRole` of wire contracts section 2.
+  3. Low, `BoardPage.tsx`: a late 401 that a newer session view ignores left the board saying that the control plane did not answer.
+  4. Low, `BoardColumns.tsx`: the count badge of a column with one card was named "1 cards".
+  5. Low, `BoardPage.tsx`: the informational first-run notice kept Mantine's assertive `role="alert"`.
+  6. Low, `board-feed.ts`: `startBoardFeed` is a long closure, and `readThenOpen` shadowed `read()` with its boolean outcome.
+  7. Low, the spec delta: "Web SPA live board updates" kept the events during a read without the 1,000 bound.
+  8. Low, this record: the self-check's `src/board` coverage predated the pass 1 fixes.
+  9. Low, this record: the Revision list stopped before the pass 1 fixes and named no reviewed head.
+
+### Pass 2 fixes
+
+Architect check pending: these fixes were not reviewed by a later pass (governance "Architect check of unreviewed fixes"). Fail-before logs are in the session scratchpad; each ran the new or changed tests against the sources before the fix.
+
+- Finding 1 (`8de31dca`): the adapter reads a `next` beyond `MAX_PROJECT_PAGES` (100) pages as `unavailable` (design, decision 3). Fail-before `fb-29a-p2-1.log`: "reads a server that keeps naming new cursors as unreachable after the page limit" fails, the adapter answered `read` after 101 pages.
+- Finding 2 (`94e9a869`): a denied read is `{ kind: 'denied', requiredRole }` when the 403 names its role, the feed's failed state carries the whole failure, and the notice adds "Reading it needs the role <role>." (design, decisions 1 and 7). No contract changed: the generated `AccessDenial.details` already admits the field. Fail-before `fb-29a-p2-2.log`: "reads a 403 with the role it needs" and "names the role a 403 answer says the board needs" fail.
+- Finding 3 (`bf3fafef`): an `unauthenticated` failure has its own notice "Your session ended" with a retry instead of the unreachable text (design, decision 7). Fail-before `fb-29a-p2-3.log`: "says that the session ended when a late 401 of a renewed session leaves the board", where the session's expiry check renews it while a board read is pending and the read then answers 401, fails; the board showed "The board cannot be loaded".
+- Finding 4 (`78384265`): the badge is named "1 card" for one card. Fail-before `fb-29a-p2-4.log`: "puts each card in its column and names the project", now expecting "1 card", fails.
+- Finding 5 (`e0eb017d`): the first-run notice has `role="status"` (design, decision 7). Fail-before `fb-29a-p2-5.log`: the two first-run tests, which now find the notice as a status named "No project yet" and expect no alert, fail.
+- Finding 6 (`41b846d3`): the outcome is named `shown`. The suggested class was not adopted, to keep the fix minimal and behaviour-preserving; no test changed, and every feed test passes.
+- Finding 7 (`e704ba26`): the requirement keeps up to 1,000 events that arrive during a read and resyncs beyond that (481 characters, was 468); `npm run openspec -- validate build-board-view --strict` passes.
+- Findings 8 and 9 (`e5db172c`): the self-check dates its coverage before the pass 1 fixes and adds the later numbers, and the Revision list names every commit up to the reviewed head `4efdbca2`.
+- Records: pass 2 and its findings in `passes.jsonl` and `findings.jsonl`, outcome `fixed-unreviewed`, and this section.
+- Coordinator decision (Niki, 2026-11-03): `Shell.tsx:19` of 28b shows a `Loader` without a reduced-motion check; 29b fixes it by reusing the reduced-motion helper that 29a adds, with its own test.
+- Checks after the fixes: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json` pass; `apps/web` Vitest 264 tests pass; `make findings ARGS="validate"` passes; the new comments of the changed `.ts` and `.tsx` files were checked for at most two lines of at most 80 characters. The `make verify` of the fixed tree is in "Generated checks".
+
 ## Limitations
 
 - No browser run: the board was checked in jsdom only, with a stubbed `ResizeObserver` and `matchMedia`; the `EventSource` adapter was tested with a fake source, not against the control plane's stream.
@@ -115,8 +146,8 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad; each
 
 ## Remaining gates
 
-- Independent review: pass 2 of the pass 1 fixes, then pass 3 if pass 2 reports a Medium or worse finding.
 - Follow-up for 29b `build-task-detail`: the route `/app/projects/:projectId/...` sets the project picker to its project.
-- Architect check by the coordinator of any unreviewed fixes.
+- Follow-up for 29b `build-task-detail` (Niki, 2026-11-03): the `Loader` of `Shell.tsx:19` (28b) leaves out its spin under reduced motion through the reduced-motion helper that 29a adds, with its own test.
+- Architect check by the coordinator of the pass 2 fixes, which no later pass reviewed: `8de31dca`, `94e9a869`, `bf3fafef`, `78384265`, `e0eb017d`, `41b846d3`, `e704ba26`, and `e5db172c`.
 - Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
