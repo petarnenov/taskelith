@@ -66,6 +66,30 @@ Each behaviour fix has a test that fails before it; the fail-before logs are `fb
 
 The same commit `522f9217` applies the coordinator decisions of 2026-11-03 after pass 1: the dedupe bound and the one-time first events (decision 7), the three deviations, traceability, task order, and trigger-written touches (decision 9), and the follow-ups; `4f00c1f4` and the records after it remove the task order deviation (finding 6).
 
+## Review pass 2
+
+- Reviewer: role B, Claude Code `claude-fable-5-1`, effort medium (`claude`, `claude-fable-5-1`, `medium`), session `641a57eb-d171-444b-9af5-7f399819adf2`, run with `make review` under the coordinator's assignment; the developing subagent received the report (`review-15-p2-report.md` in the scratchpad) and did not see the run's model confirmation, which the worker session records. The reviewed range is `468783d9..8ac154a2`; the report says that no file was edited, that `verify:comments` passes, and that the recorded `make verify` tree `cbdbd6b1` is the tree of `6aa1fcc6`.
+- Findings: Critical 0, High 0, Medium 2, Low 6, as its `passes.jsonl` line and the eight pass 2 lines of `findings.jsonl` record.
+
+### Pass 2 fixes
+
+Pass 3 reviews these fixes. Each behaviour fix has a test that fails before it: `fb-15-p2-base.log` in the scratchpad runs the new tests over the sources of `8ac154a2` (the migration, the adapters, the projector, the view rules, and the board fixture reverted; the new tests and the lineage conformance case kept, the execution `dist` emitted with `tsc --noEmitOnError false` because the case calls `CardCatalog.tasks`): tests 68, pass 50, fail 18. `fb-15-p2-<n>.log` extracts each finding's failing tests from it. Every claim was checked against the code before a change.
+
+- **1, Medium, unreadable card** (`de0b6f98`, `control-plane-api`). A card whose record or view read answers a failure appends nothing and gets a new `run` touch above the pass's horizon, so it stays pending and the next pass retries it, while the other cards project; only the projection state, the outbox, or the touches fail a batch. `project` answers the touches and the unreadable cards, and the numbering pass logs `events.projection.skipped` with run identifiers and a count only (design decision 11). `fb-15-p2-1.log`: with a card without its run, `project` answers `internal` and appends nothing for the other card.
+- **2, Medium, installation-wide transaction** (`de0b6f98`, `control-plane-api`). The installation-wide reprojection stays until G6 (coordinator). A pass first expands project, worker, and fleet touches into one `run` touch per card in its own transaction, with `board-changed` after a worker touch, and reads its horizon; each batch then takes at most 100 card-sized touches up to the horizon and consumes them with its events in one commit (design decision 11). `fb-15-p2-2.log`: a fleet touch over 101 cards projects in one transaction, so a crash at the second reach of `CardProjectionCommit.before` or `.after` never comes (`Missing expected rejection`).
+- **3, Low, worker and delete touches** (`de0b6f98`, `postgres-state`). The worker update trigger compares only the placement record fields and whether the worker is enrolled, through `to_jsonb` of the row, so the earlier down migrations can still drop a column; every watched table but the cards also touches on delete, and a deleted held reservation touches the fleet. `fb-15-p2-3.log`: a self-check sequence and journal update touches `worker:w-1`.
+- **4, Low, admission order port** (`15666f5e`, `product-ports`). `CardCatalog.tasks(runId)` is on the port, `CardLineage` is gone, and the in-memory catalog orders the lineage by the admission path; the lineage conformance case runs on both adapters. `fb-15-p2-4.log`: the in-memory case fails (`catalog.admit is not a function`). This overlaps the coordinator's parity constraint below.
+- **5, Low, citation: declined**. Item 14 exports `untilNumberable` from `packages/adapters/postgres/test/test-database.ts` (line 121 at the base `468783d9`), built on `untilHorizonAbove` with the same query, so the pass 1 record's citation is accurate and stays.
+- **6, Low, empty take** (`de0b6f98`, `postgres-state`). `take` answers an empty batch before the resolution query; no behaviour changes, so there is no fail-before test, and the empty take is asserted.
+- **7, Low, index and sequence** (`de0b6f98`, `postgres-state`). The card index sorts `run_id COLLATE "C"` as the board does, and `tasks_admission_seq` is owned by its column, so the down migration drops it with the column. The project references stay out: the migration test runs each down migration over every later table, so a later migration cannot reference `projects`; the card reference waits for item 25 (design "Follow-ups"). `fb-15-p2-7.log`: the index has the database collation.
+- **8, Low, unreachable without contact** (`a2200926`, `control-plane-api`). An unreachable owning worker answers `worker-unreachable` with its last contact, or `stopped` without one (design decision 4). `fb-15-p2-8.log`: the session answers `working`.
+
+`abf17bd4` updates the design (decisions 1, 4, 7, 10, and 11, the coordinator decisions after pass 2, risks, follow-ups, and the test plan) and the deltas: the projector's batches and the unreadable card in `control-plane-api`, the delete triggers and the unread worker fields in `postgres-state`, and the port's task order in `product-ports`.
+
+### Coordinator parity constraint
+
+Not a pass 2 finding: the coordinator's decision of 2026-11-03 that the in-memory board world orders a card's tasks by the same root-to-task admission path as PostgreSQL, with interleaved admissions in the parity test. `15666f5e` makes the `BoardWorld` fixture admit through `InMemoryCardCatalog.admit`, and the parity test admits `task-b`, `task-a`, a child of `task-b`, a child of `task-a`, and another child of `task-b`. `fb-15-p2-parity.log`: with the fixture's insertion order, the in-memory detail lists `task-a` before the children of `task-b`, while PostgreSQL lists them under `task-b`. It overlaps finding 4, fixed in the same commit.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -89,12 +113,14 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - `traceability` of the task detail is empty until item 25.
 - The admission order of concurrent admissions is the order of their sequence values, not of their commits, and may have gaps (design decision 10).
 - The order of `waitingFor` and the session activity derivation follow the design (decision 4), which the contract does not fix.
-- A worker or fleet touch reprojects every card; the batch dedupes the reads per card and the stored projection the events (design decision 7); narrowing and measuring it is a follow-up.
+- A worker or fleet touch reprojects every card until G6; the batch dedupes the reads per card and the stored projection the events (design decision 7), and each transaction holds at most a batch (decision 11); narrowing and measuring it is a follow-up.
+- An unreadable card is retried and logged once per pass until it can be read (design decision 11).
+- `cards.project_id` has no reference to `projects` until item 25 (design "Follow-ups").
 - The first worker touch after the migration appends one `board-changed` per project, a known one-time event (design decision 7).
-- Review pass 1 ran; its fixes await pass 2. No deployment or browser check was made (backend only).
+- Review passes 1 and 2 ran; the pass 2 fixes await pass 3. No deployment or browser check was made (backend only).
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B over the pass 1 fixes, and pass 3 when governance "Review sequence" requires it, with their fix rounds.
+- Review pass 3 by reviewer A over the pass 2 fixes, which governance "Review sequence" requires after a pass 2 with Medium findings, and its fix round.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
