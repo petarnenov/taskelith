@@ -193,6 +193,17 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 4 | A | `codex gpt-6-astra#medium` | `01a1a103-bf45-7b93-812b-716bdbf76b85` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
+## Archive
+
+Checked on the tree of the archive commit `docs: archive the implement ui event stream change`, the last commit of the branch and the working tree that the checks ran on, after every task in `tasks.md` was ticked; only the `make verify` line changed afterward. `origin/dev` was `f0ed0139` after `git fetch origin`, which is also the merge base.
+
+- `npm run openspec -- archive implement-ui-event-stream --yes`: `Change 'implement-ui-event-stream' archived as '2026-11-03-implement-ui-event-stream'.`
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-11-03-implement-ui-event-stream`.
+- `git diff f0ed0139 -- openspec/specs`: only this change's edits, in `control-plane-api` (50 lines changed), `control-plane-wire-contracts` (10), `postgres-state` (19), `session-turn-model` (7), and `trust-and-operational-foundation` (7); 83 insertions, 10 deletions, which are the removed "View position before the event stream" and the replaced text of "Event position after commit". #428's and #429's requirements keep their text.
+- The moved change holds `findings.jsonl` (20 findings) and `passes.jsonl` (4 passes); `make findings ARGS="validate"`: `Every findings file is valid: 106 file(s); every pass summary file is valid: 86 file(s); every route file is valid: 39 file(s).`
+- `make verify` (`verify-14-rearchive-wt.log`): passed, profile full, uncommitted working tree, no stamp written, one run, no rerun: tests 4485, suites 50, pass 4476, fail 0, cancelled 0, skipped 9; all files 99.41% lines, 92.74% branches, 98.87% functions; the tree differed from the archive commit only by this line. A second run on the committed tree (`verify-14-rearchive.log`) writes the stamp that the `pre-push` hook reuses.
+
 ## Remaining gates
 
 - The coordinator's architect check of the reconciliation fixes (section "Reconciliation fixes for the architect check").
