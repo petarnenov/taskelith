@@ -110,13 +110,26 @@ Pass 3 reviews these fixes. Fail-before logs are in the scratchpad; each mutatio
 
 Coordinator request on `6545826f`: its switch to READ COMMITTED applies only to the test's held transactions (`heldOpen` and the end-to-end test's concurrent transaction). Production event writers keep their SERIALIZABLE isolation, and a serialization retry of such a writer is a new transaction with a new id, which the numbering horizon treats like any other transaction.
 
+## Review pass 3
+
+- Reviewer: role A, Antigravity CLI `gemini-4-argon-medium`, effort medium (`agy`, `gemini-4-argon-medium`, `medium`), session `b62f1dbf-6aaf-43c4-aa14-25b9b8db4d61`, run by the coordinator as worker step 5 assigns; the reviewed snapshot is `26bbb10f..df705c2b`, read-only. The report (`review-14-p3-report.md` in the scratchpad) confirms each pass 2 fix and the test fix of `6e84c16a`.
+- Findings: Critical 0, High 0, Medium 1, Low 1, as its `passes.jsonl` line and the two `findings.jsonl` lines record; pass 2 missed both, which existed in its snapshot (`missedBy`). Pass 3 is the last pass, so its fixes are unreviewed.
+
+### Pass 3 fixes
+
+Architect check pending: these fixes were not reviewed by a later pass (governance "Architect check of unreviewed fixes"). Their `findings.jsonl` outcome is `fixed-unreviewed`.
+
+- **M1, a late role denial** (`2e0d0de2`, `control-plane-api`). The claim held: both stream routes lacked `reasons`, so a `role-required` denial of the hub's re-check after the bounds read answered 401 through `forbidden: 401`, and the project stream read its project before that re-check, so an unknown project answered 404 first. Both routes now map `role-required` to 403 as the project commands do, and the project stream's re-check checks the role, then reads the project, so the order stays 401, 403, 404. The new route test passes the server's check for everyone and leaves the re-check to the real roles. `fb-14-p3-M1.log`: on `df705c2b` it fails with 401 for `/projects/alpha/events`; with the route reasons alone it fails with 404 for the unknown `/projects/gamma/events`; with both parts it passes. The reviewer's snippet named `installation-Maintainer`; the routes keep their requirements, `projectRead` and `OWNER_ONLY`.
+- **L1, a stale comment** (`72211095`). The comment of `BEFORE_ANY_EVENT` names the tests that wire no UI event log as its users, since the control plane reads its positions from the log.
+- Coordinator architect check: (pending).
+
 ## Limitations
 
 - `card-changed` and `board-changed` are typed and mapped but not emitted; item 15 emits them (Q2 and coordinator decision, 2026-11-03); likewise the `card-changed` that section 10 pairs with an item counting toward a card.
 - The durable snapshot of output older than the retained window is not served: 14b, a separate change with its own operation, scheduled after item 15 unless item 29's board needs older output first (coordinator decision, 2026-11-03).
 - A change committed before a stream's open but numbered after its bounds read can end that new stream once; accepted as the safe direction, since a stream never outlives a role, and the reconnect stays open (coordinator decision, 2026-11-03; design, "Risks / Trade-offs").
 - An inbox item whose card subject has no attempt breaks `NativeRequestInboxSubject` and is skipped, logged with its type and violation only, and the stream goes on (coordinator decision, 2026-11-03).
-- Passes 1 and 2 ran; pass 2 reviewed the pass 1 fixes, and the pass 2 fixes are not yet reviewed (pass 3 reviews them). No deployment or browser check was made (backend only).
+- Passes 1 to 3 ran; pass 2 reviewed the pass 1 fixes and pass 3 the pass 2 fixes. The pass 3 fixes are unreviewed and await the coordinator's architect check. No deployment or browser check was made (backend only).
 - Streams wake on the numbered notification and on a pass of their own process that numbered; a stream whose process missed a notification of another process's numbering waits for that process's next numbering or notification. One control-plane instance is the G6 target, so no cached-head poll was added.
 - The numbering horizon is cluster-wide; `idle_in_transaction_session_timeout` and the oldest transaction's age are operator settings and monitoring that Taskelith neither sets nor exports yet (design, "Risks / Trade-offs").
 
@@ -139,6 +152,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review: pass 3 by reviewer A (Antigravity CLI `gemini-4-argon-medium`), which reviews the pass 2 fixes.
+- Architect check of the pass 3 fixes by the coordinator (section "Pass 3 fixes").
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
