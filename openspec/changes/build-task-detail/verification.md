@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 29 (`docs/g3-plan.md`, row 29), sub-change 29b under the coordinator's split (item brief question Q1, answer (b), Niki, 2026-11-03), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `d3dd09ed` (#433): the task detail at `/app/projects/:projectId/cards/:runId` as a Mantine Drawer over the board (decision Q2), its content from `readTaskDetail`, its states, its live updates through the 29a board feed, and the three 29a follow-ups: the address's project in the picker, the shell's session-check loader under reduced motion, and card links ([design](design.md), decisions 1 to 9). Out of scope: answering inbox items (item 32), new task (item 30), the agent session screen (item 31), `listAgentSessions` (design, "Agent sessions"), and any OpenAPI or control-plane change.
+G3 item 29 (`docs/g3-plan.md`, row 29), sub-change 29b under the coordinator's split (item brief question Q1, answer (b), Niki, 2026-11-03), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `d3dd09ed` (#433): the task detail at `/app/projects/:projectId/cards/:runId` as a Mantine Drawer over the board (decision Q2), its content from `readTaskDetail`, its states, its live updates through the 29a board feed, and the three 29a follow-ups: the address's project in the picker, the shell's session-check loader under reduced motion, and card links ([design](design.md), decisions 1 to 9). Out of scope: answering inbox items (item 32), new task (item 30), the agent session screen (item 31), `listAgentSessions`, which the coordinator made a follow-up of item 31 on 2026-11-03 (design, "Agent sessions"), and any OpenAPI or control-plane change.
 
 Commit type: `apps/web` is a private workspace; the published `taskelith` package ships only `dist/cli.js`, `docs/architecture.md`, `README.md`, and `LICENSE`, so every commit uses `chore`, `test`, or `docs`, never `feat` or `fix`.
 
@@ -14,7 +14,9 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `defeb7fa` `chore: build the web task detail drawer with live updates, card links, the address's project, and a still session loader`.
 - `9e7e9b7a` `docs: record the build-task-detail proposal, design, spec delta, and SPA status`.
 - `54f41806` `docs: route the build-task-detail change` (`route.json`, unedited, at head `9e7e9b7a`): "route: elevated (lines, files, size), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.66) and agrees; recommendation only, the brief's effort medium applies.
-- `70f5da18` `docs: record the build-task-detail verification`, then the `make record` of its `make verify`.
+- `70f5da18` `docs: record the build-task-detail verification`, then `24dfecef`, the `make record` of its `make verify`; pass 1 reviewed `d3dd09ed..24dfecef`.
+- Pass 1 fixes, each a test commit before its fix: finding 7 `3b09e5a1`, `147364ff`; finding 1 `7e2255ad`, `715e7418`; finding 2 `1b0cc68d`, `553a1048`; finding 3 `a92350cb`, `97674267`; finding 4 `c2085c8b`, `62700f6a`; finding 5 `eff35577`, `bdcb7e49`; finding 6 `0ceee162`, `3c095f4c`; findings 8 and 9 and the coordinator decisions `904eb798` (proposal, design, spec delta) and the record commits after it.
+- `be32f9f2` `docs: route the build-task-detail change after the pass 1 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `904eb798` (`route.json` unedited): "route: elevated (lines, files, size)", rule version 5, 1,943 lines in 32 files; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.65) and agrees.
 
 ## Environment
 
@@ -27,17 +29,20 @@ macOS on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s npm 
 - Hexagonal boundaries: screens depend on the `BoardGateway` port; only `control-plane-board.ts` touches the typed fetch; `task-detail-feed.ts` and `task-detail-wire.ts` are plain TypeScript without React, tested without a DOM tree.
 - Mantine only (D17): no CSS file, no `styles`, `classNames`, or `style` prop; `Drawer`, `Table`, `List`, `Paper`, `Badge`, `Anchor`, `Alert`, and `Loader` are Mantine components; long identifiers break through `<wbr>` elements, not a style.
 - Design rules: no table scrolls sideways; the Drawer's `xl` size is capped by Mantine at the viewport width; the card link is an `Anchor` with the theme's 44 px line height; contrast pair of the link on a card added (design, decision 9).
-- Spec delta: `product-ui` removes "Web SPA task detail route" and adds four requirements (424, 332, 163, and 368 characters); `npm run openspec -- validate build-task-detail --strict` passes, and the pinned CLI archived the delta into strictly valid specs in a scratch copy of the repository's `openspec/` (totals + 4, ~ 0, - 1; `openspec validate --specs --strict`: 71 passed), which was then deleted; `npm run verify:archive` passes too.
+- Spec delta: `product-ui` removes "Web SPA task detail route", with a **Reason** and a **Migration** that names its replacement "Web SPA task detail address" (coordinator decision, 2026-11-03), and adds four requirements (424, 332, 163, and 368 characters before the pass 1 fixes; 461, 434, 163, and 435 after them); `npm run openspec -- validate build-task-detail --strict` passes, and the pinned CLI archived the delta into strictly valid specs in a scratch copy of the repository's `openspec/` (totals + 4, ~ 0, - 1; `openspec validate --specs --strict`: 71 passed), which was then deleted; `npm run verify:archive` passes too.
 - Comments: `npm run verify:comments` passes; the comments of the `.tsx` files of this change were checked with a script for at most two lines of at most 80 characters.
 - Type checks: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json`, which includes the tests, pass.
-- Coverage of the new files (Vitest, `apps/web`): 100% lines in every file; `TaskDetailView.tsx` 83.33% branches, `Breakable.tsx` 75% branches (the empty text), `TaskList.tsx` 95%, `task-detail-wire.ts` 98.13%, and every other new file 100%; `apps/web` overall 98.92% statements, 97.69% branches, 99.66% functions, and 100% lines over 339 tests.
+- Coverage after the pass 1 fixes (Vitest, `apps/web`, 450 tests in 15 files): 100% lines in every file; `TaskDetailDrawer.tsx` 93.1% branches, `TaskDetailView.tsx` 91.66%, `Breakable.tsx` 85.71%, `TaskList.tsx` 95%, `task-detail-feed.ts` 96.15%, `ProjectPicker.tsx` 92.85%; `apps/web` overall 98.87% statements, 97.5% branches, 99.67% functions, and 100% lines.
+- Coverage before the pass 1 fixes (Vitest, `apps/web`): 100% lines in every file; `TaskDetailView.tsx` 83.33% branches, `Breakable.tsx` 75% branches (the empty text), `TaskList.tsx` 95%, `task-detail-wire.ts` 98.13%, and every other new file 100%; `apps/web` overall 98.92% statements, 97.69% branches, 99.66% functions, and 100% lines over 339 tests.
 - Test authoring: no sleeps; the feed tests settle held reads and drain microtasks as the 29a feed tests do. A first draft of the live-update test raced the board's first render against the stream events (2 of 6 coverage runs red); it now waits for the shown board before it emits, and 8 runs in a row passed.
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). Its totals are from `verify-29b-1.log` in the session scratchpad, the `make verify` of the tree of `70f5da18` (`f8f348de`), which passed at the first run; in it `apps/web` Vitest ran 339 tests in 14 files, all passing, with 98.91% statements, 97.68% branches, 99.66% functions, and 100% lines.
+The generated part below matches the tree (`make record-check`). Before pass 1 it recorded `verify-29b-1.log` in the session scratchpad, the `make verify` of the tree of `70f5da18` (`f8f348de`); that log holds one run, which passed, and no other run was made, so no flake and no rerun belong to that record; the pass 1 prompt's mention of a rerun after an out-of-branch flake did not apply to this change (pass 1 finding 9). In it `apps/web` Vitest ran 339 tests in 14 files, all passing, with 98.91% statements, 97.68% branches, 99.66% functions, and 100% lines. After the pass 1 fixes it records the run named under "Pass 1 fixes".
 
 ## Fail-before
+
+The fail-before evidence of the pass 1 fixes is under "Pass 1 fixes".
 
 Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taskelith/72320a31-29ec-4dad-bb0b-5d2fa342f935/scratchpad`).
 
@@ -70,17 +75,47 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Review plan of the brief (governance v11, effort medium, `env -u JEV_MAF_LAB` before each invocation): pass 1 reviewer A `codex gpt-6-astra#medium`; pass 2 reviewer B `claude claude-fable-5-1#medium`; pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; stop at a pass with only Low findings or none. `route.json` recommends effort high for passes 1 and 2; the brief's effort medium applies. No pass has run yet.
+Review plan of the brief (governance v11, effort medium, `env -u JEV_MAF_LAB` before each invocation): pass 1 reviewer A `codex gpt-6-astra#medium`; pass 2 reviewer B `claude claude-fable-5-1#medium`; pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; stop at a pass with only Low findings or none. `route.json` recommends effort high for passes 1 and 2; the brief's effort medium applies.
+
+### Pass 1
+
+- Reviewer A `codex gpt-6-astra#medium`, run by the coordinator on `d3dd09ed..24dfecef`: Codex CLI 0.166.0 reported model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`, and session `01a1a2ea-05b9-7f43-9aec-8f59f720abd3`. The prompt, the log, and the report are in the coordinator's session scratchpad (`review-29b-p1.md`, `review-29b-p1.log`, `review-29b-p1-report.md`); the report says that the worktree remained unchanged.
+- Findings: Critical 0, High 1, Medium 5, Low 3, as in `passes.jsonl`; one line per finding in `findings.jsonl`. Every claim was checked against the code, Mantine 9.7.4's sources, the wire contracts, and the logs before its fix, and every one held; none was declined.
+  1. High, `TaskDetailDrawer.tsx`: a board re-read that failed, such as a 403 after `stream-ended`, left the detail's snapshot shown and dropped its lost notice.
+  2. Medium, `task-detail-feed.ts` and `useTaskDetail.ts`: a resync after a restore could replace the board with one below the detail's position, and the detail then read nothing; a board without the card was skipped.
+  3. Medium, `TaskDetailDrawer.tsx`: the Drawer, always opened and unmounted with its route, never ran Mantine's focus return, so closing it lost the focus.
+  4. Medium, `ProjectPicker.tsx`: the header's picker was behind the modal Drawer's overlay, so choosing another project while the detail was open was out of reach; the test used `hidden: true`.
+  5. Medium, `screens.ts`: an identifier with a dot or a slash gave an address that the SPA's server answers with 404.
+  6. Medium, `TaskDetailView.tsx` and `TaskList.tsx`: gate identifiers in badges, unbroken identifiers, and four-column tables could force sideways scrolling at phone width.
+  7. Low, `TaskDetailDrawer.tsx`: a Mantine `Title` inside the Drawer's own `h2` nested two headings.
+  8. Low, `design.md`: it said that the detail reads only once its board shows, and took a missing `card-changed` for a supported limitation.
+  9. Low, `verification.md` and `tasks.md`: the evidence check did not resolve the prompt's mention of a rerun, task 3.2 stayed open, and the remaining gates required pass 2 without the stop rule.
+
+### Pass 1 fixes
+
+Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-29b-p1-<n>.log`); each ran the new tests of the test commit against the sources before the fix, and the whole `apps/web` suite passed after each fix.
+
+- Finding 1 (`715e7418`): the board's `Outlet` hands the Drawer the live board with its retry; a failed board of the detail's project drops the detail and shows why, with the role a 403 names and a retry of the board and the detail (design, decision 6). Fail-before `fb-29b-p1-1.log`: "drops the detail and names the role when the board read after a stream end is denied" and "drops the detail when the board cannot be read after the stream closed, and retries both" fail, neither notice found.
+- Finding 2 (`553a1048`): the board feed numbers its snapshots, and `boardReread` reads the detail again for each new one whatever the positions, dropping the changes held from before (design, decision 7). Fail-before `fb-29b-p1-2.log`: the three new feed tests fail (`boardReread` missing), and "reads the detail again after a resync, though the restored board lies below it" and "reads the detail again after a resync whose board no longer holds the card" fail, no new answer shown.
+- Finding 3 (`97674267`): `TaskDetailRoute` focuses again, when it leaves, the element that had the focus as it opened, else the board's heading (design, decision 3). Fail-before `fb-29b-p1-3.log`: the four focus tests (Escape, the close button, the browser's back, and an address) fail, the focus on `body`.
+- Finding 4 (`62700f6a`): the Drawer shows the Mantine `ProjectPicker` at its top (design, decision 4). Fail-before `fb-29b-p1-4.log`: "closes the detail when the operator chooses another project in its dialog" and "chooses a project by keyboard in its dialog, and keeps the detail for the same project" fail, no accessible picker in the dialog.
+- Finding 5 (`bdcb7e49`): `taskDetailPath` writes every character other than a letter, a digit, `-`, or `_` as `~` and two hexadecimal digits, and `identifierOf` reads the address back in `BoardPage`, `TaskDetailRoute`, and `ProjectPicker` (design, decision 10). Fail-before `fb-29b-p1-5.log`: the 94 printable-character tests and the longest-identifier test of `screens.test.ts`, the three link tests, and "reads the detail of the identifiers that a route-safe address names" fail, 99 in all; the server rule was read from `apps/control-plane/src/api/web-app.ts` and is not exercised by a web test, which would import control-plane code.
+- Finding 6 (`3c095f4c`): stages and trace links are bordered Mantine lists, gate identifiers stand beside their state badges, and `Breakable` now breaks only runs without a space, for every identifier and display text the Drawer shows (design, decision 5). Fail-before `fb-29b-p1-6.log`: "fits the longest identifiers and text at phone width" fails with a run of 129 characters without a break, and the stage and traceability tests fail on the tables. The check is in jsdom, not at 320 px in a browser.
+- Finding 7 (`147364ff`): the Drawer's title is plain text in Mantine's `h2`. Fail-before `fb-29b-p1-7.log`: "titles the dialog with one heading of level 2 and no heading inside it" fails on two headings.
+- Finding 8 (`904eb798`): design decision 7 says that the detail's first read starts with the Drawer, independently of the board, and "Risks and trade-offs" calls a missing `card-changed` a violation of wire contracts sections 8 and 10, which 15a emits.
+- Finding 9 (this record): the evidence check resolves the rerun mention, task 3.2 is ticked, and the remaining gates follow the stop rule.
+- Coordinator decisions of 2026-11-03 (Niki), in `904eb798`: `listAgentSessions` is a follow-up of item 31, and the Drawer keeps the session indicator from `readTaskDetail` (design, "Agent sessions"); the picker leads to the board only from a task detail address, now the scenario "Another project on another page"; the removed "Web SPA task detail route" has a **Reason** and a **Migration** that names "Web SPA task detail address", so that the archive reads as a rename (`npm run openspec -- validate build-task-detail --strict` passes); and the other departures and trade-offs of the reviewed design are accepted (design, "Proof of concept").
 
 ## Limitations
 
-- No browser run: the Drawer was checked in jsdom only, with stubbed `ResizeObserver` and `matchMedia`; Mantine's transitions and focus trap were not checked in a browser.
+- No browser run: the Drawer was checked in jsdom only, with stubbed `ResizeObserver` and `matchMedia`; Mantine's transitions and focus trap, and the layout at 320 px, were not checked in a browser.
 - Until item 25 registers cards and traceability, a running control plane answers an empty board, so no card links to a detail outside tests, and traceability shows only its empty state.
-- `listAgentSessions` is not read (design, "Agent sessions").
+- `listAgentSessions` is not read; it is a follow-up of item 31 (design, "Agent sessions").
+- The route-safe address is checked against the server's refusal rule as read, not through the control plane's `webAppAnswer`.
 
 ## Remaining gates
 
-- Review passes 1 and 2, and pass 3 if pass 2 reports a Medium or worse finding.
+- Review pass 2 of the pass 1 fixes, because pass 1 reported a High and five Medium findings; pass 3 only if pass 2 reports a Medium or worse finding; the review stops at a pass with only Low findings or none.
 - Architect check by the coordinator of any fixes that no later pass reviews.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
