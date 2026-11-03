@@ -237,7 +237,7 @@ test('capabilities that break their shape are internal', async () => {
 test('a bind whose integration changed while the plugin resolved is a conflict and stores nothing', async () => {
   let integrations: InMemoryScmIntegrations | undefined;
   const resolveRemoteUrl = async ({ repository }: { repository: string }) => {
-    value(await integrations!.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }));
+    value(await integrations!.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }, ENTRY));
     return ok({ repository, remoteUrl: REMOTE_URL });
   };
   const racing = await fixture({ provider: (scm) => ({ ...scm, resolveRemoteUrl }) });
