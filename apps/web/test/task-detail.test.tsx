@@ -48,6 +48,20 @@ function section(name: string) {
   return within(screen.getByRole('region', { name }));
 }
 
+// A gate's line: its identifier, state badge, and the evidence it needs.
+function gateLine(stage: HTMLElement, gateId: string): string | undefined {
+  return within(stage).getByText(gateId).parentElement?.textContent ?? undefined;
+}
+
+// A 128-character identifier, the longest the wire contracts allow.
+const LONG = 'x'.repeat(128);
+
+// The longest run of text without a break opportunity, a space or <wbr>.
+function longestUnbroken(element: Element): number {
+  const text = element.innerHTML.replace(/<wbr>/g, ' ').replace(/<[^>]*>/g, ' ');
+  return Math.max(...text.split(/\s+/).map((word) => word.length));
+}
+
 describe('the task detail route', () => {
   it('links each card to its detail, which opens over the board without reading the board again', async () => {
     const view = renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), gatewayWith());
@@ -194,18 +208,13 @@ describe('the task detail', () => {
     ];
     openDetail(taskDetail({ stages }));
     await drawer();
-    const rows = section('Stages and gates').getAllByRole('row').slice(1);
-    expect(rows.map((row) => within(row).getAllByRole('cell')[0]!.textContent)).toEqual([
-      'propose',
-      'apply',
-      'platform-managed',
-    ]);
-    expect(within(rows[0]!).getByText('proposal-valid passed')).toBeDefined();
-    expect(within(rows[0]!).getByText('needs structural validation')).toBeDefined();
-    expect(within(rows[1]!).getByText('No gate')).toBeDefined();
-    expect(within(rows[2]!).getByText('tests stale')).toBeDefined();
-    expect(within(rows[2]!).getByText('approval pending')).toBeDefined();
-    expect(within(rows[2]!).getByText('Verify')).toBeDefined();
+    const stageItems = section('Stages and gates').getAllByRole('listitem');
+    expect(stageItems.map((item) => item.querySelector('p')?.textContent)).toEqual(['propose', 'apply', 'platform-managed']);
+    expect(gateLine(stageItems[0]!, 'proposal-valid')).toBe('proposal-validpassedneeds structural validation');
+    expect(within(stageItems[1]!).getByText('No gate')).toBeDefined();
+    expect(gateLine(stageItems[2]!, 'tests')).toBe('testsstaleneeds platform record');
+    expect(gateLine(stageItems[2]!, 'approval')).toBe('approvalpendingneeds semantic approval');
+    expect(within(stageItems[2]!).getByText('Verify · not started')).toBeDefined();
   });
 
   it('says why the card does not move: its wait, obstacle, blocked gates, and task end', async () => {
@@ -257,8 +266,14 @@ describe('the task detail', () => {
     ];
     openDetail(taskDetail({ traceability }));
     await drawer();
-    const rows = section('Traceability').getAllByRole('row').slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual(['Board columns1.1, 1.2attempt-1stale', 'Pickernonenonemissing']);
+    const links = section('Traceability').getAllByRole('listitem');
+    expect(links).toHaveLength(2);
+    for (const [link, texts] of [
+      [links[0]!, ['Board columns', 'Work items: 1.1, 1.2', 'Attempts: attempt-1', 'stale']],
+      [links[1]!, ['Picker', 'Work items: none', 'Attempts: none', 'missing']],
+    ] as const) {
+      for (const text of texts) expect(within(link).getByText(text)).toBeDefined();
+    }
   });
 
   it('shows the run binding', async () => {
@@ -342,6 +357,37 @@ describe('the task detail', () => {
     const list = section('Tasks in admission order');
     expect(list.getByText(/attempt a resolved by an operator: Process gone/)).toBeDefined();
     expect(list.getByText(/attempt b never started/)).toBeDefined();
+  });
+
+  it('fits the longest identifiers and text at phone width: no long run without a break, no wide table', async () => {
+    const longCard = card({ runId: LONG, framework: { pluginId: LONG, pluginVersion: LONG }, waitingFor: 'reviewer' });
+    const stage = {
+      stageId: LONG,
+      origin: 'native' as const,
+      state: 'in-progress' as const,
+      column: 'review' as const,
+      gates: [{ gateId: LONG, state: 'blocked' as const, requiredEvidence: 'platform-record' as const, blockReason: LONG }],
+    };
+    const traceability = [{ requirement: LONG, workItemIds: [LONG, LONG], attemptIds: [LONG], evidence: 'current' as const }];
+    const longTask = task({
+      taskId: LONG,
+      taskRunId: LONG,
+      admission: { admissionId: LONG, stageId: LONG, workItemId: LONG, state: 'admitted', policyRevision: LONG },
+      delegation: { parentTaskId: LONG, depth: 1 },
+      end: {
+        kind: 'cancelled',
+        taskId: LONG,
+        attemptId: LONG,
+        outcome: { kind: 'operator-resolved', ownershipGeneration: 1, cancelled: false, endedAt: '2026-11-03T08:10:00.000Z', executionId: 'e', evidence: LONG },
+      },
+    });
+    openDetail(taskDetail({ card: longCard, stages: [stage], traceability, tasks: [longTask] }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByRole('region', { name: 'Run binding' });
+    expect(longestUnbroken(dialog)).toBeLessThanOrEqual(24);
+    for (const row of within(dialog).getAllByRole('row')) {
+      expect(row.querySelectorAll('td, th').length).toBeLessThanOrEqual(2);
+    }
   });
 
   it('says when the run has no stage and no task yet', async () => {
