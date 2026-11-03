@@ -1,0 +1,105 @@
+{
+  "change": "revise-scm-port-refresh-and-authorization",
+  "generatedAt": "2026-11-02T21:41:17.219Z",
+  "devCommit": "ecf8cd3c62d293bab7330bc5318a8be4335f8cea",
+  "query": {
+    "capabilities": [
+      "scm-port",
+      "scm-qualification",
+      "git-workspace-port",
+      "plugin-registration"
+    ],
+    "files": [
+      "packages/plugins/scm-github/**",
+      "packages/modules/integrations/**",
+      "packages/plugin-sdk/**",
+      "docs/contracts/scm-*"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 36
+      },
+      {
+        "category": "error-handling",
+        "count": 31
+      },
+      {
+        "category": "spec-wording",
+        "count": 19
+      },
+      {
+        "category": "redaction",
+        "count": 17
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 16
+      },
+      {
+        "category": "docs",
+        "count": 12
+      },
+      {
+        "category": "test-flakiness",
+        "count": 7
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 775,
+        "inChecklist": 638
+      },
+      "mediumOrWorse": {
+        "findings": 373,
+        "inChecklist": 319
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 120
+      },
+      {
+        "category": "spec-wording",
+        "count": 90
+      },
+      {
+        "category": "docs",
+        "count": 66
+      },
+      {
+        "category": "stale-citation",
+        "count": 47
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 23
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 383,
+        "inChecklist": 376
+      },
+      "mediumOrWorse": {
+        "findings": 63,
+        "inChecklist": 63
+      }
+    }
+  }
+}

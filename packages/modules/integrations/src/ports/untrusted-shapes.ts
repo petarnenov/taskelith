@@ -36,6 +36,31 @@ export const externalIdentifier: FieldCheck = (value) =>
 export const externalIdentifiers: FieldCheck = (value) =>
   Array.isArray(value) && value.every(isExternalIdentifier) ? undefined : `must be an array of non-empty strings ${BOUND}`;
 
+export const positiveInteger: FieldCheck = (value) =>
+  Number.isSafeInteger(value) && (value as number) > 0 ? undefined : 'must be a positive integer';
+
+// An Authorization header value: a scheme, a space, and credentials of
+// visible ASCII and inner spaces, so that no line break reaches a header.
+const AUTHORIZATION = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+ [\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/;
+
+// The bounds of `ScmAuthorization` and `RemoteUrl` in the execution wire
+// contract, whose remote URL pattern this one repeats.
+export const MAX_AUTHORIZATION_LENGTH = 65536;
+export const MAX_REMOTE_URL_LENGTH = 2048;
+const LABEL = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
+const PORT = '(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?';
+const REMOTE_URL = new RegExp(`^https://${LABEL}(?:\\.${LABEL})*${PORT}(?:/[^?#\\s]*)?$`);
+
+export const authorizationValue: FieldCheck = (value) =>
+  typeof value === 'string' && value.length <= MAX_AUTHORIZATION_LENGTH && AUTHORIZATION.test(value)
+    ? undefined
+    : 'must be a scheme, a space, and visible ASCII credentials';
+
+export const httpsRemoteUrl: FieldCheck = (value) =>
+  typeof value === 'string' && value.length <= MAX_REMOTE_URL_LENGTH && REMOTE_URL.test(value)
+    ? undefined
+    : 'must be an HTTPS URL without user information, query, or fragment';
+
 const present: FieldCheck = (value) => (value === undefined ? 'is missing' : undefined);
 
 export const flag: FieldCheck = (value) => (typeof value === 'boolean' ? undefined : 'must be a boolean');

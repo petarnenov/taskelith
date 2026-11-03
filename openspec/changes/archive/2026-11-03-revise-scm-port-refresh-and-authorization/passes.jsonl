@@ -1,0 +1,2 @@
+{"change": "revise-scm-port-refresh-and-authorization", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a19e52-ff6c-7252-9ddb-1be5470ae760", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 1}}
+{"change": "revise-scm-port-refresh-and-authorization", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "3de8e612-8b75-4606-b3c2-fa6c0cf341b8", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 7}}

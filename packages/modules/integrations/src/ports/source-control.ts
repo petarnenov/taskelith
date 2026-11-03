@@ -2,7 +2,7 @@ import type { Result } from '@taskelith/kernel';
 
 // The port an SCM plugin implements, a draft until a second SCM maps onto it.
 // Plain text shapes, which the module checks: plugin output is untrusted.
-export const SOURCE_CONTROL_PORT_VERSION = '0.1.0';
+export const SOURCE_CONTROL_PORT_VERSION = '0.2.0';
 
 // Permissions a run may need, in SCM-neutral terms; a plugin maps each one to
 // its service's narrowest native permission.
@@ -43,24 +43,45 @@ export interface RunCredentialReference {
   readonly credentialId: string;
 }
 
-// A credential for one run only. `secret` is delivered to that run and is
-// never logged or stored; `permissions` are the effective ones granted.
+// The version of a credential's secret that its run has adopted.
+export interface RunCredentialAdoption extends RunCredentialReference {
+  readonly version: number;
+}
+
+// A credential for one run only. `secret` and `authorization`, the whole
+// Authorization header value, reach that run only and are never logged.
 export interface RunCredential {
   readonly credentialId: string;
   readonly runId: string;
+  // 1 at issue and one more at each refresh; the id stays the same.
+  readonly version: number;
   readonly secret: string;
+  readonly authorization: string;
   readonly repositories: readonly string[];
+  // The effective permissions granted.
   readonly permissions: readonly string[];
   // A kernel Instant: UTC, YYYY-MM-DDTHH:mm:ss.sssZ.
   readonly expiresAt: string;
 }
 
-// A refresh returns a new secret for the same grant and ends the previous
-// secret; `credentialId` may stay the same.
+// A refresh returns the next version and keeps the earlier ones until an
+// adoption confirms a later version, a revocation, or their own expiry.
 export interface RunCredentialIssuer {
   issueRunCredential(request: RunCredentialRequest): Promise<Result<RunCredential>>;
   refreshRunCredential(request: RunCredentialReference): Promise<Result<RunCredential>>;
+  confirmRunCredentialAdoption(request: RunCredentialAdoption): Promise<Result<void>>;
   revokeRunCredential(request: RunCredentialReference): Promise<Result<void>>;
+}
+
+// An HTTPS URL without user information, query, or fragment.
+export interface RepositoryRemote {
+  readonly repository: string;
+  readonly remoteUrl: string;
+}
+
+// Derives a repository's remote URL as the plugin's own identity.
+export interface RepositoryRemoteResolver {
+  resolveRemoteUrl(request: RepositoryRequest): Promise<Result<RepositoryRemote>>;
 }
 
 export interface MergeProtectionRequest extends RepositoryRequest {
@@ -177,6 +198,7 @@ export interface SourceControlCapabilities {
 }
 
 // The whole plugin; clients depend on the narrower port they use.
-export interface SourceControlProvider extends RunCredentialIssuer, ChangeRequestHost, WebhookVerifier {
+export interface SourceControlProvider
+  extends RunCredentialIssuer, RepositoryRemoteResolver, ChangeRequestHost, WebhookVerifier {
   readonly capabilities: SourceControlCapabilities;
 }

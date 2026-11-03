@@ -6,6 +6,7 @@ import { InMemoryScm } from './in-memory-source-control.ts';
 // Each defect of the fake service breaks one guarantee of the port.
 
 const EXTRA_CONTEXT = 'existing/required';
+const FOREIGN_REFUSAL = / to the foreign repository( [a-z ]+)? must fail with forbidden$/;
 
 function cases(lines: readonly string[]): string[] {
   return [...new Set(headings(lines))];
@@ -49,7 +50,7 @@ test('a credential that works for no access at all is reported', async () => {
 
 test('a credential not limited to the project repositories is reported', async () => {
   const lines = await defective({ unscopedCredentials: true });
-  assert.ok(lines.every((line) => line.endsWith('to the foreign repository must fail with forbidden')));
+  assert.ok(lines.every((line) => FOREIGN_REFUSAL.test(line)));
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'write credential outcome',
@@ -61,32 +62,31 @@ test('a credential not limited to the project repositories is reported', async (
 
 test('a refreshed credential that the service widened is reported', async () => {
   const lines = await defective({ refreshUnscopes: true });
-  assert.deepEqual(headings(lines), Array(5).fill('refreshed credential outcome'));
-  assert.ok(lines.every((line) => line.endsWith('to the foreign repository must fail with forbidden')));
+  assert.deepEqual(headings(lines), Array(10).fill('refreshed credential outcome'));
+  assert.ok(lines.every((line) => FOREIGN_REFUSAL.test(line)));
 });
 
 test('a refresh that does not extend the expiry is reported', async () => {
   const lines = await defective({ refreshKeepsExpiry: true });
-  assert.deepEqual(headings(lines), Array(2).fill('refreshed credential outcome'));
-  assert.match(lines[0]!, /refreshRunCredential must extend expiresAt beyond/);
+  assert.deepEqual(cases(lines), ['refreshed credential outcome', 'adopted credential outcome', 'revoked credential outcome']);
+  assert.ok(lines.every((line) => /refreshRunCredential must extend expiresAt beyond/.test(line)));
 });
 
 test('a refresh that returns the same secret with a later expiry is reported', async () => {
   const lines = await defective({ refreshKeepsSecret: true });
   assert.equal(lines[0], 'refreshed credential outcome: refreshRunCredential must return a new secret');
-  assert.match(lines[4]!, /write-code to the project repository after its refresh must fail with forbidden/);
-});
-
-test('a refresh that leaves the previous secret working is reported', async () => {
-  const lines = await defective({ refreshKeepsOldSecret: true });
-  assert.deepEqual(headings(lines), Array(5).fill('refreshed credential outcome'));
-  assert.ok(lines.every((line) => line.endsWith('after its refresh must fail with forbidden')));
+  assert.equal(lines[1], 'refreshed credential outcome: refreshRunCredential must return a new authorization');
+  assert.ok(lines.includes(
+    'refreshed credential outcome: write-code to the project repository after the adoption of its successor must fail with forbidden',
+  ));
 });
 
 test('a refresh that widens a credential to every permission is reported', async () => {
   assert.deepEqual(await defective({ refreshWidens: true }), [
     'refreshed credential outcome: refreshRunCredential granted write-code to a request without it',
     'refreshed credential outcome: refreshRunCredential changed the permissions',
+    'adopted credential outcome: refreshRunCredential granted write-code to a request without it',
+    'adopted credential outcome: refreshRunCredential changed the permissions',
   ]);
 });
 
@@ -94,14 +94,15 @@ test('one secret shared between runs is reported', async () => {
   const lines = await defective({ sharedSecret: true });
   assert.deepEqual(cases(lines), ['credential isolation outcome']);
   assert.equal(lines[0], 'credential isolation outcome: credentials of two runs must have distinct secrets');
-  assert.match(lines[1]!, /after another run got write-code must fail with forbidden/);
-  assert.match(lines[2]!, /read-code .* after another run was revoked must succeed/);
+  assert.equal(lines[1], 'credential isolation outcome: credentials of two runs must have distinct authorizations');
+  assert.match(lines[2]!, /after another run got write-code must fail with forbidden/);
+  assert.match(lines[3]!, /read-code .* after another run was revoked must succeed/);
 });
 
 test('a credential that reads outside the project is reported', async () => {
   const lines = await defective({ readsOutsideProject: true });
   assert.ok(lines.length > 0);
-  assert.ok(lines.every((line) => /: read-code to the foreign repository must fail with forbidden$/.test(line)));
+  assert.ok(lines.every((line) => FOREIGN_REFUSAL.test(line) && line.includes(': read-code to')));
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'write credential outcome',
@@ -113,9 +114,15 @@ test('a credential that reads outside the project is reported', async () => {
 
 test('a refreshed or revoked credential that still reads is reported', async () => {
   const lines = await defective({ endedCanRead: true });
+  const successor = 'read-code to the project repository after the adoption of its successor must fail with forbidden';
+  const later = 'read-code to the project repository after the adoption of a later version must fail with forbidden';
   assert.deepEqual(lines, [
-    'refreshed credential outcome: read-code to the project repository after its refresh must fail with forbidden',
-    'refreshed credential outcome: read-code to the project repository after its refresh must fail with forbidden',
+    `refreshed credential outcome: ${successor}`,
+    `refreshed credential outcome: ${successor}`,
+    `adopted credential outcome: ${later}`,
+    `adopted credential outcome: ${later}`,
+    'adopted credential outcome: read-code to the project repository after a stale adoption must fail with forbidden',
+    'revoked credential outcome: read-code to the project repository after the revocation of its credential must fail with forbidden',
     'revoked credential outcome: read-code to the project repository after its revocation must fail with forbidden',
     'credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden',
   ]);

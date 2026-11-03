@@ -1,0 +1,24 @@
+## Context
+
+`CommittingFleetRegistry.enroll` (`packages/adapters/postgres/src/committing-repositories.ts:229-231`) runs `PostgresFleetRepository.enroll` in one `SERIALIZABLE` transaction. Its first statement (`packages/adapters/postgres/src/fleet-repositories.ts:76-81`) is `UPDATE enrollment_tokens SET used_at = clock_timestamp() WHERE secret_hash = $1 AND used_at IS NULL RETURNING expires_at <= clock_timestamp() AS expired`. The `RETURNING` list is evaluated after the row is updated, so after any wait for the row lock, and `clock_timestamp()`, unlike `now()`, reads the server's clock at that moment. Line 83 refuses with reason `token-expired` when it is true. The expiry is thus compared with the database clock, after the lock wait.
+
+## Diagnosis
+
+- The old test computed the expiry on the host, `Date.now() + 1000`, took the row lock in a second connection, slept 1500 ms on a host timer, and committed.
+- The enrollment's `UPDATE` cannot pass the lock before the commit, so it evaluates the expiry at least 1500 ms of host time after the expiry was computed. For it to read "not expired", the database clock must then be more than about 500 ms behind the host clock.
+- Setup time is not the cause: the failing runs took 1575 ms and 1632 ms in all (two failing `make verify` logs on this host), so the setup took at most about 130 ms, and a slower setup would only make the comparison later and the token more expired.
+- On Docker Desktop the server runs in a Linux VM whose clock is corrected to the host's, and on the loaded iMac the archived change `stabilize-observability-lag-test` inferred a step back of about 2 ms from a test value; the lag needed here is above 500 ms. A lag of the VM clock behind the host's of more than half a second explains every failure. The lag was not observed at a failure; at the time of this change it measured about 20 ms.
+- Reproduction: a database whose `search_path` puts a schema `lagging` before `pg_catalog`, with `lagging.clock_timestamp()` returning the real database clock less 600 ms, which stands for a database clock 600 ms behind the host's, made the old test fail in both recorded runs with the integration's exact message (`verification.md`). Its margin over the old 1500 ms sleep is about 100 ms, so a much slower run could still pass; it demonstrates the mechanism, not a guaranteed failure.
+
+## Goals / Non-Goals
+
+Make the test independent of the host clock and of host timing without weakening what it proves: an expiry that passes while the enrollment waits for the row lock refuses it. No product code change; the requirement is unchanged.
+
+## Decisions
+
+- **A stepped database clock.** As in `pinnedClockCredentials` of the archived change `stabilize-observability-lag-test`, a role's `search_path` is `stepped_clock, pg_catalog, "$user", public`, so the adapter's unqualified `clock_timestamp()` resolves to `stepped_clock.clock_timestamp()`. That function returns a fixed instant plus `last_value` milliseconds of the sequence `stepped_clock.offset_milliseconds`. A sequence is not transactional: `setval` from another session is seen at once, also inside the enrollment's `SERIALIZABLE` transaction, whose snapshot would hide a table update. The adapter's SQL is unchanged.
+- **The clock stands still until the barrier.** The clock stands at `2099-01-01T00:00:00.000Z` and the token expires one second later, so the expiry cannot pass during the setup, however slow the host. An observer connection outside any transaction polls `pg_stat_activity` until a backend of the stepped role in the database waits on a lock with a query starting `UPDATE enrollment_tokens `; the observer stays outside a transaction because a backend keeps its view of `pg_stat_activity` until its transaction ends, so polls from the holder's open transaction could repeat a stale view. The query text of another role's backend is visible only to a superuser or a member of `pg_read_all_stats`; the test services' `taskelith` user is a superuser (`infra/services/compose.yaml`); only then is the clock stepped two seconds ahead, and the lock released. The expiry thus passes while the enrollment waits, and an enrollment that compared the expiry before the lock reads it as unexpired.
+- **Ahead of the real clock.** The fixed instant lies ahead of the real clock, so a regression to `now()`, the transaction's start on the real clock, also reads the token as unexpired and fails the test.
+- **The clock is checked.** The test first reads `clock_timestamp()` through the stepped credentials and asserts the fixed instant, so a role setting that no longer applies fails loudly.
+- **Cleanup.** A `finally` block ends both test connections, which releases the holder's lock even when a step failed, and waits for the enrollment, so a failure cannot leave a lock that blocks the next test's `TRUNCATE`.
+- **A bounded barrier.** The poll fails with a message after 500 tries instead of hanging.

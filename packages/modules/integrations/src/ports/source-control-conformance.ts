@@ -1,5 +1,6 @@
 import { ConformanceCase, type SourceControlConformanceFinding } from './conformance-case.js';
 import {
+  checkAdoptedCredential,
   checkChangeRequestAndStatusCredentials,
   checkCredentialIsolation,
   checkReadOnlyCredential,
@@ -17,6 +18,7 @@ import {
   checkStaleHead,
   checkUndeclaredMergeMethods,
 } from './merge-cases.js';
+import { checkRepositoryRemote } from './remote-cases.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { checkWebhookDelivery } from './webhook-cases.js';
 
@@ -38,8 +40,10 @@ const CASES: readonly (readonly [string, CaseBody])[] = Object.freeze([
   ['write credential', checkWriteCredential],
   ['change request and status credentials', checkChangeRequestAndStatusCredentials],
   ['refreshed credential', checkRefreshedCredential],
+  ['adopted credential', checkAdoptedCredential],
   ['revoked credential', checkRevokedCredential],
   ['credential isolation', checkCredentialIsolation],
+  ['repository remote', checkRepositoryRemote],
   ['merge protection', checkMergeProtection],
   ['change request', checkChangeRequest],
   ['required statuses', checkRequiredStatuses],

@@ -1,0 +1,74 @@
+{
+  "change": "revise-scm-port-refresh-and-authorization",
+  "generatedAt": "2026-11-02T22:00:11.483Z",
+  "devCommit": "ecf8cd3c62d293bab7330bc5318a8be4335f8cea",
+  "headCommit": "9f62a58c8ad5f8f1156596f327b806a4519f3dd7",
+  "features": {
+    "linesChanged": 657,
+    "filesChanged": 19,
+    "capabilities": [
+      "scm-port"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": true,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 3,
+      "thirdPassShare": 1,
+      "mediumOrWorsePerChange": 21.333333333333332
+    }
+  },
+  "rule": {
+    "version": 3,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "security",
+      "contracts"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6.1-sol",
+          "variant": "high"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "failed",
+    "reason": "timeout",
+    "latencyMs": 2003
+  }
+}

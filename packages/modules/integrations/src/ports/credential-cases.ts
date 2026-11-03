@@ -1,9 +1,14 @@
 import { parseInstant, type Result } from '@taskelith/kernel';
-import { fixtureResult, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
+import { failsWith, fixtureResult, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
 import { isSameSet, isSubset } from './conformance-steps.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
-import { SCM_PERMISSIONS, type RunCredential, type RunCredentialRequest } from './source-control.js';
+import {
+  SCM_PERMISSIONS,
+  type RunCredential,
+  type RunCredentialAdoption,
+  type RunCredentialRequest,
+} from './source-control.js';
 
 // Cases for run credentials: what each grant claims, and what the fixture
 // can natively do with it.
@@ -14,6 +19,7 @@ const READ_WRITE = Object.freeze(['read-code', 'write-code']);
 // (contract section 7, Forgejo admission gate).
 const CHANGE_REQUESTS = Object.freeze(['read-code', 'write-change-requests']);
 const STATUSES = Object.freeze(['read-code', 'write-statuses']);
+const UNKNOWN_CREDENTIAL = 'conformance-unknown-credential';
 
 interface Probe {
   readonly permission: string;
@@ -42,20 +48,62 @@ export async function checkChangeRequestAndStatusCredentials(
   await expectGrantedAccess(run, fixture, statuses);
 }
 
-// A refresh keeps the grant, extends it, and replaces the secret; the old
-// secret must stop working, and the new one gets the native probes again.
+// A refresh keeps the grant, extends it, and replaces the secret; both
+// versions work until the run's adoption of the new one ends the old one.
 export async function checkRefreshedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   await expectRefreshed(run, fixture, 'conformance-refresh-read-only', READ_ONLY);
   await expectRefreshed(run, fixture, 'conformance-refresh', SCM_PERMISSIONS);
 }
 
+// An adoption ends only earlier versions, a repeated or stale one nothing
+// more; only issued versions are adopted, and adopted ones still refresh.
+export async function checkAdoptedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
+  const first = await issueCredential(run, fixture, 'conformance-adoption', READ_ONLY);
+  const second = await refresh(run, fixture, first);
+  const third = await refresh(run, fixture, second);
+  await confirmAdoption(run, fixture, second);
+  await expectEnded(run, fixture, first, 'after the adoption of a later version');
+  await expectReads(run, fixture, third, 'after the adoption of an earlier version');
+  await confirmAdoption(run, fixture, second);
+  await expectReads(run, fixture, second, 'after its adoption was repeated');
+  await failsWith(
+    run,
+    'confirmRunCredentialAdoption of a version not yet issued',
+    () => fixture.provider.confirmRunCredentialAdoption({ credentialId: third.credentialId, version: third.version + 1 }),
+    'not-found',
+  );
+  await confirmAdoption(run, fixture, third);
+  await expectEnded(run, fixture, second, 'after the adoption of a later version');
+  await confirmAdoption(run, fixture, second);
+  await expectRefused(run, fixture, readProbe(fixture, second, 'after a stale adoption'));
+  await expectReads(run, fixture, third, 'after its adoption');
+  const fourth = await refresh(run, fixture, third);
+  await expectReads(run, fixture, fourth, 'after a refresh that follows an adoption');
+  await revoke(run, fixture, third);
+  await expectUnknownAdoption(run, fixture, 'a revoked credential', { credentialId: third.credentialId, version: third.version });
+  const unknown = { credentialId: UNKNOWN_CREDENTIAL, version: 1 };
+  await expectUnknownAdoption(run, fixture, 'an unknown credential', unknown);
+}
+
+function expectUnknownAdoption(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  subject: string,
+  adoption: RunCredentialAdoption,
+): Promise<void> {
+  const operation = `confirmRunCredentialAdoption of ${subject}`;
+  return failsWith(run, operation, () => fixture.provider.confirmRunCredentialAdoption(adoption), 'not-found');
+}
+
 // The access before the revocation shows that the refusals after it come
-// from the revocation.
+// from the revocation, which ends every version of the credential.
 export async function checkRevokedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const credential = await issueCredential(run, fixture, 'conformance-revoke', SCM_PERMISSIONS);
   await expectGrantedAccess(run, fixture, credential);
-  await revoke(run, fixture, credential);
-  await expectEnded(run, fixture, credential, 'after its revocation');
+  const refreshed = await refresh(run, fixture, credential);
+  await revoke(run, fixture, refreshed);
+  await expectEnded(run, fixture, credential, 'after the revocation of its credential');
+  await expectEnded(run, fixture, refreshed, 'after its revocation');
 }
 
 // Credentials of runs that overlap stay apart: a grant for one run never
@@ -65,6 +113,7 @@ export async function checkCredentialIsolation(run: ConformanceCase, fixture: So
   const reader = await issueCredential(run, fixture, 'conformance-isolation-reader', READ_ONLY);
   const writer = await issueCredential(run, fixture, 'conformance-isolation-writer', READ_WRITE);
   run.expect(reader.secret !== writer.secret, 'credentials of two runs must have distinct secrets');
+  run.expect(reader.authorization !== writer.authorization, 'credentials of two runs must have distinct authorizations');
   const afterGrant = 'after another run got write-code';
   await expectRefused(run, fixture, { permission: 'write-code', credential: reader, repository: project, when: afterGrant });
   await revoke(run, fixture, writer);
@@ -85,21 +134,45 @@ async function expectRefreshed(
   permissions: readonly string[],
 ): Promise<void> {
   const original = await issueCredential(run, fixture, runId, permissions);
+  const refreshed = await refresh(run, fixture, original);
+  await expectGrantedAccess(run, fixture, original, 'before the adoption of its successor');
+  await expectGrantedAccess(run, fixture, refreshed);
+  await confirmAdoption(run, fixture, refreshed);
+  await expectEnded(run, fixture, original, 'after the adoption of its successor');
+  await expectGrantedAccess(run, fixture, refreshed, 'after its adoption');
+}
+
+async function refresh(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  previous: RunCredential,
+): Promise<RunCredential> {
   const refreshed = await succeeds(
     run,
     'refreshRunCredential',
-    () => fixture.provider.refreshRunCredential({ credentialId: original.credentialId }),
+    () => fixture.provider.refreshRunCredential({ credentialId: previous.credentialId }),
     readRunCredential,
   );
-  checkGrant(run, 'refreshRunCredential', grantOf(original), refreshed);
-  run.expect(isSameSet(refreshed.permissions, original.permissions), 'refreshRunCredential changed the permissions');
-  run.expect(refreshed.secret !== original.secret, 'refreshRunCredential must return a new secret');
+  checkGrant(run, 'refreshRunCredential', grantOf(previous), refreshed);
+  run.expect(refreshed.credentialId === previous.credentialId, 'refreshRunCredential returned another credentialId');
+  run.expect(refreshed.version === previous.version + 1, 'refreshRunCredential must return the next version');
+  run.expect(isSameSet(refreshed.permissions, previous.permissions), 'refreshRunCredential changed the permissions');
+  run.expect(refreshed.secret !== previous.secret, 'refreshRunCredential must return a new secret');
+  run.expect(refreshed.authorization !== previous.authorization, 'refreshRunCredential must return a new authorization');
   run.expect(
-    Date.parse(refreshed.expiresAt) > Date.parse(original.expiresAt),
+    Date.parse(refreshed.expiresAt) > Date.parse(previous.expiresAt),
     'refreshRunCredential must extend expiresAt beyond the original expiry',
   );
-  await expectEnded(run, fixture, original, 'after its refresh');
-  await expectGrantedAccess(run, fixture, refreshed);
+  return refreshed;
+}
+
+function confirmAdoption(run: ConformanceCase, fixture: SourceControlConformanceFixture, adopted: RunCredential): Promise<void> {
+  return succeeds(
+    run,
+    'confirmRunCredentialAdoption',
+    () => fixture.provider.confirmRunCredentialAdoption({ credentialId: adopted.credentialId, version: adopted.version }),
+    nothing,
+  );
 }
 
 async function issueCredential(
@@ -116,6 +189,7 @@ async function issueCredential(
     readRunCredential,
   );
   checkGrant(run, 'issueRunCredential', request, credential);
+  run.expect(credential.version === 1, 'issueRunCredential must return version 1');
   return credential;
 }
 
@@ -160,13 +234,27 @@ async function expectGrantedAccess(
   run: ConformanceCase,
   fixture: SourceControlConformanceFixture,
   credential: RunCredential,
+  when?: string,
 ): Promise<void> {
   for (const permission of SCM_PERMISSIONS) {
-    const inProject = { permission, credential, repository: fixture.projectRepository };
+    const inProject = { permission, credential, repository: fixture.projectRepository, when };
     if (credential.permissions.includes(permission)) await expectAllowed(run, fixture, inProject);
     else await expectRefused(run, fixture, inProject);
-    await expectRefused(run, fixture, { permission, credential, repository: fixture.foreignRepository });
+    await expectRefused(run, fixture, { permission, credential, repository: fixture.foreignRepository, when });
   }
+}
+
+function expectReads(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  credential: RunCredential,
+  when: string,
+): Promise<void> {
+  return expectAllowed(run, fixture, readProbe(fixture, credential, when));
+}
+
+function readProbe(fixture: SourceControlConformanceFixture, credential: RunCredential, when: string): Probe {
+  return { permission: 'read-code', credential, repository: fixture.projectRepository, when };
 }
 
 async function expectEnded(

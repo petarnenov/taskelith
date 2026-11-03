@@ -79,7 +79,7 @@ test('a throwing capabilities getter is reported without its payload', async () 
 test('an unknown failure code is reported without its value', async () => {
   const code = await patched(() => ({ revokeRunCredential: async () => err({ code: SECRET, message: SECRET, details: {} }) as never }));
   assertNoSecret(code);
-  assert.equal(code[0], 'revoked credential result: revokeRunCredential: result.error.code is not a kernel failure code');
+  assert.equal(code[0], 'adopted credential result: revokeRunCredential: result.error.code is not a kernel failure code');
 });
 
 test('a throwing failure details getter is reported without its payload', async () => {
@@ -87,13 +87,13 @@ test('a throwing failure details getter is reported without its payload', async 
     revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: { get reason() { return throwSecret(); } } }) as never,
   }));
   assertNoSecret(details);
-  assert.equal(details[0], 'revoked credential result: revokeRunCredential: result.error.details could not be read: an Error');
+  assert.equal(details[0], 'adopted credential result: revokeRunCredential: result.error.details could not be read: an Error');
 });
 
 test('a throwing result value getter is reported without its payload', async () => {
   const value = await patched(() => ({ revokeRunCredential: async () => ({ ok: true, get value() { return throwSecret(); } }) as never }));
   assertNoSecret(value);
-  assert.equal(value[0], 'revoked credential result: revokeRunCredential: result.value could not be read: an Error');
+  assert.equal(value[0], 'adopted credential result: revokeRunCredential: result.value could not be read: an Error');
 });
 
 // Outcome findings name a field and the mismatch, never a plugin or
