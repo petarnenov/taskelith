@@ -12,9 +12,10 @@ import {
 } from '@taskelith/access';
 import { ControlPlaneApi, createApiServer, scmIntegrationServices, singlePlugin, type ApiServices, type ScmIntegrationPorts } from '@taskelith/control-plane';
 import {
-  InMemoryScmIntegrations, ScmSecrets, normalizeOrigin, type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries,
+  InMemoryScmIntegrationAudit, InMemoryScmIntegrations, ScmSecrets, normalizeOrigin,
+  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries,
 } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type Instant } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { githubSourceControlPlugin } from '@taskelith/scm-github';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
@@ -31,6 +32,8 @@ const WEBHOOK_SECRET = 'synthetic-route-webhook-secret';
 const ROTATED_SECRET = 'synthetic-rotated-webhook-secret';
 const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const PEM_LINE = PRIVATE_KEY.split('\n')[1]!;
+const AT = value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z')));
+const CLOCK = { now: (): Instant => AT };
 const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
 const CREATION = Object.freeze({
   pluginId: 'scm-github', label: 'GitHub', allowedOrigin: 'HTTPS://GitHub.COM',
@@ -49,7 +52,7 @@ type Headers = Record<string, string>;
 async function fixture(t: TestContext) {
   const store = new InMemoryAccessStore();
   const secrets = new NodeSecrets();
-  const clock = { now: () => value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z'))) };
+  const clock = CLOCK;
   const sessions = new SessionService({ store, hasher, secrets, random: secrets, clock, throttle: new LoginThrottle({ clock, sleep: async () => undefined }) });
   const administration = new PrincipalAdministration({ store, hasher, random: secrets, clock });
   const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
@@ -59,7 +62,8 @@ async function fixture(t: TestContext) {
   const recorded: string[] = [];
   const deliveries = { record: async (_id: string, event: { deliveryId: string }) => { recorded.push(event.deliveryId); return ok<DeliveryRecording>('recorded'); } };
   const sink = new InMemoryLogSink();
-  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(), deliveries), new Logger(sink, clock));
+  const audit = new InMemoryScmIntegrationAudit();
+  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(audit), deliveries), new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), scmIntegrations: scm.integrations, scmWebhooks: scm.webhooks,
@@ -80,7 +84,7 @@ async function fixture(t: TestContext) {
     assert.equal(answer.status, 201, answer.text);
     return String(answer.body.integrationId);
   };
-  return { base, call, created, sink, recorded, VERA: await browser(base, 'vera'), OWNER: await browser(base, 'owner') };
+  return { base, call, created, sink, recorded, audit, owner, VERA: await browser(base, 'vera'), OWNER: await browser(base, 'owner') };
 }
 
 // A logged-in browser's headers, with the CSRF header of its session.
@@ -100,7 +104,7 @@ const holdsNoSecret = (text: string) => ![WEBHOOK_SECRET, ROTATED_SECRET, PEM_LI
 
 function githubPorts(store: ScmIntegrations, deliveries: ScmWebhookDeliveries): ScmIntegrationPorts {
   const plugin = githubSourceControlPlugin();
-  return { store, deliveries, plugin, plugins: singlePlugin(plugin) };
+  return { store, deliveries, plugin, plugins: singlePlugin(plugin), clock: CLOCK };
 }
 
 test('an owner creates and reads an integration, with its origin normalized and its secrets only by name', async (t) => {
@@ -250,9 +254,61 @@ test('the composition logs an integration that cannot verify its webhooks, witho
   value(await store.add({
     integrationId, pluginId: 'scm-retired', label: 'Retired', allowedOrigin: value(normalizeOrigin('https://git.example.com')),
     settings: {}, secretNames: ['webhook-secret'], revision: 1,
-  }, value(ScmSecrets.of({ 'webhook-secret': WEBHOOK_SECRET }))));
+  }, value(ScmSecrets.of({ 'webhook-secret': WEBHOOK_SECRET })), { actor: 'test', reason: 'unverifiable test', at: AT }));
   assert.equal((await scm.webhooks.receive(integrationId, { headers: {}, rawBody: new Uint8Array() })).ok, false);
   const warnings = sink.records.map((record) => [record.level, record.event, record.fields]);
   assert.deepEqual(warnings, [['warn', 'scm.integration.unverifiable', { integrationId, revision: 1, reason: 'plugin-missing' }]]);
   assert.ok(!JSON.stringify(sink.records).includes(WEBHOOK_SECRET));
+});
+
+test('each committed create and update is audited with the caller as actor and its operation as reason', async (t) => {
+  const { call, created, audit, owner, OWNER } = await fixture(t);
+  const integrationId = await created();
+  const changed = await call('PATCH', `/scm-integrations/${integrationId}`, OWNER, {
+    expectedRevision: 1, label: 'Renamed', settings: { ...CREATION.settings, 'merge-methods': 'rebase' },
+  });
+  assert.equal(changed.status, 200, changed.text);
+  const rotated = await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, secrets: { 'webhook-secret': WEBHOOK_SECRET } });
+  assert.equal(rotated.status, 200, rotated.text);
+  const creating = { actor: owner, reason: 'control-plane API createScmIntegration', occurredAt: AT };
+  const updating = { actor: owner, reason: 'control-plane API updateScmIntegration', occurredAt: AT };
+  assert.deepEqual(value(await audit.trail()), [
+    {
+      integrationId, kind: 'created', ...creating, revision: 1,
+      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.app-id', 'settings.installation-id', 'settings.merge-methods', 'private-key', 'webhook-secret'],
+    },
+    { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'settings.merge-methods'], revision: 2 },
+    { integrationId, kind: 'secret-changed', ...updating, changedFields: ['webhook-secret'], revision: 3 },
+  ]);
+});
+
+test('a refused create or update, 400, 403, 404, or 409, writes no audit row', async (t) => {
+  const { call, created, audit, VERA } = await fixture(t);
+  const integrationId = await created();
+  const refusals = [
+    await call('POST', '/scm-integrations', BEARER, { ...CREATION, settings: { ...CREATION.settings, 'app-id': 'twelve' } }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, secrets: { token: ROTATED_SECRET } }),
+    await call('POST', '/scm-integrations', VERA, CREATION),
+    await call('PATCH', `/scm-integrations/${integrationId}`, VERA, { expectedRevision: 1, label: 'Refused' }),
+    await call('POST', '/scm-integrations', BEARER, { ...CREATION, pluginId: 'scm-forgejo' }),
+    await call('PATCH', `/scm-integrations/${MISSING}`, BEARER, { expectedRevision: 1, label: 'Missing' }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, label: 'Stale' }),
+  ];
+  assert.deepEqual(refusals.map((answer) => answer.status), [400, 400, 403, 403, 404, 404, 409]);
+  assert.deepEqual(value(await audit.trail()).map((event) => [event.kind, event.revision]), [['created', 1]]);
+});
+
+test('no secret value of a create, an update, or a secret change reaches the request log or the audit trail', async (t) => {
+  const { call, created, sink, audit } = await fixture(t);
+  const integrationId = await created();
+  const answers = [
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, label: 'Renamed', secrets: { 'webhook-secret': ROTATED_SECRET } }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, secrets: { 'private-key': PRIVATE_KEY } }),
+  ];
+  assert.deepEqual(answers.map((answer) => answer.status), [200, 200]);
+  const trail = value(await audit.trail());
+  assert.deepEqual(trail.map((event) => event.kind), ['created', 'updated', 'secret-changed']);
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.ok(holdsNoSecret(JSON.stringify(trail)));
 });

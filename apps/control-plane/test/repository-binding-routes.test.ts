@@ -36,6 +36,7 @@ const BEARER = { authorization: `Bearer ${OPERATOR}` };
 const MISSING = `p${'f'.repeat(32)}`;
 const INTEGRATION_ID = value(parseIdentifier('ScmIntegrationId', `i${'1'.repeat(32)}`)) as ScmIntegrationId;
 const SECRET = 'synthetic-binding-route-secret';
+const AUDIT_ENTRY = { ...INVOCATION, at: value(instantFromEpochMilliseconds(0)) };
 const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
 const DEFAULTS = {
   framework: { pluginId: 'sdlc-openspec' }, implementers: ['agent-primary'], reviewer: 'agent-primary',
@@ -116,7 +117,7 @@ async function fixture(t: TestContext) {
     integrationId: INTEGRATION_ID, pluginId: 'scm-fake', label: 'Fake', allowedOrigin: value(normalizeOrigin('https://scm.example')),
     settings: {}, secretNames: ['webhook-secret'], revision: 1,
   };
-  value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
+  value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET })), AUDIT_ENTRY));
   const scm = new FakeScm();
   const bindings = new InMemoryRepositoryBindings(integrations);
   const sink = new InMemoryLogSink();
@@ -262,14 +263,14 @@ test('an integration whose plugin is not registered answers 503', async (t) => {
   value(await integrations.add({
     integrationId: other, pluginId: 'scm-gone', label: 'Gone', allowedOrigin: value(normalizeOrigin('https://scm.example')),
     settings: {}, secretNames: [], revision: 1,
-  }, value(ScmSecrets.of({}))));
+  }, value(ScmSecrets.of({})), AUDIT_ENTRY));
   assert.equal((await call('PUT', path, MARIA, { binding: { ...BINDING, integrationId: other } })).status, 503);
 });
 
 test('a bind whose integration changes while the plugin resolves answers 409 and stores nothing', async (t) => {
   const { call, path, stored, scm, integrations, MARIA } = await fixture(t);
   scm.resolver = async (repository) => {
-    value(await integrations.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }));
+    value(await integrations.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }, AUDIT_ENTRY));
     return ok({ repository, remoteUrl: REMOTE_URL });
   };
   assert.equal((await call('PUT', path, MARIA, { binding: BINDING })).status, 409);
