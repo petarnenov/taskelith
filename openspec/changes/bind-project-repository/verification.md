@@ -76,11 +76,15 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, cont
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `244403329e30c2fc36f978254bc74b8bec2cf7b0`; tests 4666, pass 4657, fail 0, skipped 9; all files 99.44% lines, 92.75% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `9379bc96b26a0d8b03e503913d030bc5a94e4681`; tests 4676, pass 4667, fail 0, skipped 9; all files 99.44% lines, 92.76% branches, 98.87% functions.
 - `npm run openspec -- validate bind-project-repository --strict`: passed, `Change 'bind-project-repository' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 112 file(s); every pass summary file is valid: 92 file(s); every route file is valid: 45 file(s).`.
 - Spec diff against the merge base `634080a0e379` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a37b-5df2-7510-9179-31c62a1fd763` | 0 | 1 | 2 | 1 |
 <!-- make record: end -->
 
 ## Independent review
