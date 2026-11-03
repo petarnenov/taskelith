@@ -17,6 +17,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `6e5753b7` routed at head `20817b52` (unedited; tier `elevated`, 46 files and 1881 lines, triggers lines, files, capabilities, contracts, and size; recommended effort high for passes 1 and 2, while the brief names medium).
 - `18df9a20` recorded these revisions and the fail-before evidence. Its `make verify` (`verify-15b-1.log`) passed on the tree `b88599d0` (tests 4586, pass 4577, fail 0, skipped 9; all files 99.42% lines, 92.66% branches, 98.83% functions), but the new `api/inbox-answer-api.js` had 61.76% and `application/reconciliation-resolution.js` 67.74% branches, below the 75% the brief requires of a new file.
 - `f8da7ac4` `test: cover the failure paths of the inbox answer handler and the resolver` adds a unit test of each and an HTTP test of every answer kind, which changed the diff, so `97dd25f3` deleted that `route.json` and `988b6e93` routed again at head `97dd25f3` (unedited; tier `elevated`, 48 files and 2011 lines, the same triggers and recommendation).
+- `c3723b0f` recorded this revision. Its `make verify` (`verify-15b-2.log`) passed on the tree `d36af11a` (tests 4592, pass 4583, fail 0, skipped 9; all files 99.43% lines, 92.75% branches, 98.83% functions; every new file at least 83.33% branches); it is the run that `make record` records, and the commit that records it changes no checked input other than this file.
 
 ## Environment
 
@@ -44,3 +45,28 @@ Logs in the session scratchpad (`fb-15b-*.log`). Each mutation was applied to on
 - The generation check and the unknown check of the resolver survived at `9c62d07a`: the source derives its item from the task in the same transaction, so no answer reaches them. `20817b52` calls the resolver with a stale item; at `20817b52`, `fb-15b-mutation-no-generation-check.log` and `fb-15b-mutation-resolver-no-unknown-check.log`: 1 of 116 fails each, that test; the surviving run's log at `9c62d07a` was replaced by the first.
 - The first attempts at `skip-key-check`, `closed-as-open`, and `record-any-item` failed the build and ran nothing, and a mutation of the PostgreSQL adapter's record guard failed the build twice and was dropped, since the in-memory mutation covers the shared conformance case; their logs were discarded.
 - At `f8da7ac4`: `fb-15b-mutation-record-failure-ignored.log` (`reconciliation-resolution.ts`, a failed record ignored): 1 of 111 fails, the resolver's record test; `fb-15b-mutation-handler-without-principal-check.log` (`inbox-answer-api.ts`, an anonymous caller authorized as a principal): 1 of 111 fails, the handler's anonymous test. A first attempt at the second failed the build; its log was discarded.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `d36af11a1f0d3dfb6a533d59147c233fea057a4e`; tests 4592, pass 4583, fail 0, skipped 9; all files 99.43% lines, 92.75% branches, 98.83% functions.
+- `npm run openspec -- validate answer-inbox-items --strict`: passed, `Change 'answer-inbox-items' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 108 file(s); every pass summary file is valid: 88 file(s); every route file is valid: 41 file(s).`.
+- Spec diff against the merge base `1c75f149484f` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
+
+## Limitations
+
+- Until item 25 registers cards, the reconciliation source lists no unknown execution in a running installation; unrecorded processes, which name no card, are listed (design "Context").
+- The resolver's generation and unknown rechecks are reached only by a direct call, since the source derives its item in the same transaction (section "Fail-before").
+- A resolved execution sends the worker no command of its own (design "Risks / Trade-offs").
+- The digest names the responder, so another principal that repeats a key gets `idempotency-key-reused` (design decision 2).
+- No review pass ran yet; no deployment or browser check was made (backend only).
+
+## Remaining gates
+
+- Review passes by the brief's reviewers, their fixes, and their records.
+- The archive of the change, and integration into dev by the coordinator (single pull request).
