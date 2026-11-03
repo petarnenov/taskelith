@@ -128,6 +128,21 @@ test('a role change of another project or principal, or one before the open, lea
   assert.deepEqual([sink.marks(), sink.closed], [[1], false]);
 });
 
+test('a role change committed before the open but numbered after it ends the new stream once, and a reconnect stays open', async () => {
+  const { log, hub } = setup();
+  log.commit([changeEntry({ change: 'roles-changed', principalId: VERA, projectId: ALPHA })]);
+  const { sink: first } = await opened(hub, 0);
+  value(await log.assign(1_000, AT));
+  hub.wake();
+  await first.until((recorded) => recorded.closed);
+  assert.deepEqual(first.frames, [{ kind: 'stream-ended', reason: 'role-changed' }]);
+  const { sink: reconnected } = await opened(hub, 0);
+  await committed(log, eventEntry(marked(1)));
+  hub.wake();
+  await reconnected.until((recorded) => recorded.frames.length === 1);
+  assert.deepEqual([reconnected.marks(), reconnected.closed], [[1], false]);
+});
+
 test('the installation stream ends on a change of the installation role, not on a project role', async () => {
   const { log, hub } = setup();
   const { sink } = await opened(hub, undefined, subject(INSTALLATION_SCOPE));

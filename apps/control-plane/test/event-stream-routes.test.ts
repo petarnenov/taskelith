@@ -31,7 +31,9 @@ import {
   InMemorySessionTimelineStore,
   InMemoryTaskLineage,
   InMemoryUiEventLog,
+  NATIVE_REQUEST_SOURCE_ID,
   SessionTimelineService,
+  nativeRequestItem,
   parseSessionGeneration,
   projectScope,
   type NeedsYouItem,
@@ -333,6 +335,43 @@ test('a stream whose unsent bytes pass the buffer bound is dropped, and an event
   await publish();
   await response.closed;
   assert.deepEqual([response.destroyed, response.ended], [true, false]);
+});
+
+test('an inbox item without an attempt is skipped, logged by identifiers only, and the next event still arrives', async () => {
+  const lineage = new InMemoryTaskLineage({ runs: [{ runId: 'run-alpha', projectId: 'alpha' }], tasks: [] });
+  const timeline = new SessionTimelineService({
+    store: new InMemorySessionTimelineStore(lineage, log), digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
+    outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(randomBytes(32))),
+    turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+  });
+  const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
+  const taskId = id('TaskId', 'task-no-attempt') as TaskId;
+  lineage.addTask({ taskId, rootTaskId: taskId, depth: 0, projectId: ALPHA, runId: 'run-alpha' as never });
+  const sessionId = id('SessionId', 's-no-attempt');
+  const generation = value(parseSessionGeneration(1));
+  value(await timeline.openSession({ id: sessionId, taskId, harness: id('HarnessPluginId', 'harness-a') }));
+  const started = await timeline.startGeneration(sessionId, { generation, nativeSessionId: id('NativeSessionId', 'native-1') });
+  assert.equal(started.ok ? 'started' : started.error.code, 'precondition-failed',
+    'item 13 now runs a request without an attempt: revisit the skip of NativeRequestInboxSubject');
+  const item = nativeRequestItem(NATIVE_REQUEST_SOURCE_ID, {
+    item: { id: id('NeedsYouItemId', 'item-no-attempt'), kind: 'permission-request', sessionId, taskId, request: { generation, nativeRequestId: id('NativeRequestId', 'request-1') }, createdAt: AT, state: 'open' },
+    scope: { projectId: ALPHA, runId: 'run-alpha' as never },
+  })!;
+  const subject = checkHttpSchema('NativeRequestInboxSubject', item.subject);
+  assert.match(subject.ok ? 'valid' : subject.error.join('; '), /required property 'attemptId'/,
+    'the contract now admits a subject without an attempt: revisit the skip');
+  await publish();
+  const stream = await open('/projects/alpha/events', BEARER);
+  const logged = logs.records.length;
+  log.commit([eventEntry({ scope: projectScope(ALPHA), occurredAt: AT, record: { type: 'inbox-item-changed', item } }), eventEntry(marked(61))]);
+  await publish();
+  assert.deepEqual((await stream.next())?.data?.workersOnline, 61, 'the item is skipped and the next event arrives');
+  const skipped = logs.records.slice(logged).filter((record) => record.event === 'events.stream.invalid-event');
+  assert.equal(skipped.length, 1);
+  assert.deepEqual(Object.keys(skipped[0]!.fields).sort(), ['type', 'violation']);
+  assert.equal(skipped[0]!.fields.type, 'inbox-item-changed');
+  assert.match(String(skipped[0]!.fields.violation), /^ProjectEvent \//);
+  assert.equal(JSON.stringify(skipped[0]!.fields).includes(item.title), false, 'no payload text reaches the log');
 });
 
 function request(projectId: string): ApiRequest {
