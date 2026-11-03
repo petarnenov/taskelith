@@ -210,6 +210,9 @@ test('both origins are normalized as written, so numeric hosts that URL parsing 
     const bound = value(await service.bind(PROJECT_ID, first()));
     assert.equal(bound.remoteUrl, `${origin}/${PROJECT}.git`, origin);
   }
+  const bare = async ({ repository }: { repository: string }) => ok({ repository, remoteUrl: 'https://SCM.example' });
+  const pathless = await fixture({ provider: (scm) => ({ ...scm, resolveRemoteUrl: bare }) });
+  assert.equal(value(await pathless.service.bind(PROJECT_ID, first())).remoteUrl, 'https://SCM.example');
   const { service } = await fixture({ allowedOrigin: 'https://127.0.0.1', provider: resolvingUnder('https://127.1') });
   assert.deepEqual(refusal(await service.bind(PROJECT_ID, first())), ['precondition-failed', 'remote-origin-mismatch']);
 });

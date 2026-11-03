@@ -1,11 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Remote origin of a binding
-An integration's allowed origin, https with a host and an optional port, SHALL be set only by an `installation-owner` and stored with a lower-case host and an explicit port, 443 by default. `bindRepository` SHALL take no remote URL: the integration's plugin SHALL resolve it, and the control plane SHALL refuse with 422 `remote-origin-mismatch` a resolved URL whose origin, normalized the same way, is not that origin.
+An integration's allowed origin, https with a host and an optional port, SHALL be set only by an `installation-owner` and stored with a lower-case host and an explicit port, 443 by default. `bindRepository` SHALL take no remote URL: the integration's plugin SHALL resolve it, and the control plane SHALL refuse with 422 `remote-origin-mismatch` a resolved URL whose origin, its scheme and authority as written and normalized the same way, is not that origin.
 
 #### Scenario: Remote URL outside the integration's origin
 - **WHEN** a maintainer binds a repository whose resolved remote URL has a host that is not that of the integration's allowed origin
 - **THEN** the answer is 422 with reason `remote-origin-mismatch` and the binding is unchanged
+
+#### Scenario: Origin compared as written
+- **WHEN** the allowed origin is `https://127.1` and the plugin resolves `https://127.1/acme/project.git`
+- **THEN** the binding is stored, because neither origin is rewritten by URL canonicalization before the comparison
 
 #### Scenario: Old client sends a remote URL
 - **WHEN** a client sends `bindRepository` with a `remoteUrl` in its binding

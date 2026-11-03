@@ -1,5 +1,5 @@
 import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
-import { normalizeOrigin } from '../domain/normalized-origin.js';
+import { normalizeRemoteOrigin } from '../domain/normalized-origin.js';
 import type { ScmIntegration, ScmIntegrationId } from '../domain/scm-integration.js';
 import type { BindableProjects, RepositoryBinding, RepositoryBindings } from '../ports/repository-bindings.js';
 import type { ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
@@ -76,7 +76,9 @@ export class RepositoryBindingService {
     const { integration, provider } = stored.value;
     const remote = await resolvedRemote(provider, binding.repository);
     if (!remote.ok) return remote;
-    if (!sameOrigin(remote.value.remoteUrl, integration)) return err(refusal('remote-origin-mismatch', 'the remote URL lies outside the allowed origin'));
+    const origin = normalizeRemoteOrigin(remote.value.remoteUrl);
+    if (!origin.ok) return err(pluginDefect());
+    if (origin.value !== integration.allowedOrigin) return err(refusal('remote-origin-mismatch', 'the remote URL lies outside the allowed origin'));
     const methods = declaredMergeMethods(provider);
     if (!methods.ok) return methods;
     if (!methods.value.includes(binding.mergeMethod)) return err(refusal('merge-method-undeclared', 'the plugin does not declare the merge method'));
@@ -151,12 +153,6 @@ function declaredMergeMethods(provider: SourceControlProvider): Result<readonly 
   } catch {
     return err(pluginDefect());
   }
-}
-
-// A resolved remote URL has the `RemoteUrl` form, so its origin parses.
-function sameOrigin(remoteUrl: string, integration: ScmIntegration): boolean {
-  const origin = normalizeOrigin(new URL(remoteUrl).origin, 'remoteUrl');
-  return origin.ok && origin.value === integration.allowedOrigin;
 }
 
 function refusal(reason: string, message: string): Failure {
