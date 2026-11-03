@@ -14,6 +14,7 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), sub-change 20e, developed by a brie
 - `22ce7cc4` `docs: record the review route of the receive scm webhooks change` (`route.json` unedited): the tree that `make verify` checked; the commit after it, `e1493259`, adds this record and the `make record` output and is the head for review pass 1.
 - Pass 1 fix round: `1d214a8f` `docs: record review pass 1 of the receive scm webhooks change` (its `passes.jsonl` line and four findings, recorded before any fix); `6e8b7bb6` `chore: store SCM webhook identifiers as UTF-16LE bytes so that every port identifier is kept exactly` (finding 2); `776698c8` `chore: give the SCM webhook decoy the GitHub plugin's work and accept only GitHub's eventless events without an event` (findings 1 and 3, coordinator decision of 2026-11-03); `e5943f9a` `docs: specify the eventless webhook rule, the decoy work, and the identifier storage of the receive scm webhooks change`: the tree that the fix round's `make verify` checked; the commit after it, `d337810f`, adds this record and is the head for review pass 2. Pass 2 fix round: `74e9068b` `docs: record review pass 2 of the receive scm webhooks change` (its `passes.jsonl` line, seven findings, and the review snapshots, recorded before any fix); `f5c03c52` `chore: bound concurrent SCM webhook bodies, refuse an oversized declared length unread, and name the raw path parameter rule` (findings 1, 5, and 6); `aeb928f9` `docs: keep the scm-port delta SCM-neutral and state the unsigned webhook headers and the webhook body bounds` (findings 2, 3, and 4); `e93cd834` `docs: record the pass 2 fix round of the receive scm webhooks change` (the resolutions): the tree that the round's `make verify` checked; the commit after it adds the round's checks and the `make record` output and is the head for review pass 3 (`67281b79`). Pass 3 fix round: `e9f05220` `docs: record review pass 3 of the receive scm webhooks change` (its `passes.jsonl` line and three findings, recorded before any fix); `af608e54` `test: synchronize the SCM webhook slot test on gates and count the server's body reads` (finding 1); the next commit, `docs: record the pass 3 fix round of the receive scm webhooks change`, fixes finding 2 in this record and is the tree that the round's `make verify` checked. `route.json` is not routed again: later passes never route.
 - Merge of `dev` (coordinator decision of 2026-11-03, option (a), before integration and without an archive): `24c8c37a` `chore: merge dev into the receive scm webhooks change` merges `origin/dev` `26bbb10f` (#427, `implement-project-setup`) into `d29179aa`; the merge commit is the tree that the merge's `make verify` checked. See "Merge of dev" below.
+- `9eb405e7` `docs: record the merge of dev into the receive scm webhooks change`, the head that the reconciliation review (pass 4) reviewed; the commit after it records that review in `passes.jsonl` and this file and changes no checked input.
 
 ## Environment
 
@@ -126,6 +127,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6-astra#medium` | `01a19fb8-59e6-7ef3-b2f9-cc2d2e520bff` | 0 | 1 | 3 | 0 |
 | 2 | B | `claude claude-fable-5-1#medium` | `b7260c40-dd88-4f3e-934d-0eec0a8e4aff` | 0 | 0 | 1 | 6 |
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a19fea-10c4-7863-aab7-fac9c7c533d2` | 0 | 0 | 1 | 2 |
+| 4 | A | `codex gpt-6-astra#medium` | `01a1a009-35bc-79a0-8238-6e5f0c423b88` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -174,6 +176,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   2. Low, `evidence-mismatch`: the Environment paragraph and the Checks table named different Node.js versions for the pass 2 fix round's `make verify`. Fixed, unreviewed, in this record.
   3. Low, `contract-drift`: restates pass 2 finding 7. Deferred, as the reviewer proposed.
 
+### Pass 4 (role A): reconciliation review
+
+- Reviewer: Codex CLI `gpt-6-astra`, effort `medium` (`codex gpt-6-astra#medium`), the reviewer of pass 1, as worker step 10 item 4 requires for the merge of `dev` ("Merge of dev").
+- Invocation, through `make review CHANGE=receive-scm-webhooks PASS=4`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, environment `PATH HOME USER LANG TERM`, started 2026-11-03T06:12:00Z at head `9eb405e7`; the prompt limited the review to the resolved merge `24c8c37a` of `origin/dev` `26bbb10f`, its six conflicted files, the reconciliation, and the commits after the merge up to `9eb405e7`.
+- Confirmation: model `gpt-6-astra`, effort `medium`, sandbox `read-only` reported in the header; session `01a1a009-35bc-79a0-8238-6e5f0c423b88`; exit 0.
+- Snapshot before and after: both `27d7d3b9e29d4943b0f78190be6e51b1c114dc600c8da1f3e7f6932ceb7b0630`, unchanged, taken by the worker Zaki.
+- Result: every conflicted file keeps #427's edits with this change's on top; the `BROWSER_OR_OPERATOR` security, the receiver's security `none`, and `signedBodyLimit` stay; migrations apply `1792933700000` before `1792933800000` and the down test reverses them; the nine added requirements collide with none of #427's; the "Merge of dev" record matches the merge. The reviewer ran no tests and read no raw run logs.
+- Counts: Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl`; `findings.jsonl` has no line for it. The pass schema has no form for a reconciliation review, so, as for earlier returns, `passes.jsonl` records it as pass 4, role A.
+- Scope: the review covered only the merge and the reconciliation, not the pass 3 fixes, which stay unreviewed for the coordinator's architect check below.
+
 ### Pass 3 fixes for the architect check
 
 Unreviewed fixes, for the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"):
@@ -195,5 +207,4 @@ Unreviewed fixes, for the coordinator's check as solution architect (governance 
 ## Remaining gates
 
 - The coordinator's architect check of the pass 3 fixes ("Pass 3 fixes for the architect check").
-- Review of the merge's resolved diff and the reconciliation by the reviewer of pass 1 (worker step 10), assigned by the coordinator.
 - Integration into dev by the coordinator (single pull request)
