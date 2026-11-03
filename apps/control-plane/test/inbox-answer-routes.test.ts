@@ -53,8 +53,10 @@ class ItemSource implements NeedsYouSource {
   readonly kinds = ['permission-request', 'reconciliation'] as const;
   readonly items = new Map<string, NeedsYouItem>();
   readonly refusals = new Map<string, string>();
+  readonly received: unknown[] = [];
 
   reset(): void {
+    this.received.length = 0;
     this.items.clear();
     this.refusals.clear();
     const maintained = { ...item('i-maintained', 'run-1'), answerableBy: 'project-maintainer' } as NeedsYouItem;
@@ -73,6 +75,7 @@ class ItemSource implements NeedsYouSource {
   }
 
   async answer(request: AnswerRequest) {
+    this.received.push(request.answer);
     const current = this.items.get(request.itemId)!;
     const refusal = this.refusals.get(request.itemId);
     if (refusal !== undefined) return err(failure('precondition-failed', 'refused', { reason: refusal }));
@@ -162,4 +165,21 @@ test('only an installation-owner answers an installation item, which no project 
   assert.deepEqual([answered.status, answered.body.reconciliationReason, (answered.body.status as { state: string }).state], [
     200, 'unrecorded-process', 'resolved',
   ]);
+});
+
+test('every answer kind reaches the source as the port\'s answer, and evidence with a control character is 400', async () => {
+  const kinds = [
+    { kind: 'input-request', text: 'yes' }, { kind: 'spec-approval', decision: 'reject', reason: 'why' },
+    { kind: 'escalation', decision: 'retry' }, { kind: 'delivery-acknowledgement', decision: 'acknowledge' },
+    { kind: 'reconciliation', decision: 'resolve-execution', evidence: 'incident-7', reason: 'gone' },
+  ];
+  for (const [index, given] of kinds.entries()) {
+    source.reset();
+    assert.equal((await answer('/projects/alpha/inbox/i-maintained/answer', 'mara', `key-${index}`, given)).status, 200, given.kind);
+    assert.deepEqual(source.received, [given]);
+  }
+  source.reset();
+  const malformed = { ...ACKNOWLEDGE, evidence: 'incident\u00077' };
+  assert.equal((await answer('/inbox/i-process/answer', 'owner', 'key-1', malformed)).status, 400);
+  assert.deepEqual(source.received, []);
 });
