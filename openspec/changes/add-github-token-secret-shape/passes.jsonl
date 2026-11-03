@@ -1,0 +1,1 @@
+{"change": "add-github-token-secret-shape", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a19eb6-b681-7e70-998b-c4458edb89e9", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 2}}
