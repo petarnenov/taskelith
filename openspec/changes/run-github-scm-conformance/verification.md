@@ -52,7 +52,10 @@ The pass 1 fix round, oldest first:
 - `fb7b1dc8` `chore: harden the github conformance guard, evidence, long run, and cleanup` (findings 2 and 4 to 10, the root development dependencies, and the regenerated inventory).
 - `8e13cfe2` `chore: raise the source control port to 0.3.0 for the credential end propagation window` (finding 12).
 - `eb8451df` `docs: keep the octokit rows candidate and describe the pass 1 fixes of the run github scm conformance change` (findings 11 and 14).
-- FIXROUND_EVIDENCE_COMMITS
+- `cb17cb81` `docs: record the live conformance runs after the pass 1 fixes and the pass 1 findings`.
+- `72093e05` `docs: record the pass 1 fix round of the run github scm conformance change`. `make verify` run 4 checked its tree, `01300bc6`; the commit after it adds the run to this record.
+
+The fix round needs no new route: governance routes only before pass 1, and later passes never route.
 
 ## Environment
 
@@ -118,7 +121,12 @@ These are not review findings and are not in `findings.jsonl`; review pass 2 rev
 | `env -u NODE_ENV make verify` (run 1, before the rebase) | `ea23f250`, clean | Failed in `verify:comments`: three new three-line comments, in `github-conformance-cleanup.ts`, `github-conformance-long-run.ts`, and `github-conformance.ts`. Fixed in `537d76e7`. |
 | `env -u NODE_ENV make verify` (run 2, before the rebase) | `2840a8e5`, tree `2a763a75`, clean | Passed, profile full, stamp written. Tests 4433, suites 49, pass 4386, fail 0, cancelled 0, skipped 47. All files: 99.39 % lines, 92.72 % branches, 98.89 % functions. No known flake failed, and nothing was rerun. |
 | `env -u NODE_ENV make verify` (run 3, after the rebase) | `fc1aa519`, tree `d2d35096`, clean | Passed at the first attempt, profile full, stamp written. Tests 4669, pass 4622, fail 0, skipped 47. All files: 99.41 % lines, 92.80 % branches, 98.84 % functions. No known flake failed, and nothing was rerun. |
+| `env -u NODE_ENV make verify` (run 4, pass 1 fix round) | `72093e05`, tree `01300bc6`, clean | Passed at the first attempt, profile full, stamp written. Tests 4687, suites 50, pass 4640, fail 0, cancelled 0, skipped 47. All files: 99.41 % lines, 92.82 % branches, 98.84 % functions. No known flake failed, and nothing was rerun. |
 | `test/github-conformance.test.ts` | inside run 2 | 12 tests pass. |
+| `test/github-conformance.test.ts`, `revocation-window.test.ts`, `run-credentials.test.ts` | `fb7b1dc8` | 68 tests pass after the pass 1 fixes. |
+| `npm ls @octokit/plugin-paginate-rest @octokit/core` | `fb7b1dc8` | 16.0.0 and 7.0.8 at the root; 15.0.0 only under `@semantic-release/github`; `@taskelith/scm-github` depends on `@octokit/core` 7.0.8 only. |
+| `npm pack --dry-run` file list | before and after the fix round | The same five files. |
+| `make findings ARGS="validate"` | `cb17cb81` | Every findings file is valid. |
 | `npm run openspec -- validate run-github-scm-conformance --strict` | `6b0dedf5` | `Change 'run-github-scm-conformance' is valid` |
 | CLI smoke without network | `be5f5567` (before the rebase) | Without the variables, exit 2 names all four. Without arguments, exit 2 prints the usage. With a throwaway generated key and `--out` inside the worktree, exit 2 is refused before any request. |
 
@@ -154,11 +162,15 @@ Route (`route.json`, rule version 5, routed again in `a018d996`): elevated (line
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `d2d350965c33cb325a561a0ccb9f1fe80144c651`; tests 4669, pass 4622, fail 0, skipped 47; all files 99.41% lines, 92.80% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `01300bc6d421a2079ecd632c07bc5d9ead75cb1d`; tests 4687, pass 4640, fail 0, skipped 47; all files 99.41% lines, 92.82% branches, 98.84% functions.
 - `npm run openspec -- validate run-github-scm-conformance --strict`: passed, `Change 'run-github-scm-conformance' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 111 file(s); every pass summary file is valid: 91 file(s); every route file is valid: 44 file(s).`.
 - Spec diff against the merge base `d0d594782357` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a361-8932-7770-9eac-c24aaf5229a3` | 0 | 3 | 10 | 1 |
 <!-- make record: end -->
 
 ## Independent review
