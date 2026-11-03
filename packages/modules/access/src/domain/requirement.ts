@@ -29,8 +29,8 @@ export function projectRead(projectId: string | undefined): AccessRequirement {
   return Object.freeze({ kind: 'project', projectId, role: 'project-viewer', ownerPass: 'section-3-read' });
 }
 
-// TEMPORARY G2 bridge (Q5): the owner also passes the project requirements
-// of the G2 operator operations until item 11 lands projects and members.
+// TEMPORARY G2 bridge (Q5): the owner also passes the G2 operator project
+// requirements until require-existing-project-for-runs removes it.
 export function g2BridgeRequirement(projectId: string | undefined, role: ProjectRole): AccessRequirement {
   return Object.freeze({ kind: 'project', projectId, role, ownerPass: 'g2-bridge' });
 }
