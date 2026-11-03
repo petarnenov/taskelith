@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import { redactFailure } from '@taskelith/secrets';
+import type { BodyDrains } from './body-drain.js';
 
 // Every message of the execution and SDLC contracts is at most 1 MiB.
 export const MAX_BODY_BYTES = 1024 ** 2;
@@ -45,6 +46,8 @@ export interface StreamResponse extends ResponseExtras {
 }
 
 export type ApiResponse = JsonResponse | BinaryResponse | EmptyResponse | StreamResponse;
+// An answer whose whole content is known when its head is written.
+export type CompleteResponse = Exclude<ApiResponse, StreamResponse>;
 
 // The success of an `event-stream` route, which the server answers with
 // the headers before it starts the stream.
@@ -63,7 +66,8 @@ export function bearerToken(request: IncomingMessage): string | undefined {
 export async function readBody(request: IncomingMessage, limit: number): Promise<Result<Buffer>> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of request) {
+  // Past the limit the request stays open, so its answer can drain the rest.
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     size += (chunk as Buffer).length;
     if (size > limit) return err(failure('invalid', `the request body exceeds ${limit} bytes`));
     chunks.push(chunk as Buffer);
@@ -88,6 +92,18 @@ export function parseJson(bytes: Buffer): Result<unknown> {
 
 export function writeResponse(response: ServerResponse, answer: ApiResponse, correlationId: string): void {
   if ('stream' in answer) return writeStream(response, answer, correlationId);
+  response.end(startResponse(response, answer, correlationId));
+}
+
+// The answer goes first; `drains` closes the connection after the body.
+export function writeResponseBeforeBodyEnds(
+  request: IncomingMessage, response: ServerResponse, answer: CompleteResponse, correlationId: string, drains: BodyDrains,
+): void {
+  drains.answer(request, response, startResponse(response, answer, correlationId));
+}
+
+// Writes the head of an answer with a known length and returns its content.
+function startResponse(response: ServerResponse, answer: CompleteResponse, correlationId: string): Uint8Array {
   const binary = 'binary' in answer;
   const content = 'empty' in answer ? Buffer.alloc(0) : binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
   response.writeHead(answer.status, {
@@ -99,7 +115,7 @@ export function writeResponse(response: ServerResponse, answer: ApiResponse, cor
     // Evidence bytes are data; a browser must not render them as a page.
     'x-content-type-options': 'nosniff',
   });
-  response.end(content);
+  return content;
 }
 
 // No content length, since the stream has no end that the server knows.
