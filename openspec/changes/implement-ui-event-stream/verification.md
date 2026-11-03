@@ -15,7 +15,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `634b3beb` recorded the `make verify` of the tree of `6c762264` (`verify-14-5.log`).
 - Coordinator decisions of 2026-11-03 on the implemented change (design, "Coordinator decisions"): `b3c30f8a` `test: ...` adds the HTTP test of an inbox item without an attempt and the hub test of the reconnect after an early role change; `7911842c` `docs: ...` records the decisions in `design.md` and names the change in the provisional row of `docs/operational-targets.md`. The tests changed the diff, so `5815f302` deleted the route of `6c762264` and `50eb65d1` routed again, unedited: "route: elevated (lines, files, capabilities, size), rule version 5", the same reviewers and shadow agreement as before.
 - The commit after this one records the `make verify` of the tree of `50eb65d1`.
-- Pass 1 fixes (section "Review pass 1"): `80f2c5f6` (H2), `317415bc` (M5), `25fd5bd1` (M3), `503e1028` (M4), `07a93bab` (H1), then the records and the `make verify` of the fixed tree.
+- Pass 1 fixes (section "Review pass 1"): `80f2c5f6` (H2), `317415bc` (M5), `25fd5bd1` (M3), `503e1028` (M4), `07a93bab` (H1), then the records (`c4a3f7e2`); the fixes changed the diff, so `43e31f66` deleted the fifth `route.json` and `29ec0b7f` routed a sixth time (unedited; tier `elevated` as before, 62 files and 3634 lines), then the `make verify` of the fixed tree.
 
 ## Environment
 
