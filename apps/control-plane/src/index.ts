@@ -116,7 +116,9 @@ export {
   NUMBERING_BATCH,
   PRUNING_BATCH,
   WakeableLoop,
+  numberingPass,
   type EventLogKeeperDependencies,
+  type NumberingPassParts,
 } from './application/event-log-keeper.js';
 export { MAX_STREAM_BUFFER_BYTES, EventStreamApi, type EventStreamOperations } from './api/event-stream-api.js';
 export { eventData, frameText, inboxItemBody, type EventData } from './api/event-stream-wire.js';

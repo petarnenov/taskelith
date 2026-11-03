@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_EVENT_RETENTION_HOURS, EventLogKeeper, LogViewPositions, NUMBERING_BATCH, WakeableLoop } from '@taskelith/control-plane';
+import { DEFAULT_EVENT_RETENTION_HOURS, EventLogKeeper, LogViewPositions, NUMBERING_BATCH, WakeableLoop, numberingPass } from '@taskelith/control-plane';
 import { InMemoryUiEventLog } from '@taskelith/execution';
 import { err, failure, ok, type Instant } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, value } from '@taskelith/testing';
 import { AT, ManualClock, ManualScheduler, eventEntry, marked } from './event-stream-fixtures.ts';
 
@@ -96,3 +97,30 @@ function counter() {
   };
   return state;
 }
+
+test('a numbering pass numbers and wakes the streams while the LISTEN connection is still opening', async () => {
+  const log = new InMemoryUiEventLog();
+  log.commit([eventEntry(marked(1))]);
+  let listens = 0;
+  let wakes = 0;
+  await numberingPass({
+    keeper: new EventLogKeeper({ log, clock: new ManualClock() }),
+    wakeUps: { listen: () => (listens++, new Promise<boolean>(() => undefined)) },
+    streams: { wake: () => void wakes++ },
+    logger: new Logger(new InMemoryLogSink(), { now: () => AT }),
+  });
+  assert.deepEqual([listens, value(await log.bounds()).head, wakes], [1, 1, 1]);
+});
+
+test('a numbering pass that cannot number logs it and still wakes the streams', async () => {
+  const logs = new InMemoryLogSink();
+  let wakes = 0;
+  await numberingPass({
+    keeper: { numberCommitted: async () => err(failure('unavailable', 'down')) },
+    wakeUps: { listen: async () => true },
+    streams: { wake: () => void wakes++ },
+    logger: new Logger(logs, { now: () => AT }),
+  });
+  assert.equal(wakes, 1);
+  assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code]), [['events.numbering.failed', 'unavailable']]);
+});

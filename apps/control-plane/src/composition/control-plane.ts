@@ -50,7 +50,7 @@ import { ROUTES } from '../api/routes.js';
 import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
-import { EventLogKeeper, WakeableLoop } from '../application/event-log-keeper.js';
+import { EventLogKeeper, WakeableLoop, numberingPass } from '../application/event-log-keeper.js';
 import { EventStreamHub, type Scheduler } from '../application/event-stream-hub.js';
 import { HEARTBEAT_QUEUE, HeartbeatService } from '../application/heartbeat-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
@@ -308,11 +308,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
     supervise('sessions', runPeriodically(async () => logFailure(logger, 'access.sessions.purge.failed', await sessions.purgeExpired()), controller.signal,
       settings.sessionPurgeMilliseconds ?? SESSION_PURGE_MILLISECONDS)),
-    supervise('event-numbering', numbering.run(async () => {
-      await notifications.listen();
-      logFailure(logger, 'events.numbering.failed', await keeper.numberCommitted());
-      hub.wake();
-    }, controller.signal, settings.eventPollMilliseconds ?? EVENT_POLL_MILLISECONDS)),
+    supervise('event-numbering', numbering.run(() => numberingPass({ keeper, wakeUps: notifications, streams: hub, logger }), controller.signal,
+      settings.eventPollMilliseconds ?? EVENT_POLL_MILLISECONDS)),
     supervise('event-pruning', runPeriodically(async () => logFailure(logger, 'events.pruning.failed', await keeper.prune()), controller.signal,
       EVENT_PRUNE_MILLISECONDS)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),

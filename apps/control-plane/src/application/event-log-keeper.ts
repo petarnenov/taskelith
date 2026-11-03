@@ -1,5 +1,6 @@
 import type { UiEventLog, ViewPositions } from '@taskelith/execution';
 import { instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
+import type { Logger } from '@taskelith/observability';
 import type { Scheduler } from './event-stream-hub.js';
 
 // Provisional, in docs/operational-targets.md: entries numbered or pruned
@@ -43,6 +44,22 @@ export class EventLogKeeper {
     if (!cutoff.ok) return Promise.resolve(cutoff);
     return this.#dependencies.log.prune(cutoff.value, PRUNING_BATCH);
   }
+}
+
+export interface NumberingPassParts {
+  readonly keeper: Pick<EventLogKeeper, 'numberCommitted'>;
+  readonly wakeUps: { listen(): Promise<boolean> };
+  readonly streams: { wake(): void };
+  readonly logger: Logger;
+}
+
+// One run of the numbering loop. The wake-up connection opens beside it,
+// so one that stalls never holds the poll.
+export async function numberingPass({ keeper, wakeUps, streams, logger }: NumberingPassParts): Promise<void> {
+  void wakeUps.listen();
+  const numbered = await keeper.numberCommitted();
+  if (!numbered.ok) logger.warn('events.numbering.failed', { code: numbered.error.code, message: numbered.error.message });
+  streams.wake();
 }
 
 // A view's position is the log's head when the read starts: what the view
