@@ -121,6 +121,7 @@ test('an inbox source takes its position from the head of the view snapshot', as
   const positions: string[] = [];
   const recording: InboxSourcesIn = (_timeline, viewPositions) => [{
     id: 'native-request' as never, kinds: ['input-request'],
+    item: async () => ok(undefined),
     openItems: async () => {
       positions.push(value(await viewPositions.current()));
       return ok({ items: [], position: positions.at(-1)! });

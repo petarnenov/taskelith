@@ -1,5 +1,12 @@
 import type { BoardReads, BoardStore, CardViewParts } from '@taskelith/control-plane';
-import { InMemoryCardCatalog, type CardTask, type NeedsYouItem, type NeedsYouSource, type Task } from '@taskelith/execution';
+import {
+  InMemoryCardCatalog,
+  type CardTask,
+  type NeedsYouItem,
+  type NeedsYouSource,
+  type Task,
+  type UnrecordedProcess,
+} from '@taskelith/execution';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { Assignment, PlacementOutcomeRecord, WorkerPlacementRecord } from '@taskelith/scheduling';
 import type { Gate, StageState, TaskAdmission, WorkflowRun } from '@taskelith/sdlc';
@@ -83,6 +90,8 @@ export class BoardWorld {
   readonly held = new Set<string>();
   readonly autoMergeOff = new Set<string>();
   items: NeedsYouItem[] = [];
+  processes: UnrecordedProcess[] = [];
+  readonly answered = new Map<string, NeedsYouItem>();
   head = 7;
   quarantined = false;
   failSource = false;
@@ -130,6 +139,7 @@ export class BoardWorld {
         occupancy: async (workerId) => ({ slots: this.occupied.get(workerId) ?? 0, cpuMillicores: 0, memoryMebibytes: 0 }),
         heldForAttempt: async (attemptId) => this.held.has(attemptId),
       },
+      reconciliation: { unrecordedProcesses: async () => this.processes, answers: { get: async (itemId) => ok(this.answered.get(itemId)) } },
       autoMergeEnabled: async (projectId) => ok(!this.autoMergeOff.has(projectId)),
     };
   }
@@ -142,6 +152,7 @@ export class BoardWorld {
   source(): NeedsYouSource {
     return {
       id: 'native-requests' as never, kinds: ['permission-request'],
+      item: async () => ok(undefined),
       openItems: async (scope, after) => {
         if (this.failSource) return err(failure('unavailable', 'the source is down'));
         const own = this.items.filter((each) => scope.kind === 'project' && each.subject.scope === 'card' && each.subject.projectId === scope.projectId);
