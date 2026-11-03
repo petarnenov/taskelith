@@ -13,6 +13,7 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), sub-change 20e, developed by a brie
 - `5e63d8a6` `docs: specify the receive scm webhooks change and update the contracts`.
 - `22ce7cc4` `docs: record the review route of the receive scm webhooks change` (`route.json` unedited): the tree that `make verify` checked; the commit after it, `e1493259`, adds this record and the `make record` output and is the head for review pass 1.
 - Pass 1 fix round: `1d214a8f` `docs: record review pass 1 of the receive scm webhooks change` (its `passes.jsonl` line and four findings, recorded before any fix); `6e8b7bb6` `chore: store SCM webhook identifiers as UTF-16LE bytes so that every port identifier is kept exactly` (finding 2); `776698c8` `chore: give the SCM webhook decoy the GitHub plugin's work and accept only GitHub's eventless events without an event` (findings 1 and 3, coordinator decision of 2026-11-03); `e5943f9a` `docs: specify the eventless webhook rule, the decoy work, and the identifier storage of the receive scm webhooks change`: the tree that the fix round's `make verify` checked; the commit after it, `d337810f`, adds this record and is the head for review pass 2. Pass 2 fix round: `74e9068b` `docs: record review pass 2 of the receive scm webhooks change` (its `passes.jsonl` line, seven findings, and the review snapshots, recorded before any fix); `f5c03c52` `chore: bound concurrent SCM webhook bodies, refuse an oversized declared length unread, and name the raw path parameter rule` (findings 1, 5, and 6); `aeb928f9` `docs: keep the scm-port delta SCM-neutral and state the unsigned webhook headers and the webhook body bounds` (findings 2, 3, and 4); `e93cd834` `docs: record the pass 2 fix round of the receive scm webhooks change` (the resolutions): the tree that the round's `make verify` checked; the commit after it adds the round's checks and the `make record` output and is the head for review pass 3 (`67281b79`). Pass 3 fix round: `e9f05220` `docs: record review pass 3 of the receive scm webhooks change` (its `passes.jsonl` line and three findings, recorded before any fix); `af608e54` `test: synchronize the SCM webhook slot test on gates and count the server's body reads` (finding 1); the next commit, `docs: record the pass 3 fix round of the receive scm webhooks change`, fixes finding 2 in this record and is the tree that the round's `make verify` checked. `route.json` is not routed again: later passes never route.
+- Merge of `dev` (coordinator decision of 2026-11-03, option (a), before integration and without an archive): `24c8c37a` `chore: merge dev into the receive scm webhooks change` merges `origin/dev` `26bbb10f` (#427, `implement-project-setup`) into `d29179aa`; the merge commit is the tree that the merge's `make verify` checked. See "Merge of dev" below.
 
 ## Environment
 
@@ -72,6 +73,21 @@ The fix changes only the test; its negative control ran against the fixed test w
 - Finding 2 changes this record only: the pass 2 fix round's `make verify` row now names v24.22.1, which its log shows, and the Environment paragraph names v24.22.0 only for the focused runs.
 - Finding 3 restates pass 2 finding 7 and stays deferred.
 
+## Merge of dev
+
+`24c8c37a` merges `origin/dev` `26bbb10f` (#427, `implement-project-setup`, sub-change 11a) into `d29179aa`; the merge base was `a21913f1`. The change was not archived, so worker step 10's revert of an archive commit did not apply; its merge, reconciliation, and record steps did. Six files conflicted, and each keeps #427's edits with this change's on top:
+
+- `apps/control-plane/src/api/routes.ts`: the `receiveScmWebhook` route (security `none`, `signedBodyLimit`) stays after the agent session routes, and #427's project routes follow it with their `BROWSER_OR_OPERATOR` security.
+- `apps/control-plane/src/api/control-plane-api.ts`: `ApiServices` keeps both `scmWebhooks` and `projects`; the `receiveScmWebhook` case stays in the dispatch, whose default now goes to #427's `#dispatchProject`.
+- `apps/control-plane/src/composition/control-plane.ts`: the composition wires both the `ScmWebhookReceiver` and #427's `projects` services.
+- `apps/control-plane/test/access-requirements.test.ts`: the served operations are the agent session, login, and project operations and `receiveScmWebhook`.
+- `apps/control-plane/test/api-server.test.ts`: the five stub service sets carry both `scmWebhooks` and `projects`.
+- `packages/adapters/postgres/test/migrations.integration.test.ts`: both constants stay; every migration list ends `SLOT_CREDENTIAL_STORED_AT, SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP`, as `1792933700000` sorts before `1792933800000`; the schema list holds both changes' tables; the stored-at test removes both later migrations from its copy; both changes' tests stay.
+
+Migration order and down migrations: the first migration test applies both migrations in that order on an empty database, and #427's tests that copy the migrations without `PROJECT_SETUP` apply this change's migration first and then `PROJECT_SETUP` alone. #427's down test runs the `PROJECT_SETUP` down on a database that holds `scm_webhook_deliveries`. The merge also changes this change's deliveries migration test to take the down migrations in reverse order: `PROJECT_SETUP` down first, after which both delivery rows remain, then `SCM_WEBHOOK_DELIVERIES` down, which removes the table. This assertion was written with the merge and has no fail-before run.
+
+Reconciliation: every delta of this change is `ADDED` (four `scm-port`, four `control-plane-api`, one `postgres-state` requirement); none modifies, removes, or renames a living requirement, so no delta needed rewriting. #427 added `control-plane-api` requirements "Project operations served", "Project creation without members", "Project changes by compare-and-set", "Project members managed by the installation-owner", and "Projects listed by membership", and `postgres-state` "Project setup tables"; no name equals a requirement this change adds (checked with `grep` over `openspec/specs`). #427's one-sentence edit of wire contracts section 2 merged without a conflict and leaves the receiver's exception unchanged; `docs/contracts/source-control.md` did not change on `dev`.
+
 ## Checks
 
 | Check | Revision | Result |
@@ -86,6 +102,8 @@ The fix changes only the test; its negative control ran against the fixed test w
 | `env -u NODE_ENV make verify` (pass 2 fix round, run 1) | `e93cd834`, tree `a4d6e944`, clean | Passed on the first run with Node.js v24.22.1, profile full, stamp written: tests 4312, suites 49, pass 4265, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.68 % branches, 98.85 % functions; `api-server.js` 99.13 %, 92.23 %, 96.97 %, `webhook-receiver.js` and `scm-webhook-deliveries.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions. No known flake failed, and the `http-evidence-publisher` flake candidate did not recur |
 | `env -u NODE_ENV make verify` (pass 3 fix round, run 1) | `a8441f3b`, tree `2f90fcdf`, clean | Failed only the known flake g2-partition, "a partition while the process runs keeps its observations, published once after the heal" (`test/g2-partition.test.ts:95`, `the exit waits in the local outbox`, `'ended' !== 'pending'`): tests 4312, pass 4264, fail 1, skipped 47 |
 | `env -u NODE_ENV make verify` (pass 3 fix round, run 2) | `a8441f3b`, tree `2f90fcdf`, clean | Passed with Node.js v24.22.1, profile full, stamp written: tests 4312, suites 49, pass 4265, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.69 % branches, 98.85 % functions; `api-server.js` 99.13 %, 92.23 %, 96.97 %, `scm-webhook-deliveries.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions. The `http-evidence-publisher` flake candidate did not recur |
+| `env -u NODE_ENV make verify` (merge of dev, run 1) | `24c8c37a`, tree `7fbe24a7`, clean | Passed on the first run with Node.js v24.22.1, profile full, stamp written: tests 4362, suites 49, pass 4315, fail 0, cancelled 0, skipped 47; all files 99.38 % lines, 92.71 % branches, 98.88 % functions; `api-server.js` 99.13 %, 92.23 %, 96.97 %, `control-plane-api.js` 99.70 %, 85.53 %, 100 %, `webhook-receiver.js` and `scm-webhook-deliveries.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions. No known flake failed, and the `http-evidence-publisher` flake candidate did not recur |
+| `npm run openspec -- validate --all --strict` | `24c8c37a` | `Totals: 72 passed, 0 failed (72 items)` |
 | Focused runs | `dbfbf3fd` working tree | The new and touched tests with the PostgreSQL adapter's integration tests, the control-plane API, access, browser session, request edge, agent session route, and slot credential tests, the integrations, `scm-github`, and contracts tests: `pass 726`, `fail 0` |
 
 ### Route
@@ -97,10 +115,10 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, cont
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `2f90fcdfaa532f50ead2dca4bd567ae031c0214b`; tests 4312, pass 4265, fail 0, skipped 47; all files 99.37% lines, 92.69% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `7fbe24a746b37e023207569e00d25db662faf4df`; tests 4362, pass 4315, fail 0, skipped 47; all files 99.38% lines, 92.71% branches, 98.88% functions.
 - `npm run openspec -- validate receive-scm-webhooks --strict`: passed, `Change 'receive-scm-webhooks' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 103 file(s); every pass summary file is valid: 83 file(s); every route file is valid: 36 file(s).`.
-- Spec diff against the merge base `a21913f13672` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).`.
+- Spec diff against the merge base `26bbb10fecea` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
@@ -177,4 +195,5 @@ Unreviewed fixes, for the coordinator's check as solution architect (governance 
 ## Remaining gates
 
 - The coordinator's architect check of the pass 3 fixes ("Pass 3 fixes for the architect check").
+- Review of the merge's resolved diff and the reconciliation by the reviewer of pass 1 (worker step 10), assigned by the coordinator.
 - Integration into dev by the coordinator (single pull request)
