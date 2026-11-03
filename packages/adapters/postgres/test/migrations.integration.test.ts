@@ -821,6 +821,23 @@ test('the board migration orders existing tasks by identifier, new ones after, a
   assert.deepEqual(await query(url, "SELECT 1 FROM pg_class WHERE relname = 'tasks_admission_seq'"), []);
 });
 
+test('the inbox answers migration touches each worker whose unrecorded processes predate it', async () => {
+  const directory = await copiedMigrations();
+  await rm(join(directory, `${INBOX_ANSWERS}.sql`));
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url, directory)).ok, true);
+  const process = (worker: string, observation: string) => query(url, `INSERT INTO unrecorded_processes
+    (worker_id, observation_id, journal_id, containment, process_count, recorded_at) VALUES ($1, $2, 'journal-1', 'cgroup x', 1, now())`,
+  [worker, observation]);
+  for (const [worker, observation] of [['worker-2', 'observation-1'], ['worker-1', 'observation-2'], ['worker-2', 'observation-3']]) {
+    await process(worker!, observation!);
+  }
+  await query(url, 'DELETE FROM card_touches');
+  assert.deepEqual(await migrate(url), { ok: true, value: [INBOX_ANSWERS] });
+  const touches = await query<{ subject_id: string }>(url, "SELECT subject_id FROM card_touches WHERE subject = 'unrecorded-process' ORDER BY 1");
+  assert.deepEqual(touches.map((row) => row.subject_id), ['worker-1', 'worker-2']);
+});
+
 test('the inbox answers migration keeps one key per item, immutable reconciliation answers, and process touches, and its down migration removes them', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url)).ok, true);

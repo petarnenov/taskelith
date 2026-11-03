@@ -53,6 +53,10 @@ $$;
 CREATE TRIGGER unrecorded_processes_touch AFTER INSERT ON unrecorded_processes
   FOR EACH ROW EXECUTE FUNCTION touch_unrecorded_process();
 
+-- The processes recorded before this migration open their items, too.
+INSERT INTO card_touches (subject, subject_id)
+  SELECT DISTINCT 'unrecorded-process', worker_id FROM unrecorded_processes;
+
 -- Down Migration
 
 -- CASCADE drops the trigger also where an earlier down migration ran.
