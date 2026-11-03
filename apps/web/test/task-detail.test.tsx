@@ -136,23 +136,24 @@ describe('the project of a task detail address', () => {
     expect(localStorage.getItem(PROJECT_KEY)).toBe(OTHER_PROJECT.projectId);
   });
 
-  it('closes the detail when the operator chooses another project', async () => {
+  it('closes the detail when the operator chooses another project in its dialog', async () => {
     const view = openDetail();
-    await drawer();
+    const detail = await drawer();
     const user = userEvent.setup();
-    await user.click(screen.getAllByRole('button', { name: 'Project: Taskelith', hidden: true })[0]!);
-    await user.click(await screen.findByRole('menuitem', { name: 'Website', hidden: true }));
+    await user.click(detail.getByRole('button', { name: 'Project: Taskelith' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Website' }));
     await waitFor(() => expect(view.router.state.location.pathname).toBe('/app'));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(view.boardGateway.readBoard).toHaveBeenLastCalledWith(OTHER_PROJECT.projectId));
   });
 
-  it('keeps the detail open when the operator chooses the same project', async () => {
+  it('chooses a project by keyboard in its dialog, and keeps the detail for the same project', async () => {
     const view = openDetail();
-    await drawer();
+    const detail = await drawer();
     const user = userEvent.setup();
-    await user.click(screen.getAllByRole('button', { name: 'Project: Taskelith', hidden: true })[0]!);
-    await user.click(await screen.findByRole('menuitem', { name: 'Taskelith', hidden: true }));
+    detail.getByRole('button', { name: 'Project: Taskelith' }).focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('menuitem', { name: 'Taskelith' }));
     expect(view.router.state.location.pathname).toBe(DETAIL_PATH);
   });
 });
