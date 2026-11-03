@@ -29,6 +29,7 @@ import { AgentSessionApi, type AgentSessionOperations } from './agent-session-ap
 import { ruleOf } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
 import { BoardApi, type BoardOperations } from './board-api.js';
+import { INBOX_ANSWER_OPERATIONS, InboxAnswerApi } from './inbox-answer-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
 import { ScmIntegrationApi, type ScmIntegrationOperations } from './scm-integration-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
@@ -101,6 +102,7 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #projects: ProjectApi;
   readonly #events: EventStreamApi;
   readonly #board: BoardApi;
+  readonly #inboxAnswers: InboxAnswerApi;
   readonly #scmIntegrations: ScmIntegrationApi;
 
   constructor(services: ApiServices) {
@@ -109,6 +111,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#projects = new ProjectApi(services.projects);
     this.#events = new EventStreamApi(services.events);
     this.#board = new BoardApi(services.board);
+    this.#inboxAnswers = new InboxAnswerApi(services.board);
     this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
   }
 
@@ -131,6 +134,7 @@ export class ControlPlaneApi implements ApiHandlers {
   // The role on the project of the resource that the path names, which the
   // server checks before the body (wire contracts section 2).
   authorizeResource(operationId: string, caller: Caller, parameters: readonly string[]): Promise<Result<void>> {
+    if (INBOX_ANSWER_OPERATIONS.has(operationId)) return this.#inboxAnswers.authorizeItem(operationId, caller, parameters);
     const rule = ruleOf(operationId);
     const [first = ''] = parameters;
     if (rule.kind === 'evidence-project') return this.#authorizeEvidence(caller.principalId, first);
@@ -259,6 +263,9 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#board.readInstallationInbox(request);
       case 'readInstallationInboxCounts':
         return this.#board.readInstallationInboxCounts();
+      case 'answerInboxItem':
+      case 'answerInstallationInboxItem':
+        return this.#inboxAnswers.answer(operationId, request);
       default:
         return Promise.resolve(err(failure('internal', `operation ${operationId} has no handler`)));
     }

@@ -73,10 +73,17 @@ export class NativeRequestSource implements NeedsYouSource {
     return ok(Object.freeze({ items: Object.freeze(items), position: position.value }));
   }
 
+  async item(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>> {
+    const scoped = await this.#store.transaction((tx) => tx.items.get(itemId));
+    if (!scoped.ok) return scoped;
+    return ok(scoped.value !== undefined && isInScope(scoped.value, scope) ? this.#itemOf(scoped.value) : undefined);
+  }
+
+  // An item of another project answers as an unknown one.
   async answer(request: AnswerRequest): Promise<Result<NeedsYouItem>> {
     const scoped = await this.#store.transaction((tx) => tx.items.get(request.itemId));
     if (!scoped.ok) return scoped;
-    if (scoped.value?.scope === undefined) return unknownItem(request.itemId);
+    if (scoped.value === undefined || !isInScope(scoped.value, request.scope)) return unknownItem(request.itemId);
     if (scoped.value.item.kind !== request.answer.kind) return err(failure('invalid', `item ${request.itemId} takes another kind of answer`));
     const answered = { scoped: scoped.value, request };
     return scoped.value.item.kind === 'delivery-acknowledgement' ? this.#acknowledge(answered) : this.#consume(answered);
@@ -148,6 +155,11 @@ function timelineAnswerOf(answer: NeedsYouAnswer): Answer | undefined {
   if (answer.kind === 'permission-request') return { kind: 'permission', decision: answer.decision };
   if (answer.kind === 'input-request') return { kind: 'input', text: answer.text };
   return undefined;
+}
+
+// Session items belong to a card of a project, never to the installation.
+function isInScope({ scope }: ScopedInboxItem, inbox: NeedsYouScope): boolean {
+  return inbox.kind === 'project' && scope?.projectId === inbox.projectId;
 }
 
 function unknownItem(itemId: NeedsYouItemId): Result<never> {

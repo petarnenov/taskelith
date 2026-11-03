@@ -1,5 +1,5 @@
 import { AUTO_MERGE_STARTS_ON } from '@taskelith/access';
-import type { NeedsYouSource, SessionTimelineTransaction, ViewPositions } from '@taskelith/execution';
+import type { NeedsYouSource, ViewPositions } from '@taskelith/execution';
 import { NoMergeQueue } from '@taskelith/integrations';
 import { ok } from '@taskelith/kernel';
 import type { PostgresDatabase, PostgresTransaction } from '@taskelith/postgres';
@@ -13,20 +13,15 @@ export interface BoardServices {
   readonly projector: CardProjector;
 }
 
-// The inbox sources over one snapshot's timeline and its log head.
-export type InboxSourcesIn = (transaction: SessionTimelineTransaction, positions: ViewPositions) => readonly NeedsYouSource[];
+// The inbox sources over one snapshot's reads and its log head.
+export type InboxSourcesIn = (reads: BoardReads, positions: ViewPositions) => readonly NeedsYouSource[];
 
 // The views read one REPEATABLE READ snapshot each; the projector runs
 // SERIALIZABLE. The merge queue is empty until item 23.
 export function startBoardServices(database: PostgresDatabase, sourcesIn: InboxSourcesIn): BoardServices {
   const parts: CardViewParts = {
     mergeQueue: new NoMergeQueue(),
-    sources: (reads) => sourcesIn(reads.timeline, {
-      current: async () => {
-        const head = await reads.head();
-        return head.ok ? ok(String(head.value)) : head;
-      },
-    }),
+    sources: (reads) => sourcesIn(reads, headPositions(reads)),
   };
   const views: BoardStore = { snapshot: (work) => database.readOnly((transaction) => work(boardReadsOf(transaction))) };
   const projections: ProjectionStore = { transaction: (work) => database.transaction((transaction) => work(projectionOf(transaction))) };
@@ -59,9 +54,23 @@ export function boardReadsOf(transaction: PostgresTransaction): BoardReads {
       occupancy: (workerId) => transaction.ledger.heldOnWorker(workerId),
       heldForAttempt: (attemptId) => transaction.ledger.heldForAttempt(attemptId),
     },
+    reconciliation: {
+      unrecordedProcesses: () => transaction.reconciliation.unrecordedProcesses(),
+      answers: transaction.reconciliationAnswers,
+    },
     autoMergeEnabled: async (projectId) => {
       const setting = await transaction.access.projects.autoMergeSetting(projectId);
       return setting.ok ? ok(setting.value?.enabled ?? AUTO_MERGE_STARTS_ON) : setting;
+    },
+  };
+}
+
+// The log's head, as the snapshot that reads it sees it.
+export function headPositions(reads: Pick<BoardReads, 'head'>): ViewPositions {
+  return {
+    current: async () => {
+      const head = await reads.head();
+      return head.ok ? ok(String(head.value)) : head;
     },
   };
 }

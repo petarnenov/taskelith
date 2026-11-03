@@ -148,7 +148,9 @@ export type NeedsYouItem = NeedsYouItemFields &
       }
   );
 
+// `scope`: the inbox the caller answers in, where the item must belong.
 export interface AnswerRequest {
+  readonly scope: NeedsYouScope;
   readonly itemId: NeedsYouItemId;
   readonly responder: PrincipalId;
   readonly answer: NeedsYouAnswer;
@@ -166,6 +168,8 @@ export interface NeedsYouSource {
   readonly id: NeedsYouSourceId;
   readonly kinds: readonly NeedsYouKind[];
   openItems(scope: NeedsYouScope, after?: string): Promise<Result<SourcePage>>;
+  // The item in any state, or undefined when the scope holds no such item.
+  item(scope: NeedsYouScope, itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>>;
   answer(request: AnswerRequest): Promise<Result<NeedsYouItem>>;
 }
 

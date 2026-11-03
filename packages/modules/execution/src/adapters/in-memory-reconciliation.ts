@@ -17,8 +17,13 @@ export class InMemoryUnrecordedProcesses implements UnrecordedProcesses {
   }
 
   ofWorker(workerId: WorkerId): readonly UnrecordedProcess[] {
-    return [...this.#processes.values()].filter((process) => process.workerId === workerId)
-      .sort((left, right) => compare([left.recordedAt, left.observationId], [right.recordedAt, right.observationId]));
+    return this.all().filter((process) => process.workerId === workerId);
+  }
+
+  all(): readonly UnrecordedProcess[] {
+    return [...this.#processes.values()].sort((left, right) => compare(
+      [left.recordedAt, left.workerId, left.observationId], [right.recordedAt, right.workerId, right.observationId],
+    ));
   }
 }
 
@@ -42,6 +47,10 @@ export class InMemoryReconciliationQueue implements ReconciliationQueue {
 
   async unrecordedProcessesOfWorker(workerId: WorkerId): Promise<readonly UnrecordedProcess[]> {
     return this.#processes.ofWorker(workerId);
+  }
+
+  async unrecordedProcesses(): Promise<readonly UnrecordedProcess[]> {
+    return this.#processes.all();
   }
 
   #unknown(): readonly UnknownExecution[] {

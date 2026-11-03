@@ -1,4 +1,11 @@
-import type { CardCatalog, SessionTimelineTransaction, Task, WorkerId } from '@taskelith/execution';
+import type {
+  CardCatalog,
+  ReconciliationAnswers,
+  SessionTimelineTransaction,
+  Task,
+  UnrecordedProcess,
+  WorkerId,
+} from '@taskelith/execution';
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AssignmentRepository, PlacementOutcomeRecords, WorkerOccupancy, WorkerPlacementRecord } from '@taskelith/scheduling';
 import type { AdmissionRepository, GateRepository, ProjectId, WorkflowRunRepository } from '@taskelith/sdlc';
@@ -17,6 +24,7 @@ export interface BoardReads {
   readonly placementOutcomes: Pick<PlacementOutcomeRecords, 'get'>;
   readonly assignments: Pick<AssignmentRepository, 'listByAttempt'>;
   readonly fleet: FleetReads;
+  readonly reconciliation: ReconciliationQueueReads;
   autoMergeEnabled(projectId: ProjectId): Promise<Result<boolean>>;
 }
 
@@ -26,6 +34,12 @@ export interface FleetReads {
   quarantined(): Promise<boolean>;
   occupancy(workerId: WorkerId): Promise<WorkerOccupancy>;
   heldForAttempt(attemptId: Task['attempts'][number]['id']): Promise<boolean>;
+}
+
+// What the reconciliation source lists beyond the cards' tasks.
+export interface ReconciliationQueueReads {
+  unrecordedProcesses(): Promise<readonly UnrecordedProcess[]>;
+  readonly answers: Pick<ReconciliationAnswers, 'get'>;
 }
 
 // Each view's reads run in one read-only REPEATABLE READ snapshot.

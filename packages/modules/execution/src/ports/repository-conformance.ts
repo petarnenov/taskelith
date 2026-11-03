@@ -425,7 +425,7 @@ export const RECONCILIATION_QUEUE_CONFORMANCE: readonly ConformanceCase<Reconcil
     },
   },
   {
-    name: 'an unrecorded process is recorded once per observation and listed for its worker',
+    name: 'an unrecorded process is recorded once per observation and listed for its worker and in all',
     async check({ processes, queue }) {
       const problems: string[] = [];
       const workerId = id('WorkerId', 'worker-1');
@@ -436,6 +436,9 @@ export const RECONCILIATION_QUEUE_CONFORMANCE: readonly ConformanceCase<Reconcil
       expectSuccess(problems, 'other worker', await processes.record(unrecordedProcess('observation-1', AT, 'worker-2')));
       expectSame(problems, 'listed', await queue.unrecordedProcessesOfWorker(workerId), [
         unrecordedProcess('observation-1', AT), unrecordedProcess('observation-2', LATER),
+      ]);
+      expectSame(problems, 'all', await queue.unrecordedProcesses(), [
+        unrecordedProcess('observation-1', AT), unrecordedProcess('observation-1', AT, 'worker-2'), unrecordedProcess('observation-2', LATER),
       ]);
       return problems;
     },

@@ -5,8 +5,10 @@ import {
   NativeRequestSource,
   SessionTimelineService,
   parseTurnId,
+  type InputDigest,
   type NeedsYouItemId,
   type NeedsYouSource,
+  type SessionTimelineStore,
   type SessionTimelineTransaction,
   type SessionScopes,
   type TurnId,
@@ -27,9 +29,12 @@ export interface AgentSessionServices {
   readonly scopes: SessionScopes;
   readonly positions: ViewPositions;
   readonly clock: Clock;
+  // The keyed digest of session input, which inbox answers share.
+  readonly digest: InputDigest;
   // Built for item 15, which registers it with the inbox.
   readonly source: NativeRequestSource;
-  // The same source over one snapshot's timeline, which a view reads.
+  // The same source over one transaction's timeline, which a view reads
+  // and an inbox answer writes.
   sourceIn(transaction: SessionTimelineTransaction, positions: ViewPositions): NeedsYouSource;
 }
 
@@ -45,17 +50,20 @@ export function startAgentSessionServices(namespace: ControlPlaneNamespace, data
   const tailCipher = outputTailCipher(tailKey.value);
   if (!tailCipher.ok) return tailCipher;
   const store = new PostgresSessionTimelineStore(database);
-  const timeline = new SessionTimelineService({
-    store, digest: digest.value, redactor: new SecretTextRedactor(), outputRedactor: new SecretOutputRedactor(), tailCipher: tailCipher.value,
-    turnIds: { next: mintTurnId }, clock, itemIds: { next: mintItemId },
+  const timelineOver = (over: SessionTimelineStore) => new SessionTimelineService({
+    store: over, digest: digest.value, redactor: new SecretTextRedactor(), outputRedactor: new SecretOutputRedactor(),
+    tailCipher: tailCipher.value, turnIds: { next: mintTurnId }, clock, itemIds: { next: mintItemId },
   });
+  const timeline = timelineOver(store);
   const positions = new LogViewPositions(new PostgresUiEventLog(database));
   const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions });
-  const sourceIn = (transaction: SessionTimelineTransaction, snapshotPositions: ViewPositions) => new NativeRequestSource({
-    id: NATIVE_REQUEST_SOURCE_ID, timeline, digest: digest.value, clock,
-    store: { transaction: (work) => work(transaction) }, positions: snapshotPositions,
-  });
-  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, source, sourceIn });
+  const sourceIn = (transaction: SessionTimelineTransaction, snapshotPositions: ViewPositions) => {
+    const bound: SessionTimelineStore = { transaction: (work) => work(transaction) };
+    return new NativeRequestSource({
+      id: NATIVE_REQUEST_SOURCE_ID, timeline: timelineOver(bound), digest: digest.value, clock, store: bound, positions: snapshotPositions,
+    });
+  };
+  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, digest: digest.value, source, sourceIn });
 }
 
 // `t` and 32 lowercase hexadecimal digits from 128 random bits (wire

@@ -52,6 +52,7 @@ import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { EventLogKeeper, WakeableLoop, numberingPass } from '../application/event-log-keeper.js';
 import { startBoardServices } from './board-views.js';
+import { startInboxServices } from './inbox-answers.js';
 import { EventStreamHub, type Scheduler } from '../application/event-stream-hub.js';
 import { HEARTBEAT_QUEUE, HeartbeatService } from '../application/heartbeat-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
@@ -211,7 +212,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const keeper = new EventLogKeeper({
     log: eventLog, clock, ...(settings.eventRetentionHours === undefined ? {} : { retentionHours: settings.eventRetentionHours }),
   });
-  const board = startBoardServices(database, (transaction, positions) => [agentSessions.value.sourceIn(transaction, positions)]);
+  const inbox = startInboxServices(database, agentSessions.value);
+  const board = startBoardServices(database, inbox.viewSources);
   const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
   if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
@@ -237,7 +239,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
       members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),
     },
     events: { hub, projects: projectSetup, authorization, sessions, logger },
-    board: { views: board.views, projects: projectSetup, authorization },
+    board: { views: board.views, projects: projectSetup, authorization, answers: inbox.answers },
   });
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.

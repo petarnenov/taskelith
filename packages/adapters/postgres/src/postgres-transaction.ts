@@ -38,6 +38,7 @@ import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
 import { PostgresUiEventRecords } from './ui-event-repositories.js';
 import { PostgresCardCatalog, PostgresCardProjections } from './card-repositories.js';
+import { PostgresInboxAnswerKeys, PostgresReconciliationAnswers } from './inbox-answer-repositories.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
 // read and write through it, and commit or roll back together.
@@ -85,6 +86,8 @@ export class PostgresTransaction {
   readonly scmWebhookDeliveries: PostgresScmWebhookDeliveryRecords;
   readonly cards: PostgresCardCatalog;
   readonly cardProjections: PostgresCardProjections;
+  readonly inboxAnswerKeys: PostgresInboxAnswerKeys;
+  readonly reconciliationAnswers: PostgresReconciliationAnswers;
   // Sealed secrets only; PostgresScmIntegrations seals and opens them.
   readonly scmIntegrations: PostgresScmIntegrationRecords;
   // The outbox reads its stored messages back, such as an offer sent again.
@@ -134,6 +137,8 @@ export class PostgresTransaction {
     this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
     this.cards = new PostgresCardCatalog(session);
     this.cardProjections = new PostgresCardProjections(session);
+    this.inboxAnswerKeys = new PostgresInboxAnswerKeys(session);
+    this.reconciliationAnswers = new PostgresReconciliationAnswers(session);
     this.scmIntegrations = new PostgresScmIntegrationRecords(session);
     this.outboxLookup = this.outbox;
   }

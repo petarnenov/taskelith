@@ -52,6 +52,7 @@ const SESSION_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-fou
 const SESSION_COMMAND: Partial<Record<FailureCode, number>> = { ...SESSION_READ, conflict: 409, 'precondition-failed': 422 };
 const PROJECT_PATH = `^/projects/${SEGMENT}`;
 const PROJECT_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
+const INBOX_ANSWER: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409, 'precondition-failed': 422 };
 const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409 };
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
@@ -187,6 +188,14 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'readInstallationInboxCounts', method: 'GET', pattern: /^\/inbox\/counts$/, security: BROWSER_OR_OPERATOR,
     response: 'InboxCounts', success: 200, statuses: { forbidden: 401, unavailable: 503, internal: 500 }, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'answerInboxItem', method: 'POST', pattern: new RegExp(`${PROJECT_PATH}/inbox/${SEGMENT}/answer$`), security: BROWSER_OR_OPERATOR,
+    body: 'InboxAnswerSubmission', response: 'InboxItem', success: 200, statuses: INBOX_ANSWER, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'answerInstallationInboxItem', method: 'POST', pattern: new RegExp(`^/inbox/${SEGMENT}/answer$`), security: BROWSER_OR_OPERATOR,
+    body: 'InboxAnswerSubmission', response: 'InboxItem', success: 200, statuses: INBOX_ANSWER, reasons: ROLE_DENIAL,
   },
   // Control-plane wire contracts section 10: the event streams.
   {
