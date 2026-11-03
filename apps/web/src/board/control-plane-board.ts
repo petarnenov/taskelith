@@ -19,6 +19,9 @@ const CLOSED = 2;
 // An event the SPA cannot read makes the board read its snapshot again.
 const UNREADABLE: BoardStreamEvent = { kind: 'resync' };
 
+// A server that names new cursors beyond this many pages reads as unreachable.
+export const MAX_PROJECT_PAGES = 100;
+
 interface BoardGatewayOptions {
   readonly fetch?: typeof fetch;
   readonly openEventSource?: OpenEventSource;
@@ -40,12 +43,17 @@ export function createBoardGateway({
       if (result === undefined) return { kind: 'unavailable' };
       if (!hasStatus(result, 200)) return { kind: failureOf(result) };
       const page = projectPageOf(result.body);
-      if (page === undefined || (page.next !== undefined && visited.has(page.next))) return { kind: 'unavailable' };
+      if (page === undefined || cannotFollow(page.next, visited)) return { kind: 'unavailable' };
       projects.push(...page.projects);
       after = page.next;
       if (after !== undefined) visited.add(after);
     } while (after !== undefined);
     return { kind: 'read', value: projects };
+  }
+
+  // A cursor already followed loops, and the limit stops endless new ones.
+  function cannotFollow(next: string | undefined, visited: ReadonlySet<string>): boolean {
+    return next !== undefined && (visited.has(next) || visited.size + 1 >= MAX_PROJECT_PAGES);
   }
 
   async function readBoard(projectId: string): Promise<ReadResult<Board>> {
