@@ -191,6 +191,68 @@ export const ACCESS_STORE_CONFORMANCE: readonly ConformanceCase<AccessStore>[] =
     },
   },
   {
+    name: 'stored defaults keep their values when the caller changes its input afterwards',
+    async check(store) {
+      const problems: string[] = [];
+      const input = { ...DEFAULTS, implementers: [...DEFAULTS.implementers] };
+      must(await run(store, async (tx) => {
+        must(await tx.principals.add(principal('a', 'alice')));
+        return tx.projects.add(project('1'), input);
+      }));
+      input.implementers.push('agent-tertiary');
+      input.reviewer = 'agent-primary';
+      expectSame(problems, 'added', must(await run(store, (tx) => tx.projects.defaults(pid('1')))), { defaults: DEFAULTS, revision: 1 });
+      const change = { changedBy: id('a'), changedAt: at(5) };
+      const next = { ...DEFAULTS, implementers: ['agent-secondary'] };
+      must(await run(store, (tx) => tx.projects.replaceDefaults(pid('1'), 1, next, change)));
+      next.implementers.push('agent-primary');
+      const stored = { defaults: { ...DEFAULTS, implementers: ['agent-secondary'] }, revision: 2, lastChange: change };
+      expectSame(problems, 'replaced', must(await run(store, (tx) => tx.projects.defaults(pid('1')))), stored);
+      return problems;
+    },
+  },
+  {
+    name: 'of two concurrent defaults replacements at one revision exactly one wins',
+    async check(store) {
+      const problems: string[] = [];
+      must(await run(store, async (tx) => {
+        must(await tx.principals.add(principal('a', 'alice')));
+        return tx.projects.add(project('1'), DEFAULTS);
+      }));
+      const change = { changedBy: id('a'), changedAt: at(5) };
+      const candidates = [['agent-primary'], ['agent-secondary']].map((implementers) => ({ ...DEFAULTS, implementers }));
+      const results = await Promise.all(candidates.map((defaults) => run(store, (tx) => tx.projects.replaceDefaults(pid('1'), 1, defaults, change))));
+      const winner = expectOneWinner(problems, 'concurrent replacements', results);
+      const stored = must(await run(store, (tx) => tx.projects.defaults(pid('1'))));
+      if (winner !== undefined) expectSame(problems, 'stored', stored, { defaults: candidates[winner], revision: 2, lastChange: change });
+      return problems;
+    },
+  },
+  {
+    name: 'concurrent assignments and a removal of one member leave one consistent role',
+    async check(store) {
+      const problems: string[] = [];
+      must(await run(store, async (tx) => {
+        must(await tx.principals.add(principal('a', 'alice')));
+        must(await tx.projects.add(project('1'), DEFAULTS));
+        return tx.projectRoles.assign(pid('1'), id('a'), 'project-viewer', at(1));
+      }));
+      const assign = (role: 'project-operator' | 'project-maintainer') => run(store, (tx) => tx.projectRoles.assign(pid('1'), id('a'), role, at(2)));
+      const assigned = await Promise.all([assign('project-operator'), assign('project-maintainer')]);
+      assigned.forEach((result, index) => expectSuccess(problems, `assignment ${index + 1}`, result));
+      const role = must(await run(store, (tx) => tx.projectRoles.roleOf(pid('1'), id('a'))));
+      if (role !== 'project-operator' && role !== 'project-maintainer') problems.push(`assigned role: got ${String(role)}`);
+      const [reassigned, removed] = await Promise.all([assign('project-operator'), run(store, (tx) => tx.projectRoles.remove(pid('1'), id('a')))]);
+      expectSuccess(problems, 'reassignment', reassigned);
+      expectRead(problems, 'removal', removed, true);
+      const members = must(await run(store, (tx) => tx.projectRoles.members(pid('1'), undefined, 10)));
+      const last = must(await run(store, (tx) => tx.projectRoles.roleOf(pid('1'), id('a'))));
+      if (last !== undefined && last !== 'project-operator') problems.push(`role after the race: got ${last}`);
+      expectSame(problems, 'members', members.map((member) => member.role), last === undefined ? [] : [last]);
+      return problems;
+    },
+  },
+  {
     name: 'a session is replaced under a new hash, touched, and ended once',
     async check(store) {
       const problems: string[] = [];

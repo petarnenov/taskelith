@@ -9,6 +9,7 @@ import {
   ROUTES,
   StatusAnswer,
   createApiServer,
+  ruleOf,
   type ApiHandlers,
   type ApiRequest,
   type ControlPlaneStore,
@@ -81,17 +82,27 @@ test('the installation CA is public: no bearer is needed, and one is ignored', a
   assert.doesNotMatch(body, /PRIVATE KEY/);
 });
 
-test('every status a route of the execution document answers is declared there', () => {
-  const document = JSON.parse(readFileSync(new URL('../../../packages/contracts/documents/execution.openapi.json', import.meta.url), 'utf8'));
+// Every status a route can answer: its own, and the server's 403 of a role
+// checked before the body or of a session mutation's CSRF check.
+function answeredStatuses(route: RouteDefinition): string[] {
+  const rule = ruleOf(route.operationId);
+  const roleBeforeBody = rule.kind === 'path-project' || (rule.kind === 'fixed' && rule.requirement.kind !== 'authenticated');
+  const csrf = route.security.includes('browserSession') && route.method !== 'GET';
+  const own = [route.success, ...Object.values(route.statuses), ...Object.values(route.reasons ?? {})];
+  return [...new Set([...own, ...(roleBeforeBody || csrf ? [403] : [])].map(String))];
+}
+
+test('every status a route answers is declared by the operation in its document', () => {
   const declared = new Map<string, string[]>();
-  for (const item of Object.values(document.paths) as Array<Record<string, { operationId: string; responses: object }>>) {
-    for (const operation of Object.values(item)) declared.set(operation.operationId, Object.keys(operation.responses));
+  for (const name of ['sdlc', 'execution', 'control-plane']) {
+    const document = JSON.parse(readFileSync(new URL(`../../../packages/contracts/documents/${name}.openapi.json`, import.meta.url), 'utf8'));
+    for (const item of Object.values(document.paths) as Array<Record<string, { operationId: string; responses: object }>>) {
+      for (const operation of Object.values(item)) declared.set(operation.operationId, Object.keys(operation.responses));
+    }
   }
-  const documented = ROUTES.filter((route) => declared.has(route.operationId));
-  assert.ok(documented.some((route) => route.operationId === 'readInstallationCa'));
-  for (const route of documented) {
-    const answered = [route.success, ...Object.values(route.statuses)].map(String);
-    assert.deepEqual(answered.filter((status) => !declared.get(route.operationId)!.includes(status)), [], route.operationId);
+  assert.ok(ROUTES.some((route) => route.operationId === 'readInstallationCa'));
+  for (const route of ROUTES) {
+    assert.deepEqual(answeredStatuses(route).filter((status) => !declared.get(route.operationId)!.includes(status)), [], route.operationId);
   }
 });
 

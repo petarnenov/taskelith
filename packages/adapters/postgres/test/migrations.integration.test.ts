@@ -3,10 +3,13 @@ import { cp, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { AuthorizationService, PrincipalAdministration, projectRequirement, type PasswordHasher, type PrincipalId } from '@taskelith/access';
 import { endAttempt, openTask, recordExecutionEvidence } from '@taskelith/execution';
 import { fleetWorker } from '@taskelith/fleet';
-import { MIGRATIONS_DIRECTORY, PostgresDatabase, migrate } from '@taskelith/postgres';
-import { value } from '@taskelith/testing';
+import { err, failure, instantFromEpochMilliseconds } from '@taskelith/kernel';
+import { MIGRATIONS_DIRECTORY, PostgresAccessStore, PostgresDatabase, migrate } from '@taskelith/postgres';
+import { NodeSecrets } from '@taskelith/secrets';
+import { failed, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, usedAdmission } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
 import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-database.ts';
@@ -632,6 +635,43 @@ test('the project setup migration keeps earlier roles, refuses new ones without 
   await defaults('{a,b}', 'project-maintainer', 'wait', null);
   await assert.rejects(query(url, "INSERT INTO auto_merge_settings (project_id, enabled, revision) VALUES ('missing', true, 1)"), /auto_merge_settings_project_id_fkey/);
   await assert.rejects(query(url, 'INSERT INTO auto_merge_settings (project_id, enabled, revision) VALUES ($1, true, 0)', [project]), /auto_merge_settings_revision_check/);
+});
+
+// Role commands hash no password.
+const NO_HASHER: PasswordHasher = {
+  hash: async () => err(failure('internal', 'no password is hashed here')),
+  verify: async () => err(failure('internal', 'no password is verified here')),
+};
+
+test('a role kept on a G2 project identifier is revoked by the administrative removal, which audits it', async () => {
+  const directory = await copiedMigrations();
+  await rm(join(directory, `${PROJECT_SETUP}.sql`));
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url, directory)).ok, true);
+  const [owner, vera] = [`u${'a'.repeat(32)}` as PrincipalId, `u${'b'.repeat(32)}` as PrincipalId];
+  await query(url, `INSERT INTO principals (principal_id, kind, login_name, created_at)
+    VALUES ($1, 'operator', 'owner', now()), ($2, 'operator', 'vera', now())`, [owner, vera]);
+  await query(url, "INSERT INTO installation_roles (principal_id, role, granted_at) VALUES ($1, 'installation-owner', now())", [owner]);
+  await query(url, `INSERT INTO project_roles (project_id, principal_id, role, assigned_at)
+    VALUES ('g2-project', $1, 'project-operator', now())`, [vera]);
+  assert.deepEqual(await migrate(url), { ok: true, value: [PROJECT_SETUP] });
+  const database = new PostgresDatabase(url);
+  try {
+    const store = new PostgresAccessStore(database);
+    const operate = () => new AuthorizationService(store).authorize(vera, projectRequirement('g2-project', 'project-operator'));
+    value(await operate());
+    const clock = { now: () => value(instantFromEpochMilliseconds(Date.now())) };
+    const admin = new PrincipalAdministration({ store, hasher: NO_HASHER, random: new NodeSecrets(), clock });
+    const invocation = { actor: 'root@control-plane-1', reason: 'revoke a G2 role' };
+    const removed = value(await admin.removeProjectRole(owner, { projectId: 'g2-project', loginName: 'vera' }, invocation));
+    assert.deepEqual(removed, { principalId: vera, loginName: 'vera', projectId: 'g2-project' });
+    assert.equal(failed(await operate()).details.reason, 'role-required', 'the access is revoked');
+    assert.deepEqual(await query(url, 'SELECT kind, principal_id, project_id, role, actor FROM access_audit_events'), [
+      { kind: 'access.project-role-removed', principal_id: vera, project_id: 'g2-project', role: 'project-operator', actor: invocation.actor },
+    ]);
+  } finally {
+    await database.close();
+  }
 });
 
 test('the project setup down migration removes its tables and the foreign key of the project roles', async () => {

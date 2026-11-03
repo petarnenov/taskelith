@@ -8,6 +8,7 @@ import {
   PrincipalAdministration,
   PROJECT_PAGE_SIZE,
   ProjectSetupService,
+  type AccessAuditEvent,
   type PrincipalId,
   type ProjectDefaults,
 } from '@taskelith/access';
@@ -135,6 +136,36 @@ test('the administrative role commands refuse a project that does not exist', as
   assert.equal(refused.code, 'not-found');
 });
 
+test('the administrative removal accepts an identifier that names no project, so a G2 role stays revocable', async () => {
+  const { owner, admin, principal, trail } = await setup();
+  const bob = await principal('bob');
+  const before = await trail();
+  const removed = value(await admin.removeProjectRole(owner, { projectId: 'g2-project', loginName: 'bob' }, INVOCATION));
+  assert.deepEqual(removed, { principalId: bob, loginName: 'bob', projectId: 'g2-project' });
+  assert.deepEqual(await trail(), before, 'no role was held, so nothing is audited');
+});
+
+test('of two concurrent defaults changes one wins with one audit event, and member races end as the trail\'s last event says', async () => {
+  const { owner, admin, projects, principal, create, assign, trail } = await setup();
+  const { projectId } = await create();
+  const [maria, bob] = [await principal('maria'), await principal('bob')];
+  value(await assign(projectId, maria, 'project-maintainer'));
+  const candidates = [['agent-primary'], ['agent-secondary']].map((implementers) => ({ ...DEFAULTS, implementers }));
+  const changes = await Promise.all(candidates.map((defaults) =>
+    projects.replaceDefaults(maria, projectId, { expectedRevision: 1, value: defaults }, INVOCATION)));
+  assert.deepEqual(changes.map((change) => (change.ok ? 'ok' : change.error.code)).sort(), ['conflict', 'ok']);
+  const stored = value(await projects.readDefaults(projectId));
+  assert.deepEqual([stored.defaults, stored.revision], [candidates[changes.findIndex((change) => change.ok)], 2]);
+  assert.equal((await trail()).filter((event) => event.kind === 'access.project-defaults-changed').length, 1);
+  const races = await Promise.all([
+    assign(projectId, bob, 'project-operator'), assign(projectId, bob, 'project-viewer'),
+    admin.removeProjectMember(owner, { projectId, principalId: bob }, INVOCATION),
+  ]);
+  for (const race of races) assert.equal(race.ok, true);
+  const members = value(await projects.listMembers(projectId, undefined)).items.filter((member) => member.principalId === bob);
+  assert.deepEqual(members.map((member) => member.role), roleByTrail(await trail(), projectId, bob));
+});
+
 test('members are paged by principal identifier', async () => {
   const { projects, principal, create, assign } = await setup();
   const { projectId } = await create();
@@ -148,6 +179,34 @@ test('members are paged by principal identifier', async () => {
   const first = value(await projects.listMembers(projectId, undefined));
   assert.deepEqual([first.items.length, first.next], [PROJECT_PAGE_SIZE, ids[PROJECT_PAGE_SIZE - 1]]);
   assert.deepEqual(value(await projects.listMembers(projectId, first.next)).items.map((member) => member.principalId), [ids[PROJECT_PAGE_SIZE]]);
+});
+
+test('a project name of 1024 supplementary characters is created and renamed, and one more is refused', async () => {
+  const { projects, principal, create, assign } = await setup();
+  const longest = '\u{1F600}'.repeat(1024);
+  const { projectId } = await create(longest);
+  assert.equal(value(await projects.readProject(projectId)).name, longest);
+  const maria = await principal('maria');
+  value(await assign(projectId, maria, 'project-maintainer'));
+  const renamed = value(await projects.renameProject(maria, projectId, { expectedRevision: 1, value: `${longest.slice(2)}x` }, INVOCATION));
+  assert.equal([...renamed.name].length, 1024);
+  const tooLong = `${longest}x`;
+  assert.equal(failed(await projects.renameProject(maria, projectId, { expectedRevision: 2, value: tooLong }, INVOCATION)).details.field, 'name');
+  assert.equal(failed(parseProjectName(tooLong)).details.field, 'name');
+});
+
+test('defaults may name plugins that no registry knows; they are stored and read as given', async () => {
+  const { owner, projects, principal, assign } = await setup();
+  const unregistered: ProjectDefaults = {
+    ...DEFAULTS, frameworkPluginId: 'sdlc-unregistered', implementers: ['harness-unregistered'], reviewer: 'reviewer-unregistered',
+  };
+  const { projectId } = value(await projects.createProject(owner, { name: 'Alpha', defaults: unregistered }, INVOCATION));
+  assert.deepEqual(value(await projects.readDefaults(projectId)), { defaults: unregistered, revision: 1 });
+  const maria = await principal('maria');
+  value(await assign(projectId, maria, 'project-maintainer'));
+  const replaced = { ...unregistered, implementers: ['harness-other', 'harness-unregistered'] };
+  value(await projects.replaceDefaults(maria, projectId, { expectedRevision: 1, value: replaced }, INVOCATION));
+  assert.deepEqual(value(await projects.readDefaults(projectId)).defaults, replaced);
 });
 
 test('project names and defaults are checked for callers other than HTTP', () => {
@@ -170,3 +229,10 @@ test('a minted project identifier of the wrong shape fails the creation and writ
   assert.equal(refused.code, 'internal');
   assert.deepEqual(await trail(), before);
 });
+
+// The role that the last role event of the trail leaves, as a list.
+function roleByTrail(events: readonly AccessAuditEvent[], projectId: string, principalId: PrincipalId): string[] {
+  const last = events.filter((event) => event.projectId === projectId && event.principalId === principalId)
+    .filter((event) => event.kind === 'access.project-role-assigned' || event.kind === 'access.project-role-removed').at(-1);
+  return last?.kind === 'access.project-role-assigned' && last.role !== undefined ? [last.role] : [];
+}
