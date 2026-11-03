@@ -83,6 +83,25 @@ test('a floor raised past a stream\'s cursor before it read sends cursor-expired
   assert.equal(hub.openStreams(), 0);
 });
 
+test('a floor raised past the cursor during a read sends cursor-expired instead of what the read returned', async () => {
+  const { log, clock } = setup();
+  const pruning = {
+    bounds: () => log.bounds(),
+    readAfter: async (...args: Parameters<InMemoryUiEventLog['readAfter']>) => {
+      const read = await log.readAfter(...args);
+      clock.advance(1);
+      value(await log.prune(clock.now(), 1));
+      return read;
+    },
+  };
+  const hub = new EventStreamHub({ log: pruning, scheduler: new ManualScheduler(), clock, logger: new Logger(new InMemoryLogSink(), { now: () => AT }) });
+  const { sink } = await opened(hub);
+  await committed(log, eventEntry(marked(1)), eventEntry(marked(2)));
+  hub.wake();
+  await sink.until((recorded) => recorded.closed);
+  assert.deepEqual(sink.frames, [{ kind: 'resync', reason: 'cursor-expired' }]);
+});
+
 test('a change of the principal\'s role in the project or of its installation role ends the stream with stream-ended', async () => {
   for (const change of [{ projectId: ALPHA }, {}]) {
     const { log, hub } = setup();
