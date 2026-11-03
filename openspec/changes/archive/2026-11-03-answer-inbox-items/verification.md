@@ -110,6 +110,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | B | `claude claude-fable-5-1#medium` | `9f964100-5197-4275-b912-82f36763342f` | 0 | 0 | 0 | 8 |
 <!-- make record: end -->
 
+## Archive
+
+The archive commit `docs: archive the answer inbox items change` applies the reviewed deltas with the pinned CLI (`npm run openspec -- archive answer-inbox-items --yes`, totals + 8, ~ 0, - 0) after every task was ticked. Checked on the tree of the archive commit, the working tree the checks ran on:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: the line `change/2026-11-03-answer-inbox-items` passes.
+- `make findings ARGS="validate"`: passed; the moved change has its `findings.jsonl` (14 findings) and `passes.jsonl` (2 passes).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `1c75f149` (`origin/dev` unchanged): only additions, the eight requirements of this change in `control-plane-api` (4), `postgres-state` (1), and `product-ports` (3); no other text changes.
+- `make verify` on the archive commit's tree, for the `pre-push` stamp: `verify-15b-archive.log` in the session scratchpad.
+
 ## Limitations
 
 - Until item 25 registers cards, the reconciliation source lists no unknown execution in a running installation; unrecorded processes, which name no card, are listed (design "Context").
@@ -124,4 +134,4 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - The coordinator's architect check of the pass 2 fixes.
-- The archive of the change, and integration into dev by the coordinator (single pull request).
+- Integration into dev by the coordinator (single pull request).

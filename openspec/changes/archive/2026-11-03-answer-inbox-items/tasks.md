@@ -26,8 +26,8 @@
 - [x] 6.1 Route the change, run `make verify`, and record `verification.md` with `make record` and `make record-check`
 - [x] 6.2 Review pass 1 by reviewer A, and its fix round
 - [x] 6.3 Review pass 2 by reviewer B, unless pass 1 is Low-only, and its fix round
-- [ ] 6.4 Review pass 3, which governance "Review sequence" runs when pass 2 reports a Medium-or-higher finding
+- [x] 6.4 Review pass 3, which governance "Review sequence" runs when pass 2 reports a Medium-or-higher finding
 
 ## 7. Archive
 
-- [ ] 7.1 Archive the change in the last commit of the branch
+- [x] 7.1 Archive the change in the last commit of the branch
