@@ -159,6 +159,18 @@ No later pass reviews the fixes of the pass 2 round. Each awaits the coordinator
 - 11c: `createRun` requires an existing project, the temporary G2 bridge is removed, and the G2 role denials answer the declared 403 (pass 1 decision (a)). It follows 11b, which waits for 20f `manage-scm-integrations` (owner decision, 2026-11-03); its row of the G3 work plan lands with the edit of `docs/g3-plan.md` by 20f (pass 2 decision (a)).
 - Row 11 of `docs/g3-plan.md` gets a scope note of the 2026-11-03 split into 11a, 11b, and 11c with that same edit (pass 2 finding L3, deferred).
 
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the implement project setup change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive implement-project-setup --yes` on `59daf730`, with every task of `tasks.md` ticked (6.4 ticked as not needed, since pass 2 reported only Low findings), and only this section changed afterward. `origin/dev` was `a21913f1` (#426) after `git fetch origin`; the merge base stays `a21913f1`.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-11-03-implement-project-setup` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `a21913f1`) | Only this change's deltas: `control-plane-api` adds 5 requirements ("Project operations served", "Project creation without members", "Project changes by compare-and-set", "Project members managed by the installation-owner", "Projects listed by membership"); `postgres-state` adds "Project setup tables"; `trust-and-operational-foundation` adds "Projects behind the Access port" and "Project roles on existing projects only" and modifies "Temporary G2 bridge", which now names sub-change 11c; 73 insertions and 1 deletion; no requirement of these specs reaches 500 characters (this change's longest 367, "Project operations served") |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 103 file(s); every pass summary file is valid: 83 file(s); every route file is valid: 36 file(s).` |
+| `make verify` on the archive working tree (log `verify-11a-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; tests 4311, pass 4302, fail 0, skipped 9; all files 99.40% lines, 92.62% branches, 98.90% functions |
+
 ## Remaining gates
 
 - Architect check of the unreviewed pass 2 fixes by the coordinator.
