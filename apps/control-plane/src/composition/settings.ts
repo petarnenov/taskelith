@@ -8,6 +8,7 @@ import type { KnownWorkflow } from '../application/workflow-registry.js';
 import { readBrokerTls } from '../broker-tls.js';
 import { readServiceEndpoints, type Environment } from '../service-endpoints.js';
 import type { ControlPlaneSettings } from './control-plane.js';
+import { WEB_APP_DIR_VARIABLE } from './web-app-directory.js';
 
 export const DEFAULT_API_HOST = '127.0.0.1';
 export const DEFAULT_API_PORT = 8080;
@@ -42,6 +43,7 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
     },
     workflows: workflows.value,
     transportLimits: transportLimits.value,
+    ...(environment[WEB_APP_DIR_VARIABLE] ? { webAppDirectory: environment[WEB_APP_DIR_VARIABLE] } : {}),
     ...(natsTls.value === undefined ? {} : { natsTls: natsTls.value }),
   });
 }
