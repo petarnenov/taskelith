@@ -157,3 +157,12 @@ test('a change of the installation quarantine or recovery epoch touches every ca
   assert.deepEqual(await touches(), ['fleet:installation', 'fleet:installation', 'fleet:installation']);
   assert.deepEqual(await take(), { ok: true, value: { touches: 3, runIds: ['run-1', 'run-2'], workersChanged: false } });
 });
+
+test('a card lists its tasks in task identifier order, whatever order they were admitted in', async () => {
+  await card('run-1');
+  await lineage('task-b', 'run-1');
+  await lineage('task-a', 'run-1');
+  await lineage('task-a-child', 'run-child', 'task-a', 1);
+  const tasks = value(await database.readOnly((tx) => tx.cards.tasks('run-1' as never)));
+  assert.deepEqual(tasks.map((each) => each.taskId), ['task-a', 'task-a-child', 'task-b']);
+});
