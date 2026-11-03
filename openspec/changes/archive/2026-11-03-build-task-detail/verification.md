@@ -154,6 +154,16 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 - `make verify` of the fixed tree (`a463504c`, tree `fed39a90`), `verify-29b-p2e.log` in the session scratchpad: passed at the first run, profile full, no rerun; in it `apps/web` Vitest ran 457 tests, all passing, with 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines. The generated part above records it.
 - Architect check (Niki, 2026-11-03): PASSED for 23789da3, 49518eea, 0e5a0f33, 1053a645.
 
+## Archive
+
+The archive commit `docs: archive the build task detail change` applies the reviewed delta with the pinned CLI (`npm run openspec -- archive build-task-detail --yes`, totals + 4, ~ 0, - 1) after every task was ticked, task 4.2 by the coordinator's architect check recorded above. Checked on the tree of the archive commit, the working tree the checks ran on:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: the line `change/2026-11-03-build-task-detail` passes; the command fails as a whole on older archived changes.
+- `make findings ARGS="validate"`: passed; the moved change has its `findings.jsonl` (17 findings) and `passes.jsonl` (2 passes).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `d0d59478`: only `product-ui`, the removed "Web SPA task detail route" and the four added requirements of this change; no other text changes.
+- `make verify` (`verify-29b-archive2.log` in the session scratchpad): passed, profile full, on the uncommitted working tree, so no stamp was written; 4,630 tests, 4,621 passed, 0 failed, 9 skipped; coverage 99.44% lines, 92.73% branches, 98.87% functions; `apps/web` Vitest 457 of 457 passed, 100% lines, 97.65% branches, 99.68% functions.
+
 ## Limitations
 
 - No browser run: the Drawer was checked in jsdom only, with stubbed `ResizeObserver` and `matchMedia`; Mantine's transitions and focus trap were not checked in a browser.
