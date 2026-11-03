@@ -10,15 +10,20 @@ import { BodyDrains, MAX_CONCURRENT_DRAINS, MAX_DRAIN_MILLISECONDS, MAX_DRAINED_
 
 const ANSWER = Buffer.from('{"code":"invalid"}');
 
-// What the drain did to a response: its writes and whether it ended.
+// What the drain did to a response: its writes, a flush, and its end.
 class RecordedResponse {
   readonly written: Uint8Array[] = [];
+  flushed = false;
   ended = false;
   endedWith: Uint8Array | undefined;
 
   write(content: Uint8Array): boolean {
     this.written.push(content);
     return true;
+  }
+
+  flushHeaders(): void {
+    this.flushed = true;
   }
 
   // Never finishes, as for a client that reads no output.
@@ -49,8 +54,8 @@ function exchange(): Exchange {
   return { body, socket, response: new RecordedResponse() };
 }
 
-function answer(drains: BodyDrains, { body, response }: Exchange): void {
-  drains.answer(body as unknown as IncomingMessage, response as unknown as ServerResponse, ANSWER);
+function answer(drains: BodyDrains, { body, response }: Exchange, content: Uint8Array = ANSWER): void {
+  drains.answer(body as unknown as IncomingMessage, response as unknown as ServerResponse, content);
 }
 
 // Lets the stream deliver what was written, without timers.
@@ -65,9 +70,16 @@ async function discard(body: PassThrough, bytes: number): Promise<void> {
 test('the drain sends the answer at once and discards the body while it flows', async () => {
   const drained = exchange();
   answer(new BodyDrains(), drained);
-  assert.deepEqual(drained.response.written, [ANSWER]);
+  assert.deepEqual([drained.response.written, drained.response.flushed], [[ANSWER], false]);
   await discard(drained.body, 1024);
   assert.equal(drained.body.isPaused(), false);
+  assert.equal(drained.response.ended, false);
+});
+
+test('an empty answer flushes its head at once instead of writing nothing', () => {
+  const drained = exchange();
+  answer(new BodyDrains(), drained, Buffer.alloc(0));
+  assert.deepEqual([drained.response.flushed, drained.response.written], [true, []]);
   assert.equal(drained.response.ended, false);
 });
 

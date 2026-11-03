@@ -189,7 +189,7 @@ async function serve({ handlers, slots, drains, routes, logger, webApp }: Listen
   const failed = 'content' in answer ? undefined : answer.failure;
   if (!response.headersSent) {
     if ('content' in answer) writeWebAppFile(response, answer, correlationId);
-    else if ('stream' in answer || request.complete) writeResponse(response, answer, correlationId);
+    else if ('stream' in answer || bodyEnded(request)) writeResponse(response, answer, correlationId);
     else writeResponseBeforeBodyEnds(request, response, answer, correlationId, drains);
   }
   const fields = requestLogFields({
@@ -199,6 +199,12 @@ async function serve({ handlers, slots, drains, routes, logger, webApp }: Listen
   const log = logger.with({ correlationId });
   if (answer.status >= 500) log.error('api.request', fields);
   else log.info('api.request', fields);
+}
+
+// A request without a body is complete before its parser says so.
+function bodyEnded(request: IncomingMessage): boolean {
+  const { 'content-length': length, 'transfer-encoding': encoding } = request.headers;
+  return request.complete || (encoding === undefined && Number(length ?? 0) === 0);
 }
 
 // Wire contracts section 2: authenticate, then the CSRF header of a

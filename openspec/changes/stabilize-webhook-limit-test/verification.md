@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Assigned on 2026-11-03 by the coordinator (Niki) to the worker Zaki, size S, developed by a briefed subagent. Source: the test "a body over the limit is 413 before any verification, and one at the limit is read" of `apps/control-plane/test/scm-webhook-receiver.test.ts` failed intermittently with `fetch failed` and `ECONNRESET` in three `make verify` runs on the loaded iMac on 2026-11-03, and passed alone in 3 of 3 runs. Scope: the product fix in `apps/control-plane/src/api/http-exchange.ts` and `apps/control-plane/src/api/api-server.ts`, the export of the drain bounds from `apps/control-plane/src/index.ts`, three tests in the test file, wire contract section 5, a `control-plane-api` spec delta, and this change. Excluded: other flaky tests, the 25 MiB limit, and the verification order. Commit types `chore`, `test`, and `docs`; `@taskelith/control-plane` is private.
+Assigned on 2026-11-03 by the coordinator (Niki) to the worker Zaki, size S, developed by a briefed subagent. Source: the test "a body over the limit is 413 before any verification, and one at the limit is read" of `apps/control-plane/test/scm-webhook-receiver.test.ts` failed intermittently with `fetch failed` and `ECONNRESET` in three `make verify` runs on the loaded iMac on 2026-11-03, and passed alone in 3 of 3 runs. Scope: the product fix in `apps/control-plane/src/api/body-drain.ts`, `apps/control-plane/src/api/http-exchange.ts`, and `apps/control-plane/src/api/api-server.ts`, the export of the drain bounds from `apps/control-plane/src/index.ts`, the new tests in `apps/control-plane/test/scm-webhook-receiver.test.ts`, `apps/control-plane/test/body-drain.test.ts`, and `apps/control-plane/test/early-answer.test.ts` with the raw sender `apps/control-plane/test/raw-sender.ts`, wire contract section 5, a `control-plane-api` spec delta, and this change. Excluded: other flaky tests, the 25 MiB limit, and the verification order. Commit types `chore`, `test`, and `docs`; `@taskelith/control-plane` is private.
 
 ## Revision
 
@@ -21,7 +21,7 @@ Zaki's host `hpz600`: Linux 6.8.0-147-generic, x86_64, 8 logical CPUs. `make ver
 
 ## Diagnosis
 
-- Every answer is sent with `response.shouldKeepAlive = false` (`apps/control-plane/src/api/api-server.ts:129`), so it carries `Connection: close`. `signedBody` answers 413 `body-too-large` when the declared `content-length` exceeds 25 MiB, before it reads the body. The test's oversized `fetch` declares 25 MiB + 1 byte, so the server answers at once while `fetch` still writes the body.
+- Every answer is sent with `response.shouldKeepAlive = false` (`apps/control-plane/src/api/api-server.ts:133`), so it carries `Connection: close`. `signedBody` answers 413 `body-too-large` when the declared `content-length` exceeds 25 MiB, before it reads the body. The test's oversized `fetch` declares 25 MiB + 1 byte, so the server answers at once while `fetch` still writes the body.
 - On a finished response of a connection that is not kept alive, Node.js 24's `resOnFinish` calls `socket.destroySoon()` (`if (res._last) { ... socket.destroySoon(); }` in the `node` binary's `_http_server`), which destroys the socket once its FIN is written. A TCP close with received data still unread makes the kernel send a reset. The client's next write fails with `EPIPE` or `ECONNRESET`; `fetch` fails as a whole when that error comes before it has parsed the 413, which a loaded host makes likely.
 
 ## Fail-before
@@ -35,7 +35,7 @@ First round, at `7ebb61f1`; the pass 1 fix round has its own below.
 
 ## Author self-check
 
-- Against the brief: the product, not the test, is fixed; the preferred mechanism, `Connection: close` and a graceful end after the answer is written, with a drain bounded in bytes and time, named `MAX_DRAINED_BODY_BYTES` (32 MiB) and `MAX_DRAIN_MILLISECONDS` (10 s) in `apps/control-plane/src/api/http-exchange.ts`. Discarded bytes are counted, never buffered.
+- Against the brief: the product, not the test, is fixed; the preferred mechanism, `Connection: close` and a graceful end after the answer is written, with a drain bounded in bytes and time, named `MAX_DRAINED_BODY_BYTES` (32 MiB) and `MAX_DRAIN_MILLISECONDS` (10 s), since `f86d074a` in `apps/control-plane/src/api/body-drain.ts`. Discarded bytes are counted, never buffered.
 - The declared-length test "a declared length over the limit is 413 before the body is read" is unchanged and passes: its sender reads the answer at once, and its `request.destroy()` ends the drain.
 - The fix keys on `request.complete`, so it also covers other answers sent before their body ended (design "Every early answer"); requests whose body was read and event streams are written as before.
 - The time bound test uses the test runner's mock `setTimeout`, and the other new tests wait on socket events with 60 s outer bounds; no fixed sleeps.

@@ -26,9 +26,15 @@ export class BodyDrains {
     socket.once('close', () => {
       this.#draining -= 1;
     });
-    response.write(content);
+    send(response, content);
     drain(request, response);
   }
+}
+
+// A zero-length write leaves the head unsent until the response ends.
+function send(response: ServerResponse, content: Uint8Array): void {
+  if (content.byteLength === 0) response.flushHeaders();
+  else response.write(content);
 }
 
 // The body's end closes gracefully. A bound pauses the input and destroys
