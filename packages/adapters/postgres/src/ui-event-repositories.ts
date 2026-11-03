@@ -24,9 +24,8 @@ interface EntryRow {
   readonly record: string;
 }
 
-// The event log's rows of one transaction. Writers append in SERIALIZABLE
-// transactions; numbering and pruning run READ COMMITTED under the lock of
-// the sequence row, so each sees every entry committed before it.
+// One transaction's log rows: writers append SERIALIZABLE; numbering and
+// pruning run READ COMMITTED under the sequence row lock, seeing all commits.
 export class PostgresUiEventRecords implements UiEventOutbox, PrincipalChanges {
   readonly #session: Session;
   #notified = false;

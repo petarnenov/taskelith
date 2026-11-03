@@ -4,9 +4,8 @@ import { APPENDED_CHANNEL, NUMBERED_CHANNEL } from './ui-event-repositories.js';
 
 type Listener = () => void;
 
-// The wake-ups of the event log over one LISTEN connection: entries were
-// appended, or numbered. A lost connection is reopened by `listen`; the
-// readers poll as well, so a missed notification only delays them.
+// The log's wake-ups (appended, numbered) over one LISTEN connection, which
+// `listen` reopens; readers also poll, so a missed one only delays them.
 export class PostgresUiEventNotifications {
   readonly #url: URL;
   readonly #logger: Logger;
