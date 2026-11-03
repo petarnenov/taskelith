@@ -70,9 +70,21 @@ export {
   type UnverifiableReason,
 } from './ports/scm-integrations.js';
 export {
+  SCM_INTEGRATION_AUDIT_KINDS,
+  changeAudit,
+  creationAudit,
+  type ScmIntegrationAudit,
+  type ScmIntegrationAuditEntry,
+  type ScmIntegrationAuditEvent,
+  type ScmIntegrationAuditKind,
+} from './ports/scm-integration-audit.js';
+export { SCM_INTEGRATION_AUDIT_CONFORMANCE, type ScmIntegrationAuditTarget } from './ports/scm-integration-audit-conformance.js';
+export { InMemoryScmIntegrationAudit } from './adapters/in-memory-scm-integration-audit.js';
+export {
   SCM_INTEGRATION_PAGE_SIZE,
   ScmIntegrationService,
   type ScmIntegrationCreation,
+  type ScmIntegrationInvocation,
   type ScmIntegrationPage,
   type ScmIntegrationServicePorts,
   type ScmIntegrationUpdate,

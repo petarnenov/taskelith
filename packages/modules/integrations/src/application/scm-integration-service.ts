@@ -1,6 +1,8 @@
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import type { Clock } from '@taskelith/sdlc';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
 import { MAX_SCM_SECRETS, ScmSecrets, type ScmIntegration } from '../domain/scm-integration.js';
+import type { ScmIntegrationAuditEntry } from '../ports/scm-integration-audit.js';
 import type { ScmIntegrationChange, ScmIntegrationIds, ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
 import type { ScmValues, SourceControlPlugin } from '../ports/source-control-plugin.js';
 
@@ -27,10 +29,17 @@ export interface ScmIntegrationPage {
   readonly next?: string;
 }
 
+// The audited actor, a principal, and the reason of the command.
+export interface ScmIntegrationInvocation {
+  readonly actor: string;
+  readonly reason: string;
+}
+
 export interface ScmIntegrationServicePorts {
   readonly store: ScmIntegrations;
   readonly plugins: ScmPlugins;
   readonly ids: ScmIntegrationIds;
+  readonly clock: Clock;
 }
 
 // Wire contracts section 4: the plugin checks its settings and secrets,
@@ -57,7 +66,7 @@ export class ScmIntegrationService {
     return read.value === undefined ? err(unknownIntegration()) : ok(read.value);
   }
 
-  async create(creation: ScmIntegrationCreation): Promise<Result<ScmIntegration>> {
+  async create(creation: ScmIntegrationCreation, invocation: ScmIntegrationInvocation): Promise<Result<ScmIntegration>> {
     const plugin = this.#ports.plugins.pluginOf(creation.pluginId);
     if (plugin === undefined) return err(failure('not-found', 'no SCM plugin has this identifier', { pluginId: creation.pluginId }));
     const allowedOrigin = normalizeOrigin(creation.allowedOrigin);
@@ -72,10 +81,10 @@ export class ScmIntegrationService {
       integrationId: this.#ports.ids.next(), pluginId: plugin.id, label: creation.label, allowedOrigin: allowedOrigin.value,
       settings: { ...creation.settings }, secretNames: secrets.value.names(), revision: 1,
     };
-    return this.#ports.store.add(integration, secrets.value);
+    return this.#ports.store.add(integration, secrets.value, this.#auditEntry(invocation));
   }
 
-  async update(integrationIdText: string, update: ScmIntegrationUpdate): Promise<Result<ScmIntegration>> {
+  async update(integrationIdText: string, update: ScmIntegrationUpdate, invocation: ScmIntegrationInvocation): Promise<Result<ScmIntegration>> {
     const current = await this.read(integrationIdText);
     if (!current.ok) return current;
     const plugin = this.#ports.plugins.pluginOf(current.value.pluginId);
@@ -84,7 +93,11 @@ export class ScmIntegrationService {
     if (!change.ok) return change;
     const overflowing = secretPastLimit(current.value, change.value.secrets);
     if (overflowing !== undefined) return err(failure('invalid', `the secret ${overflowing} exceeds the ${MAX_SCM_SECRETS} secrets of an integration`, { setting: overflowing }));
-    return this.#ports.store.update(current.value.integrationId, change.value);
+    return this.#ports.store.update(current.value.integrationId, change.value, this.#auditEntry(invocation));
+  }
+
+  #auditEntry({ actor, reason }: ScmIntegrationInvocation): ScmIntegrationAuditEntry {
+    return { actor, reason, at: this.#ports.clock.now() };
   }
 }
 
