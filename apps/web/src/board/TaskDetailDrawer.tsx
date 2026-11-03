@@ -1,4 +1,4 @@
-import { Alert, Drawer } from '@mantine/core';
+import { Alert, Box, Drawer } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
@@ -6,6 +6,7 @@ import type { ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
 import type { BoardOutlet } from './BoardPage';
 import { LoadError, withRequiredRole } from './LoadError';
+import { ProjectPicker } from './ProjectPicker';
 import type { TaskDetailState } from './task-detail-feed';
 import { TaskDetailView } from './TaskDetailView';
 import type { LiveBoard } from './useLiveBoard';
@@ -70,6 +71,10 @@ function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawer
       title={shown?.card.title ?? 'Task detail'}
       closeButtonProps={{ 'aria-label': 'Close the task detail' }}
     >
+      {/* The modal Drawer hides the header's picker, so it has its own. */}
+      <Box mb="md">
+        <ProjectPicker />
+      </Box>
       {boardFailure === undefined ? (
         <DetailContent state={detail.state} lost={shownBoard?.liveness === 'lost'} onRetry={detail.retry} />
       ) : (
