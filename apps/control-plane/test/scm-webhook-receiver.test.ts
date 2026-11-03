@@ -233,40 +233,83 @@ test('a declared length over the limit is 413 before the body is read', async ()
   }
 });
 
+// A gate that one side opens and the other awaits.
+function gate(): { readonly opened: Promise<void>; readonly open: () => void } {
+  let open = (): void => undefined;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
+}
+
+// Calls `admitted` once a request passed every check before its body slot:
+// the immediate runs after the server queued it for, or gave it, the slot.
+class AdmissionSignallingApi extends ControlPlaneApi {
+  readonly #admitted: () => void;
+
+  constructor(services: ApiServices, admitted: () => void) {
+    super(services);
+    this.#admitted = admitted;
+  }
+
+  override async authorizeResource(...check: Parameters<ControlPlaneApi['authorizeResource']>): Promise<Result<void>> {
+    const authorized = await super.authorizeResource(...check);
+    setImmediate(this.#admitted);
+    return authorized;
+  }
+}
+
 test('deliveries beyond the concurrency limit wait for a free slot before their body is read', async () => {
-  let verified = 0;
+  const firstHoldsSlot = gate();
+  const releaseFirst = gate();
+  const secondAdmitted = gate();
+  const holdingDeliveries: ScmWebhookDeliveries = {
+    record: async (_integrationId, event) => {
+      if (event.deliveryId === 'slot-1') {
+        firstHoldsSlot.open();
+        await releaseFirst.opened;
+      }
+      return ok('recorded');
+    },
+  };
   const slotReceiver = new ScmWebhookReceiver({
-    verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, {
-      verifyWebhookDelivery: (delivery: WebhookDelivery) => {
-        verified += 1;
-        return github.verifyWebhookDelivery(delivery);
-      },
-    }]])),
-    deliveries: new InMemoryDeliveries(),
+    verifiers: new InMemoryScmIntegrationVerifiers(new Map([[KNOWN, github]])),
+    deliveries: holdingDeliveries,
     decoy: new GithubWebhookDecoy(),
     eventless: new GithubEventlessDeliveries(),
   });
-  const slotServer = createApiServer(new ControlPlaneApi({ scmWebhooks: slotReceiver } as unknown as ApiServices), { maxConcurrentWebhooks: 1 });
-  let received = 0;
-  slotServer.on('request', () => {
-    received += 1;
+  let admissions = 0;
+  const api = new AdmissionSignallingApi({ scmWebhooks: slotReceiver } as unknown as ApiServices, () => {
+    admissions += 1;
+    if (admissions === 2) secondAdmitted.open();
+  });
+  const slotServer = createApiServer(api, { maxConcurrentWebhooks: 1 });
+  const bodiesRead: string[] = [];
+  slotServer.on('request', (request: IncomingMessage) => {
+    const iterate = request[Symbol.asyncIterator].bind(request);
+    request[Symbol.asyncIterator] = () => {
+      bodiesRead.push(String(request.headers['x-github-delivery']));
+      return iterate();
+    };
   });
   await new Promise<void>((resolve) => slotServer.listen(0, '127.0.0.1', () => resolve()));
   after(() => new Promise<void>((resolve) => slotServer.close(() => resolve())));
   const url = `http://127.0.0.1:${(slotServer.address() as AddressInfo).port}/scm-integrations/${KNOWN}/webhooks`;
   const holding = pullRequest('slot-1');
   const waiting = pullRequest('slot-2');
-  const first = openDelivery(url, holding, 10);
-  const second = openDelivery(url, waiting, 0);
-  second.request.end(waiting.body);
+  const first = openDelivery(url, holding, holding.body.length);
+  first.request.end();
   try {
-    while (received < 2) await new Promise((resolve) => setTimeout(resolve, 10));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.equal(verified, 0, 'the second delivery waits while the first holds the only slot');
+    await answeredWithin(firstHoldsSlot.opened, 5_000);
+    const second = openDelivery(url, waiting, waiting.body.length);
+    second.request.end();
+    await answeredWithin(secondAdmitted.opened, 5_000);
+    assert.deepEqual(bodiesRead, ['slot-1'], 'the second body stays unread while the first holds the only slot');
+    releaseFirst.open();
+    const statuses = await Promise.all([first.answer, second.answer].map(async (answer) => (await answeredWithin(answer, 5_000)).statusCode));
+    assert.deepEqual(statuses, [202, 202]);
+    assert.deepEqual(bodiesRead, ['slot-1', 'slot-2']);
   } finally {
-    first.request.end(holding.body.subarray(10));
+    releaseFirst.open();
   }
-  const statuses = await Promise.all([first.answer, second.answer].map(async (answer) => (await answer).statusCode));
-  assert.deepEqual(statuses, [202, 202]);
-  assert.equal(verified, 2);
 });
