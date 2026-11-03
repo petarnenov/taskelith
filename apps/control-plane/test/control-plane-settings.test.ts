@@ -147,6 +147,15 @@ test('the streams take the target byte limit unless configured', () => {
   }
 });
 
+test('the event log keeps a numbered event 24 hours unless configured in whole hours', () => {
+  assert.equal(value(readControlPlaneSettings(BASE, 'linux', 501)).eventRetentionHours, 24);
+  assert.equal(value(readControlPlaneSettings({ ...BASE, TASKELITH_EVENT_RETENTION_HOURS: '72' }, 'linux', 501)).eventRetentionHours, 72);
+  for (const text of ['0', '-1', '1.5', 'day']) {
+    const failure = failed(readControlPlaneSettings({ ...BASE, TASKELITH_EVENT_RETENTION_HOURS: text }, 'linux', 501));
+    assert.deepEqual([failure.code, failure.details.variable], ['invalid', 'TASKELITH_EVENT_RETENTION_HOURS'], text);
+  }
+});
+
 // The catch-up path of an offline worker: its unacknowledged notice must
 // stay in the command stream until the rotation's deadline.
 test('the command stream keeps a rotation notice at least until the rotation deadline', () => {

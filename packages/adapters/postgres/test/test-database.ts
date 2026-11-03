@@ -19,6 +19,7 @@ const TABLES = [
   'agent_sessions', 'agent_session_output', 'agent_session_output_tails', 'agent_session_attempts', 'session_idempotency_keys', 'session_inbox_items',
   'session_audit_events',
   'account_slots', 'slot_credentials', 'slot_credential_counters', 'slot_credential_deliveries',
+  'ui_events',
 ];
 let created = 0;
 
@@ -114,8 +115,10 @@ export function assertNoPassword(text: string, password: string): void {
   for (const form of [password, encodeURIComponent(password)]) assert.ok(!text.includes(form), 'the password was logged');
 }
 
+// The event sequence keeps its one row, set back to before any event.
 export async function truncateAll(url: URL): Promise<void> {
   await query(url, `TRUNCATE ${TABLES.join(', ')}`);
+  await query(url, 'UPDATE ui_event_sequence SET head = 0, floor = 0');
 }
 
 async function administer(statement: string): Promise<void> {

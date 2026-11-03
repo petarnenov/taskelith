@@ -175,6 +175,7 @@ function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): 
     audit: tx.audit,
     scopes: tx.scopes,
     tails: tx.tails,
+    events: tx.events,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);

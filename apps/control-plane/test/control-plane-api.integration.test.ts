@@ -353,6 +353,33 @@ describe('agent sessions', () => {
   });
 });
 
+describe('event streams', () => {
+  // A wide bound: the loaded iMac is slow, and a missed wake-up waits for
+  // the assigner's poll.
+  const STREAM_BOUND_MILLISECONDS = 60_000;
+  const DEFAULTS = {
+    framework: { pluginId: 'sdlc-openspec' }, implementers: ['agent-primary'], reviewer: 'agent-secondary',
+    specApprover: 'project-maintainer', noEligibleSlot: 'wait',
+  };
+
+  test('a project stream ends with stream-ended once a change of its reader\'s role commits, through the assigner', async () => {
+    const created = await call('POST', '/projects', { bearer: operator, body: { name: 'Streamed project', defaults: DEFAULTS } });
+    assert.equal(created.status, 201);
+    const projectId = String(created.body.projectId);
+    const [owner] = await sql<{ principal_id: string }>(database, 'SELECT principal_id FROM installation_roles');
+    const stream = await fetch(`https://127.0.0.1:${running.api.port}/projects/${projectId}/events`, {
+      headers: { authorization: `Bearer ${operator}` }, signal: AbortSignal.timeout(STREAM_BOUND_MILLISECONDS),
+    });
+    assert.deepEqual([stream.status, stream.headers.get('content-type'), stream.headers.get('cache-control')], [200, 'text/event-stream', 'no-store']);
+    const assigned = await call('PUT', `/projects/${projectId}/members/${owner!.principal_id}`, { bearer: operator, body: { role: 'project-viewer' } });
+    assert.equal(assigned.status, 200);
+    const frames = (await stream.text()).split('\n\n').filter((frame) => frame !== '' && !frame.startsWith(':'));
+    assert.deepEqual(frames, ['event: stream-ended\ndata: {"type":"stream-ended","reason":"role-changed"}']);
+    const [numbered] = await sql<{ unnumbered: number }>(database, 'SELECT count(*)::int AS unnumbered FROM ui_events WHERE position IS NULL');
+    assert.equal(numbered!.unnumbered, 0);
+  });
+});
+
 describe('runs and tasks', () => {
   test('a run is created once; a retry returns it, and another binding is 409', async () => {
     const unknown = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-0', projectId: 'project-1', binding: { ...BINDING, workflowDigest: `sha256:${'cd'.repeat(32)}` } } });
