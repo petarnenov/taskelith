@@ -16,4 +16,4 @@
 ## 4. Review and archive
 
 - [x] 4.1 Review passes in order until one reports only Low findings or none, at most three, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
-- [ ] 4.2 Merge `origin/dev` right before the archive, and archive the change in the last commit of the branch
+- [x] 4.2 Merge `origin/dev` right before the archive, and archive the change in the last commit of the branch

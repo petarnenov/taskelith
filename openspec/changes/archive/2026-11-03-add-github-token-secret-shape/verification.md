@@ -143,6 +143,17 @@ Every pass runs at effort medium per owner decision.
 - Pass 3 is the last pass, so these three fixes are unreviewed (outcome `fixed-unreviewed`); the coordinator checks them as solution architect (governance "Architect check of unreviewed fixes").
 - Architect check of the pass 3 fixes: the coordinator records it in the pull request body, since the branch is archived.
 
+## Archive
+
+Checked on the working tree of the archive commit, `docs: archive the add github token secret shape change`, which is the tree these checks ran on; `origin/dev` was still the merge base `c355525b`, so no merge preceded the archive.
+
+- `npm run openspec -- archive add-github-token-secret-shape --yes`: archived as `2026-11-03-add-github-token-secret-shape`; `execution-observability`, `installation-enrollment`, and `scm-port` each with one modified requirement.
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-03-add-github-token-secret-shape`.
+- `git diff c355525b -- openspec/specs`: only this change's edits, the three requirement texts and the scenarios of the deltas (3 files, 14 insertions, 5 deletions).
+- The moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"`, run by `make verify`: `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).`
+- `env -u NODE_ENV make verify`, three runs on the same working tree at host load average 6 to 9 on 8 cores. The first failed one Docker scenario, `test/g2-cancellation-races.test.ts` "h. an unauthorized start cancels only that execution" (`the authorized start not met within 20000 ms`); the second failed another, `test/g2-partition.test.ts` "a partition while the process runs delays its observations, applied once after the heal" (`the start is journaled not met within 20000 ms`). Neither is a known flake, and neither touches this change, whose archive only moves records and applies the deltas. The third passed, profile full, no stamp (uncommitted tree): tests 4159, suites 49, pass 4112, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.69 % branches, 98.84 % functions; `redaction-rules.js` and `scrub.js` 100 % each.
+
 ## Limitations
 
 - An identifier that holds `ghs_` and 36 more token characters is redacted even inside a longer word, although it may be no token (design, "Risks").
@@ -153,5 +164,4 @@ Every pass runs at effort medium per owner decision.
 ## Remaining gates
 
 - The coordinator's architect check of the unreviewed pass 3 fixes.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
