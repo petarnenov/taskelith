@@ -20,6 +20,11 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), third change of its split, develope
 - `ec971227` `chore: harden GitHub SCM plugin tokens, protection, and logging after review pass 1`: the fixes of the eight pass 1 findings and coordinator decision D2, with their tests and the emulator's new native means.
 - `76fde79b` `docs: specify the GitHub plugin's protection refusal, refresh expiry, and register status`: the `scm-port` delta, design, proposal, source control contract sections 2 and 4, and coordinator decision D1 in `docs/dependencies.md` and `docs/g3-dependencies.md` section 6.
 - `f1492055` `docs: resolve the review pass 1 findings of the implement github scm plugin core change`: the tree that the second `make verify` checked; the commit after it adds this record.
+- `60ecb640` `docs: record the pass 1 fix round of the implement github scm plugin core change`: the head that review pass 2 reviewed.
+- `b69a5777` `docs: record review pass 2 of the implement github scm plugin core change` (`passes.jsonl` and the nine findings, before any fix).
+- `88364f6d` `chore: fix the GitHub plugin refresh wait, expired versions, and token checks after review pass 2`: the source fixes of pass 2 findings 1 to 3, 5, 6, and 9 with their tests, the emulator's default clock step 0, its case-insensitive token request, and the fixture's emulated clock.
+- `fcca463e` `docs: specify the GitHub plugin's refresh wait, expired versions, and protection window`: the `scm-port` delta, design decisions 3 to 6, and source control contract section 2 rule 5, section 4, and section 7 (findings 4, 7, 8).
+- `f2602da3` `docs: resolve the review pass 2 findings of the implement github scm plugin core change`: the tree that the third `make verify` checked; the commit after it adds this record and is the head for review pass 3.
 
 ## Environment
 
@@ -27,7 +32,7 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 ## Author self-check
 
-- Scope: only the brief's nine points. `git diff 3341f8a8 --stat`, without `package-lock.json` and `docs/dependencies/`, lists 53 files, 2326 insertions and 22 deletions, under the size guard (60 files, 5000 lines); after the pass 1 fixes at `f1492055`, 56 files, 2966 insertions and 24 deletions. No OpenAPI, wire, migration, receiver, `make` target, or published-package source change.
+- Scope: only the brief's nine points. `git diff 3341f8a8 --stat`, without `package-lock.json` and `docs/dependencies/`, lists 53 files, 2326 insertions and 22 deletions, under the size guard (60 files, 5000 lines); after the pass 1 fixes at `f1492055`, 56 files, 2966 insertions and 24 deletions; after the pass 2 fixes at `f2602da3`, 56 files, 3211 insertions and 25 deletions. No OpenAPI, wire, migration, receiver, `make` target, or published-package source change.
 - Dependencies (checklist `docs`, `evidence-mismatch`): `npm ls` shows `@octokit/core@7.0.8` and `@octokit/auth-app@8.3.1` at the root and `@octokit/plugin-paginate-rest@16.0.0` under `packages/plugins/scm-github/node_modules`, because the release tooling keeps 15.0.0 at the root; the three are exact in the plugin's `package.json`. The register row quotes the lockfile integrity of each; osv.dev (`POST https://api.osv.dev/v1/query`) returned `{}` for the three and for the seven packages the install added to the lockfile; `npm audit --omit=dev` reports three moderate findings (`glob`, `minimatch`, `node-pg-migrate`), the same counts as on the base lockfile. `make dependency-inventory` reported "Generated 927 package paths; 70 with license coverage gaps (all reviewed; 4 declaration-only)". `@octokit/webhooks-methods` is not installed; the deviation and its reason are in `docs/dependencies.md` and `docs/g3-dependencies.md` section 6.
 - Register status: the brief asked to move the Octokit rows to the register's accepted state. The rows stay `candidate`, because the `dependency-register` requirement "Version-specific decisions" marks an installed tool without adoption, operational, upgrade, and recovery evidence as a candidate. The coordinator decided (D1, 2026-11-03) that the register rules win over the brief: the rows stay `candidate`, marked as installed by `implement-github-scm-plugin-core`, and are promoted after 20d's live conformance; `docs/dependencies.md` and `docs/g3-dependencies.md` section 6 say so.
 - Plugin boundary (checklist `contract-drift`): `src/` imports only `@taskelith/kernel`, `@taskelith/plugin-sdk`, Octokit, and Node built-ins (`npm run check:boundaries` passes); no kernel or module code names GitHub. Failures carry only GitHub's status, never its message (`github-data.ts`).
@@ -79,6 +84,21 @@ The new tests (the emulator's new native means first, in `test/github-emulator.t
 
 D2's other two cases, "a branch without protection gets the required contexts" and "a branch with only this protection is protected again", passed before and after, as they should. The existing test "protection requires the contexts and binds administrators" now asks for both contexts in its second call, because a context that is not requested is refused (D2). After the fixes (`ec971227`): `tests 57`, `pass 57`. The overtaken refresh test holds the token request with a barrier (`holdNext`), and the same-second tests stop the emulator's clock (`mintClockStepMs: 0`), so no test depends on timing.
 
+### Fail-before of the pass 2 fixes
+
+The new and changed tests, with the emulator's default clock step 0, the fixture's emulated clock, and the emulator's case-insensitive token request, ran against the source of `60ecb640` (`git stash push -- packages/plugins/scm-github/src`, `npm run build`): `node --experimental-strip-types --test packages/plugins/scm-github/test/*.test.ts` gave `tests 66`, `pass 48`, `fail 18`. The failing tests, by finding:
+
+| Finding | Failing before the fix |
+| --- | --- |
+| 1 same-second refresh | "a refresh in the same second as its version waits for a later expiry", "a refresh that waiting does not make later fails and leaves no token" (two token requests, not three), "two concurrent refreshes in one second both get later versions", and "the plugin passes the SCM conformance suite against the emulated GitHub", which issues and refreshes in one emulated second, as the reviewer predicted for GitHub.com; with that clock every test that refreshes right after an issue failed too: "an adoption revokes the earlier tokens at GitHub", "a revocation revokes every live token at GitHub and forgets the credential", "a failed revocation during an adoption is reported and retried", and "an unconfirmed revocation with status 403 / 404 / 422 / 500 is unavailable and kept" |
+| 2 installation listing | "a mint lists no installation repositories", "a repository named in another case is granted under its requested name" |
+| 3 expired credentials | "a credential whose versions all expired is forgotten without GitHub", "an expired earlier version ends without a revocation request" |
+| 5 empty App settings | "empty App settings are invalid, not thrown" |
+| 6 local failure | "a request that fails before reaching GitHub is internal, not unavailable" |
+| 9 idempotent protection | "an ensured protection is not written again" |
+
+"another owner's repository is not found and leaves no token" and "a refused token request reads the installation across pages" passed before and after: they guard the behaviour that the removed pre-mint listing gave. "every request names API version 2022-11-28" now also makes a refused request, so that the listing route is among the checked requests. Findings 4, 7, and 8 are documentation. After the fixes (`88364f6d`): `tests 66`, `pass 66`. The refresh wait goes through the injected clock, which the fixture maps to the emulator's `advance`, so no test sleeps or depends on timing.
+
 ## Checks
 
 | Check | Revision | Result |
@@ -86,6 +106,7 @@ D2's other two cases, "a branch without protection gets the required contexts" a
 | `env -u NODE_ENV make verify` | `e9a7e2a7` | Failed in `npm run verify:comments`: `installation-tokens.ts:29: comment spans 3 lines (max 2)` and `github-emulator.ts:3: comment spans 4 lines (max 2)`; fixed in `646c1063` |
 | `env -u NODE_ENV make verify` | `e85955e2`, tree `bcaa51c9` | Passed on the first run, profile full, stamp written: tests 4222, suites 49, pass 4175, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.62 % branches, 98.86 % functions; `scm-github` modules 90.32 to 100 % lines, 76.81 to 100 % branches, 85.71 to 100 % functions; `redaction-rules.js` and `credential-cases.js` 100 % each |
 | `env -u NODE_ENV make verify` | `f1492055`, tree `8b8382bc` | Passed on the first run, profile full, stamp written: tests 4243, suites 49, pass 4196, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.65 % branches, 98.88 % functions; `scm-github` modules 96.77 to 100 % lines, 80.95 to 100 % branches, 100 % functions; no known flake recurred |
+| `env -u NODE_ENV make verify` | `f2602da3`, tree `e5d3f64a` | First run failed only the known flake "a partition while the process runs keeps its observations, published once after the heal" (`test/g2-partition.test.ts`): tests 4252, pass 4204, fail 1, skipped 47. The rerun passed, profile full, stamp written: tests 4252, suites 49, pass 4205, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `scm-github` modules 96.97 to 100 % lines, 83.72 to 100 % branches, 88.89 to 100 % functions (`run-credentials.js` 88.89 %: the system clock is replaced in tests) |
 | `npm run openspec -- validate implement-github-scm-plugin-core --strict` | `c31be6f6` | `Change 'implement-github-scm-plugin-core' is valid` |
 | Focused runs | `c31be6f6` | `packages/plugins/scm-github/test/*.test.ts`: 36 of 36; integrations tests and the plugin tests together: 110 of 110 |
 
@@ -98,7 +119,7 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, secu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8b8382bcefc3faa47afa807e01b7b36ecde27d06`; tests 4243, pass 4196, fail 0, skipped 47; all files 99.36% lines, 92.65% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `e5d3f64a4059e316dc7ba0310ec5e1ad17efebc5`; tests 4252, pass 4205, fail 0, skipped 47; all files 99.36% lines, 92.66% branches, 98.84% functions.
 - `npm run openspec -- validate implement-github-scm-plugin-core --strict`: passed, `Change 'implement-github-scm-plugin-core' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 101 file(s); every pass summary file is valid: 81 file(s); every route file is valid: 34 file(s).`.
 - Spec diff against the merge base `3341f8a82c2d` with `origin/dev`: no change under `openspec/specs`.
@@ -107,6 +128,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19f35-9548-7090-b974-933d2f545f61` | 0 | 4 | 4 | 0 |
+| 2 | B | `claude claude-fable-5-1#medium` | `6dc40131-2ee6-470d-8844-945f21022a01` | 0 | 0 | 3 | 6 |
 <!-- make record: end -->
 
 ## Independent review
@@ -125,19 +147,36 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   7. Medium, unconfirmed revocations map to other codes (`installation-tokens.ts`): every answer but success or 401 is `unavailable` and keeps the token.
   8. Medium, remote URL checks miss the length, IPv6, and port rules (`change-requests.ts`): the execution wire `RemoteUrl` pattern and its 2048 character bound (decision 4).
 - Coordinator decisions applied in this round (Niki, 2026-11-03): D1 above (register status); D2 (finding 4); D3, `docs/qualification/github.md` untouched; D4, design decision 3 records why run tokens are requested directly with `POST /app/installations/{installation_id}/access_tokens` and not through `auth-app`.
-- The fixes are not yet reviewed: pass 2 (role B) reviews them.
+- Pass 2 confirmed all eight fixes; their outcome stays `fixed`.
+
+### Pass 2, role B
+
+- Reviewer: Claude Code, model `claude-fable-5-1`, effort `medium` (owner decision 2026-11-02; `route.json` recommends high), plan mode, run by Zaki with `make review` on head `60ecb640` against the merge base `3341f8a8`. Session `6dc40131-2ee6-470d-8844-945f21022a01`. The reviewer reported that it changed no file.
+- Findings: Critical 0, High 0, Medium 3, Low 6. Resolutions, in `88364f6d` and `fcca463e`, all `fixed-unreviewed` until pass 3:
+  1. Medium, a refresh in the same second as its version fails `unavailable`, which GitHub.com makes the common case and the emulator's one-second step hid (`run-credentials.ts`): a token no later is revoked, the plugin waits the shortfall plus one second through the injected clock and mints once more, failing `unavailable` only when that one is no later either; the emulator's step defaults to 0 (decision 3, "GitHub refresh expiry").
+  2. Medium, every mint lists all installation repositories and compares names by case (`installation-tokens.ts`): no listing before a mint; only a 422 refusal lists the installation to tell `not-found` from `invalid`; names match regardless of case, and a grant for another owner's repository is revoked with `not-found` (decision 3). `plugin-paginate-rest` stays in use on that path, so the Octokit set is unchanged.
+  3. Medium, credentials never revoked keep their tokens and entries for the process lifetime (`run-credentials.ts`): each operation ends versions a minute past GitHub's expiry without a request and forgets credentials whose versions all ended (decision 3, "GitHub expired credential versions").
+  4. Low, an operator change between the protection read and write is overwritten (`change-requests.ts`): recorded in decision 4 and contract section 4; GitHub has no conditional write.
+  5. Low, the factory throws for an empty App ID or key (`github-source-control.ts`): empty App ID, installation ID, or private key fail with `invalid` (decision 6).
+  6. Low, a local signing failure reads as GitHub unavailable (`github-api.ts`, `github-data.ts`): status 0 now means a local failure and maps to `internal` with a message that names it (decision 6).
+  7. Low, the refresh's `unavailable` cause is outside the contract (`docs/contracts/source-control.md`): rule 5 and the GitHub refresh row of section 7 name it.
+  8. Low, verified deliveries without a `repository`, such as `ping`, fail `invalid` (`webhook-verifier.ts`): a port limit, recorded in decision 5 with the note that the 20e receiver must answer `ping` without the port.
+  9. Low, ensuring an already ensured protection still writes (`change-requests.ts`): a protection that already requires exactly the contexts with `enforce_admins` is returned without a write.
+- The pass 2 fixes are not yet reviewed: pass 3 (role A) reviews them.
 
 ## Limitations
 
 - Credential versions live in the plugin's memory: a restart forgets every credential, whose tokens then end at GitHub's own expiry, at most an hour later (design decision 3). Durable state waits for item 21.
 - The tests run against an emulated GitHub API that encodes this change's reading of GitHub; no live GitHub call was made. 20d's live conformance checks it, including narrowing a token to one of several installed repositories, which the qualification did not test.
 - `ensureMergeProtection` refuses a branch whose protection it would weaken, such as one with required reviews, instead of merging those settings, a recorded follow-up (design decision 4).
-- A second refresh within one second of the newest version fails with `unavailable`, because GitHub's expiry has second precision (design decision 3).
+- A refresh in the newest version's second waits about a second for a later expiry and mints once more; a refresh whose second token is still no later, such as the loser of more than two concurrent refreshes, fails with `unavailable` (design decision 3).
+- Expired versions are swept on the plugin's next operation, not on a timer, so an idle process keeps them until then (design decision 3).
+- A webhook delivery without a `repository`, such as `ping`, fails with `invalid` (design decision 5).
 - A token the plugin refused and could not revoke stays live until a later token request or revocation of the same plugin instance revokes it, or until its own expiry.
 - No composition root registers the plugin yet.
 
 ## Remaining gates
 
-- Independent review pass 2 (role B) of the pass 1 fixes, pass 3 if pass 2 reports a Medium or worse finding, and the coordinator's architect check of any unreviewed fixes.
+- Independent review pass 3 (role A) of the pass 2 fixes, and the coordinator's architect check of any fix that no later pass reviews.
 - Promotion of the Octokit register rows after 20d's live conformance (D1).
 - Integration into dev by the coordinator (single pull request)
