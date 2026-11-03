@@ -8,5 +8,5 @@ A run credential's secret SHALL be delivered only to its run and SHALL NOT be lo
 - **THEN** the secret is redacted or scrubbed there and reaches only its run
 
 #### Scenario: GitHub installation token in text
-- **WHEN** a log line or an error payload holds a GitHub App installation token, stateful or stateless, even glued to other text
+- **WHEN** a log line or an error payload holds a GitHub App installation token, stateful or stateless, after a space or punctuation
 - **THEN** it holds `[redacted]` in the token's place

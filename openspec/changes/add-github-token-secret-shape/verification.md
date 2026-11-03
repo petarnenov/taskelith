@@ -11,6 +11,9 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), second change of its split, develop
 - `3b84d6a1` `chore: redact GitHub installation tokens in logs and secrets` (the rule, the contract, and the change's proposal, design, deltas, tasks, `checklist.json`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `d290fb27` `docs: record the review route of the add github token secret shape change` (`route.json` unedited).
 - `bd692f5b` `docs: record the verification of the add github token secret shape change`, the tree that `make verify` checked; the commit after it adds the `make record` output and is the head for review pass 1.
+- `05e1cc03` `docs: record review pass 1 of the add github token secret shape change`.
+- `d5f35cfc` `test: split the GitHub installation token tests and expect a token shape inside a word to stay` (the tests alone, for the fail-before runs of the pass 1 fixes).
+- The commit after it, `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, holds the rule and record fixes.
 
 ## Environment
 
@@ -20,13 +23,13 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 - Scope: only the brief's items. `git diff c355525b --stat` lists `docs/contracts/source-control.md`, `packages/modules/observability/src/domain/redaction-rules.ts`, `packages/modules/observability/test/logger.test.ts`, `packages/adapters/secrets/test/secrets.test.ts`, and this change. No plugin, Octokit, `PLUGIN_API_VERSION`, `scrubEnvironment` call site, wire, OpenAPI, or migration change.
 - Shape (checklist `redaction`): `ghs_[A-Za-z0-9._-]{36,}`, GitHub's recommended pattern for its stateful and stateless installation token formats, with the length and character set justified in design decision 1. Other GitHub token prefixes are not added, because no fetched source documents their length or character set (design decision 2). [GitHub qualification](/docs/qualification/github.md) records no token length (design decision 3).
-- Boundaries: as `redactIssuedSecrets` and `redactNkeySeeds`, no word boundary; text glued in front stays and the token is replaced, tested in both users.
+- Boundaries: a word boundary before `ghs_` since the fix of pass 1 finding 1 (design decision 1): a token after a space or punctuation is replaced, and a token shape inside a longer word, after a letter, digit, or `_`, stays, tested in both users.
 - Order: the rule precedes `redactJwts` in `TOKEN_SHAPE_RULES`, so a stateless token is replaced whole; before the rule the JWT rule alone left `ghs_12345_[redacted]` (fail-before below).
 - Contract (checklist `contract-drift`): source control contract section 3 now states the shape rule as in place and keeps item 21's `scrubEnvironment` obligation open; the `scm-port` requirement "Run credential secret" says the same. No other document names the item 20 shape obligation as open; `docs/g3-plan.md` row 20 describes the item's scope and stays.
 - Secrets in tests: the tokens are built at run time (`` `ghs_${'A1b2'.repeat(9)}` `` and `` `ghs_12345_${JWT}` `` with the tests' existing synthetic JWT), as `test/review-findings.test.ts` builds its `ghp_` value; no real token was printed or committed.
 - Requirement texts: `execution-observability` "Logs without secrets" 441 characters, `scm-port` "Run credential secret" 374; each MODIFIED delta copies the living requirement with all its scenarios and adds one.
 - Commit types: the published `taskelith` package compiles only `src/` (`tsconfig.json` `rootDir` `src`, `files` `dist/`), and `src/cli.ts` imports no workspace package, so neither private package ships in it; the commits use `test`, `chore`, and `docs`.
-- Comments: two new comments of two lines each, under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
+- Comments: three new comments of two lines each, under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
 
 ## Fail-before
 
@@ -36,6 +39,24 @@ The tests were committed alone in `ff5af31a`, before the rule. On that commit, a
 - The stateless assertions come after the failing first assertion of each test, so they were checked on the same build with a one-off script calling `redactSecrets` and `redactText` on `` `token ghs_12345_${JWT} failed` ``: both returned `token ghs_12345_[redacted] failed`, not the expected `token [redacted] failed`.
 
 On `3b84d6a1`, the same command after the same build: `tests 36`, `pass 36`, `fail 0`.
+
+### Fail-before of the pass 1 fixes
+
+Pass 1 finding 2 found that each positive test stopped at its first failing assertion, so the run above never showed the glued, log field, `redactFailure`, and `scrubEnvironment` behaviors failing. `d5f35cfc` splits the tests into one test per behavior and adds the negative of finding 1, a token shape inside a longer word, in both users. Each run below is `node --experimental-strip-types --test packages/modules/observability/test/logger.test.ts packages/adapters/secrets/test/secrets.test.ts` after `node --experimental-strip-types scripts/build-workspaces.ts`.
+
+- Tests of `d5f35cfc` with the rule file of the base `c355525b` (`git show c355525b:packages/modules/observability/src/domain/redaction-rules.ts` over the file, restored afterwards): `tests 44`, `pass 36`, `fail 8`, each positive test failing on its own:
+  - "text loses a stateful GitHub installation token": actual `'token ghs_A1b2…A1b2 failed'`, expected `'token [redacted] failed'`.
+  - "text loses a GitHub installation token glued after punctuation": actual `'r-ghs_A1b2…A1b2'`, expected `'r-[redacted]'`.
+  - "text loses a stateless GitHub installation token whole": actual `'token ghs_12345_[redacted] failed'`, expected `'token [redacted] failed'`.
+  - "a failure loses GitHub installation tokens in its message and details": actual `[ 'bad ghs_12345_[redacted]', { presented: 'ghs_A1b2…A1b2' } ]`, expected `[ 'bad [redacted]', { presented: '[redacted]' } ]`.
+  - "an environment loses a variable that holds a GitHub installation token": actual `{ GIT_HINT: 'use ghs_A1b2…A1b2', KEEP: 'k' }`, expected `{ KEEP: 'k' }`.
+  - "a GitHub installation token glued after punctuation is redacted in correlation": actual `'r-ghs_A1b2…A1b2'`, expected `'r-[redacted]'`.
+  - "a stateful GitHub installation token is redacted in a field": actual `'push (ghs_A1b2…A1b2) failed'`, expected `'push ([redacted]) failed'`.
+  - "a stateless GitHub installation token is redacted whole in a field": actual `'push ghs_12345_[redacted] failed'`, expected `'push [redacted] failed'`.
+- Tests of `d5f35cfc` with the rule of pass 1's head `b7935aeb`, no boundary: `tests 44`, `pass 42`, `fail 2`, both "a GitHub installation token shape inside a longer word stays" (actual `'keep prefix[redacted] here'`, expected `'keep prefixghs_A1b2…A1b2suffix here'`).
+- Tests of `d5f35cfc` with the fixed rule: `tests 44`, `pass 44`, `fail 0`.
+
+The synthetic token `ghs_` and nine times `A1b2` is shortened to `ghs_A1b2…A1b2` above.
 
 ## Checks
 
@@ -47,7 +68,7 @@ On `3b84d6a1`, the same command after the same build: `tests 36`, `pass 36`, `fa
 
 ### Route
 
-Route (`route.json`, rule version 5): elevated (security, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees. Reviews run at effort medium per owner decision, although `route.json` recommends high for passes 1 and 2. Pass 3's recommended reviewer differs from the brief's governance sequence (Codex CLI `gpt-6.1-sol`); the coordinator assigns the reviewers.
+Route (`route.json`, rule version 5): elevated (security, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees. Reviews run at effort medium per owner decision, although `route.json` recommends high for passes 1 and 2. Pass 3's recommended reviewer is the one governance "Reviewer assignment" names for pass 3, Antigravity CLI `gemini-4-argon-medium`; the coordinator assigns the reviewers.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -63,10 +84,20 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run; the coordinator runs the passes. Every pass runs at effort medium per owner decision.
+Every pass runs at effort medium per owner decision.
+
+### Pass 1
+
+- Reviewer: Codex CLI `gpt-6-astra`, role A, through `make review`, at head `b7935aeb` against `c355525b`; session `01a19eb6-b681-7e70-998b-c4458edb89e9`; model `gpt-6-astra`, effort `medium`, and sandbox `read-only`, each reported in the header.
+- Result: Critical 0, High 0, Medium 2, Low 2, recorded in `passes.jsonl` and `findings.jsonl`.
+- Finding 1 (Medium, `redaction`): the brief's near-miss negative for a token shape embedded in a longer word was a match. Fixed: the rule takes a word boundary before `ghs_`; design decision 1 and its risks, both deltas, the proposal, and contract section 3 say so; a negative test in both users.
+- Finding 2 (Medium, `missing-fail-before-test`): the fail-before run did not show every positive behavior failing. Fixed: one test per behavior and the fail-before runs above.
+- Finding 3 (Low, `stale-citation`): the route section called the pass 3 reviewer of `route.json` a departure from governance. Fixed in the route section.
+- Finding 4 (Low, `evidence-mismatch`): E1 and E4 linked raw `main` and the other pages had no unversioned label. Fixed: E1 and E4 link their pinned commit, checked to serve both files (HTTP 200), and E1's rendered page, E2, E3, and E5 are labelled unversioned.
 
 ## Limitations
 
+- A token glued after a letter, digit, or `_`, for example after a literal `\n` escape in serialized text, stays unless a marked-position rule covers it (design decision 1, "Risks").
 - No live GitHub token was redacted: the tests use synthetic tokens in the documented formats. Both formats come from GitHub's documentation and changelog, not from an observed token.
 - The rule replaces a trailing `.`, `-`, or `_` glued to a token with it, such as a sentence's final period (design decision 1).
 - Tokens of other SCM services, and GitHub's `ghp_`, `gho_`, `ghu_`, `ghr_`, and `github_pat_` tokens, have no shape rule.

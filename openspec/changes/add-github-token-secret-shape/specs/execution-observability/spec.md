@@ -16,12 +16,12 @@ The logger SHALL replace the value of every field whose name may hold a secret w
 
 #### Scenario: A secret of a known shape in text
 
-- **WHEN** a field or correlation value holds an issued Taskelith secret, a GitHub App installation token in its stateful or stateless format, an NKey seed, a NATS JWT, a `.creds` block, or a PEM private key, even glued to other text
+- **WHEN** a field or correlation value holds an issued Taskelith secret, a GitHub App installation token in its stateful or stateless format that no letter, digit, or `_` precedes, an NKey seed, a NATS JWT, a `.creds` block, or a PEM private key, even glued to other text
 - **THEN** the record holds `[redacted]` in its place
 
 #### Scenario: Near miss of a GitHub installation token
 
-- **WHEN** a field or correlation value holds `ghs_` followed by fewer than 36 token characters, or 36 such characters after another prefix such as `ghx_`, `GHS_`, or `ghs-`
+- **WHEN** a field or correlation value holds `ghs_` followed by fewer than 36 token characters, 36 such characters after another prefix such as `ghx_`, `GHS_`, or `ghs-`, or a token shape inside a longer word, after a letter, digit, or `_`
 - **THEN** the record holds that text unchanged
 
 #### Scenario: Pathological log text
