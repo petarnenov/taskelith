@@ -160,10 +160,10 @@ Reconciliation review: pending, by the reviewer of pass 1 (worker step 10 item 4
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a453fe62baade2a382e0733d257703490b683208`; tests 4393, pass 4384, fail 0, skipped 9; all files 99.39% lines, 92.67% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `df394999c87bb66857e7738c2aa682ab80195f06`; tests 4485, pass 4476, fail 0, skipped 9; all files 99.41% lines, 92.72% branches, 98.89% functions.
 - `npm run openspec -- validate implement-ui-event-stream --strict`: passed, `Change 'implement-ui-event-stream' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 104 file(s); every pass summary file is valid: 84 file(s); every route file is valid: 37 file(s).`.
-- Spec diff against the merge base `26bbb10fecea` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 106 file(s); every pass summary file is valid: 86 file(s); every route file is valid: 39 file(s).`.
+- Spec diff against the merge base `f0ed0139b0f6` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
