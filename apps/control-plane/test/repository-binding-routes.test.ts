@@ -119,8 +119,9 @@ async function fixture(t: TestContext) {
   value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
   const scm = new FakeScm();
   const bindings = new InMemoryRepositoryBindings(integrations);
-  const service = repositoryBindingService({ bindings, integrations, plugins: singlePlugin(scm.plugin()), projects: bindableProjects(setup) });
   const sink = new InMemoryLogSink();
+  const ports = { bindings, integrations, plugins: singlePlugin(scm.plugin()), projects: bindableProjects(setup) };
+  const service = repositoryBindingService(ports, new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), repositoryBindings: service,
@@ -293,6 +294,10 @@ test('a plugin envelope whose getter throws answers 500 and its message reaches 
   }
   assert.ok(sink.records.length > 0);
   assert.ok(!JSON.stringify(sink.records).includes(SECRET));
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), ['resolveRemoteUrl', 'createProvider'].map((operation) => [
+    'error', { integrationId: INTEGRATION_ID, pluginId: 'scm-fake', operation, kind: 'threw' },
+  ]));
   assert.equal(await stored(), undefined);
 });
 

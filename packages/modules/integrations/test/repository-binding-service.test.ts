@@ -9,6 +9,7 @@ import {
   type RepositoryBindingUpdate,
   type ScmIntegration,
   type ScmIntegrationId,
+  type ScmPluginDefect,
   type SourceControlPlugin,
   type SourceControlProvider,
 } from '@taskelith/integrations';
@@ -57,8 +58,9 @@ async function fixture(options: FixtureOptions = {}) {
   const plugin = pluginOf(options.createProvider ?? (() => ok(provider)));
   const plugins = { pluginOf: (pluginId: string) => (options.registered !== false && pluginId === plugin.id ? plugin : undefined) };
   const projects = { exists: async (projectId: string) => ok(projectId === PROJECT_ID) };
-  const service = new RepositoryBindingService({ bindings, integrations, plugins, projects });
-  return { integrations, bindings, service };
+  const defects: ScmPluginDefect[] = [];
+  const service = new RepositoryBindingService({ bindings, integrations, plugins, projects, defects: { defect: (defect) => defects.push(defect) } });
+  return { integrations, bindings, service, defects };
 }
 
 const first = (binding: Partial<RepositoryBindingUpdate['binding']> = {}): RepositoryBindingUpdate => ({ binding: { ...REQUEST, ...binding } });
@@ -249,6 +251,7 @@ test('a store failure is passed on', async () => {
     integrations: { configurationOf: async () => err(failure('internal', 'sealed')) },
     plugins: { pluginOf: () => undefined },
     projects: { exists: async () => err(failure('unavailable', 'down')) },
+    defects: { defect: () => undefined },
   });
   assert.equal(failed(await broken.read(PROJECT_ID)).code, 'unavailable');
   assert.equal(failed(await broken.bind(PROJECT_ID, first())).code, 'unavailable');
@@ -257,7 +260,54 @@ test('a store failure is passed on', async () => {
     integrations: { configurationOf: async () => err(failure('internal', 'sealed')) },
     plugins: { pluginOf: () => undefined },
     projects: { exists: async () => ok(true) },
+    defects: { defect: () => undefined },
   });
   assert.equal(failed(await sealed.read(PROJECT_ID)).code, 'unavailable');
   assert.equal(failed(await sealed.bind(PROJECT_ID, first())).code, 'internal');
+});
+
+const defectOf = (operation: ScmPluginDefect['operation'], kind: ScmPluginDefect['kind']): ScmPluginDefect => ({
+  integrationId: INTEGRATION_ID, pluginId: 'scm-example', operation, kind,
+});
+
+const leaking = () => {
+  throw new Error(`the plugin leaked ${SECRET}`);
+};
+
+test('each plugin defect is reported once by its operation and kind, never with a plugin message or value', async () => {
+  const host = Array.from({ length: 5 }, () => 'a'.repeat(63)).join('.');
+  const resolving = (resolveRemoteUrl: Provider['resolveRemoteUrl']) => ({ provider: (scm: Provider) => ({ ...scm, resolveRemoteUrl }) });
+  const capabilities = Object.defineProperty({}, 'mergeMethods', { enumerable: true, get: leaking });
+  const cases: ReadonlyArray<readonly [FixtureOptions, ScmPluginDefect]> = [
+    [{ createProvider: leaking }, defectOf('createProvider', 'threw')],
+    [{ createProvider: () => ({ ok: 'yes', value: SECRET }) as never }, defectOf('createProvider', 'malformed-envelope')],
+    [{ createProvider: () => ok(SECRET as never) }, defectOf('createProvider', 'malformed-value')],
+    [resolving(async () => leaking()), defectOf('resolveRemoteUrl', 'threw')],
+    [resolving(async () => ({ ok: 'yes', value: SECRET }) as never), defectOf('resolveRemoteUrl', 'malformed-envelope')],
+    [resolving(async () => ok({ repository: PROJECT, remoteUrl: `https://a:${SECRET}@scm.example/x.git` })), defectOf('resolveRemoteUrl', 'malformed-value')],
+    [resolving(async () => ok({ repository: 'acme/other', remoteUrl: 'https://scm.example/acme/other.git' })), defectOf('resolveRemoteUrl', 'foreign-repository')],
+    [resolving(async () => err(failure('conflict', SECRET))), defectOf('resolveRemoteUrl', 'unexpected-failure-code')],
+    [{ provider: resolvingUnder(`https://${host}`) }, defectOf('resolveRemoteUrl', 'unnormalizable-origin')],
+    [{ provider: (scm) => ({ ...scm, capabilities: capabilities as never }) }, defectOf('capabilities', 'threw')],
+    [{ provider: (scm) => ({ ...scm, capabilities: { mergeMethods: SECRET } as never }) }, defectOf('capabilities', 'malformed-value')],
+  ];
+  for (const [options, expected] of cases) {
+    const { service, defects } = await fixture(options);
+    assert.equal(failed(await service.bind(PROJECT_ID, first())).code, 'internal', expected.kind);
+    assert.deepEqual(defects, [expected], `${expected.operation} ${expected.kind}`);
+    assert.ok(!JSON.stringify(defects).includes(SECRET) && !JSON.stringify(defects).includes(host));
+  }
+});
+
+test('a typed refusal, an unusable configuration, and a bind report no plugin defect', async () => {
+  const notFound = async () => err(failure('not-found', SECRET));
+  const cases: readonly FixtureOptions[] = [
+    {}, { provider: (scm) => ({ ...scm, resolveRemoteUrl: notFound }) },
+    { createProvider: () => err(failure('invalid', SECRET)) }, { registered: false },
+  ];
+  for (const options of cases) {
+    const { service, defects } = await fixture(options);
+    await service.bind(PROJECT_ID, first());
+    assert.deepEqual(defects, []);
+  }
 });
