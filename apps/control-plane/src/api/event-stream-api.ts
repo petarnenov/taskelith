@@ -39,21 +39,29 @@ export class EventStreamApi {
     const cursor = streamCursor(request);
     if (!cursor.ok) return cursor;
     const [projectId = ''] = request.parameters;
-    const project = await this.#operations.projects.readProject(projectId);
-    if (!project.ok) return project;
-    return this.#open(request, projectScope(projectId as ProjectId), projectRead(projectId), 'ProjectEvent', cursor.value);
+    const reauthorize = (principalId: PrincipalId) => this.#readableProject(principalId, projectId);
+    return this.#open(request, projectScope(projectId as ProjectId), reauthorize, 'ProjectEvent', cursor.value);
   }
 
   async streamInstallationEvents(request: ApiRequest): Promise<Result<StreamAnswer>> {
     const cursor = streamCursor(request);
     if (!cursor.ok) return cursor;
-    return this.#open(request, INSTALLATION_SCOPE, OWNER_ONLY, 'InstallationEvent', cursor.value);
+    const reauthorize = (principalId: PrincipalId) => this.#operations.authorization.authorize(principalId, OWNER_ONLY);
+    return this.#open(request, INSTALLATION_SCOPE, reauthorize, 'InstallationEvent', cursor.value);
+  }
+
+  // The role before the project, so that a denial is 403 and never 404.
+  async #readableProject(principalId: PrincipalId, projectId: string): Promise<Result<void>> {
+    const authorized = await this.#operations.authorization.authorize(principalId, projectRead(projectId));
+    if (!authorized.ok) return authorized;
+    const project = await this.#operations.projects.readProject(projectId);
+    return project.ok ? ok(undefined) : project;
   }
 
   async #open(
     request: ApiRequest,
     scope: UiEventScope,
-    requirement: AccessRequirement,
+    reauthorize: (principalId: PrincipalId) => Promise<Result<void>>,
     schema: EventSchema,
     cursor: number | undefined,
   ): Promise<Result<StreamAnswer>> {
@@ -61,9 +69,9 @@ export class EventStreamApi {
     if (principalId === undefined) return err(unauthenticated());
     const reader = parseIdentifier('PrincipalId', principalId);
     if (!reader.ok) return reader;
-    const { authorization, sessions, logger } = this.#operations;
+    const { sessions, logger } = this.#operations;
     const subject: StreamSubject = {
-      scope, principalId: reader.value, reauthorize: () => authorization.authorize(principalId, requirement),
+      scope, principalId: reader.value, reauthorize: () => reauthorize(principalId),
       ...(session === undefined ? {} : { login: { liveUntil: () => sessions.liveUntil(session.session.idHash) } }),
     };
     const opened = await this.#operations.hub.open(subject, cursor);

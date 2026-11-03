@@ -154,11 +154,11 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   // Control-plane wire contracts section 10: the event streams.
   {
     operationId: 'streamProjectEvents', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/events$`), security: BROWSER_OR_OPERATOR,
-    query: ['after'], response: 'event-stream', success: 200, statuses: PROJECT_READ,
+    query: ['after'], response: 'event-stream', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
   },
   {
     operationId: 'streamInstallationEvents', method: 'GET', pattern: /^\/events$/, security: BROWSER_OR_OPERATOR,
-    query: ['after'], response: 'event-stream', success: 200, statuses: COMMON,
+    query: ['after'], response: 'event-stream', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {

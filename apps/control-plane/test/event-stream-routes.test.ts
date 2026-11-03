@@ -52,9 +52,11 @@ const INVOCATION = { actor: 'root@control-plane-1', reason: 'event stream route 
 
 const BEARER = { authorization: `Bearer ${OPERATOR}` };
 
+type Authorization = ApiServices['authorization'];
+
 // One test's stores, log, hub, and server, disposed after it, so that no
 // test sees another's events, streams, or log records.
-async function routeFixture(t: TestContext) {
+async function routeFixture(t: TestContext, serverAuthorization?: Authorization) {
   // Access records its principal changes into the same log as the timeline.
   const log = new InMemoryUiEventLog();
   const store = new InMemoryAccessStore({ committed: (changes) => log.commit(changes.map((change) => ({ kind: 'principal-change', change: change as never }))) });
@@ -85,7 +87,7 @@ async function routeFixture(t: TestContext) {
   const events = { hub, projects: projectSetup, authorization, sessions, logger };
   const api = new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
-    sessions, authorization, events, projects: { setup: projectSetup },
+    sessions, authorization: serverAuthorization ?? authorization, events, projects: { setup: projectSetup },
   } as unknown as ApiServices);
   const server = createApiServer(api);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -288,6 +290,18 @@ test('the streams need a credential, a role on the project or the owner\'s, and 
     ['/projects/gamma/events', BEARER, 404],
   ] as const) {
     assert.equal(await refusal(path, headers), status, `${path} ${status}`);
+  }
+});
+
+test('a denial by the stream\'s own role check, after the server passed the caller, answers 403 before 404', async (t) => {
+  // The server's check passes everyone, as if the role was removed after it.
+  const { browser, base } = await routeFixture(t, { authorize: async () => ok(undefined) });
+  const nora = await browser('nora');
+  const vera = await browser('vera');
+  for (const [path, headers] of [['/projects/alpha/events', nora], ['/projects/gamma/events', nora], ['/events', vera]] as const) {
+    const response = await fetch(`${base}${path}`, { headers });
+    const body = await response.json() as { details: { reason?: string } };
+    assert.deepEqual([response.status, body.details.reason], [403, 'role-required'], path);
   }
 });
 
