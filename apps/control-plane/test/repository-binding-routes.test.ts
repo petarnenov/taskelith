@@ -23,6 +23,7 @@ import {
   type SourceControlProvider,
 } from '@taskelith/integrations';
 import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 
@@ -60,11 +61,12 @@ function unsupported(): Promise<Result<never>> {
 // `merge-commit` and `squash` methods.
 class FakeScm {
   resolver: Resolver = async (repository) => ok({ repository, remoteUrl: `https://scm.example/${repository}.git` });
+  factory: (provider: SourceControlProvider) => Result<SourceControlProvider> = ok;
 
   plugin(): SourceControlPlugin {
     return {
       id: 'scm-fake', secretNames: ['webhook-secret'], checkSettings: () => ok(undefined), checkSecret: () => ok(undefined),
-      createProvider: () => ok(this.#provider()), createDecoy: () => ({ verifyWebhookDelivery: unsupported }), isEventless: () => false,
+      createProvider: () => this.factory(this.#provider()), createDecoy: () => ({ verifyWebhookDelivery: unsupported }), isEventless: () => false,
     };
   }
 
@@ -118,10 +120,11 @@ async function fixture(t: TestContext) {
   const scm = new FakeScm();
   const bindings = new InMemoryRepositoryBindings(integrations);
   const service = repositoryBindingService({ bindings, integrations, plugin: scm.plugin(), projects: bindableProjects(setup) });
+  const sink = new InMemoryLogSink();
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), repositoryBindings: service,
-  } as unknown as ApiServices));
+  } as unknown as ApiServices), { logger: new Logger(sink, clock) });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
   t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -136,7 +139,7 @@ async function fixture(t: TestContext) {
   const [OWNER, MARIA, OTTO, VERA, NORA] = await Promise.all(['owner', 'maria', 'otto', 'vera', 'nora'].map((name) => browser(base, name)));
   const path = `/projects/${ALPHA}/repository`;
   const stored = async () => value(await bindings.get(ALPHA));
-  return { call, scm, integrations, path, stored, ALPHA, OWNER: OWNER!, MARIA: MARIA!, OTTO: OTTO!, VERA: VERA!, NORA: NORA! };
+  return { call, scm, integrations, path, stored, sink, ALPHA, OWNER: OWNER!, MARIA: MARIA!, OTTO: OTTO!, VERA: VERA!, NORA: NORA! };
 }
 
 function projectDefaults() {
@@ -256,5 +259,26 @@ test('a bind whose integration changes while the plugin resolves answers 409 and
     return ok({ repository, remoteUrl: REMOTE_URL });
   };
   assert.equal((await call('PUT', path, MARIA, { binding: BINDING })).status, 409);
+  assert.equal(await stored(), undefined);
+});
+
+// A result envelope whose `ok` getter throws with a synthetic secret.
+function throwingEnvelope(): never {
+  return Object.defineProperty({}, 'ok', { enumerable: true, get: () => { throw new Error(`the getter leaked ${SECRET}`); } }) as never;
+}
+
+test('a plugin envelope whose getter throws answers 500 and its message reaches neither the answer nor the logs', async (t) => {
+  const { call, path, stored, scm, sink, MARIA } = await fixture(t);
+  scm.resolver = async () => throwingEnvelope();
+  const resolving = await call('PUT', path, MARIA, { binding: BINDING });
+  scm.resolver = async (repository) => ok({ repository, remoteUrl: `https://scm.example/${repository}.git` });
+  scm.factory = () => throwingEnvelope();
+  const building = await call('PUT', path, MARIA, { binding: BINDING });
+  for (const answer of [resolving, building]) {
+    assert.deepEqual([answer.status, answer.body.code], [500, 'internal']);
+    assert.ok(!answer.text.includes(SECRET));
+  }
+  assert.ok(sink.records.length > 0);
+  assert.ok(!JSON.stringify(sink.records).includes(SECRET));
   assert.equal(await stored(), undefined);
 });

@@ -144,6 +144,41 @@ test('a plugin that throws is internal, without its message', async () => {
   assert.equal(failed(await building.service.bind(PROJECT_ID, first())).code, 'internal');
 });
 
+// Result envelopes whose reading throws or breaks the kernel Result shape.
+function hostileEnvelopes(): readonly unknown[] {
+  const throwing = (fields: object, name: string) => Object.defineProperty({ ...fields }, name, {
+    enumerable: true, get: () => { throw new Error(`the getter leaked ${SECRET}`); },
+  });
+  return [
+    throwing({}, 'ok'),
+    throwing({ ok: true }, 'value'),
+    throwing({ ok: false }, 'error'),
+    { ok: false, error: throwing({ message: SECRET }, 'code') },
+    { ok: false, error: { code: 'not-a-kernel-code', message: SECRET } },
+    { ok: 'yes', value: SECRET },
+    undefined,
+  ];
+}
+
+test('a resolver envelope whose getter throws or that breaks its shape is internal and never quoted', async () => {
+  for (const [index, envelope] of hostileEnvelopes().entries()) {
+    const resolveRemoteUrl = async () => envelope as Result<never>;
+    const { service } = await fixture({ provider: (scm) => ({ ...scm, resolveRemoteUrl }) });
+    const refused = failed(await service.bind(PROJECT_ID, first()));
+    assert.equal(refused.code, 'internal', `envelope ${index}`);
+    assert.ok(!JSON.stringify(refused).includes(SECRET), `envelope ${index}`);
+  }
+});
+
+test('a provider factory envelope whose getter throws or that breaks its shape is internal and never quoted', async () => {
+  for (const [index, envelope] of hostileEnvelopes().entries()) {
+    const { service } = await fixture({ createProvider: () => envelope as Result<Provider> });
+    const refused = failed(await service.bind(PROJECT_ID, first()));
+    assert.equal(refused.code, 'internal', `envelope ${index}`);
+    assert.ok(!JSON.stringify(refused).includes(SECRET), `envelope ${index}`);
+  }
+});
+
 test('an integration without a registered plugin, or whose plugin cannot build it, is unavailable', async () => {
   const unregistered = await fixture({ registered: false });
   assert.equal(failed(await unregistered.service.bind(PROJECT_ID, first())).code, 'unavailable');
