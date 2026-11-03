@@ -10,6 +10,9 @@ export default defineConfig(({ command }) => {
   return {
     base: '/app/',
     envDir: false,
+    // The control plane's nonce placeholder, which every response of the
+    // page replaces with a fresh nonce; a root test checks the build.
+    html: { cspNonce: 'TASKELITH_CSP_NONCE' },
     plugins: [react()],
     build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
     server: command === 'serve' ? devServer(devServerFiles(process.env)) : undefined,

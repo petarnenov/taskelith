@@ -28,6 +28,7 @@ import { MINIMUM_TLS_VERSION, type ServerTls } from './server-tls.js';
 import { UploadSlots } from './upload-slots.js';
 import { ROUTES, type RouteDefinition } from './routes.js';
 import { sessionCookie } from './session-cookie.js';
+import { WEB_APP_OPERATION, webAppAnswer, writeWebAppFile, type WebAppAnswer, type WebAppFiles } from './web-app.js';
 
 // Who a request's credential authenticated: the worker of a worker bearer,
 // or the principal of the operator bearer or of an authenticated session.
@@ -77,6 +78,8 @@ export interface ApiServerOptions {
   readonly maxConcurrentUploads?: number;
   // Plain HTTP without it, which only unit tests of the handling use.
   readonly tls?: ServerTls;
+  // The built SPA, served under /app/ to requests that no route matches.
+  readonly webApp?: WebAppFiles;
 }
 
 export type ApiServer = Server | HttpsServer;
@@ -96,38 +99,52 @@ export function createTlsApiServer(listener: ApiRequestListener, tls: ServerTls)
 // Request handling that listeners may share: checkHttpSchema validates, and
 // no log line holds a request body, cookie, or bearer.
 export function createApiRequestListener(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiRequestListener {
-  const logger = options.logger ?? SILENT_LOGGER;
-  const routes = options.routes ?? ROUTES;
-  const uploads = new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS);
+  const context: ListenerContext = {
+    handlers,
+    uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
+    routes: options.routes ?? ROUTES,
+    logger: options.logger ?? SILENT_LOGGER,
+    ...(options.webApp === undefined ? {} : { webApp: options.webApp }),
+  };
   return (request, response) => {
     // A reused idle socket races the idle timeout: a request written as it
     // fires is reset unread, so every answer closes its connection.
     response.shouldKeepAlive = false;
     // serve answers every failure itself; this only guards a broken socket.
-    serve(handlers, uploads, routes, logger, request, response).catch(() => response.destroy());
+    serve(context, request, response).catch(() => response.destroy());
   };
 }
 
-async function serve(
-  handlers: ApiHandlers,
-  uploads: UploadSlots,
-  routes: readonly RouteDefinition[],
-  logger: Logger,
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> {
+// What every request of one listener shares.
+interface ListenerContext {
+  readonly handlers: ApiHandlers;
+  readonly uploads: UploadSlots;
+  readonly routes: readonly RouteDefinition[];
+  readonly logger: Logger;
+  readonly webApp?: WebAppFiles;
+}
+
+async function serve({ handlers, uploads, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
   let parameters: readonly string[] = [];
   let query = new URLSearchParams();
   let declaredQuery: readonly string[] = [];
-  let answer: ApiResponse;
+  let answer: ApiResponse | WebAppAnswer;
   try {
     const url = new URL(request.url ?? '/', 'http://control-plane');
     query = url.searchParams;
-    const matched = match(routes, request.method ?? 'GET', url.pathname);
-    if (matched === undefined) {
+    const method = request.method ?? 'GET';
+    const matched = match(routes, method, url.pathname);
+    // Every route comes first, so the SPA never shadows an operation; the
+    // SPA checks the path as sent, before the URL removes its dot segments.
+    const requestPath = (request.url ?? '/').split('?')[0]!;
+    const page = matched === undefined && webApp !== undefined ? webAppAnswer(webApp, method, requestPath) : undefined;
+    if (page !== undefined) {
+      operationId = WEB_APP_OPERATION;
+      answer = page;
+    } else if (matched === undefined) {
       answer = failureResponse(404, failure('not-found', 'no operation has this method and path'));
     } else if (!matched.ok) {
       answer = failureResponse(400, matched.error);
@@ -140,10 +157,14 @@ async function serve(
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
   }
-  if (!response.headersSent) writeResponse(response, answer, correlationId);
+  const failed = 'content' in answer ? undefined : answer.failure;
+  if (!response.headersSent) {
+    if ('content' in answer) writeWebAppFile(response, answer, correlationId);
+    else writeResponse(response, answer, correlationId);
+  }
   const fields = requestLogFields({
     method: redactSecrets(request.method ?? ''), operationId, parameters, query, declaredQuery, status: answer.status,
-    durationMs: Math.round(performance.now() - startedAt), ...(answer.failure === undefined ? {} : { failure: answer.failure }),
+    durationMs: Math.round(performance.now() - startedAt), ...(failed === undefined ? {} : { failure: failed }),
   });
   const log = logger.with({ correlationId });
   if (answer.status >= 500) log.error('api.request', fields);

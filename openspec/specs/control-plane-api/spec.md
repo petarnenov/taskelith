@@ -294,3 +294,74 @@ Installation initialization SHALL create `control-plane/session-output-tail.key`
 #### Scenario: Rerun with a lost tail key
 - **WHEN** initialization runs again on an installation with a tail key, and again after the key is lost
 - **THEN** the first rerun keeps the key's bytes, and the second creates a new key with mode `0600`
+
+### Requirement: Web SPA served under /app/
+The browser endpoint SHALL answer GET and HEAD of `/app` and of every path under `/app/` that no operation matches with the built SPA: the file at the path with its content type, or `index.html` for a path without a file extension. A missing file with an extension SHALL be a 404 `not-found`, never the page. Every operation SHALL be matched first; the worker endpoint SHALL serve no SPA. The request log SHALL name the operation `web-app` and no path.
+
+#### Scenario: Screen address
+- **WHEN** a browser opens `/app/sessions` or another path under `/app/` without a file extension
+- **THEN** the answer is 200 with the build's `index.html` as `text/html; charset=utf-8`
+
+#### Scenario: Missing asset
+- **WHEN** a browser requests `/app/assets/index-missing.js`, a file with an extension that the build does not hold
+- **THEN** the answer is 404 `not-found` as JSON, not the page
+
+#### Scenario: Operation path
+- **WHEN** a request matches an operation, or a path outside `/app/` matches none
+- **THEN** the operation answers it, or the answer is the API's 404 `not-found`, and never the SPA
+
+### Requirement: Web SPA cache headers
+A file of the build under `assets/`, whose name Vite gives a content hash, SHALL be answered with `Cache-Control: public, max-age=31536000, immutable`; `index.html` and every other file SHALL be answered with `Cache-Control: no-cache`.
+
+#### Scenario: Hashed asset
+- **WHEN** a browser requests `/app/assets/index-AbC123.js`
+- **THEN** the answer is `text/javascript; charset=utf-8` with `Cache-Control: public, max-age=31536000, immutable`
+
+#### Scenario: Page
+- **WHEN** a browser requests any address that answers `index.html`
+- **THEN** the answer carries `Cache-Control: no-cache`
+
+### Requirement: Web SPA content security policy
+Every SPA answer, a failure included, SHALL carry a `Content-Security-Policy` with `default-src 'none'`, `script-src 'self'`, `style-src 'self'`, and `frame-ancestors 'none'`, without `unsafe-inline` or `unsafe-eval`; the page's `style-src` SHALL add a nonce of 128 random bits, fresh per answer, in place of the build's placeholder. Each SHALL also carry `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, and same-origin opener and resource policies.
+
+#### Scenario: Page nonce
+- **WHEN** a browser requests the page twice
+- **THEN** each answer's `style-src` names a different nonce, which the page's `csp-nonce` meta tag carries in place of the placeholder
+
+#### Scenario: Failure headers
+- **WHEN** a request under `/app/` gets a 404 or 400 from the SPA, such as for a missing asset
+- **THEN** the JSON answer carries the policy and the related headers, with `Cache-Control: no-store`
+
+#### Scenario: Inline script
+- **WHEN** the control plane answers the page
+- **THEN** its `script-src` is `'self'` alone, without a nonce or `unsafe-inline`, so a browser runs no inline script
+
+### Requirement: Web SPA path confinement
+The control plane SHALL answer only regular files read at start from the build, opening none through a link in its last component, and SHALL fail the start for a root that is a link or an entry found replaced. A path as sent, before URL normalization, whose decoded segments hold `.`, `..`, an inner empty segment, a separator, or NUL SHALL be a 404 `not-found` without a lookup, as SHALL a path at or below a left-out link; invalid percent-encoding SHALL be a 400 `invalid`.
+
+#### Scenario: Traversal
+- **WHEN** a request names `/app/..%2Fsecret.txt`, `/app/assets/..%2F..%2Fsecret`, or a symbolic link of the build that points outside it
+- **THEN** the answer is 404 and holds neither the file outside the build nor the page
+
+#### Scenario: Dot segment as sent
+- **WHEN** a request is sent as `/app/%2e/sessions` or `/app/assets/../assets/index-AbC123.js`
+- **THEN** the answer is 404 `not-found`, and the build is not looked up
+
+#### Scenario: Below a link
+- **WHEN** the build holds a symbolic link `outside` and a request names `/app/outside` or `/app/outside/sessions`
+- **THEN** the answer is 404 `not-found`, not the page
+
+#### Scenario: Entry replaced at start
+- **WHEN** a file or directory of the build is replaced by a symbolic link while the start reads the build
+- **THEN** the start fails with `precondition-failed` and names `TASKELITH_WEB_APP_DIR`
+
+### Requirement: Web SPA build at start
+The control plane SHALL read the build from the directory that `TASKELITH_WEB_APP_DIR` names once at start; a directory that cannot be read or has no `index.html` SHALL fail the start with `precondition-failed` and name the variable and the directory. Without the variable the browser endpoint SHALL serve no SPA, so `/app/` answers 404 `not-found`. The control-plane image SHALL set the variable to the SPA that its build stage builds.
+
+#### Scenario: Build missing
+- **WHEN** `TASKELITH_WEB_APP_DIR` names a directory without `index.html`
+- **THEN** the start fails with `precondition-failed` and names `TASKELITH_WEB_APP_DIR`
+
+#### Scenario: No build configured
+- **WHEN** the control plane starts without `TASKELITH_WEB_APP_DIR`
+- **THEN** `/app/` answers 404 `not-found`, and every operation answers as before

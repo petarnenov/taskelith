@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, X509Certificate } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request as httpsRequest } from 'node:https';
@@ -76,6 +76,12 @@ const database = new URL(POSTGRES);
 database.pathname = `/${databaseName}`;
 const base = mkdtempSync(join(tmpdir(), 'taskelith-api-'));
 const dataRoot = join(base, 'root');
+// A web build, which the composition gives the browser endpoint only.
+const webApp = join(base, 'web');
+const WEB_SCRIPT = 'console.log("app");';
+mkdirSync(join(webApp, 'assets'), { recursive: true });
+writeFileSync(join(webApp, 'index.html'), '<!doctype html><div id="root"></div>');
+writeFileSync(join(webApp, 'assets', 'index-AbC123.js'), WEB_SCRIPT);
 const authorityKeys = { ...JSON.parse(integrationSecret('authority.json')), accountSeed: new TextDecoder().decode(createAccount().getSeed()) };
 value(value(ControlPlaneNamespace.open({ dataRoot, ownerUid })).create('broker-authority', authorityKeys));
 const authority = value(BrokerAuthority.fromKeys(authorityKeys));
@@ -124,7 +130,7 @@ const BROWSER_TLS = { certificate: operatorCertificate.certificatePem, key: oper
 const SETTINGS: ControlPlaneSettings = {
   dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
   browser: { host: '127.0.0.1', port: 0, tls: BROWSER_TLS },
-  workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
+  workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000, webAppDirectory: webApp,
   // The test server keeps JetStream in a small tmpfs.
   transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
 };
@@ -202,16 +208,29 @@ function presented(port: number, ca: string, minVersion: 'TLSv1' | 'TLSv1.2' = '
   });
 }
 
-// The status of a GET on `port` without a credential, trusting `ca`.
-function statusOf(port: number, ca: string, path: string): Promise<number | undefined> {
+interface PlainAnswer {
+  readonly status: number | undefined;
+  readonly contentType: string | undefined;
+  readonly body: string;
+}
+
+// A GET on `port` without a credential, trusting `ca`.
+function plainGet(port: number, ca: string, path: string): Promise<PlainAnswer> {
   return new Promise((resolve, reject) => {
     const request = httpsRequest({ host: '127.0.0.1', port, path, ca }, (response) => {
-      response.resume();
-      resolve(response.statusCode);
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => resolve({
+        status: response.statusCode, contentType: response.headers['content-type'], body: Buffer.concat(chunks).toString('utf8'),
+      }));
     });
     request.once('error', reject);
     request.end();
   });
+}
+
+async function statusOf(port: number, ca: string, path: string): Promise<number | undefined> {
+  return (await plainGet(port, ca, path)).status;
 }
 
 describe('TLS listeners', () => {
@@ -241,6 +260,18 @@ describe('TLS listeners', () => {
     const path = '/executions/execution-1/slot-credentials/slot-1?attemptId=attempt-1&ownershipGeneration=1&recoveryEpoch=1';
     assert.equal(await statusOf(running.api.port, installationCa, path), 401, 'the worker endpoint serves it');
     assert.equal(await statusOf(running.browser.port, operatorAuthority.certificatePem, path), 404);
+  });
+
+  test('the browser endpoint serves the configured web build, and the worker endpoint never does', async () => {
+    const page = await plainGet(running.browser.port, operatorAuthority.certificatePem, '/app/sessions');
+    assert.deepEqual([page.status, page.contentType], [200, 'text/html; charset=utf-8']);
+    const script = await plainGet(running.browser.port, operatorAuthority.certificatePem, '/app/assets/index-AbC123.js');
+    assert.deepEqual([script.status, script.contentType, script.body], [200, 'text/javascript; charset=utf-8', WEB_SCRIPT]);
+    for (const path of ['/app/sessions', '/app/assets/index-AbC123.js']) {
+      const answer = await plainGet(running.api.port, installationCa, path);
+      assert.deepEqual([answer.status, answer.contentType], [404, 'application/json'], path);
+      assert.doesNotMatch(answer.body, /id="root"|console\.log/, path);
+    }
   });
 
   test('a plain HTTP request and TLS 1.1 get no API answer', async () => {
