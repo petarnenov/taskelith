@@ -37,7 +37,7 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). Since the pass 1 fixes its totals are from `verify-29a-p1.log` in the session scratchpad, the `make verify` of the tree of `d3f7ce31` (`49bdafdf`), which passed at the first run; in it `apps/web` Vitest ran 260 tests, all passing, with 98.58% statements, 97.43% branches, 99.55% functions, and 100% lines. Before review they were from `verify-29a-2.log`, the second `make verify` on the tree of `ab35acb9` (`6bfd91d0`), unchanged between the runs. The first run, `verify-29a-1.log`, failed only the control-plane test "a body over the limit is 413 before any verification, and one at the limit is read", whose request ended in `fetch failed` with `write ECONNRESET` (tests 4610, pass 4600, fail 1, skipped 9); this change touches no file under `apps/control-plane`, so the run was repeated once on the same tree without a change, and it passed. The first run stopped at that failure before `apps/web` Vitest ran; in the second run it ran 246 tests, all passing, with 98.52% statements, 97.13% branches, 99.54% functions, and 100% lines (pass 1 finding 8).
+The generated part below matches the tree (`make record-check`). Since the pass 2 fixes its totals are from `verify-29a-p2.log` in the session scratchpad, the `make verify` of the tree of `6adcc867` (`857506a7`), which passed at the first run; in it `apps/web` Vitest ran 264 tests, all passing, with 98.6% statements, 97.69% branches, 99.57% functions, and 100% lines. After the pass 1 fixes they were from `verify-29a-p1.log`, the `make verify` of the tree of `d3f7ce31` (`49bdafdf`), which passed at the first run; in it `apps/web` Vitest ran 260 tests, all passing, with 98.58% statements, 97.43% branches, 99.55% functions, and 100% lines. Before review they were from `verify-29a-2.log`, the second `make verify` on the tree of `ab35acb9` (`6bfd91d0`), unchanged between the runs. The first run, `verify-29a-1.log`, failed only the control-plane test "a body over the limit is 413 before any verification, and one at the limit is read", whose request ended in `fetch failed` with `write ECONNRESET` (tests 4610, pass 4600, fail 1, skipped 9); this change touches no file under `apps/control-plane`, so the run was repeated once on the same tree without a change, and it passed. The first run stopped at that failure before `apps/web` Vitest ran; in the second run it ran 246 tests, all passing, with 98.52% statements, 97.13% branches, 99.54% functions, and 100% lines (pass 1 finding 8).
 
 ## Fail-before
 
@@ -61,7 +61,7 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `49bdafdf31fa2c68268b78946668caf6e4159162`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.72% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `857506a7d5e53583980fb94594ef36c1a031e9e9`; tests 4610, pass 4601, fail 0, skipped 9; all files 99.44% lines, 92.71% branches, 98.87% functions.
 - `npm run openspec -- validate build-board-view --strict`: passed, `Change 'build-board-view' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 109 file(s); every pass summary file is valid: 89 file(s); every route file is valid: 42 file(s).`.
 - Spec diff against the merge base `0e8d10e0a7bd` with `origin/dev`: no change under `openspec/specs`.
@@ -70,6 +70,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a28c-fb8e-7173-966a-655865635f91` | 0 | 0 | 6 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `e1c1b848-c6e9-4b1c-ad86-b68bd1353183` | 0 | 0 | 0 | 9 |
 <!-- make record: end -->
 
 ## Independent review
