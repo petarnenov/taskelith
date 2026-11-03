@@ -77,7 +77,7 @@ function ShownBoard({ view, liveness }: { readonly view: BoardView; readonly liv
 // Decision Q3 of the coordinator: no link to a screen that is not built.
 function FirstRun() {
   return (
-    <Alert color="indigo" variant="light" title="No project yet">
+    <Alert color="indigo" variant="light" title="No project yet" role="status">
       You hold no role on any project, or none exists. The project setup screen is not built yet: an
       installation-owner creates a project through the control plane's createProject operation (POST /projects)
       and assigns its members. The taskelith CLI has no project command. The board shows the project once you hold

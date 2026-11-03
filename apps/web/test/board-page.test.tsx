@@ -245,11 +245,11 @@ describe('the board states', () => {
     const boardGateway = new FakeBoardGateway();
     boardGateway.listProjects.mockResolvedValue({ kind: 'read', value: [] });
     renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), boardGateway);
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText('No project yet')).toBeDefined();
-    expect(alert.textContent).toContain('createProject operation (POST /projects)');
-    expect(alert.textContent).toContain('The project setup screen is not built yet');
-    expect(within(alert).queryByRole('link')).toBeNull();
+    const notice = await screen.findByRole('status', { name: 'No project yet' });
+    expect(notice.textContent).toContain('createProject operation (POST /projects)');
+    expect(notice.textContent).toContain('The project setup screen is not built yet');
+    expect(within(notice).queryByRole('link')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
     expect(boardGateway.readBoard).not.toHaveBeenCalled();
   });
@@ -411,9 +411,8 @@ describe('the project picker', () => {
     localStorage.setItem(PROJECT_KEY, 'gone');
     const boardGateway = boardGatewayWith(board(), []);
     renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), boardGateway);
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText('No project yet')).toBeDefined();
-    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(await screen.findByRole('status', { name: 'No project yet' })).toBeDefined();
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(boardGateway.readBoard).not.toHaveBeenCalled();
   });
 
