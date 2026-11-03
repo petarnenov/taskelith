@@ -95,7 +95,7 @@ export class RepositoryBindingService {
     if (plugin === undefined) return err(failure('unavailable', 'the integration names no registered SCM plugin'));
     const built = await pluginAnswer(() => plugin.createProvider({ settings: integration.settings, secrets: secrets.reveal() }), asProvider);
     if (!built.ok) return built;
-    if (!built.value.ok) return err(failure('unavailable', 'the SCM plugin cannot serve the integration'));
+    if (!built.value.ok) return err(unusableConfiguration());
     return ok({ integration, provider: built.value.value });
   }
 }
@@ -157,6 +157,12 @@ function declaredMergeMethods(provider: SourceControlProvider): Result<readonly 
 
 function refusal(reason: string, message: string): Failure {
   return failure('precondition-failed', message, { reason });
+}
+
+// The plugin refused the stored configuration; its message is never quoted.
+function unusableConfiguration(): Failure {
+  const reason = 'integration-configuration-unusable';
+  return failure('unavailable', "the integration's stored configuration is unusable", { reason });
 }
 
 function pluginDefect(): Failure {

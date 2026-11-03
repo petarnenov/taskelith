@@ -1627,7 +1627,7 @@
             }
           },
           "503": {
-            "description": "A store the operation needs, the integration's plugin, or its service is unavailable; retry later.",
+            "description": "A store the operation needs, the integration's plugin, or its service is unavailable; retry later. A plugin that cannot build a provider from the integration's stored configuration answers `details.reason` `integration-configuration-unusable`, without the plugin's message.",
             "content": {
               "application/json": {
                 "schema": {

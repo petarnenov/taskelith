@@ -33,6 +33,14 @@ A first bind SHALL name no expected revision and fail with 409 on a bound projec
 - **WHEN** the plugin resolves a remote URL with user information
 - **THEN** the answer is 500 and nothing is stored
 
+#### Scenario: Unusable stored configuration
+- **WHEN** the integration's plugin refuses to build a provider from the stored configuration
+- **THEN** the answer is 503 with reason `integration-configuration-unusable`, quoting no plugin message, and nothing is stored
+
+#### Scenario: Plugin envelope that throws
+- **WHEN** reading the plugin's result envelope throws, or the envelope breaks the kernel `Result` shape
+- **THEN** the answer is 500 without the thrown message, which no log record carries either
+
 ### Requirement: Binding against a current resolution
 The resolver call SHALL run before and outside the store's transaction. Inside it, the store SHALL check that the integration still exists at the revision the service resolved against, and otherwise fail with 409, so that no binding is stored against a stale resolution. The merge method SHALL be one that the plugin's capabilities declare.
 
