@@ -8,11 +8,14 @@ import { BoardCardView } from './BoardCardView';
 const COLUMN_WIDTH = 264;
 const GATE_WIDTH = 200;
 
+// Mantine's viewport takes no focus, so a keyboard could not scroll it.
+const VIEWPORT_PROPS = { tabIndex: 0, role: 'region', 'aria-label': 'Board columns' } as const;
+
 // The six columns scroll sideways at phone width, which the design rules
 // allow for board columns only; the merge gate sits after Review.
 export function BoardColumns({ board }: { readonly board: Board }) {
   return (
-    <ScrollArea type="auto" offsetScrollbars>
+    <ScrollArea type="auto" offsetScrollbars viewportProps={VIEWPORT_PROPS}>
       <Group gap={12} wrap="nowrap" align="flex-start">
         {COLUMNS.map((column) => (
           <Fragment key={column}>

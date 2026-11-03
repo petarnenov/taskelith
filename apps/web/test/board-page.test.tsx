@@ -81,6 +81,16 @@ describe('the board columns', () => {
     expect(column('Review').getByLabelText('0 cards')).toBeDefined();
   });
 
+  it('lets the keyboard reach and scroll the columns through a named, focusable viewport', async () => {
+    showBoard();
+    await columns();
+    const viewport = screen.getByRole('region', { name: 'Board columns' });
+    expect(viewport.tabIndex).toBe(0);
+    expect(within(viewport).getByRole('region', { name: 'Archived' })).toBeDefined();
+    viewport.focus();
+    expect(document.activeElement).toBe(viewport);
+  });
+
   it('says that the board is empty while no card exists', async () => {
     showBoard();
     expect(await screen.findByText(/No card yet\./)).toBeDefined();
