@@ -17,6 +17,7 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), sub-change 20f, the sixth change of
 - `cb7cbbcb` `test: list the scm integration operations among the served control-plane operations` changes the diff, so `route.json` was deleted and routed again, as protocol worker step 4 requires:
 - `06851a35` `docs: route the manage scm integrations change again after the access requirements test fix` (`route.json` unedited, same recommendation): the tree `ec677ca1` that `make verify` run 2 checked; the commit after it adds this record and the `make record` output and is the head for review pass 1 (`37aaf861`).
 - Pass 1 fix round: `c9ed4062` `docs: record review pass 1 of the manage scm integrations change` (its `passes.jsonl` line and four findings, recorded before any fix); `4e569972` `chore: name the scm setting or secret at fault when the schema refuses an integration body` (finding 1); `88d2698d` `chore: bound the stored scm integration origin port to 65535` (finding 2); `444e9878` `test: run one scm integrations store conformance suite against the postgresql and in-memory adapters` (finding 3); `b3a15bee` `chore: let only an app composition root import a plugin package` (coordinator condition Q4); `839758ff` `docs: specify the schema refusal names, the origin port bound, the store conformance suite, and the coordinator decisions of the manage scm integrations change`; the next commit, `docs: record the pass 1 fix round of the manage scm integrations change`, fixes finding 4 in this record and is the tree that the round's `make verify` checks. `route.json` is not routed again: later passes never route.
+- Pass 2 fix round: `b96f89af` `docs: record review pass 2 of the manage scm integrations change` (its `passes.jsonl` line and eight findings, recorded before any fix); `d0c51844` `chore: read scm integrations read-only, recover a broken secret, report unverifiable integrations, require an rsa app key, and bound stored secrets` (findings 1 to 4 and 6 to 8, with their tests); `cb4ea8b4` `docs: describe the pass 2 fixes of the manage scm integrations change and the audit events of 11b` (finding 5, the design, the source control contract, the `scm-port` scenario, and the G3 plan note); the next commit records the round and is the tree that the round's `make verify` checks.
 
 ## Environment
 
@@ -73,6 +74,28 @@ Focused runs of the fix round used `node --experimental-strip-types --test` afte
 | Plugin settings check | `github-plugin.ts`: an unknown setting is no longer refused | plugin test, route test | tests 16, fail 2: "the settings check names an unknown, missing, or invalid setting and never quotes a value", "an unknown plugin answers 404, and a bad origin, setting, or secret 400 naming it but never its value" |
 | No secret in JSON | `scm-integration.ts`: `ScmSecrets.toJSON` returns the values | service test | tests 11, fail 1: "secrets never show their values in a string, JSON, or inspection" |
 | Key at start | `composition/scm-integrations.ts`: a missing key falls back to a random one | `scm-integration-start.test.ts` | tests 3, fail 1: "a missing SCM secret key refuses the start and names init, which creates it" |
+
+### Pass 2 fixes for the architect check
+
+Pass 2 reported only Low findings, so the review ended and these fixes are `fixed-unreviewed`: no later pass reviewed them, and the coordinator checks them as solution architect (`/docs/governance.md`, "Architect check of unreviewed fixes"). Each behavior test was written first and run against the unchanged implementation; the module, plugin, and route tests with `node --experimental-strip-types --test` after `npm run build`, and the PostgreSQL ones under `scripts/docker-slot.ts` and `scripts/services.sh run taskelith-zaki20f-fix2`, all with the pinned Node.js v24.22.1 through `scripts/with-pinned-node.sh`.
+
+- Before (`b96f89af` with the tests added): the module, plugin, and route files gave tests 37, pass 32, fail 5; the PostgreSQL store file gave tests 12, pass 9, fail 3.
+- After (`d0c51844`): the service, conformance, plugin, route, start, receiver, and decoy tests 64 of 64 pass; the PostgreSQL store and webhook delivery files 15 of 15 pass; `tsc -p tsconfig.check.json --noEmit`, `npm run verify:comments`, and `npm run check:boundaries` pass.
+
+| Finding | Fix | Test, failing before |
+| --- | --- | --- |
+| 1, reads in SERIALIZABLE | `packages/adapters/postgres/src/scm-integrations.ts`: `get`, `page`, and `configurationOf` run in `PostgresDatabase.readOnly` | "reads run in read-only transactions and only changes in read-write ones": `actual` five `read-write`, `expected` `read-only` for the three reads |
+| 2, update opens every secret | same file: `update` opens only the secrets it keeps (`#opened` takes the wanted names) | "a secret that no longer opens can be replaced, though an update that keeps it still fails": `expected success, got {"code":"internal",...,"details":{"setting":"signing-key"}}` |
+| 3, silent unverifiable integration | `packages/modules/integrations/src/application/stored-integration-verifiers.ts`: reports `plugin-missing` or `provider-refused` once per integration and revision through the new port `UnverifiableIntegrations` (`ports/scm-integrations.ts`) and caches the miss; `apps/control-plane/src/composition/scm-integrations.ts` logs it as the warning `scm.integration.unverifiable` with no value, and the composition passes its logger | module: "stored verifiers report once per revision an integration that cannot verify, never with a value" (`actual: []`); route file: "the composition logs an integration that cannot verify its webhooks, without a secret" (`actual: []`) |
+| 4, non-RSA private key | `packages/plugins/scm-github/src/github-plugin.ts`: `isRsaPrivateKey` requires `asymmetricKeyType === 'rsa'` | "the secret check refuses a private key that is not RSA without quoting it", with EC P-256 and Ed25519 keys generated at test time: `expected a failure` |
+| 5, wire wording | `docs/contracts/control-plane-wire-contracts.md` section 4: `details.field` `allowedOrigin` for an origin, `details.setting` for a setting or secret | docs only |
+| 6, undefined change field | `changedConfiguration` in `packages/modules/integrations/src/ports/scm-integrations.ts` keeps a field that is absent or `undefined` | conformance "a change field that is present but undefined keeps the stored value": in memory, `got` an integration without label, origin, or settings; PostgreSQL, `null value in column "label" ... violates not-null constraint` |
+| 7, secrets past 32 | `packages/modules/integrations/src/application/scm-integration-service.ts`: `secretPastLimit` refuses the first added secret beyond `MAX_SCM_SECRETS` (32, `domain/scm-integration.ts`) with `invalid` naming it; the wire contract states it | "an update refuses a secret that would take the integration past 32 secrets and names it", with a plugin that accepts any name: `expected a failure` |
+| 8, duplicated merge | both stores (`in-memory-scm-integrations.ts`, postgres `scm-integrations.ts`) apply a change through `changedConfiguration` | refactoring: the conformance suite, now six cases, passes for both stores |
+
+Also in the round: `docs/g3-plan.md` item 11 says that 11b carries the audit events for an SCM integration's creation, update, and secret change (coordinator decision, 2026-11-03); the design states the read-only reads, the recovery, the report, the RSA key, and the bound; `docs/contracts/source-control.md` section 6.1 and the `scm-port` scenario "GitHub secrets" name the RSA key. No OpenAPI document, schema, or 20e receiver answer changed.
+
+Architect check (coordinator): pending.
 
 ## Checks
 
@@ -142,6 +165,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   6. Low, `contract-drift`: an optional change field present but `undefined` overwrites the stored value.
   7. Low, `contract-drift`: updates can grow the secret names past the response schema's 32.
   8. Low, `contract-drift`: both adapters duplicate how a change merges over the current integration.
+- Resolutions (`findings.jsonl`, all `fixed-unreviewed`): findings 1 to 4 and 6 to 8 in `d0c51844`, finding 5 in `cb4ea8b4`; "Pass 2 fixes for the architect check" gives each fix and its failing-first test. None was declined or deferred, and none needed an OpenAPI or receiver change.
 
 ## Limitations
 
@@ -152,6 +176,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 as the coordinator assigns them, and their fix rounds.
+- The coordinator's architect check of the pass 2 fixes (the review ended after the Low-only pass 2).
 - The archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
