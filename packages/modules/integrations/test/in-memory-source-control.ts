@@ -53,6 +53,9 @@ export interface ScmDefects {
   readonly unusableAuthorization?: boolean;
   readonly remoteOfProjectForAll?: boolean;
   readonly resolvesHiddenRepository?: boolean;
+  readonly refreshesRevokedCredential?: boolean;
+  readonly unknownRefreshFailsWith?: FailureCode;
+  readonly revokesMissingCredential?: boolean;
 }
 
 // The service's own configuration, which a conforming plugin respects.
@@ -196,10 +199,10 @@ export class InMemoryScm {
   }
 
   private refresh(credentialId: string): Result<RunCredential> {
-    const versions = this.versionsOf(credentialId);
+    const versions = this.defects.refreshesRevokedCredential ? this.everyVersionOf(credentialId) : this.versionsOf(credentialId);
     const latest = versions.at(-1);
     const dropped = this.defects.adoptionDropsGrant && this.adopted.has(credentialId);
-    if (!latest || dropped) return err(failure('not-found', 'unknown credential'));
+    if (!latest || dropped) return err(failure(this.unknownRefreshCode(credentialId), 'unknown credential'));
     const previous = latest.credential;
     const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
     const credential = {
@@ -244,8 +247,14 @@ export class InMemoryScm {
     return stored < adopted;
   }
 
+  private unknownRefreshCode(credentialId: string): FailureCode {
+    const unknown = this.everyVersionOf(credentialId).length === 0;
+    return unknown ? (this.defects.unknownRefreshFailsWith ?? 'not-found') : 'not-found';
+  }
+
   private revoke(credentialId: string): Result<void> {
     const versions = this.versionsOf(credentialId);
+    if (versions.length === 0 && this.defects.revokesMissingCredential) return ok(undefined);
     if (versions.length === 0) return err(failure('not-found', 'unknown credential'));
     this.revoked.add(credentialId);
     const ended = this.defects.revocationKeepsEarlier ? versions.slice(-1) : versions;
@@ -255,7 +264,10 @@ export class InMemoryScm {
 
   // The versions of a credential that is not revoked, oldest first.
   private versionsOf(credentialId: string): StoredCredential[] {
-    if (this.revoked.has(credentialId)) return [];
+    return this.revoked.has(credentialId) ? [] : this.everyVersionOf(credentialId);
+  }
+
+  private everyVersionOf(credentialId: string): StoredCredential[] {
     return [...this.credentials.values()]
       .filter((stored) => stored.credential.credentialId === credentialId)
       .sort((left, right) => left.credential.version - right.credential.version);

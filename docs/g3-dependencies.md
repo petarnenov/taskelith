@@ -120,6 +120,11 @@ The 2025 Octokit advisories (GHSA-rmvr-2pp2-xj38, GHSA-h5c3-5r3r-rr8q, GHSA-xx4v
 
 **Author's proposal:** inside the GitHub SCM plugin, `@octokit/core@7.0.8` with `@octokit/auth-app@8.3.1` as the authentication strategy (per-installation tokens narrowed by repository and permission, cached and refreshed) and `@octokit/plugin-paginate-rest@16.0.0`; webhook signatures verified on the raw body with `@octokit/webhooks-methods@6.0.0`, with event routing owned by the plugin. Set `X-GitHub-Api-Version: 2022-11-28` explicitly in the request defaults. Leave out the meta package, `@octokit/rest`, and the retry and throttling plugins (and with them `bottleneck`) until a later gate measures a need. Plan a requalification against API version 2026-03-10 before 2028-03-10.
 
+**As installed by G3 sub-change 20c (`implement-github-scm-plugin-core`), 2026-11-03:** `@octokit/core@7.0.8`, `@octokit/auth-app@8.3.1`, and `@octokit/plugin-paginate-rest@16.0.0`, exact-pinned in the private `@taskelith/scm-github` package. Their register rows in [dependency register](dependencies.md#g3-dependencies) stay `candidate` until 20d's live conformance against GitHub.com, then are promoted to `accepted` (coordinator decision, 2026-11-03). Two deviations from the proposal: the first decided by the coordinator for 20c, the second a design choice of 20c, recorded in its design.
+
+- `@octokit/webhooks-methods@6.0.0` is not installed. Its `verify` takes the payload as a string, so the raw body would be decoded and encoded again before the HMAC, which can change bytes that are not valid UTF-8. The plugin computes HMAC-SHA256 with `node:crypto` over the raw body bytes and compares the digests with `timingSafeEqual` after a length check, with no conversion of the body to text.
+- `auth-app` signs the App JWT and supplies the plugin's own installation token, but the plugin requests each run's narrowed installation token itself through `POST /app/installations/{installation_id}/access_tokens`. `auth-app` caches installation tokens and shares one pending request among identical concurrent requests, so two runs with the same repositories and permissions could get the same token.
+
 ## 7. Web terminal: xterm.js and node-pty (D18)
 
 | Package and version | Published | Facts | Security route | Advisories and maintenance |

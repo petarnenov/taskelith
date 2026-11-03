@@ -3100,18 +3100,125 @@
       ]
     },
     {
+      "bom-ref": "@octokit/auth-app@8.3.1",
+      "type": "library",
+      "name": "@octokit/auth-app",
+      "version": "8.3.1",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/auth-app@8.3.1",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/auth-app/-/auth-app-8.3.1.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5c75b166c1789af193402bfb00ec606f2f6df4e8d53b5f4506e2aaf909b207116b7fe076851fcfe63fcc4c5f20f796c84dff1c46d475eca2174e1a4536a88a6e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/auth-oauth-app@9.0.5",
+      "type": "library",
+      "name": "@octokit/auth-oauth-app",
+      "version": "9.0.5",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/auth-oauth-app@9.0.5",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/auth-oauth-app/-/auth-oauth-app-9.0.5.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "1e7db20252038c52c68c0cfbb7e091bbb7bd558a055b55b72cbc8e2f26a11682469427f83ed0e41cab51113f30ff6089a6cac2d05c481798395edc7d1383bbf3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/auth-oauth-device@8.0.5",
+      "type": "library",
+      "name": "@octokit/auth-oauth-device",
+      "version": "8.0.5",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/auth-oauth-device@8.0.5",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/auth-oauth-device/-/auth-oauth-device-8.0.5.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "91d26d8d187290c2c9acc75ca02e7a5d40437e8500b961052a9903c706229be6cdc18c3532b78ba2593e3cb9f01184fc7639b9f3d61ea5e32e27cf8408023355"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/auth-oauth-user@6.0.4",
+      "type": "library",
+      "name": "@octokit/auth-oauth-user",
+      "version": "6.0.4",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/auth-oauth-user@6.0.4",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/auth-oauth-user/-/auth-oauth-user-6.0.4.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "7b26b6a4c27da4206ad63ae6d517fa277348f8d7a6129cc330ba3d27f1a94682b42a07712155d65f82c44887f027e1987a8aba405225509362d65569e450609b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "@octokit/auth-token@6.0.0",
       "type": "library",
       "name": "@octokit/auth-token",
       "version": "6.0.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/auth-token@6.0.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3137,14 +3244,9 @@
       "type": "library",
       "name": "@octokit/core",
       "version": "7.0.8",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/core@7.0.8",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3170,14 +3272,9 @@
       "type": "library",
       "name": "@octokit/endpoint",
       "version": "11.0.5",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/endpoint@11.0.5",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3203,14 +3300,9 @@
       "type": "library",
       "name": "@octokit/graphql",
       "version": "9.0.5",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/graphql@9.0.5",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3221,6 +3313,62 @@
         {
           "alg": "SHA-512",
           "content": "6edfe19b4dcb794e95cbb1704eb9240bda775c64ff941c0296094cab10527b9fead04e427494d7780a84234be5c3cf7f2c5fc6eadaf24c81fc1e2ad9de9acc56"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/oauth-authorization-url@8.0.0",
+      "type": "library",
+      "name": "@octokit/oauth-authorization-url",
+      "version": "8.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/oauth-authorization-url@8.0.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/oauth-authorization-url/-/oauth-authorization-url-8.0.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "ed0a0b3d187fb2c100fc7b87047755752805f3134bcff05ce66f5f66402b244e5b6fa3665640e6dda9cac573e6375ce1e9be562993d1af7ebdef1293ff2337a9"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/oauth-methods@6.0.5",
+      "type": "library",
+      "name": "@octokit/oauth-methods",
+      "version": "6.0.5",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/oauth-methods@6.0.5",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/oauth-methods/-/oauth-methods-6.0.5.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "fe6033eed683643ec3715e33706e930f0dcaafa4ce95d998051a6f03ad82dd623144c99c817f17c6c4ef550a26a8a13b54493f06062151aa35691dad606c882a"
         }
       ],
       "licenses": [
@@ -3269,14 +3417,9 @@
       "type": "library",
       "name": "@octokit/openapi-types",
       "version": "29.0.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/openapi-types@29.0.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3320,6 +3463,34 @@
         {
           "alg": "SHA-512",
           "content": "970f40f582f9b3854f8fe544c7cb8cc5ac509b661382b3c392b2c4b99baed7c47c4cade83dc5c5e0aeade769f1eb19f545ca20642f62d7cf2c02bff85d825a41"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@octokit/plugin-paginate-rest@16.0.0",
+      "type": "library",
+      "name": "@octokit/plugin-paginate-rest",
+      "version": "16.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40octokit/plugin-paginate-rest@16.0.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@octokit/plugin-paginate-rest/-/plugin-paginate-rest-16.0.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "ed1b54786672a402b8100e0bae34c29ec2c02cd3a851c621e6f3a708d5e97484154d008f878385bbbdf6e223ea025b372868159d992d2949cd29908e2b21eb94"
         }
       ],
       "licenses": [
@@ -3401,14 +3572,9 @@
       "type": "library",
       "name": "@octokit/request-error",
       "version": "7.1.2",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/request-error@7.1.2",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3434,14 +3600,9 @@
       "type": "library",
       "name": "@octokit/request",
       "version": "10.0.16",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/request@10.0.16",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3500,14 +3661,9 @@
       "type": "library",
       "name": "@octokit/types",
       "version": "18.0.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/%40octokit/types@18.0.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -6129,6 +6285,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/scm-github@0.0.0",
+      "type": "library",
+      "name": "@taskelith/scm-github",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/scm-github@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/sdlc-openspec@0.0.0",
       "type": "library",
       "name": "@taskelith/sdlc-openspec",
@@ -8140,14 +8311,9 @@
       "type": "library",
       "name": "before-after-hook",
       "version": "4.0.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/before-after-hook@4.0.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -9517,14 +9683,9 @@
       "type": "library",
       "name": "content-type",
       "version": "3.1.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/content-type@3.1.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15621,14 +15782,9 @@
       "type": "library",
       "name": "json-with-bigint",
       "version": "3.5.12",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/json-with-bigint@3.5.12",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -24415,6 +24571,34 @@
       ]
     },
     {
+      "bom-ref": "toad-cache@3.7.4",
+      "type": "library",
+      "name": "toad-cache",
+      "version": "3.7.4",
+      "scope": "required",
+      "purl": "pkg:npm/toad-cache@3.7.4",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/toad-cache/-/toad-cache-3.7.4.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "9b54dd47faef4fb920189661b2936d5ddb1d624d1f75d1692491651b9b3e5243c5a3a9642e867760b39aa2f3d88ead51ef934fe497de4e548768eb04d3da5e0a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "tough-cookie@6.0.2",
       "type": "library",
       "name": "tough-cookie",
@@ -25412,18 +25596,41 @@
       ]
     },
     {
+      "bom-ref": "universal-github-app-jwt@2.2.2",
+      "type": "library",
+      "name": "universal-github-app-jwt",
+      "version": "2.2.2",
+      "scope": "required",
+      "purl": "pkg:npm/universal-github-app-jwt@2.2.2",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/universal-github-app-jwt/-/universal-github-app-jwt-2.2.2.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "75c99b792ace7539ec8c68d47c096a34326b8715e2ce3033f788a36bd430f18919d6ebb477e1a8673c87f896fdb4822abc6b1a7547f083edb6939683aaac336f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "universal-user-agent@7.0.3",
       "type": "library",
       "name": "universal-user-agent",
       "version": "7.0.3",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/universal-user-agent@7.0.3",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -27623,6 +27830,48 @@
       ]
     },
     {
+      "ref": "@octokit/auth-app@8.3.1",
+      "dependsOn": [
+        "@octokit/auth-oauth-app@9.0.5",
+        "@octokit/auth-oauth-user@6.0.4",
+        "@octokit/request-error@7.1.2",
+        "@octokit/request@10.0.16",
+        "@octokit/types@18.0.0",
+        "toad-cache@3.7.4",
+        "universal-github-app-jwt@2.2.2",
+        "universal-user-agent@7.0.3"
+      ]
+    },
+    {
+      "ref": "@octokit/auth-oauth-app@9.0.5",
+      "dependsOn": [
+        "@octokit/auth-oauth-device@8.0.5",
+        "@octokit/auth-oauth-user@6.0.4",
+        "@octokit/request@10.0.16",
+        "@octokit/types@18.0.0",
+        "universal-user-agent@7.0.3"
+      ]
+    },
+    {
+      "ref": "@octokit/auth-oauth-device@8.0.5",
+      "dependsOn": [
+        "@octokit/oauth-methods@6.0.5",
+        "@octokit/request@10.0.16",
+        "@octokit/types@18.0.0",
+        "universal-user-agent@7.0.3"
+      ]
+    },
+    {
+      "ref": "@octokit/auth-oauth-user@6.0.4",
+      "dependsOn": [
+        "@octokit/auth-oauth-device@8.0.5",
+        "@octokit/oauth-methods@6.0.5",
+        "@octokit/request@10.0.16",
+        "@octokit/types@18.0.0",
+        "universal-user-agent@7.0.3"
+      ]
+    },
+    {
       "ref": "@octokit/auth-token@6.0.0",
       "dependsOn": []
     },
@@ -27654,6 +27903,19 @@
       ]
     },
     {
+      "ref": "@octokit/oauth-authorization-url@8.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "@octokit/oauth-methods@6.0.5",
+      "dependsOn": [
+        "@octokit/oauth-authorization-url@8.0.0",
+        "@octokit/request-error@7.1.2",
+        "@octokit/request@10.0.16",
+        "@octokit/types@18.0.0"
+      ]
+    },
+    {
       "ref": "@octokit/openapi-types@28.0.0",
       "dependsOn": []
     },
@@ -27666,6 +27928,13 @@
       "dependsOn": [
         "@octokit/core@7.0.8",
         "@octokit/types@17.0.0"
+      ]
+    },
+    {
+      "ref": "@octokit/plugin-paginate-rest@16.0.0",
+      "dependsOn": [
+        "@octokit/core@7.0.8",
+        "@octokit/types@18.0.0"
       ]
     },
     {
@@ -28453,6 +28722,7 @@
     {
       "ref": "@taskelith/plugin-sdk@0.0.0",
       "dependsOn": [
+        "@taskelith/integrations@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "ajv@8.20.0"
@@ -28483,6 +28753,17 @@
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/scm-github@0.0.0",
+      "dependsOn": [
+        "@octokit/auth-app@8.3.1",
+        "@octokit/core@7.0.8",
+        "@octokit/plugin-paginate-rest@16.0.0",
+        "@taskelith/integrations@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/plugin-sdk@0.0.0"
       ]
     },
     {
@@ -32195,6 +32476,7 @@
         "@taskelith/plugin-sdk@0.0.0",
         "@taskelith/postgres@0.0.0",
         "@taskelith/scheduling@0.0.0",
+        "@taskelith/scm-github@0.0.0",
         "@taskelith/sdlc-openspec@0.0.0",
         "@taskelith/sdlc-speckit@0.0.0",
         "@taskelith/sdlc@0.0.0",
@@ -32296,6 +32578,10 @@
       "dependsOn": [
         "is-number@7.0.0"
       ]
+    },
+    {
+      "ref": "toad-cache@3.7.4",
+      "dependsOn": []
     },
     {
       "ref": "tough-cookie@6.0.2",
@@ -32467,6 +32753,10 @@
       "dependsOn": [
         "crypto-random-string@4.0.0"
       ]
+    },
+    {
+      "ref": "universal-github-app-jwt@2.2.2",
+      "dependsOn": []
     },
     {
       "ref": "universal-user-agent@7.0.3",
