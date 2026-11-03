@@ -5,6 +5,8 @@ export type ScmIntegrationId = Identifier<'ScmIntegrationId'>;
 
 // Settings and secrets are named in kebab-case (`SettingName`).
 const SETTING_NAME = /^[a-z][a-z0-9-]{0,63}$/;
+// The most secrets one integration holds, as `ScmIntegration` shows them.
+export const MAX_SCM_SECRETS = 32;
 
 // An installation-wide integration as stored and shown: its secrets only by
 // name, never by value (wire contracts section 7).

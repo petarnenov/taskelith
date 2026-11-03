@@ -56,10 +56,18 @@ class ExamplePlugin implements SourceControlPlugin {
   }
 }
 
+// A plugin that accepts any secret name, as a plugin may.
+class AnySecretPlugin extends ExamplePlugin {
+  override checkSecret(): Result<void> {
+    return ok(undefined);
+  }
+}
+
+const IGNORED = { unverifiable: () => undefined };
+
 let minted = 0;
-function setup() {
+function setup(plugin: ExamplePlugin = new ExamplePlugin()) {
   const store = new InMemoryScmIntegrations();
-  const plugin = new ExamplePlugin();
   const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
   const ids = { next: () => value(parseIdentifier('ScmIntegrationId', `i${String(++minted).padStart(32, '0')}`)) as ScmIntegrationId };
   return { store, plugin, plugins, service: new ScmIntegrationService({ store, plugins, ids }) };
@@ -184,7 +192,7 @@ test('secrets never show their values in a string, JSON, or inspection', () => {
 test('stored verifiers serve the integration plugin, cached by revision, and none for an unknown integration', async () => {
   const { service, store, plugin, plugins } = setup();
   const created = value(await service.create(CREATION));
-  const verifiers = new StoredScmIntegrationVerifiers(store, plugins);
+  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, IGNORED);
   const delivery: WebhookDelivery = { headers: {}, rawBody: new Uint8Array() };
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
@@ -199,7 +207,33 @@ test('stored verifiers serve the integration plugin, cached by revision, and non
 test('stored verifiers answer none when the plugin is gone or cannot be built', async () => {
   const { service, store } = setup();
   const created = value(await service.create(CREATION));
-  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => undefined }).verifierOf(created.integrationId)), undefined);
+  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => undefined }, IGNORED).verifierOf(created.integrationId)), undefined);
   const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', 'cannot build')) } as unknown as SourceControlPlugin;
-  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => broken }).verifierOf(created.integrationId)), undefined);
+  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => broken }, IGNORED).verifierOf(created.integrationId)), undefined);
+});
+
+test('stored verifiers report once per revision an integration that cannot verify, never with a value', async () => {
+  const { service, store } = setup();
+  const created = value(await service.create(CREATION));
+  const reports: unknown[] = [];
+  const reporter = { unverifiable: (...report: unknown[]) => { reports.push(report); } };
+  const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', `cannot build with ${SECRET}`)) } as unknown as SourceControlPlugin;
+  for (const plugin of [undefined, broken]) {
+    const verifiers = new StoredScmIntegrationVerifiers(store, { pluginOf: () => plugin }, reporter);
+    assert.equal(value(await verifiers.verifierOf(created.integrationId)), undefined);
+    assert.equal(value(await verifiers.verifierOf(created.integrationId)), undefined, 'the next delivery reports nothing new');
+  }
+  assert.deepEqual(reports, [[created.integrationId, 1, 'plugin-missing'], [created.integrationId, 1, 'provider-refused']]);
+  assert.ok(!JSON.stringify(reports).includes(SECRET));
+});
+
+test('an update refuses a secret that would take the integration past 32 secrets and names it', async () => {
+  const { service } = setup(new AnySecretPlugin());
+  const created = value(await service.create(CREATION));
+  const extra = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`extra-${String(index).padStart(2, '0')}`, SECRET]));
+  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 1, secrets: extra })).secretNames.length, 32);
+  const refused = failed(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-98': SECRET, 'extra-99': SECRET } }));
+  assert.deepEqual([refused.code, refused.details], ['invalid', { setting: 'extra-98' }]);
+  assert.ok(!refused.message.includes(SECRET));
+  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-00': OTHER_SECRET } })).revision, 3);
 });

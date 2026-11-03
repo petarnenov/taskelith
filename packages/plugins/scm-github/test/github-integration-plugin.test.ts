@@ -54,6 +54,17 @@ test('the secret check accepts a PEM private key and a webhook secret, and names
   }
 });
 
+// GitHub App tokens are signed with RS256, so only an RSA key can sign them.
+test('the secret check refuses a private key that is not RSA without quoting it', () => {
+  const pem = (key: ReturnType<typeof generateKeyPairSync>['privateKey']) => key.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const keys = [pem(generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey), pem(generateKeyPairSync('ed25519').privateKey)];
+  for (const key of keys) {
+    const refused = failed(plugin.checkSecret('private-key', key));
+    assert.deepEqual([refused.code, refused.details], ['invalid', { setting: 'private-key' }]);
+    assert.ok(!refused.message.includes(key.split('\n')[1]!));
+  }
+});
+
 test('a provider built from a configuration verifies deliveries with its webhook secret', async () => {
   const { options } = githubTestbed();
   const built = value(githubSourceControlPlugin({ baseUrl: options.baseUrl!, fetch: options.fetch! }).createProvider({ settings: SETTINGS, secrets: SECRETS }));

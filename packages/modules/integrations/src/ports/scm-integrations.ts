@@ -4,7 +4,7 @@ import type { ScmIntegration, ScmIntegrationId, ScmSecrets } from '../domain/scm
 import type { SourceControlPlugin } from './source-control-plugin.js';
 
 // A change by compare-and-set on `expectedRevision`: settings replace every
-// setting, and secrets replace the named ones and keep the others.
+// setting, secrets replace the named ones, and an undefined field keeps.
 export interface ScmIntegrationChange {
   readonly expectedRevision: number;
   readonly label?: string;
@@ -16,6 +16,24 @@ export interface ScmIntegrationChange {
 export interface StoredScmConfiguration {
   readonly integration: ScmIntegration;
   readonly secrets: ScmSecrets;
+}
+
+// The one meaning of a change for every store: `current` at the revision
+// the change expects, with at least the secrets that the change keeps.
+export function changedConfiguration(current: StoredScmConfiguration, change: ScmIntegrationChange): StoredScmConfiguration {
+  const { integration } = current;
+  const secrets = change.secrets === undefined ? current.secrets : current.secrets.replacedBy(change.secrets);
+  return {
+    integration: {
+      ...integration,
+      label: change.label ?? integration.label,
+      allowedOrigin: change.allowedOrigin ?? integration.allowedOrigin,
+      settings: change.settings ?? integration.settings,
+      secretNames: secrets.names(),
+      revision: integration.revision + 1,
+    },
+    secrets,
+  };
 }
 
 // The integrations with their secrets, which only `configurationOf` opens.
@@ -37,4 +55,12 @@ export interface ScmPlugins {
 
 export interface ScmIntegrationIds {
   next(): ScmIntegrationId;
+}
+
+export type UnverifiableReason = 'plugin-missing' | 'provider-refused';
+
+// Tells the operator that a stored integration cannot verify its webhooks,
+// which a sender only sees as the one 401.
+export interface UnverifiableIntegrations {
+  unverifiable(integrationId: ScmIntegrationId, revision: number, reason: UnverifiableReason): void;
 }

@@ -183,7 +183,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const runs = new RunService(database, workflows);
   const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
   if (!agentSessions.ok) return agentSessions;
-  const scm = startScmIntegrationServices(admin.value.namespace, database);
+  const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
   if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
     runs,

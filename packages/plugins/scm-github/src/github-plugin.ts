@@ -73,13 +73,13 @@ function isValidSetting(name: string, setting: string | undefined): boolean {
 
 function checkSecret(name: string, secret: string): Result<void> {
   if (name === 'webhook-secret') return secret.length > 0 ? ok(undefined) : refused(name);
-  return name === 'private-key' && isPrivateKey(secret) ? ok(undefined) : refused(name);
+  return name === 'private-key' && isRsaPrivateKey(secret) ? ok(undefined) : refused(name);
 }
 
-function isPrivateKey(pem: string): boolean {
+// App tokens are signed with RS256, which only an RSA key can do.
+function isRsaPrivateKey(pem: string): boolean {
   try {
-    createPrivateKey(pem);
-    return true;
+    return createPrivateKey(pem).asymmetricKeyType === 'rsa';
   } catch {
     return false;
   }

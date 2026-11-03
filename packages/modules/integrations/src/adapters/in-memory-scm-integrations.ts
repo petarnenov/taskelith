@@ -1,6 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { codeUnitOrder, type ScmIntegration, type ScmIntegrationId, type ScmSecrets } from '../domain/scm-integration.js';
-import type { ScmIntegrationChange, ScmIntegrations, StoredScmConfiguration } from '../ports/scm-integrations.js';
+import { changedConfiguration, type ScmIntegrationChange, type ScmIntegrations, type StoredScmConfiguration } from '../ports/scm-integrations.js';
 
 // The store in memory, for tests and tools; each call is atomic, so a
 // compare-and-set never interleaves with another.
@@ -25,10 +25,7 @@ export class InMemoryScmIntegrations implements ScmIntegrations {
     const stored = this.#stored.get(integrationId);
     if (stored === undefined) return err(failure('not-found', 'no SCM integration has this identifier'));
     if (stored.integration.revision !== change.expectedRevision) return err(failure('conflict', 'the integration changed since its revision'));
-    const { expectedRevision: _expected, secrets: replacements, ...replaced } = change;
-    const secrets = replacements === undefined ? stored.secrets : stored.secrets.replacedBy(replacements);
-    const integration = { ...stored.integration, ...replaced, secretNames: secrets.names(), revision: stored.integration.revision + 1 };
-    return ok(this.#keep({ integration, secrets }));
+    return ok(this.#keep(changedConfiguration(stored, change)));
   }
 
   async configurationOf(integrationId: ScmIntegrationId): Promise<Result<StoredScmConfiguration | undefined>> {

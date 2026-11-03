@@ -54,13 +54,16 @@ export type {
 } from './ports/webhook-receipt.js';
 export { ScmWebhookReceiver, type ScmWebhookReceiverPorts, type WebhookReceipt } from './application/webhook-receiver.js';
 export { normalizeOrigin, MAX_ORIGIN_LENGTH, type NormalizedOrigin } from './domain/normalized-origin.js';
-export { ScmSecrets, type ScmIntegration } from './domain/scm-integration.js';
-export type {
-  ScmIntegrationChange,
-  ScmIntegrationIds,
-  ScmIntegrations,
-  ScmPlugins,
-  StoredScmConfiguration,
+export { MAX_SCM_SECRETS, ScmSecrets, type ScmIntegration } from './domain/scm-integration.js';
+export {
+  changedConfiguration,
+  type ScmIntegrationChange,
+  type ScmIntegrationIds,
+  type ScmIntegrations,
+  type ScmPlugins,
+  type StoredScmConfiguration,
+  type UnverifiableIntegrations,
+  type UnverifiableReason,
 } from './ports/scm-integrations.js';
 export {
   SCM_INTEGRATION_PAGE_SIZE,

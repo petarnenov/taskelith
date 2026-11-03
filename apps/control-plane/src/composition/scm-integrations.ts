@@ -8,8 +8,10 @@ import {
   type ScmIntegrations,
   type ScmWebhookDeliveries,
   type SourceControlPlugin,
+  type UnverifiableIntegrations,
 } from '@taskelith/integrations';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import type { Logger } from '@taskelith/observability';
 import { CommittingScmWebhookDeliveries, PostgresScmIntegrations, type PostgresDatabase } from '@taskelith/postgres';
 import { registerGithubSourceControlPlugin } from '@taskelith/scm-github';
 import { scmSecretCipher } from '@taskelith/secrets';
@@ -24,25 +26,32 @@ export interface ScmIntegrationServices {
 
 // The integrations over PostgreSQL with GitHub, the first SCM (ADR 0006); a
 // missing or malformed secret key refuses the start.
-export function startScmIntegrationServices(namespace: ControlPlaneNamespace, database: PostgresDatabase): Result<ScmIntegrationServices> {
+export function startScmIntegrationServices(namespace: ControlPlaneNamespace, database: PostgresDatabase, logger: Logger): Result<ScmIntegrationServices> {
   const key = new ScmIntegrationSecretKeyFile(namespace).read();
   if (!key.ok) return key;
   const cipher = scmSecretCipher(key.value);
   if (!cipher.ok) return cipher;
   const github = registerGithubSourceControlPlugin(SCM_PLUGIN_HOST);
   if (!github.ok) return github;
-  return ok(scmIntegrationServices(new PostgresScmIntegrations(database, cipher.value), new CommittingScmWebhookDeliveries(database), github.value));
+  return ok(scmIntegrationServices(new PostgresScmIntegrations(database, cipher.value), new CommittingScmWebhookDeliveries(database), github.value, logger));
 }
 
 // The installation's SCM plugin also gives the receiver its decoy and its
 // eventless rule, so no plugin fact is copied here.
-export function scmIntegrationServices(store: ScmIntegrations, deliveries: ScmWebhookDeliveries, plugin: SourceControlPlugin): ScmIntegrationServices {
+export function scmIntegrationServices(
+  store: ScmIntegrations, deliveries: ScmWebhookDeliveries, plugin: SourceControlPlugin, logger: Logger,
+): ScmIntegrationServices {
   const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
+  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger));
   return {
     integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId } }),
-    webhooks: new ScmWebhookReceiver({
-      verifiers: new StoredScmIntegrationVerifiers(store, plugins), deliveries, decoy: plugin.createDecoy(), eventless: plugin,
-    }),
+    webhooks: new ScmWebhookReceiver({ verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin }),
+  };
+}
+
+function unverifiableLog(logger: Logger): UnverifiableIntegrations {
+  return {
+    unverifiable: (integrationId, revision, reason) => logger.warn('scm.integration.unverifiable', { integrationId, revision, reason }),
   };
 }
 

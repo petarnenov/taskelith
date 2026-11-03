@@ -71,6 +71,34 @@ test('a sealed secret put back from an earlier revision no longer opens', async 
   assert.deepEqual([refused.code, refused.details], ['internal', { setting: 'signing-key' }]);
 });
 
+test('a secret that no longer opens can be replaced, though an update that keeps it still fails', async () => {
+  const stored = await added();
+  const [before] = await query<{ nonce: Buffer; sealed: Buffer }>(url,
+    "SELECT nonce, sealed FROM scm_integration_secrets WHERE integration_id = $1 AND name = 'signing-key'", [stored.integrationId]);
+  value(await store.update(stored.integrationId, { expectedRevision: 1, label: 'Moved' }));
+  await query(url, "UPDATE scm_integration_secrets SET nonce = $2, sealed = $3 WHERE integration_id = $1 AND name = 'signing-key'",
+    [stored.integrationId, before!.nonce, before!.sealed]);
+  const kept = failed(await store.update(stored.integrationId, { expectedRevision: 2, label: 'Kept' }));
+  assert.deepEqual([kept.code, kept.details], ['internal', { setting: 'signing-key' }]);
+  value(await store.update(stored.integrationId, { expectedRevision: 2, secrets: secrets({ 'signing-key': 'replacement' }) }));
+  assert.deepEqual(value(await store.configurationOf(stored.integrationId))?.secrets.reveal(), { 'signing-key': 'replacement', 'webhook-secret': SECRET });
+});
+
+test('reads run in read-only transactions and only changes in read-write ones', async () => {
+  const used: string[] = [];
+  const recording = {
+    transaction: <Value>(work: TransactionWork<Value>) => { used.push('read-write'); return database.transaction(work); },
+    readOnly: <Value>(work: TransactionWork<Value>) => { used.push('read-only'); return database.readOnly(work); },
+  };
+  const recorded = new PostgresScmIntegrations(recording, cipher);
+  const stored = value(await recorded.add(integration(), secrets({ 'webhook-secret': SECRET })));
+  value(await recorded.get(stored.integrationId));
+  value(await recorded.page(undefined, 10));
+  value(await recorded.configurationOf(stored.integrationId));
+  value(await recorded.update(stored.integrationId, { expectedRevision: 1, label: 'Renamed' }));
+  assert.deepEqual(used, ['read-write', 'read-only', 'read-only', 'read-only', 'read-write']);
+});
+
 // Both transactions read the revision before either writes, so the second
 // write meets the first's row and is retried, which then sees a conflict.
 test('of two concurrent updates at one revision exactly one wins and the other fails with conflict', async () => {
@@ -78,6 +106,7 @@ test('of two concurrent updates at one revision exactly one wins and the other f
   const arrive = rendezvous(2);
   let attempts = 0;
   const overlapping = {
+    readOnly: <Value>(work: TransactionWork<Value>) => database.readOnly(work),
     transaction: <Value>(work: TransactionWork<Value>) => database.transaction(async (tx) => {
       attempts += 1;
       await tx.scmIntegrations.get(stored.integrationId);

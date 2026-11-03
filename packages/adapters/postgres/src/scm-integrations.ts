@@ -1,5 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
+  changedConfiguration,
   ScmSecrets,
   type NormalizedOrigin,
   type ScmIntegration,
@@ -91,13 +92,13 @@ export class PostgresScmIntegrationRecords {
   }
 }
 
-// Each operation in one SERIALIZABLE transaction. A change re-seals every
-// secret under the new revision, so an older row cannot be put back.
+// Reads in read-only, changes in SERIALIZABLE transactions. A change
+// re-seals every secret under the new revision, so no old row comes back.
 export class PostgresScmIntegrations implements ScmIntegrations {
-  readonly #database: Pick<PostgresDatabase, 'transaction'>;
+  readonly #database: Pick<PostgresDatabase, 'transaction' | 'readOnly'>;
   readonly #cipher: ScmSecretCipher;
 
-  constructor(database: Pick<PostgresDatabase, 'transaction'>, cipher: ScmSecretCipher) {
+  constructor(database: Pick<PostgresDatabase, 'transaction' | 'readOnly'>, cipher: ScmSecretCipher) {
     this.#database = database;
     this.#cipher = cipher;
   }
@@ -111,34 +112,35 @@ export class PostgresScmIntegrations implements ScmIntegrations {
   }
 
   get(integrationId: ScmIntegrationId): Promise<Result<ScmIntegration | undefined>> {
-    return this.#database.transaction(async ({ scmIntegrations: records }) => ok(await records.get(integrationId)));
+    return this.#database.readOnly(async ({ scmIntegrations: records }) => ok(await records.get(integrationId)));
   }
 
   page(after: string | undefined, limit: number): Promise<Result<readonly ScmIntegration[]>> {
-    return this.#database.transaction(async ({ scmIntegrations: records }) => ok(await records.page(after, limit)));
+    return this.#database.readOnly(async ({ scmIntegrations: records }) => ok(await records.page(after, limit)));
   }
 
+  // Opens only the secrets the change keeps, so replacing a secret that no
+  // longer opens recovers the integration.
   update(integrationId: ScmIntegrationId, change: ScmIntegrationChange): Promise<Result<ScmIntegration>> {
     return this.#database.transaction(async ({ scmIntegrations: records }) => {
       const current = await records.get(integrationId);
       if (current === undefined) return err(failure('not-found', 'no SCM integration has this identifier'));
       if (current.revision !== change.expectedRevision) return err(failure('conflict', 'the integration changed since its revision'));
-      const kept = await this.#opened(records, current);
+      const replaced = new Set(change.secrets?.names());
+      const kept = await this.#opened(records, current, (name) => !replaced.has(name));
       if (!kept.ok) return kept;
-      const secrets = change.secrets === undefined ? kept.value : kept.value.replacedBy(change.secrets);
-      const { expectedRevision, secrets: _replacements, ...replaced } = change;
-      const integration = { ...current, ...replaced, revision: current.revision + 1 };
-      if (!(await records.replace(integration, expectedRevision))) return err(failure('conflict', 'the integration changed since its revision'));
+      const { integration, secrets } = changedConfiguration({ integration: current, secrets: kept.value }, change);
+      if (!(await records.replace(integration, change.expectedRevision))) return err(failure('conflict', 'the integration changed since its revision'));
       await records.replaceSecrets(integrationId, this.#sealed(integration, secrets));
       return ok((await records.get(integrationId))!);
     });
   }
 
   configurationOf(integrationId: ScmIntegrationId): Promise<Result<StoredScmConfiguration | undefined>> {
-    return this.#database.transaction(async ({ scmIntegrations: records }) => {
+    return this.#database.readOnly(async ({ scmIntegrations: records }) => {
       const integration = await records.get(integrationId);
       if (integration === undefined) return ok(undefined);
-      const secrets = await this.#opened(records, integration);
+      const secrets = await this.#opened(records, integration, () => true);
       return secrets.ok ? ok({ integration, secrets: secrets.value }) : secrets;
     });
   }
@@ -148,9 +150,9 @@ export class PostgresScmIntegrations implements ScmIntegrations {
     return new Map(secrets.names().map((name) => [name, this.#cipher.seal(values[name]!, sealingContext(integration, name))]));
   }
 
-  async #opened(records: PostgresScmIntegrationRecords, integration: ScmIntegration): Promise<Result<ScmSecrets>> {
+  async #opened(records: PostgresScmIntegrationRecords, integration: ScmIntegration, wanted: (name: string) => boolean): Promise<Result<ScmSecrets>> {
     const values: Record<string, string> = {};
-    for (const row of await records.secrets(integration.integrationId)) {
+    for (const row of (await records.secrets(integration.integrationId)).filter((secret) => wanted(secret.name))) {
       const opened = this.#cipher.open(row, sealingContext(integration, row.name));
       if (opened === undefined) return err(failure('internal', 'a stored SCM secret fails decryption', { setting: row.name }));
       values[row.name] = opened;

@@ -1,6 +1,6 @@
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
-import { ScmSecrets, type ScmIntegration } from '../domain/scm-integration.js';
+import { MAX_SCM_SECRETS, ScmSecrets, type ScmIntegration } from '../domain/scm-integration.js';
 import type { ScmIntegrationChange, ScmIntegrationIds, ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
 import type { ScmValues, SourceControlPlugin } from '../ports/source-control-plugin.js';
 
@@ -81,8 +81,17 @@ export class ScmIntegrationService {
     const plugin = this.#ports.plugins.pluginOf(current.value.pluginId);
     if (plugin === undefined) return err(failure('internal', 'the integration names no registered SCM plugin'));
     const change = changeOf(plugin, update);
-    return change.ok ? this.#ports.store.update(current.value.integrationId, change.value) : change;
+    if (!change.ok) return change;
+    const overflowing = secretPastLimit(current.value, change.value.secrets);
+    if (overflowing !== undefined) return err(failure('invalid', `the secret ${overflowing} exceeds the ${MAX_SCM_SECRETS} secrets of an integration`, { setting: overflowing }));
+    return this.#ports.store.update(current.value.integrationId, change.value);
   }
+}
+
+// The first added secret, in code-unit order, beyond `MAX_SCM_SECRETS`.
+function secretPastLimit(current: ScmIntegration, replacements: ScmSecrets | undefined): string | undefined {
+  const added = (replacements?.names() ?? []).filter((name) => !current.secretNames.includes(name));
+  return added[MAX_SCM_SECRETS - current.secretNames.length];
 }
 
 function changeOf(plugin: SourceControlPlugin, update: ScmIntegrationUpdate): Result<ScmIntegrationChange> {

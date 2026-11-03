@@ -93,6 +93,17 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
     },
   },
   {
+    name: 'a change field that is present but undefined keeps the stored value',
+    async check(store) {
+      const problems: string[] = [];
+      const stored = await added(store, '1');
+      const change = { expectedRevision: 1, label: undefined, allowedOrigin: undefined, settings: undefined, secrets: undefined };
+      expectRead(problems, 'update', await store.update(stored.integrationId, change), { ...stored, revision: 2 });
+      expectRead(problems, 'secrets', await revealed(store, stored.integrationId), SECRETS);
+      return problems;
+    },
+  },
+  {
     name: 'a stale revision fails with conflict, and of two concurrent updates at one revision exactly one wins',
     async check(store) {
       const problems: string[] = [];

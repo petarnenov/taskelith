@@ -11,8 +11,8 @@ import {
   SessionService,
 } from '@taskelith/access';
 import { ControlPlaneApi, createApiServer, scmIntegrationServices, type ApiServices } from '@taskelith/control-plane';
-import { InMemoryScmIntegrations, type DeliveryRecording } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok } from '@taskelith/kernel';
+import { InMemoryScmIntegrations, ScmSecrets, normalizeOrigin, type DeliveryRecording, type ScmIntegrationId } from '@taskelith/integrations';
+import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { githubSourceControlPlugin } from '@taskelith/scm-github';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
@@ -56,8 +56,8 @@ async function fixture(t: TestContext) {
   value(await administration.setPassword(owner, 'vera', PASSWORD, INVOCATION));
   const recorded: string[] = [];
   const deliveries = { record: async (_id: string, event: { deliveryId: string }) => { recorded.push(event.deliveryId); return ok<DeliveryRecording>('recorded'); } };
-  const scm = scmIntegrationServices(new InMemoryScmIntegrations(), deliveries, githubSourceControlPlugin());
   const sink = new InMemoryLogSink();
+  const scm = scmIntegrationServices(new InMemoryScmIntegrations(), deliveries, githubSourceControlPlugin(), new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), scmIntegrations: scm.integrations, scmWebhooks: scm.webhooks,
@@ -231,4 +231,21 @@ test('a stored integration verifies its webhooks, and a changed webhook secret a
   assert.equal(await deliver(integrationId, WEBHOOK_SECRET, 'd-3'), 401);
   assert.equal(await deliver(integrationId, ROTATED_SECRET, 'd-4'), 202);
   assert.deepEqual(recorded, ['d-1', 'd-4']);
+});
+
+test('the composition logs an integration that cannot verify its webhooks, without a secret', async () => {
+  const store = new InMemoryScmIntegrations();
+  const sink = new InMemoryLogSink();
+  const clock = { now: () => value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z'))) };
+  const deliveries = { record: async () => ok<DeliveryRecording>('recorded') };
+  const scm = scmIntegrationServices(store, deliveries, githubSourceControlPlugin(), new Logger(sink, clock));
+  const integrationId = value(parseIdentifier('ScmIntegrationId', MISSING)) as ScmIntegrationId;
+  value(await store.add({
+    integrationId, pluginId: 'scm-retired', label: 'Retired', allowedOrigin: value(normalizeOrigin('https://git.example.com')),
+    settings: {}, secretNames: ['webhook-secret'], revision: 1,
+  }, value(ScmSecrets.of({ 'webhook-secret': WEBHOOK_SECRET }))));
+  assert.equal((await scm.webhooks.receive(integrationId, { headers: {}, rawBody: new Uint8Array() })).ok, false);
+  const warnings = sink.records.map((record) => [record.level, record.event, record.fields]);
+  assert.deepEqual(warnings, [['warn', 'scm.integration.unverifiable', { integrationId, revision: 1, reason: 'plugin-missing' }]]);
+  assert.ok(!JSON.stringify(sink.records).includes(WEBHOOK_SECRET));
 });
