@@ -25,7 +25,7 @@ The worker Desi's host, a 2020 Intel iMac, macOS 26.6.2 (Darwin 25.6.0, x86_64),
 - Coordinator decisions, each with its test:
   - Q1 one binding per project: `project_repository_bindings` keyed by `project_id`, foreign keys to `projects` and `scm_integrations`; port `RepositoryBindings`, `REPOSITORY_BINDINGS_CONFORMANCE` run against the in-memory and the PostgreSQL store, and the migration test.
   - Q2 rebind and running attempts: the `control-plane-wire-contracts` scenario "Rebind while attempts run" and wire section 4; nothing serves the credential issue yet (item 21), so it has no test here.
-  - Q4 resolver errors: `not-found` 422 `repository-not-visible`, `forbidden` 422 `integration-credential-refused`, `unavailable` 503, `invalid` 400, `internal` and any other code 500, a malformed or foreign resolved value 500, a plugin that throws 500 without its message, origin mismatch 422 `remote-origin-mismatch`, a missing plugin 503; each has a case in `repository-binding-service.test.ts` and, over HTTP, in `repository-binding-routes.test.ts`, which also checks each 422 body against `BindingRefusal` and that no answer quotes the resolver's message.
+  - Q4 resolver errors: `not-found` 422 `repository-not-visible`, `forbidden` 422 `integration-credential-refused`, `unavailable` 503, `invalid` 400, `internal` and any other code 500, a malformed or foreign resolved value 500, a plugin that throws 500 without its message, origin mismatch 422 `remote-origin-mismatch`, a missing plugin 503; each has a case in `repository-binding-service.test.ts`; over HTTP, `repository-binding-routes.test.ts` covers every resolver code above except `precondition-failed`, which the service suite alone covers, the malformed and the foreign resolved value, the throwing plugin (since pass 1, `8044b747`), the origin mismatch, the undeclared merge method, and the missing plugin, checks every 422 body against `BindingRefusal` (all four reasons since `8044b747`), and checks that no answer quotes the resolver's message.
   - Q5 compare-and-set: same binding at the current revision 200 at that revision; first bind on a bound project 409; stale revision 409; any field changes (conformance and route tests).
   - Q6 transaction: the resolver runs before `put`; `put` re-checks the integration's revision in its transaction. In memory, the service and route tests change the integration from inside the resolver and get 409. In PostgreSQL, `repository-bindings.integration.test.ts` commits an integration update after the put's snapshot and before its locking read (`FOR SHARE`), and the put is retried and answers `conflict`. A read returns the binding as stored. Non-members get 403 before 404 (`requirementBeforeBody`, unchanged). `merge-method-undeclared` is checked against `provider.capabilities` through `readCapabilities`.
   - Q7 contract: `RepositoryBindingInput` without `remoteUrl` (`additionalProperties: false`, so 400 for old clients, tested over HTTP); `RemoteUrlCandidate` removed; version 0.5.0; `breaking-changes.json` declares the two breaking changes that `make contract-breaking-changes BASE=634080a0` printed; `make contract-compatibility`: `Contract documents have no undeclared breaking change.`; `npm run verify:web-api-types`: the generated client matches.
@@ -85,7 +85,29 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not yet run.
+### Pass 1
+
+- Reviewer: Codex CLI, model `gpt-6-astra`, effort `medium`, role A, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=bind-project-repository PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the reviewer reported model `gpt-6-astra` and session `01a1a37b-5df2-7510-9179-31c62a1fd763`.
+- Reviewed `634080a0..89638ea9`; the snapshot (`a4aec648…`) was unchanged after the pass.
+- Counts: Critical 0, High 1, Medium 2, Low 1, recorded in `passes.jsonl` and `findings.jsonl` (`964308f1`). Every finding is fixed; pass 2 checks the fixes.
+
+| # | Severity | Finding | Test (fail-before) | Fix |
+| --- | --- | --- | --- | --- |
+| H1 | High | The provider factory and resolver envelopes were read outside the protected boundary, so a throwing getter's message reached the 500 answer | `b7a9c61f`; `fb-11b1-p1-1.log`: tests 24, pass 21, fail 3 (two service tests, one HTTP test that checks the answer and the log records) | `d9ecede2`: `pluginAnswer` reads each envelope and its value once inside the `try`, with `readResult` and the value reader, into a plain snapshot; a throw or a broken envelope is the plugin defect |
+| M2 | Medium | The in-memory put checked an integration revision captured before an `await`, so an update could land between the check and the write | `21119d0a`; `fb-11b1-p1-2.log`: tests 7, pass 6, fail 1 (an update after the paused snapshot moved the integration to revision 2) | `1a8fef1f`: `InMemoryScmIntegrations.exclusive` serializes `add`, `update`, and the binding put, so the update waits for the put, as the PostgreSQL `FOR SHARE` lock makes it wait; the test pauses after the snapshot and asserts the order put, then update |
+| M3 | Medium | The stored origin went through `normalizeOrigin` and the resolved one through WHATWG `URL` first, so `https://127.1` failed to match itself, and some numeric hosts made `new URL` throw | `55fa93d8`; `fb-11b1-p1-3.log`: tests 15, pass 13, fail 2 (numeric hosts, and an origin that does not normalize) | `fe40c9c5`: `normalizeRemoteOrigin` takes the scheme and authority as written and normalizes them as an allowed origin; an origin that does not normalize is the plugin defect; wire section 4.1 and the spec delta say so |
+| L4 | Low | The record claimed HTTP evidence that the route suite lacked | Evidence only: `8044b747` adds the HTTP cases; negative control `fb-11b1-p1-4.log`: with the repository identity check removed the route suite fails 1 of 11 | `8044b747`, and the self-check above states the evidence per suite |
+
+### Coordinator decisions after pass 1
+
+Decided by the coordinator (Niki) after pass 1 and committed apart from the findings, so that pass 2 reviews them:
+
+- Q1: the four `remote-*` reasons stay removed from `BindingRefusal`; the 0.5.0 declaration in `packages/contracts/breaking-changes.json` names the removal next to the added values (`4eb0840b`); `make contract-compatibility` passes.
+- Q2: a plugin that cannot build a provider from the stored configuration answers 503, never 500, with `details.reason` `integration-configuration-unusable` and the message "the integration's stored configuration is unusable", without the plugin's message. Test `a2ba93ee` (`fb-11b1-p1-q2.log`: tests 27, pass 25, fail 2), fix `06c1a122` with the OpenAPI 503 description, wire section 4, and two `control-plane-api` scenarios; the regenerated web client is unchanged (`npm run verify:web-api-types` matches). A factory that throws or returns a broken envelope stays the 500 plugin defect, and the test that a plugin throw answers 500 without its message is kept.
+- Q3: the 422 order stays resolver, origin, merge method.
+- Q4: `docs/g3-plan.md` row 11 records the split of 11b into 11b1 and 11b2 (`ec6d081a`).
+- The design records the fixes and decisions (`6b4900b0`).
 
 ## Limitations
 
@@ -93,9 +115,14 @@ Not yet run.
 - The credential issue that re-reads a rebound binding (Q2) is item 21's; this change states it in the contracts and the spec only.
 - Audit events of SCM integrations are 11b2.
 
+## Follow-ups
+
+- The contract-breaking check (oasdiff) misses the removal of a request property: it did not report `remoteUrl` leaving `RepositoryBindingInput`.
+- Audit other control-plane reads of plugin results (20f integration operations, the credential issue) for throwing getters.
+
 ## Remaining gates
 
-- Review pass 1 (role A), then pass 2 (role B); pass 3 (role A) only after a pass 2 with a Medium or worse finding; each recorded in `passes.jsonl`, `findings.jsonl`, and this record.
+- Review pass 2 (role B), which also checks the pass 1 fixes and the coordinator decisions above; pass 3 (role A) only after a pass 2 with a Medium or worse finding; each recorded in `passes.jsonl`, `findings.jsonl`, and this record.
 - The coordinator's architect check of any fix that no later pass reviews.
 - Archive on the branch, then the handoff.
 - Integration into dev by the coordinator (single pull request).
