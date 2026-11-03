@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { draft } from '@taskelith/plugin-sdk';
-import { coversRequest, equalsGrant, type InstallationToken, type InstallationTokens, type TokenGrant } from './installation-tokens.js';
+import type { InstallationToken, InstallationTokens, TokenGrant } from './installation-tokens.js';
 
 type RunCredential = draft.RunCredential;
 
@@ -10,10 +10,19 @@ interface CredentialVersion {
   token: string | undefined;
 }
 
+interface RunCredentialVersion {
+  readonly minted: InstallationToken;
+  readonly version: number;
+}
+
 interface StoredCredential {
   readonly runId: string;
   readonly grant: TokenGrant;
   readonly versions: CredentialVersion[];
+  // GitHub's expiry of the newest version, in epoch milliseconds.
+  latestExpiry: number;
+  // Refreshes still waiting for GitHub, which a revocation waits for.
+  readonly refreshing: Set<Promise<Result<RunCredentialVersion>>>;
   revoked: boolean;
 }
 
@@ -26,27 +35,34 @@ export class GithubRunCredentials {
 
   async issueRunCredential(request: draft.RunCredentialRequest): Promise<Result<RunCredential>> {
     const requested = { repositories: [...request.repositories], permissions: [...request.permissions] };
-    const minted = await this.tokens.mint(requested, coversRequest(requested));
+    const minted = await this.tokens.mint(requested);
     if (!minted.ok) return minted;
     const credentialId = randomUUID();
-    const { repositories, permissions, token } = minted.value;
-    const stored = { runId: request.runId, grant: { repositories, permissions }, versions: [{ token }], revoked: false };
+    const { repositories, permissions, token, expiresAt } = minted.value;
+    const stored: StoredCredential = {
+      runId: request.runId,
+      grant: { repositories, permissions },
+      versions: [{ token }],
+      latestExpiry: Date.parse(expiresAt),
+      refreshing: new Set(),
+      revoked: false,
+    };
     this.credentials.set(credentialId, stored);
-    return ok(runCredential(credentialId, stored, minted.value));
+    return ok(runCredential(credentialId, stored, { minted: minted.value, version: 1 }));
   }
 
   async refreshRunCredential({ credentialId }: draft.RunCredentialReference): Promise<Result<RunCredential>> {
-    const before = this.live(credentialId);
-    if (!before.ok) return before;
-    const minted = await this.tokens.mint(before.value.grant, equalsGrant(before.value.grant));
-    if (!minted.ok) return minted;
     const stored = this.live(credentialId);
-    if (!stored.ok) {
-      await this.tokens.revoke(minted.value.token);
-      return stored;
+    if (!stored.ok) return stored;
+    const refreshing = this.nextVersion(stored.value);
+    stored.value.refreshing.add(refreshing);
+    try {
+      const next = await refreshing;
+      if (!next.ok) return next;
+      return ok(runCredential(credentialId, stored.value, next.value));
+    } finally {
+      stored.value.refreshing.delete(refreshing);
     }
-    stored.value.versions.push({ token: minted.value.token });
-    return ok(runCredential(credentialId, stored.value, minted.value));
   }
 
   async confirmRunCredentialAdoption({ credentialId, version }: draft.RunCredentialAdoption): Promise<Result<void>> {
@@ -65,9 +81,30 @@ export class GithubRunCredentials {
     const stored = this.credentials.get(credentialId);
     if (stored === undefined) return err(unknownCredential());
     stored.revoked = true;
+    await Promise.allSettled(stored.refreshing);
     const ended = await this.end(stored.versions);
     if (ended.ok) this.credentials.delete(credentialId);
     return ended;
+  }
+
+  // A token minted after a revocation still joins the versions, which it
+  // ends; one that does not extend the expiry is discarded.
+  private async nextVersion(stored: StoredCredential): Promise<Result<RunCredentialVersion>> {
+    const minted = await this.tokens.mint(stored.grant);
+    if (!minted.ok) return minted;
+    const { token, expiresAt } = minted.value;
+    if (stored.revoked) {
+      stored.versions.push({ token });
+      return err(unknownCredential());
+    }
+    const expiry = Date.parse(expiresAt);
+    if (expiry <= stored.latestExpiry) {
+      await this.tokens.discard(token);
+      return err(failure('unavailable', 'GitHub gave the refresh no later expiry; retry after a second'));
+    }
+    stored.versions.push({ token });
+    stored.latestExpiry = expiry;
+    return ok({ minted: minted.value, version: stored.versions.length });
   }
 
   private live(credentialId: string): Result<StoredCredential> {
@@ -88,11 +125,11 @@ export class GithubRunCredentials {
   }
 }
 
-function runCredential(credentialId: string, stored: StoredCredential, minted: InstallationToken): RunCredential {
+function runCredential(credentialId: string, stored: StoredCredential, { minted, version }: RunCredentialVersion): RunCredential {
   return {
     credentialId,
     runId: stored.runId,
-    version: stored.versions.length,
+    version,
     secret: minted.token,
     authorization: basicAuthorization(minted.token),
     repositories: [...stored.grant.repositories],

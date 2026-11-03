@@ -28,10 +28,13 @@ export interface EmulatorSetup {
   // GitHub's names of the merge methods the repositories allow.
   readonly allowedMergeMethods?: readonly string[];
   readonly pageSize?: number;
-  // Defects: permissions added to every narrowed token, and protection
-  // that never binds an administrator.
+  // How far the clock moves per token; real time passes between requests.
+  readonly mintClockStepMs?: number;
+  // Defects: permissions added to every narrowed token, protection that
+  // never binds an administrator, and token answers without an expiry.
   readonly alsoGrants?: Readonly<Record<string, string>>;
   readonly ignoresEnforceAdmins?: boolean;
+  readonly omitsExpiry?: boolean;
 }
 
 export interface RecordedRequest {
@@ -59,15 +62,42 @@ interface Pull {
   mergedAt: string | null;
 }
 
-interface Protection {
+export interface Protection {
   readonly contexts: readonly string[];
+  readonly strict: boolean;
   readonly enforceAdmins: boolean;
+  readonly reviews?: Readonly<Record<string, unknown>>;
+  readonly restrictions?: Readonly<Record<string, unknown>>;
+  // Names of GitHub's `{ enabled }` settings that are on.
+  readonly enabled: readonly string[];
 }
 
-interface Refusal {
+// The `{ enabled }` settings that a protection PUT may set.
+const ENABLED_SETTINGS: readonly string[] = Object.freeze([
+  'required_linear_history',
+  'allow_force_pushes',
+  'allow_deletions',
+  'block_creations',
+  'required_conversation_resolution',
+  'lock_branch',
+]);
+
+interface Answer {
   readonly method: string;
   readonly path: RegExp;
-  readonly status: number;
+  readonly reply: Reply;
+}
+
+interface Hold {
+  readonly method: string;
+  readonly path: RegExp;
+  readonly reached: () => void;
+  readonly released: Promise<void>;
+}
+
+export interface HeldRequest {
+  readonly reached: Promise<void>;
+  release(): void;
 }
 
 type Reply = readonly [status: number, data?: unknown, headers?: Record<string, string>];
@@ -83,7 +113,9 @@ export class GithubEmulator {
   private readonly statuses = new Map<string, string>();
   private readonly pulls = new Map<string, Pull>();
   private readonly mergedBy = new Map<string, string>();
-  private readonly refusals: Refusal[] = [];
+  private readonly answers: Answer[] = [];
+  private readonly holds: Hold[] = [];
+  private revocationRefusal: number | undefined;
   private readonly routes: readonly (readonly [string, RegExp, Route])[];
   private readonly allowedMergeMethods: ReadonlySet<string>;
 
@@ -121,6 +153,7 @@ export class GithubEmulator {
       body: text.length === 0 ? undefined : JSON.parse(text),
     };
     this.requests.push(recorded);
+    await this.awaitRelease(recorded);
     const [status, data, headers] = this.route(recorded, path);
     const response = data === undefined ? new Response(null, { status, headers }) : Response.json(data, { status, headers });
     // A fetched response names its URL, which pagination reads.
@@ -129,7 +162,36 @@ export class GithubEmulator {
 
   // Native means of the fixture and the tests, outside the plugin.
   refuseNext(method: string, path: RegExp, status: number): void {
-    this.refusals.push({ method, path, status });
+    this.answerNext(method, path, status, { message: 'refused' });
+  }
+
+  // The next matching request gets this answer instead of its route's.
+  answerNext(method: string, path: RegExp, status: number, data: unknown, headers?: Record<string, string>): void {
+    this.answers.push({ method, path, reply: [status, data, headers] });
+  }
+
+  // Every token revocation fails with the status until it is undefined.
+  refuseRevocations(status: number | undefined): void {
+    this.revocationRefusal = status;
+  }
+
+  // Holds the next matching request until the test releases it.
+  holdNext(method: string, path: RegExp): HeldRequest {
+    let reached = (): void => {};
+    let release = (): void => {};
+    const reachedPromise = new Promise<void>((resolve) => { reached = resolve; });
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    this.holds.push({ method, path, reached, released });
+    return { reached: reachedPromise, release };
+  }
+
+  protectBranch(repository: string, branch: string, protection: Partial<Protection>): void {
+    const base = { contexts: [], strict: false, enforceAdmins: false, enabled: [] };
+    this.protections.set(branchKey(repository, branch), { ...base, ...protection });
+  }
+
+  protectionOf(repository: string, branch: string): Protection | undefined {
+    return this.protections.get(branchKey(repository, branch));
   }
 
   createBranch(repository: string, branch: string): string {
@@ -165,8 +227,8 @@ export class GithubEmulator {
   }
 
   private route(request: RecordedRequest, path: string): Reply {
-    const refused = this.refusals.findIndex((refusal) => refusal.method === request.method && refusal.path.test(path));
-    if (refused !== -1) return [this.refusals.splice(refused, 1)[0]!.status, { message: 'refused' }];
+    const answer = this.answers.findIndex((next) => next.method === request.method && next.path.test(path));
+    if (answer !== -1) return this.answers.splice(answer, 1)[0]!.reply;
     for (const [method, pattern, route] of this.routes) {
       const match = pattern.exec(path);
       if (match !== null && method === request.method) return route(request, match);
@@ -185,13 +247,14 @@ export class GithubEmulator {
     if (!Object.entries(permissions).every(([name, level]) => grants(APP_PERMISSIONS[name], level))) {
       return [422, { message: 'Permission not granted to the App' }];
     }
-    this.time += 1000;
+    this.time += this.setup.mintClockStepMs ?? 1000;
     const granted = { ...permissions, ...this.setup.alsoGrants, metadata: 'read' };
     const token = this.storeToken(new Set(names), granted, body.repositories !== undefined);
     const repositories = names.map((full_name) => ({ full_name, name: full_name.split('/')[1] }));
+    const expiresAt = new Date(this.tokens.get(token)!.expiresAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
     return [201, {
       token,
-      expires_at: new Date(this.tokens.get(token)!.expiresAt).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      expires_at: this.setup.omitsExpiry === true ? null : expiresAt,
       permissions: granted,
       repository_selection: 'selected',
       ...(body.repositories === undefined ? {} : { repositories }),
@@ -211,6 +274,7 @@ export class GithubEmulator {
   }
 
   private revokeToken(request: RecordedRequest): Reply {
+    if (this.revocationRefusal !== undefined) return [this.revocationRefusal, { message: 'refused' }];
     const presented = /^token (.+)$/.exec(request.headers['authorization'] ?? '')?.[1];
     const token = presented === undefined ? undefined : this.tokens.get(presented);
     if (token === undefined || !this.isTokenLive(presented!)) return [401, { message: 'Bad credentials' }];
@@ -234,9 +298,19 @@ export class GithubEmulator {
   private protect(request: RecordedRequest, repository: string, branch: string): Reply {
     const refused = this.authorize(this.tokenOf(request), repository, 'administration', 'write');
     if (refused !== undefined) return refused;
-    const body = request.body as { required_status_checks: { contexts: string[] }; enforce_admins: boolean };
-    const enforceAdmins = body.enforce_admins && !this.setup.ignoresEnforceAdmins;
-    const protection = { contexts: [...body.required_status_checks.contexts], enforceAdmins };
+    const body = request.body as Record<string, unknown> & {
+      required_status_checks: { strict: boolean; contexts: string[] };
+      enforce_admins: boolean;
+    };
+    // A PUT replaces the whole protection; omitted settings turn off.
+    const protection = {
+      contexts: [...body.required_status_checks.contexts],
+      strict: body.required_status_checks.strict,
+      enforceAdmins: body.enforce_admins && !this.setup.ignoresEnforceAdmins,
+      ...settingOf('reviews', body['required_pull_request_reviews']),
+      ...settingOf('restrictions', body['restrictions']),
+      enabled: ENABLED_SETTINGS.filter((name) => body[name] === true),
+    };
     this.protections.set(branchKey(repository, branch), protection);
     return [200, protectionData(protection)];
   }
@@ -305,6 +379,14 @@ export class GithubEmulator {
     return [200, { service: level === 'read' ? 'git-upload-pack' : 'git-receive-pack' }];
   }
 
+  private async awaitRelease(request: RecordedRequest): Promise<void> {
+    const held = this.holds.findIndex((hold) => hold.method === request.method && hold.path.test(request.path));
+    if (held === -1) return;
+    const [hold] = this.holds.splice(held, 1);
+    hold!.reached();
+    await hold!.released;
+  }
+
   private authorize(token: Token | undefined, repository: string, permission: string, level: 'read' | 'write'): Reply | undefined {
     if (token === undefined) return [401, { message: 'Bad credentials' }];
     if (!token.repositories.has(repository)) return [404, { message: 'Not Found' }];
@@ -369,9 +451,17 @@ function grants(granted: string | undefined, level: string): boolean {
   return granted === 'write' || (granted === 'read' && level === 'read');
 }
 
+function settingOf(name: 'reviews' | 'restrictions', value: unknown): Partial<Protection> {
+  return typeof value === 'object' && value !== null ? { [name]: value as Record<string, unknown> } : {};
+}
+
+// GitHub's answer omits review and push settings that are off.
 function protectionData(protection: Protection): unknown {
   return {
-    required_status_checks: { strict: false, contexts: protection.contexts },
+    required_status_checks: { strict: protection.strict, contexts: protection.contexts },
     enforce_admins: { enabled: protection.enforceAdmins },
+    ...(protection.reviews === undefined ? {} : { required_pull_request_reviews: protection.reviews }),
+    ...(protection.restrictions === undefined ? {} : { restrictions: protection.restrictions }),
+    ...Object.fromEntries(ENABLED_SETTINGS.map((name) => [name, { enabled: protection.enabled.includes(name) }])),
   };
 }

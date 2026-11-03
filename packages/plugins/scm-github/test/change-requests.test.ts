@@ -26,7 +26,7 @@ async function openPull({ provider, emulator }: GithubTestbed) {
 test('protection requires the contexts and binds administrators', async () => {
   const testbed = githubTestbed();
   await value(testbed.provider.ensureMergeProtection({ repository: PROJECT, branch: 'main', requiredStatuses: ['existing'] }));
-  const protection = await value(testbed.provider.ensureMergeProtection({ repository: PROJECT, branch: 'main', requiredStatuses: [REVIEW] }));
+  const protection = await value(testbed.provider.ensureMergeProtection({ repository: PROJECT, branch: 'main', requiredStatuses: ['existing', REVIEW] }));
   assert.deepEqual(protection, { repository: PROJECT, branch: 'main', requiredStatuses: ['existing', REVIEW], bindsProvider: true });
   const put = testbed.emulator.requests.filter((request) => request.method === 'PUT').at(-1);
   assert.deepEqual(put?.body, {
@@ -100,4 +100,58 @@ test('a commit status needs a port state, and a refusal keeps its status only', 
     message: 'GitHub refused to set a commit status',
     details: { status: '403' },
   });
+});
+
+const MAIN = { repository: PROJECT, branch: 'main' };
+const ENSURE = { ...MAIN, requiredStatuses: [REVIEW] };
+
+test('a branch without protection gets the required contexts', async () => {
+  const { provider, emulator } = githubTestbed();
+  const protection = await value(provider.ensureMergeProtection(ENSURE));
+  assert.deepEqual(protection, { ...MAIN, requiredStatuses: [REVIEW], bindsProvider: true });
+  assert.deepEqual(emulator.protectionOf(PROJECT, 'main')?.contexts, [REVIEW]);
+});
+
+test('a branch with only this protection is protected again', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.protectBranch(PROJECT, 'main', { contexts: [REVIEW], enforceAdmins: false });
+  const protection = await value(provider.ensureMergeProtection(ENSURE));
+  assert.deepEqual(protection, { ...MAIN, requiredStatuses: [REVIEW], bindsProvider: true });
+});
+
+const FOREIGN_SETTINGS: readonly (readonly [string, Parameters<GithubTestbed['emulator']['protectBranch']>[2]])[] = [
+  ['required_pull_request_reviews', { reviews: { required_approving_review_count: 1 } }],
+  ['restrictions', { restrictions: { users: [], teams: [], apps: [] } }],
+  ['required_status_checks.strict', { strict: true }],
+  ['required_status_checks.contexts', { contexts: ['ci/build'] }],
+  ['required_linear_history', { enabled: ['required_linear_history'] }],
+];
+
+for (const [setting, foreign] of FOREIGN_SETTINGS) {
+  test(`a branch whose protection has ${setting} is refused untouched`, async () => {
+    const { provider, emulator } = githubTestbed();
+    emulator.protectBranch(PROJECT, 'main', foreign);
+    const before = emulator.protectionOf(PROJECT, 'main');
+    const refused = await provider.ensureMergeProtection(ENSURE);
+    assert.equal(refused.ok ? undefined : refused.error.code, 'precondition-failed');
+    assert.equal(refused.ok ? undefined : refused.error.details['settings'], setting);
+    assert.equal(emulator.requests.some((request) => request.method === 'PUT'), false);
+    assert.equal(emulator.protectionOf(PROJECT, 'main'), before);
+  });
+}
+
+test('every conflicting setting is named', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.protectBranch(PROJECT, 'main', { strict: true, reviews: {}, restrictions: {} });
+  const refused = await provider.ensureMergeProtection(ENSURE);
+  const named = refused.ok ? undefined : refused.error.details['settings'];
+  assert.equal(named, 'required_pull_request_reviews,restrictions,required_status_checks.strict');
+});
+
+test('a remote URL outside the contract is refused', async () => {
+  for (const url of ['https://[::1]/acme/project.git', 'https://github.test:0/acme/project.git', `https://github.test/${'a'.repeat(2048)}`]) {
+    const { provider, emulator } = githubTestbed();
+    emulator.answerNext('GET', /^\/repos\/acme\/project$/, 200, { clone_url: url });
+    assert.equal(await code(provider.resolveRemoteUrl({ repository: PROJECT })), 'internal', url);
+  }
 });

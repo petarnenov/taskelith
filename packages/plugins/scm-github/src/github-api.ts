@@ -32,6 +32,8 @@ export interface GithubRefusal {
 export type GithubResult<T = GithubReply> = Result<T, GithubRefusal>;
 
 const PaginatingOctokit = Octokit.plugin(paginateRest);
+// Octokit and auth-app log GitHub's messages to the console; none escape.
+const SILENT_LOG = Object.freeze({ debug: discard, info: discard, warn: discard, error: discard });
 type Parameters = Record<string, unknown>;
 
 export class GithubApi {
@@ -42,6 +44,7 @@ export class GithubApi {
     const defaults = {
       baseUrl: connection.baseUrl ?? 'https://api.github.com',
       userAgent: USER_AGENT,
+      log: SILENT_LOG,
       request: connection.fetch === undefined ? {} : { fetch: connection.fetch },
     };
     const auth = { appId: connection.appId, installationId: connection.installationId, privateKey: connection.privateKey };
@@ -74,6 +77,8 @@ function withApiVersion<Client extends Octokit>(client: Client): Client {
   });
   return client;
 }
+
+function discard(): void {}
 
 function reply(response: { readonly status: number; readonly data: unknown }): GithubReply {
   return { status: response.status, data: response.data };

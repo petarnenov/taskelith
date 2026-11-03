@@ -167,3 +167,78 @@ test('after a restart every earlier credential is unknown', async () => {
   emulator.advance(60 * 60 * 1000);
   assert.equal(emulator.isTokenLive(credential.secret), false);
 });
+
+const REVOCATION_ROUTE = /^\/installation\/token$/;
+
+test('a refresh overtaken by a revocation whose cleanup fails is retried', async () => {
+  const { provider, emulator } = githubTestbed();
+  const credential = await value(provider.issueRunCredential(READ_ONLY));
+  const held = emulator.holdNext('POST', TOKEN_ROUTE);
+  const refreshing = provider.refreshRunCredential(credential);
+  await held.reached;
+  emulator.refuseRevocations(503);
+  const revoking = provider.revokeRunCredential(credential);
+  held.release();
+  assert.equal(await code(refreshing), 'not-found');
+  assert.equal(await code(revoking), 'unavailable');
+  emulator.refuseRevocations(undefined);
+  await value(provider.revokeRunCredential(credential));
+  assert.equal(emulator.liveRunTokens(), 0);
+});
+
+test('a rejected grant whose revocation fails is revoked by the next call', async () => {
+  const { provider, emulator } = githubTestbed({}, { alsoGrants: { contents: 'write' } });
+  emulator.refuseNext('DELETE', REVOCATION_ROUTE, 503);
+  assert.equal(await code(provider.issueRunCredential(READ_ONLY)), 'internal');
+  assert.equal(emulator.liveRunTokens(), 1);
+  assert.equal(await code(provider.issueRunCredential(READ_ONLY)), 'internal');
+  assert.equal(emulator.liveRunTokens(), 0);
+});
+
+test('a token answer without an expiry is revoked', async () => {
+  const { provider, emulator } = githubTestbed({}, { omitsExpiry: true });
+  assert.equal(await code(provider.issueRunCredential(READ_ONLY)), 'internal');
+  assert.equal(emulator.liveRunTokens(), 0);
+});
+
+for (const extra of [{ statuses: 'write' }, { administration: 'write' }] as Record<string, string>[]) {
+  test(`a token granted ${JSON.stringify(extra)} beyond the request is revoked`, async () => {
+    const { provider, emulator } = githubTestbed({}, { alsoGrants: extra });
+    assert.equal(await code(provider.issueRunCredential(READ_ONLY)), 'internal');
+    assert.equal(emulator.liveRunTokens(), 0);
+  });
+}
+
+test('a refresh within the same second as its version fails and leaves no token', async () => {
+  const { provider, emulator } = githubTestbed({}, { mintClockStepMs: 0 });
+  const credential = await value(provider.issueRunCredential(READ_ONLY));
+  assert.equal(await code(provider.refreshRunCredential(credential)), 'unavailable');
+  assert.equal(emulator.liveRunTokens(), 1);
+  emulator.advance(1000);
+  const refreshed = await value(provider.refreshRunCredential(credential));
+  assert.ok(Date.parse(refreshed.expiresAt) > Date.parse(credential.expiresAt));
+  assert.equal(refreshed.version, 2);
+});
+
+test('of two concurrent refreshes in one second only one succeeds', async () => {
+  const { provider, emulator } = githubTestbed({}, { mintClockStepMs: 0 });
+  const credential = await value(provider.issueRunCredential(READ_ONLY));
+  emulator.advance(1000);
+  const results = await Promise.all([provider.refreshRunCredential(credential), provider.refreshRunCredential(credential)]);
+  assert.deepEqual(results.map((result) => result.ok).sort(), [false, true]);
+  assert.equal(emulator.liveRunTokens(), 2);
+});
+
+for (const status of [403, 404, 422, 500]) {
+  test(`an unconfirmed revocation with status ${status} is unavailable and kept`, async () => {
+    const { provider, emulator } = githubTestbed();
+    const first = await value(provider.issueRunCredential(READ_ONLY));
+    const second = await value(provider.refreshRunCredential(first));
+    emulator.refuseNext('DELETE', REVOCATION_ROUTE, status);
+    assert.equal(await code(provider.confirmRunCredentialAdoption(second)), 'unavailable');
+    emulator.refuseNext('DELETE', REVOCATION_ROUTE, status);
+    assert.equal(await code(provider.revokeRunCredential(second)), 'unavailable');
+    await value(provider.revokeRunCredential(second));
+    assert.equal(emulator.liveRunTokens(), 0);
+  });
+}

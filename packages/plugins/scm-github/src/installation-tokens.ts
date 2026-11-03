@@ -1,7 +1,7 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { GithubApi } from './github-api.js';
-import { malformed, recordOf, refusal, textOf } from './github-data.js';
-import { effectivePermissions, githubPermissions } from './permissions.js';
+import { malformed, recordOf, refusal, textOf, type JsonRecord } from './github-data.js';
+import { effectivePermissions, githubPermissions, isExactGrant } from './permissions.js';
 import { parseRepository } from './repository-name.js';
 
 // Installation access tokens narrowed to a run's repositories and
@@ -18,17 +18,26 @@ export interface InstallationToken extends TokenGrant {
   readonly expiresAt: string;
 }
 
+interface TokenRequest {
+  readonly repositories: string[];
+  readonly permissions: Readonly<Record<string, string>>;
+}
+
 const VISIBLE_ASCII = /^[\x21-\x7e]+$/;
 
 export class InstallationTokens {
+  // Tokens the plugin refused whose revocation GitHub has not confirmed.
+  private readonly discarded = new Set<string>();
+
   constructor(
     private readonly api: GithubApi,
     private readonly installationId: string,
   ) {}
 
-  // Only for repositories of the installation; a token whose grant
-  // `accepts` refuses is revoked at once.
-  async mint(grant: TokenGrant, accepts: (granted: TokenGrant) => boolean): Promise<Result<InstallationToken>> {
+  // Exactly the requested repositories and permissions, only for
+  // repositories of the installation; any other token is discarded.
+  async mint(grant: TokenGrant): Promise<Result<InstallationToken>> {
+    await this.retryDiscarded();
     const requested = await this.tokenRequest(grant);
     if (!requested.ok) return requested;
     const minted = await this.api.asApp('POST /app/installations/{installation_id}/access_tokens', {
@@ -36,21 +45,42 @@ export class InstallationTokens {
       ...requested.value,
     });
     if (!minted.ok) return err(refusal(minted.error, 'issue an installation token'));
-    const token = readToken(minted.value.data);
+    const data = recordOf(minted.value.data);
+    const token = tokenOf(data);
     if (token === undefined) return err(malformed('an installation token request'));
-    if (accepts(token)) return ok(token);
-    await this.revoke(token.token);
-    return err(failure('internal', 'GitHub granted other repositories or permissions than requested'));
+    const read = readGrant(token, data, grant.repositories, requested.value.permissions);
+    if (!read.ok) await this.discard(token);
+    return read;
   }
 
-  // True once the token no longer works: revoked now, or already invalid.
+  // Revoked now or already invalid (401); any other answer leaves the
+  // token live and fails with `unavailable`, so the caller retries.
   async revoke(token: string): Promise<Result<void>> {
+    await this.retryDiscarded();
+    return this.revokeAtGithub(token);
+  }
+
+  // Revokes a token no caller will use; a failure is retried later.
+  async discard(token: string): Promise<void> {
+    const revoked = await this.revokeAtGithub(token);
+    if (!revoked.ok) this.discarded.add(token);
+  }
+
+  private async retryDiscarded(): Promise<void> {
+    for (const token of [...this.discarded]) {
+      this.discarded.delete(token);
+      await this.discard(token);
+    }
+  }
+
+  private async revokeAtGithub(token: string): Promise<Result<void>> {
     const revoked = await this.api.withToken(token, 'DELETE /installation/token');
     if (revoked.ok || revoked.error.status === 401) return ok(undefined);
-    return err(refusal(revoked.error, 'revoke an installation token'));
+    const status = String(revoked.error.status);
+    return err(failure('unavailable', 'GitHub did not confirm a token revocation', { status }));
   }
 
-  private async tokenRequest(grant: TokenGrant): Promise<Result<{ repositories: string[]; permissions: Record<string, string> }>> {
+  private async tokenRequest(grant: TokenGrant): Promise<Result<TokenRequest>> {
     const permissions = githubPermissions(grant.permissions);
     if (!permissions.ok) return permissions;
     if (grant.repositories.length === 0) return err(failure('invalid', 'A run credential needs at least one repository'));
@@ -65,7 +95,7 @@ export class InstallationTokens {
     if (!grant.repositories.every((repository) => installed.value.has(repository))) {
       return err(failure('not-found', 'A run credential names a repository outside the installation'));
     }
-    return ok({ repositories: names, permissions: { ...permissions.value } });
+    return ok({ repositories: names, permissions: permissions.value });
   }
 
   private async installedRepositories(): Promise<Result<ReadonlySet<string>>> {
@@ -75,29 +105,30 @@ export class InstallationTokens {
   }
 }
 
-function readToken(data: unknown): InstallationToken | undefined {
-  const record = recordOf(data);
-  const token = textOf(record['token']);
-  const expiry = Date.parse(textOf(record['expires_at']) ?? '');
-  if (token === undefined || !VISIBLE_ASCII.test(token) || Number.isNaN(expiry)) return undefined;
-  const repositories = Array.isArray(record['repositories'])
-    ? record['repositories'].map((repository) => textOf(recordOf(repository)['full_name']) ?? '')
+function tokenOf(data: JsonRecord): string | undefined {
+  const token = textOf(data['token']);
+  return token !== undefined && VISIBLE_ASCII.test(token) ? token : undefined;
+}
+
+// The token's grant must equal the request (source control contract
+// section 3); its expiry is a kernel instant.
+function readGrant(
+  token: string,
+  data: JsonRecord,
+  repositories: readonly string[],
+  permissions: Readonly<Record<string, string>>,
+): Result<InstallationToken> {
+  const expiry = Date.parse(textOf(data['expires_at']) ?? '');
+  if (Number.isNaN(expiry)) return err(malformed('an installation token request'));
+  const granted = Array.isArray(data['repositories'])
+    ? data['repositories'].map((repository) => textOf(recordOf(repository)['full_name']) ?? '')
     : [];
-  const permissions = effectivePermissions(recordOf(record['permissions']));
-  return { token, expiresAt: new Date(expiry).toISOString(), repositories, permissions };
-}
-
-// Exactly the requested repositories, every requested permission, and
-// write-code only on request (source control contract section 3).
-export function coversRequest(request: TokenGrant): (granted: TokenGrant) => boolean {
-  return (granted) => isSameSet(request.repositories, granted.repositories)
-    && request.permissions.every((permission) => granted.permissions.includes(permission))
-    && (request.permissions.includes('write-code') || !granted.permissions.includes('write-code'));
-}
-
-// A refresh keeps the repositories and the effective permissions.
-export function equalsGrant(grant: TokenGrant): (granted: TokenGrant) => boolean {
-  return (granted) => isSameSet(grant.repositories, granted.repositories) && isSameSet(grant.permissions, granted.permissions);
+  const grantedPermissions = recordOf(data['permissions']);
+  if (!isSameSet(repositories, granted) || !isExactGrant(permissions, grantedPermissions)) {
+    return err(failure('internal', 'GitHub granted other repositories or permissions than requested'));
+  }
+  const effective = effectivePermissions(grantedPermissions);
+  return ok({ token, expiresAt: new Date(expiry).toISOString(), repositories: granted, permissions: effective });
 }
 
 function isSameSet(left: readonly string[], right: readonly string[]): boolean {
