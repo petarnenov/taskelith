@@ -4,7 +4,7 @@
 Migration `1792934000000_scm-integrations` SHALL create `scm_integrations`, keyed by a minted integration identifier, with the plugin, the label, the normalized origin, the settings as a JSON object, and the revision, and `scm_integration_secrets`, one row per integration and secret name with a nonce and a sealed `bytea`, and SHALL drop both in its down migration. `scm_webhook_deliveries` SHALL keep no foreign key to them.
 
 #### Scenario: Checked values
-- **WHEN** a row has an identifier that is not minted, an origin that is not normalized, settings that are no object, or a secret name that is not kebab-case
+- **WHEN** a row has an identifier that is not minted, an origin that is not normalized, such as one with a port above 65535, settings that are no object, or a secret name that is not kebab-case
 - **THEN** the insert fails on the table's check
 
 ### Requirement: Sealed SCM secrets

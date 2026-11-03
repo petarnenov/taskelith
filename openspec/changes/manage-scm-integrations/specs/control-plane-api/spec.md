@@ -7,6 +7,10 @@ The control plane SHALL serve `listScmIntegrations` and `readScmIntegration` to 
 - **WHEN** two `updateScmIntegration` requests at one revision arrive together
 - **THEN** one answers 200, the other 409, and the revision moves once
 
+#### Scenario: Setting refused by the document's schema
+- **WHEN** a create or update body holds a secret with an empty value or a name that is not kebab-case, or a setting that is no string
+- **THEN** the answer is 400 `invalid` with `details.setting` naming that setting or secret, and it quotes no value
+
 #### Scenario: Principal without the owner role
 - **WHEN** a principal without `installation-owner` creates or updates an integration
 - **THEN** the answer is 403 `role-required` and nothing changes, while its list and read answer 200

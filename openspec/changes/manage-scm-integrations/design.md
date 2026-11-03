@@ -4,7 +4,7 @@ G3 plan item 20 is split; this is its sixth change, 20f `manage-scm-integrations
 
 **Goals.** The four operations over a store with sealed secrets; the plugin checks its own settings and secrets; the receiver verifies deliveries of stored integrations; the composition copies no fact of the GitHub plugin.
 
-**Non-goals.** `bindRepository` and `readRepositoryBinding` (11b); `createRun` and the G2 bridge (11c); deletion, and rotation beyond an update; 20d live conformance; delivery to runs (item 21); the SPA screen (item 34); any change of an OpenAPI operation, response, or schema, or of the receiver's answers, limit, or deduplication; a foreign key from `scm_webhook_deliveries`.
+**Non-goals.** `bindRepository` and `readRepositoryBinding` (11b); `createRun` and the G2 bridge (11c); deletion, and rotation beyond an update; 20d live conformance; delivery to runs (item 21); the SPA screen (item 34); any change of an OpenAPI operation, response, or schema, or of the receiver's answers, limit, or deduplication; a foreign key from `scm_webhook_deliveries`; audit events for an integration's creation, update, and secret change, a named follow-up in the scope of 11b (coordinator decision, Niki, 2026-11-03).
 
 ## Decisions
 
@@ -31,7 +31,7 @@ The names are kebab-case `SettingName` values that the plugin defines. For GitHu
 | Secret | `private-key` | The App's private key, which `crypto.createPrivateKey` parses |
 | Secret | `webhook-secret` | The webhook secret, not empty |
 
-The module checks the settings as a whole set through the plugin, every secret it is given through the plugin, and on creation that every secret of the plugin's `secretNames` is given. A refusal is `invalid` with `details.setting` naming the setting or secret; the module answers with its own message, which names it and never quotes the plugin's message or the value.
+The module checks the settings as a whole set through the plugin, every secret it is given through the plugin, and on creation that every secret of the plugin's `secretNames` is given. A refusal is `invalid` with `details.setting` naming the setting or secret; the module answers with its own message, which names it and never quotes the plugin's message or the value. A body that the document's schema already refuses, such as an empty secret, a name that is not kebab-case, or a value that is no string, never reaches the plugin: the API server checks each entry of `settings` and `secrets` alone against `ScmSettings` or `ScmSecrets` and names the first refused one in `details.setting`, beside `details.violations`.
 
 ### 3. Allowed origin (scope point 3)
 
@@ -41,10 +41,10 @@ The module checks the settings as a whole set through the plugin, every secret i
 
 `packages/adapters/postgres/migrations/1792934000000_scm-integrations.sql` creates:
 
-- `scm_integrations(integration_id text PRIMARY KEY CHECK (minted form), plugin_id, label CHECK (1 to 1024 characters), allowed_origin CHECK (normalized form, at most 300), settings jsonb CHECK (an object), revision integer CHECK (>= 1))`.
+- `scm_integrations(integration_id text PRIMARY KEY CHECK (minted form), plugin_id, label CHECK (1 to 1024 characters), allowed_origin CHECK (normalized form with a port from 1 to 65535, the pattern of `NormalizedOrigin`, at most 300), settings jsonb CHECK (an object), revision integer CHECK (>= 1))`.
 - `scm_integration_secrets(integration_id REFERENCES scm_integrations, name CHECK (SettingName), nonce bytea, sealed bytea, PRIMARY KEY (integration_id, name))`, one row per integration and name, like `slot_credentials`.
 
-The down migration drops both. `scm_webhook_deliveries` keeps no foreign key, as the brief requires, so recorded deliveries do not depend on the integration's row. The store is `packages/adapters/postgres/src/scm-integrations.ts`, with its rows on `PostgresTransaction.scmIntegrations`.
+The down migration drops both. `scm_webhook_deliveries` keeps no foreign key, as the brief requires, so recorded deliveries do not depend on the integration's row. The store is `packages/adapters/postgres/src/scm-integrations.ts`, with its rows on `PostgresTransaction.scmIntegrations`. One conformance suite, `SCM_INTEGRATIONS_CONFORMANCE` in the module's ports, runs against both the PostgreSQL and the in-memory store: creation and readback, a missing integration, pages, whole-settings and named-secret replacement, and revision conflicts; the sealing and transaction-overlap tests stay PostgreSQL-specific.
 
 ### 5. Secrets at rest (scope point 5)
 
@@ -56,11 +56,11 @@ The secrets are sealed with `AesGcmSlotCredentialCipher` of `@taskelith/secrets`
 
 ### 7. Plugin descriptor (scope point 7)
 
-The draft `SourceControlPlugin` (`packages/modules/integrations/src/ports/source-control-plugin.ts`) is in the module's port entry beside `SourceControlProvider`, and the plugin SDK re-exports it in its `draft` namespace. It holds the manifest identifier, `secretNames`, `checkSettings`, `checkSecret`, `createProvider`, `createDecoy`, and `isEventless`. The plugin API goes to `0.4.0`, and both bundled manifests, `scm-github` and `sdlc-openspec`, declare `^0.4.0`, which `test/plugin-manifests.test.ts` checks. `SOURCE_CONTROL_PORT_VERSION` stays `0.2.0`, because no operation of `SourceControlProvider` changes. The GitHub plugin's `githubSourceControlPlugin` and `registerGithubSourceControlPlugin` implement it; its decoy and its verifier share one signature check, and `GITHUB_EVENTLESS_EVENTS` moves into the plugin. The composition (`apps/control-plane/src/composition/scm-integrations.ts`) takes the decoy and the eventless rule from the registered plugin and no longer names `x-hub-signature-256`, its form, `x-github-event`, or the events; `scm-webhook-decoy.test.ts` keeps counting the HMACs and comparisons, now against the plugin's decoy.
+The draft `SourceControlPlugin` (`packages/modules/integrations/src/ports/source-control-plugin.ts`) is in the module's port entry beside `SourceControlProvider`, and the plugin SDK re-exports it in its `draft` namespace. It holds the manifest identifier, `secretNames`, `checkSettings`, `checkSecret`, `createProvider`, `createDecoy`, and `isEventless`. The plugin API goes to `0.4.0`, and both bundled manifests, `scm-github` and `sdlc-openspec`, declare `^0.4.0`, which `test/plugin-manifests.test.ts` checks. `SOURCE_CONTROL_PORT_VERSION` stays `0.2.0`, because no operation of `SourceControlProvider` changes; the coordinator accepted this decision (Niki, 2026-11-03). The GitHub plugin's `githubSourceControlPlugin` and `registerGithubSourceControlPlugin` implement it; its decoy and its verifier share one signature check, and `GITHUB_EVENTLESS_EVENTS` moves into the plugin. The composition (`apps/control-plane/src/composition/scm-integrations.ts`) takes the decoy and the eventless rule from the registered plugin and no longer names `x-hub-signature-256`, its form, `x-github-event`, or the events; `scm-webhook-decoy.test.ts` keeps counting the HMACs and comparisons, now against the plugin's decoy. Only an app's composition root, `apps/<app>/src/composition/`, may import a plugin package: `npm run check:boundaries` refuses any other product source that does, so no module, adapter, handler, or API file names `scm-github` (coordinator condition, Niki, 2026-11-03).
 
 ### 8. No secret value anywhere (scope point 8)
 
-`ScmSecrets` keeps the values private and prints `[redacted]` from `toString`, `toJSON`, and inspection; only `reveal` gives them, to the cipher and the plugin's factory. A read returns `secretNames`, the stored names. Refusals name settings, never values; the cipher's failures name only the key's size. No audit event is added by this change. The route test checks that no answer or request log line holds a secret, also for a refused body.
+`ScmSecrets` keeps the values private and prints `[redacted]` from `toString`, `toJSON`, and inspection; only `reveal` gives them, to the cipher and the plugin's factory. A read returns `secretNames`, the stored names. Refusals name settings, never values; the cipher's failures name only the key's size. No audit event is added by this change: audit events for an integration's creation, update, and secret change are a named follow-up in the scope of 11b (coordinator decision, Niki, 2026-11-03). The route test checks that no answer or request log line holds a secret, also for a refused body.
 
 ### 9. Plan and documents (scope points 9 and 10)
 
@@ -68,7 +68,7 @@ The G3 plan's row 20 lists 20a to 20f, row 11 its sub-changes 11a to 11c, and ro
 
 ## Risks / Trade-offs
 
-- The composition registers one SCM plugin, GitHub, whose decoy and eventless rule the receiver uses for every integration; a second plugin needs a receiver that picks them per integration.
-- No audit event records an integration's creation or change; the wire contract asks for none, and the coordinator may want one with item 11b.
+- The composition registers one SCM plugin, GitHub, whose decoy and eventless rule the receiver uses for every integration; a second plugin needs a receiver that picks them per integration. The coordinator accepted this limitation (Niki, 2026-11-03).
+- No audit event records an integration's creation, update, or secret change; the wire contract asks for none, and they are a named follow-up in the scope of 11b (coordinator decision, Niki, 2026-11-03).
 - Settings are stored as `jsonb`, which cannot hold a NUL; the GitHub plugin's checks refuse one first, and a later plugin that accepts one would answer 500.
 - Every delivery reads the integration's revision from PostgreSQL before verification; an unknown integration costs the same read.
