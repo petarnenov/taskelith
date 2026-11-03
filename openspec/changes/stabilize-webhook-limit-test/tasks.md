@@ -15,8 +15,8 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Repeated runs of the test file under load, strict validation, and `make verify`
-- [ ] 4.2 Record `verification.md`
+- [x] 4.1 Repeated runs of the test file under load, strict validation, and `make verify`
+- [x] 4.2 Record `verification.md`
 
 ## 5. Review and archive
 
