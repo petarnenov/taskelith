@@ -54,9 +54,22 @@ export class GithubApi {
   }
 
   // As the App or its installation, as the route requires: the plugin's
-  // own identity.
-  asApp(route: string, parameters: Parameters = {}): Promise<GithubResult> {
-    return settle(async () => reply(await this.app.request(route, parameters)));
+  // own identity, with a token narrowed to the route's repository.
+  async asApp(route: string, parameters: Parameters = {}): Promise<GithubResult> {
+    const repository = parameters['repo'];
+    if (typeof repository !== 'string') return settle(async () => reply(await this.app.request(route, parameters)));
+    const token = await this.repositoryToken(repository);
+    return token.ok ? this.withToken(token.value, route, parameters) : token;
+  }
+
+  // GitHub refuses a token for a repository the installation cannot see
+  // with 422; to the caller that repository is not found, as with 404.
+  private async repositoryToken(repository: string): Promise<GithubResult<string>> {
+    const minted = await settle(async () => {
+      const authentication = await this.app.auth({ type: 'installation', repositoryNames: [repository] });
+      return (authentication as { token: string }).token;
+    });
+    return !minted.ok && minted.error.status === 422 ? err({ status: 404 }) : minted;
   }
 
   listAsApp(route: string, parameters: Parameters = {}): Promise<GithubResult<readonly unknown[]>> {
