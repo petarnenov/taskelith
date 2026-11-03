@@ -79,8 +79,8 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
   }
 
   function readThenOpen(delay: number): void {
-    void read().then((read) => {
-      if (!read) return;
+    void read().then((shown) => {
+      if (!shown) return;
       if (delay === 0) open();
       else later(delay, open);
     });
