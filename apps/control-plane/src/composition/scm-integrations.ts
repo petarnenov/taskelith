@@ -15,6 +15,7 @@ import {
 } from '@taskelith/integrations';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
+import type { Clock } from '@taskelith/sdlc';
 import { CommittingScmWebhookDeliveries, PostgresRepositoryBindings, PostgresScmIntegrations, type PostgresDatabase } from '@taskelith/postgres';
 import { registerGithubSourceControlPlugin } from '@taskelith/scm-github';
 import { scmSecretCipher } from '@taskelith/secrets';
@@ -36,7 +37,7 @@ export interface StartedScmIntegrationServices extends ScmIntegrationServices {
 // The integrations over PostgreSQL with GitHub, the first SCM (ADR 0006); a
 // missing or malformed secret key refuses the start.
 export function startScmIntegrationServices(
-  namespace: ControlPlaneNamespace, database: PostgresDatabase, logger: Logger, projects: BindableProjects,
+  namespace: ControlPlaneNamespace, database: PostgresDatabase, logger: Logger, projects: BindableProjects, clock: Clock,
 ): Result<StartedScmIntegrationServices> {
   const key = new ScmIntegrationSecretKeyFile(namespace).read();
   if (!key.ok) return key;
@@ -48,7 +49,7 @@ export function startScmIntegrationServices(
   const plugins = singlePlugin(github.value);
   const bindings = repositoryBindingService({ bindings: new PostgresRepositoryBindings(database), integrations, plugins, projects }, logger);
   const deliveries = new CommittingScmWebhookDeliveries(database);
-  return ok({ ...scmIntegrationServices({ store: integrations, deliveries, plugin: github.value, plugins }, logger), bindings });
+  return ok({ ...scmIntegrationServices({ store: integrations, deliveries, plugin: github.value, plugins, clock }, logger), bindings });
 }
 
 export interface ScmIntegrationPorts {
@@ -56,16 +57,17 @@ export interface ScmIntegrationPorts {
   readonly deliveries: ScmWebhookDeliveries;
   readonly plugin: SourceControlPlugin;
   readonly plugins: ScmPlugins;
+  readonly clock: Clock;
 }
 
 // The installation's SCM plugin also gives the receiver its decoy and its
 // eventless rule, so no plugin fact is copied here.
 export function scmIntegrationServices(
-  { store, deliveries, plugin, plugins }: ScmIntegrationPorts, logger: Logger,
+  { store, deliveries, plugin, plugins, clock }: ScmIntegrationPorts, logger: Logger,
 ): ScmIntegrationServices {
   const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger));
   return {
-    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId } }),
+    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock }),
     webhooks: new ScmWebhookReceiver({ verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin }),
   };
 }
