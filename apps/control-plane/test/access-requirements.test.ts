@@ -73,8 +73,8 @@ test('the credential renewal, confirmation, and relay take the worker credential
 
 const LOGIN_OPERATIONS = ['logIn', 'logOut', 'readSession'];
 const PROJECT_OPERATIONS = [
-  'assignProjectMember', 'createProject', 'listProjectMembers', 'listProjects', 'readAutoMergeSetting', 'readProject', 'readProjectDefaults',
-  'removeProjectMember', 'updateProject', 'updateProjectDefaults',
+  'assignProjectMember', 'bindRepository', 'createProject', 'listProjectMembers', 'listProjects', 'readAutoMergeSetting', 'readProject',
+  'readProjectDefaults', 'readRepositoryBinding', 'removeProjectMember', 'updateProject', 'updateProjectDefaults',
 ];
 const SCM_INTEGRATION_OPERATIONS = ['createScmIntegration', 'listScmIntegrations', 'readScmIntegration', 'updateScmIntegration'];
 const AGENT_SESSION_OPERATIONS = [

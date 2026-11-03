@@ -10,8 +10,10 @@ import {
   PrincipalAdministration,
   SessionService,
 } from '@taskelith/access';
-import { ControlPlaneApi, createApiServer, scmIntegrationServices, type ApiServices } from '@taskelith/control-plane';
-import { InMemoryScmIntegrations, ScmSecrets, normalizeOrigin, type DeliveryRecording, type ScmIntegrationId } from '@taskelith/integrations';
+import { ControlPlaneApi, createApiServer, scmIntegrationServices, singlePlugin, type ApiServices, type ScmIntegrationPorts } from '@taskelith/control-plane';
+import {
+  InMemoryScmIntegrations, ScmSecrets, normalizeOrigin, type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries,
+} from '@taskelith/integrations';
 import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { githubSourceControlPlugin } from '@taskelith/scm-github';
@@ -57,7 +59,7 @@ async function fixture(t: TestContext) {
   const recorded: string[] = [];
   const deliveries = { record: async (_id: string, event: { deliveryId: string }) => { recorded.push(event.deliveryId); return ok<DeliveryRecording>('recorded'); } };
   const sink = new InMemoryLogSink();
-  const scm = scmIntegrationServices(new InMemoryScmIntegrations(), deliveries, githubSourceControlPlugin(), new Logger(sink, clock));
+  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(), deliveries), new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), scmIntegrations: scm.integrations, scmWebhooks: scm.webhooks,
@@ -95,6 +97,11 @@ async function browser(base: string, loginName: string): Promise<Headers> {
 }
 
 const holdsNoSecret = (text: string) => ![WEBHOOK_SECRET, ROTATED_SECRET, PEM_LINE].some((secret) => text.includes(secret));
+
+function githubPorts(store: ScmIntegrations, deliveries: ScmWebhookDeliveries): ScmIntegrationPorts {
+  const plugin = githubSourceControlPlugin();
+  return { store, deliveries, plugin, plugins: singlePlugin(plugin) };
+}
 
 test('an owner creates and reads an integration, with its origin normalized and its secrets only by name', async (t) => {
   const { call, created, VERA } = await fixture(t);
@@ -238,7 +245,7 @@ test('the composition logs an integration that cannot verify its webhooks, witho
   const sink = new InMemoryLogSink();
   const clock = { now: () => value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z'))) };
   const deliveries = { record: async () => ok<DeliveryRecording>('recorded') };
-  const scm = scmIntegrationServices(store, deliveries, githubSourceControlPlugin(), new Logger(sink, clock));
+  const scm = scmIntegrationServices(githubPorts(store, deliveries), new Logger(sink, clock));
   const integrationId = value(parseIdentifier('ScmIntegrationId', MISSING)) as ScmIntegrationId;
   value(await store.add({
     integrationId, pluginId: 'scm-retired', label: 'Retired', allowedOrigin: value(normalizeOrigin('https://git.example.com')),

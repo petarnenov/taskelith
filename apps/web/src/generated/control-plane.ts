@@ -786,14 +786,13 @@ export interface components {
         ExternalId: string;
         BranchName: string;
         RemoteUrl: string;
-        RemoteUrlCandidate: string;
         AllowedOrigin: string;
         NormalizedOrigin: string;
         BindingRefusal: {
             code: "precondition-failed";
             message: string;
             details: {
-                reason: "remote-not-https" | "remote-userinfo" | "remote-query" | "remote-fragment" | "remote-origin-mismatch" | "merge-method-undeclared";
+                reason: "repository-not-visible" | "integration-credential-refused" | "remote-origin-mismatch" | "merge-method-undeclared";
             } & {
                 [key: string]: string;
             };
@@ -802,7 +801,6 @@ export interface components {
         RepositoryBindingInput: {
             integrationId: components["schemas"]["Identifier"];
             repository: components["schemas"]["ExternalId"];
-            remoteUrl: components["schemas"]["RemoteUrlCandidate"];
             integrationBranch: components["schemas"]["BranchName"];
             mergeMethod: components["schemas"]["MergeMethod"];
         };

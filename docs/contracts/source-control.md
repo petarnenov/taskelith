@@ -59,7 +59,7 @@ The ports belong to the Integrations module, the "SCM / Tracker integrations" mo
 ### 4.1 Repository remote
 
 - `resolveRemoteUrl` takes a repository and returns it with its remote URL, as the plugin's own identity reads it from the service: an HTTPS URL of at most 2048 characters with a host name, not an IPv6 literal, an optional port from 1 to 65535, and no white space, user information, query, or fragment, the `RemoteUrl` form of the execution wire document and the form that the repository binding requires ([control-plane wire contracts](control-plane-wire-contracts.md) section 4, "Repository binding"). It fails with `not-found` for a repository that the plugin's identity cannot see.
-- [Control-plane wire contracts](control-plane-wire-contracts.md) section 4.1 assigns this operation to item 20, after which a binding's `remoteUrl` becomes output-only; that change of the wire contract and of the binding's handlers is not part of the port.
+- `bindRepository` resolves a binding's remote URL through this operation, so the binding's `remoteUrl` is output-only since sub-change 11b1 ([control-plane wire contracts](control-plane-wire-contracts.md) sections 4 and 4.1). It maps `not-found` to 422 `repository-not-visible` and `forbidden` to 422 `integration-credential-refused`, and treats a value outside this form as a plugin defect; that mapping belongs to the binding's handlers, not to the port.
 
 ## 5. Review identity
 
