@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith control-plane API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Login and sessions, projects with their members, defaults, auto-merge setting, and repository binding, the workers view, enrollment tokens, account slots, SCM integrations, and the webhook receiver (G3 item 9a); the board, task detail, and inbox views, inbox answers, agent sessions with their turns, native requests, responses, and output, and the server-sent event streams (G3 item 9b). A browser authenticates with the session cookie and sends the CSRF token on every mutation; the CLI and the owner use the operator credential. No response carries a stored secret; only issuing or rotating an enrollment token reveals its secret, once. The terminal WebSocket upgrade (G3 item 9d), whose frames `terminal.asyncapi.json` defines."
   },
   "paths": {
@@ -1507,7 +1507,7 @@
       "put": {
         "operationId": "bindRepository",
         "summary": "Bind a project to one repository of an SCM integration, or change the binding by compare-and-set",
-        "description": "Requires `project-maintainer` on the project, who manages project integrations (trust model section 3). The control plane normalizes the remote URL's origin and compares it with the integration's allowed origin; it re-checks a bound remote URL against the integration's current origin every time it issues or re-delivers a per-run SCM credential.",
+        "description": "Requires `project-maintainer` on the project, who manages project integrations (trust model section 3). The integration's plugin resolves the repository's remote URL before the binding is stored; the control plane normalizes its origin and compares it with the integration's allowed origin, and it re-checks a bound remote URL against the integration's current origin every time it issues or re-delivers a per-run SCM credential.",
         "security": [
           {
             "browserSession": [],
@@ -1597,7 +1597,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or it is absent while the project is bound.",
+            "description": "The expected revision is not the current one, it is absent while the project is bound, or the integration changed while its plugin resolved the remote URL.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1607,7 +1607,7 @@
             }
           },
           "422": {
-            "description": "The remote URL is not HTTPS, holds user information, a query, or a fragment, or lies outside the integration's allowed origin; or the integration's plugin does not declare the merge method, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
+            "description": "The integration's plugin cannot see the repository or its credential is refused, the resolved remote URL lies outside the integration's allowed origin, or the integration's plugin does not declare the merge method, so every merge would fail with `unavailable` (source control contract section 2, rule 5, and section 4).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1627,7 +1627,7 @@
             }
           },
           "503": {
-            "description": "A store the operation needs is unavailable; retry later.",
+            "description": "A store the operation needs, the integration's plugin, or its service is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6453,12 +6453,6 @@
         "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(?:/[^?#\\s]*)?$",
         "description": "A bound remote URL: HTTPS with a host name and an optional port from 1 to 65535, without IPv6 literal, user information, query, or fragment, which a workspace clones from and pushes to (git workspace contract sections 3 and 7), so that no secret can be part of it. Its origin is the allowed origin of the binding's SCM integration when it was bound."
       },
-      "RemoteUrlCandidate": {
-        "type": "string",
-        "maxLength": 2048,
-        "pattern": "^[A-Za-z][A-Za-z0-9+.-]*://\\S+$",
-        "description": "A remote URL that `bindRepository` checks: an absolute URL with an authority and no white space. A URL that is not HTTPS, holds user information, a query, or a fragment, or whose normalized origin is not the integration's allowed origin is refused with 422 `BindingRefusal`."
-      },
       "AllowedOrigin": {
         "type": "string",
         "maxLength": 300,
@@ -6474,7 +6468,7 @@
       "BindingRefusal": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Status 422 of `bindRepository`, checked in this order: the remote URL is not HTTPS, holds user information, a query, or a fragment, or its normalized origin is not the integration's allowed origin; or the integration's plugin does not declare the merge method in its `SourceControlCapabilities`.",
+        "description": "Status 422 of `bindRepository`, checked in this order: the integration's plugin cannot see the repository (`repository-not-visible`) or its credential is refused (`integration-credential-refused`); the normalized origin of the resolved remote URL is not the integration's allowed origin; or the integration's plugin does not declare the merge method in its `SourceControlCapabilities`.",
         "required": [
           "code",
           "message",
@@ -6497,10 +6491,8 @@
               "reason": {
                 "type": "string",
                 "enum": [
-                  "remote-not-https",
-                  "remote-userinfo",
-                  "remote-query",
-                  "remote-fragment",
+                  "repository-not-visible",
+                  "integration-credential-refused",
                   "remote-origin-mismatch",
                   "merge-method-undeclared"
                 ]
@@ -6526,7 +6518,6 @@
         "required": [
           "integrationId",
           "repository",
-          "remoteUrl",
           "integrationBranch",
           "mergeMethod"
         ],
@@ -6538,9 +6529,6 @@
           "repository": {
             "$ref": "#/components/schemas/ExternalId"
           },
-          "remoteUrl": {
-            "$ref": "#/components/schemas/RemoteUrlCandidate"
-          },
           "integrationBranch": {
             "$ref": "#/components/schemas/BranchName",
             "description": "The target branch of the project's merges (product ports section 6.3) and the base branch of its workspaces (git workspace contract section 3)."
@@ -6548,7 +6536,8 @@
           "mergeMethod": {
             "$ref": "#/components/schemas/MergeMethod"
           }
-        }
+        },
+        "description": "The binding a maintainer sends. It names no remote URL: the integration's plugin resolves the repository's remote URL (source control contract section 4.1), and a body that still sends `remoteUrl` is refused with 400."
       },
       "RepositoryBinding": {
         "type": "object",
