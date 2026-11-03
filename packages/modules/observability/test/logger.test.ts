@@ -115,11 +115,17 @@ test('near misses of a GitHub installation token stay', () => {
   }
 });
 
-test('a GitHub installation token shape inside a longer word stays', () => {
-  for (const kept of [`prefix${GITHUB_TOKEN}suffix`, `my_${GITHUB_TOKEN}`, `v2${GITHUB_TOKEN}`]) {
-    assert.equal(redactText(`keep ${kept} here`), `keep ${kept} here`, kept);
-  }
-});
+for (const before of ['prefix', 'my_', 'v2']) {
+  test(`a GitHub installation token after the word ${before} is redacted`, () => {
+    assert.equal(redactText(`keep ${before}${GITHUB_TOKEN} here`), `keep ${before}${REDACTED} here`);
+  });
+}
+
+for (const escape of ['\\n', '\\t', '\\r', '\\"']) {
+  test(`a GitHub installation token after the escape ${escape} is redacted`, () => {
+    assert.equal(redactText(`line${escape}${GITHUB_TOKEN}`), `line${escape}${REDACTED}`);
+  });
+}
 
 test('PEM private keys of every type are redacted, whole or cut, and certificates stay', () => {
   for (const type of ['PRIVATE KEY', 'ENCRYPTED PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY']) {

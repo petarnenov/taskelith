@@ -6,6 +6,8 @@ import { failure } from '@taskelith/kernel';
 import { assertLinearOnRuns } from '@taskelith/testing';
 import { NodeSecrets, RandomIdentifiers, REDACTED, redactFailure, redactSecrets, scrubEnvironment } from '@taskelith/secrets';
 
+const JWT = 'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl';
+
 test('issued secrets carry their kind, differ, and match only their own hash', () => {
   const secrets = new NodeSecrets();
   const first = secrets.issue('operator');
@@ -32,14 +34,13 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   const secret = new NodeSecrets().issue('worker').secret;
   const seed = new TextDecoder().decode(createUser().getSeed());
   const accountSeed = new TextDecoder().decode(createAccount().getSeed());
-  const jwt = 'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl';
-  const creds = `-----BEGIN NATS USER JWT-----\n${jwt}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${seed}\n------END USER NKEY SEED------`;
+  const creds = `-----BEGIN NATS USER JWT-----\n${JWT}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${seed}\n------END USER NKEY SEED------`;
 
   assert.equal(redactSecrets(`token ${secret} failed`), `token ${REDACTED} failed`);
   assert.equal(redactSecrets(`x${secret}`), `x${REDACTED}`, 'a prefix glued in front hides nothing');
   assert.equal(redactSecrets(`9${seed}`), `9${REDACTED}`);
   assert.equal(redactSecrets(`seeds ${seed} ${accountSeed}`), `seeds ${REDACTED} ${REDACTED}`);
-  assert.equal(redactSecrets(`jwt ${jwt}`), `jwt ${REDACTED}`);
+  assert.equal(redactSecrets(`jwt ${JWT}`), `jwt ${REDACTED}`);
   assert.equal(redactSecrets(`creds:\n${creds}\nend`), `creds:\n${REDACTED}\nend`);
   assert.equal(redactSecrets('workerId w0123 and tkop_short stay'), 'workerId w0123 and tkop_short stay');
   const redacted = redactFailure(failure('forbidden', `bad ${secret}`, { presented: secret, worker: 'w1' }));
@@ -48,7 +49,7 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
 
 // Synthetic GitHub installation tokens: stateful, and stateless with a JWT.
 const GITHUB_TOKEN = `ghs_${'A1b2'.repeat(9)}`;
-const GITHUB_STATELESS_TOKEN = `ghs_12345_${'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl'}`;
+const GITHUB_STATELESS_TOKEN = `ghs_12345_${JWT}`;
 
 test('text loses a stateful GitHub installation token', () => {
   assert.equal(redactSecrets(`token ${GITHUB_TOKEN} failed`), `token ${REDACTED} failed`);
@@ -78,11 +79,17 @@ test('near misses of a GitHub installation token stay', () => {
   }
 });
 
-test('a GitHub installation token shape inside a longer word stays', () => {
-  for (const kept of [`prefix${GITHUB_TOKEN}suffix`, `my_${GITHUB_TOKEN}`, `v2${GITHUB_TOKEN}`]) {
-    assert.equal(redactSecrets(`keep ${kept} here`), `keep ${kept} here`, kept);
-  }
-});
+for (const before of ['prefix', 'my_', 'v2']) {
+  test(`a GitHub installation token after the word ${before} is redacted`, () => {
+    assert.equal(redactSecrets(`keep ${before}${GITHUB_TOKEN} here`), `keep ${before}${REDACTED} here`);
+  });
+}
+
+for (const escape of ['\\n', '\\t', '\\r', '\\"']) {
+  test(`a GitHub installation token after the escape ${escape} is redacted`, () => {
+    assert.equal(redactSecrets(`line${escape}${GITHUB_TOKEN}`), `line${escape}${REDACTED}`);
+  });
+}
 
 test('the user information of a URL is redacted, percent-encoded or not', () => {
   assert.equal(redactSecrets('postgres://owner:example-password@localhost/taskelith'), `postgres://${REDACTED}@localhost/taskelith`);
