@@ -20,7 +20,7 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `74e0739a` `test: cover the failure paths of the board reads composition` adds a unit test over a fake transaction, which changed the diff, so `e1b677e7` deleted the second `route.json` and `3b6c8719` routed a third time (unedited; tier `elevated`, 41 files and 2608 lines, the same triggers).
 - `18d889a2` recorded this revision list; `f7f56f95` recorded `verify-15-3.log` (tree `35bb6db1`) with `make record`. Review pass 1 reviewed `468783d9..f7f56f95`.
 - Pass 1 fixes (section "Pass 1 fixes"): `e13b58e2`, `2ce1c0eb`, `9b5f193f`, `bec6dcd9`, `60cce934`, `b6386560`, `7f1475ca`, and the design and delta commit `522f9217`. `f313b9a5` records pass 1 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `44f5ecf6` deleted the third `route.json` and `50afde6e` routed a fourth time (unedited; tier `elevated`, 41 files and 2799 lines, the same triggers).
-- The commit after the next `make verify` records it with `make record`.
+- `45df01f8` recorded the pass 1 fixes. Its first `make verify` (`verify-15-p1.log`) failed before `make test` started: Docker could not create the network of the verify services (`all predefined address pools have been fully subnetted`), an environment failure outside the change. The worker removed the containers and network of its own manual-run services (project `taskelith-464544771-dev`, volumes kept) and reran `make verify` once on the same tree (`verify-15-p1b.log`), which passed and is the run that `make record` records.
 
 ## Environment
 
@@ -70,11 +70,15 @@ The same commit `522f9217` applies the coordinator decisions of 2026-11-03 after
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `35bb6db1362b6a34b4b52bc82d553ad217636fa1`; tests 4533, pass 4524, fail 0, skipped 9; all files 99.42% lines, 92.67% branches, 98.77% functions.
+- `make verify`: passed, profile full, tree `2dd515e45a135c317ae77f3edadfac741e1b51c3`; tests 4541, pass 4532, fail 0, skipped 9; all files 99.42% lines, 92.70% branches, 98.78% functions.
 - `npm run openspec -- validate implement-board-and-inbox-views --strict`: passed, `Change 'implement-board-and-inbox-views' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 107 file(s); every pass summary file is valid: 87 file(s); every route file is valid: 40 file(s).`.
 - Spec diff against the merge base `468783d9f2e5` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a15e-ae75-7220-8a24-a46c374d3bc0` | 0 | 2 | 7 | 2 |
 <!-- make record: end -->
 
 ## Limitations
