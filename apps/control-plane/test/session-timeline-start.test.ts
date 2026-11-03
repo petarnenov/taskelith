@@ -12,7 +12,7 @@ import {
   SessionOutputTailKeyFile,
 } from '@taskelith/control-plane-store';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { parseInstant } from '@taskelith/kernel';
+import { ok, parseInstant } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 
 const ownerUid = process.getuid!();
@@ -41,6 +41,18 @@ test('the session timeline service starts with the installation digest and outpu
   value(new SessionInputDigestKeyFile(space).create());
   value(new SessionOutputTailKeyFile(space).create());
   assert.ok(value(startAgentSessionServices(space, unusedDatabase(), CLOCK)));
+});
+
+test('the inbox source over one snapshot lists that snapshot\'s items at its position', async () => {
+  const space = namespace();
+  value(new SessionInputDigestKeyFile(space).create());
+  value(new SessionOutputTailKeyFile(space).create());
+  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const listed: string[] = [];
+  const snapshot = { items: { listOpen: async (projectId: string) => (listed.push(projectId), ok([])) } };
+  const source = services.sourceIn(snapshot as never, { current: async () => ok('12') });
+  assert.deepEqual(await source.openItems({ kind: 'project', projectId: 'alpha' as never }), { ok: true, value: { items: [], position: '12' } });
+  assert.deepEqual(listed, ['alpha']);
 });
 
 test('a missing digest key refuses the service start and names init, which creates it', () => {
