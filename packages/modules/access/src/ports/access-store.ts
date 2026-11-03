@@ -1,11 +1,12 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
 import type { LoginName, PasswordHash, Principal, PrincipalId } from '../domain/principal.js';
+import type { Project, ProjectDefaults, SettingChange, StoredAutoMergeSetting, StoredDefaults } from '../domain/project.js';
 import type { ProjectRole } from '../domain/roles.js';
 import type { SecretHash } from '../domain/secret-hash.js';
 import type { StoredSession } from '../domain/session.js';
 
-// Principals, roles, sessions, and their audit trail. `transaction` commits
+// Principals, projects, roles, sessions, and their audit. `transaction` commits
 // the work's writes only when it answers ok, and serializes concurrent work.
 export interface AccessStore {
   transaction<Value>(work: (tx: AccessTransaction) => Promise<Result<Value>>): Promise<Result<Value>>;
@@ -13,6 +14,7 @@ export interface AccessStore {
 
 export interface AccessTransaction {
   readonly principals: Principals;
+  readonly projects: Projects;
   readonly projectRoles: ProjectRoles;
   readonly sessions: Sessions;
   readonly audit: AccessAudit;
@@ -31,19 +33,50 @@ export interface Principals {
   operatorPrincipal(): Promise<Result<PrincipalId | undefined>>;
 }
 
+// Which projects a page holds: every one, or those on which `memberOf`
+// holds a role; at most `limit`, after `after`, in code-unit order.
+export interface ProjectQuery {
+  readonly after?: string;
+  readonly limit: number;
+  readonly memberOf?: PrincipalId;
+}
+
+// `add` is `conflict` for a taken identifier; compare-and-set writes are
+// `not-found` for an unknown project and `conflict` for a moved revision.
+export interface Projects {
+  // Also the defaults and the auto-merge setting, on, at revision 1.
+  add(project: Project, defaults: ProjectDefaults): Promise<Result<void>>;
+  get(projectId: string): Promise<Result<Project | undefined>>;
+  page(query: ProjectQuery): Promise<Result<readonly Project[]>>;
+  rename(projectId: string, expectedRevision: number, name: string): Promise<Result<Project>>;
+  defaults(projectId: string): Promise<Result<StoredDefaults | undefined>>;
+  replaceDefaults(
+    projectId: string, expectedRevision: number, defaults: ProjectDefaults, change: SettingChange,
+  ): Promise<Result<StoredDefaults>>;
+  autoMergeSetting(projectId: string): Promise<Result<StoredAutoMergeSetting | undefined>>;
+}
+
 export interface ProjectRoleGrant {
   readonly projectId: string;
   readonly role: ProjectRole;
 }
 
-// At most one role per principal and project; `assign` replaces it, and
-// `remove` answers whether there was one.
+export interface ProjectMembership {
+  readonly principalId: PrincipalId;
+  readonly loginName: LoginName;
+  readonly role: ProjectRole;
+}
+
+// At most one role per principal and project; `assign` replaces it, or is
+// `not-found` for an unknown principal or project; `remove` answers if any.
 export interface ProjectRoles {
   roleOf(projectId: string, principalId: PrincipalId): Promise<Result<ProjectRole | undefined>>;
   assign(projectId: string, principalId: PrincipalId, role: ProjectRole, assignedAt: Instant): Promise<Result<void>>;
   remove(projectId: string, principalId: PrincipalId): Promise<Result<boolean>>;
   // In project identifier order.
   projectsOf(principalId: PrincipalId): Promise<Result<readonly ProjectRoleGrant[]>>;
+  // At most `limit` after `after`, in principal identifier code-unit order.
+  members(projectId: string, after: string | undefined, limit: number): Promise<Result<readonly ProjectMembership[]>>;
 }
 
 // `replace` and `touch` are `not-found` unless a session that has not ended

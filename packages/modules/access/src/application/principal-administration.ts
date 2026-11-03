@@ -1,8 +1,9 @@
-import { err, failure, ok, parseIdentifier, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
 import { checkNewPassword } from '../domain/password-policy.js';
 import { parseLoginName, parsePrincipalId, type Principal, type PrincipalId } from '../domain/principal.js';
+import { unknownProject } from '../domain/project.js';
 import { OWNER_ONLY } from '../domain/requirement.js';
 import { parseProjectRole, type ProjectRole } from '../domain/roles.js';
 import type { AccessStore, AccessTransaction } from '../ports/access-store.js';
@@ -90,13 +91,18 @@ export class PrincipalAdministration {
     target: { readonly projectId: string; readonly loginName: string; readonly role: string },
     invocation: AdministrativeInvocation,
   ): Promise<Result<ProjectRoleChange>> {
-    const role = parseProjectRole(target.role);
-    if (!role.ok) return Promise.resolve(role);
-    return this.#roleCommand(actor, target, invocation, async (tx, principalId, projectId, at) => {
-      const assigned = await tx.projectRoles.assign(projectId, principalId, role.value, at);
-      if (!assigned.ok) return assigned;
-      return ok({ changed: true, role: role.value, event: { kind: 'access.project-role-assigned', principalId, projectId, role: role.value } });
-    });
+    const loginName = parseLoginName(target.loginName);
+    if (!loginName.ok) return Promise.resolve(loginName);
+    return this.#assign(actor, target, (tx) => principalNamed(tx, loginName.value), invocation);
+  }
+
+  // `assignProjectMember`: the same command for a principal by identifier.
+  assignProjectMember(
+    actor: PrincipalId,
+    target: { readonly projectId: string; readonly principalId: string; readonly role: string },
+    invocation: AdministrativeInvocation,
+  ): Promise<Result<ProjectRoleChange>> {
+    return this.#assign(actor, target, (tx) => principalWithId(tx, target.principalId), invocation);
   }
 
   // Succeeds for a principal that holds no role; only a removal is audited.
@@ -105,37 +111,61 @@ export class PrincipalAdministration {
     target: { readonly projectId: string; readonly loginName: string },
     invocation: AdministrativeInvocation,
   ): Promise<Result<ProjectRoleChange>> {
-    return this.#roleCommand(actor, target, invocation, async (tx, principalId, projectId) => {
-      const held = await tx.projectRoles.roleOf(projectId, principalId);
-      if (!held.ok) return held;
-      const removed = await tx.projectRoles.remove(projectId, principalId);
-      if (!removed.ok) return removed;
-      const event: Audited = { kind: 'access.project-role-removed', principalId, projectId, ...(held.value === undefined ? {} : { role: held.value }) };
-      return ok({ changed: removed.value, event });
-    });
+    const loginName = parseLoginName(target.loginName);
+    if (!loginName.ok) return Promise.resolve(loginName);
+    return this.#roleCommand(actor, target.projectId, invocation, (tx) => principalNamed(tx, loginName.value), removal);
+  }
+
+  // `removeProjectMember`: also succeeds for an unknown principal, which
+  // holds no role (wire contracts section 4).
+  async removeProjectMember(
+    actor: PrincipalId,
+    target: { readonly projectId: string; readonly principalId: string },
+    invocation: AdministrativeInvocation,
+  ): Promise<Result<void>> {
+    const removed = await this.#roleCommand(actor, target.projectId, invocation, (tx) => principalWithId(tx, target.principalId), removal);
+    return removed.ok || isUnknownPrincipal(removed.error) ? ok(undefined) : removed;
   }
 
   #authorized(actor: PrincipalId): Promise<Result<void>> {
     return this.#deps.store.transaction((tx) => authorizeIn(tx, actor, OWNER_ONLY));
   }
 
+  #assign(
+    actor: PrincipalId,
+    target: { readonly projectId: string; readonly role: string },
+    principalOf: (tx: AccessTransaction) => Promise<Result<Principal>>,
+    invocation: AdministrativeInvocation,
+  ): Promise<Result<ProjectRoleChange>> {
+    const role = parseProjectRole(target.role);
+    if (!role.ok) return Promise.resolve(role);
+    return this.#roleCommand(actor, target.projectId, invocation, principalOf, async (tx, principalId, projectId, at) => {
+      const assigned = await tx.projectRoles.assign(projectId, principalId, role.value, at);
+      if (!assigned.ok) return assigned;
+      return ok({ changed: true, role: role.value, event: { kind: 'access.project-role-assigned', principalId, projectId, role: role.value } });
+    });
+  }
+
   #roleCommand(
     actor: PrincipalId,
-    target: { readonly projectId: string; readonly loginName: string },
+    projectIdText: string,
     invocation: AdministrativeInvocation,
-    change: (tx: AccessTransaction, principalId: PrincipalId, projectId: string, at: Instant) => Promise<Result<{ changed: boolean; role?: ProjectRole; event: Audited }>>,
+    principalOf: (tx: AccessTransaction) => Promise<Result<Principal>>,
+    change: RoleChange,
   ): Promise<Result<ProjectRoleChange>> {
-    const projectId = parseIdentifier('ProjectId', target.projectId);
+    const projectId = parseIdentifier('ProjectId', projectIdText);
     if (!projectId.ok) return Promise.resolve(projectId);
-    const loginName = parseLoginName(target.loginName);
-    if (!loginName.ok) return Promise.resolve(loginName);
     return this.#command(actor, invocation, async (tx, at) => {
-      const principal = await principalNamed(tx, loginName.value);
+      const project = await tx.projects.get(projectId.value);
+      if (!project.ok) return project;
+      if (project.value === undefined) return unknownProject();
+      const principal = await principalOf(tx);
       if (!principal.ok) return principal;
-      const changed = await change(tx, principal.value.principalId, projectId.value, at);
+      const { principalId, loginName } = principal.value;
+      const changed = await change(tx, principalId, projectId.value, at);
       if (!changed.ok) return changed;
       const { role } = changed.value;
-      const value = { principalId: principal.value.principalId, loginName: loginName.value, projectId: projectId.value, ...(role === undefined ? {} : { role }) };
+      const value = { principalId, loginName, projectId: projectId.value, ...(role === undefined ? {} : { role }) };
       return ok({ value, ...(changed.value.changed ? { event: changed.value.event } : {}) });
     });
   }
@@ -161,6 +191,31 @@ export class PrincipalAdministration {
       return ok(done.value.value);
     });
   }
+}
+
+type RoleChange = (
+  tx: AccessTransaction, principalId: PrincipalId, projectId: string, at: Instant,
+) => Promise<Result<{ changed: boolean; role?: ProjectRole; event: Audited }>>;
+
+const removal: RoleChange = async (tx, principalId, projectId) => {
+  const held = await tx.projectRoles.roleOf(projectId, principalId);
+  if (!held.ok) return held;
+  const removed = await tx.projectRoles.remove(projectId, principalId);
+  if (!removed.ok) return removed;
+  const event: Audited = { kind: 'access.project-role-removed', principalId, projectId, ...(held.value === undefined ? {} : { role: held.value }) };
+  return ok({ changed: removed.value, event });
+};
+
+function isUnknownPrincipal(failed: Failure): boolean {
+  return failed.code === 'not-found' && failed.details.principal !== undefined;
+}
+
+async function principalWithId(tx: AccessTransaction, text: string): Promise<Result<Principal>> {
+  const principalId = parsePrincipalId(text);
+  const found = principalId.ok ? await tx.principals.get(principalId.value) : ok(undefined);
+  if (!found.ok) return found;
+  if (found.value !== undefined) return ok(found.value);
+  return err(failure('not-found', 'no principal has this identifier', { principal: text }));
 }
 
 async function principalNamed(tx: AccessTransaction, loginName: Principal['loginName']): Promise<Result<Principal>> {

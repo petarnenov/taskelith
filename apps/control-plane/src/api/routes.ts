@@ -9,7 +9,7 @@ export type SecurityScheme = 'operatorToken' | 'enrollmentToken' | 'workerCreden
 // its failures map to the statuses the document declares.
 export interface RouteDefinition {
   readonly operationId: string;
-  readonly method: 'GET' | 'POST' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly pattern: RegExp;
   // The alternatives of the document's `security` array.
   readonly security: readonly SecurityScheme[];
@@ -39,6 +39,12 @@ const COMMON: Partial<Record<FailureCode, number>> = { invalid: 400, forbidden: 
 const SESSION_PATH = `^/projects/${SEGMENT}/agent-sessions/${SEGMENT}`;
 const SESSION_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
 const SESSION_COMMAND: Partial<Record<FailureCode, number>> = { ...SESSION_READ, conflict: 409, 'precondition-failed': 422 };
+const PROJECT_PATH = `^/projects/${SEGMENT}`;
+const PROJECT_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
+const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409 };
+// A role lost after the server's check is denied by the command's own.
+const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
+const BOTH: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
 
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
@@ -144,6 +150,47 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'respondToNativeRequest', method: 'POST', pattern: new RegExp(`${SESSION_PATH}/responses$`),
     security: ['browserSession', 'operatorToken'], body: 'NativeResponseSubmission', response: 'NativeRequest', success: 200,
     statuses: SESSION_COMMAND,
+  },
+  // Control-plane wire contracts section 4: projects, members, and defaults.
+  {
+    operationId: 'listProjects', method: 'GET', pattern: /^\/projects$/, security: BOTH, query: ['after'],
+    response: 'ProjectPage', success: 200, statuses: COMMON,
+  },
+  {
+    operationId: 'createProject', method: 'POST', pattern: /^\/projects$/, security: BOTH, body: 'ProjectCreation',
+    response: 'Project', success: 201, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readProject', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}$`), security: BOTH,
+    response: 'Project', success: 200, statuses: PROJECT_READ,
+  },
+  {
+    operationId: 'updateProject', method: 'PATCH', pattern: new RegExp(`${PROJECT_PATH}$`), security: BOTH, body: 'ProjectUpdate',
+    response: 'Project', success: 200, statuses: PROJECT_UPDATE, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'listProjectMembers', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/members$`), security: BOTH, query: ['after'],
+    response: 'ProjectMemberPage', success: 200, statuses: PROJECT_READ,
+  },
+  {
+    operationId: 'assignProjectMember', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BOTH,
+    body: 'MemberAssignment', response: 'ProjectMember', success: 200, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'removeProjectMember', method: 'DELETE', pattern: new RegExp(`${PROJECT_PATH}/members/${SEGMENT}$`), security: BOTH,
+    response: 'empty', success: 204, statuses: PROJECT_READ, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readProjectDefaults', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BOTH,
+    response: 'ProjectDefaults', success: 200, statuses: PROJECT_READ,
+  },
+  {
+    operationId: 'updateProjectDefaults', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/defaults$`), security: BOTH,
+    body: 'ProjectDefaultsUpdate', response: 'ProjectDefaults', success: 200, statuses: PROJECT_UPDATE, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'readAutoMergeSetting', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/auto-merge$`), security: BOTH,
+    response: 'AutoMergeSetting', success: 200, statuses: PROJECT_READ,
   },
   {
     operationId: 'readSession', method: 'GET', pattern: /^\/session$/, security: ['browserSession', 'none'], browserOnly: true,

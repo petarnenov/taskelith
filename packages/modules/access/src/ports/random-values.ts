@@ -4,4 +4,6 @@ export interface RandomValues {
   sessionToken(): string;
   // `u` and 32 lowercase hexadecimal digits from 128 random bits.
   principalId(): string;
+  // `p` and 32 lowercase hexadecimal digits from 128 random bits.
+  projectId(): string;
 }

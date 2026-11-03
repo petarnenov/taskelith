@@ -4,6 +4,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import {
   AuthorizationService,
   LoginThrottle,
+  PrincipalAdministration,
+  ProjectSetupService,
   SessionService,
   type LoginThrottleSettings,
   type SessionLifetime,
@@ -196,6 +198,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
     agentSessions: agentSessions.value,
+    projects: {
+      setup: new ProjectSetupService({ store: access.store, random: access.secrets, clock }),
+      members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),
+    },
   });
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.

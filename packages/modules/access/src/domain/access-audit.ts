@@ -9,13 +9,17 @@ export type AccessAuditKind =
   | 'access.principal-created'
   | 'access.password-set'
   | 'access.project-role-assigned'
-  | 'access.project-role-removed';
+  | 'access.project-role-removed'
+  | 'access.project-created'
+  | 'access.project-renamed'
+  | 'access.project-defaults-changed';
 
 // Names principals, roles, actors, and reasons; never a password, hash,
 // session identifier, or CSRF token (decision 12).
 export interface AccessAuditEvent {
   readonly kind: AccessAuditKind;
-  // Absent only on a refused bootstrap of an installation with no owner.
+  // Absent on a refused bootstrap of an installation with no owner and on
+  // a project event, which names its project.
   readonly principalId?: PrincipalId;
   readonly projectId?: string;
   readonly role?: Role;

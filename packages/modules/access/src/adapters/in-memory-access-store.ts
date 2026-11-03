@@ -1,6 +1,17 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AccessAuditEvent } from '../domain/access-audit.js';
 import type { LoginName, PasswordHash, Principal, PrincipalId } from '../domain/principal.js';
+import {
+  AUTO_MERGE_STARTS_ON,
+  FIRST_REVISION,
+  revisionConflict,
+  unknownProject,
+  type Project,
+  type ProjectDefaults,
+  type SettingChange,
+  type StoredAutoMergeSetting,
+  type StoredDefaults,
+} from '../domain/project.js';
 import type { ProjectRole } from '../domain/roles.js';
 import type { SecretHash } from '../domain/secret-hash.js';
 import { isLive, type StoredSession } from '../domain/session.js';
@@ -9,8 +20,11 @@ import type {
   AccessStore,
   AccessTransaction,
   Principals,
+  ProjectMembership,
+  ProjectQuery,
   ProjectRoleGrant,
   ProjectRoles,
+  Projects,
   Sessions,
 } from '../ports/access-store.js';
 
@@ -19,8 +33,15 @@ interface RoleRow extends ProjectRoleGrant {
   readonly assignedAt: Instant;
 }
 
+interface ProjectRow {
+  readonly project: Project;
+  readonly defaults: StoredDefaults;
+  readonly autoMerge: StoredAutoMergeSetting;
+}
+
 interface State {
   readonly principals: Map<PrincipalId, Principal>;
+  readonly projects: Map<string, ProjectRow>;
   readonly owners: Map<PrincipalId, Instant>;
   operator: PrincipalId | undefined;
   readonly roles: Map<string, RoleRow>;
@@ -30,7 +51,7 @@ interface State {
 
 function copy(state: State): State {
   return {
-    principals: new Map(state.principals), owners: new Map(state.owners), operator: state.operator,
+    principals: new Map(state.principals), projects: new Map(state.projects), owners: new Map(state.owners), operator: state.operator,
     roles: new Map(state.roles), sessions: new Map(state.sessions), audit: [...state.audit],
   };
 }
@@ -39,7 +60,7 @@ function copy(state: State): State {
 // state only when the work answers ok.
 export class InMemoryAccessStore implements AccessStore {
   #state: State = {
-    principals: new Map(), owners: new Map(), operator: undefined, roles: new Map(), sessions: new Map(), audit: [],
+    principals: new Map(), projects: new Map(), owners: new Map(), operator: undefined, roles: new Map(), sessions: new Map(), audit: [],
   };
 
   #queue: Promise<unknown> = Promise.resolve();
@@ -60,6 +81,7 @@ export class InMemoryAccessStore implements AccessStore {
 function transactionOver(state: State): AccessTransaction {
   return {
     principals: new MemoryPrincipals(state),
+    projects: new MemoryProjects(state),
     projectRoles: new MemoryProjectRoles(state),
     sessions: new MemorySessions(state),
     audit: new MemoryAudit(state),
@@ -119,6 +141,63 @@ class MemoryPrincipals implements Principals {
 
 const roleKey = (projectId: string, principalId: PrincipalId) => JSON.stringify([projectId, principalId]);
 
+// Code-unit order, as wire contracts section 6 pages lists.
+const byCodeUnits = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+
+class MemoryProjects implements Projects {
+  constructor(private readonly state: State) {}
+
+  async add(project: Project, defaults: ProjectDefaults): Promise<Result<void>> {
+    if (this.state.projects.has(project.projectId)) return err(failure('conflict', `the project ${project.projectId} exists`));
+    this.state.projects.set(project.projectId, Object.freeze({
+      project: Object.freeze({ ...project }),
+      defaults: Object.freeze({ defaults, revision: FIRST_REVISION }),
+      autoMerge: Object.freeze({ enabled: AUTO_MERGE_STARTS_ON, revision: FIRST_REVISION }),
+    }));
+    return ok(undefined);
+  }
+
+  async get(projectId: string): Promise<Result<Project | undefined>> {
+    return ok(this.state.projects.get(projectId)?.project);
+  }
+
+  async page({ after, limit, memberOf }: ProjectQuery): Promise<Result<readonly Project[]>> {
+    const member = (projectId: string) => memberOf === undefined || this.state.roles.has(roleKey(projectId, memberOf));
+    const projects = [...this.state.projects.values()].map((row) => row.project)
+      .filter((project) => (after === undefined || project.projectId > after) && member(project.projectId))
+      .sort((left, right) => byCodeUnits(left.projectId, right.projectId));
+    return ok(projects.slice(0, limit));
+  }
+
+  async rename(projectId: string, expectedRevision: number, name: string): Promise<Result<Project>> {
+    const row = this.state.projects.get(projectId);
+    if (row === undefined) return unknownProject();
+    if (row.project.revision !== expectedRevision) return revisionConflict('project');
+    const project = Object.freeze({ ...row.project, name, revision: expectedRevision + 1 });
+    this.state.projects.set(projectId, Object.freeze({ ...row, project }));
+    return ok(project);
+  }
+
+  async defaults(projectId: string): Promise<Result<StoredDefaults | undefined>> {
+    return ok(this.state.projects.get(projectId)?.defaults);
+  }
+
+  async replaceDefaults(
+    projectId: string, expectedRevision: number, defaults: ProjectDefaults, lastChange: SettingChange,
+  ): Promise<Result<StoredDefaults>> {
+    const row = this.state.projects.get(projectId);
+    if (row === undefined) return unknownProject();
+    if (row.defaults.revision !== expectedRevision) return revisionConflict('project defaults');
+    const stored = Object.freeze({ defaults, revision: expectedRevision + 1, lastChange: Object.freeze({ ...lastChange }) });
+    this.state.projects.set(projectId, Object.freeze({ ...row, defaults: stored }));
+    return ok(stored);
+  }
+
+  async autoMergeSetting(projectId: string): Promise<Result<StoredAutoMergeSetting | undefined>> {
+    return ok(this.state.projects.get(projectId)?.autoMerge);
+  }
+}
+
 class MemoryProjectRoles implements ProjectRoles {
   constructor(private readonly state: State) {}
 
@@ -128,6 +207,7 @@ class MemoryProjectRoles implements ProjectRoles {
 
   async assign(projectId: string, principalId: PrincipalId, role: ProjectRole, assignedAt: Instant): Promise<Result<void>> {
     if (!this.state.principals.has(principalId)) return unknownPrincipal(principalId);
+    if (!this.state.projects.has(projectId)) return unknownProject();
     this.state.roles.set(roleKey(projectId, principalId), Object.freeze({ projectId, principalId, role, assignedAt }));
     return ok(undefined);
   }
@@ -140,7 +220,16 @@ class MemoryProjectRoles implements ProjectRoles {
     const grants = [...this.state.roles.values()]
       .filter((row) => row.principalId === principalId)
       .map(({ projectId, role }) => Object.freeze({ projectId, role }));
-    return ok(grants.sort((left, right) => (left.projectId < right.projectId ? -1 : 1)));
+    return ok(grants.sort((left, right) => byCodeUnits(left.projectId, right.projectId)));
+  }
+
+  async members(projectId: string, after: string | undefined, limit: number): Promise<Result<readonly ProjectMembership[]>> {
+    const members = [...this.state.roles.values()]
+      .filter((row) => row.projectId === projectId && (after === undefined || row.principalId > after))
+      .sort((left, right) => byCodeUnits(left.principalId, right.principalId))
+      .slice(0, limit)
+      .map(({ principalId, role }) => Object.freeze({ principalId, loginName: this.state.principals.get(principalId)!.loginName, role }));
+    return ok(members);
   }
 }
 

@@ -16,6 +16,13 @@ export {
   type PrincipalSummary,
   type ProjectRoleChange,
 } from './application/principal-administration.js';
+export {
+  PROJECT_PAGE_SIZE,
+  ProjectSetupService,
+  type Page,
+  type ProjectSetupDependencies,
+  type Revised,
+} from './application/project-setup-service.js';
 export { RoleApprovers } from './application/role-approvers.js';
 export {
   SESSION_PURGE_BATCH,
@@ -42,6 +49,25 @@ export {
   type PrincipalId,
   type PrincipalKind,
 } from './domain/principal.js';
+export {
+  AUTO_MERGE_STARTS_ON,
+  FIRST_REVISION,
+  MAX_IMPLEMENTERS,
+  NO_ELIGIBLE_SLOT_POLICIES,
+  parseMintedProjectId,
+  parseProjectDefaults,
+  parseProjectName,
+  revisionConflict,
+  SPEC_APPROVERS,
+  unknownProject,
+  type NoEligibleSlotPolicy,
+  type Project,
+  type ProjectDefaults,
+  type SettingChange,
+  type SpecApprover,
+  type StoredAutoMergeSetting,
+  type StoredDefaults,
+} from './domain/project.js';
 export {
   AUTHENTICATED,
   g2BridgeRequirement,
@@ -81,8 +107,11 @@ export type {
   AccessStore,
   AccessTransaction,
   Principals,
+  ProjectMembership,
+  ProjectQuery,
   ProjectRoleGrant,
   ProjectRoles,
+  Projects,
   Sessions,
 } from './ports/access-store.js';
 export type { Approval, Approvers, DecisionBody } from './ports/approvers.js';
