@@ -95,7 +95,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Reviewer: Codex CLI `gpt-6-astra`, effort `medium` (`codex gpt-6-astra#medium`), assigned by the coordinator; `route.json` recommends `high`, and the authorized `medium` applies (owner decision 2026-11-02).
 - Invocation, through `make review CHANGE=receive-scm-webhooks PASS=1`: `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, environment `PATH HOME USER LANG TERM`, started 2026-11-03T04:43:41Z at head `e1493259`; the route gate reported that `route.json` was made for this tree.
 - Confirmation: model `gpt-6-astra`, effort `medium`, sandbox `read-only` reported in the header; session `01a19fb8-59e6-7ef3-b2f9-cc2d2e520bff`; exit 0.
-- Snapshot before: `b39e8a0829a2fdd1fa04b99532fe304adef3cc18841b27acca92c194bbefbb29`; the reviewer reported that it modified no file. The after snapshot was taken by the worker Zaki and is not part of this subagent's evidence.
+- Snapshot before and after: both `b39e8a0829a2fdd1fa04b99532fe304adef3cc18841b27acca92c194bbefbb29`, unchanged, taken by the worker Zaki; the reviewer reported that it modified no file.
 - Counts: Critical 0, High 1, Medium 3, Low 0, as in `passes.jsonl`. The report also noted that the wire contracts document has no section 14 (its last is 12); the brief's reference to it is the coordinator's, and this record cites no section 14.
 - Findings and resolutions (`findings.jsonl`, all `fixed`, for pass 2 to check):
   1. High, `error-handling`: the decoy hashed every body while the plugin hashes only for a well-formed signature. Fixed in `776698c8` (`GithubWebhookDecoy`, design decision 3).
@@ -103,6 +103,15 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
   3. Medium, `test-flakiness`: the plugin's ping test depended on the previous test's record. Fixed in `776698c8`.
   4. Medium, `missing-fail-before-test`: no fail-before evidence for the migration, plugin receipt, and access tests. Fixed in this record ("Pass 1 fix round" above).
 - Coordinator decision applied in the same round (Niki, 2026-11-03): the eventless rule of design decision 4.
+
+### Pass 2 (role B)
+
+- Reviewer: Claude Code `claude-fable-5-1`, effort `medium` (`claude claude-fable-5-1#medium`), assigned by the coordinator; `route.json` recommends `high`, and the authorized `medium` applies (owner decision 2026-11-02).
+- Invocation, through `make review CHANGE=receive-scm-webhooks PASS=2`: `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>`, environment `PATH HOME USER LANG TERM`, started 2026-11-03T05:09:28Z at head `d337810f`; the prompt named pass 1's session and asked for a check of each pass 1 fix and an independent review of the whole change.
+- Confirmation: the last `"type":"result"` line of the log names `claude-fable-5-1` in its `modelUsage` and session `b7260c40-dd88-4f3e-934d-0eec0a8e4aff`; exit 0.
+- Snapshot before and after: both `1330ac02e132f6f40c81a4765382452c9be61de2f24a5620b1a92b672f35831d`, unchanged, taken by the worker Zaki.
+- Pass 1 fixes: the reviewer confirmed all four (`findings.jsonl` keeps them `fixed`).
+- Counts: Critical 0, High 0, Medium 1, Low 6, as in `passes.jsonl`. Findings 1, 4, 5, and 6 concern code or text that pass 1 reviewed, so `findings.jsonl` names pass 1 in their `missedBy`; findings 2, 3, and 7 concern text of the pass 1 fix round.
 
 ## Limitations
 
