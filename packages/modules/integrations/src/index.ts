@@ -77,3 +77,13 @@ export { StoredScmIntegrationVerifiers } from './application/stored-integration-
 export { InMemoryScmIntegrations } from './adapters/in-memory-scm-integrations.js';
 export { SCM_INTEGRATIONS_CONFORMANCE } from './ports/scm-integrations-conformance.js';
 export { NoMergeQueue } from './adapters/no-merge-queue.js';
+export type { RepositoryBinding, RepositoryBindingValues } from './domain/repository-binding.js';
+export { integrationMoved, nextBinding, type BindableProjects, type BindingPut, type RepositoryBindings } from './ports/repository-bindings.js';
+export { REPOSITORY_BINDINGS_CONFORMANCE, type RepositoryBindingsTarget } from './ports/repository-bindings-conformance.js';
+export {
+  RepositoryBindingService,
+  type RepositoryBindingRequest,
+  type RepositoryBindingServicePorts,
+  type RepositoryBindingUpdate,
+} from './application/repository-binding-service.js';
+export { InMemoryRepositoryBindings } from './adapters/in-memory-repository-bindings.js';

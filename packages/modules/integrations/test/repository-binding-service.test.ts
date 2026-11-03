@@ -182,7 +182,7 @@ test('a bind whose integration changed while the plugin resolved is a conflict a
 test('a store failure is passed on', async () => {
   const broken = new RepositoryBindingService({
     bindings: { get: async () => err(failure('unavailable', 'down')), put: async () => err(failure('unavailable', 'down')) },
-    integrations: { get: async () => ok(INTEGRATION), configurationOf: async () => err(failure('internal', 'sealed')) },
+    integrations: { configurationOf: async () => err(failure('internal', 'sealed')) },
     plugins: { pluginOf: () => undefined },
     projects: { exists: async () => err(failure('unavailable', 'down')) },
   });
@@ -190,7 +190,7 @@ test('a store failure is passed on', async () => {
   assert.equal(failed(await broken.bind(PROJECT_ID, first())).code, 'unavailable');
   const sealed = new RepositoryBindingService({
     bindings: { get: async () => err(failure('unavailable', 'down')), put: async () => err(failure('unavailable', 'down')) },
-    integrations: { get: async () => ok(INTEGRATION), configurationOf: async () => err(failure('internal', 'sealed')) },
+    integrations: { configurationOf: async () => err(failure('internal', 'sealed')) },
     plugins: { pluginOf: () => undefined },
     projects: { exists: async () => ok(true) },
   });
