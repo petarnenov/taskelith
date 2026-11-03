@@ -54,7 +54,7 @@ const ALPHA_STREAM: StreamFilter = { scope: projectScope(ALPHA), principalId: PE
 
 export const UI_EVENT_LOG_CONFORMANCE: readonly ConformanceCase<UiEventLogFixture>[] = Object.freeze([
   {
-    name: 'an empty log has floor and head 0, and committed entries are numbered from 1 in commit order',
+    name: 'an empty log has floor and head 0, and committed entries are numbered from 1 in the order of their sequential commits',
     async check({ log, commit }) {
       const problems: string[] = [];
       expectRead(problems, 'empty bounds', await log.bounds(), { floor: 0, head: 0 });

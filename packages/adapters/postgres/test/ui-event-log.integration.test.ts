@@ -65,11 +65,11 @@ function gate(): { opened: Promise<void>; open(): void } {
 
 // A transaction that appended its entries and stays open until released,
 // at the latest when the test ends.
-async function heldOpen(t: TestContext, ...marks: readonly number[]) {
+async function heldOpen(t: TestContext, ...events: readonly UiEvent[]) {
   const inserted = gate();
   const release = gate();
   const done = database.transaction(async (tx) => {
-    for (const mark of marks) value(await tx.uiEvents.append(outputEvent(mark)));
+    for (const event of events) value(await tx.uiEvents.append(event));
     inserted.open();
     await release.opened;
     return ok(undefined);
@@ -81,7 +81,7 @@ async function heldOpen(t: TestContext, ...marks: readonly number[]) {
 }
 
 test('an entry committed while an earlier inserter is open waits for it, then both are numbered in insertion order', async (t) => {
-  const early = await heldOpen(t, 1);
+  const early = await heldOpen(t, outputEvent(1));
   await commitNow([{ kind: 'event', event: outputEvent(2) }]);
   assert.equal(value(await log.assign(100, AT)), 0, 'the later commit is not numbered while the earlier inserter is open');
   const seen = value(await log.bounds()).head;
@@ -93,7 +93,7 @@ test('an entry committed while an earlier inserter is open waits for it, then bo
 });
 
 test('entries inserted in one order and committed in the other before any numbering are numbered in insertion order', async (t) => {
-  const early = await heldOpen(t, 1);
+  const early = await heldOpen(t, outputEvent(1));
   await commitNow([{ kind: 'event', event: outputEvent(2) }]);
   await early.commit();
   await untilNumberable(url);
@@ -102,7 +102,7 @@ test('entries inserted in one order and committed in the other before any number
 });
 
 test('a long-open transaction delays numbering but neither blocks other writers\' inserts and commits nor loses their order', async (t) => {
-  const long = await heldOpen(t, 1);
+  const long = await heldOpen(t, outputEvent(1));
   for (const mark of [2, 3, 4]) {
     await commitNow([{ kind: 'event', event: outputEvent(mark) }]);
     assert.equal(value(await log.assign(100, AT)), 0, `commit ${mark} waits for the long transaction`);
@@ -163,6 +163,31 @@ test('Access records role changes into the log in the transaction of the change,
   value(await log.assign(100, AT));
   assert.deepEqual(await changesOf(owner), [{ change: 'roles-changed', principalId: owner }]);
   assert.deepEqual(await changesOf(bob), [{ change: 'roles-changed', principalId: bob, projectId }]);
+});
+
+test('an event inserted before a role revocation commits but committed after it is numbered before the revocation', async (t) => {
+  const store = new PostgresAccessStore(database);
+  const secrets = new NodeSecrets();
+  const clock = { now: () => AT };
+  const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
+  const admin = new PrincipalAdministration({ store, hasher: NO_HASHER, random: secrets, clock });
+  const setup = new ProjectSetupService({ store, random: secrets, clock });
+  const { projectId } = value(await setup.createProject(owner, { name: 'Alpha', defaults: DEFAULTS }, INVOCATION));
+  const bob = value(await admin.createPrincipal(owner, 'bob', INVOCATION)).principalId;
+  value(await admin.assignProjectMember(owner, { projectId, principalId: bob, role: 'project-viewer' }, INVOCATION));
+  await untilNumberable(url);
+  value(await log.assign(100, AT));
+  const opened = value(await log.bounds()).head;
+  const record = { type: 'board-changed', workersOnline: 7 } as const;
+  const concurrent = await heldOpen(t, { scope: projectScope(projectId as string as ProjectId), occurredAt: AT, record });
+  value(await admin.removeProjectMember(owner, { projectId, principalId: bob }, INVOCATION));
+  assert.equal(value(await log.assign(100, AT)), 0, 'the committed revocation waits for the open event');
+  await concurrent.commit();
+  await untilNumberable(url);
+  assert.equal(value(await log.assign(100, AT)), 2);
+  const filter = { scope: projectScope(projectId as string as ProjectId), principalId: bob as string as ReaderId };
+  const read = value(await log.readAfter(opened, value(await log.bounds()).head, filter, 100));
+  assert.deepEqual(read.map((entry) => entry.kind), ['event', 'principal-change'], 'the reader gets the event, then its stream-ended');
 });
 
 test('a commit that appends entries and a numbering each wake the listeners of their channel', async () => {
