@@ -118,6 +118,16 @@ The fixes of pass 2 (`c96440f9`, `design.md`, and this record) have no later rev
 
 ## Remaining gates
 
-- Review pass 2, and pass 3 only after a pass 2 with a Medium or worse finding.
-- Archive (worker step 7).
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run after review pass 2 and its fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after ticking every task and `npm run openspec -- archive stabilize-fleet-token-expiry-test --yes` (archived as `2026-11-03-stabilize-fleet-token-expiry-test`; the CLI warned that the proposal's Why section exceeds 1000 characters, which strict validation accepts), on base `c355525b`.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 71 passed, 0 failed (71 items)` |
+| `make verify` | Passed, profile full, uncommitted working tree, so no stamp: tests 4113, suites 49, pass 4104, fail 0, cancelled 0, skipped 9; all files 99.39 % lines, 92.59 % branches, 98.87 % functions; this change's test passed (165 ms) |
+| This change's line of `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-11-03-stabilize-fleet-token-expiry-test` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Empty, as intended for a change with `skip_specs: true` |
+| Moved change has `findings.jsonl` and `passes.jsonl`; `make findings ARGS="validate"` | Both present; `Every findings file is valid: 98 file(s); every pass summary file is valid: 78 file(s); every route file is valid: 31 file(s).` |

@@ -20,4 +20,4 @@
 ## 5. Review and archive
 
 - [x] 5.1 Independent review (passes 1 and 2; pass 2 Low only)
-- [ ] 5.2 Archive the change
+- [x] 5.2 Archive the change
