@@ -14,7 +14,7 @@ Out of scope: SCM integration CRUD and secret storage, 20d live conformance, eve
 
 ### 1. Receiver in the Integrations module (Q1)
 
-`ScmWebhookReceiver` (`packages/modules/integrations/src/application/webhook-receiver.ts`) takes three ports: `ScmIntegrationVerifiers`, a read port from an `ScmIntegrationId` to the integration's `WebhookVerifier` or none; `ScmWebhookDeliveries`, which records an event and answers `recorded` or `repeated`; and a decoy `WebhookVerifier`. The ports live in `src/ports/webhook-receipt.ts` and are exported from the module's root, not from its `./port` entry, because plugins do not implement them. The module names no SCM; the control plane's composition fills the verifiers with `InMemoryScmIntegrationVerifiers`, empty until integrations are stored, and the same adapter serves the tests.
+`ScmWebhookReceiver` (`packages/modules/integrations/src/application/webhook-receiver.ts`) takes four ports: `ScmIntegrationVerifiers`, a read port from an `ScmIntegrationId` to the integration's `WebhookVerifier` or none; `ScmWebhookDeliveries`, which records an event and answers `recorded` or `repeated`; a decoy `WebhookVerifier`; and `EventlessDeliveries`, which tells by its headers whether a verified delivery is one its service sends without an event of the port (decision 4). The ports live in `src/ports/webhook-receipt.ts` and are exported from the module's root, not from its `./port` entry, because plugins do not implement them. The module names no SCM; the control plane's composition fills the verifiers with `InMemoryScmIntegrationVerifiers`, empty until integrations are stored, and the same adapter serves the tests.
 
 ### 2. Order and the body limit (Q2)
 
@@ -22,11 +22,11 @@ The route declares `signedBodyLimit`, which makes `api-server.ts` read the body 
 
 ### 3. One refusal and constant work (scope point 3)
 
-An identifier that `parseIdentifier` refuses is never looked up; an unknown one is looked up and not found. In both cases the receiver runs the decoy, `DecoyWebhookVerifier` of the composition: HMAC-SHA256 over the raw body under a random per-process key and a `timingSafeEqual`, the work of the plugin's own check, and then answers the same failure as a missing or failed signature: `forbidden`, reason `signature-invalid`, one fixed message. A path parameter that is not valid percent-encoding reaches this route undecoded and is then an unknown integration, where other routes answer 400. The tests check identical status and body text for all of these, and that the decoy saw each delivery of an unknown or invalid integration; they assert no timing, which would be flaky.
+An identifier that `parseIdentifier` refuses is never looked up; an unknown one is looked up and not found. In both cases the receiver runs the decoy, `GithubWebhookDecoy` of the composition, and then answers the same failure as a missing or failed signature: `forbidden`, reason `signature-invalid`, one fixed message. The decoy repeats the GitHub plugin's header-dependent work under a random per-process key: for a missing or malformed `x-hub-signature-256` it computes nothing, as the plugin returns before any HMAC; for a well-formed one it computes HMAC-SHA256 over the raw body and compares the digests with `timingSafeEqual` (review pass 1 finding 1). It names GitHub's header, so it lives in the composition, not the module. A path parameter that is not valid percent-encoding reaches this route undecoded and is then an unknown integration, where other routes answer 400. The tests check identical status and body text for all of these, that the decoy saw each delivery of an unknown or invalid integration, and, by counting the `node:crypto` HMAC and comparison calls, that an unknown and a known integration do the same work for a missing, malformed, short, wrong, and upper-case wrong signature; they assert no timing, which would be flaky.
 
 ### 4. Parse failures and deliveries without an event
 
-The plugin checks the signature before anything else, so its `invalid` comes only for a verified delivery; it uses `invalid` both for a body it cannot parse and for a delivery without a `repository`, such as `ping` (core design decision 5). Without changing the plugin, the receiver tells them apart by the raw body alone: a body that decodes as strict UTF-8 JSON to an object is a verified delivery that the port's event cannot carry, the receipt is `no-event`, answered 202 and not recorded; any other body answers 400 `invalid` and is not recorded. The rule names no SCM. A consequence: a verified JSON object without the plugin's delivery or event header also answers 202 without a record, where it could have been 400; GitHub always sends both headers.
+The plugin checks the signature before anything else, so its `invalid` comes only for a verified delivery; it uses `invalid` both for a body it cannot parse and for a delivery without a `repository`, such as `ping` (core design decision 5). Without changing the plugin, the receiver accepts such a delivery as `no-event`, answered 202 and not recorded, only when the `EventlessDeliveries` port calls it eventless and its raw body decodes as strict UTF-8 JSON to an object; any other one answers 400 `invalid` and is not recorded. The composition's `GithubEventlessDeliveries` calls a delivery eventless when its verified `x-github-event` header is in the named set `GITHUB_EVENTLESS_EVENTS`: `ping`, `installation`, and `installation_repositories`, the events without a repository that core design decision 5 names (coordinator decision, 2026-11-03). So a verified `push` without a repository, or a verified `ping` whose body is no JSON object, answers 400. The module names no SCM.
 
 ### 5. Deduplication (scope point 5)
 
@@ -34,7 +34,7 @@ The plugin checks the signature before anything else, so its `invalid` comes onl
 
 ### 6. Migration (scope point 7)
 
-`1792933700000_scm-webhook-deliveries` creates only the table: `kind` limited to the port's four `WEBHOOK_EVENT_KINDS`, identifiers of 1 to 1024 characters as the port's external identifiers, `received_at` from the database clock, and no foreign key, since integrations are not stored yet. The down migration drops the table.
+`1792933700000_scm-webhook-deliveries` creates only the table: `kind` limited to the port's four `WEBHOOK_EVENT_KINDS`, `received_at` from the database clock, and no foreign key, since integrations are not stored yet. The port's external identifiers are any 1 to 1024 UTF-16 code units, and a `text` column rejects a NUL and cannot keep an unpaired surrogate through UTF-8, so the delivery identifier, repository, change request, and commit are `bytea` columns holding the identifier's UTF-16LE code units, checked to 2 to 2048 bytes of even length; the encoding is injective, so the key deduplicates exactly, and decoding it gives back the identifier (review pass 1 finding 2). The down migration drops the table.
 
 ### 7. Logs (scope point 8)
 
@@ -42,7 +42,8 @@ The request log is unchanged: its allowlist (wire contracts section 7) holds the
 
 ## Risks / Trade-offs
 
-- The decoy matches the GitHub plugin's work, HMAC-SHA256 over the body; a later plugin with other work leaves a timing difference between its unknown and known integrations until the decoy matches it.
-- A verified JSON body that the plugin rejects for another reason than a missing repository answers 202 without a record (decision 4).
+- The decoy repeats the GitHub plugin's work for each signature form, which a test compares with the plugin; a later plugin with other work leaves a timing difference between its unknown and known integrations until the composition gives it a matching decoy.
+- The eventless rule is GitHub's: a later SCM plugin needs its own rule in the composition, or its eventless deliveries answer 400.
+- The stored identifiers are UTF-16LE bytes, so reading them in SQL needs decoding; nothing reads them yet (items 23 and the board).
 - A GitHub webhook configured with the `application/x-www-form-urlencoded` content type verifies but answers 400, as its body is no JSON object; the integration must use `application/json`.
 - No integration is served until integrations are stored, so the installed receiver refuses every delivery with 401.

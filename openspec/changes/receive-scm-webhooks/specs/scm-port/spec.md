@@ -1,25 +1,37 @@
 ## ADDED Requirements
 
 ### Requirement: Webhook receipt ports
-The integrations module SHALL receive webhook deliveries through `ScmWebhookReceiver` over the ports `ScmIntegrationVerifiers`, which gives an integration's `WebhookVerifier` or none, and `ScmWebhookDeliveries`, which records a verified event, both outside the `./port` entry and naming no SCM. The receiver SHALL check a verified event's shape before it records it.
+The integrations module SHALL receive webhook deliveries through `ScmWebhookReceiver` over the ports `ScmIntegrationVerifiers`, which gives an integration's `WebhookVerifier` or none, `ScmWebhookDeliveries`, which records a verified event, and `EventlessDeliveries`, which tells an eventless delivery by its headers, all outside the `./port` entry and naming no SCM. The receiver SHALL check a verified event's shape before it records it.
 
 #### Scenario: Event of another shape
 - **WHEN** a verifier returns an event whose kind is not one of `WEBHOOK_EVENT_KINDS`
 - **THEN** the receipt fails with `internal` and nothing is recorded
 
 ### Requirement: One refusal for unauthenticated deliveries
-The receiver SHALL refuse an integration identifier that is not a kernel identifier, an unknown integration, and a delivery that its verifier refuses with `forbidden` with one failure: `forbidden`, reason `signature-invalid`, and one message. For an unknown or invalid integration it SHALL first run a decoy verifier over the delivery.
+The receiver SHALL refuse an integration identifier that is not a kernel identifier, an unknown integration, and a delivery that its verifier refuses with `forbidden` with one failure: `forbidden`, reason `signature-invalid`, and one message. For an unknown or invalid integration it SHALL first run a decoy verifier over the delivery, which the composition SHALL give the work of its plugin's verification for the same headers.
 
 #### Scenario: Unknown integration
 - **WHEN** a delivery names an integration that the verifiers do not know
 - **THEN** the decoy verifies the delivery and the receipt fails exactly as for a failed signature
 
+#### Scenario: Missing signature of an unknown integration
+- **WHEN** a delivery without a signature names an unknown integration and the same delivery a known GitHub one
+- **THEN** both compute the same number of HMACs and comparisons, none
+
 ### Requirement: Verified deliveries without an event
-When a verifier fails with `invalid`, the receiver SHALL accept the delivery as `no-event` without recording it if its raw body is a JSON object in strict UTF-8, and SHALL otherwise fail with `invalid` and record nothing.
+When a verifier fails with `invalid`, the receiver SHALL accept the delivery as `no-event` without recording it only if `EventlessDeliveries` calls it eventless and its raw body is a JSON object in strict UTF-8, and SHALL otherwise fail with `invalid` and record nothing. For GitHub the composition SHALL call eventless only the events `ping`, `installation`, and `installation_repositories`.
 
 #### Scenario: Ping
-- **WHEN** a verified delivery has a JSON object body without a repository
+- **WHEN** a verified `ping` delivery has a JSON object body without a repository
 - **THEN** the receipt is `no-event` and nothing is recorded
+
+#### Scenario: Event without a repository
+- **WHEN** a verified `push` delivery has a JSON object body without a repository
+- **THEN** the receipt fails with `invalid` and nothing is recorded
+
+#### Scenario: Eventless delivery without an object
+- **WHEN** a verified `ping` delivery's body is a JSON array
+- **THEN** the receipt fails with `invalid` and nothing is recorded
 
 #### Scenario: Unparseable payload
 - **WHEN** a verified delivery's body is not valid UTF-8
