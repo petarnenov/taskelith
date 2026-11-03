@@ -22,6 +22,16 @@ export const NUMBERED_CHANNEL = 'taskelith_ui_events_numbered';
 // cluster wrote it, as before a restore; such a transaction has ended.
 const FOREIGN_TRANSACTION = 'inserted_by >= pg_snapshot_xmax(pg_current_snapshot())';
 
+// Access and the log each define the change; the stored forms must agree,
+// so this fails to compile once the two shapes drift apart.
+const PRINCIPAL_CHANGES_AGREE: SameType<Stored<AccessPrincipalChange>, Stored<PrincipalChange>> = true;
+void PRINCIPAL_CHANGES_AGREE;
+
+type SameType<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+// A record as its JSON text holds it: a branded identifier is a string.
+type Stored<Record> = Record extends object ? { readonly [Key in keyof Record]: Textual<Record[Key]> } : never;
+type Textual<Value> = Value extends string ? ({} extends Omit<Value, keyof string> ? Value : string) : Value;
+
 interface EntryRow {
   readonly position: string;
   readonly kind: 'event' | 'principal-change';
