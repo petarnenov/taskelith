@@ -95,7 +95,7 @@ The `control-plane/` subtree SHALL consist of owner-only directories and files, 
 - **THEN** it fails with `precondition-failed` and creates no new authority
 
 ### Requirement: Secret scrubbing
-Failures that leave the process SHALL have bearer secrets, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys redacted, and a child process's environment SHALL keep no secret variable or value.
+Failures that leave the process SHALL have bearer secrets, GitHub App installation tokens, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys redacted, and a child process's environment SHALL keep no secret variable or value.
 
 #### Scenario: Failure with a secret
 - **WHEN** a failure's message or details contain a worker secret

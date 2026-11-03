@@ -116,11 +116,15 @@ The module SHALL provide `runSourceControlConformance`, which a plugin's tests r
 - **THEN** the report has a finding for that case
 
 ### Requirement: Run credential secret
-A run credential's secret SHALL be delivered only to its run and SHALL NOT be logged or stored. G2 has no mechanism for this, so it is G3 work: item 20 SHALL add the secret's shape to the shared redaction rules that log redaction and `@taskelith/secrets` use, and item 21, which delivers the credential to a run, SHALL scrub it on that path.
+A run credential's secret SHALL be delivered only to its run and SHALL NOT be logged or stored. The shared `SECRET_SHAPE_RULES`, which log redaction and `@taskelith/secrets` use, SHALL match the GitHub plugin's secret, a GitHub App installation token, in its stateful and stateless formats. Item 21, which delivers the credential to a run in G3, SHALL scrub it on that path.
 
 #### Scenario: Secret on the delivery path
 - **WHEN** the delivery path hands a run credential to its run, and a log line, an error payload, or a child process environment on that path holds the secret
 - **THEN** the secret is redacted or scrubbed there and reaches only its run
+
+#### Scenario: GitHub installation token in text
+- **WHEN** a log line or an error payload holds a GitHub App installation token, stateful or stateless, wherever it starts, also inside a longer word
+- **THEN** it holds `[redacted]` in the token's place
 
 ### Requirement: Refreshed credential delivery
 A refreshed credential SHALL reach its running run, and the run SHALL adopt it. This is G3 work: item 9 defines the notice, which carries no secret, the HTTPS fetch, and the confirmation, item 21 delivers it, item 18 adopts it and confirms, and item 21 then ends the previous version through `confirmRunCredentialAdoption`. Port version `0.2.0` keeps the previous version valid until then.
