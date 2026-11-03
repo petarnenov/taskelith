@@ -18,7 +18,9 @@ Commit type: `packages/modules/*`, `packages/adapters/postgres`, and `apps/contr
 - `fd1bb853` `test: cover the inbox source position of the board composition` adds that test, which changed the diff, so `cfe8d48d` deleted that `route.json` and `2b9f126b` routed again (unedited; tier `elevated`, 40 files and 2584 lines, the same triggers).
 - `7171b2f6` recorded these revisions. Its `make verify` (`verify-15-2.log`) passed on the tree `03adafdf` (tests 4532, pass 4523, fail 0, skipped 9; all files 99.42% lines, 92.66% branches, 98.78% functions), but `composition/board-views.js` still had 70.83% branches: no test reached the failure paths of the board reads.
 - `74e0739a` `test: cover the failure paths of the board reads composition` adds a unit test over a fake transaction, which changed the diff, so `e1b677e7` deleted the second `route.json` and `3b6c8719` routed a third time (unedited; tier `elevated`, 41 files and 2608 lines, the same triggers).
-- The `docs: ...` commit after it records this revision list; the commit after the next `make verify` records it with `make record`.
+- `18d889a2` recorded this revision list; `f7f56f95` recorded `verify-15-3.log` (tree `35bb6db1`) with `make record`. Review pass 1 reviewed `468783d9..f7f56f95`.
+- Pass 1 fixes (section "Pass 1 fixes"): `e13b58e2`, `2ce1c0eb`, `9b5f193f`, `bec6dcd9`, `60cce934`, `b6386560`, `7f1475ca`, and the design and delta commit `522f9217`. `f313b9a5` records pass 1 in `passes.jsonl` and `findings.jsonl`. The fixes changed the diff, so `44f5ecf6` deleted the third `route.json` and `50afde6e` routed a fourth time (unedited; tier `elevated`, 41 files and 2799 lines, the same triggers).
+- The commit after the next `make verify` records it with `make record`.
 
 ## Environment
 
@@ -41,6 +43,28 @@ Logs in the session scratchpad (`fb-15-*.log`). Each mutation was applied to one
 - `fb-15-auto-merge-default.log` (`composition/board-views.ts`, a project without a setting starts with auto-merge off) at `74e0739a`: 1 of 1 fails, the composition test that `74e0739a` adds.
 - `fb-15-quarantine.log` (`composition/board-views.ts`, the installation's quarantine ignored) at `74e0739a`: 1 of 1 fails, the same test. A first mutation that dropped the skip of a worker without a record failed the build and ran the unmutated `dist`; its log was discarded.
 
+## Review pass 1
+
+- Reviewer: role A, Codex CLI `gpt-6-astra`, effort medium (`codex`, `gpt-6-astra`, `medium`), session `01a1a15e-ae75-7220-8a24-a46c374d3bc0`, run by the worker session with `make review` (`codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only`), which reported the model `gpt-6-astra`, effort medium, and the read-only sandbox; `route.json` recommended effort high, and the authorized medium applied (policy version 11). The reviewed range is `468783d9..f7f56f95`; the report says that no worktree file changed, that `make record-check` and `verify:comments` passed, and that it did not rerun the full suite.
+- Findings: Critical 0, High 2, Medium 7, Low 2, as its `passes.jsonl` line and the eleven `findings.jsonl` lines record.
+
+### Pass 1 fixes
+
+Each behaviour fix has a test that fails before it; the fail-before logs are `fb-15-p1-<n>.log` in the scratchpad, each run against the sources of `f7f56f95` with the new tests, and `fixed-15-p1.log` runs the change's tests after the fixes (60 tests, all passed). Pass 2 reviews these fixes.
+
+- **1, High, task detail changes** (`bec6dcd9`, `control-plane-api`). The stored projection is the card and its task detail (stages, run binding, tasks), with a fleet obstacle's `observedAt` stripped from the card and from each task; the event still carries the card. `fb-15-p1-1.log`: the projector test that changes a later stage's gate and then an admission appends 1 event, not 3.
+- **2, High, capacity changes** (`e13b58e2`, `postgres-state`). Assignment triggers write a `fleet` touch when a held reservation is inserted, released, or moved to another worker, and `take` names every card for it; an occupancy-neutral update touches only its task. `fb-15-p1-2.log`: with two cards, a held reservation of one names only `run-1`.
+- **3, Medium, admissions** (`e13b58e2`, `postgres-state`). An `admissions` trigger writes an `admission` touch, mapped to the cards of the tasks that name it. `fb-15-p1-3.log`: no touch is written.
+- **4, Medium, installation state** (`e13b58e2`, `postgres-state`). `installation` triggers write a `fleet` touch on insert and on a change of `quarantined` or `recovery_epoch`, not of the identity. `fb-15-p1-4.log`: no touch is written.
+- **5, Medium, session activity** (`60cce934`, `control-plane-api`). A task is `working` only while a session binds its active attempt or still runs a generation of it (stopping, unconfirmed), else `stopped`; the test fixture's sessions now bind their task's attempts. `fb-15-p1-5.log`: a stopped session of an earlier attempt with a retry awaiting placement answers `working`.
+- **6, Medium, admission order: deferred.** No store keeps the order in which tasks were admitted (an admission keeps only its last change time), so under the coordinator decision of 2026-11-03 (c) the detail lists tasks in task identifier order until 15b or the first store that holds the order. `7f1475ca` corrects the `CardLineage` comment, which claimed admission order, and adds a PostgreSQL test of reverse-lexical admission; design decision 9 and the `control-plane-api` delta ("Task detail before traceability and admission order") state the order and the empty `traceability`. Because `TaskDetail.tasks` in `control-plane.openapi.json` and product ports section 3.7 require admission order, the worker reported the options to the coordinator instead of changing the contract or the store.
+- **7, Medium, card obstacle** (`b6386560`, `control-plane-api`). The card shows its first rejected obstacle, else its first waiting one only while `waitingFor` is capacity, which any waiting obstacle of the current stage now selects; each task in the detail keeps its own. `fb-15-p1-7.log`: a card waiting for a person carries the waiting `worker-capacity-exhausted` obstacle.
+- **8, Medium, numbering test** (`9b5f193f`, `control-plane-api`). The test waits on the numbering horizon condition (the query of item 14's `untilNumberable`) and numbers through the READ COMMITTED `PostgresUiEventLog`; a new test holds an older transaction open, sees `assign` answer 0, and numbers after it ends. `fb-15-p1-8.log`: the original test, with an older transaction open in another database of the cluster, fails `0 !== 1`; the probe file was not committed.
+- **9, Medium, titles** (`2ce1c0eb`, `product-ports`, `postgres-state`). `parseCardRecord` refuses an unpaired surrogate, so both adapters accept only titles that PostgreSQL text keeps; the shared conformance case also reads back an astral title unchanged. `fb-15-p1-9.log`: the case fails on both adapters (`high surrogate` and `low surrogate` accepted).
+- **10 and 11, Low, design** (`522f9217`). Decision 6 describes `total` and `byCard`; decision 3 names `unavailable` for `enqueue` and `recordManualMerge` and `not-found` for `transition` and `latestForRun`.
+
+The same commit `522f9217` applies the coordinator decisions of 2026-11-03 after pass 1: the dedupe bound and the one-time first events (decision 7), the three deviations, traceability, task order, and trigger-written touches (decision 9), and the follow-ups.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -57,13 +81,15 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Until item 25 registers cards, no writer calls `CardCatalog.register`, so every board is empty and every task detail answers `404` (Q2 (a)).
 - The merge queue is the empty `NoMergeQueue` until item 23 (Q5 (a)); `integration` never reaches `queued`, `merging`, or `integrated` before it.
-- `traceability` of the task detail is empty, since no store holds requirement references; task order in a card is by task identifier, since no store keeps the admission order.
+- `traceability` of the task detail is empty until item 25; task order in a card is by task identifier until 15b or the first store that keeps the admission order, which `TaskDetail.tasks` and product ports section 3.7 require (finding 6, deferred, with the coordinator).
 - The order of `waitingFor` and the session activity derivation follow the design (decision 4), which the contract does not fix.
-- A worker touch reprojects every card; the stored projection dedupes the events (design, "Risks / Trade-offs").
-- No independent review has run yet; no deployment or browser check was made (backend only).
+- A worker or fleet touch reprojects every card; the batch dedupes the reads per card and the stored projection the events (design decision 7); narrowing and measuring it is a follow-up.
+- The first worker touch after the migration appends one `board-changed` per project, a known one-time event (design decision 7).
+- Review pass 1 ran; its fixes await pass 2. No deployment or browser check was made (backend only).
 
 ## Remaining gates
 
-- Review passes 1 to 3 per governance, and their fix rounds.
+- Review pass 2 by reviewer B over the pass 1 fixes, and pass 3 when governance "Review sequence" requires it, with their fix rounds.
+- The coordinator's decision on finding 6 (admission order).
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
