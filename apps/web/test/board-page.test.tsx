@@ -49,6 +49,21 @@ async function cardNamed(title: string) {
   return within(await screen.findByRole('article', { name: title }));
 }
 
+async function withReducedMotion(run: () => Promise<void>): Promise<void> {
+  const matchMedia = window.matchMedia;
+  const reduced = (query: string) => ({ ...matchMedia(query), matches: query.includes('prefers-reduced-motion') });
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: reduced });
+  try {
+    await run();
+  } finally {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
+  }
+}
+
+function spinnerOf(status: string) {
+  return screen.getByText(status).closest('[role="status"]')?.querySelector('.mantine-Loader-root') ?? null;
+}
+
 function indicatorOf(title: string) {
   const article = screen.getByRole('article', { name: title });
   const indicator = article.querySelector('[data-indicator]');
@@ -190,18 +205,13 @@ describe('the session activity indicator', () => {
   });
 
   it('spins nowhere when the system asks for reduced motion, and keeps the labels', async () => {
-    const matchMedia = window.matchMedia;
-    const reduced = (query: string) => ({ ...matchMedia(query), matches: query.includes('prefers-reduced-motion') });
-    Object.defineProperty(window, 'matchMedia', { configurable: true, value: reduced });
-    try {
+    await withReducedMotion(async () => {
       showBoard(board({ cards }));
       await cardNamed('Working');
       await waitFor(() => expect(indicatorOf('Working').dataset.indicator).toBe('still'));
       expect(indicatorOf('Working').textContent).toBe('Session working');
       expect(screen.getByRole('main').querySelector('[data-indicator] .mantine-Loader-root')).toBeNull();
-    } finally {
-      Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
-    }
+    });
   });
 });
 
@@ -232,6 +242,21 @@ describe('the board states', () => {
     expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
     await act(async () => snapshot.resolve({ kind: 'read', value: board() }));
     expect(await columns()).toHaveLength(7);
+  });
+
+  it('keeps the loading texts but spins no loader when the system asks for reduced motion', async () => {
+    await withReducedMotion(async () => {
+      const boardGateway = new FakeBoardGateway();
+      const projects = deferred<ReadResult<readonly Project[]>>();
+      boardGateway.listProjects.mockReturnValueOnce(projects.promise);
+      boardGateway.readBoard.mockReturnValueOnce(deferred<ReadResult<Board>>().promise);
+      renderApp('/app/', fakeGateway(AUTHENTICATED), new ManualClock(), boardGateway);
+      expect(await screen.findByText('Loading your projects…')).toBeDefined();
+      await waitFor(() => expect(spinnerOf('Loading your projects…')).toBeNull());
+      await act(async () => projects.resolve({ kind: 'read', value: [PROJECT] }));
+      expect(await screen.findByText('Loading the board…')).toBeDefined();
+      await waitFor(() => expect(spinnerOf('Loading the board…')).toBeNull());
+    });
   });
 
   it('shows no task data when the board cannot be loaded, and loads it on retry', async () => {

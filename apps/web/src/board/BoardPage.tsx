@@ -1,4 +1,5 @@
 import { Alert, Button, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { useReducedMotion } from '@mantine/hooks';
 import type { Project, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
 import type { BoardView } from './board-model';
@@ -127,10 +128,12 @@ function LoadError({ title, onRetry, children }: LoadErrorProps) {
   );
 }
 
+// The theme's reduced motion does not stop the loader, so it is left out.
 function Loading({ text }: { readonly text: string }) {
+  const reducedMotion = useReducedMotion();
   return (
     <Group gap="sm" role="status" aria-busy="true">
-      <Loader size="sm" aria-hidden="true" />
+      {reducedMotion ? null : <Loader size="sm" aria-hidden="true" />}
       <Text c="dimmed">{text}</Text>
     </Group>
   );
