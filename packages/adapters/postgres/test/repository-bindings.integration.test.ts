@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { after, test } from 'node:test';
-import { REPOSITORY_BINDINGS_CONFORMANCE, ScmSecrets, normalizeOrigin, type BindingPut, type ScmIntegration, type ScmIntegrationId } from '@taskelith/integrations';
+import {
+  REPOSITORY_BINDINGS_CONFORMANCE, ScmSecrets, normalizeOrigin,
+  type BindingPut, type RepositoryBinding, type ScmIntegration, type ScmIntegrationId,
+} from '@taskelith/integrations';
 import { parseIdentifier } from '@taskelith/kernel';
-import { PostgresDatabase, PostgresRepositoryBindings, PostgresScmIntegrations, type TransactionWork } from '@taskelith/postgres';
+import {
+  PostgresDatabase, PostgresRepositoryBindings, PostgresScmIntegrations,
+  type PostgresTransaction, type TransactionWork,
+} from '@taskelith/postgres';
 import { scmSecretCipher } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
 import { createMigratedDatabase, query } from './test-database.ts';
@@ -23,10 +29,34 @@ async function emptied(): Promise<void> {
   }
 }
 
+// Each attempt's put awaits `pause` after its FOR SHARE read, so the
+// transaction keeps the row lock while it waits.
+function pausingAfterIntegrationRead(pause: () => Promise<void>): PostgresRepositoryBindings {
+  const pausing = (tx: PostgresTransaction): PostgresTransaction => {
+    const records = tx.repositoryBindings;
+    const repositoryBindings = {
+      get: (projectId: string) => records.get(projectId),
+      integrationRevision: async (integrationId: ScmIntegrationId) => {
+        const revision = await records.integrationRevision(integrationId);
+        await pause();
+        return revision;
+      },
+      insert: (binding: RepositoryBinding) => records.insert(binding),
+      replace: (binding: RepositoryBinding, expected: number) => records.replace(binding, expected),
+    };
+    return Object.create(tx, { repositoryBindings: { value: repositoryBindings } }) as PostgresTransaction;
+  };
+  return new PostgresRepositoryBindings({
+    readOnly: (work) => database.readOnly(work),
+    transaction: (work) => database.transaction((tx) => work(pausing(tx))),
+  });
+}
+
 for (const conformance of REPOSITORY_BINDINGS_CONFORMANCE) {
   test(`PostgreSQL repository bindings: ${conformance.name}`, async () => {
     await emptied();
-    assert.deepEqual(await conformance.check({ bindings, integrations, projectIds: PROJECT_IDS }), []);
+    const target = { bindings, integrations, projectIds: PROJECT_IDS, pausingAfterIntegrationRead };
+    assert.deepEqual(await conformance.check(target), []);
   });
 }
 

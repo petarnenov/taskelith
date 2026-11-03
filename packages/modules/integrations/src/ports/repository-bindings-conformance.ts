@@ -11,7 +11,24 @@ export interface RepositoryBindingsTarget {
   readonly bindings: RepositoryBindings;
   readonly integrations: Pick<ScmIntegrations, 'add' | 'update'>;
   readonly projectIds: readonly [string, string];
+  // The same store, whose put awaits `pause` after its locking read of
+  // the integration and before it writes.
+  pausingAfterIntegrationRead(pause: () => Promise<void>): RepositoryBindings;
 }
+
+interface Deferred {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+}
+
+function deferred(): Deferred {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
+
+// Long enough for a store that does not wait to finish the update.
+const UPDATE_GRACE_MS = 50;
 
 function must<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`conformance fixture: ${result.error.message}`);
@@ -131,6 +148,43 @@ export const REPOSITORY_BINDINGS_CONFORMANCE: readonly ConformanceCase<Repositor
       must(await target.bindings.put(apart));
       const read = await target.bindings.get(other);
       expectSame(problems, 'other project', read.ok ? read.value : undefined, bound(other, apart, 1));
+      return problems;
+    },
+  },
+  {
+    name: 'an integration update that starts while a put holds the integration waits for the put, so the binding is stored at a current revision',
+    async check(target) {
+      const problems: string[] = [];
+      const [projectId] = target.projectIds;
+      const integration = await added(target, '1');
+      const snapshot = deferred();
+      const gate = deferred();
+      const pausing = target.pausingAfterIntegrationRead(async () => { snapshot.resolve(); await gate.promise; });
+      const finished: string[] = [];
+      const put = firstPut(projectId, integration);
+      const putting = pausing.put(put).finally(() => finished.push('put'));
+      await snapshot.promise;
+      const updating = target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' })
+        .finally(() => finished.push('update'));
+      await new Promise((resolve) => setTimeout(resolve, UPDATE_GRACE_MS));
+      expectSame(problems, 'while the put holds the integration', [...finished], []);
+      gate.resolve();
+      const [stored, updated] = await Promise.all([putting, updating]);
+      expectRead(problems, 'put', stored, bound(projectId, put, 1));
+      expectSame(problems, 'updated revision', updated.ok ? updated.value.revision : undefined, 2);
+      expectSame(problems, 'order', finished, ['put', 'update']);
+      return problems;
+    },
+  },
+  {
+    name: 'a put after a completed integration update, at the revision before it, fails with conflict and stores nothing',
+    async check(target) {
+      const problems: string[] = [];
+      const [projectId] = target.projectIds;
+      const integration = await added(target, '1');
+      must(await target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }));
+      expectCode(problems, 'stale put', await target.bindings.put(firstPut(projectId, integration)), 'conflict');
+      expectRead(problems, 'still unbound', await target.bindings.get(projectId), undefined);
       return problems;
     },
   },
