@@ -23,13 +23,13 @@ const HASHED_DIRECTORY = 'assets/';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
 // A file of the build with the headers of its path.
-export interface WebAppPage {
+export interface WebAppFile {
   readonly status: 200;
-  readonly page: Uint8Array;
+  readonly content: Uint8Array;
   readonly headers: Readonly<Record<string, string>>;
 }
 
-export type WebAppAnswer = WebAppPage | JsonResponse;
+export type WebAppAnswer = WebAppFile | JsonResponse;
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = Object.freeze({
   '.css': 'text/css; charset=utf-8',
@@ -53,16 +53,16 @@ export function webAppAnswer(files: WebAppFiles, method: string, requestPath: st
   if (files.isLeftOut(path.value)) return webAppFailure(404, failure('not-found', 'the web app refuses this path'));
   if (path.value === WEB_APP_INDEX || posix.extname(path.value) === '') return indexPage(files);
   const content = files.file(path.value);
-  return content === undefined ? noFile() : filePage(path.value, content);
+  return content === undefined ? noFile() : fileAnswer(path.value, content);
 }
 
 export function isWebAppPath(pathname: string): boolean {
   return pathname === WEB_APP_BASE || pathname.startsWith(`${WEB_APP_BASE}/`);
 }
 
-export function writeWebAppPage(response: ServerResponse, page: WebAppPage, correlationId: string): void {
-  response.writeHead(page.status, { ...page.headers, 'content-length': page.page.byteLength, 'x-correlation-id': correlationId });
-  response.end(page.page);
+export function writeWebAppFile(response: ServerResponse, file: WebAppFile, correlationId: string): void {
+  response.writeHead(file.status, { ...file.headers, 'content-length': file.content.byteLength, 'x-correlation-id': correlationId });
+  response.end(file.content);
 }
 
 // The decoded path below /app/. A segment that is empty before the last,
@@ -84,14 +84,14 @@ function indexPage(files: WebAppFiles): WebAppAnswer {
   const index = files.file(WEB_APP_INDEX);
   if (index === undefined) return noFile();
   const nonce = randomBytes(16).toString('base64');
-  const page = Buffer.from(Buffer.from(index).toString('utf8').replaceAll(WEB_APP_NONCE_PLACEHOLDER, nonce));
-  return { status: 200, page, headers: { ...securityHeaders(nonce), 'content-type': CONTENT_TYPES['.html']!, 'cache-control': 'no-cache' } };
+  const content = Buffer.from(Buffer.from(index).toString('utf8').replaceAll(WEB_APP_NONCE_PLACEHOLDER, nonce));
+  return { status: 200, content, headers: { ...securityHeaders(nonce), 'content-type': CONTENT_TYPES['.html']!, 'cache-control': 'no-cache' } };
 }
 
-function filePage(path: string, content: Uint8Array): WebAppPage {
+function fileAnswer(path: string, content: Uint8Array): WebAppFile {
   const contentType = CONTENT_TYPES[posix.extname(path)] ?? 'application/octet-stream';
   const cacheControl = path.startsWith(HASHED_DIRECTORY) ? IMMUTABLE : 'no-cache';
-  return { status: 200, page: content, headers: { ...securityHeaders(undefined), 'content-type': contentType, 'cache-control': cacheControl } };
+  return { status: 200, content, headers: { ...securityHeaders(undefined), 'content-type': contentType, 'cache-control': cacheControl } };
 }
 
 function noFile(): JsonResponse {

@@ -28,7 +28,7 @@ import { MINIMUM_TLS_VERSION, type ServerTls } from './server-tls.js';
 import { UploadSlots } from './upload-slots.js';
 import { ROUTES, type RouteDefinition } from './routes.js';
 import { sessionCookie } from './session-cookie.js';
-import { WEB_APP_OPERATION, webAppAnswer, writeWebAppPage, type WebAppAnswer, type WebAppFiles } from './web-app.js';
+import { WEB_APP_OPERATION, webAppAnswer, writeWebAppFile, type WebAppAnswer, type WebAppFiles } from './web-app.js';
 
 // Who a request's credential authenticated: the worker of a worker bearer,
 // or the principal of the operator bearer or of an authenticated session.
@@ -99,7 +99,7 @@ export function createTlsApiServer(listener: ApiRequestListener, tls: ServerTls)
 // Request handling that listeners may share: checkHttpSchema validates, and
 // no log line holds a request body, cookie, or bearer.
 export function createApiRequestListener(handlers: ApiHandlers, options: ApiServerOptions = {}): ApiRequestListener {
-  const listener: Listener = {
+  const context: ListenerContext = {
     handlers,
     uploads: new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS),
     routes: options.routes ?? ROUTES,
@@ -111,12 +111,12 @@ export function createApiRequestListener(handlers: ApiHandlers, options: ApiServ
     // fires is reset unread, so every answer closes its connection.
     response.shouldKeepAlive = false;
     // serve answers every failure itself; this only guards a broken socket.
-    serve(listener, request, response).catch(() => response.destroy());
+    serve(context, request, response).catch(() => response.destroy());
   };
 }
 
 // What every request of one listener shares.
-interface Listener {
+interface ListenerContext {
   readonly handlers: ApiHandlers;
   readonly uploads: UploadSlots;
   readonly routes: readonly RouteDefinition[];
@@ -124,7 +124,7 @@ interface Listener {
   readonly webApp?: WebAppFiles;
 }
 
-async function serve({ handlers, uploads, routes, logger, webApp }: Listener, request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function serve({ handlers, uploads, routes, logger, webApp }: ListenerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
@@ -157,9 +157,9 @@ async function serve({ handlers, uploads, routes, logger, webApp }: Listener, re
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
   }
-  const failed = 'page' in answer ? undefined : answer.failure;
+  const failed = 'content' in answer ? undefined : answer.failure;
   if (!response.headersSent) {
-    if ('page' in answer) writeWebAppPage(response, answer, correlationId);
+    if ('content' in answer) writeWebAppFile(response, answer, correlationId);
     else writeResponse(response, answer, correlationId);
   }
   const fields = requestLogFields({
