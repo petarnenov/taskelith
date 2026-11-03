@@ -1,0 +1,105 @@
+{
+  "change": "audit-scm-integration-changes",
+  "generatedAt": "2026-11-03T23:41:11.912Z",
+  "devCommit": "2700c16a4620abc0ed0fdd76061110ace3afa341",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "postgres-state",
+      "engineering-principles",
+      "scm-port"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/integrations/**",
+      "packages/adapters/**",
+      "docs/contracts/**"
+    ],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 144
+      },
+      {
+        "category": "error-handling",
+        "count": 77
+      },
+      {
+        "category": "docs",
+        "count": 50
+      },
+      {
+        "category": "redaction",
+        "count": 42
+      },
+      {
+        "category": "spec-wording",
+        "count": 38
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 36
+      },
+      {
+        "category": "concurrency-race",
+        "count": 30
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 943,
+        "inChecklist": 797
+      },
+      "mediumOrWorse": {
+        "findings": 462,
+        "inChecklist": 422
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 147
+      },
+      {
+        "category": "spec-wording",
+        "count": 100
+      },
+      {
+        "category": "docs",
+        "count": 77
+      },
+      {
+        "category": "stale-citation",
+        "count": 57
+      },
+      {
+        "category": "contract-drift",
+        "count": 25
+      },
+      {
+        "category": "process",
+        "count": 25
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 447,
+        "inChecklist": 440
+      },
+      "mediumOrWorse": {
+        "findings": 68,
+        "inChecklist": 68
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+## Context
+
+Sub-change 20f `manage-scm-integrations` stores SCM integrations in `@taskelith/integrations`: `ScmIntegrationService` checks a creation or an update, and the `ScmIntegrations` store writes it, in PostgreSQL in one SERIALIZABLE transaction and in memory inside `exclusive()`, which the in-memory repository bindings of 11b1 share. Its design deferred the audit events of an integration's creation, update, and secret change to 11b (archive `2026-11-03-manage-scm-integrations`, design section 8). The existing audit tables, `audit_events`, `access_audit_events`, and `session_audit_events`, share one shape: a `position` identity key, the kind, the subject, the actor, the time, and the `refuse_audit_change()` trigger; Access writes its rows through the `AccessAudit` port (`append`, `trail`) in the transaction of the change.
+
+## Goals / Non-Goals
+
+Goals: one immutable audit row for each committed creation and update of an SCM integration, written in the change's own transaction, naming the actor, the reason, the changed fields, and the new revision, and never a secret value.
+
+Non-goals: reading the audit trail through the API, any UI, and auditing reads or refusals.
+
+## Decisions
+
+The coordinator (Niki) decided the table and Q1 to Q9 on 2026-11-04; each decision below names its question.
+
+1. **Table.** Migration `1792934400000_scm-integration-audit-events` creates `scm_integration_audit_events` with `position bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY`, `integration_id` referencing `scm_integrations`, `kind` with a check for `created`, `updated`, and `secret-changed`, `actor` and `reason` (both `NOT NULL`), `changed_fields text[] NOT NULL`, `revision`, the integration's new revision, and `occurred_at timestamptz`. A `BEFORE UPDATE OR DELETE` trigger runs `refuse_audit_change()`, so rows never change. No column holds a value of a field: the row names fields only.
+2. **Same transaction (Q1).** `ScmIntegrations.add` and `update` take a `ScmIntegrationAuditEntry`: the actor, the reason, and the time. Only the store knows the before-state of an update, which PostgreSQL re-reads under SERIALIZABLE, so the store computes the changed field names and writes the row inside its own transaction: in PostgreSQL the existing write transaction through `tx.scmIntegrationAudit`, in memory inside `exclusive()`, where the row is appended before the integration is kept. A failing append therefore fails the change, which keeps nothing. The new port `ScmIntegrationAudit` (`append`, `trail`) has an in-memory adapter, which the in-memory store takes, and a PostgreSQL adapter; `trail` returns the rows in position order, and `SCM_INTEGRATION_AUDIT_CONFORMANCE` runs against both.
+3. **Actor and reason (Q2).** The handlers of `createScmIntegration` and `updateScmIntegration` pass the caller's `PrincipalId` as the actor and `control-plane API <operationId>` as the reason, as the project handlers' `invocationOf` does; a request without a principal fails with `internal`. There is no system actor. The module keeps the actor a string, as `AccessAuditEvent` does, so it does not depend on `@taskelith/access`.
+4. **Changed field names (Q3).** On create: every field the creation supplies, `pluginId`, `label`, `allowedOrigin`, `settings.<key>` for each setting, and each secret name. On update: `label` and `allowedOrigin` when the new value differs, `settings.<key>` for each key, of the old or the new settings, whose value differs, and each name in the change's `secrets`. Names are in that order, settings and secrets each in code-unit order. **Secret values are never compared, decrypted, or hashed to decide what changed:** a secret counts as changed when its name appears in the update's `secrets`, whatever its value, so sending the stored value again is still audited; only the non-secret fields are diffed. In PostgreSQL the store opens only the secrets it keeps, as before, never a replaced one.
+5. **One row per update (Q4).** The kind is `secret-changed` when the update names at least one secret and no non-secret field differs, and `updated` otherwise, with the secret names among the changed fields.
+6. **No-op update (Q5).** An update that changes nothing still moves the revision, so it is audited as `updated` with no changed fields.
+7. **Refusals (Q6).** A refusal or failure, 400, 403, 404, or 409, writes no row: the service refuses before the store, the store refuses before it appends, and in PostgreSQL a failed transaction rolls back.
+8. **Revision and time (Q7).** The row records the integration's new revision and keeps its foreign key; no operation deletes an integration. The time comes from a `Clock` that the composition injects into `ScmIntegrationService`.
+9. **Log and redaction (Q8, Q9).** The control-plane requirement "Request logs without secrets" also names an SCM integration's secret value. The audit write logs nothing. The route test sends a known secret value on create, on update, and on a secret change, captures the request log, reads the audit trail, and finds the value in neither.
+
+## Risks / Trade-offs
+
+- The port's signature changes: every caller of `add` and `update`, the service, the conformance suites, and the tests, passes an audit entry. The API is the only production caller.
+- A secret sent with its stored value is audited as changed. This is deliberate: deciding otherwise would need the stored value, and the audit would reveal whether a guess matched.
+- The table grows without a retention rule, as the other audit tables do; no spec states one.
