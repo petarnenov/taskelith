@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Card store
-The Execution module SHALL keep a card per root run in a `CardCatalog` port, with its project, a title of 1 to 200 code points without a control character, a work type, and its creation time; a run without a card SHALL not be on the board, and registering a known run SHALL answer `conflict`. Task intake writes the cards; until it does, every board is empty.
+The Execution module SHALL keep a card per root run in a `CardCatalog` port, with its project, a title of 1 to 200 code points without a control character or an unpaired surrogate, a work type, and its creation time; a run without a card SHALL not be on the board, and registering a known run SHALL answer `conflict`. Task intake writes the cards; until it does, every board is empty.
 
 #### Scenario: A run without a card
 - **WHEN** a workflow run of the project has no card

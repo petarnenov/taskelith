@@ -16,7 +16,7 @@ G3 item 15 ([G3 work plan](/docs/g3-plan.md), row 15), sub-change 15a under the 
 
 ### 1. The card store (Q2 (a))
 
-`CardCatalog` (`packages/modules/execution/src/ports/card-catalog.ts`) holds a card per root run: `runId`, `projectId`, `title` (1 to 200 code points, no control character), `workType`, and `createdAt`; `register` answers `conflict` for a known run. `tasks(runId)` in the PostgreSQL adapter lists the card's tasks through the task lineage of its root, so a re-admitted task and a delegated child task belong to the card (product ports "One card per root run"). A run without a row is not a card, which keeps delegated child runs off the board. Item 25's intake writes the rows; until it lands no writer registers one, so every board is empty and every task detail answers `404`. Tests seed rows through the port.
+`CardCatalog` (`packages/modules/execution/src/ports/card-catalog.ts`) holds a card per root run: `runId`, `projectId`, `title` (1 to 200 code points, no control character, no unpaired surrogate, which UTF-8 text in PostgreSQL cannot keep, so both adapters accept the same titles and read them back unchanged), `workType`, and `createdAt`; `register` answers `conflict` for a known run. `tasks(runId)` in the PostgreSQL adapter lists the card's tasks through the task lineage of its root, so a re-admitted task and a delegated child task belong to the card (product ports "One card per root run"), in task identifier order (decision 9). A run without a row is not a card, which keeps delegated child runs off the board. Item 25's intake writes the rows; until it lands no writer registers one, so every board is empty and every task detail answers `404`. Tests seed rows through the port.
 
 ### 2. The stage rules
 
@@ -24,11 +24,11 @@ G3 item 15 ([G3 work plan](/docs/g3-plan.md), row 15), sub-change 15a under the 
 
 ### 3. The merge gate (Q5 (a))
 
-`NoMergeQueue` (`packages/modules/integrations/src/adapters/no-merge-queue.ts`) answers no request for every run, an empty queue, and `unavailable` for a write. `integration` therefore follows section 3.4, rules 1 to 4, from readiness and the auto-merge setting alone: `not-ready`, `ready` with auto-merge on, `awaiting-manual-merge` with it off; a request in flight wins once item 23 records one.
+`NoMergeQueue` (`packages/modules/integrations/src/adapters/no-merge-queue.ts`) answers `not-found` for every run's latest request, an empty queue to `claimNext`, `unavailable` to `enqueue` and `recordManualMerge`, since no queue is built, and `not-found` to `transition`, since it holds no request to transition. `integration` therefore follows section 3.4, rules 1 to 4, from readiness and the auto-merge setting alone: `not-ready`, `ready` with auto-merge on, `awaiting-manual-merge` with it off; a request in flight wins once item 23 records one.
 
 ### 4. Tasks, sessions, and obstacles
 
-`application/card-tasks.ts` derives each task's session activity (section 3.6, the most urgent first), its placement obstacle (section 3.8: the rejection of an ended task; else, for a task waiting for placement, the fleet's obstacle; else the most recent observation, the scheduler's on a tie; none while a reservation is held), and its end (section 3.9). A card's `waitingFor` is the first that holds: a person (an open item, or a manual merge or escalation), the merge queue, capacity (a waiting obstacle), then, for an idle stage that has not completed, a reviewer when it has the `review` obligation and otherwise a stage admission. The contract names the values but not this order; the design fixes it.
+`application/card-tasks.ts` derives each task's session activity (section 3.6, the most urgent first; `working` only while a session binds the task's active attempt or still runs a generation of it, so a session that stopped in an earlier attempt leaves a retry awaiting placement `stopped`), its placement obstacle (section 3.8: the rejection of an ended task; else, for a task waiting for placement, the fleet's obstacle; else the most recent observation, the scheduler's on a tie; none while a reservation is held), and its end (section 3.9). A card's `waitingFor` is the first that holds: a person (an open item, or a manual merge or escalation), the merge queue, capacity (a task of the current stage with a waiting obstacle), then, for an idle stage that has not completed, a reviewer when it has the `review` obligation and otherwise a stage admission. The contract names the values but not this order; the design fixes it. The card's `obstacle` is the first rejected one of the current stage's tasks in task identifier order, else the first waiting one only while `waitingFor` is capacity (section 3.3); each task in the detail keeps its own.
 
 ### 5. One snapshot per view (Q6 (a))
 
@@ -36,15 +36,27 @@ G3 item 15 ([G3 work plan](/docs/g3-plan.md), row 15), sub-change 15a under the 
 
 ### 6. The inbox
 
-`BoardViews` implements `NeedsYouInbox` over the registered `NeedsYouSource`s of the snapshot; on dev that is the native request source of 13b, built per snapshot with the snapshot's head as its position (`AgentSessionServices.sourceIn`). `open` pages every source to its end, filters by `kind` and `runId`, and sorts newest first, then by item identifier; a source that fails answers `503`. `counts` counts by kind and, for registered cards only, by card. `needsYou` of a card counts its open items.
+`BoardViews` implements `NeedsYouInbox` over the registered `NeedsYouSource`s of the snapshot; on dev that is the native request source of 13b, built per snapshot with the snapshot's head as its position (`AgentSessionServices.sourceIn`). `open` pages every source to its end, filters by `kind` and `runId`, and sorts newest first, then by item identifier; a source that fails answers `503`. `counts` answers `total`, every open item of the scope, and `byCard`, the open items of each registered card of a project scope in run identifier order; an installation scope has no `byCard` entries. `needsYou` of a card counts its open items.
 
 ### 7. Card touches and the projector (Q4 (b))
 
-Triggers of migration `1792934100000` write a `card_touches` row in the transaction of every write a card reads: the card row, runs, gates, task lineage, tasks, assignments, placement outcomes, agent sessions, inbox items, the auto-merge setting, and workers; a worker update that changes only `last_contact_at` writes none. Triggers keep the board projection out of every module and commit or roll back with the write. `CardProjector.project` runs in each numbering pass before it numbers: in one `SERIALIZABLE` transaction per batch of 100 touches it deletes the touches, resolves their cards, and appends `card-changed` when a card's projection differs from the stored one (a fleet obstacle's `observedAt` aside, which is each read's time), and, after a worker touch, `board-changed` for each project whose stored `workersOnline` differs. A failed projection is logged as `events.projection.failed` and the numbering still runs. The crash point `CardProjectionCommit` sits before and after that commit: a crash leaves the touch or its event, never neither, and the restart appends the event once.
+Triggers of migration `1792934100000` write a `card_touches` row in the transaction of every write a card or its task detail reads: the card row, runs, gates, task lineage, tasks, admissions, assignments, placement outcomes, agent sessions, inbox items, the auto-merge setting, and workers; a worker update that changes only `last_contact_at` writes none. The fleet obstacle of every waiting card reads the fleet's free slots and the installation's quarantine and recovery epoch, so a reservation held or released, a reservation moved to another worker, and a change of the quarantine or the recovery epoch write a `fleet` touch, which names every card, as a worker touch does. Triggers keep the board projection out of every module and commit or roll back with the write (decision 9). `CardProjector.project` runs in each numbering pass before it numbers: in one `SERIALIZABLE` transaction per batch of 100 touches it deletes the touches, resolves their cards, and appends `card-changed` when a card's projection, the card and its task detail (wire contracts section 8, "Cards"), differs from the stored one (a fleet obstacle's `observedAt` aside, which is each read's time), with the card as its data, and, after a worker touch, `board-changed` for each project whose stored `workersOnline` differs. A failed projection is logged as `events.projection.failed` and the numbering still runs. The crash point `CardProjectionCommit` sits before and after that commit: a crash leaves the touch or its event, never neither, and the restart appends the event once.
+
+Dedupe bound. Frequent writes, such as the `agent_sessions` updates of a session's output, each write a touch, but they do not each make a projection: `take` reduces a batch of up to 100 touches to the distinct cards they name, so the projector reads each touched card once per batch, and it appends `card-changed` only when that read differs from the stored projection. The reads are therefore bounded by the touched cards per numbering pass, not by the writes; the events by the real changes. A worker or fleet touch still reads every card of the installation, which a follow-up narrows.
+
+First touch. No `workersOnline` is stored before the projector's first worker touch, so the first worker touch after the migration appends one `board-changed` per project, and the first touch of each card one `card-changed`. These are known one-time events of the deployment; the migration does not seed the stored values to avoid them.
 
 ### 8. HTTP
 
-`BoardApi` serves the six operations after the project check (`404` for an unknown project), with the role requirements already in `access-requirements.ts`. `callerMayAct` is the caller's `project-operator` requirement on the project, evaluated in the handler; no port decides authorization. `readTaskDetail` answers `404` for a run that is no card of the project. `traceability` is empty, since no store holds requirement references yet.
+`BoardApi` serves the six operations after the project check (`404` for an unknown project), with the role requirements already in `access-requirements.ts`. `callerMayAct` is the caller's `project-operator` requirement on the project, evaluated in the handler; no port decides authorization. `readTaskDetail` answers `404` for a run that is no card of the project. `traceability` is empty (decision 9).
+
+### 9. Deviations
+
+Three deviations from the brief and the contracts, each with its follow-up:
+
+- **Traceability.** `TaskDetail.traceability` is `[]`: no store holds requirement references and the links from them to work items and attempts. Item 25's intake owns the requirement links (coordinator, 2026-11-03).
+- **Task order.** Product ports section 3.7 and `TaskDetail.tasks` list the tasks in admission order, but no store keeps the order in which tasks were admitted: an admission keeps only its last change time. Until 15b or the first store that holds admission order, the detail lists the tasks in task identifier order (coordinator, 2026-11-03).
+- **Trigger-written touches.** The brief's Q4 (b) has each writer append its touch. Database triggers write it instead, in the same transaction as the writer's own statement, so the touch commits or rolls back with the write exactly as a writer's append would, and no module learns about the board. Every row write to a watched table fires its trigger, whichever module makes it; only a `TRUNCATE`, which no writer uses, bypasses them.
 
 ## Coordinator decisions
 
@@ -57,6 +69,13 @@ Niki, 2026-11-03, on the brief's questions:
 - Q5: (a) a named empty `MergeQueue` adapter (decision 3).
 - Q6: (a) one read-only `REPEATABLE READ` transaction per view, the head read first in it (decision 5).
 
+Niki, 2026-11-03, after review pass 1:
+
+- (a) Follow-up: narrow the worker touches to that worker's cards, and measure on a large board; the design states the dedupe bound (decision 7).
+- (b) The first touch after the migration appends one `board-changed` per project, a known one-time event that the migration does not seed (decision 7).
+- (c) Traceability goes to item 25, whose intake owns the requirement links, and admission-order task ordering to 15b or the first store that holds admission order; the spec delta states that `traceability` is `[]` and the order is by task identifier until then (decision 9).
+- (d) The three deviations are recorded as decisions, the trigger-written touches justified by the writer's transaction (decision 9).
+
 ## Review checklist
 
 `checklist.json`, saved with the brief's invocation at `468783d9`, size L. Review categories, most frequent first: contract-drift, spec-wording, error-handling, missing-fail-before-test, docs, naming, concurrency-race. Record quality: evidence-mismatch, spec-wording, docs, stale-citation, contract-drift, process, missing-fail-before-test.
@@ -65,13 +84,19 @@ Niki, 2026-11-03, on the brief's questions:
 
 - Execution: the card store conformance cases and record parsing; the stage rules (order, columns, the Close stage, readiness, gate urgency).
 - Integrations: `NoMergeQueue` answers.
-- PostgreSQL: the conformance cases, the check constraints, the touches of each trigger and none after a rollback or for a contact-only worker update, the projection state, and the migration's up and down steps.
-- Control plane: the views over an in-memory world (snapshot order, columns, sessions, obstacles, ends, the merge gate, the task detail, the inbox, a failing source); the projector's dedupe; the routes and their roles; the numbering pass's projection; over PostgreSQL, the snapshot, a card committed after the head, the projector's events, the crash points, and a failing store.
+- PostgreSQL: the conformance cases, the check constraints, the touches of each trigger, including the admission touch and the fleet touches of a reservation and of the installation, and none after a rollback, for a contact-only worker update, or for an occupancy-neutral reservation update, the projection state, and the migration's up and down steps.
+- Control plane: the views over an in-memory world (snapshot order, columns, sessions, obstacles, ends, the merge gate, the task detail, the inbox, a failing source); the projector's dedupe and its event after a change of the task detail alone; the routes and their roles; the numbering pass's projection; over PostgreSQL, the snapshot, a card committed after the head, the numbering of a projected event only after every older transaction ended, waiting on that condition, the projector's events, the crash points, and a failing store.
 - Fail-before: the tests against the base sources, and targeted mutations, each turning at least one test red.
 
 ## Risks / Trade-offs
 
-- A worker touch reprojects every card of the installation, and session output updates touch their task often; the stored projection dedupes the events, but the reads grow with the cards. Narrowing the worker touch is a follow-up if the board grows large.
-- Task order in a card is by task identifier, since no store keeps the admission order.
-- The first worker touch after the migration emits one `board-changed` per project, since no `workersOnline` is stored yet.
-- `traceability` stays empty until a store holds requirement references.
+- A worker or fleet touch reprojects every card of the installation, and session output updates touch their task often; the batch dedupes the reads per card and the stored projection the events (decision 7), but the reads grow with the cards.
+- Task order in a card is by task identifier, not admission order (decision 9).
+- The first worker touch after the migration emits one `board-changed` per project (decision 7).
+- `traceability` stays empty until item 25 (decision 9).
+
+## Follow-ups
+
+- Narrow the worker touches to that worker's cards, and measure the projection on a large board (coordinator, 2026-11-03).
+- Requirement traceability in the task detail: item 25, whose intake owns the requirement links.
+- Admission-order task ordering: 15b, or the first store that holds admission order.

@@ -16,12 +16,23 @@ The control plane SHALL serve `readBoard`, `readTaskDetail`, `readInbox`, `readI
 - **THEN** the board answers `200` with `callerMayAct` false
 
 ### Requirement: Card events projected after each change
-A projector SHALL consume the card touches of committed changes in one `SERIALIZABLE` transaction per batch, append `card-changed` with the card the board would return when the card differs from its last event, a fleet obstacle's observation time aside, and `board-changed` for each project whose workers online changed, and SHALL run in each numbering pass before it numbers.
+A projector SHALL consume the card touches of committed changes in one `SERIALIZABLE` transaction per batch, append `card-changed` with the card the board would return when the card or its task detail differs from its last projection, a fleet obstacle's observation time aside, and `board-changed` for each project whose workers online changed, and SHALL run in each numbering pass before it numbers.
 
 #### Scenario: An unchanged card is touched again
 - **WHEN** a touched card projects to the same record as its last event
 - **THEN** no `card-changed` is appended
 
+#### Scenario: Only the task detail changes
+- **WHEN** a touched card's own record is unchanged but its task detail changed, such as a gate of a later stage
+- **THEN** one `card-changed` with that unchanged card is appended
+
 #### Scenario: A worker comes online
 - **WHEN** a worker's change raises the workers online
 - **THEN** each project gets one `board-changed` with the new count
+
+### Requirement: Task detail before traceability and admission order
+Until task intake records requirement links, the task detail SHALL return `traceability` empty, and until a store keeps the order in which tasks were admitted, it SHALL list the card's tasks in task identifier order.
+
+#### Scenario: A task detail read before intake
+- **WHEN** a task detail of a card with two tasks is read
+- **THEN** its `traceability` is empty and its tasks are listed in task identifier order
