@@ -2,6 +2,15 @@ import { render } from '@testing-library/react';
 import { createMemoryRouter } from 'react-router';
 import { vi } from 'vitest';
 import { App } from '../src/App';
+import type {
+  Board,
+  BoardCard,
+  BoardGateway,
+  BoardStreamEvent,
+  BoardStreamListener,
+  Project,
+  ReadResult,
+} from '../src/board/board';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
 import type { LoginOutcome, LogoutOutcome, Operator, SessionGateway, SessionRead } from '../src/session/session';
@@ -62,8 +71,85 @@ export function fakeGateway(firstRead: SessionRead = ANONYMOUS): FakeGateway {
   };
 }
 
-export function renderApp(path: string, gateway: SessionGateway = fakeGateway(AUTHENTICATED), clock = new ManualClock()) {
+export const PROJECT: Project = { projectId: 'project-1', name: 'Taskelith' };
+export const OTHER_PROJECT: Project = { projectId: 'project-2', name: 'Website' };
+
+export function card(overrides: Partial<BoardCard> = {}): BoardCard {
+  return {
+    runId: 'run-1',
+    title: 'Add the board',
+    workType: 'feature',
+    framework: { pluginId: 'openspec', pluginVersion: '1.3.0' },
+    column: 'implement',
+    stage: { stageId: 'apply', origin: 'native', state: 'in-progress' },
+    session: { state: 'working' },
+    integration: 'not-ready',
+    needsYou: 0,
+    ...overrides,
+  };
+}
+
+export function board(overrides: Partial<Board> = {}): Board {
+  return {
+    asOf: '2026-11-03T09:00:00.000Z',
+    position: '40',
+    projectId: PROJECT.projectId,
+    cards: [],
+    workersOnline: 1,
+    callerMayAct: true,
+    ...overrides,
+  };
+}
+
+export interface FakeStream {
+  readonly projectId: string;
+  readonly after: string;
+  readonly emit: (event: BoardStreamEvent) => void;
+  readonly isClosed: () => boolean;
+}
+
+// A board gateway whose streams the test drives; a closed stream drops
+// every event, as the EventSource adapter does.
+export class FakeBoardGateway implements BoardGateway {
+  readonly streams: FakeStream[] = [];
+
+  readonly listProjects = vi.fn(async (): Promise<ReadResult<readonly Project[]>> => ({ kind: 'read', value: [PROJECT] }));
+
+  readonly readBoard = vi.fn(async (_projectId: string): Promise<ReadResult<Board>> => ({ kind: 'read', value: board() }));
+
+  readonly openEvents = (projectId: string, after: string, listener: BoardStreamListener) => {
+    let closed = false;
+    this.streams.push({
+      projectId,
+      after,
+      emit: (event) => {
+        if (!closed) listener(event);
+      },
+      isClosed: () => closed,
+    });
+    return () => {
+      closed = true;
+    };
+  };
+
+  lastStream(): FakeStream {
+    const stream = this.streams.at(-1);
+    if (stream === undefined) throw new Error('No stream was opened.');
+    return stream;
+  }
+
+  openStreams(): FakeStream[] {
+    return this.streams.filter((stream) => !stream.isClosed());
+  }
+}
+
+export function renderApp(
+  path: string,
+  gateway: SessionGateway = fakeGateway(AUTHENTICATED),
+  clock = new ManualClock(),
+  boardGateway: BoardGateway = new FakeBoardGateway(),
+) {
   const router = createMemoryRouter(appRoutes(), { basename: APP_BASENAME, initialEntries: [path] });
-  const view = render(<App router={router} gateway={gateway} clock={clock} />);
-  return { ...view, router, gateway, clock };
+  const view = render(<App router={router} gateway={gateway} board={boardGateway} clock={clock} />);
+  return { ...view, router, gateway, clock, boardGateway };
 }
