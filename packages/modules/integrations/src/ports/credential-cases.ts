@@ -104,6 +104,20 @@ export async function checkRevokedCredential(run: ConformanceCase, fixture: Sour
   await revoke(run, fixture, refreshed);
   await expectEnded(run, fixture, credential, 'after the revocation of its credential');
   await expectEnded(run, fixture, refreshed, 'after its revocation');
+  await expectMissing(run, fixture, 'a revoked credential', refreshed.credentialId);
+  await expectMissing(run, fixture, 'an unknown credential', UNKNOWN_CREDENTIAL);
+}
+
+// Neither revives a credential nor hides that it is gone.
+async function expectMissing(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  subject: string,
+  credentialId: string,
+): Promise<void> {
+  const { provider } = fixture;
+  await failsWith(run, `refreshRunCredential of ${subject}`, () => provider.refreshRunCredential({ credentialId }), 'not-found');
+  await failsWith(run, `revokeRunCredential of ${subject}`, () => provider.revokeRunCredential({ credentialId }), 'not-found');
 }
 
 // Credentials of runs that overlap stay apart: a grant for one run never
