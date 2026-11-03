@@ -750,6 +750,21 @@ test('the event stream down migration removes the log and its sequence', async (
   assert.deepEqual(await query(url, 'SELECT count(*)::int AS count FROM projects'), [{ count: 0 }], 'the earlier migrations stay');
 });
 
+test('the webhook, project, event stream, and SCM integration migrations go down over every later table', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const applied = await migrate(url);
+  assert.deepEqual(applied.ok && applied.value.slice(-4), [SCM_WEBHOOK_DELIVERIES, PROJECT_SETUP, UI_EVENT_STREAM, SCM_INTEGRATIONS]);
+  const present = async (table: string) => (await query(url, 'SELECT 1 FROM information_schema.tables WHERE table_name = $1', [table])).length === 1;
+  const steps: [string, string][] = [
+    [SCM_WEBHOOK_DELIVERIES, 'scm_webhook_deliveries'], [PROJECT_SETUP, 'projects'], [UI_EVENT_STREAM, 'ui_events'], [SCM_INTEGRATIONS, 'scm_integrations'],
+  ];
+  for (const [index, [migration, table]] of steps.entries()) {
+    await migratedDown(url, migration);
+    assert.equal(await present(table), false, `${migration} removes ${table}`);
+    for (const [, later] of steps.slice(index + 1)) assert.equal(await present(later), true, `${migration} keeps ${later}`);
+  }
+});
+
 test('the SCM integrations migration checks its values and its down migration removes its tables', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   assert.equal((await migrate(url)).ok, true);
