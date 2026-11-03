@@ -2,8 +2,8 @@
 
 -- The event log of the control-plane streams (G3 item 14): a change's
 -- transaction inserts its entries without a position; the assigner numbers
--- them from `ui_event_sequence` once every transaction that could still
--- insert an earlier entry has ended, in insertion order.
+-- them from `ui_event_sequence`, in `entry_id` order, once their
+-- transaction is below the oldest open one.
 CREATE TABLE ui_events (
   entry_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   position bigint UNIQUE CHECK (position >= 1),
