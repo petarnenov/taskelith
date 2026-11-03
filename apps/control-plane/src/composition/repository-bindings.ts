@@ -2,21 +2,23 @@ import type { ProjectSetupService } from '@taskelith/access';
 import {
   RepositoryBindingService,
   type BindableProjects,
-  type RepositoryBindings,
-  type ScmIntegrations,
-  type ScmPlugins,
+  type RepositoryBindingServicePorts,
+  type ScmPluginDefects,
 } from '@taskelith/integrations';
 import { ok } from '@taskelith/kernel';
+import type { Logger } from '@taskelith/observability';
 
-export interface RepositoryBindingPorts {
-  readonly bindings: RepositoryBindings;
-  readonly integrations: Pick<ScmIntegrations, 'configurationOf'>;
-  readonly plugins: ScmPlugins;
-  readonly projects: BindableProjects;
+export type RepositoryBindingPorts = Omit<RepositoryBindingServicePorts, 'defects'>;
+
+// The service whose plugin defects become one sanitized error record each.
+export function repositoryBindingService(ports: RepositoryBindingPorts, logger: Logger): RepositoryBindingService {
+  return new RepositoryBindingService({ ...ports, defects: pluginDefectLog(logger) });
 }
 
-export function repositoryBindingService(ports: RepositoryBindingPorts): RepositoryBindingService {
-  return new RepositoryBindingService(ports);
+function pluginDefectLog(logger: Logger): ScmPluginDefects {
+  return {
+    defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', { integrationId, pluginId, operation, kind }),
+  };
 }
 
 // The Access module's projects as the integrations module asks for them.

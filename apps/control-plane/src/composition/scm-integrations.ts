@@ -46,7 +46,7 @@ export function startScmIntegrationServices(
   if (!github.ok) return github;
   const integrations = new PostgresScmIntegrations(database, cipher.value);
   const plugins = singlePlugin(github.value);
-  const bindings = repositoryBindingService({ bindings: new PostgresRepositoryBindings(database), integrations, plugins, projects });
+  const bindings = repositoryBindingService({ bindings: new PostgresRepositoryBindings(database), integrations, plugins, projects }, logger);
   const deliveries = new CommittingScmWebhookDeliveries(database);
   return ok({ ...scmIntegrationServices({ store: integrations, deliveries, plugin: github.value, plugins }, logger), bindings });
 }
