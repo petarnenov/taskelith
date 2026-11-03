@@ -5,6 +5,7 @@ import { UI_EVENT_LOG_CONFORMANCE, projectScope, type CommittedEntry, type Princ
 import type { ProjectId } from '@taskelith/sdlc';
 import { err, failure, ok } from '@taskelith/kernel';
 import { PostgresAccessStore, PostgresDatabase, PostgresUiEventLog, PostgresUiEventNotifications } from '@taskelith/postgres';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 import { AT } from './fixtures.ts';
@@ -141,4 +142,31 @@ test('a commit that appends entries and a numbering each wake the listeners of t
   await numbered.opened;
   await notifications.close();
   assert.equal(await notifications.listen(), false, 'a closed listener stays closed');
+});
+
+test('a listener that cannot connect answers false and logs the loss, a close during the connect keeps it closed, and a removed listener hears nothing', async () => {
+  const logs = new InMemoryLogSink();
+  const unreachable = new URL(url.href);
+  unreachable.port = '1';
+  const failing = new PostgresUiEventNotifications(unreachable, new Logger(logs, { now: () => AT }));
+  assert.equal(await failing.listen(), false);
+  assert.ok(logs.records.some((record) => record.event === 'postgres.events.listen.lost'));
+  const closing = new PostgresUiEventNotifications(url);
+  const connecting = closing.listen();
+  await closing.close();
+  assert.equal(await connecting, false);
+  const notifications = new PostgresUiEventNotifications(url);
+  after(() => notifications.close());
+  let heard = 0;
+  const stop = notifications.onAppended(() => heard++);
+  notifications.onNumbered(() => heard++)();
+  stop();
+  const numbered = gate();
+  notifications.onNumbered(() => numbered.open());
+  assert.equal(await notifications.listen(), true);
+  assert.equal(await notifications.listen(), true, 'an open listener stays open');
+  await commit([{ kind: 'event', event: outputEvent(1) }]);
+  value(await log.assign(100, AT));
+  await numbered.opened;
+  assert.equal(heard, 0);
 });
