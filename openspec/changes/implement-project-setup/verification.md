@@ -128,11 +128,11 @@ Niki (architect), 2026-11-03, binding (design, "Pass 1 coordinator decisions"):
 
 | Finding | Resolution | Commit |
 | --- | --- | --- |
-| L1 (Low, `evidence-mismatch`), "No independent review has run yet" | The limitation says passes 1 and 2 have run and pass 3 does not | this round's record commit |
-| L2 (Low, `evidence-mismatch`), the generated block's log | "Evidence check" names `verify-11a-3.log` and this round's log as the sources of the rewritten block | this round's record commit |
+| L1 (Low, `evidence-mismatch`), "No independent review has run yet" | The limitation says passes 1 and 2 have run and pass 3 does not | `7d57e0a5` |
+| L2 (Low, `evidence-mismatch`), the generated block's log | "Evidence check" names `verify-11a-3.log` and this round's log as the sources of the rewritten block | `7d57e0a5` |
 | L3 (Low, `docs`), row 11 of `docs/g3-plan.md` without the split | Deferred: the coordinator keeps `docs/g3-plan.md` unchanged in this change (pass 2 decision (a)); the scope note lands with the edit by 20f ("Follow-ups") | none |
 | L4 (Low, `naming`), `BOTH` | `BROWSER_OR_OPERATOR` in `routes.ts`; the agent session routes are not touched | `572f01c6` |
-| L5 (Low, `clean-code`), `assigned.value.role ?? role` | `ProjectRoleAssignment`, `ProjectRoleChange` with a required `role`, is what both assignment commands return; the handler drops the fallback | `572f01c6` |
+| L5 (Low, `clean-code`, recorded as `naming`, the closest category), `assigned.value.role ?? role` | `ProjectRoleAssignment`, `ProjectRoleChange` with a required `role`, is what both assignment commands return; the handler drops the fallback | `572f01c6` |
 
 No fail-before applies: L4 is a rename and L5 a type change with no behaviour change; L1 to L3 change records only. With the fixes, the access module and the control-plane project, route, and server tests pass (`fix-11a-p2-unit.log` in the scratchpad: tests 113, pass 113, fail 0), and `make verify` below.
 
@@ -148,7 +148,7 @@ Niki (architect), 2026-11-03, binding (design, "Pass 2 coordinator decisions"):
 No later pass reviews the fixes of the pass 2 round. Each awaits the coordinator's check as solution architect (governance "Architect check of unreviewed fixes"):
 
 - L4 and L5, `572f01c6` (`apps/control-plane/src/api/routes.ts`, `apps/control-plane/src/api/project-api.ts`, `packages/modules/access/src/application/principal-administration.ts`, `packages/modules/access/src/index.ts`): architect check pending.
-- L1 and L2, this round's record commit (`verification.md`); L3 deferred: architect check pending.
+- L1 and L2, `7d57e0a5` (`verification.md`); L3 deferred: architect check pending.
 - Decision (a), `572f01c6` (the comments of `packages/modules/access/src/domain/requirement.ts` and `apps/control-plane/src/api/control-plane-api.ts`) and `e5fe091d` (`specs/trust-and-operational-foundation/spec.md`, `design.md`, `proposal.md`, `docs/contracts/control-plane-wire-contracts.md`, `docs/contracts/execution-wire-contracts.md`): architect check pending.
 - Decision (b), `e5fe091d` (`design.md`): architect check pending.
 
