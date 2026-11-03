@@ -103,6 +103,37 @@ describe('the task detail feed', () => {
     expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
   });
 
+  it('reads again for a new board snapshot, even one below the detail after a restore', async () => {
+    const { gateway, states, settled } = heldReads();
+    const feed = start(gateway, states);
+    await settled(0, read('100'));
+    feed.boardReread();
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+    await settled(1, read('20'));
+    expect(states.at(-1)).toEqual({ status: 'shown', detail: taskDetail({ position: '20' }) });
+    feed.cardChanged('21');
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads once after a read for a new board snapshot during it, and drops the changes before it', async () => {
+    const { gateway, states, settled } = heldReads();
+    const feed = start(gateway, states);
+    feed.cardChanged('150');
+    feed.boardReread();
+    await settled(0, read('100'));
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+    await settled(1, read('20'));
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads nothing for a new board snapshot after a failed read', async () => {
+    const { gateway, states, settled } = heldReads();
+    const feed = start(gateway, states);
+    await settled(0, { kind: 'unavailable' });
+    feed.boardReread();
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(1);
+  });
+
   it('shows nothing and reads no more once stopped', async () => {
     const { gateway, states, settled } = heldReads();
     const feed = start(gateway, states);

@@ -374,6 +374,34 @@ describe('live updates of the task detail', () => {
     expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
   });
 
+  it('reads the detail again after a resync, though the restored board lies below it', async () => {
+    const gateway = gatewayWith(taskDetail({ position: '100' }));
+    openDetail(undefined, DETAIL_PATH, gateway);
+    await drawer();
+    await screen.findByRole('article', { name: 'Add the board' });
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(1);
+    gateway.readBoard.mockResolvedValue({ kind: 'read', value: board({ position: '20', cards: [card()] }) });
+    gateway.readTaskDetail.mockResolvedValue({
+      kind: 'read',
+      value: taskDetail({ position: '20', card: card({ title: 'Add the board, restored' }) }),
+    });
+    act(() => gateway.lastStream().emit({ kind: 'resync' }));
+    expect(await screen.findByRole('dialog', { name: 'Add the board, restored' })).toBeDefined();
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the detail again after a resync whose board no longer holds the card', async () => {
+    const gateway = gatewayWith();
+    openDetail(undefined, DETAIL_PATH, gateway);
+    await drawer();
+    await screen.findByRole('article', { name: 'Add the board' });
+    gateway.readBoard.mockResolvedValue({ kind: 'read', value: board({ position: '20', cards: [] }) });
+    gateway.readTaskDetail.mockResolvedValue({ kind: 'not-found' });
+    act(() => gateway.lastStream().emit({ kind: 'resync' }));
+    expect(await within(screen.getByRole('dialog')).findByText('Task not found')).toBeDefined();
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+  });
+
   it('drops the detail and names the role when the board read after a stream end is denied', async () => {
     const gateway = gatewayWith();
     openDetail(undefined, DETAIL_PATH, gateway);
