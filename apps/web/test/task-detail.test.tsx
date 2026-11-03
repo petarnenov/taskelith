@@ -374,6 +374,36 @@ describe('live updates of the task detail', () => {
     expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
   });
 
+  it('drops the detail and names the role when the board read after a stream end is denied', async () => {
+    const gateway = gatewayWith();
+    openDetail(undefined, DETAIL_PATH, gateway);
+    await drawer();
+    await screen.findByRole('article', { name: 'Add the board' });
+    gateway.readBoard.mockResolvedValue({ kind: 'denied', requiredRole: 'project-viewer' });
+    act(() => gateway.lastStream().emit({ kind: 'stream-ended' }));
+    const detail = within(screen.getByRole('dialog'));
+    expect(await detail.findByText('No access to this task')).toBeDefined();
+    expect(detail.getByText(/Reading it needs the role project-viewer\./)).toBeDefined();
+    expect(detail.queryByRole('region')).toBeNull();
+  });
+
+  it('drops the detail when the board cannot be read after the stream closed, and retries both', async () => {
+    const gateway = gatewayWith();
+    openDetail(undefined, DETAIL_PATH, gateway);
+    await drawer();
+    await screen.findByRole('article', { name: 'Add the board' });
+    gateway.readBoard.mockResolvedValueOnce({ kind: 'unavailable' });
+    act(() => gateway.lastStream().emit({ kind: 'failed' }));
+    const detail = within(screen.getByRole('dialog'));
+    expect(await detail.findByText('The task detail cannot be kept current')).toBeDefined();
+    expect(detail.queryByRole('region')).toBeNull();
+    await userEvent.click(detail.getByRole('button', { name: 'Retry' }));
+    await drawer();
+    expect(await screen.findByRole('article', { name: 'Add the board' })).toBeDefined();
+    expect(gateway.readBoard).toHaveBeenCalledTimes(3);
+    expect(gateway.readTaskDetail).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the time of its state while the live updates are lost', async () => {
     const gateway = gatewayWith();
     openDetail(undefined, DETAIL_PATH, gateway);
