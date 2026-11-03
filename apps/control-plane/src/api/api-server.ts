@@ -10,6 +10,7 @@ import { err, failure, ok, parseIdentifier, type CorrelationId, type Failure, ty
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
 import {
+  BODY_TOO_LARGE,
   MAX_BODY_BYTES,
   MAX_CONCURRENT_UPLOADS,
   MAX_EVIDENCE_BYTES,
@@ -52,6 +53,13 @@ export interface ApiRequest extends Caller {
 export interface Upload {
   readonly record: unknown;
   readonly content: Uint8Array;
+}
+
+// The body of a route with `signedBodyLimit`: exact bytes, never parsed,
+// with the request's headers, their names in lower case.
+export interface SignedBody {
+  readonly headers: Readonly<Record<string, string>>;
+  readonly rawBody: Uint8Array;
 }
 
 // A success whose status or headers the operation decides, such as 200 for
@@ -200,7 +208,7 @@ async function answerRoute(
   if (!resource.ok) return failureResponse(statusOf(route, resource.error), resource.error);
   const handled = async (): Promise<ApiResponse> => {
     const body = await validatedBody(request, route);
-    if (!body.ok) return failureResponse(400, body.error);
+    if (!body.ok) return failureResponse(bodyFailureStatus(route, body.error), body.error);
     const sourceAddress = request.socket.remoteAddress ?? 'unknown';
     const validated = { parameters, body: body.value, query: url.searchParams, correlationId, sourceAddress, ...caller.value };
     const outcome = await handlers.handle(route.operationId, validated, bearer);
@@ -287,7 +295,14 @@ async function authenticateSession(handlers: ApiHandlers, optional: boolean, req
   return optional ? ok({}) : err(unauthenticated());
 }
 
+// A body over its limit is 413 where the route declares that reason.
+function bodyFailureStatus(route: RouteDefinition, failed: Failure): number {
+  const reason = failed.details.reason;
+  return (reason === undefined ? undefined : route.reasons?.[reason]) ?? 400;
+}
+
 async function validatedBody(request: IncomingMessage, route: RouteDefinition): Promise<Result<unknown>> {
+  if (route.signedBodyLimit !== undefined) return signedBody(request, route.signedBodyLimit);
   if (route.body === undefined) return ok(undefined);
   if (route.upload) return validatedUpload(request, route.body);
   const body = await readJsonBody(request);
@@ -309,6 +324,17 @@ function writeOnlyViolation(schema: string, violation: Failure): Failure {
 const FIELD_RULES: Readonly<Record<string, string>> = Object.freeze({
   '/loginName': 'the login name must be lowercase: 1-64 letters, digits, ".", "_", or "-", starting with a letter or digit',
 });
+
+// Node gives the header names in lower case and joins repeated values.
+async function signedBody(request: IncomingMessage, limit: number): Promise<Result<SignedBody>> {
+  const body = await readBody(request, limit);
+  if (!body.ok) return err(failure('invalid', body.error.message, { reason: BODY_TOO_LARGE }));
+  const headers = Object.entries(request.headers).flatMap(([name, value]) => {
+    if (value === undefined) return [];
+    return [[name, typeof value === 'string' ? value : value.join(', ')] as const];
+  });
+  return ok({ headers: Object.fromEntries(headers), rawBody: new Uint8Array(body.value) });
+}
 
 // Exactly a JSON `record` part, at most 1 MiB, and a `content` part.
 async function validatedUpload(request: IncomingMessage, schema: keyof HttpSchemas & string): Promise<Result<Upload>> {
@@ -348,6 +374,8 @@ function match(
     try {
       return ok({ route, parameters: found.slice(1).map((part) => decodeURIComponent(part)) });
     } catch {
+      // The receiver answers such an integration as unknown (section 5).
+      if (route.signedBodyLimit !== undefined) return ok({ route, parameters: found.slice(1) });
       return err(failure('invalid', 'a path parameter is not valid percent-encoding'));
     }
   }

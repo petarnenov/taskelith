@@ -8,6 +8,11 @@ export const MAX_BODY_BYTES = 1024 ** 2;
 // and publications buffered at once.
 export const MAX_EVIDENCE_BYTES = 64 * 1024 ** 2;
 export const MAX_CONCURRENT_UPLOADS = 4;
+// The SCM webhook receiver's limit: GitHub caps a payload at 25 MB ("Webhook
+// events and payloads"), here 25 MiB; other bodies keep MAX_BODY_BYTES.
+export const MAX_SCM_WEBHOOK_BODY_BYTES = 25 * 1024 ** 2;
+// The failure reason of a body over its route's limit.
+export const BODY_TOO_LARGE = 'body-too-large';
 
 // Headers such as Set-Cookie; a failure keeps its redacted code and
 // details for the request log.

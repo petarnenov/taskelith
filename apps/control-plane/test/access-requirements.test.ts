@@ -15,7 +15,9 @@ function operationsOf(name: string): Operation[] {
 const operations = operationsOf('control-plane.openapi.json');
 const executionOperations = operationsOf('execution.openapi.json');
 
+// An empty `security` array requires no credential: the scheme `none`.
 function schemesOf(operation: Operation): string[] {
+  if (operation.security?.length === 0) return ['none'];
   return (operation.security ?? [])
     .map((alternative) => Object.keys(alternative).filter((scheme) => scheme !== 'csrfToken')[0] ?? 'none').sort();
 }
@@ -77,7 +79,8 @@ const AGENT_SESSION_OPERATIONS = [
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
-  assert.deepEqual(served.map((route) => route.operationId).sort(), [...AGENT_SESSION_OPERATIONS, ...LOGIN_OPERATIONS].sort());
+  const expected = [...AGENT_SESSION_OPERATIONS, ...LOGIN_OPERATIONS, 'receiveScmWebhook'];
+  assert.deepEqual(served.map((route) => route.operationId).sort(), expected.sort());
   for (const route of served) {
     const operation = operations.find((candidate) => candidate.operationId === route.operationId)!;
     assert.deepEqual([...route.security].sort(), schemesOf(operation), route.operationId);
