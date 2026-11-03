@@ -78,8 +78,10 @@ async function sessionActivity(task: Task, end: TaskEnd | undefined, context: Ta
     const workers = await context.workers();
     if (!workers.ok) return workers;
     const worker = workers.value.get(owning.workerId);
-    if (worker?.reachable === false && worker.lastContactAt !== undefined) {
-      return ok(Object.freeze({ state: 'worker-unreachable' as const, lastContactAt: worker.lastContactAt }));
+    // `worker-unreachable` carries the last contact; without one, `stopped`.
+    if (worker?.reachable === false) {
+      const { lastContactAt } = worker;
+      return ok(lastContactAt === undefined ? activity('stopped') : Object.freeze({ state: 'worker-unreachable' as const, lastContactAt }));
     }
   }
   if (context.hasOpenItem) return ok(activity('waiting-for-person'));

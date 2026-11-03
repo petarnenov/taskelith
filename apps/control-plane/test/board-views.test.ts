@@ -54,6 +54,13 @@ test('the session shows an unreachable worker with its last contact, and an unkn
   assert.deepEqual((await onlyCard(uncertain)).session, { state: 'process-uncertain' });
 });
 
+test('a session on an unreachable worker without a recorded contact is stopped, never working', async () => {
+  const world = await runningCard();
+  const { lastContactAt: _contact, ...neverContacted } = worker('w-1', { reachable: false });
+  world.workers[0] = neverContacted as never;
+  assert.deepEqual((await onlyCard(world)).session, { state: 'stopped' });
+});
+
 test('a stopped session of an earlier attempt leaves a retry awaiting placement stopped, not working', async () => {
   const failed = { id: 'att-1', executions: [], outcome: { kind: 'exited', status: { kind: 'code', code: 1 }, startProven: true, cancelled: false, ownershipGeneration: 1, endedAt: EARLY, executionId: 'ex-1' } };
   const world = await runningCard();
