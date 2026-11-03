@@ -93,11 +93,15 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, secu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `ec677ca18d85d084b453121954e989862c291e30`; tests 4402, pass 4355, fail 0, skipped 47; all files 99.38% lines, 92.71% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `a34946f2ccdc5c0b7d847bbb2c13cf98601910cc`; tests 4413, pass 4366, fail 0, skipped 47; all files 99.39% lines, 92.73% branches, 98.89% functions.
 - `npm run openspec -- validate manage-scm-integrations --strict`: passed, `Change 'manage-scm-integrations' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 105 file(s); every pass summary file is valid: 85 file(s); every route file is valid: 38 file(s).`.
 - Spec diff against the merge base `4b89aa6ec578` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a04c-b762-7452-8a9c-a3856c97fce8` | 0 | 0 | 4 | 0 |
 <!-- make record: end -->
 
 ## Independent review
