@@ -1,5 +1,7 @@
 import { localStorageColorSchemeManager, MantineProvider } from '@mantine/core';
 import { RouterProvider, type createBrowserRouter } from 'react-router';
+import type { BoardGateway } from './board/board';
+import { BoardServicesProvider } from './board/BoardServices';
 import type { Clock } from './session/clock';
 import type { SessionGateway } from './session/session';
 import { SessionProvider } from './session/SessionProvider';
@@ -12,17 +14,20 @@ const colorSchemeManager = localStorageColorSchemeManager({ key: COLOR_SCHEME_KE
 export interface AppProps {
   readonly router: ReturnType<typeof createBrowserRouter>;
   readonly gateway: SessionGateway;
+  readonly board: BoardGateway;
   readonly clock: Clock;
   // The page's CSP nonce, which every style element of Mantine carries.
   readonly styleNonce?: string;
 }
 
-export function App({ router, gateway, clock, styleNonce }: AppProps) {
+export function App({ router, gateway, board, clock, styleNonce }: AppProps) {
   const getStyleNonce = styleNonce === undefined ? undefined : () => styleNonce;
   return (
     <MantineProvider theme={theme} defaultColorScheme="dark" colorSchemeManager={colorSchemeManager} getStyleNonce={getStyleNonce}>
       <SessionProvider gateway={gateway} clock={clock}>
-        <RouterProvider router={router} />
+        <BoardServicesProvider gateway={board} clock={clock}>
+          <RouterProvider router={router} />
+        </BoardServicesProvider>
       </SessionProvider>
     </MantineProvider>
   );
