@@ -5,10 +5,10 @@
 
 ## 2. Implementation and tests
 
-- [ ] 2.1 The `ScmIntegrationAudit` port, its conformance suite, the in-memory adapter, the audit entry of the store's `add` and `update`, and the clock and invocation of `ScmIntegrationService`, with tests failing before them
-- [ ] 2.2 Migration `1792934400000_scm-integration-audit-events`, the PostgreSQL adapter, and the audit write in the store's transaction, with migration, conformance, and rollback tests failing before them
-- [ ] 2.3 The handlers' actor and reason and the composition's clock, with HTTP tests of the audit rows, the refusals, and the redaction failing before them
-- [ ] 2.4 Control-plane wire contracts section 4
+- [x] 2.1 The `ScmIntegrationAudit` port, its conformance suite, the in-memory adapter, the audit entry of the store's `add` and `update`, and the clock and invocation of `ScmIntegrationService`, with tests failing before them
+- [x] 2.2 Migration `1792934400000_scm-integration-audit-events`, the PostgreSQL adapter, and the audit write in the store's transaction, with migration, conformance, and rollback tests failing before them
+- [x] 2.3 The handlers' actor and reason and the composition's clock, with HTTP tests of the audit rows, the refusals, and the redaction failing before them
+- [x] 2.4 Control-plane wire contracts section 4
 
 ## 3. Records and checks
 
