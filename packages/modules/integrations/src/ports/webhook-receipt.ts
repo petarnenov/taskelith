@@ -1,8 +1,8 @@
-import type { Identifier, Result } from '@taskelith/kernel';
+import type { Result } from '@taskelith/kernel';
+import type { ScmIntegrationId } from '../domain/scm-integration.js';
 import type { WebhookDelivery, WebhookEvent, WebhookVerifier } from './source-control.js';
 
-// An SCM integration, whose plugin verifies the deliveries sent to it.
-export type ScmIntegrationId = Identifier<'ScmIntegrationId'>;
+export type { ScmIntegrationId };
 
 // The verifier of each SCM integration that the composition serves, or
 // undefined for an integration it does not know.
