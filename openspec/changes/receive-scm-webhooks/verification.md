@@ -84,6 +84,8 @@ The fix changes only the test; its negative control ran against the fixed test w
 | `env -u NODE_ENV make verify` (fix round, run 1) | `e5943f9a`, tree `1f418345`, clean | Passed on the first run, profile full, stamp written: tests 4309, suites 49, pass 4262, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.70 % branches, 98.85 % functions; `webhook-receiver.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions, `scm-webhook-deliveries.js` 100 % each. No known flake failed |
 | `npm run openspec -- validate receive-scm-webhooks --strict` | `e5943f9a` | `Change 'receive-scm-webhooks' is valid` |
 | `env -u NODE_ENV make verify` (pass 2 fix round, run 1) | `e93cd834`, tree `a4d6e944`, clean | Passed on the first run with Node.js v24.22.1, profile full, stamp written: tests 4312, suites 49, pass 4265, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.68 % branches, 98.85 % functions; `api-server.js` 99.13 %, 92.23 %, 96.97 %, `webhook-receiver.js` and `scm-webhook-deliveries.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions. No known flake failed, and the `http-evidence-publisher` flake candidate did not recur |
+| `env -u NODE_ENV make verify` (pass 3 fix round, run 1) | `a8441f3b`, tree `2f90fcdf`, clean | Failed only the known flake g2-partition, "a partition while the process runs keeps its observations, published once after the heal" (`test/g2-partition.test.ts:95`, `the exit waits in the local outbox`, `'ended' !== 'pending'`): tests 4312, pass 4264, fail 1, skipped 47 |
+| `env -u NODE_ENV make verify` (pass 3 fix round, run 2) | `a8441f3b`, tree `2f90fcdf`, clean | Passed with Node.js v24.22.1, profile full, stamp written: tests 4312, suites 49, pass 4265, fail 0, cancelled 0, skipped 47; all files 99.37 % lines, 92.69 % branches, 98.85 % functions; `api-server.js` 99.13 %, 92.23 %, 96.97 %, `scm-webhook-deliveries.js` 100 % each, `scm-webhooks.js` 100 % lines, 90 % branches, 100 % functions. The `http-evidence-publisher` flake candidate did not recur |
 | Focused runs | `dbfbf3fd` working tree | The new and touched tests with the PostgreSQL adapter's integration tests, the control-plane API, access, browser session, request edge, agent session route, and slot credential tests, the integrations, `scm-github`, and contracts tests: `pass 726`, `fail 0` |
 
 ### Route
@@ -95,7 +97,7 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, cont
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `a4d6e9448ab29d9e781bf631064bc6ade9e1e1e0`; tests 4312, pass 4265, fail 0, skipped 47; all files 99.37% lines, 92.68% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `2f90fcdfaa532f50ead2dca4bd567ae031c0214b`; tests 4312, pass 4265, fail 0, skipped 47; all files 99.37% lines, 92.69% branches, 98.85% functions.
 - `npm run openspec -- validate receive-scm-webhooks --strict`: passed, `Change 'receive-scm-webhooks' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 103 file(s); every pass summary file is valid: 83 file(s); every route file is valid: 36 file(s).`.
 - Spec diff against the merge base `a21913f13672` with `origin/dev`: no change under `openspec/specs`.
@@ -105,6 +107,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19fb8-59e6-7ef3-b2f9-cc2d2e520bff` | 0 | 1 | 3 | 0 |
 | 2 | B | `claude claude-fable-5-1#medium` | `b7260c40-dd88-4f3e-934d-0eec0a8e4aff` | 0 | 0 | 1 | 6 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a19fea-10c4-7863-aab7-fac9c7c533d2` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Independent review
