@@ -14,23 +14,23 @@ The receiver SHALL refuse an integration identifier that is not a kernel identif
 - **WHEN** a delivery names an integration that the verifiers do not know
 - **THEN** the decoy verifies the delivery and the receipt fails exactly as for a failed signature
 
-#### Scenario: Missing signature of an unknown integration
-- **WHEN** a delivery without a signature names an unknown integration and the same delivery a known GitHub one
-- **THEN** both compute the same number of HMACs and comparisons, none
+#### Scenario: Invalid integration identifier
+- **WHEN** a delivery names an integration identifier that is not a kernel identifier
+- **THEN** the verifiers are not asked, the decoy verifies the delivery, and the receipt fails exactly as for a failed signature
 
 ### Requirement: Verified deliveries without an event
-When a verifier fails with `invalid`, the receiver SHALL accept the delivery as `no-event` without recording it only if `EventlessDeliveries` calls it eventless and its raw body is a JSON object in strict UTF-8, and SHALL otherwise fail with `invalid` and record nothing. For GitHub the composition SHALL call eventless only the events `ping`, `installation`, and `installation_repositories`.
+When a verifier fails with `invalid`, the receiver SHALL accept the delivery as `no-event` without recording it only if `EventlessDeliveries` calls it eventless and its raw body is a JSON object in strict UTF-8, and SHALL otherwise fail with `invalid` and record nothing.
 
-#### Scenario: Ping
-- **WHEN** a verified `ping` delivery has a JSON object body without a repository
+#### Scenario: Eventless delivery
+- **WHEN** a verified delivery that `EventlessDeliveries` calls eventless has a JSON object body
 - **THEN** the receipt is `no-event` and nothing is recorded
 
-#### Scenario: Event without a repository
-- **WHEN** a verified `push` delivery has a JSON object body without a repository
+#### Scenario: Delivery that is not eventless
+- **WHEN** a verified delivery without an event that `EventlessDeliveries` does not call eventless has a JSON object body
 - **THEN** the receipt fails with `invalid` and nothing is recorded
 
 #### Scenario: Eventless delivery without an object
-- **WHEN** a verified `ping` delivery's body is a JSON array
+- **WHEN** a verified delivery that `EventlessDeliveries` calls eventless has a JSON array body
 - **THEN** the receipt fails with `invalid` and nothing is recorded
 
 #### Scenario: Unparseable payload
