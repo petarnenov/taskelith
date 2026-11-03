@@ -119,6 +119,15 @@ test('the Dockerfile builds only from the base and checks the Node.js tarballs',
   for (const line of downloads) assert.match(line, /^--checksum=sha256:\$\{NODE_SHA256_(AMD64|ARM64)\} https:\/\/nodejs\.org\//);
 });
 
+test('the control-plane image serves the SPA that its build stage builds', () => {
+  const build = stageInstructions('build').join('\n');
+  assert.match(build, /^WORKDIR \/opt\/taskelith$/m);
+  assert.match(build, /^RUN npm ci --ignore-scripts && npm run build && npm prune --omit=dev /m);
+  assert.ok(stageInstructions('runtime').includes('COPY --from=build /opt /opt'));
+  const environment = stageInstructions('control-plane').find((line) => line.startsWith('ENV '))?.split(' ') ?? [];
+  assert.ok(environment.includes('TASKELITH_WEB_APP_DIR=/opt/taskelith/apps/web/dist'), environment.join(' '));
+});
+
 // The instructions of a stage, each with its continuation lines joined.
 function stageInstructions(name: string): readonly string[] {
   const start = dockerfile.indexOf(` AS ${name}\n`);

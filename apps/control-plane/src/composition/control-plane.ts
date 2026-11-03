@@ -55,6 +55,7 @@ import { repairCommandConsumers } from './command-consumer-repair.js';
 import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
+import { readWebAppDirectory } from './web-app-directory.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -97,6 +98,9 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly sessionLifetime?: SessionLifetime;
   readonly loginThrottle?: LoginThrottleSettings;
   readonly sessionPurgeMilliseconds?: number;
+  // The built SPA that the browser endpoint serves under /app/; without
+  // it, /app/ answers 404 like any other path without an operation.
+  readonly webAppDirectory?: string;
 }
 
 export interface RunningControlPlane {
@@ -134,6 +138,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!owner.ok) return owner;
   const tls = listenerTls(admin.value, settings);
   if (!tls.ok) return tls;
+  const webApp = settings.webAppDirectory === undefined ? ok(undefined) : readWebAppDirectory(settings.webAppDirectory);
+  if (!webApp.ok) return webApp;
   const installationCa = admin.value.installationCa();
   if (!installationCa.ok) return installationCa;
   const authority = admin.value.brokerAuthority();
@@ -194,7 +200,9 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.
   const workerRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.browserOnly) });
-  const browserRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.confidential) });
+  const browserRequests = createApiRequestListener(api, {
+    logger, routes: ROUTES.filter((route) => !route.confidential), ...(webApp.value === undefined ? {} : { webApp: webApp.value }),
+  });
   const servers = [createTlsApiServer(workerRequests, tls.value.worker), createTlsApiServer(browserRequests, tls.value.browser)];
   const closeApi = once(async () => {
     await Promise.all(servers.map((server) => close(server)));

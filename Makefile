@@ -195,7 +195,7 @@ web-test:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run test --workspace=@taskelith/web
 
 # Development only: the SPA on https://localhost:5173/app/, proxied to the
-# running installation's control plane; G3 item 28c serves the built SPA.
+# running installation's control plane, which also serves the built SPA.
 web-dev:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/web-dev.sh $(INSTALLATION)
 

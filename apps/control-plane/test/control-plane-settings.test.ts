@@ -16,6 +16,7 @@ import {
   readControlPlaneSettings,
   readServerHosts,
   serveUntilStopped,
+  WEB_APP_DIR_VARIABLE,
   WorkflowRegistry,
 } from '@taskelith/control-plane';
 import { FLEET_LIMITS } from '@taskelith/fleet';
@@ -43,6 +44,13 @@ test('the API binds loopback on the default port unless configured', () => {
   assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'missing.pem') }, 'linux', 501)).details.variable, 'TASKELITH_NATS_CA');
   writeFileSync(join(directory, 'ca.pem'), 'PEM');
   assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'ca.pem') }, 'linux', 501)).natsTls, { ca: 'PEM' });
+});
+
+test('the web build directory is taken from its variable, and none without it', () => {
+  assert.equal(WEB_APP_DIR_VARIABLE, 'TASKELITH_WEB_APP_DIR');
+  assert.equal(value(readControlPlaneSettings(BASE, 'linux', 501)).webAppDirectory, undefined);
+  assert.equal(value(readControlPlaneSettings({ ...BASE, TASKELITH_WEB_APP_DIR: '' }, 'linux', 501)).webAppDirectory, undefined);
+  assert.equal(value(readControlPlaneSettings({ ...BASE, TASKELITH_WEB_APP_DIR: '/opt/web' }, 'linux', 501)).webAppDirectory, '/opt/web');
 });
 
 test('the browser endpoint binds loopback on 8443 and takes both TLS files or none', () => {

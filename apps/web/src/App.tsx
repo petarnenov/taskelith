@@ -13,11 +13,14 @@ export interface AppProps {
   readonly router: ReturnType<typeof createBrowserRouter>;
   readonly gateway: SessionGateway;
   readonly clock: Clock;
+  // The page's CSP nonce, which every style element of Mantine carries.
+  readonly styleNonce?: string;
 }
 
-export function App({ router, gateway, clock }: AppProps) {
+export function App({ router, gateway, clock, styleNonce }: AppProps) {
+  const getStyleNonce = styleNonce === undefined ? undefined : () => styleNonce;
   return (
-    <MantineProvider theme={theme} defaultColorScheme="dark" colorSchemeManager={colorSchemeManager}>
+    <MantineProvider theme={theme} defaultColorScheme="dark" colorSchemeManager={colorSchemeManager} getStyleNonce={getStyleNonce}>
       <SessionProvider gateway={gateway} clock={clock}>
         <RouterProvider router={router} />
       </SessionProvider>

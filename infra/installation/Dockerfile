@@ -44,8 +44,10 @@ WORKDIR /opt/taskelith
 ENV NODE_ENV=production TASKELITH_DATA_DIR=/var/lib/taskelith
 USER taskelith
 
+# The browser endpoint serves the SPA that the build stage built.
 FROM runtime AS control-plane
-ENV TASKELITH_API_HOST=0.0.0.0 TASKELITH_BROWSER_HOST=0.0.0.0
+ENV TASKELITH_API_HOST=0.0.0.0 TASKELITH_BROWSER_HOST=0.0.0.0 \
+  TASKELITH_WEB_APP_DIR=/opt/taskelith/apps/web/dist
 EXPOSE 8080 8443
 CMD ["node", "apps/control-plane/dist/main.js"]
 
