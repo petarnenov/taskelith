@@ -16,7 +16,7 @@ The control plane SHALL serve `readBoard`, `readTaskDetail`, `readInbox`, `readI
 - **THEN** the board answers `200` with `callerMayAct` false
 
 ### Requirement: Card events projected after each change
-A projector SHALL consume the card touches of committed changes in one `SERIALIZABLE` transaction per batch, append `card-changed` with the card the board would return when the card or its task detail differs from its last projection, a fleet obstacle's observation time aside, and `board-changed` for each project whose workers online changed, and SHALL run in each numbering pass before it numbers.
+A projector SHALL replace each project, worker, or fleet touch with a touch of each card it names, then consume the card touches in `SERIALIZABLE` transactions of at most 100 touches each, append `card-changed` with the card the board would return when the card or its task detail differs from its last projection, a fleet obstacle's observation time aside, and `board-changed` for each project whose workers online changed, and SHALL run in each numbering pass before it numbers.
 
 #### Scenario: An unchanged card is touched again
 - **WHEN** a touched card projects to the same record as its last event
@@ -29,6 +29,17 @@ A projector SHALL consume the card touches of committed changes in one `SERIALIZ
 #### Scenario: A worker comes online
 - **WHEN** a worker's change raises the workers online
 - **THEN** each project gets one `board-changed` with the new count
+
+#### Scenario: A fleet change over more cards than a batch
+- **WHEN** a fleet touch names more cards than a batch holds and the process dies after the first batch commits
+- **THEN** the restart appends the event of each remaining card once, and of no card twice
+
+### Requirement: Unreadable card isolated
+A card whose view cannot be read SHALL append nothing and keep a pending touch, while the other cards of its batch project; the numbering pass SHALL log only the run identifiers and the count of such cards, and the card SHALL project in a later pass once it can be read.
+
+#### Scenario: A card without its run
+- **WHEN** a pass projects two touched cards and one has no stored run
+- **THEN** the other card's `card-changed` is appended, the first keeps its touch, and once its run is stored a later pass appends its `card-changed`
 
 ### Requirement: Task detail before traceability
 Until task intake records requirement links, the task detail SHALL return `traceability` empty.

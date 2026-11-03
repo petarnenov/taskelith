@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Card tables and touches
-The adapter SHALL keep the cards, each card's last projection, and each project's last `workersOnline`, and SHALL write a card touch in the transaction of every write a card or its task detail reads, through triggers on the card, run, gate, lineage, task, admission, assignment, placement outcome, session, inbox item, auto-merge setting, worker, and installation tables; a worker update of only its contact time SHALL write none.
+The adapter SHALL keep the cards, each card's last projection, and each project's last `workersOnline`, and SHALL write a card touch in the transaction of every write a card or its task detail reads, through triggers on the card inserts and on the inserts, updates, and deletes of the run, gate, lineage, task, admission, assignment, placement outcome, session, inbox item, auto-merge setting, worker, and installation tables; a worker update of no field the board reads SHALL write none.
 
 #### Scenario: A rolled-back write
 - **WHEN** a transaction that inserted a gate of a card's run rolls back
@@ -13,6 +13,10 @@ The adapter SHALL keep the cards, each card's last projection, and each project'
 
 #### Scenario: A heartbeat
 - **WHEN** a worker update changes only its last contact time
+- **THEN** no card touch is written
+
+#### Scenario: A self-check sequence
+- **WHEN** a worker update changes only its self-check sequence or its journal
 - **THEN** no card touch is written
 
 ### Requirement: Card projection commit point
