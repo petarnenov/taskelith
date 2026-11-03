@@ -5,15 +5,15 @@
 
 ## 2. Implementation and tests
 
-- [ ] 2.1 The contract break: `RepositoryBindingInput` without `remoteUrl`, `RemoteUrlCandidate` removed, the `BindingRefusal` reasons, version 0.5.0, the `breaking-changes.json` entry, and the regenerated web client, with contract tests failing before it
-- [ ] 2.2 The module's `RepositoryBinding`, `RepositoryBindings` port with its conformance suite, `nextBinding`, the in-memory store, and `RepositoryBindingService`, with tests failing before them
-- [ ] 2.3 Migration `1792934300000_project-repository-bindings` and the PostgreSQL store, with migration, conformance, and stale resolution tests failing before them
-- [ ] 2.4 The two routes, their handlers, and the composition, with HTTP tests of every role refusal and resolver mapping failing before them
-- [ ] 2.5 Control-plane wire contracts sections 4, 4.1, 11, and 12, and the source control contract section 4.1
+- [x] 2.1 The contract break: `RepositoryBindingInput` without `remoteUrl`, `RemoteUrlCandidate` removed, the `BindingRefusal` reasons, version 0.5.0, the `breaking-changes.json` entry, and the regenerated web client, with contract tests failing before it
+- [x] 2.2 The module's `RepositoryBinding`, `RepositoryBindings` port with its conformance suite, `nextBinding`, the in-memory store, and `RepositoryBindingService`, with tests failing before them
+- [x] 2.3 Migration `1792934300000_project-repository-bindings` and the PostgreSQL store, with migration, conformance, and stale resolution tests failing before them
+- [x] 2.4 The two routes, their handlers, and the composition, with HTTP tests of every role refusal and resolver mapping failing before them
+- [x] 2.5 Control-plane wire contracts sections 4, 4.1, 11, and 12, and the source control contract section 4.1
 
 ## 3. Records and checks
 
-- [ ] 3.1 Route the change, run `make verify`, `make record`, and write `verification.md`
+- [x] 3.1 Route the change, run `make verify`, `make record`, and write `verification.md`
 
 ## 4. Review and archive
 
