@@ -9,7 +9,9 @@ Assigned on 2026-11-03 by the coordinator (Niki) to the worker Zaki, size S, dev
 - Base: `dev` `0e8d10e0` (#432); the brief's checklist was saved with `--at 0e8d10e0a7bdd24680897050231c175fd016783c --size S`.
 - `7ebb61f1` `chore: answer before an unread body ends and close after a bounded drain` (the fix, the tests, the contract, the proposal, design, tasks, spec delta, `checklist.json`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `7a728252` `chore: route the stabilize webhook limit test change` (`route.json` unedited).
-- The commit of this record and `make record` follows.
+- `809228ce` `docs: record the checks of the stabilize webhook limit test change`.
+- `f86d074a` `chore: bound and force the discard after an early answer` (the pass 1 fixes, with the pass 1 summary in `passes.jsonl`).
+- The commit of this record, `findings.jsonl`, and `make record` follows.
 
 ## Environment
 
@@ -21,6 +23,9 @@ Zaki's host `hpz600`: Linux 6.8.0-147-generic, x86_64, 8 logical CPUs. `make ver
 - On a finished response of a connection that is not kept alive, Node.js 24's `resOnFinish` calls `socket.destroySoon()` (`if (res._last) { ... socket.destroySoon(); }` in the `node` binary's `_http_server`), which destroys the socket once its FIN is written. A TCP close with received data still unread makes the kernel send a reset. The client's next write fails with `EPIPE` or `ECONNRESET`; `fetch` fails as a whole when that error comes before it has parsed the 413, which a loaded host makes likely.
 
 ## Fail-before
+
+First round, at `7ebb61f1`; the pass 1 fix round has its own below.
+
 
 - An exploratory raw socket client against the server of the base, in a temporary test file that was deleted, failed with `Error: write EPIPE`, `code: 'EPIPE'`.
 - The new test "a sender that writes its whole oversized body before reading still gets the 413" with the product fix of `api-server.ts` reverted to the base (`git checkout apps/control-plane/src/api/api-server.ts`, `npm run build`), the rest of the change kept: 3 of 3 runs failed that test, 13 others passed in each run. With the fix restored and rebuilt, the file passed 14 of 14.
@@ -61,15 +66,25 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending: the worker runs the passes at effort medium (owner decision 2026-11-02).
+Pass 1: Codex CLI `gpt-6-astra`, effort medium, session `01a1a2a3-6447-7620-a2d4-ad6e537b3c1e`, reviewed `0e8d10e0..809228ce`: Critical 0, High 2, Medium 5, Low 1, all fixed in `f86d074a` (`findings.jsonl`). Pass 2 is next, since pass 1 had Medium or worse findings.
+
+## Pass 1 fix round
+
+- **Fixes.** `readBody` reads through `request.iterator({ destroyOnReturn: false })` (`apps/control-plane/src/api/http-exchange.ts:70`). `BodyDrains` (`apps/control-plane/src/api/body-drain.ts`) pauses the input and destroys the socket at either bound, keeps the deadline until the socket closes, admits at most `MAX_CONCURRENT_DRAINS` (16) drains and ends the answer at once beyond them; `serve` calls it synchronously (`apps/control-plane/src/api/api-server.ts:193`). Spec delta: "Answer before the body ends" (466 characters), "Bounded discards" (326), and MODIFIED "SCM webhook receiver served" (477) with its three scenarios; wire contract section 5 matches.
+- **Fail-before.** The new tests against the source of `809228ce` (`git stash` of `apps/control-plane/src` and the new unit test, `npm run build`), the rest of the tests kept: 13 passed and 5 failed. The chunked sender of 8 MiB over the limit read nothing (`actual: ''`; 5 of 5 runs of that test alone failed); the time bound test failed at `assert.equal(serverSide.destroyed, true)` after the deadline; the saturation test failed with `no answer within 60000 ms`; the fault test failed with `Error: writeHead failed` as an unhandled rejection; and the slot test failed because it now observes `request.iterator`, which the old `readBody` did not call. The early 401 test and the declared senders passed there, as the first round had fixed them. With the fixes restored and rebuilt, the three files passed 27 of 27, twice.
+- **Mutations.** Each edit of the built `apps/control-plane/dist/api/body-drain.js`, restored after, failed at least one test: byte bound `>=` (1 failed), byte bound removed (2), deadline one millisecond shorter (2) or longer (2), body end ignored (3, the saturation test by its 60 s watchdog, so no run hung), drain slots unbounded (3), drain slots off by one (3).
+- **Load.** The three files (`scm-webhook-receiver.test.ts`, `body-drain.test.ts`, `early-answer.test.ts`) at `f86d074a`, 20 consecutive runs with 16 busy-loop Node.js processes on the 8 logical CPUs: 20 of 20 runs passed 27 of 27 tests, load average 3.18 to 19.63, run duration 7488 to 18262 ms.
+- **Scratch archive.** A copy of `openspec/` archived the change (`+ 2, ~ 1`), and `openspec validate --specs --strict` passed there: `Totals: 71 passed, 0 failed (71 items)`.
 
 ## Limitations
 
 - The intermittent failure was not reproduced on the iMac; the raw sender reproduces its mechanism deterministically on this host.
-- A sender that writes more than 32 MiB past an early answer, or for more than 10 s, can still lose it to a reset; that is the bound the brief requires.
+- A sender that writes more than 32 MiB past an early answer, or for more than 10 s, or that arrives while all 16 discard slots are taken, can still lose the answer to a reset; that is the bound the brief requires.
+- The byte bound overshoots by at most the chunk that crosses it; the wire test accepts any close between 32 and 64 MiB written, since kernel buffers hold part of what the sender wrote.
 
 ## Remaining gates
 
-- Independent review, passes 1 and 2, and pass 3 if pass 2 has a Medium or worse finding.
+- Independent review: pass 2, which runs because pass 1 had a Medium or worse finding, and pass 3 only if pass 2 has one; a pass with only Low findings or none ends the review.
+- The coordinator's check, as solution architect, of every fix that no later pass reviews.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request).
