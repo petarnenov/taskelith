@@ -11,15 +11,15 @@ export interface InboxAnswerKey {
   readonly outcome: NeedsYouItem;
 }
 
-// The control plane's answer keys (product ports section 4.2); recording a
-// key that the item already holds is `conflict`.
+// The control plane's answer keys (product ports section 4.2); a key that
+// the item already holds is `conflict` `idempotency-key-reused`.
 export interface InboxAnswerKeys {
   find(itemId: NeedsYouItemId, key: IdempotencyKey): Promise<Result<InboxAnswerKey | undefined>>;
   record(answer: InboxAnswerKey): Promise<Result<void>>;
 }
 
-// The reconciliation source's resolved items, kept as their audit record; a
-// second resolution of an item is `conflict`, any other item `invalid`.
+// The reconciliation source's resolved items, their audit record: a second
+// resolution is `conflict` `already-answered`, any other item `invalid`.
 export interface ReconciliationAnswers {
   get(itemId: NeedsYouItemId): Promise<Result<NeedsYouItem | undefined>>;
   record(item: NeedsYouItem): Promise<Result<void>>;

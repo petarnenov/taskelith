@@ -1,4 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { ALREADY_ANSWERED, KEY_REUSED } from '../application/session-timeline-service.js';
 import type { IdempotencyKey } from '../domain/identifiers.js';
 import {
   isResolvedReconciliation,
@@ -18,7 +19,7 @@ export class InMemoryInboxAnswerKeys implements InboxAnswerKeys {
 
   async record(answer: InboxAnswerKey): Promise<Result<void>> {
     const held = keyOf(answer.itemId, answer.key);
-    if (this.#keys.has(held)) return err(failure('conflict', `item ${answer.itemId} already holds the key ${answer.key}`));
+    if (this.#keys.has(held)) return err(failure('conflict', `item ${answer.itemId} already holds the key ${answer.key}`, { reason: KEY_REUSED }));
     this.#keys.set(held, structuredClone(answer));
     return ok(undefined);
   }
@@ -35,7 +36,7 @@ export class InMemoryReconciliationAnswers implements ReconciliationAnswers {
 
   async record(item: NeedsYouItem): Promise<Result<void>> {
     if (!isResolvedReconciliation(item)) return err(failure('invalid', `item ${item.id} is not a resolved reconciliation item`));
-    if (this.#items.has(item.id)) return err(failure('conflict', `item ${item.id} is resolved`));
+    if (this.#items.has(item.id)) return err(failure('conflict', `item ${item.id} is resolved`, { reason: ALREADY_ANSWERED }));
     this.#items.set(item.id, structuredClone(item));
     return ok(undefined);
   }

@@ -1,5 +1,6 @@
-import type { Instant } from '@taskelith/kernel';
+import type { Instant, Result } from '@taskelith/kernel';
 import { expectCode, expectRead, expectSuccess, type ConformanceCase, type EvidenceReference } from '@taskelith/sdlc';
+import { ALREADY_ANSWERED, KEY_REUSED } from '../application/session-timeline-service.js';
 import type { IdempotencyKey, PrincipalId, WorkerId } from '../domain/identifiers.js';
 import type { JournalId, ObservationId } from '../domain/observation-sequence.js';
 import type { InboxAnswerKey, InboxAnswerKeys, ReconciliationAnswers } from './inbox-answers.js';
@@ -39,6 +40,12 @@ function tamper(item: NeedsYouItem | undefined): void {
   }
 }
 
+// A `CommandConflict` names its reason (wire contracts section 8).
+function expectConflict(problems: string[], label: string, result: Result<unknown>, reason: string): void {
+  expectCode(problems, label, result, 'conflict');
+  if (!result.ok && result.error.details.reason !== reason) problems.push(`${label}: reason ${String(result.error.details.reason)}, expected ${reason}`);
+}
+
 function keyOf(itemId: NeedsYouItemId, key: IdempotencyKey, digest = 'digest-1'): InboxAnswerKey {
   return { itemId, key, digest, outcome: resolvedProcess(itemId) };
 }
@@ -51,7 +58,7 @@ export const INBOX_ANSWER_KEYS_CONFORMANCE: readonly ConformanceCase<InboxAnswer
       expectRead(problems, 'unknown', await keys.find(ITEM, KEY), undefined);
       expectSuccess(problems, 'record', await keys.record(keyOf(ITEM, KEY)));
       expectRead(problems, 'read', await keys.find(ITEM, KEY), keyOf(ITEM, KEY));
-      expectCode(problems, 'again', await keys.record(keyOf(ITEM, KEY, 'digest-2')), 'conflict');
+      expectConflict(problems, 'again', await keys.record(keyOf(ITEM, KEY, 'digest-2')), KEY_REUSED);
       expectRead(problems, 'unchanged', await keys.find(ITEM, KEY), keyOf(ITEM, KEY));
       expectSuccess(problems, 'other item', await keys.record(keyOf(OTHER_ITEM, KEY, 'digest-2')));
       expectRead(problems, 'scoped', await keys.find(OTHER_ITEM, KEY), keyOf(OTHER_ITEM, KEY, 'digest-2'));
@@ -81,7 +88,7 @@ export const RECONCILIATION_ANSWERS_CONFORMANCE: readonly ConformanceCase<Reconc
       expectCode(problems, 'open', await answers.record(openProcess(ITEM)), 'invalid');
       expectSuccess(problems, 'record', await answers.record(resolvedProcess(ITEM)));
       expectRead(problems, 'read', await answers.get(ITEM), resolvedProcess(ITEM));
-      expectCode(problems, 'again', await answers.record(resolvedProcess(ITEM, 'Another reason')), 'conflict');
+      expectConflict(problems, 'again', await answers.record(resolvedProcess(ITEM, 'Another reason')), ALREADY_ANSWERED);
       expectRead(problems, 'unchanged', await answers.get(ITEM), resolvedProcess(ITEM));
       expectRead(problems, 'other', await answers.get(OTHER_ITEM), undefined);
       return problems;

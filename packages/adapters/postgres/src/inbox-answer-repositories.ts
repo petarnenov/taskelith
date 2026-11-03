@@ -1,4 +1,6 @@
 import {
+  ALREADY_ANSWERED,
+  KEY_REUSED,
   isResolvedReconciliation,
   type IdempotencyKey,
   type InboxAnswerKey,
@@ -38,7 +40,7 @@ export class PostgresInboxAnswerKeys implements InboxAnswerKeys {
        ON CONFLICT (item_id, idempotency_key) DO NOTHING`,
       [answer.itemId, answer.key, answer.digest, encodeRecord(answer.outcome)],
     );
-    return rowCount === 1 ? ok(undefined) : err(failure('conflict', `item ${answer.itemId} already holds the key ${answer.key}`));
+    return rowCount === 1 ? ok(undefined) : err(failure('conflict', `item ${answer.itemId} already holds the key ${answer.key}`, { reason: KEY_REUSED }));
   }
 }
 
@@ -65,6 +67,6 @@ export class PostgresReconciliationAnswers implements ReconciliationAnswers {
        ON CONFLICT (item_id) DO NOTHING`,
       [item.id, item.reconciliationReason, encodeRecord(item), item.resolution.resolvedAt],
     );
-    return rowCount === 1 ? ok(undefined) : err(failure('conflict', `item ${item.id} is resolved`));
+    return rowCount === 1 ? ok(undefined) : err(failure('conflict', `item ${item.id} is resolved`, { reason: ALREADY_ANSWERED }));
   }
 }
