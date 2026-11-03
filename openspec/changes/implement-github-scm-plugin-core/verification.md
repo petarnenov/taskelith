@@ -29,6 +29,8 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), third change of its split, develope
 - `e58fefcc` `docs: record review pass 3 of the implement github scm plugin core change` (`passes.jsonl`, the three findings, and the pass 2 outcomes set to `fixed`).
 - `9091bf53` `chore: refuse rebinding required check Apps and report failed installation listings after review pass 3`: the fixes of pass 3 findings 1 and 2 with their tests and the emulator's new means.
 - `e2e1a9e0` `docs: specify the GitHub plugin's App-bound check refusal, listing failures, and refresh risk`: design decisions 3 and 4 and the Risks bullet (finding 3).
+- `63bfd7d4` `docs: resolve the review pass 3 findings of the implement github scm plugin core change`: this record's fail-before and architect sections and the findings' commits.
+- `b142c3ee` merges `origin/dev` `0585235f` (#425, serving the web SPA from the control plane), which touches none of this change's requirements, contracts, implementation, or tests; the fourth `make verify` checked this tree.
 
 ## Environment
 
@@ -130,6 +132,7 @@ After the fixes (`9091bf53`), the same command gave `tests 4`, `pass 4`, `fail 0
 | `env -u NODE_ENV make verify` | `e85955e2`, tree `bcaa51c9` | Passed on the first run, profile full, stamp written: tests 4222, suites 49, pass 4175, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.62 % branches, 98.86 % functions; `scm-github` modules 90.32 to 100 % lines, 76.81 to 100 % branches, 85.71 to 100 % functions; `redaction-rules.js` and `credential-cases.js` 100 % each |
 | `env -u NODE_ENV make verify` | `f1492055`, tree `8b8382bc` | Passed on the first run, profile full, stamp written: tests 4243, suites 49, pass 4196, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.65 % branches, 98.88 % functions; `scm-github` modules 96.77 to 100 % lines, 80.95 to 100 % branches, 100 % functions; no known flake recurred |
 | `env -u NODE_ENV make verify` | `f2602da3`, tree `e5d3f64a` | First run failed only the known flake "a partition while the process runs keeps its observations, published once after the heal" (`test/g2-partition.test.ts`): tests 4252, pass 4204, fail 1, skipped 47. The rerun passed, profile full, stamp written: tests 4252, suites 49, pass 4205, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.84 % functions; `scm-github` modules 96.97 to 100 % lines, 83.72 to 100 % branches, 88.89 to 100 % functions (`run-credentials.js` 88.89 %: the system clock is replaced in tests) |
+| `env -u NODE_ENV make verify` | `b142c3ee`, tree `42604aa8` (after merging `origin/dev` `0585235f`) | Passed on the first run, profile full (`package-lock.json` changed), stamp written: tests 4280, suites 49, pass 4233, fail 0, cancelled 0, skipped 47; all files 99.36 % lines, 92.66 % branches, 98.85 % functions; `change-requests.js` 99.15 % lines, 84.95 % branches, 100 % functions; `installation-tokens.js` 100 %, 91.38 %, 100 %; no known flake recurred |
 | `npm run openspec -- validate implement-github-scm-plugin-core --strict` | `c31be6f6` | `Change 'implement-github-scm-plugin-core' is valid` |
 | Focused runs | `c31be6f6` | `packages/plugins/scm-github/test/*.test.ts`: 36 of 36; integrations tests and the plugin tests together: 110 of 110 |
 
@@ -142,16 +145,17 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, secu
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e5d3f64a4059e316dc7ba0310ec5e1ad17efebc5`; tests 4252, pass 4205, fail 0, skipped 47; all files 99.36% lines, 92.66% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `42604aa84edbfc970b1e1a6b86ebd06c6c0fc2bf`; tests 4280, pass 4233, fail 0, skipped 47; all files 99.36% lines, 92.66% branches, 98.85% functions.
 - `npm run openspec -- validate implement-github-scm-plugin-core --strict`: passed, `Change 'implement-github-scm-plugin-core' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 101 file(s); every pass summary file is valid: 81 file(s); every route file is valid: 34 file(s).`.
-- Spec diff against the merge base `3341f8a82c2d` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 102 file(s); every pass summary file is valid: 82 file(s); every route file is valid: 35 file(s).`.
+- Spec diff against the merge base `0585235fd8cd` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a19f35-9548-7090-b974-933d2f545f61` | 0 | 4 | 4 | 0 |
 | 2 | B | `claude claude-fable-5-1#medium` | `6dc40131-2ee6-470d-8844-945f21022a01` | 0 | 0 | 3 | 6 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a19f67-ce5d-71a1-ba28-cbbaf6f1fdef` | 0 | 1 | 1 | 1 |
 <!-- make record: end -->
 
 ## Independent review
