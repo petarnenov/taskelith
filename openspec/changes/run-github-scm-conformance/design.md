@@ -90,4 +90,4 @@ The first live run's guard refused the plugin's own installation token request, 
 - Merges accumulate commits on the disposable repositories' `main`; this is expected for disposable repositories.
 - The run depends on the repositories' settings: a `main` branch with a commit, and merge commits, squash, and rebase all allowed.
 - The fixture's status codes for GitHub's Git HTTP refusals are assumptions until the live run confirms them.
-- The 30-second window is three to six times the delay seen on 2026-11-03; GitHub publishes no bound, so a slower propagation fails the run, which then needs a new decision rather than a longer wait.
+- GitHub publishes no bound for the delay. The green live run of 2026-11-03 saw its slowest ending refused after 10.2 seconds, counted to the last of the four permission probes, so the 30-second window leaves about three times that. A slower propagation fails the run, which then needs a new decision rather than a longer wait.

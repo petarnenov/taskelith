@@ -18,9 +18,12 @@
 
 ## 4. Live run (later phase, after the owner's setup)
 
-- [ ] 4.1 The live run against GitHub.com, its evidence, and the confirmed status codes
-- [ ] 4.2 The long run
-- [ ] 4.3 The Octokit promotion in the dependency register
+- [x] 4.1 The live run against GitHub.com, its evidence, and the confirmed status codes
+- [x] 4.2 Fix live-run finding 1: narrow the plugin's own tokens to the route's repository
+- [x] 4.3 Fix live-run finding 2 by the coordinator's option B: the propagation window in the contract, the `scm-port` delta, the suite, and the long run, with fail-before tests
+- [x] 4.4 The long run
+- [x] 4.5 The Octokit promotion in the dependency register
+- [x] 4.6 Rebase onto `dev` `d0d59478`, run again, route, verify, and record
 
 ## 5. Review and archive
 
