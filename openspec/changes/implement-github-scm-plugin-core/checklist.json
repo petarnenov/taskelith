@@ -1,0 +1,107 @@
+{
+  "change": "implement-github-scm-plugin-core",
+  "generatedAt": "2026-11-03T01:37:59.455Z",
+  "devCommit": "3341f8a82c2d64d60238e512e0471b25f2b456a5",
+  "query": {
+    "capabilities": [
+      "scm-port",
+      "plugin-registration",
+      "execution-observability",
+      "dependency-register",
+      "engineering-principles"
+    ],
+    "files": [
+      "packages/plugins/**",
+      "packages/plugin-sdk/**",
+      "packages/modules/integrations/**",
+      "packages/modules/observability/**",
+      "docs/dependencies.md"
+    ],
+    "top": 7
+  },
+  "size": "L",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 11
+      },
+      {
+        "category": "contract-drift",
+        "count": 8
+      },
+      {
+        "category": "redaction",
+        "count": 8
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 3
+      },
+      {
+        "category": "error-handling",
+        "count": 2
+      },
+      {
+        "category": "spec-wording",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 800,
+        "inChecklist": 645
+      },
+      "mediumOrWorse": {
+        "findings": 387,
+        "inChecklist": 322
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 134
+      },
+      {
+        "category": "spec-wording",
+        "count": 94
+      },
+      {
+        "category": "docs",
+        "count": 69
+      },
+      {
+        "category": "stale-citation",
+        "count": 50
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 23
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 407,
+        "inChecklist": 400
+      },
+      "mediumOrWorse": {
+        "findings": 64,
+        "inChecklist": 64
+      }
+    }
+  }
+}
