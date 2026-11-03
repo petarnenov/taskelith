@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 11 (`docs/g3-plan.md`, row 11), sub-change 11a by the coordinator's split of 2026-11-03 (design, "Coordinator decisions" Q1 to Q3), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `a21913f1` (#426): projects, members, and defaults in `@taskelith/access` with the PostgreSQL store and migration `1792933800000_project-setup.sql`, and the control plane's `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` ([design](design.md), decisions 1 to 9). Out of scope and untouched: `readRepositoryBinding`, `bindRepository`, and the integration branch (11b); `updateAutoMergeSetting` (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); views and screens; the temporary G2 bridge (design, "Open questions").
+G3 item 11 (`docs/g3-plan.md`, row 11), sub-change 11a by the coordinator's split of 2026-11-03 (design, "Coordinator decisions" Q1 to Q3), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `a21913f1` (#426): projects, members, and defaults in `@taskelith/access` with the PostgreSQL store and migration `1792933800000_project-setup.sql`, and the control plane's `listProjects`, `createProject`, `readProject`, `updateProject`, `listProjectMembers`, `assignProjectMember`, `removeProjectMember`, `readProjectDefaults`, `updateProjectDefaults`, and `readAutoMergeSetting` ([design](design.md), decisions 1 to 9). Out of scope and untouched: `readRepositoryBinding`, `bindRepository`, and the integration branch (11b); `updateAutoMergeSetting` (item 23); SCM integrations and the webhook receiver (20e); `listProjectAccountSlots` (item 12); views and screens; the temporary G2 bridge, which the follow-up `require-existing-project-for-runs` removes (design, "Pass 1 coordinator decisions" (a)). The pass 1 fix round adds the 403 declarations of the G2 documents (decision (c)).
 
 Commit type: `packages/modules/access`, `packages/adapters/*`, and `apps/control-plane` are private workspaces; the published `taskelith` package ships none of them (`package.json` `files`, checked by `scripts/verify-package.ts`), so every commit uses `chore`, `test`, or `docs`.
 
@@ -16,7 +16,8 @@ Commit type: `packages/modules/access`, `packages/adapters/*`, and `apps/control
 - `7506a2b2` `test: expect a project command's own role denial to answer 403`.
 - `c5e5295e` `docs: start the implement-project-setup verification record`.
 - `22d00101` `docs: route the implement-project-setup change`, at head `c5e5295e`; its `make verify` (`verify-11a-1.log`) passed, then `9e35c606` added handler tests to raise the branch coverage of `project-api.js` from 73.44% to above 75%, which changed the diff, so `21185cb8` deleted that `route.json` and `a3a3b889` routed again, unedited, at head `21185cb8`: "route: elevated (lines, files, capabilities, security, size), rule version 5"; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.83), agrees. Recommendation only: the brief routes effort medium.
-- The record commit after it holds the `make record` of the passing `make verify` on the tree of `a3a3b889`.
+- `a2696b2f` `docs: record the make verify of the implement project setup change`, the `make record` of the passing `make verify` on the tree of `a3a3b889`; pass 1 reviewed this head.
+- Pass 1 fix round: `git fetch origin && git merge origin/dev` was already up to date (`origin/dev` `a21913f1`, no merge commit); `d619a817` `test: expect revocable G2 roles, code-point names, copied defaults, isolated route tests, project races, and declared G2 denials`, the tests alone; `a0a541b1` `chore: keep G2 roles revocable, count name code points, copy stored defaults, and declare the G2 role denials`; `7aa9976c` `docs: record the pass 1 fixes and decisions of the implement project setup change`; then the record commits of the round with the `make record` of its `make verify`.
 
 ## Environment
 
@@ -24,11 +25,11 @@ macOS 26.6.2 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`
 
 ## Author self-check
 
-- Scope: only 11a. No change under `packages/contracts` (`git diff a21913f1 HEAD -- packages/contracts` is empty), so no OpenAPI operation, schema, or generated type changed, and no new operation was needed; no dependency changed (`package-lock.json` and every `package.json` unchanged); `ACCESS_REQUIREMENTS` is unchanged, since item 10 already named the rule of every operation.
+- Scope: only 11a. Until the pass 1 fix round no change under `packages/contracts`; since `a0a541b1` `sdlc.openapi.json` 0.4.0 declares the 403 `AccessDenial` on `createRun`, `submitTask`, and `readAdmission` and defines `AccessDenial` as `control-plane.openapi.json` does, and `execution.openapi.json` 0.9.0 declares it on `readTaskResult`, `listQuarantine`, and `redriveQuarantined` (decision (c)); no operation or other schema changed, `control-plane.openapi.json` is unchanged, `make contract-compatibility` reports 0 breaking changes for every document against `a21913f13672` (no `breaking-changes.json` entry), `npm run verify:web-api-types` passes, and the generated types are rebuilt by `npm run build`; no new operation was needed; no dependency changed (`package-lock.json` and every `package.json` unchanged); `ACCESS_REQUIREMENTS` is unchanged, since item 10 already named the rule of every operation.
 - Hexagonal boundaries: projects are a store of the existing `AccessStore` port with conformance cases that the in-memory adapter and PostgreSQL both pass; the module imports only the kernel and SDLC; `project-api.ts` maps wire shapes only; `npm run check:boundaries` passes in `make verify`.
 - Authorization: the server's check before the body is unchanged, and each command checks its actor again in its transaction; that denial answers 403 (`reasons`), tested with a server whose own check passes everyone.
 - Migration: `1792933800000` is the brief's timestamp; `1792933600000` (12f) and `1792933700000` (20e) stay unused. The foreign key is `NOT VALID` (design decision 7).
-- Spec deltas: `control-plane-api` adds five requirements (367, 205, 249, 297, and 264 characters), `trust-and-operational-foundation` two (283, 215), `postgres-state` one (309); `npm run verify:archive` archives them into strictly valid specs in `make verify`.
+- Spec deltas: `control-plane-api` adds five requirements (367, 205, 249, 297, and 264 characters), `trust-and-operational-foundation` two (283, and 258 since the pass 1 round) and, since that round, the MODIFIED "Temporary G2 bridge" (330), `postgres-state` one (309); `npm run verify:archive` archives them into strictly valid specs in `make verify`.
 - Comments: `npm run verify:comments` passes.
 - Coverage of the new and changed files (`verify-11a-2.log`): `project-api.js`, `project-repositories.js`, `project.js`, `project-setup-service.js`, `principal-administration.js`, `in-memory-access-store.js`, and `routes.js`, each at least 75% of lines, branches, and functions; the figures are in "Evidence check".
 
@@ -57,10 +58,25 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
   - `fb-11a-pg-rename-compare-and-set.log`: the PostgreSQL rename without `AND revision = $2`: fail 1, "PostgreSQL access store: a rename and a defaults change compare and set their own revisions".
 - `9e35c606` adds coverage of failure passthroughs; it guards no new behaviour.
 
+### Fail-before of the pass 1 fixes
+
+Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taskelith/72320a31-29ec-4dad-bb0b-5d2fa342f935/scratchpad/`). `d619a817` holds the tests alone.
+
+- Unit (`fb-11a-p1-unit.log`): the tests of `d619a817` against the sources of `a2696b2f` (the three fixed files of `packages/modules/access/src` stashed, then `scripts/build-workspaces.ts`), `node --experimental-strip-types --test packages/modules/access/test/*.test.ts apps/control-plane/test/project-routes.test.ts`: tests 82, pass 78, fail 4: "the administrative removal accepts an identifier that names no project, so a G2 role stays revocable" (finding 1, `not-found`), "a project name of 1024 supplementary characters is created and renamed, and one more is refused" and its HTTP twin (finding 2, the 1024-character name refused), and "in-memory access store: stored defaults keep their values when the caller changes its input afterwards" (finding 3, the pushed implementer stored).
+- PostgreSQL (`fb-11a-p1-postgres.log`): the same base through `scripts/docker-slot.ts run -- bash scripts/services.sh run fix11a` around `access-conformance.integration.test.ts` and `migrations.integration.test.ts`: tests 60, pass 59, fail 1, "a role kept on a G2 project identifier is revoked by the administrative removal, which audits it" (finding 1). With the fixes (`fix-11a-p1-postgres.log`): tests 60, pass 60, fail 0.
+- Isolation (`fb-11a-p1-list-alone.log`, finding 4): the list test of `a2696b2f` selected alone with `--test-name-pattern='^listProjects returns'`: fail 1 (`ids.length >= 2` false); the test of `d619a817` selected alone: pass 1.
+- Races (finding 5), each a mutation of the fixed sources, then restored and rebuilt, run against the same services (the diff and the output at the top of each log):
+  - `fb-11a-p1-pg-defaults-compare-and-set.log`: the PostgreSQL defaults update without `AND revision = $2`: fail 3, "PostgreSQL access store: of two concurrent defaults replacements at one revision exactly one wins", "of two overlapping defaults changes on PostgreSQL one wins, the other is a conflict after its retry, with one audit event", and the earlier compare-and-set case.
+  - `fb-11a-p1-pg-no-serialization-retry.log`: `SERIALIZATION_ATTEMPTS` 1 instead of 5: fail 7, among them both overlapping defaults and assignment tests, "an assignment overlapping a removal of one member on PostgreSQL ends as the last audit event says", and the conformance case "concurrent assignments and a removal of one member leave one consistent role", so the racers' transactions overlap and serialize.
+  - `fb-11a-p1-memory-defaults-compare-and-set.log`: the in-memory defaults update without its revision check: fail 4, among them "in-memory access store: of two concurrent defaults replacements at one revision exactly one wins" and "of two concurrent defaults changes one wins with one audit event, and member races end as the trail's last event says".
+- Declared statuses (`fb-11a-p1-g2-403.log`, decision (c)): the tests of `d619a817` against the documents of `a2696b2f`: fail 3, "every status a route answers is declared by the operation in its document" (`listQuarantine` answers an undeclared 403), and the two version and declaration tests of `execution-http-contracts.test.ts`.
+- Plugin identifiers as stored (decision (b)): "defaults may name plugins that no registry knows; they are stored and read as given" and its HTTP twin pass at the base too; they protect the decided behaviour and guard no change.
+
 ## Limitations
 
-- The temporary G2 bridge stays, although the living requirement says item 11 removes it (design, "Open questions", for Niki).
-- Plugin identifiers in the defaults are stored as given, without a registration check (design, "Open questions").
+- The temporary G2 bridge stays until the follow-up `require-existing-project-for-runs` (design, "Follow-ups"); the living requirement now names that change.
+- Plugin identifiers in the defaults are stored and read as given, without a registration check, which the task creation of items 15 and 25 makes (decision (b)).
+- The G2 documents declare a 403 that no caller receives while the operator credential authenticates only the `installation-owner` and the bridge stands (decision (c)).
 - The `NOT VALID` foreign key leaves roles assigned before the migration on G2 project identifiers unchecked.
 - No independent review has run yet; no deployment or browser check was made (backend only).
 
@@ -78,11 +94,33 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not started; the coordinator assigns the reviewers.
+### Pass 1
+
+- Reviewer A: `codex gpt-6-astra#medium` (Codex CLI, model `gpt-6-astra`, effort medium, sandbox read-only, as the session reported), session `01a19fb5-18fc-7851-8d55-c567407d8851`, started 2026-11-03T04:40:07.989Z, invocation `env -u JEV_MAF_LAB make review CHANGE=implement-project-setup PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=$S/review-11a-p1.md LOG=$S/review-11a-p1.log`; the worktree snapshot before and after the pass was the same, `90aa042120155d7eb0148ffb23796aec7b8f32d9db0a1c32cfc5397e46039257`, so the reviewer changed no file. `route.json` recommends effort high; the brief's authorized medium applies.
+- Counts: Critical 0, High 1, Medium 4, Low 2, reviewed at head `a2696b2f` (`a21913f1..a2696b2f`); report `review-11a-p1-report.md` in the scratchpad.
+- Resolutions, all fixed (`findings.jsonl`):
+  1. High, revocation of roles kept on G2 project identifiers: `remove-project-role` accepts any project identifier (`a0a541b1`), with a PostgreSQL upgrade test.
+  2. Medium, names counted in UTF-16 code units: counted in code points (`a0a541b1`).
+  3. Medium, caller-owned defaults kept by the in-memory store: frozen copies on both writes (`a0a541b1`), with a shared conformance case.
+  4. Medium, HTTP tests sharing state: a fixture per test (`d619a817`).
+  5. Medium, missing race coverage: conformance, module, and overlapping PostgreSQL tests (`d619a817`).
+  6. Low, disclosure scenario that included owners: rescoped (`7aa9976c`).
+  7. Low, retired governance citation: task 6.4 cites "Review sequence" (`7aa9976c`).
+
+### Coordinator decisions of the pass 1 fix round
+
+Niki (architect), 2026-11-03, binding (design, "Pass 1 coordinator decisions"):
+
+- (a) The living requirement "Temporary G2 bridge" no longer says that item 11 removes it: a MODIFIED delta keeps its text and defers the removal to the follow-up `require-existing-project-for-runs`, in which `createRun` requires an existing project.
+- (b) Plugin identifiers of the defaults are checked at task creation, later; until then the defaults may name an unregistered plugin, and `readProjectDefaults` returns them as stored, which module and HTTP tests check.
+- (c) Every operation that 11a answers with 403 declares it in `control-plane.openapi.json`; the G2 documents declare the 403 of their role-checked operator operations, approved as a contract fix, with the drift checks above and the minor versions `sdlc.openapi.json` 0.4.0 and `execution.openapi.json` 0.9.0; no served status stays undeclared, which `api-server.test.ts` checks for every route.
+
+## Follow-ups
+
+- `require-existing-project-for-runs`: `createRun` requires an existing project, the temporary G2 bridge is removed, and the G2 role denials answer the declared 403 (decision (a)); not yet a row of the G3 work plan.
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 in the fixed sequence (`route.json` recommends; the brief sets effort medium), each finding resolved and recorded in `findings.jsonl` and `passes.jsonl`.
-- Niki's answers to the open questions in the design: the G2 bridge, the plugin identifier check, and the undeclared 403 of the G2 documents.
+- Independent review pass 2, and pass 3 if pass 2 reports a Medium or worse finding, in the fixed sequence (`route.json` recommends; the brief sets effort medium), each finding resolved and recorded in `findings.jsonl` and `passes.jsonl`.
 - Archive of the change after review.
 - Integration into dev by the coordinator (single pull request).
