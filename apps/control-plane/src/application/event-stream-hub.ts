@@ -26,9 +26,13 @@ export type StreamFrame =
   | { readonly kind: 'stream-ended'; readonly reason: 'role-changed' }
   | { readonly kind: 'keep-alive' };
 
-// Where a stream's frames go; `send` answers false once its buffer is full.
+// Whether a sink took a frame, refused it because its buffer is full, or
+// refused it because its client is gone.
+export type SinkAnswer = 'sent' | 'full' | 'gone';
+
+// Where a stream's frames go.
 export interface StreamSink {
-  send(frame: StreamFrame): boolean;
+  send(frame: StreamFrame): SinkAnswer;
   close(): void;
 }
 
@@ -235,8 +239,11 @@ class LiveStream {
 
   // A full buffer ends the stream instead of holding the log's readers.
   #send(frame: StreamFrame): boolean {
-    if (this.#sink.send(frame)) return true;
-    this.#dependencies.logger.warn('events.stream.overflow', { scope: this.#subject.scope.kind });
+    const answer = this.#sink.send(frame);
+    if (answer === 'sent') return true;
+    const scope = this.#subject.scope.kind;
+    if (answer === 'full') this.#dependencies.logger.warn('events.stream.overflow', { scope });
+    else this.#dependencies.logger.info('events.stream.gone', { scope });
     this.close();
     return false;
   }

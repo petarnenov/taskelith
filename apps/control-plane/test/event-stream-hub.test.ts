@@ -209,13 +209,23 @@ test('a stream whose buffer is full ends, and the other streams go on', async ()
   const { log, hub, logs } = setup();
   const slow = await opened(hub);
   const fast = await opened(hub);
-  slow.sink.accepts = false;
+  slow.sink.answer = 'full';
   await committed(log, eventEntry(marked(1)), eventEntry(marked(2)));
   hub.wake();
   await slow.sink.until((recorded) => recorded.closed);
   await fast.sink.until((recorded) => recorded.frames.length === 2);
   assert.deepEqual([slow.sink.marks(), fast.sink.marks()], [[1], [1, 2]]);
-  assert.ok(logs.records.some((record) => record.event === 'events.stream.overflow'));
+  assert.deepEqual(logs.records.map((record) => record.event), ['events.stream.overflow']);
+});
+
+test('a stream whose client is gone ends with a neutral log line, not an overflow', async () => {
+  const { log, hub, logs } = setup();
+  const { sink } = await opened(hub);
+  sink.answer = 'gone';
+  await committed(log, eventEntry(marked(1)));
+  hub.wake();
+  await sink.until((recorded) => recorded.closed);
+  assert.deepEqual([logs.records.map((record) => record.event), hub.openStreams()], [['events.stream.gone'], 0]);
 });
 
 test('a wake during a read reads again, and a detached stream reads nothing more', async () => {

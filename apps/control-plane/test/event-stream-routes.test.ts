@@ -425,8 +425,9 @@ test('a client gone while the stream opened leaves no stream, timer, or log read
   log.commit([eventEntry(marked(72))]);
   value(await log.assign(10, AT));
   hub.wake();
-  await hubLogs.logged('events.stream.overflow');
+  await hubLogs.logged('events.stream.gone');
   assert.deepEqual([hub.openStreams(), later.written], [0, []], 'a response destroyed before its close event takes no frame');
+  assert.ok(!hubLogs.records.some((record) => record.event === 'events.stream.overflow'), 'a gone client is no overflow');
 });
 
 function request(owner: PrincipalId, projectId: string): ApiRequest {

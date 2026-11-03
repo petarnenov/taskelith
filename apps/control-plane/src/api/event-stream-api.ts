@@ -5,7 +5,7 @@ import { INSTALLATION_SCOPE, projectScope, type UiEventScope } from '@taskelith/
 import { err, failure, ok, parseIdentifier, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId } from '@taskelith/sdlc';
 import type { Logger } from '@taskelith/observability';
-import type { EventStreamHub, StreamFrame, StreamSink, StreamSubject } from '../application/event-stream-hub.js';
+import type { EventStreamHub, SinkAnswer, StreamFrame, StreamSink, StreamSubject } from '../application/event-stream-hub.js';
 import type { ApiRequest } from './api-server.js';
 import { eventData, frameText } from './event-stream-wire.js';
 import { StreamAnswer } from './http-exchange.js';
@@ -105,11 +105,11 @@ class ResponseSink implements StreamSink {
     this.#logger = logger;
   }
 
-  send(frame: StreamFrame): boolean {
-    if (isGone(this.#response)) return false;
+  send(frame: StreamFrame): SinkAnswer {
+    if (isGone(this.#response)) return 'gone';
     const text = this.#text(frame);
     if (text !== undefined) this.#response.write(text);
-    return this.#response.writableLength <= MAX_STREAM_BUFFER_BYTES;
+    return this.#response.writableLength <= MAX_STREAM_BUFFER_BYTES ? 'sent' : 'full';
   }
 
   // A full buffer is dropped; otherwise the last frame is flushed first.

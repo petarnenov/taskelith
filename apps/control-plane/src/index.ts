@@ -106,6 +106,7 @@ export {
   type ResyncReason,
   type Scheduler,
   type StreamFrame,
+  type SinkAnswer,
   type StreamSink,
   type StreamSubject,
 } from './application/event-stream-hub.js';

@@ -1,4 +1,4 @@
-import type { Scheduler, StreamFrame, StreamSink } from '@taskelith/control-plane';
+import type { Scheduler, SinkAnswer, StreamFrame, StreamSink } from '@taskelith/control-plane';
 import { InMemoryUiEventLog, projectScope, type CommittedEntry, type PrincipalChange, type UiEvent, type UiEventScope } from '@taskelith/execution';
 import { instantFromEpochMilliseconds, type Instant } from '@taskelith/kernel';
 import type { ProjectId } from '@taskelith/sdlc';
@@ -26,13 +26,13 @@ export async function committed(log: InMemoryUiEventLog, ...entries: readonly Co
 export class RecordingSink implements StreamSink {
   readonly frames: StreamFrame[] = [];
   closed = false;
-  accepts = true;
+  answer: SinkAnswer = 'sent';
   readonly #waiters: Array<{ holds: () => boolean; resolve: () => void }> = [];
 
-  send(frame: StreamFrame): boolean {
+  send(frame: StreamFrame): SinkAnswer {
     this.frames.push(frame);
     this.#check();
-    return this.accepts;
+    return this.answer;
   }
 
   close(): void {
