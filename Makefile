@@ -303,7 +303,7 @@ conformance-github:
 	@if [ -z "$$OUT" ]; then echo "make conformance-github: set OUT to a directory outside the worktree" >&2; exit 2; fi
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash -c \
 		'npm run --silent build && node --experimental-strip-types scripts/github-conformance.ts "$$@"' \
-		github-conformance --out "$$OUT" $(if $(filter 1,$(LONG_RUN)),--long-run) $(if $(filter 1,$(CLEANUP_ONLY)),--cleanup-only)
+		github-conformance --out "$$OUT" $(if $(filter 1,$(LONG_RUN)),--long-run) $(if $(filter 1,$(CLEANUP_ONLY)),--cleanup-only) $(if $(filter 1,$(DISCOVER)),--discover)
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.

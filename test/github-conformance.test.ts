@@ -5,16 +5,25 @@ import { ok } from '@taskelith/kernel';
 import type { SourceControlProvider } from '@taskelith/integrations';
 import { conformanceFixture, githubTestbed } from '../packages/plugins/scm-github/test/github-fixture.ts';
 import { isClean, isDone, planCleanup, type RepositoryState } from '../scripts/github-conformance-cleanup.ts';
+import { discoverInstallation, type Requester } from '../scripts/github-conformance-discovery.ts';
 import { checkedEvidence, findSecretTraces, redactEvidence, revealedKeyLines } from '../scripts/github-conformance-evidence.ts';
 import { CONFORMANCE_BRANCH_PREFIX, statusOutcome } from '../scripts/github-conformance-fixture.ts';
 import { checkRequest, RequestGuard } from '../scripts/github-conformance-guard.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from '../scripts/github-conformance-long-run.ts';
-import { loadSecrets, readSettings, SETTING_VARIABLES, type ConformanceSettings } from '../scripts/github-conformance-settings.ts';
+import {
+  loadPrivateKey,
+  loadSecrets,
+  readAppSettings,
+  readSettings,
+  SETTING_VARIABLES,
+  type ConformanceSettings,
+} from '../scripts/github-conformance-settings.ts';
 
 // The live GitHub conformance run's local parts, without any network.
 
 const PROJECT = 'petarnenov/taskelith-conformance-project';
 const FOREIGN = 'petarnenov/taskelith-conformance-foreign';
+const HIDDEN = 'petarnenov/taskelith-conformance-hidden';
 const API = 'https://api.github.com';
 const ENVIRONMENT = Object.freeze({
   TASKELITH_GITHUB_APP_KEY_FILE: '/keys/app.pem',
@@ -61,6 +70,43 @@ test('the secrets are read from the named files and refused by variable name', a
   const empty = await loadSecrets(settings.value, files({ '/keys/app.pem': PRIVATE_KEY, '/keys/webhook-secret': '\n' }));
   assert.deepEqual(empty, { ok: false, error: 'TASKELITH_GITHUB_WEBHOOK_SECRET_FILE names an empty file' });
   assertNoSecretIn(JSON.stringify([notKey, empty]));
+});
+
+test('the discovery settings need only the App ID and its key file', async () => {
+  assert.deepEqual(readAppSettings({}), { ok: false, error: 'set TASKELITH_GITHUB_APP_KEY_FILE, TASKELITH_GITHUB_APP_ID' });
+  const invalid = readAppSettings({ ...ENVIRONMENT, TASKELITH_GITHUB_APP_ID: 'x1' });
+  assert.deepEqual(invalid, { ok: false, error: 'TASKELITH_GITHUB_APP_ID must be a numeric GitHub ID' });
+  const { TASKELITH_GITHUB_APP_KEY_FILE: keyFile, TASKELITH_GITHUB_APP_ID: appId } = ENVIRONMENT;
+  const settings = readAppSettings({ TASKELITH_GITHUB_APP_KEY_FILE: keyFile, TASKELITH_GITHUB_APP_ID: appId });
+  assert.deepEqual(settings, { ok: true, value: { appId, keyFile } });
+  assert.deepEqual(await loadPrivateKey({ appId, keyFile }, async () => PRIVATE_KEY), { ok: true, value: PRIVATE_KEY.replace(/\n$/, '') });
+});
+
+test('the discovery finds the installation and checks what its token sees', async () => {
+  const found = await discoverInstallation(...githubAnswering({}));
+  assert.deepEqual(found.problems, []);
+  assert.equal(found.installationId, '42');
+  assert.deepEqual(found.installations.map(({ repository, status, installationId, account }) => [repository, status, installationId, account]), [
+    [PROJECT, 200, '42', 'petarnenov'],
+    [FOREIGN, 200, '42', 'petarnenov'],
+    [HIDDEN, 404, undefined, undefined],
+  ]);
+  assert.deepEqual([found.visibleRepositories, found.hiddenStatus], [[PROJECT, FOREIGN], 404]);
+});
+
+test('the discovery reports an installation that differs from the owner setup', async () => {
+  const exposed = await discoverInstallation(...githubAnswering({ hiddenInstalled: true, foreignId: 7 }));
+  assert.deepEqual(exposed.problems, [
+    `${FOREIGN} has another installation`,
+    `the App's view of ${HIDDEN} answered 200, not 404`,
+    `the token sees ${HIDDEN}`,
+    `the token's read of ${HIDDEN} answered 200, not 404`,
+  ]);
+  const missing = await discoverInstallation(...githubAnswering({ projectMissing: true, foreignMissing: true }));
+  assert.deepEqual(missing.problems, [`the App is not installed on ${PROJECT}`, `the App is not installed on ${FOREIGN}`]);
+  assert.deepEqual([missing.installationId, missing.visibleRepositories], [undefined, []]);
+  const unlisted = githubAnswering({ listingStatus: 403 });
+  await assert.rejects(discoverInstallation(...unlisted), /listing the token's repositories returned 403/);
 });
 
 test('the guard allows only the disposable repositories and unscoped installation calls', () => {
@@ -206,6 +252,33 @@ test('the long run reports a refresh that fails and a version that outlives its 
   const kept = await runLongRefresh({ ...fixture, provider: lax }, LONG_RUN_TIMING, testbed.options.clock!);
   assert.ok(kept.some((finding) => finding.message === 'version 1 after the adoption of 2 still reads'));
 });
+
+interface GithubSetup {
+  readonly projectMissing?: boolean;
+  readonly foreignMissing?: boolean;
+  readonly foreignId?: number;
+  readonly hiddenInstalled?: boolean;
+  readonly listingStatus?: number;
+}
+
+function githubAnswering(setup: GithubSetup): [Requester, (installationId: string) => Requester] {
+  const installation = (id: number) => ({ status: 200, data: { id, account: { login: 'petarnenov' } } });
+  const absent = { status: 404, data: { message: 'Not Found' } };
+  const installations: Record<string, { status: number; data: unknown }> = {
+    [PROJECT]: setup.projectMissing === true ? absent : installation(42),
+    [FOREIGN]: setup.foreignMissing === true ? absent : installation(setup.foreignId ?? 42),
+    [HIDDEN]: setup.hiddenInstalled === true ? installation(42) : absent,
+  };
+  const asApp: Requester = async (_method, path) => installations[path.replace(/^\/repos\/|\/installation$/g, '')]!;
+  const visible = setup.hiddenInstalled === true ? [PROJECT, FOREIGN, HIDDEN] : [PROJECT, FOREIGN];
+  const asInstallation = () => async (_method: string, path: string) => {
+    if (path.startsWith('/installation/repositories')) {
+      return { status: setup.listingStatus ?? 200, data: { repositories: visible.map((full_name) => ({ full_name })) } };
+    }
+    return path === `/repos/${HIDDEN}` && setup.hiddenInstalled !== true ? absent : { status: 200, data: {} };
+  };
+  return [asApp, asInstallation];
+}
 
 function assertNoSecretIn(text: string): void {
   for (const secret of [GITHUB_TOKEN, BASIC, JWT, WEBHOOK_SECRET, 'PRIVATE KEY-----', ...revealedKeyLines(PRIVATE_KEY)]) {

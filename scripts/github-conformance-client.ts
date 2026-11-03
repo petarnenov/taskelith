@@ -47,6 +47,11 @@ export class GithubNativeClient {
     return this.requestWithToken(await this.token(), method, path, body);
   }
 
+  // As the App itself, by its JWT, for calls about its installations.
+  async requestAsApp(method: string, path: string): Promise<ApiReply> {
+    return this.call(`Bearer ${this.appJwt()}`, method, path);
+  }
+
   async requestWithToken(token: string, method: string, path: string, body?: unknown): Promise<ApiReply> {
     return this.call(`token ${token}`, method, path, body);
   }

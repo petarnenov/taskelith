@@ -1,4 +1,4 @@
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -6,13 +6,16 @@ import { runSourceControlConformance, type SourceControlConformanceFinding } fro
 import { createGithubSourceControl } from '@taskelith/scm-github';
 import { cleanUp, isClean, type CleanupReport } from './github-conformance-cleanup.ts';
 import { GithubNativeClient } from './github-conformance-client.ts';
+import { discoverInstallation } from './github-conformance-discovery.ts';
 import { revealedKeyLines, saveEvidence } from './github-conformance-evidence.ts';
 import { liveConformanceFixture } from './github-conformance-fixture.ts';
 import { RequestGuard } from './github-conformance-guard.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from './github-conformance-long-run.ts';
 import {
   CONFORMANCE_REPOSITORIES,
+  loadPrivateKey,
   loadSecrets,
+  readAppSettings,
   readSettings,
   type ConformanceSecrets,
   type ConformanceSettings,
@@ -21,7 +24,7 @@ import {
 // The SCM conformance suite against GitHub.com with the plugin's own App,
 // on the disposable repositories only (`make conformance-github`).
 
-const USAGE = 'usage: github-conformance.ts --out DIR [--long-run] [--cleanup-only]';
+const USAGE = 'usage: github-conformance.ts --out DIR [--long-run | --cleanup-only | --discover]';
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MERGE_METHODS = Object.freeze(['merge-commit', 'squash', 'rebase']);
 const SYSTEM_CLOCK = Object.freeze({
@@ -33,6 +36,7 @@ interface Options {
   readonly out: string;
   readonly longRun: boolean;
   readonly cleanupOnly: boolean;
+  readonly discover: boolean;
 }
 
 interface Evidence {
@@ -51,6 +55,7 @@ interface Evidence {
 async function main(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
   if (options === undefined) return fail(USAGE, 2);
+  if (options.discover) return discover(options);
   const settings = readSettings(process.env);
   if (!settings.ok) return fail(settings.error, 2);
   const secrets = await loadSecrets(settings.value);
@@ -69,13 +74,56 @@ function parseOptions(argv: readonly string[]): Options | undefined {
   try {
     const { values } = parseArgs({
       args: [...argv],
-      options: { out: { type: 'string' }, 'long-run': { type: 'boolean' }, 'cleanup-only': { type: 'boolean' } },
+      options: {
+        out: { type: 'string' },
+        'long-run': { type: 'boolean' },
+        'cleanup-only': { type: 'boolean' },
+        discover: { type: 'boolean' },
+      },
       strict: true,
     });
     if (values.out === undefined || values.out.length === 0) return undefined;
-    return { out: values.out, longRun: values['long-run'] === true, cleanupOnly: values['cleanup-only'] === true };
+    const options = {
+      out: values.out,
+      longRun: values['long-run'] === true,
+      cleanupOnly: values['cleanup-only'] === true,
+      discover: values.discover === true,
+    };
+    const modes = [options.longRun, options.cleanupOnly, options.discover].filter(Boolean).length;
+    return modes > 1 ? undefined : options;
   } catch {
     return undefined;
+  }
+}
+
+// Needs only the App ID and key; prints IDs and repository names only.
+async function discover(options: Options): Promise<number> {
+  const settings = readAppSettings(process.env);
+  if (!settings.ok) return fail(settings.error, 2);
+  const privateKey = await loadPrivateKey(settings.value);
+  if (!privateKey.ok) return fail(privateKey.error, 2);
+  const out = await outputDirectory(options.out);
+  if (out === undefined) return fail('--out must be a directory outside the worktree', 2);
+  const guard = new RequestGuard(globalThis.fetch);
+  const identity = (installationId: string) => ({ appId: settings.value.appId, installationId, privateKey: privateKey.value });
+  const app = new GithubNativeClient(identity(''), guard.fetch);
+  const clients: GithubNativeClient[] = [];
+  const asInstallation = (installationId: string) => {
+    const client = new GithubNativeClient(identity(installationId), guard.fetch);
+    clients.push(client);
+    return (method: string, path: string) => client.request(method, path);
+  };
+  try {
+    const found = await discoverInstallation((method, path) => app.requestAsApp(method, path), asInstallation);
+    const record = { ...found, guardRefusals: guard.refusals };
+    const revealed = [...revealedKeyLines(privateKey.value), ...guard.mintedTokens];
+    const text = `${JSON.stringify(record, null, 2)}\n`;
+    const saved = await saveEvidence(out, 'discovery.json', text, revealed);
+    if (!saved.ok) return fail(saved.error, 1);
+    console.log(await readFile(saved.value, 'utf8'));
+    return found.problems.length === 0 && guard.refusals.length === 0 ? 0 : 1;
+  } finally {
+    for (const client of clients) await client.close().catch(() => undefined);
   }
 }
 
