@@ -257,12 +257,17 @@ test('without a build, /app/ is a 404 like any path without an operation', async
   assert.equal((await send('/app/probe', 'GET', bareBase)).status, 204);
 });
 
-test('a directory without index.html or that cannot be read fails and names the variable', () => {
+test('a directory without index.html or that cannot be read fails and names it and the error', () => {
   const empty = join(root, 'empty');
   mkdirSync(empty);
-  for (const directory of [empty, join(root, 'missing'), join(root, 'secret.txt')]) {
+  const cases = [[empty, undefined], [join(root, 'missing'), 'ENOENT'], [join(root, 'secret.txt'), 'ENOTDIR']] as const;
+  for (const [directory, errorCode] of cases) {
     const failure = failed(readWebAppDirectory(directory));
-    assert.deepEqual([failure.code, failure.details.variable], ['precondition-failed', WEB_APP_DIR_VARIABLE], directory);
+    assert.deepEqual(
+      [failure.code, failure.details.variable, failure.details.directory, failure.details.code],
+      ['precondition-failed', WEB_APP_DIR_VARIABLE, directory, errorCode],
+      directory,
+    );
     assert.match(failure.message, new RegExp(WEB_APP_DIR_VARIABLE));
   }
 });
