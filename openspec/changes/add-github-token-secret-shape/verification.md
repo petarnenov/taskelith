@@ -15,6 +15,8 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), second change of its split, develop
 - `d5f35cfc` `test: split the GitHub installation token tests and expect a token shape inside a word to stay` (the tests alone, for the fail-before runs of the pass 1 fixes).
 - `f377a38f` `chore: take a word boundary before GitHub installation tokens and record the pass 1 fixes`, the tree that the second `make verify` checked; the commit after it adds the `make record` output and is the head for review pass 2.
 - `a6a1435e` `test: expect a GitHub installation token inside a word or after an escape to be redacted` (the tests alone, for the fail-before run of the pass 2 fixes).
+- `d9781452` `chore: redact GitHub installation tokens wherever they start and record review pass 2 and its fixes`, the tree that the third `make verify` checked; the two record commits after it end at `dc6f2649`, the head for review pass 3.
+- `1d2f9854` `test: expect an issued secret and a stateless GitHub token glued after it to be redacted` (the tests alone, for the fail-before run of the pass 3 fix).
 
 ## Environment
 
@@ -22,15 +24,15 @@ Native Ubuntu host `hpz600`, Linux 6.8.0-147-generic x86_64; Node.js v24.22.1, t
 
 ## Author self-check
 
-- Scope: only the brief's items. `git diff c355525b --stat` lists `docs/contracts/source-control.md`, `packages/modules/observability/src/domain/redaction-rules.ts`, `packages/modules/observability/test/logger.test.ts`, `packages/adapters/secrets/test/secrets.test.ts`, and this change. No plugin, Octokit, `PLUGIN_API_VERSION`, `scrubEnvironment` call site, wire, OpenAPI, or migration change.
+- Scope: only the brief's items. `git diff c355525b --stat` lists `docs/contracts/source-control.md`, `docs/contracts/installation-and-enrollment.md`, `packages/modules/observability/src/domain/redaction-rules.ts`, `packages/modules/observability/test/logger.test.ts`, `packages/adapters/secrets/test/secrets.test.ts`, and this change. No plugin, Octokit, `PLUGIN_API_VERSION`, `scrubEnvironment` call site, wire, OpenAPI, or migration change.
 - Shape (checklist `redaction`): `ghs_[A-Za-z0-9._-]{36,}`, GitHub's recommended pattern for its stateful and stateless installation token formats, with the length and character set justified in design decision 1. Other GitHub token prefixes are not added, because no fetched source documents their length or character set (design decision 2). [GitHub qualification](/docs/qualification/github.md) records no token length (design decision 3).
 - Boundaries: no boundary before `ghs_` (design decision 1): a token is replaced wherever it starts, after a space or punctuation, inside a longer word, or after a serialized escape such as a literal `\n`, tested in both users. Pass 1's word boundary was reversed by coordinator decision 2026-11-03 (pass 2 below).
-- Order: the rule precedes `redactJwts` in `TOKEN_SHAPE_RULES`, so a stateless token is replaced whole; before the rule the JWT rule alone left `ghs_12345_[redacted]` (fail-before below).
+- Order: the rule comes first in `TOKEN_SHAPE_RULES`, before `redactIssuedSecrets` and `redactJwts`, so a stateless token is replaced whole; before the rule the JWT rule alone left `ghs_12345_[redacted]`, and with the issued-secret rule first an issued secret glued in front took the token's prefix and JWT header (pass 3 finding 1; fail-before below).
 - Contract (checklist `contract-drift`): source control contract section 3 now states the shape rule as in place and keeps item 21's `scrubEnvironment` obligation open; the `scm-port` requirement "Run credential secret" says the same. No other document names the item 20 shape obligation as open; `docs/g3-plan.md` row 20 describes the item's scope and stays. [Installation and enrollment contract](/docs/contracts/installation-and-enrollment.md) section 8 and the `installation-enrollment` requirement "Secret scrubbing", which list the shapes `@taskelith/secrets` redacts, now name the token.
 - Secrets in tests: the tokens are built at run time (`` `ghs_${'A1b2'.repeat(9)}` `` and `` `ghs_12345_${JWT}` `` with the tests' existing synthetic JWT), as `test/review-findings.test.ts` builds its `ghp_` value; no real token was printed or committed.
-- Requirement texts: `execution-observability` "Logs without secrets" 441 characters, `scm-port` "Run credential secret" 374, `installation-enrollment` "Secret scrubbing" 225. Each MODIFIED delta copies the living requirement with all its scenarios; the `execution-observability` delta also edits the scenarios "A secret of a known shape in text" and "Pathological log text" and adds "Near miss of a GitHub installation token", the `scm-port` delta adds "GitHub installation token in text", and the `installation-enrollment` delta changes only the requirement text.
+- Requirement texts: `execution-observability` "Logs without secrets" 441 characters, `scm-port` "Run credential secret" 374, `installation-enrollment` "Secret scrubbing" 235. Each MODIFIED delta copies the living requirement with all its scenarios; the `execution-observability` delta also edits the scenarios "A secret of a known shape in text" and "Pathological log text" and adds "Near miss of a GitHub installation token", the `scm-port` delta adds "GitHub installation token in text", and the `installation-enrollment` delta changes only the requirement text.
 - Commit types: the published `taskelith` package compiles only `src/` (`tsconfig.json` `rootDir` `src`, `files` `dist/`), and `src/cli.ts` imports no workspace package, so neither private package ships in it; the commits use `test`, `chore`, and `docs`.
-- Comments: one new two-line comment (the GitHub rule), two one-line comments (the tests' synthetic tokens), and one modified two-line comment (`TOKEN_SHAPE_RULES`), all under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
+- Comments: one new two-line comment (the GitHub rule), three one-line comments (the tests' synthetic tokens, and the secrets tests' issued secret glued in front of a stateless token), and one modified two-line comment (`TOKEN_SHAPE_RULES`, which names the GitHub rule first and why), all under 80 characters; `npm run verify:comments` runs in `make verify`. No AI attribution in commits.
 
 ## Fail-before
 
@@ -63,6 +65,13 @@ Pass 2 finding 1 found that the word boundary leaves a token after a serialized 
 
 - Tests of `a6a1435e` with the rule of `f377a38f`, `/\bghs_[A-Za-z0-9._-]{36,}/g`: `tests 56`, `pass 44`, `fail 12`, each of these six tests failing in both users: "a GitHub installation token after the word prefix is redacted" (actual `'keep prefixghs_A1b2…A1b2 here'`, expected `'keep prefix[redacted] here'`), "… after the word my_ …" (actual `'keep my_ghs_A1b2…A1b2 here'`), "… after the word v2 …" (actual `'keep v2ghs_A1b2…A1b2 here'`), "… after the escape \\n …" (actual `'line\\nghs_A1b2…A1b2'`, expected `'line\\n[redacted]'`), "… after the escape \\t …" and "… after the escape \\r …" alike. The `\"` case passes before and after, because `"` is no word character; it guards the escape form that already worked.
 - Tests of `a6a1435e` with the fixed rule, `/ghs_[A-Za-z0-9._-]{36,}/g`: `tests 56`, `pass 56`, `fail 0`.
+
+### Fail-before of the pass 3 fix
+
+Pass 3 finding 1 found that `redactIssuedSecrets`, which ran first, took the prefix and JWT header of a stateless GitHub token glued after an issued secret, so the token rule no longer matched and the JWT payload and signature stayed. `1d2f9854` adds one test per user and one for `redactFailure` with `` `tkop_${'A'.repeat(20)}ghs_12345_${JWT}` ``. Same build and command as above, with `--test-reporter=tap`:
+
+- Tests of `1d2f9854` with the rule order of `dc6f2649`: `tests 59`, `pass 56`, `fail 3`: "text loses an issued secret and a stateless GitHub token glued after it" (actual `'token [redacted].eyJzdWIiOiJVIn0.c2lnbmF0dXJl failed'`, expected `'token [redacted][redacted] failed'`), "a failure loses an issued secret and a stateless GitHub token glued after it" (message and details alike), and "an issued secret and a stateless GitHub token glued after it are redacted" (actual `'push [redacted].eyJzdWIiOiJVIn0.c2lnbmF0dXJl failed'`).
+- Tests of `1d2f9854` with the GitHub rule first: `tests 59`, `pass 59`, `fail 0`.
 
 The synthetic token `ghs_` and nine times `A1b2` is shortened to `ghs_A1b2…A1b2` above.
 
@@ -119,7 +128,18 @@ Every pass runs at effort medium per owner decision.
 - Finding 3 (Low, `docs`): this record misdescribed the edited scenarios and the comments. Fixed in the author self-check.
 - Finding 4 (Low, `naming`): the secrets tests interpolated a string literal and duplicated the JWT literal. Fixed: a module-level `JWT` constant serves both tests.
 - Finding 5 (Low, `docs`): the group comment "Shapes without word boundaries" no longer fit the GitHub rule. Fixed by dropping the boundary; the rule's comment no longer says "not inside a word".
-- These fixes are unreviewed until pass 3, the coordinator's architect check covers any it does not review.
+- Pass 3 confirmed these five fixes (outcome `fixed`).
+
+### Pass 3
+
+- Argon unavailable on hpz600: agy binary needs PCLMUL, which the CPU lacks (exit 128, no pass ran, snapshot unchanged); replacement per Unavailable reviewer, coordinator 2026-11-03.
+- Reviewer: Codex CLI `gpt-6.1-sol`, role A, as that replacement, key `codex gpt-6.1-sol#medium`, through `make review`, at head `dc6f2649` against `c355525b`; session `01a19edc-ee94-7223-895c-7a6395066399`; model `gpt-6.1-sol`, effort `medium`, and sandbox `read-only`, each reported in the header. `make review` printed that `route.json` recommends `agy gemini-4-argon-medium#medium` for pass 3. Snapshot `e569b1a8…` before the Antigravity attempt and after the Codex pass, unchanged.
+- Result: Critical 0, High 0, Medium 1, Low 2, recorded in `passes.jsonl` and `findings.jsonl`. It confirmed the five fixes of pass 2.
+- Finding 1 (Medium, `redaction`): `redactIssuedSecrets` ran before the GitHub rule and cut a stateless token glued after an issued secret, leaving its JWT payload and signature. Fixed: the GitHub rule runs first in `TOKEN_SHAPE_RULES`; its character set covers the issued-secret one, so an issued secret glued after a token is replaced with it. Fail-before tests above.
+- Finding 2 (Low, `evidence-mismatch`): the self-check's list of changed files omitted the installation and enrollment contract. Fixed in the author self-check.
+- Finding 3 (Low, `evidence-mismatch`): the self-check gave "Secret scrubbing" 225 characters. Fixed: 235, measured.
+- Pass 3 is the last pass, so these three fixes are unreviewed (outcome `fixed-unreviewed`); the coordinator checks them as solution architect (governance "Architect check of unreviewed fixes").
+- Architect check of the pass 3 fixes: the coordinator records it in the pull request body, since the branch is archived.
 
 ## Limitations
 
@@ -130,6 +150,6 @@ Every pass runs at effort medium per owner decision.
 
 ## Remaining gates
 
-- Independent review passes 1 to 3 as governance requires.
+- The coordinator's architect check of the unreviewed pass 3 fixes.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)

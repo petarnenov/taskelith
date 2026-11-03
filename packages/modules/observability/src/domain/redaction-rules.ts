@@ -138,10 +138,10 @@ export function redactPemPrivateKeys(text: string): string {
 // Secrets marked by their syntax: URL user information, a bearer token, and
 // a `key=value` pair.
 export const MARKED_SECRET_RULES: readonly TextRule[] = [redactUrlUserinfo, redactBearerTokens, redactKeyValuePairs];
-// Bearer secrets, GitHub installation tokens, NKey seeds, `.creds` blocks,
-// and JWTs (trust model 5); a stateless GitHub token comes before its JWT.
+// GitHub installation tokens, bearer secrets, `.creds` blocks, NKey seeds,
+// JWTs (trust model 5); GitHub first, so no rule cuts its token or JWT.
 export const TOKEN_SHAPE_RULES: readonly TextRule[] = [
-  redactIssuedSecrets, redactGithubInstallationTokens, redactCredsBlocks, redactNkeySeeds, redactJwts,
+  redactGithubInstallationTokens, redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts,
 ];
 // PEM private keys come first, so no other rule cuts a key's markers apart.
 export const SECRET_SHAPE_RULES: readonly TextRule[] = [redactPemPrivateKeys, ...TOKEN_SHAPE_RULES];
