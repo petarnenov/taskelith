@@ -14,15 +14,18 @@ import {
 } from '@taskelith/control-plane';
 import {
   ALREADY_ANSWERED,
+  ATTEMPT_NOT_CURRENT,
+  ITEM_CLOSED,
   KEY_REUSED,
   recordExecutionEvidence,
   type InboxAnswerKeys,
   type NeedsYouAnswer,
+  type NeedsYouItem,
   type NeedsYouScope,
   type NeedsYouSource,
 } from '@taskelith/execution';
 import { fleetToken, fleetWorker } from '@taskelith/fleet';
-import { ok } from '@taskelith/kernel';
+import { ok, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import { NodeSecrets, SecretTextRedactor } from '@taskelith/secrets';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
@@ -145,7 +148,7 @@ test('an unknown execution\'s answer ends its attempt, releases its reservation,
   assert.equal(await count('inbox_answer_keys'), 1);
 });
 
-test('a refused answer changes nothing, and an execution that is no longer unknown is not answered', async () => {
+test('a refused answer records no key or answer and keeps the reservation', async () => {
   await unknownExecution();
   const inbox = startInboxServices(database, SESSIONS);
   const [open] = value(await startBoardServices(database, inbox.viewSources).views.open(PROJECT)).items;
@@ -153,6 +156,27 @@ test('a refused answer changes nothing, and an execution that is no longer unkno
   assert.equal(failed(await inbox.answers.answer(INSTALLATION, submission(open!.id, 'key-1', RESOLVE))).code, 'not-found');
   assert.deepEqual([await count('reconciliation_answers'), await count('inbox_answer_keys')], [0, 0]);
   assert.deepEqual(await sql('SELECT reservation_state FROM assignments'), [{ reservation_state: 'held' }]);
+});
+
+// The resolver in its own transaction, as the answer's source calls it.
+async function resolveIn(item: NeedsYouItem) {
+  const resolution = { resolvedBy: 'person-1' as never, answer: RESOLVE };
+  return database.transaction((tx) => new TransactionalReconciliationResolver(tx).resolve(item as never, resolution));
+}
+
+test('the resolver rereads the task: a newer generation is attempt-not-current, an ended execution item-closed', async () => {
+  await unknownExecution();
+  const { views } = startBoardServices(database, startInboxServices(database, SESSIONS).viewSources);
+  const [open] = value(await views.open(PROJECT)).items;
+  assert.equal(open!.subject.scope, 'card');
+  const subject = open!.subject.scope === 'card' ? open!.subject : undefined;
+  const newer = { ...open!, subject: { ...subject!, attemptGeneration: subject!.attemptGeneration! + 1 } } as NeedsYouItem;
+  assert.equal(failed(await resolveIn(newer)).details.reason, ATTEMPT_NOT_CURRENT);
+  assert.equal(await count('reconciliation_answers'), 0);
+  assert.equal(value(await resolveIn(open!)).state, 'resolved');
+  const ended = failed(await resolveIn(open!));
+  assert.deepEqual([ended.code, ended.details.reason], ['precondition-failed', ITEM_CLOSED]);
+  assert.equal(await count('reconciliation_answers'), 1);
 });
 
 // Holds each of the first `parties` key reads until all of them read, so
@@ -212,7 +236,7 @@ test('two concurrent different answers commit one; the other is refused as a reu
     await sql('TRUNCATE unrecorded_processes, inbox_answer_keys, reconciliation_answers');
     const itemId = await processItemId();
     const answers = racingAnswers(barrier(2));
-    const outcomes = await Promise.all([submission(itemId, 'key-1', acknowledge()), { ...other, itemId: itemId as never }]
+    const outcomes: Result<NeedsYouItem>[] = await Promise.all([submission(itemId, 'key-1', acknowledge()), { ...other, itemId: itemId as never }]
       .map((each) => answers.answer(INSTALLATION, each)));
     const refused = outcomes.filter((outcome) => !outcome.ok);
     assert.equal(refused.length, 1, reason);

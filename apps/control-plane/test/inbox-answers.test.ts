@@ -11,7 +11,7 @@ import {
   type NeedsYouScope,
   type NeedsYouSource,
 } from '@taskelith/execution';
-import { err, failure, ok } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 import { item } from './board-fixtures.ts';
 
@@ -36,7 +36,7 @@ class OneItemSource implements NeedsYouSource {
     return ok({ items: [], position: '0' });
   }
 
-  async item(scope: NeedsYouScope, itemId: string) {
+  async item(scope: NeedsYouScope, itemId: string): Promise<Result<NeedsYouItem | undefined>> {
     return ok(scope.kind === 'project' && scope.projectId === 'alpha' && itemId === this.current.id ? this.current : undefined);
   }
 
@@ -75,7 +75,7 @@ test('a key repeated with another answer or responder is idempotency-key-reused,
   const { service, source } = answers();
   value(await service.answer(ALPHA, submission('key-1')));
   for (const other of [submission('key-1', ALLOW), submission('key-1', DENY, 'person-2')]) {
-    const reused = failed(await service.answer(ALPHA, other));
+    const reused: Failure = failed(await service.answer(ALPHA, other));
     assert.deepEqual([reused.code, reused.details.reason], ['conflict', KEY_REUSED]);
   }
   assert.equal(source.requests.length, 1);
