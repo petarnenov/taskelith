@@ -145,6 +145,7 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 - Finding 8 (`49518eea`): `stepOf` moved to `board-labels.ts` and `ObstacleText` to `ObstacleText.tsx`, which the card and the detail both import; covered by the existing card and detail tests.
 - Coordinator decision Q3 (`0e5a0f33`): design decision 4 says why the picker appears twice, the modal Drawer keeping its focus trap and Escape, and that both pickers read and write the one selection of `ProjectsProvider` (`useProjects`), so they cannot disagree; they already share it, so no test was added.
 - After the fixes the whole `apps/web` suite passes: 457 tests in 15 files, 98.88% statements, 97.65% branches, 99.68% functions, and 100% lines; `tsc` of both `apps/web` configurations and `npm run verify:comments` pass.
+- Timing margin (`1053a645` `test: widen the async query timeout for apps/web`), approved by the coordinator (Niki) on 2026-11-03: the `make verify` of the fixed tree, `verify-29b-p2c.log` in the session scratchpad, failed one `apps/web` test, the `findByRole` of the link "Add the board" at `test/task-detail.test.tsx` line 68, which took 1337 ms against the 1000 ms default of Testing Library; a cold Mantine render on the loaded iMac, and the file passed 3 times on its own. `apps/web/test/setup.ts` now sets `configure({ asyncUtilTimeout: 5000 })`, and `apps/web/vitest.config.ts` sets `testTimeout: 15000`, above the Vitest default of 5000 ms, so a test leaves room above its query timeout. Fail-before does not apply to a timing margin. This commit is unreviewed too and awaits the coordinator's architect check.
 - `make verify` of the fixed tree: see "Generated checks" and the line below, written once it ran.
 - Architect check by the coordinator (Niki): _pending_.
 
@@ -164,5 +165,5 @@ Fail-before logs in the session scratchpad: `fb-29b-p2.log`, the tests of `23789
 
 ## Remaining gates
 
-- Architect check by the coordinator of the pass 2 fixes, which no later pass reviews (see "Pass 2 fixes").
+- Architect check by the coordinator of the pass 2 fixes and the timing margin `1053a645`, which no later pass reviews (see "Pass 2 fixes").
 - Integration into dev by the coordinator (single pull request).
