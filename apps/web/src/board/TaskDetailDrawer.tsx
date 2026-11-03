@@ -3,31 +3,26 @@ import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
-import type { BoardView } from './board-model';
-import type { Liveness } from './board-feed';
 import type { BoardOutlet } from './BoardPage';
 import { LoadError, withRequiredRole } from './LoadError';
+import type { TaskDetailState } from './task-detail-feed';
 import { TaskDetailView } from './TaskDetailView';
+import type { LiveBoard } from './useLiveBoard';
 import { useTaskDetail } from './useTaskDetail';
-
-interface LiveCard {
-  readonly view: BoardView;
-  readonly liveness: Liveness;
-}
 
 // The task detail address opens the Drawer over the board, so a reload or
 // a link keeps it; closing it leads back to the board.
 export function TaskDetailRoute() {
   const { projectId = '', runId = '' } = useParams();
-  const { projectId: boardProjectId, state } = useOutletContext<BoardOutlet>();
+  const outlet = useOutletContext<BoardOutlet>();
   const navigate = useNavigate();
-  const live = boardProjectId === projectId && state.status === 'shown' ? state : undefined;
+  const board = outlet.projectId === projectId ? outlet.live : undefined;
   return (
     <TaskDetailDrawer
       key={`${projectId}/${runId}`}
       projectId={projectId}
       runId={runId}
-      live={live}
+      board={board}
       onClose={() => void navigate('/')}
     />
   );
@@ -36,27 +31,53 @@ export function TaskDetailRoute() {
 interface TaskDetailDrawerProps {
   readonly projectId: string;
   readonly runId: string;
-  readonly live: LiveCard | undefined;
+  // The live board of the detail's project, if the page shows it.
+  readonly board: LiveBoard | undefined;
   readonly onClose: () => void;
 }
 
-function TaskDetailDrawer({ projectId, runId, live, onClose }: TaskDetailDrawerProps) {
-  const { state, retry } = useTaskDetail(projectId, runId, live?.view);
-  const title = state.status === 'shown' ? state.detail.card.title : 'Task detail';
+function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawerProps) {
+  const boardState = board?.state;
+  const shownBoard = boardState?.status === 'shown' ? boardState : undefined;
+  const detail = useTaskDetail(projectId, runId, shownBoard?.view);
+  const boardFailure = boardState?.status === 'failed' ? boardState.failure : undefined;
+  const shown = boardFailure === undefined && detail.state.status === 'shown' ? detail.state.detail : undefined;
+  const retryBoth = () => {
+    board?.retry();
+    detail.retry();
+  };
   return (
     <Drawer
       opened
       onClose={onClose}
       position="right"
       size="xl"
-      title={title}
+      title={shown?.card.title ?? 'Task detail'}
       closeButtonProps={{ 'aria-label': 'Close the task detail' }}
     >
-      {state.status === 'loading' ? <LoadingStatus text="Loading the task detail…" /> : null}
-      {state.status === 'failed' ? <DetailFailure failure={state.failure} onRetry={retry} /> : null}
-      {state.status === 'shown' && live?.liveness === 'lost' ? <LostNotice asOf={state.detail.asOf} /> : null}
-      {state.status === 'shown' ? <TaskDetailView detail={state.detail} /> : null}
+      {boardFailure === undefined ? (
+        <DetailContent state={detail.state} lost={shownBoard?.liveness === 'lost'} onRetry={detail.retry} />
+      ) : (
+        <DetailFailure failure={boardFailure} texts={BOARD_FAILURES} onRetry={retryBoth} />
+      )}
     </Drawer>
+  );
+}
+
+interface DetailContentProps {
+  readonly state: TaskDetailState;
+  readonly lost: boolean;
+  readonly onRetry: () => void;
+}
+
+function DetailContent({ state, lost, onRetry }: DetailContentProps) {
+  if (state.status === 'loading') return <LoadingStatus text="Loading the task detail…" />;
+  if (state.status === 'failed') return <DetailFailure failure={state.failure} texts={FAILURES} onRetry={onRetry} />;
+  return (
+    <>
+      {lost ? <LostNotice asOf={state.detail.asOf} /> : null}
+      <TaskDetailView detail={state.detail} />
+    </>
   );
 }
 
@@ -69,7 +90,9 @@ function LostNotice({ asOf }: { readonly asOf: string }) {
   );
 }
 
-const FAILURES: Readonly<Record<ReadFailure, { title: string; text: string }>> = {
+type FailureTexts = Readonly<Record<ReadFailure, { readonly title: string; readonly text: string }>>;
+
+const FAILURES: FailureTexts = {
   unauthenticated: {
     title: 'Your session ended',
     text: 'The control plane answered this read as one without a session, which may have ended before a newer one began. Retry reads the task detail again.',
@@ -88,8 +111,28 @@ const FAILURES: Readonly<Record<ReadFailure, { title: string; text: string }>> =
   },
 };
 
-function DetailFailure({ failure, onRetry }: { readonly failure: ReadFailed; readonly onRetry: () => void }) {
-  const { title, text } = FAILURES[failure.kind];
+// A board that fails under the detail drops it too: its re-read may show
+// that the caller lost access, or that the detail can no longer be current.
+const BOARD_FAILURES: FailureTexts = {
+  ...FAILURES,
+  unavailable: {
+    title: 'The task detail cannot be kept current',
+    text: 'The board under it could not be read again, so no task data is shown rather than data that may be out of date.',
+  },
+  'not-found': {
+    title: 'Project not found',
+    text: 'The control plane knows no such project, so no task data is shown.',
+  },
+};
+
+interface DetailFailureProps {
+  readonly failure: ReadFailed;
+  readonly texts: FailureTexts;
+  readonly onRetry: () => void;
+}
+
+function DetailFailure({ failure, texts, onRetry }: DetailFailureProps) {
+  const { title, text } = texts[failure.kind];
   return (
     <LoadError title={title} onRetry={onRetry}>
       {withRequiredRole(text, failure)}

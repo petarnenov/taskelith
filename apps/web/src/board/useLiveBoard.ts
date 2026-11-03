@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { startBoardFeed, type BoardFeedState } from './board-feed';
 import { useBoardServices } from './BoardServices';
 
@@ -29,5 +29,6 @@ export function useLiveBoard(projectId: string | undefined): LiveBoard {
   }, [projectId, gateway, clock, loads]);
 
   const retry = useCallback(() => setLoads((count) => count + 1), []);
-  return { state: shown.projectId === projectId ? shown.state : LOADING, retry };
+  const state = shown.projectId === projectId ? shown.state : LOADING;
+  return useMemo(() => ({ state, retry }), [state, retry]);
 }

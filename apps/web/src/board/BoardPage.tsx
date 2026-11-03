@@ -5,7 +5,7 @@ import { LoadingStatus } from '../shell/LoadingStatus';
 import type { Project, ReadFailed, ReadFailure } from './board';
 import { formatInstant } from './board-labels';
 import type { BoardView } from './board-model';
-import type { BoardFeedState, Liveness } from './board-feed';
+import type { Liveness } from './board-feed';
 import { BoardColumns } from './BoardColumns';
 import { LoadError, withRequiredRole } from './LoadError';
 import { useProjects } from './ProjectsProvider';
@@ -14,7 +14,7 @@ import { useLiveBoard, type LiveBoard } from './useLiveBoard';
 // What the board hands the task detail drawer of its outlet.
 export interface BoardOutlet {
   readonly projectId?: string;
-  readonly state: BoardFeedState;
+  readonly live: LiveBoard;
 }
 
 // The landing page: the board of the chosen project and its states
@@ -27,10 +27,7 @@ export function BoardPage() {
   }, [addressed, select]);
   const project = view.status === 'listed' ? view.selected : undefined;
   const live = useLiveBoard(project?.projectId);
-  const outlet = useMemo<BoardOutlet>(
-    () => ({ projectId: project?.projectId, state: live.state }),
-    [project?.projectId, live.state],
-  );
+  const outlet = useMemo<BoardOutlet>(() => ({ projectId: project?.projectId, live }), [project?.projectId, live]);
   return (
     <Stack>
       <Title order={1}>Project board</Title>
