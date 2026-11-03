@@ -91,7 +91,7 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
     enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
-    await waitForWaitingEnrollment(observer);
+    await waitForWaitingEnrollment(observer, steppedClock.credentials.username);
     await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
     await holder.query('COMMIT');
     const enrolled = await enrolling;
@@ -103,11 +103,12 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
   }
 });
 
-async function waitForWaitingEnrollment(client: pg.Client): Promise<void> {
+async function waitForWaitingEnrollment(client: pg.Client, role: string): Promise<void> {
   for (let tries = 0; tries < 500; tries++) {
     const { rows } = await client.query<{ waiting: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-         AND pid <> pg_backend_pid() AND query LIKE 'UPDATE enrollment_tokens %') AS waiting`,
+         AND usename = $1 AND query LIKE 'UPDATE enrollment_tokens %') AS waiting`,
+      [role],
     );
     if (rows[0]!.waiting) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
