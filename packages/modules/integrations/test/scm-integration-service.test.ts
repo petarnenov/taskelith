@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { inspect } from 'node:util';
 import test from 'node:test';
 import {
+  InMemoryScmIntegrationAudit,
   InMemoryScmIntegrations,
   ScmIntegrationService,
   ScmSecrets,
@@ -14,13 +15,15 @@ import {
   type WebhookDelivery,
   type WebhookVerifier,
 } from '@taskelith/integrations';
-import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 import { InMemoryScm } from './in-memory-source-control.ts';
 
 const SECRET = 'synthetic-secret-value';
 const OTHER_SECRET = 'other-synthetic-secret';
 const SETTINGS = Object.freeze({ 'account-id': '42' });
+const INVOCATION = Object.freeze({ actor: `p${'a'.repeat(32)}`, reason: 'control-plane API createScmIntegration' });
+const AT = value(instantFromEpochMilliseconds(Date.parse('2026-11-04T09:00:00.000Z')));
 
 // A plugin with one setting and two secrets; a value `bad` is invalid.
 class ExamplePlugin implements SourceControlPlugin {
@@ -67,10 +70,12 @@ const IGNORED = { unverifiable: () => undefined };
 
 let minted = 0;
 function setup(plugin: ExamplePlugin = new ExamplePlugin()) {
-  const store = new InMemoryScmIntegrations();
+  const audit = new InMemoryScmIntegrationAudit();
+  const store = new InMemoryScmIntegrations(audit);
   const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
   const ids = { next: () => value(parseIdentifier('ScmIntegrationId', `i${String(++minted).padStart(32, '0')}`)) as ScmIntegrationId };
-  return { store, plugin, plugins, service: new ScmIntegrationService({ store, plugins, ids }) };
+  const clock = { now: () => AT };
+  return { store, audit, plugin, plugins, service: new ScmIntegrationService({ store, plugins, ids, clock }) };
 }
 
 const CREATION: ScmIntegrationCreation = Object.freeze({
@@ -100,7 +105,7 @@ test('an origin whose normalized form exceeds 300 characters is refused', () => 
 
 test('a created integration starts at revision 1 and shows its secrets only by name', async () => {
   const { service } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   assert.deepEqual({ ...created, integrationId: 'minted' }, {
     integrationId: 'minted', pluginId: 'scm-example', label: 'Example', allowedOrigin: 'https://git.example.com:443', settings: SETTINGS,
     secretNames: ['signing-key', 'webhook-secret'], revision: 1,
@@ -111,7 +116,7 @@ test('a created integration starts at revision 1 and shows its secrets only by n
 
 test('creation refuses an unknown plugin with not-found and a bad origin, setting, or secret with invalid', async () => {
   const { service, store } = setup();
-  assert.equal(failed(await service.create({ ...CREATION, pluginId: 'scm-other' })).code, 'not-found');
+  assert.equal(failed(await service.create({ ...CREATION, pluginId: 'scm-other' }, INVOCATION)).code, 'not-found');
   const cases: ReadonlyArray<readonly [Partial<ScmIntegrationCreation>, string]> = [
     [{ allowedOrigin: 'http://git.example.com' }, 'allowedOrigin'],
     [{ settings: {} }, 'account-id'],
@@ -123,7 +128,7 @@ test('creation refuses an unknown plugin with not-found and a bad origin, settin
     [{ secrets: { ...CREATION.secrets, 'Bad Name': SECRET } }, 'Bad Name'],
   ];
   for (const [override, named] of cases) {
-    const refused = failed(await service.create({ ...CREATION, ...override }));
+    const refused = failed(await service.create({ ...CREATION, ...override }, INVOCATION));
     assert.equal(refused.code, 'invalid', named);
     assert.equal(refused.details.setting ?? refused.details.field, named);
     assert.ok(!inspect(refused).includes(SECRET), named);
@@ -133,48 +138,48 @@ test('creation refuses an unknown plugin with not-found and a bad origin, settin
 
 test('an update replaces the settings, replaces only the named secrets, and moves the revision', async () => {
   const { service, store } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   const updated = value(await service.update(created.integrationId, {
     expectedRevision: 1, label: 'Renamed', allowedOrigin: 'https://git.example.com:8443', settings: { 'account-id': '43' },
     secrets: { 'webhook-secret': OTHER_SECRET },
-  }));
+  }, INVOCATION));
   assert.deepEqual({ ...updated, integrationId: 'kept' }, {
     integrationId: 'kept', pluginId: 'scm-example', label: 'Renamed', allowedOrigin: 'https://git.example.com:8443', settings: { 'account-id': '43' },
     secretNames: ['signing-key', 'webhook-secret'], revision: 2,
   });
   const stored = value(await store.configurationOf(created.integrationId));
   assert.deepEqual(stored?.secrets.reveal(), { 'signing-key': SECRET, 'webhook-secret': OTHER_SECRET });
-  const labelOnly = value(await service.update(created.integrationId, { expectedRevision: 2, label: 'Again' }));
+  const labelOnly = value(await service.update(created.integrationId, { expectedRevision: 2, label: 'Again' }, INVOCATION));
   assert.deepEqual([labelOnly.settings, labelOnly.allowedOrigin, labelOnly.revision], [{ 'account-id': '43' }, 'https://git.example.com:8443', 3]);
 });
 
 test('an update at a stale revision fails with conflict and changes nothing', async () => {
   const { service } = setup();
-  const created = value(await service.create(CREATION));
-  value(await service.update(created.integrationId, { expectedRevision: 1, label: 'First' }));
-  assert.equal(failed(await service.update(created.integrationId, { expectedRevision: 1, label: 'Second' })).code, 'conflict');
+  const created = value(await service.create(CREATION, INVOCATION));
+  value(await service.update(created.integrationId, { expectedRevision: 1, label: 'First' }, INVOCATION));
+  assert.equal(failed(await service.update(created.integrationId, { expectedRevision: 1, label: 'Second' }, INVOCATION)).code, 'conflict');
   assert.equal(value(await service.read(created.integrationId)).label, 'First');
 });
 
 test('an update checks what it changes and refuses an unknown integration with not-found', async () => {
   const { service } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   const id = created.integrationId;
-  assert.equal(failed(await service.update(`i${'f'.repeat(32)}`, { expectedRevision: 1, label: 'x' })).code, 'not-found');
-  assert.equal(failed(await service.update('not an identifier', { expectedRevision: 1, label: 'x' })).code, 'not-found');
+  assert.equal(failed(await service.update(`i${'f'.repeat(32)}`, { expectedRevision: 1, label: 'x' }, INVOCATION)).code, 'not-found');
+  assert.equal(failed(await service.update('not an identifier', { expectedRevision: 1, label: 'x' }, INVOCATION)).code, 'not-found');
   assert.equal(failed(await service.read(`i${'f'.repeat(32)}`)).code, 'not-found');
   const changes: ReadonlyArray<Partial<ScmIntegrationUpdate>> = [
     { settings: {} }, { secrets: { token: SECRET } }, { secrets: { 'webhook-secret': 'bad' } }, { allowedOrigin: 'https://[::1]' },
   ];
   for (const change of changes) {
-    assert.equal(failed(await service.update(id, { expectedRevision: 1, ...change })).code, 'invalid', JSON.stringify(change));
+    assert.equal(failed(await service.update(id, { expectedRevision: 1, ...change }, INVOCATION)).code, 'invalid', JSON.stringify(change));
   }
   assert.equal(value(await service.read(id)).revision, 1);
 });
 
 test('integrations are listed in identifier order, at most 100 a page, with the key of the next page', async () => {
   const { service } = setup();
-  for (let index = 0; index < 101; index += 1) value(await service.create(CREATION));
+  for (let index = 0; index < 101; index += 1) value(await service.create(CREATION, INVOCATION));
   const first = value(await service.list(undefined));
   assert.equal(first.items.length, 100);
   assert.equal(first.next, first.items[99]!.integrationId);
@@ -191,13 +196,13 @@ test('secrets never show their values in a string, JSON, or inspection', () => {
 
 test('stored verifiers serve the integration plugin, cached by revision, and none for an unknown integration', async () => {
   const { service, store, plugin, plugins } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   const verifiers = new StoredScmIntegrationVerifiers(store, plugins, IGNORED);
   const delivery: WebhookDelivery = { headers: {}, rawBody: new Uint8Array() };
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
   assert.equal(plugin.created, 1, 'the second delivery reused the verifier of the same revision');
-  value(await service.update(created.integrationId, { expectedRevision: 1, secrets: { 'webhook-secret': OTHER_SECRET } }));
+  value(await service.update(created.integrationId, { expectedRevision: 1, secrets: { 'webhook-secret': OTHER_SECRET } }, INVOCATION));
   const verifier = value(await verifiers.verifierOf(created.integrationId));
   assert.equal(plugin.created, 2, 'a new revision builds a new verifier at once');
   assert.ok(verifier !== undefined && (await verifier.verifyWebhookDelivery(delivery)) !== undefined);
@@ -206,7 +211,7 @@ test('stored verifiers serve the integration plugin, cached by revision, and non
 
 test('stored verifiers answer none when the plugin is gone or cannot be built', async () => {
   const { service, store } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => undefined }, IGNORED).verifierOf(created.integrationId)), undefined);
   const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', 'cannot build')) } as unknown as SourceControlPlugin;
   assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => broken }, IGNORED).verifierOf(created.integrationId)), undefined);
@@ -214,7 +219,7 @@ test('stored verifiers answer none when the plugin is gone or cannot be built', 
 
 test('stored verifiers report once per revision an integration that cannot verify, never with a value', async () => {
   const { service, store } = setup();
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   const reports: unknown[] = [];
   const reporter = { unverifiable: (...report: unknown[]) => { reports.push(report); } };
   const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', `cannot build with ${SECRET}`)) } as unknown as SourceControlPlugin;
@@ -229,11 +234,37 @@ test('stored verifiers report once per revision an integration that cannot verif
 
 test('an update refuses a secret that would take the integration past 32 secrets and names it', async () => {
   const { service } = setup(new AnySecretPlugin());
-  const created = value(await service.create(CREATION));
+  const created = value(await service.create(CREATION, INVOCATION));
   const extra = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`extra-${String(index).padStart(2, '0')}`, SECRET]));
-  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 1, secrets: extra })).secretNames.length, 32);
-  const refused = failed(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-98': SECRET, 'extra-99': SECRET } }));
+  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 1, secrets: extra }, INVOCATION)).secretNames.length, 32);
+  const refused = failed(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-98': SECRET, 'extra-99': SECRET } }, INVOCATION));
   assert.deepEqual([refused.code, refused.details], ['invalid', { setting: 'extra-98' }]);
   assert.ok(!refused.message.includes(SECRET));
-  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-00': OTHER_SECRET } })).revision, 3);
+  assert.equal(value(await service.update(created.integrationId, { expectedRevision: 2, secrets: { 'extra-00': OTHER_SECRET } }, INVOCATION)).revision, 3);
+});
+
+test('a creation and an update are audited with the caller, its reason, and the clock time', async () => {
+  const { service, audit } = setup();
+  const created = value(await service.create(CREATION, INVOCATION));
+  const updating = { actor: `p${'b'.repeat(32)}`, reason: 'control-plane API updateScmIntegration' };
+  value(await service.update(created.integrationId, { expectedRevision: 1, label: 'Renamed', secrets: { 'webhook-secret': SECRET } }, updating));
+  const { integrationId } = created;
+  assert.deepEqual(value(await audit.trail()), [
+    {
+      integrationId, kind: 'created', ...INVOCATION, revision: 1, occurredAt: AT,
+      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'signing-key', 'webhook-secret'],
+    },
+    { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'webhook-secret'], revision: 2, occurredAt: AT },
+  ]);
+  assert.ok(!JSON.stringify(value(await audit.trail())).includes(SECRET));
+});
+
+test('a refused creation or update is not audited', async () => {
+  const { service, audit } = setup();
+  failed(await service.create({ ...CREATION, settings: {} }, INVOCATION));
+  const created = value(await service.create(CREATION, INVOCATION));
+  failed(await service.update(created.integrationId, { expectedRevision: 1, secrets: { token: SECRET } }, INVOCATION));
+  failed(await service.update(`i${'f'.repeat(32)}`, { expectedRevision: 1, label: 'Missing' }, INVOCATION));
+  failed(await service.update(created.integrationId, { expectedRevision: 2, label: 'Stale' }, INVOCATION));
+  assert.deepEqual(value(await audit.trail()).map((event) => [event.kind, event.revision]), [['created', 1]]);
 });

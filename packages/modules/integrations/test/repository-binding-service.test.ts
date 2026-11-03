@@ -13,7 +13,7 @@ import {
   type SourceControlPlugin,
   type SourceControlProvider,
 } from '@taskelith/integrations';
-import { err, failure, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 import { InMemoryScm, PROJECT } from './in-memory-source-control.ts';
 
@@ -22,6 +22,7 @@ const MISSING_PROJECT = `p${'f'.repeat(32)}`;
 const INTEGRATION_ID = value(parseIdentifier('ScmIntegrationId', `i${'1'.repeat(32)}`)) as ScmIntegrationId;
 const REMOTE_URL = `https://scm.example/${PROJECT}.git`;
 const SECRET = 'synthetic-binding-secret';
+const ENTRY = { actor: `p${'a'.repeat(32)}`, reason: 'binding service test', at: value(instantFromEpochMilliseconds(0)) };
 
 const INTEGRATION: ScmIntegration = Object.freeze({
   integrationId: INTEGRATION_ID, pluginId: 'scm-example', label: 'Example', allowedOrigin: value(normalizeOrigin('https://SCM.example')),
@@ -51,7 +52,7 @@ interface FixtureOptions {
 async function fixture(options: FixtureOptions = {}) {
   const integrations = new InMemoryScmIntegrations();
   const allowedOrigin = options.allowedOrigin === undefined ? INTEGRATION.allowedOrigin : value(normalizeOrigin(options.allowedOrigin));
-  value(await integrations.add({ ...INTEGRATION, allowedOrigin }, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
+  value(await integrations.add({ ...INTEGRATION, allowedOrigin }, value(ScmSecrets.of({ 'webhook-secret': SECRET })), ENTRY));
   const bindings = new InMemoryRepositoryBindings(integrations);
   const scm = new InMemoryScm().provider();
   const provider = options.provider?.(scm) ?? scm;

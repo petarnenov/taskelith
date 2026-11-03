@@ -2,6 +2,7 @@ import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { expectCode, expectOneWinner, expectRead, expectSame, type ConformanceCase } from '@taskelith/sdlc';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
 import { ScmSecrets, type ScmIntegration, type ScmIntegrationId } from '../domain/scm-integration.js';
+import { auditEntry } from './scm-integration-audit-conformance.js';
 import type { ScmIntegrations } from './scm-integrations.js';
 
 // The `ScmIntegrations` contract that every adapter keeps, each case on an
@@ -26,7 +27,7 @@ function integration(digit: string): ScmIntegration {
 }
 
 async function added(store: ScmIntegrations, digit: string): Promise<ScmIntegration> {
-  return must(await store.add(integration(digit), secrets(SECRETS)));
+  return must(await store.add(integration(digit), secrets(SECRETS), auditEntry()));
 }
 
 async function revealed(store: ScmIntegrations, id: ScmIntegrationId): Promise<Result<unknown>> {
@@ -43,7 +44,7 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
       expectSame(problems, 'added', stored, integration('1'));
       expectRead(problems, 'read', await store.get(stored.integrationId), integration('1'));
       expectRead(problems, 'secrets', await revealed(store, stored.integrationId), SECRETS);
-      expectCode(problems, 'same identifier', await store.add(integration('1'), secrets(SECRETS)), 'conflict');
+      expectCode(problems, 'same identifier', await store.add(integration('1'), secrets(SECRETS), auditEntry()), 'conflict');
       return problems;
     },
   },
@@ -53,7 +54,7 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
       const problems: string[] = [];
       expectRead(problems, 'read', await store.get(integrationId('9')), undefined);
       expectRead(problems, 'configuration', await store.configurationOf(integrationId('9')), undefined);
-      expectCode(problems, 'update', await store.update(integrationId('9'), { expectedRevision: 1, label: 'Missing' }), 'not-found');
+      expectCode(problems, 'update', await store.update(integrationId('9'), { expectedRevision: 1, label: 'Missing' }, auditEntry()), 'not-found');
       return problems;
     },
   },
@@ -84,10 +85,10 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
       };
       expectRead(problems, 'update', await store.update(stored.integrationId, {
         expectedRevision: 1, label: 'Renamed', allowedOrigin, settings: { 'account-id': '43' }, secrets: secrets({ 'webhook-secret': ROTATED }),
-      }), changed);
+      }, auditEntry()), changed);
       expectRead(problems, 'read', await store.get(stored.integrationId), changed);
       expectRead(problems, 'secrets', await revealed(store, stored.integrationId), { ...SECRETS, 'webhook-secret': ROTATED });
-      expectRead(problems, 'label only', await store.update(stored.integrationId, { expectedRevision: 2, label: 'Again' }),
+      expectRead(problems, 'label only', await store.update(stored.integrationId, { expectedRevision: 2, label: 'Again' }, auditEntry()),
         { ...changed, label: 'Again', revision: 3 });
       return problems;
     },
@@ -98,7 +99,7 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
       const problems: string[] = [];
       const stored = await added(store, '1');
       const change = { expectedRevision: 1, label: undefined, allowedOrigin: undefined, settings: undefined, secrets: undefined };
-      expectRead(problems, 'update', await store.update(stored.integrationId, change), { ...stored, revision: 2 });
+      expectRead(problems, 'update', await store.update(stored.integrationId, change, auditEntry()), { ...stored, revision: 2 });
       expectRead(problems, 'secrets', await revealed(store, stored.integrationId), SECRETS);
       return problems;
     },
@@ -108,8 +109,8 @@ export const SCM_INTEGRATIONS_CONFORMANCE: readonly ConformanceCase<ScmIntegrati
     async check(store) {
       const problems: string[] = [];
       const stored = await added(store, '1');
-      expectCode(problems, 'stale', await store.update(stored.integrationId, { expectedRevision: 2, label: 'Ahead' }), 'conflict');
-      const racing = await Promise.all(['First', 'Second'].map((label) => store.update(stored.integrationId, { expectedRevision: 1, label })));
+      expectCode(problems, 'stale', await store.update(stored.integrationId, { expectedRevision: 2, label: 'Ahead' }, auditEntry()), 'conflict');
+      const racing = await Promise.all(['First', 'Second'].map((label) => store.update(stored.integrationId, { expectedRevision: 1, label }, auditEntry())));
       const winner = expectOneWinner(problems, 'concurrent', racing);
       const label = winner === undefined ? undefined : ['First', 'Second'][winner];
       expectRead(problems, 'after the race', await store.get(stored.integrationId), { ...stored, label, revision: 2 });
