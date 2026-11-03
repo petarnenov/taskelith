@@ -141,7 +141,7 @@ The SPA SHALL call the control plane through a typed fetch over the types that `
 - **THEN** `make verify` fails and names the stale file
 
 ### Requirement: Web SPA development server
-The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve it over HTTPS on `localhost` only and proxy every path outside `/app/` to the browser endpoint of the local composition, which serves a certificate of the installation CA, trusting only that CA; the CA copy and the server's TLS key SHALL live outside the repository and the bundle. Until the control plane serves the SPA, the docs SHALL state that the development server is its only way to run.
+The SPA SHALL be built under the base path `/app/`. `make web-dev` SHALL serve it over HTTPS on `localhost` only and proxy every path outside `/app/` to the browser endpoint of the local composition, which serves a certificate of the installation CA, trusting only that CA; the CA copy and the server's TLS key SHALL live outside the repository and the bundle. The docs SHALL state that the control plane serves the built SPA and that the development server is for development.
 
 #### Scenario: Development server reach
 - **WHEN** `make web-dev` starts
@@ -229,3 +229,14 @@ The SPA SHALL start in the dark color scheme, switch between dark and light, and
 #### Scenario: Contrast below the minimum
 - **WHEN** a theme change brings a text or primary color pair of the shell below 4.5:1 in either scheme
 - **THEN** the web tests in `make verify` fail and name the pair
+
+### Requirement: Web SPA style nonce
+The built `index.html` SHALL carry the control plane's nonce placeholder in a `csp-nonce` meta tag and hold no inline script, inline style, or event handler attribute, and every script and style sheet it loads SHALL be a file of the build under `/app/assets/`. The SPA SHALL give Mantine the nonce of that tag, so that every style element Mantine adds carries it.
+
+#### Scenario: Mantine style elements
+- **WHEN** the SPA starts on a page whose `csp-nonce` meta tag carries a nonce
+- **THEN** every style element that Mantine adds carries that nonce
+
+#### Scenario: Built page
+- **WHEN** `npm run build` builds the SPA
+- **THEN** its `index.html` names the placeholder in the `csp-nonce` meta tag and loads only hashed files of the build, without inline script or style

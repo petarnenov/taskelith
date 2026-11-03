@@ -149,6 +149,18 @@ The pass 2 fixes are unreviewed fixes; no later pass reviews them. Each awaits t
 - The build is held in memory without a size bound, and a directory swapped for a link and back again between its open and the identity check after the read would pass the start's checks (design, "Risks and trade-offs").
 - No `Strict-Transport-Security` header (design, decision 7).
 
+## Archive
+
+Checked state: the tree of the archive commit, `docs: archive the serve web SPA from control plane change`, the last commit of the branch; the checks below ran on that working tree after `npm run openspec -- archive serve-web-spa-from-control-plane --yes` on `47afd2b9`, with every task of `tasks.md` ticked (4.2 ticked as the placed architect check, which stays a remaining gate), and only this section changed afterward. `origin/dev` was `3341f8a8` (#424) after `git fetch origin`; the merge base stays `3341f8a8`.
+
+| Command | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 71 passed, 0 failed |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-11-03-serve-web-spa-from-control-plane` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `3341f8a8`) | Only this change's deltas: `control-plane-api` adds 5 requirements ("Web SPA served under /app/", "Web SPA cache headers", "Web SPA content security policy", "Web SPA path confinement", "Web SPA build at start"); `product-ui` adds "Web SPA style nonce" and modifies "Web SPA development server"; 83 insertions and 1 deletion; no requirement of either spec exceeds 500 characters (longest 493, "Web SPA content security policy") |
+| `findings.jsonl`, `passes.jsonl`, `checklist.json`, and `route.json` in the moved change; `make findings ARGS="validate"` | All present; `Every findings file is valid: 101 file(s); every pass summary file is valid: 81 file(s); every route file is valid: 34 file(s).` |
+| `make verify` on the archive working tree (log `verify-28c-archive.log` in the session scratchpad), one run, no rerun | Passed, profile full, uncommitted working tree, so no stamp; tests 4166, pass 4157, fail 0, skipped 9; all files 99.39% lines, 92.60% branches, 98.88% functions; `apps/web` Vitest tests 146, pass 146, statements, branches, functions, and lines 100% |
+
 ## Remaining gates
 
 - Architect check of the unreviewed pass 2 fixes by the coordinator.
