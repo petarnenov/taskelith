@@ -25,6 +25,10 @@ G3 plan item 20 (`docs/g3-plan.md`, row 20), third change of its split, develope
 - `88364f6d` `chore: fix the GitHub plugin refresh wait, expired versions, and token checks after review pass 2`: the source fixes of pass 2 findings 1 to 3, 5, 6, and 9 with their tests, the emulator's default clock step 0, its case-insensitive token request, and the fixture's emulated clock.
 - `fcca463e` `docs: specify the GitHub plugin's refresh wait, expired versions, and protection window`: the `scm-port` delta, design decisions 3 to 6, and source control contract section 2 rule 5, section 4, and section 7 (findings 4, 7, 8).
 - `f2602da3` `docs: resolve the review pass 2 findings of the implement github scm plugin core change`: the tree that the third `make verify` checked; the commit after it adds this record and is the head for review pass 3.
+- `a2b25149` `docs: record the pass 2 fix round of the implement github scm plugin core change`: the head that review pass 3 reviewed.
+- `e58fefcc` `docs: record review pass 3 of the implement github scm plugin core change` (`passes.jsonl`, the three findings, and the pass 2 outcomes set to `fixed`).
+- `9091bf53` `chore: refuse rebinding required check Apps and report failed installation listings after review pass 3`: the fixes of pass 3 findings 1 and 2 with their tests and the emulator's new means.
+- `e2e1a9e0` `docs: specify the GitHub plugin's App-bound check refusal, listing failures, and refresh risk`: design decisions 3 and 4 and the Risks bullet (finding 3).
 
 ## Environment
 
@@ -98,6 +102,25 @@ The new and changed tests, with the emulator's default clock step 0, the fixture
 | 9 idempotent protection | "an ensured protection is not written again" |
 
 "another owner's repository is not found and leaves no token" and "a refused token request reads the installation across pages" passed before and after: they guard the behaviour that the removed pre-mint listing gave. "every request names API version 2022-11-28" now also makes a refused request, so that the listing route is among the checked requests. Findings 4, 7, and 8 are documentation. After the fixes (`88364f6d`): `tests 66`, `pass 66`. The refresh wait goes through the injected clock, which the fixture maps to the emulator's `advance`, so no test sleeps or depends on timing.
+
+### Fail-before of the pass 3 fixes
+
+The four new tests, with the emulator's two new means in `test/github-emulator.ts` (a protection's `apps`, answered as `required_status_checks.checks[].app_id`, and injected answers matched against the path with its query, so that one listing page can fail), ran against the source of `a2b25149` (`git stash push -- packages/plugins/scm-github/src`, `npm run build`) with `node --experimental-strip-types --test --test-reporter=spec --test-name-pattern='App bound|listing fails|later listing page' packages/plugins/scm-github/test/change-requests.test.ts packages/plugins/scm-github/test/run-credentials.test.ts`: `tests 4`, `pass 1`, `fail 3`, exit status 1.
+
+| Finding | Test | Before the fix | After |
+| --- | --- | --- | --- |
+| 1 App-bound check | "a write that would drop an App bound to a required check is refused untouched" | failed: `actual: undefined`, `expected: 'precondition-failed'` (the write went through) | passes |
+| 1 App-bound check | "an ensured protection with an App bound to its check is kept as read" | passed: a guard that the refusal applies only when a write is needed | passes |
+| 2 listing failure | "a refused token request whose installation listing fails reports the listing failure" | failed: `actual: 'invalid'`, `expected: 'unavailable'` | passes |
+| 2 listing failure | "a refused token request whose later listing page fails reports the listing failure" (page size 1, page 2 answers 503) | failed: `actual: 'invalid'`, `expected: 'unavailable'` | passes |
+
+After the fixes (`9091bf53`), the same command gave `tests 4`, `pass 4`, `fail 0`, and `node --experimental-strip-types --test packages/plugins/scm-github/test/*.test.ts` gave `tests 70`, `pass 70`, `fail 0`. Finding 3 is documentation.
+
+### Pass 3 fixes for the architect check
+
+- Finding 1 (`9091bf53`, `packages/plugins/scm-github/src/change-requests.ts`): `ensureMergeProtection` computes `isEnsured` first; when a write is needed, the new `appBoundChecks` adds `required_status_checks.checks` to the conflicts if any current check has a numeric `app_id`, so the call fails with `precondition-failed`, names that setting, and writes nothing. An already ensured protection is returned as read, as before. This follows coordinator decision D2 (refuse, do not merge operator settings) and the existing `scm-port` requirement ("a setting that the write would turn off"); the PUT still sends `contexts`, so no request shape changes. Limitation, in design decision 4: when GitHub binds an App to a check after this plugin's own write, a later call that adds a context is refused until merging the operator's settings lands.
+- Finding 2 (`9091bf53`, `packages/plugins/scm-github/src/installation-tokens.ts`): `mintRefusal` returns the listing's own failure when `GET /installation/repositories` fails on any page, mapped by status as every refusal (503 to `unavailable`); the 422's `invalid` stands only after a complete listing holds every requested repository, and a missing one stays `not-found`.
+- Finding 3 (`e2e1a9e0`, `design.md`, Risks): the bullet describes the bounded wait, its single retry, and when `unavailable` remains, as decision 3 does.
 
 ## Checks
 
@@ -177,7 +200,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 - Credential versions live in the plugin's memory: a restart forgets every credential, whose tokens then end at GitHub's own expiry, at most an hour later (design decision 3). Durable state waits for item 21.
 - The tests run against an emulated GitHub API that encodes this change's reading of GitHub; no live GitHub call was made. 20d's live conformance checks it, including narrowing a token to one of several installed repositories, which the qualification did not test.
-- `ensureMergeProtection` refuses a branch whose protection it would weaken, such as one with required reviews, instead of merging those settings, a recorded follow-up (design decision 4).
+- `ensureMergeProtection` refuses a branch whose protection it would weaken, such as one with required reviews or an App bound to a required check, instead of merging those settings, a recorded follow-up (design decision 4).
 - A refresh in the newest version's second waits about a second for a later expiry and mints once more; a refresh whose second token is still no later, such as the loser of more than two concurrent refreshes, fails with `unavailable` (design decision 3).
 - Expired versions are swept on the plugin's next operation, not on a timer, so an idle process keeps them until then (design decision 3).
 - A webhook delivery without a `repository`, such as `ping`, fails with `invalid` (design decision 5).
@@ -186,6 +209,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review pass 3 (role A) of the pass 2 fixes, and the coordinator's architect check of any fix that no later pass reviews.
+- The coordinator's architect check of the three pass 3 fixes, which no later pass reviews (section "Pass 3 fixes for the architect check"); for this archived branch it goes into the integration pull request body (governance "Architect check of unreviewed fixes").
 - Promotion of the Octokit register rows after 20d's live conformance (D1).
 - Integration into dev by the coordinator (single pull request)
