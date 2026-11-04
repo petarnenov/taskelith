@@ -85,6 +85,28 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
+## Review
+
+### Pass 1
+
+- Reviewer: Codex CLI, model `gpt-6-astra`, effort `medium`, role A, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=require-existing-project-for-runs PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the reviewer reported model `gpt-6-astra` and session `01a1a495-42d8-7780-82d5-25d605a0491a`.
+- Reviewed `aca63889..143aa6fd`; the snapshot was unchanged after the pass.
+- Counts: Critical 0, High 0, Medium 2, Low 1, recorded in `passes.jsonl` and `findings.jsonl`. Every finding is fixed; pass 2 checks the fixes.
+
+| # | Severity | Finding | Test | Fix |
+| --- | --- | --- | --- | --- |
+| M1 | Medium | The delta allowed behavior changes, but the living "Declared breaking changes listed" and its "Bump without found changes" still rejected every listed change the check does not find | `1161b77d`: the new test passes against the code before the fix, because `declarationProblems` already compares only `breakingChanges`; mutation control `mut-11c-p1-1.log` (the comparison also counts `behaviorChanges`): tests 2, fail 2 | `9956afdd`: the `sdlc-wire-contracts` delta MODIFIES "Declared breaking changes listed" (493 characters): the equality and stale checks name `breakingChanges`, `behaviorChanges` is not compared, "Bump without found changes" names breaking changes, and "Declared behavior changes" is added; the other scenarios are kept. Archive probe `archive-11c-p1.log`, then `validate --all --strict` 71 of 71 |
+| M2 | Medium | The changed scenario harnesses (`HarnessInstallation.submitTask`, `ScenarioInstallation.create`) had no execution evidence | Record only | `0490de48`: `make verify-macos-g2-scenarios` (18 of 18) and `make scenario-worker-kill` passed on this macOS host, the crash windows passed in `make verify` run 2; the two Linux targets are remaining gates |
+| L3 | Low | The bridge-search evidence claimed no tracked reference remains | Record only | `aeeecf8a`: the production symbols and the bypass are removed, the historical references are listed, and the living requirement goes with the archive; the two wire-contract mentions say that 11c retired the bridge and stay |
+
+Coordinator items of the pass 1 round (Niki, 2026-11-04), apart from the findings:
+
+- `ae85c610`: the version table of `docs/contracts/control-plane-wire-contracts.md` names `control-plane.openapi.json` 0.5.0, stale since #436.
+- `c5952e53`: coverage of the branches this change touched in `run-service.ts` and `requirement.ts`; see "Coverage" below.
+- `5655acf9`: `design.md` decision 10 says why the owner principal comes from the `init` output.
+- `bb2037b8`: the follow-up on `behaviorChanges` below.
+
 ## Deviations
 
 1. Q9 asked for a `breaking-changes.json` entry, but the check reports no change and the schema required at least one. `breaking-changes.schema.json` gains an optional `behaviorChanges` list, with `breakingChanges` empty only beside it; `make contract-compatibility` compares only the tool-reported list. The `sdlc-wire-contracts` requirement "Breaking-change declarations" is MODIFIED for it.
@@ -102,5 +124,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Review pass 1 (role A), then pass 2 (role B), and pass 3 (role A) only after a pass 2 with a Medium or worse finding.
+- Review pass 2 (role B), and pass 3 (role A) only after a pass 2 with a Medium or worse finding.
+- Run `make verify-linux-crash-windows` on a Linux host (coordinator: Zaki, hpz600) before integration.
+- Run `make verify-linux-g2-scenarios` on a Linux host (coordinator: Zaki, hpz600) before integration.
 - Integration into dev by the coordinator (single pull request).

@@ -1,0 +1,1 @@
+{"change":"require-existing-project-for-runs","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a495-42d8-7780-82d5-25d605a0491a","counts":{"critical":0,"high":0,"medium":2,"low":1}}
