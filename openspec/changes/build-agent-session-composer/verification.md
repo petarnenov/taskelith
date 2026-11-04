@@ -60,6 +60,12 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `c1fc44da40ec446c89e2366ac8b570ecf8df5028`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.87% functions.
+- `npm run openspec -- validate build-agent-session-composer --strict`: passed, `Change 'build-agent-session-composer' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 117 file(s); every pass summary file is valid: 97 file(s); every route file is valid: 50 file(s).`.
+- Spec diff against the merge base `743f4661b786` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
