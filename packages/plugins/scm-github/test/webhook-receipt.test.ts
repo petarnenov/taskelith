@@ -39,6 +39,8 @@ function receipt(): Receipt {
     deliveries,
     decoy,
     eventless: EVENTLESS,
+    pluginId: 'scm-github',
+    defects: { defect: () => undefined },
   });
   return { receiver, recorded };
 }

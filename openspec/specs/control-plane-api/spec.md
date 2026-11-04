@@ -183,11 +183,15 @@ For every operation with a session or bearer requirement, the control plane SHAL
 - **THEN** the session authenticates the read without a CSRF token, and an anonymous session answers 401
 
 ### Requirement: Request logs without secrets
-The request log SHALL hold only the method, the operation, its path and query parameters, the status, and the failure, redacted with `@taskelith/secrets`. No log line, failure, or audit record SHALL contain a password, a session identifier, a CSRF token, or the `Cookie`, `X-CSRF-Token`, or `Authorization` header.
+The request log SHALL hold only the method, the operation, its path and query parameters, the status, and the failure, redacted with `@taskelith/secrets`. No log line, failure, or audit record SHALL contain a password, a session identifier, a CSRF token, an SCM integration's secret value, or the `Cookie`, `X-CSRF-Token`, or `Authorization` header.
 
 #### Scenario: Secrets absent from output
 - **WHEN** a login fails, a CSRF check fails, and a body fails validation with a known password, session identifier, and CSRF token
 - **THEN** none of those values appears in the request log, the failure bodies, or the audit trail
+
+#### Scenario: SCM secret absent from the audit trail
+- **WHEN** an integration is created, updated, and has a secret replaced, each with a known secret value
+- **THEN** that value appears in neither the request log nor the SCM integration audit trail
 
 ### Requirement: Login throttling without lockout
 `logIn` SHALL throttle by login name and by source address and never lock an account. After 5 failures of a key within 15 minutes, each further attempt of that key SHALL wait a constant delay, then be verified as usual. Attempts SHALL run one at a time per key, and an address with 4 attempts waiting SHALL get 503 `unavailable` at once. These limits are provisional.
@@ -710,3 +714,32 @@ The resolver call SHALL run before and outside the store's transaction. Inside i
 #### Scenario: Integration changed during the resolution
 - **WHEN** the integration's revision moves after the resolver answered and before the binding is stored
 - **THEN** the answer is 409 and the project's binding is unchanged
+
+### Requirement: Audited SCM integration commands
+`createScmIntegration` and `updateScmIntegration` SHALL audit each change they commit with the caller's principal as the actor and `control-plane API <operationId>` as the reason; no system actor exists. A refused or failed command, 400, 403, 404, or 409, SHALL write no audit row.
+
+#### Scenario: Refused update
+- **WHEN** an update is refused with 400, 403, 404, or 409
+- **THEN** the audit trail holds no row for it
+
+### Requirement: Runs of existing projects
+`createRun` SHALL create a run only for a project that exists, which `RunService` checks through its `ProjectDirectory` port, and SHALL answer 404 `not-found` for another project, after the role check and before the workflow check that answers 422. A project without a repository binding SHALL get a run; item 21's per-run credential issue re-checks the binding.
+
+#### Scenario: Run of an unknown project
+- **WHEN** `RunService` creates a run of a known workflow for a project identifier that names no project
+- **THEN** it fails with `not-found`, which `createRun` answers 404, and no run is stored
+
+#### Scenario: Run of an unbound project
+- **WHEN** a `project-operator` creates a run of a project that has no repository binding
+- **THEN** the answer is 201 with the run
+
+### Requirement: Roles of the run operations
+`createRun` and `submitTask` SHALL require `project-operator` or above on the run's project, with no pass for an `installation-owner`; `readAdmission` and `readTaskResult` SHALL require `project-viewer` or above, or `installation-owner`. A role refusal SHALL answer 403 `AccessDenial` with reason `role-required` and its `requiredRole`; a missing or wrong bearer SHALL stay 401.
+
+#### Scenario: Owner without a project role
+- **WHEN** the operator bearer, whose owner holds no role on the project, calls `createRun` or `submitTask`
+- **THEN** the answer is 403 `role-required` naming `project-operator`, and nothing is created
+
+#### Scenario: Owner reads a run's results
+- **WHEN** the operator bearer, whose owner holds no role on the run's project, reads an admission or a task result of the run
+- **THEN** the answer is 200

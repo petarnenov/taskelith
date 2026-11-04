@@ -16,6 +16,7 @@ import type { PostgresDatabase } from '@taskelith/postgres';
 import { ResourceAdmissionService, parseResourceRequest, type PlacementRequest, type SlotRequest } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
+import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
 
 // A run of a known workflow with one planning task per placement, for the
 // tests that need a launchable attempt in PostgreSQL.
@@ -46,7 +47,7 @@ export function launchAuthority(store: PostgresDatabase, parameters = PARAMETERS
 }
 
 export async function createLaunchRun(store: PostgresDatabase): Promise<void> {
-  value(await new RunService(store, LAUNCH_WORKFLOWS).createRun({ runId: 'run-1', projectId: 'project-1', binding: BINDING }));
+  value(await new RunService(store, LAUNCH_WORKFLOWS, EVERY_PROJECT_EXISTS).createRun({ runId: 'run-1', projectId: 'project-1', binding: BINDING }));
 }
 
 // A submitted planning task whose first attempt is placed on the worker,

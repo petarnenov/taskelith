@@ -68,6 +68,8 @@ const receiver = new ScmWebhookReceiver({
   deliveries,
   decoy: plugin.createDecoy(),
   eventless: plugin,
+  pluginId: 'scm-github',
+  defects: { defect: () => undefined },
 });
 const sink = new InMemoryLogSink();
 const logger = new Logger(sink, { now: () => '2026-11-03T09:00:00.000Z' as never });
@@ -359,6 +361,8 @@ test('deliveries beyond the concurrency limit wait for a free slot before their 
     deliveries: holdingDeliveries,
     decoy: plugin.createDecoy(),
     eventless: plugin,
+    pluginId: 'scm-github',
+    defects: { defect: () => undefined },
   });
   let admissions = 0;
   const api = new AdmissionSignallingApi({ scmWebhooks: slotReceiver } as unknown as ApiServices, () => {

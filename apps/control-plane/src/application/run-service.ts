@@ -2,6 +2,7 @@ import type { HttpSchemas } from '@taskelith/contracts';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { beginWorkflowRun, parseWorkflowRunBinding, type ProjectId, type WorkflowRunBinding } from '@taskelith/sdlc';
 import type { ControlPlaneStore } from './control-plane-store.js';
+import type { ProjectDirectory } from './project-directory.js';
 import type { WorkflowRegistry } from './workflow-registry.js';
 
 export type CreateRunRequest = HttpSchemas['CreateRunRequest'];
@@ -12,10 +13,12 @@ export type RunView = HttpSchemas['Run'];
 export class RunService {
   readonly #store: ControlPlaneStore;
   readonly #registry: WorkflowRegistry;
+  readonly #projects: ProjectDirectory;
 
-  constructor(store: ControlPlaneStore, registry: WorkflowRegistry) {
+  constructor(store: ControlPlaneStore, registry: WorkflowRegistry, projects: ProjectDirectory) {
     this.#store = store;
     this.#registry = registry;
+    this.#projects = projects;
   }
 
   // The run's project, or undefined for an unknown or invalid identifier.
@@ -35,6 +38,9 @@ export class RunService {
     if (!projectId.ok) return projectId;
     const runId = parseIdentifier('RunId', request.runId);
     if (!runId.ok) return runId;
+    // No project is ever deleted, so the check holds until the run is stored.
+    const known = await this.#knownProject(projectId.value);
+    if (!known.ok) return known;
     return this.#store.transaction(async (tx) => {
       // A stored run answers a repeat whatever the registry holds now.
       const existing = await tx.catalog.envelope(runId.value);
@@ -56,6 +62,12 @@ export class RunService {
       const registered = await tx.catalog.register({ runId: run.value.id, projectId: projectId.value as ProjectId, createdAt: at });
       return registered.ok ? ok(view(run.value.id, projectId.value, binding.value, at)) : registered;
     });
+  }
+
+  async #knownProject(projectId: string): Promise<Result<void>> {
+    const exists = await this.#projects.exists(projectId);
+    if (!exists.ok) return exists;
+    return exists.value ? ok(undefined) : err(failure('not-found', `project ${projectId} does not exist`, { project: projectId }));
   }
 }
 

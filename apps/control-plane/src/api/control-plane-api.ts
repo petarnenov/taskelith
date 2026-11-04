@@ -1,13 +1,12 @@
 import {
-  g2BridgeRequirement,
   projectRead,
+  projectRequirement,
   unauthenticated,
   viewOf as viewOfSession,
   type AccessRequirement,
   type LiveSession,
   type LoginAttempt,
   type PrincipalId,
-  type ProjectRole,
   type SecretHash,
   type SessionAnswer,
 } from '@taskelith/access';
@@ -26,7 +25,7 @@ import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../applic
 import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type SignedBody, type Upload } from './api-server.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
-import { ruleOf } from './access-requirements.js';
+import { ruleOf, type RequirementRule } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
 import { BoardApi, type BoardOperations } from './board-api.js';
 import { INBOX_ANSWER_OPERATIONS, InboxAnswerApi } from './inbox-answer-api.js';
@@ -42,6 +41,8 @@ export const QUARANTINE_REASON_LENGTH = 512;
 
 // The renewal failures answered 400, 401, or 409.
 const RENEWAL_REFUSALS: ReadonlySet<FailureCode> = new Set(['invalid', 'forbidden', 'conflict']);
+
+type RunProjectRule = Extract<RequirementRule, { kind: 'resource-project' }>;
 
 // The operations the API reaches beyond the run and task use cases.
 export interface ApiServices {
@@ -144,7 +145,7 @@ export class ControlPlaneApi implements ApiHandlers {
     const [first = ''] = parameters;
     if (rule.kind === 'evidence-project') return this.#authorizeEvidence(caller.principalId, first);
     if (rule.kind !== 'resource-project' || rule.projectIn !== 'path-resource') return Promise.resolve(ok(undefined));
-    return this.#authorizeRunProject(caller.principalId, rule.role, () => this.#services.runProjects.projectOf(first));
+    return this.#authorizeRunProject(caller.principalId, rule, () => this.#services.runProjects.projectOf(first));
   }
 
   async handle(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>> {
@@ -285,19 +286,19 @@ export class ControlPlaneApi implements ApiHandlers {
     const rule = ruleOf(operationId);
     if (rule.kind !== 'resource-project' || rule.projectIn !== 'body') return Promise.resolve(ok(undefined));
     const { projectId } = request.body as HttpSchemas['CreateRunRequest'];
-    return this.#authorizeRunProject(request.principalId, rule.role, async () => ok(projectId));
+    return this.#authorizeRunProject(request.principalId, rule, async () => ok(projectId));
   }
 
-  // An unknown resource, whose project is undefined, is denied to every
-  // caller but the owner, so that no other learns it is unknown.
+  // An unknown resource, whose project is undefined, is denied like a
+  // foreign one; only an owner's section 3 read passes it.
   async #authorizeRunProject(
-    principalId: PrincipalId | undefined, role: ProjectRole, projectOf: () => Promise<Result<string | undefined>>,
+    principalId: PrincipalId | undefined, rule: RunProjectRule, projectOf: () => Promise<Result<string | undefined>>,
   ): Promise<Result<void>> {
     if (principalId === undefined) return err(unauthenticated());
     const projectId = await projectOf();
     if (!projectId.ok) return projectId;
-    // The temporary G2 bridge (Q5); sub-change 11c retires it.
-    return this.#services.authorization.authorize(principalId, g2BridgeRequirement(projectId.value, role));
+    const requirement = rule.ownerReads ? projectRead(projectId.value) : projectRequirement(projectId.value, rule.role);
+    return this.#services.authorization.authorize(principalId, requirement);
   }
 
   // Execution wire contracts section 8.2: a record outside the caller's

@@ -1,0 +1,111 @@
+{
+  "change": "require-existing-project-for-runs",
+  "generatedAt": "2026-11-04T02:42:00.595Z",
+  "devCommit": "aca6388907482197ea80cfd740926ed8a8779c71",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "control-plane-wire-contracts",
+      "engineering-principles",
+      "trust-and-operational-foundation",
+      "sdlc-wire-contracts",
+      "execution-wire-contracts",
+      "local-installation",
+      "g2-failure-scenarios"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/contracts/**",
+      "docs/contracts/**",
+      "packages/modules/**",
+      "scripts/**",
+      "test/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 209
+      },
+      {
+        "category": "error-handling",
+        "count": 116
+      },
+      {
+        "category": "docs",
+        "count": 72
+      },
+      {
+        "category": "spec-wording",
+        "count": 58
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 54
+      },
+      {
+        "category": "naming",
+        "count": 52
+      },
+      {
+        "category": "redaction",
+        "count": 51
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 972,
+        "inChecklist": 820
+      },
+      "mediumOrWorse": {
+        "findings": 478,
+        "inChecklist": 391
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 149
+      },
+      {
+        "category": "spec-wording",
+        "count": 100
+      },
+      {
+        "category": "docs",
+        "count": 80
+      },
+      {
+        "category": "stale-citation",
+        "count": 58
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 25
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 454,
+        "inChecklist": 447
+      },
+      "mediumOrWorse": {
+        "findings": 70,
+        "inChecklist": 70
+      }
+    }
+  }
+}

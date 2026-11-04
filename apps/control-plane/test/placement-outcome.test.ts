@@ -39,6 +39,7 @@ import {
 } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 import { inMemoryCapacity } from './in-memory-capacity.ts';
+import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
 const definition = value(parseWorkflowDefinition({
@@ -131,7 +132,7 @@ async function fixture(worker: WorkerPlacementRecord = ROOMY) {
     },
     readCommitted: (work) => work(transaction),
   };
-  const runs = new RunService(store, new WorkflowRegistry([{ definition, digest: DIGEST }]));
+  const runs = new RunService(store, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS);
   for (const project of ['a', 'b']) value(await runs.createRun({ runId: `run-${project}`, projectId: `p-${project}`, binding }));
   const taskService = new TaskService(store);
   const submit = async (taskId: string, runId = 'run-a') => {

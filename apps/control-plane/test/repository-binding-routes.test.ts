@@ -22,7 +22,7 @@ import {
   type SourceControlPlugin,
   type SourceControlProvider,
 } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
+import { FAILURE_CODES, err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
@@ -36,6 +36,7 @@ const BEARER = { authorization: `Bearer ${OPERATOR}` };
 const MISSING = `p${'f'.repeat(32)}`;
 const INTEGRATION_ID = value(parseIdentifier('ScmIntegrationId', `i${'1'.repeat(32)}`)) as ScmIntegrationId;
 const SECRET = 'synthetic-binding-route-secret';
+const AUDIT_ENTRY = { ...INVOCATION, at: value(instantFromEpochMilliseconds(0)) };
 const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
 const DEFAULTS = {
   framework: { pluginId: 'sdlc-openspec' }, implementers: ['agent-primary'], reviewer: 'agent-primary',
@@ -116,7 +117,7 @@ async function fixture(t: TestContext) {
     integrationId: INTEGRATION_ID, pluginId: 'scm-fake', label: 'Fake', allowedOrigin: value(normalizeOrigin('https://scm.example')),
     settings: {}, secretNames: ['webhook-secret'], revision: 1,
   };
-  value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET }))));
+  value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': SECRET })), AUDIT_ENTRY));
   const scm = new FakeScm();
   const bindings = new InMemoryRepositoryBindings(integrations);
   const sink = new InMemoryLogSink();
@@ -137,7 +138,10 @@ async function fixture(t: TestContext) {
     const text = await response.text();
     return { status: response.status, text, body: text === '' ? {} : JSON.parse(text) as Record<string, unknown> };
   };
-  const [OWNER, MARIA, OTTO, VERA, NORA] = await Promise.all(['owner', 'maria', 'otto', 'vera', 'nora'].map((name) => browser(base, name)));
+  // One login at a time: the throttle answers 503 past 4 pending per address.
+  const logins: Headers[] = [];
+  for (const name of ['owner', 'maria', 'otto', 'vera', 'nora']) logins.push(await browser(base, name));
+  const [OWNER, MARIA, OTTO, VERA, NORA] = logins;
   const path = `/projects/${ALPHA}/repository`;
   const stored = async () => value(await bindings.get(ALPHA));
   return { call, scm, integrations, path, stored, sink, ALPHA, OWNER: OWNER!, MARIA: MARIA!, OTTO: OTTO!, VERA: VERA!, NORA: NORA! };
@@ -262,14 +266,14 @@ test('an integration whose plugin is not registered answers 503', async (t) => {
   value(await integrations.add({
     integrationId: other, pluginId: 'scm-gone', label: 'Gone', allowedOrigin: value(normalizeOrigin('https://scm.example')),
     settings: {}, secretNames: [], revision: 1,
-  }, value(ScmSecrets.of({}))));
+  }, value(ScmSecrets.of({})), AUDIT_ENTRY));
   assert.equal((await call('PUT', path, MARIA, { binding: { ...BINDING, integrationId: other } })).status, 503);
 });
 
 test('a bind whose integration changes while the plugin resolves answers 409 and stores nothing', async (t) => {
   const { call, path, stored, scm, integrations, MARIA } = await fixture(t);
   scm.resolver = async (repository) => {
-    value(await integrations.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }));
+    value(await integrations.update(INTEGRATION_ID, { expectedRevision: 1, label: 'Renamed' }, AUDIT_ENTRY));
     return ok({ repository, remoteUrl: REMOTE_URL });
   };
   assert.equal((await call('PUT', path, MARIA, { binding: BINDING })).status, 409);
@@ -308,6 +312,27 @@ test('an integration whose plugin cannot build a provider from its stored config
   assert.deepEqual(refusalOf(answer), [503, 'integration-configuration-unusable']);
   assert.ok(checkHttpSchema('Failure', answer.body).ok);
   assert.ok(!answer.text.includes(SECRET));
+  assert.ok(!JSON.stringify(sink.records).includes(SECRET));
+  assert.equal(await stored(), undefined);
+});
+
+test('a resolver or provider refusal of any code quoting a secret reaches neither the answer nor the logs', async (t) => {
+  const { call, path, stored, scm, sink, MARIA } = await fixture(t);
+  const answers: Answer[] = [];
+  for (const code of FAILURE_CODES) {
+    scm.resolver = async () => err(failure(code, `the service said ${SECRET}`, { quoted: SECRET }));
+    answers.push(await call('PUT', path, MARIA, { binding: BINDING }));
+  }
+  scm.resolver = async (repository) => ok({ repository, remoteUrl: `https://scm.example/${repository}.git` });
+  for (const code of FAILURE_CODES) {
+    scm.factory = () => err(failure(code, `the plugin refused ${SECRET}`, { quoted: SECRET }));
+    answers.push(await call('PUT', path, MARIA, { binding: BINDING }));
+  }
+  for (const answer of answers) {
+    assert.ok(answer.status >= 400 && !answer.text.includes(SECRET), answer.text);
+    assert.ok(checkHttpSchema('Failure', answer.body).ok, answer.text);
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
   assert.ok(!JSON.stringify(sink.records).includes(SECRET));
   assert.equal(await stored(), undefined);
 });

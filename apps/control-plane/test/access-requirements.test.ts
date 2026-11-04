@@ -41,7 +41,7 @@ function rowOf(operationId: string): string {
   if (rule.kind === 'fixed') return rule.requirement.kind === 'authenticated' ? 'authenticated' : 'owner';
   if (rule.kind === 'path-project') return rule.ownerReads ? 'viewer-or-owner' : rule.role.replace('project-', '');
   if (rule.kind === 'evidence-project') return 'evidence:viewer-or-owner';
-  return `resource:${rule.role}`;
+  return `resource:${rule.ownerReads ? 'viewer-or-owner' : rule.role}`;
 }
 
 test('every operation of the control-plane document has its own rule, as section 3 lists it', () => {
@@ -52,11 +52,11 @@ test('every operation of the control-plane document has its own rule, as section
   }
 });
 
-test('every G2 operator operation is checked on the project of its resource', () => {
+test('every G2 operator operation is checked on the project of its resource, and only its reads pass the owner', () => {
   const operator = ['createRun', 'submitTask'];
   const viewer = ['readAdmission', 'readTaskResult'];
   for (const operationId of operator) assert.equal(rowOf(operationId), 'resource:project-operator', operationId);
-  for (const operationId of viewer) assert.equal(rowOf(operationId), 'resource:project-viewer', operationId);
+  for (const operationId of viewer) assert.equal(rowOf(operationId), 'resource:viewer-or-owner', operationId);
   const evidence = ['readEvidence', 'downloadEvidence'];
   assert.deepEqual(evidence.map(rowOf), evidence.map(() => 'evidence:viewer-or-owner'), 'execution section 8.1');
   assert.deepEqual(['listQuarantine', 'redriveQuarantined'].map(rowOf), ['owner', 'owner']);

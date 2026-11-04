@@ -1,9 +1,12 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
+  changeAudit,
   changedConfiguration,
+  creationAudit,
   ScmSecrets,
   type NormalizedOrigin,
   type ScmIntegration,
+  type ScmIntegrationAuditEntry,
   type ScmIntegrationChange,
   type ScmIntegrationId,
   type ScmIntegrations,
@@ -92,8 +95,8 @@ export class PostgresScmIntegrationRecords {
   }
 }
 
-// Reads in read-only, changes in SERIALIZABLE transactions. A change
-// re-seals every secret under the new revision, so no old row comes back.
+// Reads in read-only, changes in SERIALIZABLE transactions with their audit
+// row. A change re-seals every secret under the new revision.
 export class PostgresScmIntegrations implements ScmIntegrations {
   readonly #database: Pick<PostgresDatabase, 'transaction' | 'readOnly'>;
   readonly #cipher: ScmSecretCipher;
@@ -103,10 +106,11 @@ export class PostgresScmIntegrations implements ScmIntegrations {
     this.#cipher = cipher;
   }
 
-  add(integration: ScmIntegration, secrets: ScmSecrets): Promise<Result<ScmIntegration>> {
-    return this.#database.transaction(async ({ scmIntegrations: records }) => {
+  add(integration: ScmIntegration, secrets: ScmSecrets, audit: ScmIntegrationAuditEntry): Promise<Result<ScmIntegration>> {
+    return this.#database.transaction(async ({ scmIntegrations: records, scmIntegrationAudit }) => {
       await records.insert(integration);
       await records.replaceSecrets(integration.integrationId, this.#sealed(integration, secrets));
+      await scmIntegrationAudit.append(creationAudit(integration, audit));
       return ok((await records.get(integration.integrationId))!);
     });
   }
@@ -121,8 +125,8 @@ export class PostgresScmIntegrations implements ScmIntegrations {
 
   // Opens only the secrets the change keeps, so replacing a secret that no
   // longer opens recovers the integration.
-  update(integrationId: ScmIntegrationId, change: ScmIntegrationChange): Promise<Result<ScmIntegration>> {
-    return this.#database.transaction(async ({ scmIntegrations: records }) => {
+  update(integrationId: ScmIntegrationId, change: ScmIntegrationChange, audit: ScmIntegrationAuditEntry): Promise<Result<ScmIntegration>> {
+    return this.#database.transaction(async ({ scmIntegrations: records, scmIntegrationAudit }) => {
       const current = await records.get(integrationId);
       if (current === undefined) return err(failure('not-found', 'no SCM integration has this identifier'));
       if (current.revision !== change.expectedRevision) return err(failure('conflict', 'the integration changed since its revision'));
@@ -132,6 +136,7 @@ export class PostgresScmIntegrations implements ScmIntegrations {
       const { integration, secrets } = changedConfiguration({ integration: current, secrets: kept.value }, change);
       if (!(await records.replace(integration, change.expectedRevision))) return err(failure('conflict', 'the integration changed since its revision'));
       await records.replaceSecrets(integrationId, this.#sealed(integration, secrets));
+      await scmIntegrationAudit.append(changeAudit(current, integration, change, audit));
       return ok((await records.get(integrationId))!);
     });
   }

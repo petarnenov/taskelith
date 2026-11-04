@@ -1,6 +1,8 @@
 import type { ScmPlugins, SourceControlPlugin } from '@taskelith/integrations';
 
-// The installation's SCM plugins: the one plugin it registers.
+// The installation's SCM plugins: the one plugin it registers, whose
+// identifier is read once here.
 export function singlePlugin(plugin: SourceControlPlugin): ScmPlugins {
-  return { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
+  const registered = plugin.id;
+  return { pluginOf: (pluginId: string) => (pluginId === registered ? plugin : undefined) };
 }

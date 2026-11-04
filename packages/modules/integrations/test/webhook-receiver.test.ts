@@ -5,12 +5,13 @@ import {
   type DeliveryRecording,
   type EventlessDeliveries,
   type ScmIntegrationVerifiers,
+  type ScmPluginDefect,
   type ScmWebhookDeliveries,
   type WebhookDelivery,
   type WebhookEvent,
   type WebhookVerifier,
 } from '@taskelith/integrations';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { FAILURE_CODES, err, failure, ok, type Result } from '@taskelith/kernel';
 
 const KNOWN = `i${'a'.repeat(32)}`;
 const EVENT: WebhookEvent = { deliveryId: 'd-1', kind: 'change-request', repository: 'owner/repository', changeRequest: '7' };
@@ -18,19 +19,21 @@ const BODY = new TextEncoder().encode('{"repository":{}}');
 const DELIVERY: WebhookDelivery = { headers: { signature: 'valid', event: 'ping' }, rawBody: BODY };
 const PUSH: WebhookDelivery = { ...DELIVERY, headers: { signature: 'valid', event: 'push' } };
 const REJECTION = { code: 'forbidden', message: 'the delivery has no valid signature', details: { reason: 'signature-invalid' } };
+const PLUGIN = 'scm-scripted';
+const SECRET = 'synthetic-receiver-secret';
 
 // A verifier that answers what a test sets and remembers what it saw.
 class ScriptedVerifier implements WebhookVerifier {
   readonly seen: WebhookDelivery[] = [];
-  readonly #answer: () => Result<WebhookEvent>;
+  readonly #answer: () => unknown;
 
-  constructor(answer: () => Result<WebhookEvent>) {
+  constructor(answer: () => unknown) {
     this.#answer = answer;
   }
 
   async verifyWebhookDelivery(delivery: WebhookDelivery): Promise<Result<WebhookEvent>> {
     this.seen.push(delivery);
-    return this.#answer();
+    return this.#answer() as Result<WebhookEvent>;
   }
 }
 
@@ -50,12 +53,18 @@ interface Testbed {
   readonly deliveries: RecordingDeliveries;
   readonly decoy: ScriptedVerifier;
   readonly asked: string[];
+  readonly defects: ScmPluginDefect[];
+}
+
+interface Misbehaviour {
+  readonly decoy?: () => unknown;
+  readonly eventless?: EventlessDeliveries;
 }
 
 // The service sends its pings without an event of the port.
 const PINGS_EVENTLESS: EventlessDeliveries = { isEventless: (delivery) => delivery.headers['event'] === 'ping' };
 
-function testbed(answer: () => Result<WebhookEvent>, lookup?: () => Result<WebhookVerifier | undefined>): Testbed {
+function testbed(answer: () => unknown, lookup?: () => Result<WebhookVerifier | undefined>, misbehaviour: Misbehaviour = {}): Testbed {
   const verifier = new ScriptedVerifier(answer);
   const asked: string[] = [];
   const verifiers: ScmIntegrationVerifiers = {
@@ -65,9 +74,13 @@ function testbed(answer: () => Result<WebhookEvent>, lookup?: () => Result<Webho
     },
   };
   const deliveries = new RecordingDeliveries();
-  const decoy = new ScriptedVerifier(() => err(failure('forbidden', 'decoy')));
-  const receiver = new ScmWebhookReceiver({ verifiers, deliveries, decoy, eventless: PINGS_EVENTLESS });
-  return { receiver, deliveries, decoy, asked };
+  const decoy = new ScriptedVerifier(misbehaviour.decoy ?? (() => err(failure('forbidden', 'decoy'))));
+  const defects: ScmPluginDefect[] = [];
+  const receiver = new ScmWebhookReceiver({
+    verifiers, deliveries, decoy, eventless: misbehaviour.eventless ?? PINGS_EVENTLESS,
+    pluginId: PLUGIN, defects: { defect: (defect) => defects.push(defect) },
+  });
+  return { receiver, deliveries, decoy, asked, defects };
 }
 
 test('a verified delivery is recorded once and a redelivery answers as a repeat', async () => {
@@ -112,11 +125,45 @@ test('a verified delivery the plugin maps to no event is invalid unless eventles
   assert.equal(deliveries.recorded.size, 0);
 });
 
-test('an event the plugin returns in another shape is an internal failure, not a record', async () => {
-  const { receiver, deliveries } = testbed(() => ok({ ...EVENT, kind: 'unknown-kind' }));
-  const answer = await receiver.receive(KNOWN, DELIVERY);
-  assert.equal(!answer.ok && answer.error.code, 'internal');
-  assert.equal(deliveries.recorded.size, 0);
+// Plugin answers outside the contract, one quoting a secret.
+const MISBEHAVIOURS: readonly (readonly [string, () => unknown, ScmPluginDefect['kind']])[] = [
+  ['a throw quoting a secret', () => { throw new Error(`refused ${SECRET}`); }, 'threw'],
+  ['a rejection', () => Promise.reject(new Error(`refused ${SECRET}`)), 'threw'],
+  ['no result envelope', () => ({ verified: true }), 'malformed-envelope'],
+  ['an event in another shape', () => ok({ ...EVENT, kind: 'unknown-kind' }), 'malformed-value'],
+];
+
+for (const [name, answer, kind] of MISBEHAVIOURS) {
+  test(`a provider's verification with ${name} gets the one rejection after the decoy's, and one defect`, async () => {
+    const { receiver, deliveries, decoy, defects } = testbed(answer);
+    assert.deepEqual(await receiver.receive(KNOWN, DELIVERY), err(REJECTION));
+    assert.deepEqual(decoy.seen, [DELIVERY], 'a defect also does the decoy work of an unknown integration');
+    assert.deepEqual(defects, [{ integrationId: KNOWN, pluginId: PLUGIN, operation: 'verifyWebhookDelivery', kind }]);
+    assert.equal(deliveries.recorded.size, 0);
+  });
+
+  test(`a decoy's verification with ${name} still gets the one rejection, and one defect of no integration`, async () => {
+    const { receiver, decoy, defects } = testbed(() => ok(EVENT), undefined, { decoy: answer });
+    assert.deepEqual(await receiver.receive(`i${'b'.repeat(32)}`, DELIVERY), err(REJECTION));
+    assert.deepEqual(await receiver.receive('not an identifier', DELIVERY), err(REJECTION));
+    assert.equal(decoy.seen.length, 2);
+    const defect = { integrationId: undefined, pluginId: PLUGIN, operation: 'verifyWebhookDelivery', kind };
+    assert.deepEqual(defects, [defect, defect]);
+  });
+}
+
+test('an eventless rule that throws or answers no flag gets the one rejection after the decoy\'s, and one defect', async () => {
+  const rules: readonly (readonly [EventlessDeliveries, ScmPluginDefect['kind']])[] = [
+    [{ isEventless: () => { throw new Error(`refused ${SECRET}`); } }, 'threw'],
+    [{ isEventless: () => 'yes' as unknown as boolean }, 'malformed-value'],
+  ];
+  for (const [eventless, kind] of rules) {
+    const invalid = () => err(failure('invalid', 'The delivery body is not an event'));
+    const { receiver, decoy, defects } = testbed(invalid, undefined, { eventless });
+    assert.deepEqual(await receiver.receive(KNOWN, DELIVERY), err(REJECTION));
+    assert.deepEqual(decoy.seen, [DELIVERY]);
+    assert.deepEqual(defects, [{ integrationId: KNOWN, pluginId: PLUGIN, operation: 'isEventless', kind }]);
+  }
 });
 
 test('a lookup or verification that is unavailable stays unavailable', async () => {
@@ -126,4 +173,14 @@ test('a lookup or verification that is unavailable stays unavailable', async () 
   const unreachable = testbed(() => err(failure('unavailable', 'the service is down')));
   const verified = await unreachable.receiver.receive(KNOWN, DELIVERY);
   assert.equal(!verified.ok && verified.error.code, 'unavailable');
+});
+
+test('a verification refusal of any code keeps its code, never the plugin message or details', async () => {
+  for (const code of FAILURE_CODES) {
+    const { receiver, deliveries } = testbed(() => err(failure(code, `refused ${SECRET}`, { quoted: SECRET })));
+    const answer = await receiver.receive(KNOWN, PUSH);
+    assert.equal(!answer.ok && answer.error.code, code);
+    assert.ok(!JSON.stringify(answer).includes(SECRET), code);
+    assert.equal(deliveries.recorded.size, 0);
+  }
 });

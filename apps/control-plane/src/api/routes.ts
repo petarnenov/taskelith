@@ -62,20 +62,20 @@ const SCM_SETTING_MAPS: Readonly<Record<string, keyof HttpSchemas & string>> = O
 export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'createRun', method: 'POST', pattern: /^\/runs$/, security: ['operatorToken'], body: 'CreateRunRequest', response: 'Run', success: 201,
-    statuses: { ...COMMON, conflict: 409, 'precondition-failed': 422 },
+    statuses: { ...COMMON, 'not-found': 404, conflict: 409, 'precondition-failed': 422 }, reasons: ROLE_DENIAL,
   },
   {
     operationId: 'submitTask', method: 'POST', pattern: new RegExp(`^/runs/${SEGMENT}/tasks$`), security: ['operatorToken'],
     body: 'SubmitTaskRequest', response: 'TaskSubmission', success: 201,
-    statuses: { ...COMMON, 'not-found': 404, conflict: 409, 'precondition-failed': 422 },
+    statuses: { ...COMMON, 'not-found': 404, conflict: 409, 'precondition-failed': 422 }, reasons: ROLE_DENIAL,
   },
   {
     operationId: 'readAdmission', method: 'GET', pattern: new RegExp(`^/runs/${SEGMENT}/admissions/${SEGMENT}$`), security: ['operatorToken'],
-    response: 'Admission', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+    response: 'Admission', success: 200, statuses: { ...COMMON, 'not-found': 404 }, reasons: ROLE_DENIAL,
   },
   {
     operationId: 'readTaskResult', method: 'GET', pattern: new RegExp(`^/runs/${SEGMENT}/tasks/${SEGMENT}/result$`), security: ['operatorToken'],
-    response: 'TaskResult', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+    response: 'TaskResult', success: 200, statuses: { ...COMMON, 'not-found': 404 }, reasons: ROLE_DENIAL,
   },
   {
     operationId: 'readInstallationCa', method: 'GET', pattern: /^\/installation\/ca$/, security: ['none'], response: 'InstallationCa', success: 200,

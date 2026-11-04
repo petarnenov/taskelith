@@ -5,8 +5,8 @@ import {
   type RepositoryBindingServicePorts,
   type ScmPluginDefects,
 } from '@taskelith/integrations';
-import { ok } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
+import { projectDirectory } from './project-directory.js';
 
 export type RepositoryBindingPorts = Omit<RepositoryBindingServicePorts, 'defects'>;
 
@@ -15,19 +15,17 @@ export function repositoryBindingService(ports: RepositoryBindingPorts, logger: 
   return new RepositoryBindingService({ ...ports, defects: pluginDefectLog(logger) });
 }
 
-function pluginDefectLog(logger: Logger): ScmPluginDefects {
+// One sanitized error record per plugin defect, of any SCM plugin call; a
+// defect of the webhook decoy names no integration.
+export function pluginDefectLog(logger: Logger): ScmPluginDefects {
   return {
-    defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', { integrationId, pluginId, operation, kind }),
+    defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', {
+      ...(integrationId === undefined ? {} : { integrationId }), pluginId, operation, kind,
+    }),
   };
 }
 
 // The Access module's projects as the integrations module asks for them.
 export function bindableProjects(projects: Pick<ProjectSetupService, 'readProject'>): BindableProjects {
-  return {
-    exists: async (projectId) => {
-      const read = await projects.readProject(projectId);
-      if (read.ok) return ok(true);
-      return read.error.code === 'not-found' ? ok(false) : read;
-    },
-  };
+  return projectDirectory(projects);
 }

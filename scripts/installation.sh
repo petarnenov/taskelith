@@ -371,13 +371,16 @@ fresh_project() {
   remove_leftovers
 }
 
-# Bootstraps and keeps the printed operator secret for the later steps.
+# Bootstraps and keeps the printed operator secret and owner principal for
+# the later steps, which assign the owner a project role.
 bootstrap_operator() {
   local result
   result="$(TASKELITH_ACTOR="$1" TASKELITH_REASON="$2" bootstrap)"
-  export TASKELITH_OPERATOR_TOKEN
+  export TASKELITH_OPERATOR_TOKEN TASKELITH_OWNER_PRINCIPAL_ID
   TASKELITH_OPERATOR_TOKEN="$(printf '%s' "$result" | field operatorSecret)"
   require TASKELITH_OPERATOR_TOKEN "bootstrap printed no operatorSecret"
+  TASKELITH_OWNER_PRINCIPAL_ID="$(printf '%s' "$result" | field ownerPrincipalId)"
+  require TASKELITH_OWNER_PRINCIPAL_ID "bootstrap printed no ownerPrincipalId"
 }
 
 # The final removal of a throwaway project, which must succeed.
