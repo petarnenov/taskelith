@@ -10,8 +10,8 @@
 
 ## 3. Verification
 
-- [ ] 3.1 `make verify-linux-crash-windows`, `make verify-linux-g2-scenarios`, and `make verify`
-- [ ] 3.2 Record `verification.md`
+- [x] 3.1 `make verify-linux-crash-windows`, `make verify-linux-g2-scenarios`, and `make verify`
+- [x] 3.2 Record `verification.md`
 
 ## 4. Review and archive
 
