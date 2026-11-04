@@ -5,7 +5,7 @@ import { err, failure, ok, parseEventMetadata, type Failure, type Instant, type 
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { evaluateSnapshots } from './inventory-reconciliation.js';
-import { authenticateObserver, retireJournal, type ProducerStanding, type ReconciliationContext } from './journal-reconciliation.js';
+import { authenticateObserver, recordCurrentContact, retireJournal, type ReconciliationContext } from './journal-reconciliation.js';
 import { OBSERVATION_EFFECTS, rejectedEffect, type ObservationEffect } from './observation-effects.js';
 import { isNotConsumed, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
 import { PendingLog } from './pending-log.js';
@@ -48,12 +48,19 @@ export class ObservationService {
     this.#logger = options.logger ?? SILENT_LOGGER;
   }
 
-  // A refused effect rolls back and is recorded again without it, so that
-  // no part of it commits; a rollback retires the journal on its own.
+  // A consumed observation's contact commits after it, on its own, so the
+  // worker row that every contact writes never makes it run again.
   async apply(message: ObservationMessage): Promise<Result<ObservationOutcome>> {
     const parsed = parseObservation(message);
     if (!parsed.ok) return parsed;
-    const observation = parsed.value;
+    const consumed = await this.#consume(parsed.value);
+    if (consumed.ok) await this.#recordContact(parsed.value);
+    return consumed;
+  }
+
+  // A refused effect rolls back and is recorded again without it, so that
+  // no part of it commits; a rollback retires the journal on its own.
+  async #consume(observation: Observation): Promise<Result<ObservationOutcome>> {
     const effect = OBSERVATION_EFFECTS[observation.type];
     if (effect === undefined) return this.#leaveUnconsumed(observation);
     const applied = await this.#transaction('committed', (tx, context) => this.#record(tx, context, observation, effect, 'applied'));
@@ -66,8 +73,8 @@ export class ObservationService {
     return this.#transaction('committed', (tx, context) => this.#record(tx, context, observation, evidence, 'rejected'));
   }
 
-  // Decision 1 with contact before the inbox, and the pending snapshots that
-  // a grown confirmed prefix may complete (21c decision 7).
+  // Decision 1 without the contact, which `apply` records after it, and the
+  // pending snapshots that a grown prefix may complete (21c decision 7).
   async #record(
     tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, effect: ObservationEffect,
     outcome: 'applied' | 'rejected',
@@ -75,9 +82,7 @@ export class ObservationService {
     const standing = await authenticateObserver(tx, producerOf(observation), context);
     if (!standing.ok) return standing;
     const { workerId, journalId } = observation.position;
-    // A duplicate is contact too, so a republishing worker stays reachable.
-    const contact = await recordProducer(tx, observation, standing.value, context);
-    if (!contact.ok) return contact;
+    if (standing.value === 'revoked') logRevokedProducer(observation, context);
     const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
     if (!inbox.ok) return inbox;
     if (inbox.value === 'duplicate') return this.#recordKnown(tx, context, observation);
@@ -115,7 +120,7 @@ export class ObservationService {
   // Decision 3: an authenticated one still counts as first contact, which
   // commits on its own; its sequence stays unrecorded.
   async #leaveUnconsumed(observation: Observation): Promise<Result<never>> {
-    const contact = await this.#transaction('refused', (tx, context) => recordContactOf(tx, context, observation));
+    const contact = await this.#transaction('refused', (tx, context) => recordUnconsumedContact(tx, context, observation));
     return contact.ok || isNotConsumed(contact.error) ? notConsumed(`${observation.type} is left to a later change`) : contact;
   }
 
@@ -124,6 +129,25 @@ export class ObservationService {
   async #retire(observation: Observation): Promise<Result<never>> {
     const retired = await this.#transaction('committed', (tx, context) => retireRolledBack(tx, observation, context));
     return retired.ok ? notConsumed('its sequence is a rollback, which retired its journal') : retired;
+  }
+
+  // A duplicate is contact too; a failure is only logged, as the consumed
+  // observation stays acknowledged and the next contact replaces this one.
+  async #recordContact(observation: Observation): Promise<void> {
+    const event = 'execution.observation.contact-unrecorded';
+    const log = this.#contactLogger(observation);
+    try {
+      const contact = await this.#store.transaction((tx) => recordCurrentContact(tx, producerOf(observation)));
+      if (!contact.ok) log.warn(event, { type: observation.type, code: contact.error.code, message: contact.error.message });
+    } catch (error) {
+      // A store throws only for a defect, such as a statement error.
+      log.error(event, { type: observation.type, code: 'internal', reason: 'threw', message: thrownMessage(error) });
+    }
+  }
+
+  #contactLogger(observation: Observation): Logger {
+    const { workerId, observationId } = observation.position;
+    return this.#logger.with({ workerId, observationId, correlationId: observation.correlationId });
   }
 
   // Writes the warnings of the attempt that settled: one that committed,
@@ -148,7 +172,9 @@ export class ObservationService {
   }
 }
 
-async function recordContactOf(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
+// Through `authenticateObserver`, which may replace the producer's journal;
+// a revoked producer makes no contact.
+async function recordUnconsumedContact(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
   const standing = await authenticateObserver(tx, producerOf(observation), context);
   if (!standing.ok) return standing;
   return standing.value === 'enrolled' ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : ok(undefined);
@@ -156,15 +182,11 @@ async function recordContactOf(tx: ControlPlaneTransaction, context: Reconciliat
 
 // Item 21d D3: a revoked worker makes no contact, so placement never
 // reaches it again; each of its accepted observations is logged instead.
-async function recordProducer(
-  tx: ControlPlaneTransaction, observation: Observation, standing: ProducerStanding, context: ReconciliationContext,
-): Promise<Result<void>> {
+function logRevokedProducer(observation: Observation, context: ReconciliationContext): void {
   const { workerId, journalId, sequence, observationId } = observation.position;
-  if (standing === 'enrolled') return tx.reports.recordContact(workerId, await tx.now());
   context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.revoked-worker.observation', {
     journalId, type: observation.type, sequence,
   });
-  return ok(undefined);
 }
 
 // A replacement committed since the rollback was found already retired the
@@ -179,8 +201,8 @@ async function retireRolledBack(tx: ControlPlaneTransaction, observation: Observ
   return sequenceClass.value === 'rollback' ? retireJournal(tx, workerId, journalId, 'sequence-rollback', context) : ok(undefined);
 }
 
-// The effect and the cursor, after `#record` recorded the contact; then the
-// pending snapshots, once the confirmed prefix grew.
+// The effect and the cursor; then the pending snapshots, once the confirmed
+// prefix grew.
 async function recordPosition(
   tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, cursor: ProducerCursor, effect: ObservationEffect,
 ): Promise<Result<void>> {
@@ -191,6 +213,10 @@ async function recordPosition(
   const advanced = await advanceCursor(tx, observation, cursor, at);
   if (!advanced.ok) return advanced;
   return advanced.value ? evaluateSnapshots(tx, workerId, journalId, context) : ok(undefined);
+}
+
+function thrownMessage(error: unknown): string {
+  return `the contact threw: ${error instanceof Error ? error.message : String(error)}`;
 }
 
 function producerOf(observation: Observation) {

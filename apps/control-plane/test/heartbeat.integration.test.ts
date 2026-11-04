@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import pg from 'pg';
-import { HeartbeatService, LostContactCheck, ObservationService } from '@taskelith/control-plane';
+import { HeartbeatService, LostContactCheck, ObservationService, type ControlPlaneStore } from '@taskelith/control-plane';
 import { fleetToken, fleetWorker } from '@taskelith/fleet';
+import { ok } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 
@@ -211,4 +212,79 @@ test('a heartbeat of the enrolled journal after a rollback retired it records no
   assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden');
   const [after] = await sql<{ reachable: boolean; last_contact_at: Date }>(`SELECT reachable, last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
   assert.deepEqual(after, before);
+});
+
+function unrecordedProcess(workerId: string, sequence: number) {
+  const metadata = {
+    observationId: `unrecorded-${workerId}-${sequence}`, observationType: 'execution.unrecorded-process', schemaVersion: 1, protocolVersion: 1,
+    occurredAt: '2026-10-26T09:00:00.000Z', correlationId: 'correlation-1', workerId, journalId: journalOf(workerId), sequence,
+  };
+  const payload = { containment: 'cgroup x', recoveryEpoch: 1, processes: [{ pid: 7, startedAt: '2026-10-26T09:00:00.000Z' }] };
+  return { subjectWorkerId: workerId, type: 'execution.unrecorded-process', body: { metadata, payload } };
+}
+
+test('an observation commits while a heartbeat holds the worker row, and its contact follows', async () => {
+  await enroll('worker-a');
+  const contacted = gate();
+  const release = gate();
+  const holding = database.transaction(async (tx) => {
+    const recorded = await tx.reports.recordContact('worker-a' as never, await tx.now());
+    contacted.open();
+    await release.opened;
+    return recorded;
+  });
+  await contacted.opened;
+  const applying = observations.apply(unrecordedProcess('worker-a', 1));
+  try {
+    await until(waitsForLock);
+    assert.deepEqual(await sql('SELECT message_id FROM inbox'), [{ message_id: 'unrecorded-worker-a-1' }], 'committed before the row is free');
+  } finally {
+    release.open();
+  }
+  value(await holding);
+  assert.equal(value(await applying), 'applied');
+  assert.equal(await reachable('worker-a'), true);
+});
+
+test('the contact after an observation never moves the last contact backward', async () => {
+  await enroll('worker-a');
+  value(await heartbeats.record(heartbeat('worker-a')));
+  await sql(`UPDATE workers SET last_contact_at = now() + interval '1 hour' WHERE worker_id = 'worker-a'`);
+  const [before] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.equal(value(await observations.apply(declaration('worker-a', 1))), 'applied');
+  const [after] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.deepEqual(after, before);
+});
+
+// Revokes the worker after the observation's transaction, before its contact's.
+function revokingBeforeContact(workerId: string): ControlPlaneStore {
+  let opened = 0;
+  return {
+    transaction: async (work) => {
+      if (++opened === 2) value(await database.transaction((tx) => tx.fleet.revoke(workerId as never, '2026-10-26T09:00:00.000Z' as never)));
+      return database.transaction(work);
+    },
+    readCommitted: (work) => database.readCommitted(work),
+  };
+}
+
+async function candidates(): Promise<readonly string[]> {
+  return value(await database.readCommitted(async (tx) => ok(await tx.workers.candidates())));
+}
+
+test('a reachable worker revoked before an observation\'s contact keeps its last contact and is no candidate', async () => {
+  await enroll('worker-a');
+  value(await heartbeats.record(heartbeat('worker-a')));
+  assert.equal(value(await observations.apply(declaration('worker-a', 1))), 'applied');
+  await sql("UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = 'worker-a'");
+  assert.deepEqual(await candidates(), ['worker-a']);
+  const [before] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  const revoking = new ObservationService(revokingBeforeContact('worker-a'), {
+    newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
+  });
+  assert.equal(value(await revoking.apply(unrecordedProcess('worker-a', 2))), 'applied');
+  const [after] = await sql<{ last_contact_at: Date; reachable: boolean }>(`SELECT last_contact_at, reachable FROM workers WHERE worker_id = 'worker-a'`);
+  assert.deepEqual(after?.last_contact_at, before?.last_contact_at, 'no contact');
+  assert.equal(after?.reachable, true, 'revocation leaves the reachable flag alone');
+  assert.deepEqual(await candidates(), []);
 });
