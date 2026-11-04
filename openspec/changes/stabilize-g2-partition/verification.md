@@ -13,7 +13,11 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `27e251f3` `docs: record the checks of the stabilize g2 partition change`.
 - `87eb24f5` `docs: separate the start timeouts and correct the counts of the stabilize g2 partition records` (pass 1 fixes and the pass 1 line of `passes.jsonl`).
 - `8bbcca37` `docs: record the pass 1 review of the stabilize g2 partition change` (`findings.jsonl`).
-- The commit of the pass 1 checks follows; later review records and the archive commit follow it.
+- `7e3c5939` `docs: record the checks of the pass 1 fix round of the stabilize g2 partition change`.
+- `e64dfd03` `test: release the held process of the broker partition scenario once the worker is online again` (pass 2 fixes in the test, and the pass 2 line of `passes.jsonl`).
+- `dc80c346` `docs: word the offline exit scenario as asserted and correct the stabilize g2 partition records` (pass 2 record fixes).
+- `3d265a7b` `docs: record the pass 2 review of the stabilize g2 partition change` (`findings.jsonl`).
+- The commit of the pass 2 checks follows; later review records and the archive commit follow it.
 
 ## Environment
 
@@ -47,8 +51,8 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 
 ## Author self-check
 
-- Fix (`test/g2-partition.test.ts:102-119`): the scenario holds its scripted process (`HELD_RUN`) and asserts that the journal still shows `started` once the worker is offline (`:110`). When the seed heals after the exit, it releases the process, waits for the exit in the journal, asserts `pending`, then heals (`:111-115`); otherwise it heals, then releases (`:116-118`). `connectedWorker` takes `runMilliseconds`, default 2.5 s, so the other two broker scenarios are unchanged (`:33-38`). No timeout, retry, or seed draw changed, and no assertion was weakened; one was added.
-- Spec delta: MODIFIED "Worker broker partition" copies the requirement (249 characters, unchanged) and both its scenarios, and adds "Exit while the worker is offline". Archive probe: a copy of `openspec/` in `sg2p/archive-probe`, `openspec archive stabilize-g2-partition --yes` with the worktree's pinned CLI (`Totals: + 0, ~ 1, - 0, → 0`), then `openspec validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- Fix (`test/g2-partition.test.ts:102-126`, lines as of the pass 2 fix round): the scenario holds its scripted process (`HELD_RUN`) and asserts that the journal still shows `started` once the worker is offline (`:110`). When the seed heals after the exit, it releases the process, waits for the exit in the journal, asserts `pending`, then heals (`:111-115`); otherwise it heals, waits until the worker's latest contact record is `worker.contact.online` (`lastContactEvent`, `:242-245`), then releases (`:116-120`). The `finally` releases the process before the worker's stop (`:124-126`). `connectedWorker` takes `runMilliseconds`, default 2.5 s, so the other two broker scenarios are unchanged (`:33-38`). No timeout, retry, or seed draw changed, and no assertion was weakened; one was added.
+- Spec delta: MODIFIED "Worker broker partition" copies the requirement (249 characters, unchanged) and both its scenarios, and adds "Exit while the worker is offline", whose THEN the pass 2 fix round worded as asserted. Archive probe, repeated after that round in `sg2p/archive-probe2` with the same result: a copy of `openspec/` in `sg2p/archive-probe`, `openspec archive stabilize-g2-partition --yes` with the worktree's pinned CLI (`Totals: + 0, ~ 1, - 0, → 0`), then `openspec validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
 - `npm run openspec -- validate stabilize-g2-partition --strict`: `Change 'stabilize-g2-partition' is valid`.
 - `npx tsc -p tsconfig.check.json`: exit 0. `npm run verify:comments`: `Every comment is within the comment length rule.` No AI attribution in commits.
 
@@ -59,12 +63,14 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 - Base, seed 1948878807, which heals after the exit, the seed of the first past failure (`sg2p/repro/base-1948878807.log`): `tests 1, pass 0, fail 1`, `AssertionError [ERR_ASSERTION]: the exit waits in the local outbox`, `'ended' !== 'pending'`, at the copy's line 109, the base's line 108: the message of the past failures.
 - Base, seed 3, which heals before the exit (`sg2p/repro/base-3.log`): `tests 1, pass 1, fail 0`, as that branch makes no outbox assertion.
 - Pass 1 fix round: five more base runs at seed 1948878807 (`sg2p/repro-base5.sh`, logs `sg2p/repro-base5/`, `summary.txt` exit 1 for runs 1 to 5): each `tests 1, pass 0, fail 1` with `the exit waits in the local outbox`, `'ended' !== 'pending'` at the copy's line 109. So six of six base runs of that seed reproduced the assertion.
+- Pass 2 fix round, the heal-before-the-exit branch (`sg2p/m1.sh`, copies `sg2p/m1/zz-m1-before-partition.test.ts` and `sg2p/m1/zz-m1-after-partition.test.ts`, logs `sg2p/m1/out/`): seed 3 heals before the exit; each copy asserts `lastContactEvent(worker) === 'worker.contact.online'`, `the worker is online at the release`, right before the release. The copy of `7e3c5939` without the wait for the reconnect: 3 of 3 runs `tests 1, pass 0, fail 1`, `AssertionError [ERR_ASSERTION]: the worker is online at the release`, `actual: 'worker.contact.offline'`, at the copy's line 118. So before the fix that branch released the process, and journaled the exit, while the worker was still offline. The copy of `e64dfd03` with the wait: 3 of 3 runs `tests 1, pass 1, fail 0`. The copies were then deleted from `test/`.
 - The delay makes the late start likely, not certain: observations publish in order, but no barrier makes the control plane apply the exit before the scenario cuts the route. Only the fixed scenario's hold and release order is deterministic.
 
 ## After
 
 - The same delayed start on the fixed copy: seed 1948878807 (`sg2p/repro/fixed-1948878807.log`) and seed 3 (`sg2p/repro/fixed-3.log`), each `tests 1, pass 1, fail 0`.
 - The fixed file on `fcc8afd5`'s tree, 30 runs with random seeds (`sg2p/load.sh`, logs `sg2p/fixed-load/`): 15 plain and 15 under 8 busy-loop processes on the 8 logical CPUs, each `tests 6, pass 6, fail 0`; 16 of the seeds healed after the exit and 14 before. The while-running broker scenario took 11120 to 11523 ms plain and 12434 to 18154 ms under the hogs. The hogs were killed by their saved PIDs; `ps` showed none afterwards.
+- Pass 2 fix round, the fixed file on `e64dfd03`'s tree, 20 runs with random seeds (`sg2p/load20.sh`, the 15/15 `load.sh` at 10/10; logs `sg2p/fix2-load/`, `summary.txt` exit 0 for all 20): 10 plain and 10 under 8 busy-loop processes, each `tests 6, pass 6, fail 0`. By the seeds (`sg2p/split.mts`), 8 healed after the exit and 12 before. The while-running broker scenario took 7204 to 8452 ms plain and 8658 to 9051 ms under the hogs when it healed before the exit, and 11270 to 11388 ms plain and 12570 to 15943 ms under the hogs when it healed after it. Afterwards `ps` showed no hog.
 
 ## make verify
 
@@ -98,7 +104,9 @@ Review effort medium: owner decision 2026-11-02.
 
 - Pass 1, reviewer A, Codex CLI `gpt-6-astra` at effort medium, session `01a1a750-6d97-78b0-90f6-5ada4c73e952`, on `27e251f3`: Critical 0, High 0, Medium 1, Low 2 (`passes.jsonl` line 1, `findings.jsonl` lines 1 to 3). The reviewer modified no file; its run of the comment check failed with `spawnSync git EPERM` in its sandbox.
 - Pass 1 fix round, records only, `87eb24f5`: the Medium (both start timeouts attributed to #446) and the two Lows (the parallel-run counts, "every time") were fixed as recorded in `findings.jsonl`; five more injected-delay base runs were made for the second Low ("Fail-before"). No code changed.
-- Pass 2: pending; Zaki runs it.
+- Pass 2, reviewer B, Claude Code `claude-fable-5-1` at effort medium, session `4331c26b-17f0-4231-89b9-1e231f5532e8`, on `7e3c5939`: Critical 0, High 0, Medium 1, Low 5 (`passes.jsonl` line 2, `findings.jsonl` lines 4 to 9). The reviewer modified no file.
+- Pass 2 fix round, `e64dfd03` and `dc80c346`: the Medium (the heal-before-the-exit branch released the process before the reconnect) and the Low on the `finally` were fixed in the test; the Lows on the spec THEN, the `worker-contact.ts` citation, `tasks.md`, and `proposal.md` in the records, as recorded in `findings.jsonl`. The reviewer's second citation for the `finally`, `test/g2-cancellation-races.test.ts:502`, is a release in `settleRace`, not in a `finally`, so `design.md` cites `:391` only.
+- Pass 3: pending; the pass 2 Medium calls for it under the route.
 
 ## Limitations
 
