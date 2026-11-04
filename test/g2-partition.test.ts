@@ -7,7 +7,7 @@ import {
   PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
 } from './g2-scenarios/scenario-run.ts';
 import { REDELIVERY_BUDGET_MILLISECONDS, SCENARIO_LIMITS, ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
-import { ScenarioWorker } from './g2-scenarios/scenario-worker.ts';
+import { HELD_RUN, ScenarioWorker, type ScriptedRun } from './g2-scenarios/scenario-worker.ts';
 import { assertExitedOnce, journalOf, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
@@ -30,9 +30,11 @@ async function assertOneIntentPerAssignment(installation: ScenarioInstallation, 
 describe('worker to NATS', SCENARIO_HOST, () => {
   const proxied = integrationEndpoint('TASKELITH_NATS_PROXY_URL');
 
-  async function connectedWorker(installation: ScenarioInstallation, name: string, random: SeededRandom): Promise<ScenarioWorker> {
+  async function connectedWorker(
+    installation: ScenarioInstallation, name: string, random: SeededRandom, runMilliseconds: ScriptedRun = 2_500,
+  ): Promise<ScenarioWorker> {
     const worker = new ScenarioWorker(installation, {
-      name, random, nats: proxied, runMilliseconds: 2_500, enrollmentToken: await installation.enrollmentToken(),
+      name, random, nats: proxied, runMilliseconds, enrollmentToken: await installation.enrollmentToken(),
     });
     await worker.start();
     await waitFor(() => reachable(installation, worker.workerId), 20_000, 'the worker is reachable');
@@ -90,28 +92,37 @@ describe('worker to NATS', SCENARIO_HOST, () => {
     })));
   });
 
-  // Seed: whether the heal comes before or after the process exits; an exit
-  // journaled offline reaches the control plane from the local outbox.
+  // Seed: the process exits offline, its exit waiting in the local outbox
+  // until the heal, or exits once the worker is online again after the heal.
   test('a partition while the process runs keeps its observations, published once after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterExit = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-worker-nats-while-running', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');
-      const worker = await connectedWorker(installation, 'nats-while-running', random);
+      // Held until the worker is offline, so the exit cannot be published
+      // before the cut, however late the control plane records the start.
+      const worker = await connectedWorker(installation, 'nats-while-running', random, HELD_RUN);
       try {
         await installation.submitTask('task-nats-running');
         await waitFor(async () => (await startedExecutions(installation, 'task-nats-running')) === 1, 20_000, 'the start is recorded');
         await nats.disconnect();
         await waitFor(() => worker.logs.records.some(({ event }) => event === 'worker.contact.offline'), 20_000, 'the worker is offline');
+        assert.equal(journaledState(worker), 'started', 'the process runs through the cut');
         if (healAfterExit) {
+          worker.releaseScriptedProcesses();
           await waitFor(() => journaledState(worker) === 'exited', 20_000, 'the exit is journaled offline');
           assert.equal((await installation.result('task-nats-running')).state, 'pending', 'the exit waits in the local outbox');
+          await nats.heal();
+        } else {
+          await nats.heal();
+          await waitFor(() => lastContactEvent(worker) === 'worker.contact.online', 20_000, 'the worker is online again');
+          worker.releaseScriptedProcesses();
         }
-        await nats.heal();
         const executed = await assertExitedOnce(installation, 'task-nats-running');
         const duplicates = installation.logs.records.filter(({ event }) => event === 'execution.observation.duplicate').length;
         return `healed ${healAfterExit ? 'after' : 'before'} the exit; ${executed.executions} execution; ${duplicates} duplicate observations`;
       } finally {
+        worker.releaseScriptedProcesses();
         await worker.stop();
       }
     })));
@@ -225,6 +236,13 @@ describe('control plane to PostgreSQL', SCENARIO_HOST, () => {
     })));
   });
 });
+
+const CONTACT_EVENTS = ['worker.contact.online', 'worker.contact.offline'];
+
+// The worker's latest change of its broker contact, online or offline.
+function lastContactEvent(worker: ScenarioWorker): string | undefined {
+  return worker.logs.records.map(({ event }) => event).filter((event) => CONTACT_EVENTS.includes(event)).at(-1);
+}
 
 async function inventoryRequests(installation: ScenarioInstallation): Promise<number> {
   return (await installation.query(`SELECT 1 FROM outbox WHERE event_type = 'worker.inventory.requested'`)).length;

@@ -1,0 +1,17 @@
+## 1. Diagnose
+
+- [x] 1.1 Collect the past partition failures from the `make verify` logs and compare them with the mechanism of #446.
+- [x] 1.2 Run the base scenario file under load with the control plane's and the worker's logs saved.
+- [x] 1.3 Reproduce the failure by delaying the worker's start publication past the process's exit.
+
+## 2. Fix
+
+- [x] 2.1 Hold the scripted process of the broker partition while-running scenario until the worker is offline.
+- [x] 2.2 Add the scenario "Exit while the worker is offline" to "Worker broker partition".
+
+## 3. Verify
+
+- [x] 3.1 Show that the reproduction no longer fails the fixed scenario, and run the fixed file 30 times, 15 under 8 CPU hogs.
+- [x] 3.2 Run `npm run openspec -- validate stabilize-g2-partition --strict`, `make verify`, and `make verify-linux-g2-scenarios`.
+- [x] 3.3 Independent review, recorded in `verification.md`.
+- [x] 3.4 Pass 2 fix round: release the held process after the heal only once the worker is online again, and in `finally`; run the fixed file 20 times, 10 under 8 CPU hogs.
