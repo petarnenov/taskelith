@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { Clock } from '../session/clock';
 import { useSession } from '../session/SessionProvider';
-import type { BoardGateway, ReadResult } from './board';
+import type { BoardGateway } from './board';
 
 export interface BoardServices {
   readonly gateway: BoardGateway;
@@ -17,7 +17,7 @@ export function BoardServicesProvider({ children, ...services }: BoardServices &
 }
 
 // The gateway as screens use it: an unauthenticated answer of any of its
-// reads ends the session in the shell, which then shows the sign-in page.
+// reads or commands ends the session in the shell, which shows the sign-in.
 export function useBoardServices(): BoardServices {
   const services = useContext(BoardServicesContext);
   if (services === undefined) throw new Error('useBoardServices needs a BoardServicesProvider.');
@@ -29,10 +29,16 @@ export function useBoardServices(): BoardServices {
   );
 }
 
+const UNAVAILABLE = { kind: 'unavailable' } as const;
+
+interface Settled {
+  readonly kind: string;
+}
+
 function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => void): BoardGateway {
-  async function checked<T>(read: () => Promise<ReadResult<T>>): Promise<ReadResult<T>> {
+  async function checked<R extends Settled>(call: () => Promise<R>): Promise<R | typeof UNAVAILABLE> {
     const expire = expiryOfRequest();
-    const result = await settle(read);
+    const result = await settle(call);
     if (result.kind === 'unauthenticated') expire();
     return result;
   }
@@ -44,15 +50,16 @@ function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => voi
     readAgentSession: (projectId, sessionId) => checked(() => gateway.readAgentSession(projectId, sessionId)),
     listAgentSessionTurns: (projectId, sessionId, after) =>
       checked(() => gateway.listAgentSessionTurns(projectId, sessionId, after)),
+    submitTurn: (projectId, sessionId, submission) => checked(() => gateway.submitTurn(projectId, sessionId, submission)),
     openEvents: gateway.openEvents,
   };
 }
 
 // A gateway that throws reads as an unreachable control plane.
-async function settle<T>(read: () => Promise<ReadResult<T>>): Promise<ReadResult<T>> {
+async function settle<R>(call: () => Promise<R>): Promise<R | typeof UNAVAILABLE> {
   try {
-    return await read();
+    return await call();
   } catch {
-    return { kind: 'unavailable' };
+    return UNAVAILABLE;
   }
 }

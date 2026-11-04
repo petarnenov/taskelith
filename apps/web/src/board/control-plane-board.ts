@@ -4,6 +4,7 @@ import {
   sessionChangeOf,
   turnChangeOf,
   turnPageOf,
+  turnSubmittedOf,
 } from './agent-session-wire';
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
 import type {
@@ -16,14 +17,17 @@ import type {
   Project,
   ReadFailed,
   ReadResult,
+  SubmitResult,
   TaskDetail,
   TurnPage,
+  TurnSubmission,
+  TurnSubmitted,
 } from './board';
 import { boardOf, cardChangeOf, failureReason, projectPageOf, requiredRoleOf, workersChangeOf } from './board-wire';
 import { taskDetailOf } from './task-detail-wire';
 
-// The board's reads, the agent session reads, and streamProjectEvents,
-// through the typed fetch and the browser's SSE.
+// The board's reads, the agent session reads, submitTurn, and
+// streamProjectEvents, through the typed fetch and the browser's SSE.
 
 export interface EventSourceLike {
   readonly readyState: number;
@@ -63,14 +67,16 @@ interface Answer {
 interface BoardGatewayOptions {
   readonly fetch?: typeof fetch;
   readonly openEventSource?: OpenEventSource;
+  // The session's CSRF token for submitTurn, read as each request is sent.
+  readonly csrfToken?: () => string | undefined;
 }
 
 export function createBoardGateway({
   fetch: send,
   openEventSource = (url) => new EventSource(url),
+  csrfToken = () => undefined,
 }: BoardGatewayOptions = {}): BoardGateway {
-  // Every board operation is a GET, so no request carries a CSRF token.
-  const request: ApiRequest = createApiClient({ csrfToken: () => undefined, fetch: send });
+  const request: ApiRequest = createApiClient({ csrfToken, fetch: send });
 
   function listProjects(): Promise<ReadResult<readonly Project[]>> {
     return readPages(
@@ -146,6 +152,19 @@ export function createBoardGateway({
     return above ? { kind: 'read', value: page } : { kind: 'unavailable' };
   }
 
+  // A 201 records the turn and a 200 names the one its key had recorded;
+  // an answer whose effect contradicts its status is a wrong answer.
+  async function submitTurn(projectId: string, sessionId: string, submission: TurnSubmission): Promise<SubmitResult> {
+    const path = { projectId, sessionId };
+    const result = await reachable(() =>
+      request('post', '/projects/{projectId}/agent-sessions/{sessionId}/turns', { path, body: submission }),
+    );
+    if (result === undefined) return { kind: 'unavailable' };
+    if (hasStatus(result, 201)) return submittedOf(result.body, 'recorded');
+    if (hasStatus(result, 200)) return submittedOf(result.body, 'duplicate');
+    return refusalOf(result);
+  }
+
   async function readBoard(projectId: string): Promise<ReadResult<Board>> {
     const result = await reachable(() => request('get', '/projects/{projectId}/board', { path: { projectId } }));
     if (result === undefined) return { kind: 'unavailable' };
@@ -185,7 +204,34 @@ export function createBoardGateway({
     };
   }
 
-  return { listProjects, readBoard, readTaskDetail, listAgentSessions, readAgentSession, listAgentSessionTurns, openEvents };
+  return {
+    listProjects,
+    readBoard,
+    readTaskDetail,
+    listAgentSessions,
+    readAgentSession,
+    listAgentSessionTurns,
+    submitTurn,
+    openEvents,
+  };
+}
+
+function submittedOf(body: unknown, effect: TurnSubmitted['effect']): SubmitResult {
+  const submitted = turnSubmittedOf(body);
+  return submitted?.effect === effect ? { kind: effect, turn: submitted.turn } : { kind: 'unavailable' };
+}
+
+// The refusals of a turn submission (control-plane.openapi.json submitTurn),
+// each by its documented reason; a refusal without it is a wrong answer.
+function refusalOf(result: Answer): SubmitResult {
+  const { status, body } = result;
+  const reason = failureReason(body);
+  if (status === 400) return { kind: 'invalid' };
+  if (status === 403 && reason === 'csrf-token-invalid') return { kind: 'csrf-rejected' };
+  if (status === 403) return reason === 'role-required' ? denialOf(requiredRoleOf(body)) : { kind: 'unavailable' };
+  if (status === 409) return reason === 'idempotency-key-reused' ? { kind: 'key-reused' } : { kind: 'unavailable' };
+  if (status === 422) return reason === 'session-stopped' ? { kind: 'session-stopped' } : { kind: 'unavailable' };
+  return failureOf(result);
 }
 
 function failureOf({ status, body }: { readonly status: number; readonly body: unknown }): ReadFailed {

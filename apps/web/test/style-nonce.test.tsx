@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { createMemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createTurnRecordStore } from '../src/agent-session/turn-records';
 import { App } from '../src/App';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import { pageStyleNonce } from '../src/style-nonce';
@@ -32,7 +33,8 @@ describe('the style nonce', () => {
     const router = createMemoryRouter(appRoutes(), { basename: APP_BASENAME, initialEntries: ['/app/'] });
     const session = fakeGateway(AUTHENTICATED);
     const board = new FakeBoardGateway();
-    render(<App router={router} gateway={session} board={board} clock={new ManualClock()} styleNonce="bm9uY2U=" />);
+    const turnRecords = createTurnRecordStore();
+    render(<App router={router} gateway={session} board={board} turnRecords={turnRecords} clock={new ManualClock()} styleNonce="bm9uY2U=" />);
     await screen.findAllByRole('link', { name: /board/i });
     const styles = [...document.querySelectorAll('style[data-mantine-styles]')];
     expect(styles.length).toBeGreaterThan(0);

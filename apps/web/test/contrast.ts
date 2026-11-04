@@ -3,6 +3,7 @@ import {
   defaultVariantColorsResolver,
   DEFAULT_THEME,
   mergeMantineTheme,
+  type CSSVariablesResolver,
   type MantineColor,
   type MantineThemeOverride,
 } from '@mantine/core';
@@ -34,10 +35,13 @@ export interface SchemeColors {
   readonly variant: (variant: string, color: MantineColor) => VariantColors;
 }
 
-export function schemeColors(override: MantineThemeOverride, scheme: Scheme): SchemeColors {
+// The provider's resolver overrides the default one's variables, as
+// MantineProvider merges them.
+export function schemeColors(override: MantineThemeOverride, scheme: Scheme, resolver?: CSSVariablesResolver): SchemeColors {
   const theme = mergeMantineTheme(DEFAULT_THEME, override);
   const resolved = defaultCssVariablesResolver(theme);
-  const variables: Variables = { ...resolved.variables, ...resolved[scheme] };
+  const overrides = resolver?.(theme) ?? { variables: {}, light: {}, dark: {} };
+  const variables: Variables = { ...resolved.variables, ...overrides.variables, ...resolved[scheme], ...overrides[scheme] };
   return {
     resolve: (value) => resolveVariable(variables, value),
     variant: (variant, color) => {
