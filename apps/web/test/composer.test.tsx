@@ -535,6 +535,39 @@ describe('a submission refused for its token', () => {
     expect(storedRecords()).toEqual([]);
   });
 
+  it('keeps a retried key sending, the field disabled, and its record plain until the renewed token is answered', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const heldRead = deferred<SessionRead>();
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(heldRead.promise);
+    const gateway = new FakeBoardGateway();
+    const heldResend = deferred<SubmitResult>();
+    gateway.submitTurn
+      .mockResolvedValueOnce({ kind: 'unavailable' })
+      .mockResolvedValueOnce({ kind: 'csrf-rejected' })
+      .mockReturnValueOnce(heldResend.promise);
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    const failed = await composerAlert('Not sent');
+    await userEvent.click(within(failed).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(session.read).toHaveBeenCalledTimes(2));
+    const form = await composer();
+    expect(form.getByText('Sending')).toBeDefined();
+    expect(message().disabled).toBe(true);
+    await act(async () => heldRead.resolve(AUTHENTICATED));
+    await waitFor(() => expect(gateway.submitTurn).toHaveBeenCalledTimes(3));
+    expect(form.getByText('Sending')).toBeDefined();
+    expect(form.queryByText('Not sent')).toBeNull();
+    expect(form.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(message().disabled).toBe(true);
+    expect(storedRecords().map((record) => Object.keys(record).sort())).toEqual([['key', 'sentAt', 'text', 'tokenRefreshed']]);
+    await act(async () =>
+      heldResend.resolve({ kind: 'recorded', turn: turn({ turnId: 'turn-3', position: 3, text: 'Fix the build', state: 'queued' }) }),
+    );
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    expect(storedRecords()).toEqual([]);
+  });
+
   it('gives each key its own session read', async () => {
     const session = fakeGateway(AUTHENTICATED);
     const gateway = new FakeBoardGateway();
