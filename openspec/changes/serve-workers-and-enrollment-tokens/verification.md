@@ -11,7 +11,7 @@ G3 plan item 33 (`docs/g3-plan.md`, row 33), change 1 of the item (backend, size
 - Fleet module: `3e90e986` (tests), `d1905ab3` `chore: list, revoke, and rotate enrollment tokens by identifier through a token service, and refuse a revoked token at redemption`.
 - PostgreSQL: `18cc4257` (tests), `b2ba0944` `chore: identify, revoke, and rotate enrollment tokens in PostgreSQL under the redemption row lock`.
 - Control plane: `d28cef2c` (tests), `9f649f84` `chore: serve the workers view and the enrollment token operations for the installation owner with the secret revealed once`.
-- `3c273b4c` the wire contracts note (task 2.4), then this record and the tasks, `route.json` (unedited), and the `make record` output, each in its own commit.
+- `3c273b4c` the wire contracts note (task 2.4), `0d4f28c9` this record and the tasks, `0cc99e5b` `route.json` (unedited), `d20ee8bb` the typecheck fix of two test files after `make verify` run 1, `cced19bf` its record and the stale route's removal, `91352dd7` the second route (unedited), then the `make record` output with the coverage notes and task 3.1.
 
 ## Environment
 
@@ -60,11 +60,36 @@ Each mutation was restored and its `dist` rebuilt; `git status` showed no change
 | --- | --- | --- |
 | Focused fleet, PostgreSQL, route, and composition runs | `9f649f84` | Listed under "Fail-before": all pass |
 | `make verify` run 1 (`verify-33-1-1.log`) | `0cc99e5b`, clean | Failed in `check:boundaries` before any test: `tsc -p tsconfig.check.json` rejected the five `ApiServices` fixtures of `api-server.test.ts` without `fleet` and two result types in `enrollment-token-service.test.ts`; fixed in the `test:` commit after `0cc99e5b`, which the route of the next commit covers |
-| `make verify` run 2 (`verify-33-1-2.log`) | the routed commit, clean | recorded below |
+| `make verify` run 2 (`verify-33-1-2.log`) | `91352dd7`, tree `9b30b5f2`, clean | Passed, profile full, stamp written: tests 4833, pass 4824, fail 0, skipped 9; all files 99.45 % lines, 92.85 % branches, 98.87 % functions. `make record` refused the log because the subagent's wrapper appended an `exit 0` line after the stamp line, so the log was left as it is and the run repeated |
+| `make verify` run 3 (`verify-33-1-3.log`) | `91352dd7`, tree `9b30b5f2`, clean | Passed, profile full, stamp written, logged with the brief's plain redirection: tests 4833, pass 4824, fail 0, skipped 9; recorded below |
+
+No run hit the known flakes (`installation-script` base-ten bound, `web-app.test.ts:279`).
+
+### Coverage
+
+Per-file coverage of the changed `dist` files in `make verify` run 3 (lines, branches, functions):
+
+| File | Lines | Branches | Functions | Note |
+| --- | --- | --- | --- | --- |
+| `apps/control-plane/dist/api/fleet-api.js` | 100 % | 91.18 % | 100 % | New |
+| `apps/control-plane/dist/api/routes.js` | 100 % | 100 % | 100 % | |
+| `apps/control-plane/dist/api/control-plane-api.js` | 97.47 % | 87.43 % | 97.06 % | The uncovered lines predate the change |
+| `apps/control-plane/dist/api/project-api.js` | 100 % | 90.67 % | 100 % | |
+| `apps/control-plane/dist/application/worker-admission-view.js` | 100 % | 100 % | 100 % | New |
+| `apps/control-plane/dist/admin/admin-main.js` | 95.32 % | 91.67 % | 84.62 % | Only the import moved |
+| `apps/control-plane/dist/composition/control-plane.js` | 98.40 % | 75.76 % | 90.91 % | Uncovered lines 70-72 and 250-252 predate the change |
+| `packages/modules/fleet/dist/domain/enrollment.js` | 100 % | 100 % | 100 % | |
+| `packages/modules/fleet/dist/application/enrollment-token-service.js` | 100 % | 80.95 % | 100 % | New; the uncovered branches are `??` defaults of the dependencies |
+| `packages/modules/fleet/dist/application/enrollment-service.js` | 99.60 % | 81.44 % | 100 % | |
+| `packages/modules/fleet/dist/adapters/in-memory-fleet.js` | 100 % | 99.30 % | 100 % | |
+| `packages/modules/fleet/dist/ports/fleet-conformance.js` | 99.11 % | 86.42 % | 100 % | Lines 540-544: in the conformance race both adapters let the revocation win; the redemption-first order is covered by the service test and the PostgreSQL row-lock test |
+| `packages/adapters/postgres/dist/fleet-repositories.js` | 100 % | 97.59 % | 100 % | |
+| `packages/adapters/postgres/dist/committing-repositories.js` | 100 % | 99.39 % | 100 % | |
+| `packages/adapters/secrets/dist/node-secrets.js` | 100 % | 100 % | 100 % | |
 
 ### Route
 
-`route.json` (rule version 5) at `0cc99e5b`: elevated; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.75). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers. The typecheck fix after it changed the diff, so `route.json` was deleted and routed again at the fix commit, unedited; see the commit list under "Revision".
+`route.json` (rule version 5) at `0cc99e5b`: elevated; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.75). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers. The typecheck fix after it changed the diff, so `route.json` was deleted (`cced19bf`) and routed again at `cced19bf` and committed unedited (`91352dd7`): again elevated, rule version 5, the same reviewers; the shadow router `jev-1.14.0` timed out on that run, so the rule decided alone, as the route records.
 
 ## Deviations
 
@@ -77,6 +102,18 @@ Each mutation was restored and its `dist` rebuilt; `git status` showed no change
 - The installation contract section 5, check 1, entry for a revoked token belongs to item 26c (wire contracts section 12).
 - `afterOf` is duplicated in `scm-integration-api.ts`; a later change can import the exported one.
 - The reachability and capacity fields of the workers view stay as the contract declares them; nothing in this change reads them.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `9b30b5f218489b6a5105669918549dd21849fea5`; tests 4833, pass 4824, fail 0, skipped 9; all files 99.45% lines, 92.84% branches, 98.88% functions.
+- `npm run openspec -- validate serve-workers-and-enrollment-tokens --strict`: passed, `Change 'serve-workers-and-enrollment-tokens' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 120 file(s); every pass summary file is valid: 100 file(s); every route file is valid: 53 file(s).`.
+- Spec diff against the merge base `79fb71308766` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
 
 ## Remaining gates
 
