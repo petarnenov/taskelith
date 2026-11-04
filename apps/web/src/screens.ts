@@ -76,12 +76,14 @@ const REVIEWS: PlannedScreen = {
   change: 'build-reviews-and-settings-screens',
 };
 
-const WORKERS: PlannedScreen = {
+// The workers of the installation; 33b and 33c add the enrollment tokens
+// and the account pools below them.
+export const WORKERS: PlannedScreen = {
   path: '/workers',
   label: 'Workers',
   title: 'Workers and account pools',
   item: 33,
-  change: 'build-workers-and-pools-screens',
+  change: 'build-workers-screen',
 };
 
 const INTEGRATIONS: PlannedScreen = {
@@ -121,4 +123,5 @@ export const MAIN_NAVIGATION: readonly PlannedScreen[] = [BOARD, SESSIONS, REVIE
 export const SCREENS: readonly PlannedScreen[] = [...MAIN_NAVIGATION, NEW_TASK, NEEDS_YOU];
 
 // The routed screens whose page is still the empty planned page.
-export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => screen !== BOARD && screen !== SESSIONS);
+const BUILT_SCREENS: readonly PlannedScreen[] = [BOARD, SESSIONS, WORKERS];
+export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => !BUILT_SCREENS.includes(screen));

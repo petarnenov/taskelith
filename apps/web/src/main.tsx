@@ -9,6 +9,7 @@ import { APP_BASENAME, appRoutes } from './routes';
 import { browserClock } from './session/clock';
 import { createSessionGateway } from './session/control-plane-session';
 import { pageStyleNonce } from './style-nonce';
+import { createWorkersGateway } from './workers/control-plane-workers';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('The page has no #root element.');
@@ -21,6 +22,7 @@ createRoot(root).render(
       router={router}
       gateway={session}
       board={createBoardGateway({ csrfToken: session.csrfToken })}
+      workers={createWorkersGateway()}
       turnRecords={createTurnRecordStore()}
       clock={browserClock}
       styleNonce={pageStyleNonce(document)}
