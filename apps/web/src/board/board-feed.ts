@@ -1,5 +1,5 @@
 import type { Clock } from '../session/clock';
-import type { BoardGateway } from './board';
+import type { BoardGateway, BoardStreamEvent, BoardStreamListener } from './board';
 import { applyChange, viewOf, type BoardView } from './board-model';
 import { startLiveFeed, type LiveFeedState, type ShownView } from './live-feed';
 
@@ -33,9 +33,21 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
       positionOf: (view) => view.board.position,
       apply: applyChange,
     },
-    openEvents: (after, listener) => gateway.openEvents(projectId, after, listener),
+    openEvents: (after, listener) => gateway.openEvents(projectId, after, boardEventsOnly(listener)),
     clock,
     show,
   });
   return feed.stop;
+}
+
+// Decision Q8: a session event never reaches the board's reconnect
+// accounting, so the board behaves as before the stream carried them.
+function boardEventsOnly(listener: BoardStreamListener): BoardStreamListener {
+  return (event) => {
+    if (!isSessionEvent(event)) listener(event);
+  };
+}
+
+function isSessionEvent(event: BoardStreamEvent): boolean {
+  return event.kind === 'agent-session-changed' || event.kind === 'turn-changed';
 }
