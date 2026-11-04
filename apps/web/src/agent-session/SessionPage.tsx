@@ -103,7 +103,11 @@ function Activity({ session, detail, onRetry }: ActivityProps) {
   }
   const activity = activityOf(detail.detail, session.taskId);
   if (activity === undefined) {
-    return <Text size="sm">The task detail of run {session.runId} lists no task {session.taskId}, so no activity is shown.</Text>;
+    return (
+      <Text size="sm">
+        The task detail of run <Breakable text={session.runId} /> lists no task <Breakable text={session.taskId} />, so no activity is shown.
+      </Text>
+    );
   }
   return <SessionIndicator activity={activity} />;
 }
