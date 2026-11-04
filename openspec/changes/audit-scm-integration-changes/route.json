@@ -1,11 +1,11 @@
 {
   "change": "audit-scm-integration-changes",
-  "generatedAt": "2026-11-03T23:56:41.596Z",
+  "generatedAt": "2026-11-04T00:11:13.322Z",
   "devCommit": "2700c16a4620abc0ed0fdd76061110ace3afa341",
-  "headCommit": "dabca4d3c47a26d5e1206f46e5fc272dc42bc94e",
+  "headCommit": "c43300f582c6669610a2942e2584e6858d70dca0",
   "features": {
-    "linesChanged": 854,
-    "filesChanged": 27,
+    "linesChanged": 908,
+    "filesChanged": 28,
     "capabilities": [
       "control-plane-api",
       "postgres-state",
@@ -72,7 +72,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.71,
+    "thirdPassProbability": 0.73,
     "threshold": 0.4,
     "passes": [
       {
@@ -103,6 +103,6 @@
         }
       }
     ],
-    "latencyMs": 296
+    "latencyMs": 271
   }
 }
