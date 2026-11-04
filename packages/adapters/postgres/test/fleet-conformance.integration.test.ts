@@ -131,6 +131,23 @@ test('a token that expires while its rotation waits for the row lock is not rota
   }
 });
 
+// Rotation wins over expiry (design, decision 6): the revocation of a
+// rotated token names its replacement also once the old token has expired.
+test('a rotated token that then expires is still refused as rotated, naming its replacement', { concurrency: false }, async () => {
+  await truncateAll(url);
+  await steppedClock.stepTo(0);
+  const registry = new CommittingFleetRegistry(steppedDatabase);
+  value(await registry.addToken(fleetToken('t1', {}, STEPPED_EXPIRY)));
+  value(await registry.rotateToken('id-t1', fleetToken('t2'), AT));
+  await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
+  const expiry = "SELECT expires_at <= clock_timestamp() AS expired FROM enrollment_tokens WHERE token_id = 'id-t1'";
+  assert.deepEqual(await query(steppedClock.credentials, expiry), [{ expired: true }], 'the old token has expired');
+  const revoked = await registry.revokeToken('id-t1', AT);
+  assert.deepEqual(!revoked.ok && revoked.error.details, { reason: 'token-rotated', replacementTokenId: 'id-t2' });
+  assert.deepEqual(await pendingIds(registry), ['id-t2'], 'the replacement stays pending');
+  assert.equal(value(await registry.unusedToken(fleetToken('t1').hash)), undefined, 'the old token enrolls nothing');
+});
+
 // Token commands and a redemption of the pending token `id-t1` (hash `t1`).
 type TokenWrite<Value> = (registry: CommittingFleetRegistry) => Promise<Result<Value>>;
 const revoke: TokenWrite<void> = (registry) => registry.revokeToken('id-t1', AT);

@@ -480,8 +480,12 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       must(await registry.addToken(fleetToken('t0', {}, LONG_AGO)));
       must(await registry.enroll('t2' as SecretHash, fleetWorker('w1', 'j1')));
       must(await registry.revokeToken('id-t3', AT));
+      // An upper-case identifier sorts first by code unit; the cursor
+      // comparison shares that order, whatever the store's own collation.
+      must(await registry.addToken(fleetToken('T6')));
       const pending = (tokens: readonly EnrollmentTokenRecord[]) => tokens.map((token) => token.tokenId).join(',');
-      expectSame(problems, 'first page', pending(must(await registry.pendingTokens(undefined, 2))), 'id-t1,id-t4');
+      expectSame(problems, 'first page', pending(must(await registry.pendingTokens(undefined, 2))), 'id-T6,id-t1');
+      expectSame(problems, 'after the first', pending(must(await registry.pendingTokens('id-T6', 2))), 'id-t1,id-t4');
       expectSame(problems, 'after cursor', pending(must(await registry.pendingTokens('id-t4', 2))), 'id-t5');
       expectSame(problems, 'past the end', pending(must(await registry.pendingTokens('id-t5', 2))), '');
       expectRead(problems, 'by id', await registry.tokenById('id-t1'), tokenRecord(fleetToken('t1')));
@@ -509,7 +513,7 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       must(await registry.addToken(fleetToken('t6', {}, LONG_AGO)));
       expectSuccess(problems, 'expired', await registry.revokeToken('id-t6', AT));
       expectSuccess(problems, 'replacement revoked', await registry.revokeToken('id-t5', AT));
-      expectRefusal(problems, 'rotated before expiry', await registry.revokeToken('id-t3', AT), 'token-rotated');
+      expectRefusal(problems, 'rotated after its replacement is revoked', await registry.revokeToken('id-t3', AT), 'token-rotated');
       return problems;
     },
   },
