@@ -16,7 +16,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `a05ed32c` `docs: route the build-workers-screen change` (`route.json`, unedited, at head `52ab84bd`): "route: elevated (lines, files), rule version 5", 1,172 lines in 25 files, size M; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.62) and agrees; recommendation only, the brief's effort medium applies.
 - `5e1be8ed` `docs: record the make verify run of the build-workers-screen change`: the record commit of the first revision, with the generated part of that run; pass 1 reviewed `d0acd304..5e1be8ed`.
 - Pass 1 fixes, each test in its own commit before its fix ("Pass 1 fixes" below): `9a4a0e82` test and `24dbc268` fix (finding 1), `ce6f82e9` and `5ac1cf6f` (2), `1bbdcf5d` and `65a02cf7` (3), `a05e7f97` test (4), `8cdfb9eb` test (5), `18afafad` test (6), `9affc4f8` test (7), `1f8646d8` and `d388b739` (8), `11c318a8` `docs: describe the scalar checks, the copied problems, the grid, and the session reread in the build-workers-screen design` (7 and the design wording of 1, 2, 3, and 8), `fb19c688` `docs: route the build-workers-screen change after the pass 1 fixes` (`route.json` regenerated at head `11c318a8`, unedited: still elevated, 1,337 lines in 26 files, the same reviewers and recommendation), then the pass 1 records commit and the record commit of the `make verify` run after the fixes.
-- Pass 2 fixes, the test in its own commit before its fix ("Pass 2 fixes" below): `964f2dcf` test and `9ae0f2ff` fix (finding 1), `467a9578` (2), `0097af6c` (3), `07a2570e` `docs: route the build-workers-screen change after the pass 2 fixes` (`route.json` regenerated at head `467a9578`, unedited: still elevated, 1,409 lines in 29 files, the same reviewers and recommendation, P(third) 0.65), then the pass 2 records commit, the record commit of the `make verify` run after the fixes, and the archive commit.
+- Pass 2 fixes, the test in its own commit before its fix ("Pass 2 fixes" below): `964f2dcf` test and `9ae0f2ff` fix (finding 1), `467a9578` (2), `0097af6c` (3), `07a2570e` `docs: route the build-workers-screen change after the pass 2 fixes` (`route.json` regenerated at head `467a9578`, unedited: still elevated, 1,409 lines in 29 files, the same reviewers and recommendation, P(third) 0.65), then the pass 2 records commit `8a45961d`, the merge `c7d66655` of `origin/dev` `3d40034c` (#446, the archived `stabilize-g2-cancellation-races`, which touched no file of this change; merged without conflict, then `make setup`), the record commit of the `make verify` run of the merged tree, and the archive commit.
 
 ## Environment
 
@@ -60,15 +60,16 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `24e18d1df2245243488a3a28f78dd0318d0ee644`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.88% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `be0fc087edce2fddeddf9329a5794c507299f337`; tests 4861, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.92% branches, 98.88% functions.
 - `npm run openspec -- validate build-workers-screen --strict`: passed, `Change 'build-workers-screen' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 122 file(s); every pass summary file is valid: 102 file(s); every route file is valid: 55 file(s).`.
-- Spec diff against the merge base `d0acd304ef72` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`.
+- Spec diff against the merge base `3d40034c1262` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a6f7-07f3-7050-8b27-4d1dcc8f5c1f` | 0 | 0 | 4 | 5 |
+| 2 | B | `claude claude-fable-5-1#medium` | `4995efd9-aa91-4106-9c64-91b6ed8cc968` | 0 | 0 | 0 | 3 |
 <!-- make record: end -->
 
 ## Independent review
@@ -122,6 +123,7 @@ No later pass reviews these fixes (see "Fixes no later pass reviewed"). The fail
 - Finding 2 (`467a9578`): "Follow-ups for the coordinator" lists the contract change, the worker-changed event, the row 33 wording with the old change name, and the `AGENTS.md` extension list beside the three earlier items.
 - Finding 3 (`0097af6c`): `isRecord`, `isText`, and `isInstant` with the `Fields` type live in `api/wire-guards.ts`; `board-wire.ts` re-exports them, so `agent-session-wire.ts`, `task-detail-wire.ts`, and every test import are unchanged; `workers-wire.ts` and `read-result.ts`, which had a private copy of `isRecord`, import them from there, and `grep -rn "board/" apps/web/src/api apps/web/src/session apps/web/src/workers/workers-wire.ts` finds nothing (design, decision 1). No behaviour changed; the whole suite, `tsc` of both configurations, and the SPA build pass.
 - After the fixes the whole `apps/web` suite passes: 816 tests in 32 files (`coverage-33a-p2.log` in the session scratchpad), 99.11% statements, 97.66% branches, 99.82% functions, and 100% lines; `src/api` at 100 on every metric; `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run build --workspace=@taskelith/web`, and `npm run verify:comments` pass; `git diff d0acd304 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
+- `make verify` of the fixed, recorded, and merged tree (`c7d66655`, tree `be0fc087`), `verify-33a-merged.log` in the session scratchpad with its exit code in `verify-33a-merged.exit`: passed at the first run, profile full, no rerun of any suite, nothing appended to the log; 4,861 tests, 4,852 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 816 tests in 32 files, all passing, 99.11% statements, 97.66% branches, 99.82% functions, and 100% lines. The generated part above records it.
 
 ## Fixes no later pass reviewed
 
