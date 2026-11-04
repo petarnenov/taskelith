@@ -122,7 +122,7 @@ test('creation refuses an unknown plugin with not-found and a bad origin, settin
   assert.equal(failed(await service.create({ ...CREATION, pluginId: 'scm-other' }, INVOCATION)).code, 'not-found');
   const cases: ReadonlyArray<readonly [Partial<ScmIntegrationCreation>, string]> = [
     [{ allowedOrigin: 'http://git.example.com' }, 'allowedOrigin'],
-    [{ settings: {} }, 'account-id'],
+    [{ settings: {} }, 'settings'],
     [{ settings: { 'account-id': 'bad' } }, 'account-id'],
     [{ settings: { ...SETTINGS, region: 'eu' } }, 'region'],
     [{ secrets: { 'signing-key': SECRET } }, 'webhook-secret'],
@@ -308,5 +308,48 @@ test('a plugin check that throws or breaks its envelope fails a create or update
       assert.equal(value(await store.get(integrationId))?.revision, 1, named);
       assert.ok(![refusals, defects, value(await audit.trail())].some((held) => inspect(held).includes(QUOTED)), named);
     }
+  }
+});
+
+// Refuses every set of settings, naming in its details what `named` says.
+function namingPlugin(named: (settings: Readonly<Record<string, string>>) => unknown): ExamplePlugin {
+  const plugin = new ExamplePlugin();
+  Object.defineProperty(plugin, 'checkSettings', {
+    value: (settings: Readonly<Record<string, string>>) => ({ ok: false, error: { code: 'invalid', message: 'refused', details: named(settings) } }),
+  });
+  return plugin;
+}
+
+test('a refused setting is named only by a name the request or the integration holds, else as settings', async () => {
+  const SETTING_VALUE = 'synthetic-setting-value';
+  const cases: ReadonlyArray<readonly [string, (settings: Readonly<Record<string, string>>) => unknown, string]> = [
+    ['a supplied name', () => ({ setting: 'account-id' }), 'account-id'],
+    ['a supplied value', (settings) => ({ setting: settings['account-id'] }), 'settings'],
+    ['arbitrary text', () => ({ setting: 'the account id 42 is wrong' }), 'settings'],
+    ['no name', () => ({}), 'settings'],
+  ];
+  for (const [named, details, expected] of cases) {
+    const { service } = setup(namingPlugin(details));
+    const refused = failed(await service.create({ ...CREATION, settings: { 'account-id': SETTING_VALUE } }, INVOCATION));
+    assert.deepEqual([refused.code, refused.details], ['invalid', { setting: expected }], named);
+    assert.ok(!inspect(refused).includes(SETTING_VALUE) && !inspect(refused).includes('42'), named);
+  }
+});
+
+test('an update names a refused setting the integration holds even when the request drops it', async () => {
+  const plugin = new ExamplePlugin();
+  const { service } = setup(plugin);
+  const { integrationId } = value(await service.create(CREATION, INVOCATION));
+  const refused = failed(await service.update(integrationId, { expectedRevision: 1, settings: {} }, INVOCATION));
+  assert.deepEqual([refused.code, refused.details], ['invalid', { setting: 'account-id' }]);
+});
+
+test('a refusal whose details are malformed is a plugin defect, quoting nothing', async () => {
+  for (const details of [{ setting: 42 }, 'synthetic-setting-value', null]) {
+    const { service, defects } = setup(namingPlugin(() => details));
+    const refused = failed(await service.create(CREATION, INVOCATION));
+    assert.deepEqual([refused.code, refused.details], ['internal', {}], inspect(details));
+    assert.deepEqual(defects.map((defect) => [defect.operation, defect.kind]), [['checkSettings', 'malformed-envelope']], inspect(details));
+    assert.ok(!inspect(refused).includes('synthetic-setting-value'));
   }
 });
