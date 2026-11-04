@@ -9,7 +9,7 @@ import { GithubNativeClient } from '../scripts/github-conformance-client.ts';
 import { discoverInstallation, type Requester } from '../scripts/github-conformance-discovery.ts';
 import { checkedEvidence, findSecretTraces, redactEvidence, revealedKeyLines } from '../scripts/github-conformance-evidence.ts';
 import { CONFORMANCE_BRANCH_PREFIX, statusOutcome } from '../scripts/github-conformance-fixture.ts';
-import { checkRequest, RequestGuard } from '../scripts/github-conformance-guard.ts';
+import { checkRequest, describeStop, RequestGuard } from '../scripts/github-conformance-guard.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from '../scripts/github-conformance-long-run.ts';
 import { isRevocationClean, revokeTokens } from '../scripts/github-conformance-revocation.ts';
 import {
@@ -157,6 +157,17 @@ test('the guarded fetch refuses before the call and witnesses minted tokens', as
   assert.deepEqual(guard.mintedTokens, [GITHUB_TOKEN]);
   await guard.fetch(new Request(`${API}/repos/${PROJECT}`));
   assert.equal(calls.length, 2);
+});
+
+test('a stop names the guard reason and never an arbitrary exception payload', async () => {
+  const guard = new RequestGuard(async () => new Response(null, { status: 204 }));
+  const refusal = await guard.fetch(`${API}/repos/petarnenov/taskelith`).catch((error: unknown) => error);
+  assert.equal(describeStop(refusal), 'the conformance guard refused the repository petarnenov/taskelith');
+  const leaky = new Error(`the conformance guard refused ${GITHUB_TOKEN}`);
+  assert.equal(describeStop(leaky), 'the run stopped on an Error');
+  assert.equal(describeStop(new TypeError(JWT)), 'the run stopped on a TypeError');
+  assert.equal(describeStop({ message: BASIC }), 'the run stopped on a value that is not an Error');
+  assert.equal(describeStop(GITHUB_TOKEN), 'the run stopped on a value that is not an Error');
 });
 
 test('the cleanup removes protection, then closes the run pull requests, then deletes its branches', () => {

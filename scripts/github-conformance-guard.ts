@@ -1,3 +1,4 @@
+import { describeThrown } from '@taskelith/integrations';
 import { CONFORMANCE_REPOSITORIES } from './github-conformance-settings.ts';
 
 // Every request of the live run, the plugin's included, passes this guard,
@@ -64,6 +65,15 @@ function isRedirect(status: number): boolean {
   return status >= 300 && status < 400;
 }
 
+// The guard's own refusals, known by identity, never by a thrown value's text.
+const REFUSAL_REASONS = new WeakMap<object, string>();
+
+// Why a run stopped: the guard's reason, or a fixed category, as other
+// thrown text may hold a secret.
+export function describeStop(thrown: unknown): string {
+  return REFUSAL_REASONS.get(thrown as object) ?? `the run stopped on ${describeThrown(thrown)}`;
+}
+
 function refuse(subject: string): GuardVerdict {
   return { allowed: false, reason: `the conformance guard refused ${subject}` };
 }
@@ -96,7 +106,9 @@ export class RequestGuard {
 
   private refuse(reason: string): never {
     this.refusals.push(reason);
-    throw new Error(reason);
+    const refusal = new Error(reason);
+    REFUSAL_REASONS.set(refusal, reason);
+    throw refusal;
   }
 
   private async witnessToken(response: Response): Promise<void> {

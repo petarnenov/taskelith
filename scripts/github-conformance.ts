@@ -15,7 +15,7 @@ import { GithubNativeClient } from './github-conformance-client.ts';
 import { discoverInstallation } from './github-conformance-discovery.ts';
 import { revealedKeyLines, saveEvidence } from './github-conformance-evidence.ts';
 import { liveConformanceFixture } from './github-conformance-fixture.ts';
-import { RequestGuard } from './github-conformance-guard.ts';
+import { describeStop, RequestGuard } from './github-conformance-guard.ts';
 import { isRevocationClean, revokeTokens, type RevocationReport } from './github-conformance-revocation.ts';
 import { LONG_RUN_TIMING, runLongRefresh } from './github-conformance-long-run.ts';
 import {
@@ -159,7 +159,7 @@ async function run(options: Options, settings: ConformanceSettings, secrets: Con
   try {
     if (!options.cleanupOnly) cases = await runSuite(options, { ...identity, ...secrets, fetch: guard.fetch }, client, { findings, endings });
   } catch (error) {
-    stopped = error instanceof Error ? error.message : 'a non-error value';
+    stopped = describeStop(error);
   } finally {
     cleanup = await cleanUp(client);
     revocation = await revokeTokens(guard.mintedTokens, revokerOf(client));
