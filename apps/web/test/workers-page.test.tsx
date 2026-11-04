@@ -357,9 +357,8 @@ describe('loading', () => {
   });
 });
 
-// Decision Q9: the server re-redacts every detail; the page still shows
-// the body as received, keeps it in component state only, and writes
-// nothing to a storage or the console.
+// Decision Q9: the server re-redacts every detail; the page shows the body
+// as received, holds it in component state only, and logs or stores nothing.
 describe('redaction', () => {
   const TOKEN = 'c'.repeat(43);
   const SECRET = `tken_${'f'.repeat(43)}`;
