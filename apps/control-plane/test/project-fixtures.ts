@@ -23,3 +23,9 @@ export async function addProjects(store: AccessStore, projectIds: readonly strin
 
 // For the run fixtures of tests that need no project store.
 export const EVERY_PROJECT_EXISTS: ProjectDirectory = Object.freeze({ exists: async () => ok(true) });
+
+// The defaults of a `createProject` body, for tests that read none.
+export const WIRE_DEFAULTS = Object.freeze({
+  framework: { pluginId: 'sdlc-openspec' }, implementers: ['agent-primary'], reviewer: 'agent-secondary',
+  specApprover: 'project-maintainer', noEligibleSlot: 'wait',
+});

@@ -33,6 +33,7 @@ import {
 } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
 import { CRASH_TRACE_VARIABLE, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
+import { WIRE_DEFAULTS } from './project-fixtures.ts';
 
 // A test-side composition of the real control plane and a real worker
 // process against the make services, for the G2 crash scenarios (item 24b).
@@ -189,6 +190,7 @@ interface Identity {
   readonly authority: BrokerAuthority;
   readonly address: TransportAddress;
   readonly operator: string;
+  readonly ownerPrincipalId: string;
 }
 
 export interface LaunchRejectionLog {
@@ -237,7 +239,7 @@ export class HarnessInstallation {
     const environment = adminEnvironment(dataRoot, database);
     const init = ['init', '--actor', 'root@test', '--reason', 'crash scenario'];
     const initialized = await bounded('the installation init', () => admin(environment, init), { signal }) as {
-      identity: { installationId: string }; operatorSecret: string; installationCa: string;
+      identity: { installationId: string }; operatorSecret: string; installationCa: string; ownerPrincipalId: string;
     };
     trustCertificateAuthority(readFileSync(initialized.installationCa, 'utf8'));
     const address = value(TransportAddress.of(initialized.identity.installationId));
@@ -252,7 +254,7 @@ export class HarnessInstallation {
     const running: RunningControlPlane = value(await bounded('the control plane start', () => starting, { signal, late: stopStarted }));
     const store = new PostgresDatabase(database, { queryTimeoutMilliseconds: OPERATION_MILLISECONDS });
     releases.add(() => store.close());
-    const identity = { database, base, authority, address, operator: initialized.operatorSecret };
+    const identity = { database, base, authority, address, operator: initialized.operatorSecret, ownerPrincipalId: initialized.ownerPrincipalId };
     return new HarnessInstallation(identity, store, logs, running.api.port, signal);
   }
 
@@ -281,10 +283,15 @@ export class HarnessInstallation {
     return issued.enrollmentToken as string;
   }
 
-  // The operator's run and planning task, as the item 23 smoke submits them.
+  // The operator's project, run, and planning task, as the item 23 smoke
+  // submits them; once per installation, since the run is fixed.
   async submitTask(taskId: string): Promise<void> {
-    await this.#operatorCall('/runs', { runId: RUN_ID, projectId: 'crash-project', binding: BINDING });
-    await this.#operatorCall(`/runs/${RUN_ID}/tasks`, { taskId, kind: 'planning', stageId: 'specs' });
+    const project = await this.#operatorCall('POST', '/projects', { name: 'Crash project', defaults: WIRE_DEFAULTS }, 201);
+    const { projectId } = project as { projectId: string };
+    const member = `/projects/${projectId}/members/${this.#identity.ownerPrincipalId}`;
+    await this.#operatorCall('PUT', member, { role: 'project-operator' }, 200);
+    await this.#operatorCall('POST', '/runs', { runId: RUN_ID, projectId, binding: BINDING }, 201);
+    await this.#operatorCall('POST', `/runs/${RUN_ID}/tasks`, { taskId, kind: 'planning', stageId: 'specs' }, 201);
   }
 
   // The launch rejections the control plane observed, in order.
@@ -305,12 +312,14 @@ export class HarnessInstallation {
     return bounded(`the broker connection ${name}`, connect, { signal: this.#signal, late: (connection) => connection.close() });
   }
 
-  async #operatorCall(path: string, body: unknown): Promise<void> {
-    await bounded(`POST ${path}`, async (signal) => {
+  async #operatorCall(method: 'POST' | 'PUT', path: string, body: unknown, status: number): Promise<unknown> {
+    return bounded(`${method} ${path}`, async (signal) => {
       const response = await fetch(new URL(path, this.apiUrl), {
-        method: 'POST', headers: { authorization: `Bearer ${this.#identity.operator}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
+        method, headers: { authorization: `Bearer ${this.#identity.operator}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
       });
-      assert.equal(response.status, 201, `POST ${path}: ${await response.text()}`);
+      const text = await response.text();
+      assert.equal(response.status, status, `${method} ${path}: ${text}`);
+      return JSON.parse(text) as unknown;
     }, { signal: this.#signal });
   }
 }
