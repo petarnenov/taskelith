@@ -14,10 +14,14 @@ import { SmokeFailure, type Answer, type OperatorApi, type SmokeClock } from '..
 const API_URL = 'http://127.0.0.1:8080';
 const WORKFLOWS = 'infra/installation/smoke/workflows.json';
 const EXITED = { kind: 'exited', status: { kind: 'code', code: 0 }, startProven: true };
+const OWNER = `u${'1'.repeat(32)}`;
+const PROJECT = `p${'2'.repeat(32)}`;
 
-// Answers every post with 201 and every get with the next scripted body.
+// Answers every post with 201, a created project with its identifier, every
+// put with 200, and every get with the next scripted body.
 class ScriptedApi implements OperatorApi {
-  readonly posts: string[] = [];
+  readonly posts: { path: string; body: unknown }[] = [];
+  readonly puts: string[] = [];
   readonly gets: string[] = [];
   readonly #bodies: unknown[];
 
@@ -25,9 +29,14 @@ class ScriptedApi implements OperatorApi {
     this.#bodies = [...bodies];
   }
 
-  post(path: string): Promise<Answer> {
-    this.posts.push(path);
-    return Promise.resolve({ status: 201, body: {} });
+  post(path: string, body: unknown): Promise<Answer> {
+    this.posts.push({ path, body });
+    return Promise.resolve({ status: 201, body: path === '/projects' ? { projectId: PROJECT } : {} });
+  }
+
+  put(path: string): Promise<Answer> {
+    this.puts.push(path);
+    return Promise.resolve({ status: 200, body: {} });
   }
 
   get(path: string): Promise<Answer> {
@@ -48,7 +57,7 @@ class CollectingRecorder implements ScenarioRecorder {
 const IMMEDIATE_CLOCK: SmokeClock = { now: () => 0, sleep: () => Promise.resolve() };
 
 function dependencies(api: OperatorApi, recorder: ScenarioRecorder = new CollectingRecorder()): ScenarioDependencies {
-  return { api: () => api, recorder: () => recorder, seed: () => 42, clock: IMMEDIATE_CLOCK };
+  return { api: () => api, ownerPrincipalId: OWNER, recorder: () => recorder, seed: () => 42, clock: IMMEDIATE_CLOCK };
 }
 
 test('each scenario task runs in its own run, named after the task', () => {
@@ -73,10 +82,13 @@ test('the seed command prints the seed of the environment', async () => {
   assert.equal(await runScenarioCommand({ name: 'seed' }, dependencies(new ScriptedApi())), '42');
 });
 
-test('submit creates the task run and submits the task', async () => {
+test('submit creates a project with the owner as its operator, the task run in it, and submits the task', async () => {
   const api = new ScriptedApi();
   assert.equal(await runScenarioCommand(parseScenarioCommand(['submit', API_URL, WORKFLOWS, 't']), dependencies(api)), '');
-  assert.deepEqual(api.posts, ['/runs', '/runs/t-run/tasks']);
+  assert.deepEqual(api.posts.map(({ path }) => path), ['/projects', '/runs', '/runs/t-run/tasks']);
+  assert.equal((api.posts[0]?.body as { name: string }).name, 'Scenario t');
+  assert.deepEqual(api.puts, [`/projects/${PROJECT}/members/${OWNER}`]);
+  assert.equal((api.posts[1]?.body as { projectId: string }).projectId, PROJECT);
 });
 
 test('await-exit prints the ended result once it exited with code 0', async () => {
