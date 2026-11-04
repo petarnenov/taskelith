@@ -232,6 +232,17 @@ Pass 3 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 
 One docs commit, `5cce95ba` (the pass 3 Low finding): it edits two sentences of `design.md`, decisions 2 and 8, so that the design states the down-migration expiry clamp of `d61bc9dc` and the 500 `internal` answer of `fc8780fa`, which pass 3 itself verified in the code. No source, test, spec, or contract file changes. Every later commit changes only the records of this change (`passes.jsonl`, `findings.jsonl`, `tasks.md`, this record, and the `make record` output) or archives the change, which applies the reviewed deltas with the pinned CLI. Architect check by the coordinator (Niki): `5cce95ba` against the migration and `issuedAnswer` in `fleet-api.ts`.
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section's `make verify` line added, after tasks 4.1 and 4.2 were ticked and `npm run openspec -- archive serve-workers-and-enrollment-tokens --yes` moved the change to `openspec/changes/archive/2026-11-04-serve-workers-and-enrollment-tokens/` (`control-plane-api` 2 added, `installation-enrollment` 1 modified; totals + 2, ~ 1, - 0). A probe of the same archive in a scratch copy of `openspec/` at `bd498af4` passed `validate --all --strict` (71 of 71) first, with the two added requirements at 496 and 499 characters and the modified one at 453 (`archive-probe-33-1.log`); the command output of the archive and its checks is `archive-33-1.log` in the session scratchpad.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-serve-workers-and-enrollment-tokens`; the command fails as a whole on older archived changes (281 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `6dab1d26`): only this change's edits, in `control-plane-api` (30 insertions, 0 deletions: the added "Workers and enrollment token operations served" and "Enrollment token command refusals") and `installation-enrollment` (9 insertions, 1 deletion: the MODIFIED "Single-use enrollment" with its "Revoked token" and "Revocation races a redemption" scenarios).
+- The moved change has `findings.jsonl` (the 19 findings of passes 1 to 3) and `passes.jsonl` (three passes); `make findings ARGS="validate"`: `Every findings file is valid: 121 file(s); every pass summary file is valid: 101 file(s); every route file is valid: 54 file(s).`
+- `make verify` (`verify-33-1-final.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4852, suites 50, pass 4843, fail 0, skipped 9; all files 99.45 % lines, 92.90 % branches, 98.88 % functions; `apps/web` Vitest 717 tests in 26 files, 100 % lines; no `tken_` in the log. No rerun. The `pre-push` hook verifies the committed tree again.
+
 ## Remaining gates
 
-The archive (task 4.2), the coordinator's architect check of `5cce95ba`, and the integration into `dev` by the coordinator (single pull request).
+- Architect check by the coordinator (Niki) of `5cce95ba`, the one fix no pass reviewed (see "Fixes no later pass reviewed").
+- Integration into dev by the coordinator (single pull request).
