@@ -10,12 +10,14 @@ const SENT_AT = '2026-11-04T10:00:00.000Z';
 const record = (key: string, text = `Message ${key}`): TurnRecord => ({ key, text, sentAt: SENT_AT });
 const NAME = `${TURN_RECORD_PREFIX}project-1/session-1`;
 
-// A storage whose named methods throw, as a browser that blocks storage.
-function throwing(...methods: (keyof Storage)[]): () => Storage {
+// A storage whose named methods throw, as a browser that blocks storage;
+// from the start, or only once `fail` is called, as a storage over quota.
+function breakable(...methods: (keyof Storage)[]) {
+  let failing = false;
   const storage = sessionStorage;
   const broken = new Proxy(storage, {
     get(target, property) {
-      if (typeof property === 'string' && methods.includes(property as keyof Storage)) {
+      if (failing && typeof property === 'string' && methods.includes(property as keyof Storage)) {
         return () => {
           throw new DOMException('Storage is blocked.', 'SecurityError');
         };
@@ -24,7 +26,18 @@ function throwing(...methods: (keyof Storage)[]): () => Storage {
       return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
     },
   });
-  return () => broken;
+  return {
+    storage: () => broken,
+    fail: () => {
+      failing = true;
+    },
+  };
+}
+
+function throwing(...methods: (keyof Storage)[]): () => Storage {
+  const broken = breakable(...methods);
+  broken.fail();
+  return broken.storage;
 }
 
 beforeEach(() => sessionStorage.clear());
@@ -101,6 +114,22 @@ describe('the turn record store', () => {
     store.add('project-1', 'session-1', record('key-2'));
     expect(store.list('project-1', 'session-1')).toEqual([record('key-1'), record('key-2')]);
     expect(sessionStorage.getItem(NAME)).toBe(JSON.stringify([record('key-1')]));
+  });
+
+  it('still removes the stored records of every session on clearAll after a write threw', () => {
+    const broken = breakable('setItem');
+    const store = createTurnRecordStore(broken.storage);
+    store.add('project-1', 'session-1', record('key-1'));
+    store.add('project-2', 'session-9', record('key-2'));
+    broken.fail();
+    store.add('project-1', 'session-1', record('key-3'));
+    expect(store.list('project-1', 'session-1')).toEqual([record('key-1'), record('key-3')]);
+    store.clearAll();
+    expect(store.list('project-1', 'session-1')).toEqual([]);
+    expect(Object.keys(sessionStorage).filter((name) => name.startsWith(TURN_RECORD_PREFIX))).toEqual([]);
+    const fresh = createTurnRecordStore();
+    expect(fresh.list('project-1', 'session-1')).toEqual([]);
+    expect(fresh.list('project-2', 'session-9')).toEqual([]);
   });
 
   it('clears the records in memory when the storage throws on removal', () => {
