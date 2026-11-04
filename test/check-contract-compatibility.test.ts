@@ -270,6 +270,15 @@ test('a behavior change that the check cannot find is declared in its own list',
   ]);
 });
 
+test('only the listed breaking changes of an entry with behavior changes count as stale', () => {
+  const both = { ...declaration('0.5.0', ['remove /channels/a']), behaviorChanges: ['the operator bearer is refused'] };
+  const document = { path: API, baseVersion: '0.4.0', headVersion: '0.5.0', breakingChanges: [] };
+
+  assert.deepEqual(declarationProblems(document, [both]), [
+    `${API}: ${FILE} lists for 0.5.0 a change not found over 0.4.0: remove /channels/a`,
+  ]);
+});
+
 test('the tracked declarations file is valid and keeps the SDLC AsyncAPI 0.4.0 history', () => {
   const read = readDeclarations(readFileSync(FILE, 'utf8'), CONTRACT_DOCUMENTS.map(({ path }) => path));
 
