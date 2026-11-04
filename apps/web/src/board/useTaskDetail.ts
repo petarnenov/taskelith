@@ -9,9 +9,23 @@ export interface LiveTaskDetail {
   readonly retry: () => void;
 }
 
-// The card's task detail, read again when the live board under it shows a
-// new state of the card or a new snapshot; without a board, one snapshot.
-export function useTaskDetail(projectId: string, runId: string, board: ShownBoard | undefined): LiveTaskDetail {
+// The card as a live view last showed it, with the view's position and
+// its snapshot count; the card is undefined while the view showed none.
+export interface LiveCard {
+  readonly card: BoardCard | undefined;
+  readonly position: string;
+  readonly snapshot: number;
+}
+
+export function liveCardOf(board: ShownBoard | undefined, runId: string): LiveCard | undefined {
+  if (board === undefined) return undefined;
+  const { board: shown } = board.view;
+  return { card: shown.cards.find((known) => known.runId === runId), position: shown.position, snapshot: board.snapshot };
+}
+
+// The card's task detail, read again when the live view under it shows a
+// new state of the card or a new snapshot; without one, one snapshot.
+export function useTaskDetail(projectId: string, runId: string, live: LiveCard | undefined): LiveTaskDetail {
   const { gateway } = useBoardServices();
   const [state, setState] = useState<TaskDetailState>({ status: 'loading' });
   const [loads, setLoads] = useState(0);
@@ -30,9 +44,9 @@ export function useTaskDetail(projectId: string, runId: string, board: ShownBoar
     return started.stop;
   }, [projectId, runId, gateway, loads]);
 
-  const card = board?.view.board.cards.find((known) => known.runId === runId);
-  const position = board?.view.board.position;
-  const snapshot = board?.snapshot;
+  const card = live?.card;
+  const position = live?.position;
+  const snapshot = live?.snapshot;
   useEffect(() => {
     if (snapshot === undefined || position === undefined) return;
     const firstSnapshot = seenSnapshot.current === undefined;

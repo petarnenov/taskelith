@@ -82,6 +82,7 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ['dimmed text on a board card', DIMMED, surfaces.card],
     ['text of a dot badge', surfaces.dotBadgeText, surfaces.dotBadge],
     ['a card title link on a board card', ANCHOR, surfaces.card],
+    ['a link on the page', ANCHOR, BODY],
   ];
 }
 

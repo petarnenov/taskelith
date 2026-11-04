@@ -1,4 +1,4 @@
-import type { Board, BoardCard, BoardChange, BoardColumn } from './board';
+import type { Board, BoardCard, BoardChange, BoardColumn, StreamChange } from './board';
 
 // A board snapshot with the events applied since, and the time of the last
 // state the SPA knows: the snapshot's asOf or a later event's occurredAt.
@@ -12,14 +12,18 @@ export function viewOf(board: Board): BoardView {
 }
 
 // Wire contracts section 10: an event not above the view's position is
-// already in it, so it is skipped.
-export function applyChange(view: BoardView, change: BoardChange): BoardView {
+// already in it, so it is skipped; a session event changes no board.
+export function applyChange(view: BoardView, change: StreamChange): BoardView {
   const { board } = view;
-  if (!isAfter(change.position, board.position)) return view;
+  if (!isBoardChange(change) || !isAfter(change.position, board.position)) return view;
   const knownAt = later(view.knownAt, change.occurredAt);
   const next = { ...board, position: change.position };
   if (change.kind === 'board-changed') return { board: { ...next, workersOnline: change.workersOnline }, knownAt };
   return { board: { ...next, cards: withCard(board.cards, change.card) }, knownAt };
+}
+
+function isBoardChange(change: StreamChange): change is BoardChange {
+  return change.kind === 'card-changed' || change.kind === 'board-changed';
 }
 
 export function cardsIn(board: Board, column: BoardColumn): BoardCard[] {
@@ -43,6 +47,6 @@ function withCard(cards: readonly BoardCard[], card: BoardCard): BoardCard[] {
   return cards.map((known, index) => (index === at ? card : known));
 }
 
-function later(first: string, second: string): string {
+export function later(first: string, second: string): string {
   return Date.parse(second) > Date.parse(first) ? second : first;
 }

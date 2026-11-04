@@ -31,6 +31,15 @@ export type AdmissionState = Schemas['AdmissionState'];
 export type TaskEnd = Schemas['TaskEnd'];
 export type AttemptOutcome = Schemas['AttemptOutcome'];
 export type AttemptOutcomeKind = AttemptOutcome['kind'];
+export type AgentSession = Schemas['AgentSession'];
+export type AgentSessionView = Schemas['AgentSessionView'];
+export type AgentSessionPage = Schemas['AgentSessionPage'];
+export type Turn = Schemas['Turn'];
+export type TurnPage = Schemas['TurnPage'];
+export type TurnState = Schemas['TurnState'];
+export type TurnOutcome = Schemas['TurnOutcome'];
+export type HarnessFailure = Schemas['HarnessFailure'];
+export type TurnAuthor = Schemas['TurnAuthor'];
 
 export interface Project {
   readonly projectId: string;
@@ -62,11 +71,38 @@ export interface WorkersChange {
 
 export type BoardChange = CardChange | WorkersChange;
 
+export interface SessionChange {
+  readonly kind: 'agent-session-changed';
+  readonly position: string;
+  readonly occurredAt: string;
+  readonly session: AgentSession;
+}
+
+export interface TurnChange {
+  readonly kind: 'turn-changed';
+  readonly position: string;
+  readonly occurredAt: string;
+  readonly sessionId: string;
+  readonly turn: Turn;
+}
+
+// Every stamped event the stream delivers; each feed applies its own.
+export type StreamChange = BoardChange | SessionChange | TurnChange;
+
 // opened: the stream is connected; interrupted: the browser reconnects;
 // failed: it closed for good, as after an error status.
-export type StreamSignal = 'opened' | 'interrupted' | 'failed' | 'resync' | 'stream-ended';
+export type StreamSignal = 'opened' | 'interrupted' | 'failed' | 'stream-ended';
 
-export type BoardStreamEvent = BoardChange | { readonly [K in StreamSignal]: { readonly kind: K } }[StreamSignal];
+// A read of the view again; for a frame the SPA could not read, it names
+// the frame's event, so a feed the frame never concerns can drop it.
+export interface Resync {
+  readonly kind: 'resync';
+  readonly unreadable?: SessionEventName;
+}
+
+export type SessionEventName = 'agent-session-changed' | 'turn-changed';
+
+export type BoardStreamEvent = StreamChange | Resync | { readonly [K in StreamSignal]: { readonly kind: K } }[StreamSignal];
 
 export type BoardStreamListener = (event: BoardStreamEvent) => void;
 
@@ -74,6 +110,10 @@ export interface BoardGateway {
   readonly listProjects: () => Promise<ReadResult<readonly Project[]>>;
   readonly readBoard: (projectId: string) => Promise<ReadResult<Board>>;
   readonly readTaskDetail: (projectId: string, runId: string) => Promise<ReadResult<TaskDetail>>;
+  readonly listAgentSessions: (projectId: string, runId: string) => Promise<ReadResult<readonly AgentSession[]>>;
+  readonly readAgentSession: (projectId: string, sessionId: string) => Promise<ReadResult<AgentSessionView>>;
+  // One page of the session's turns above the cursor, 0 for the first.
+  readonly listAgentSessionTurns: (projectId: string, sessionId: string, after: number) => Promise<ReadResult<TurnPage>>;
   // Opens the project's event stream after a position; returns its close.
   readonly openEvents: (projectId: string, after: string, listener: BoardStreamListener) => () => void;
 }
