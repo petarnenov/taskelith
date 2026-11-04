@@ -58,21 +58,21 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
     const session = await gateway.readAgentSession(projectId, sessionId);
     if (session.kind !== 'read') return session;
     const before = Math.max(0, session.value.session.lastTurnPosition - TURN_WINDOW);
-    const pages = await readTurnPages(before);
+    const pages = await readTurnPages(before, Number.POSITIVE_INFINITY);
     if (pages.kind !== 'read') return pages;
     return { kind: 'read', value: viewOf(session.value, pages.value, before) };
   }
 
-  // The turns above the cursor, every page: the session may have gained
-  // turns between the two reads.
-  async function readTurnPages(after: number): Promise<ReadResult<readonly TurnPage[]>> {
+  // The pages above the cursor, each short of 100 turns followed by its
+  // next cursor until it reaches `until`: a window, or every later turn.
+  async function readTurnPages(after: number, until: number): Promise<ReadResult<readonly TurnPage[]>> {
     const pages: TurnPage[] = [];
     let cursor = after;
     do {
       const page = await gateway.listAgentSessionTurns(projectId, sessionId, cursor);
       if (page.kind !== 'read') return page;
       pages.push(page.value);
-      if (page.value.next === undefined) return { kind: 'read', value: pages };
+      if (page.value.next === undefined || page.value.next >= until) return { kind: 'read', value: pages };
       if (page.value.next <= cursor || pages.length >= MAX_TURN_PAGES) return { kind: 'unavailable' };
       cursor = page.value.next;
     } while (true);
@@ -103,15 +103,15 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
     const after = Math.max(0, before - TURN_WINDOW);
     earlier = READING;
     showSession();
-    void gateway.listAgentSessionTurns(projectId, sessionId, after).then((page) => {
+    void readTurnPages(after, before).then((pages) => {
       if (stopped || shown?.snapshot !== snapshot) return;
-      if (page.kind !== 'read') {
-        earlier = { status: 'failed', failure: page };
+      if (pages.kind !== 'read') {
+        earlier = { status: 'failed', failure: pages };
         showSession();
         return;
       }
       earlier = READY;
-      feed.amend((view) => withEarlierTurns(view, page.value, after));
+      feed.amend((view) => withEarlierTurns(view, pages.value, after));
     });
   }
 

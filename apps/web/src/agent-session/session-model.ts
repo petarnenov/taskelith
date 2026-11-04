@@ -44,9 +44,9 @@ export function applySessionChange(view: SessionTimelineView, change: StreamChan
 
 // Turns of an earlier window join the known ones; a turn the stream already
 // showed keeps its newer state, and the cursor moves down to the window's.
-export function withEarlierTurns(view: SessionTimelineView, page: TurnPage, before: number): SessionTimelineView {
+export function withEarlierTurns(view: SessionTimelineView, pages: readonly TurnPage[], before: number): SessionTimelineView {
   const known = new Set(view.turns.map((turn) => turn.turnId));
-  const earlier = page.turns.filter((turn) => !known.has(turn.turnId));
+  const earlier = pages.flatMap((page) => page.turns).filter((turn) => !known.has(turn.turnId));
   return { ...view, turns: inOrder([...view.turns, ...earlier]), before };
 }
 
