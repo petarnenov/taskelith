@@ -1,0 +1,1 @@
+{"change": "build-agent-session-composer", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1a5c3-dbd3-7581-8f0e-c0fc44c7e9fd", "counts": {"critical": 0, "high": 4, "medium": 7, "low": 0}}
