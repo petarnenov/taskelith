@@ -266,6 +266,13 @@ describe('the shown workers', () => {
     expect(within(screen.getByRole('main')).queryAllByRole('link')).toEqual([]);
   });
 
+  it('lays the cards out in the responsive grid of the proof of concept', async () => {
+    openWorkers(workersGatewayWith(read(workersView({ workers: [worker(), worker({ workerId: 'worker-2' })] }))));
+    const region = await shownWorkers();
+    expect(region.getAllByRole('article')).toHaveLength(2);
+    expect(screen.getByRole('region', { name: 'Workers' }).classList.contains('mantine-SimpleGrid-root')).toBe(true);
+  });
+
   it('breaks a long hostname and a long worker identifier at phone width', async () => {
     const hostname = 'h'.repeat(64);
     const view = workersView({ workers: [worker({ workerId: 'w'.repeat(128), host: { platform: 'linux', architecture: 'x64', hostname } })] });
