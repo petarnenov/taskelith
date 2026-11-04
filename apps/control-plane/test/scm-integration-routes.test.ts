@@ -13,7 +13,7 @@ import {
 import { ControlPlaneApi, createApiServer, scmIntegrationServices, singlePlugin, type ApiServices, type ScmIntegrationPorts } from '@taskelith/control-plane';
 import {
   InMemoryScmIntegrationAudit, InMemoryScmIntegrations, ScmSecrets, normalizeOrigin,
-  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries,
+  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries, type SourceControlPlugin,
 } from '@taskelith/integrations';
 import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type Instant } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -49,7 +49,7 @@ interface Answer {
 
 type Headers = Record<string, string>;
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, plugin: SourceControlPlugin = githubSourceControlPlugin()) {
   const store = new InMemoryAccessStore();
   const secrets = new NodeSecrets();
   const clock = CLOCK;
@@ -63,7 +63,7 @@ async function fixture(t: TestContext) {
   const deliveries = { record: async (_id: string, event: { deliveryId: string }) => { recorded.push(event.deliveryId); return ok<DeliveryRecording>('recorded'); } };
   const sink = new InMemoryLogSink();
   const audit = new InMemoryScmIntegrationAudit();
-  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(audit), deliveries), new Logger(sink, clock));
+  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(audit), deliveries, plugin), new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), scmIntegrations: scm.integrations, scmWebhooks: scm.webhooks,
@@ -102,8 +102,9 @@ async function browser(base: string, loginName: string): Promise<Headers> {
 
 const holdsNoSecret = (text: string) => ![WEBHOOK_SECRET, ROTATED_SECRET, PEM_LINE].some((secret) => text.includes(secret));
 
-function githubPorts(store: ScmIntegrations, deliveries: ScmWebhookDeliveries): ScmIntegrationPorts {
-  const plugin = githubSourceControlPlugin();
+function githubPorts(
+  store: ScmIntegrations, deliveries: ScmWebhookDeliveries, plugin: SourceControlPlugin = githubSourceControlPlugin(),
+): ScmIntegrationPorts {
   return { store, deliveries, plugin, plugins: singlePlugin(plugin), clock: CLOCK };
 }
 
@@ -326,4 +327,35 @@ test('a create or update handler without a principal fails as internal and never
       ['internal', 'an SCM integration command reached its handler without a principal'], operationId);
   }
   assert.deepEqual(reached, []);
+});
+
+// The GitHub plugin, whose secret check throws quoting it once `broken`.
+function breakableGithub() {
+  const github = githubSourceControlPlugin();
+  const state = { broken: false };
+  const quoting = (secret: string): never => { throw new Error(`refused ${secret}`); };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    checkSecret: (name, secret) => (state.broken ? quoting(secret) : github.checkSecret(name, secret)),
+  };
+  return { plugin, state };
+}
+
+test('a plugin check that throws answers 500 to a create or update, with no value in the answer, the log, or the audit', async (t) => {
+  const { plugin, state } = breakableGithub();
+  const { call, created, sink, audit } = await fixture(t, plugin);
+  const integrationId = await created();
+  state.broken = true;
+  const answers = [
+    await call('POST', '/scm-integrations', BEARER, CREATION),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, secrets: { 'webhook-secret': ROTATED_SECRET } }),
+  ];
+  assert.deepEqual(answers.map((answer) => answer.status), [500, 500]);
+  assert.ok(answers.every((answer) => holdsNoSecret(answer.text) && !answer.text.includes('refused')));
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map((record) => record.fields.operation), ['checkSecret', 'checkSecret']);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  const trail = value(await audit.trail());
+  assert.deepEqual(trail.map((event) => event.kind), ['created']);
+  assert.ok(holdsNoSecret(JSON.stringify(trail)));
 });

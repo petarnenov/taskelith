@@ -11,6 +11,7 @@ import {
   type ScmIntegrationCreation,
   type ScmIntegrationId,
   type ScmIntegrationUpdate,
+  type ScmPluginDefect,
   type SourceControlPlugin,
   type WebhookDelivery,
   type WebhookVerifier,
@@ -75,7 +76,9 @@ function setup(plugin: ExamplePlugin = new ExamplePlugin()) {
   const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
   const ids = { next: () => value(parseIdentifier('ScmIntegrationId', `i${String(++minted).padStart(32, '0')}`)) as ScmIntegrationId };
   const clock = { now: () => AT };
-  return { store, audit, plugin, plugins, service: new ScmIntegrationService({ store, plugins, ids, clock }) };
+  const defects: ScmPluginDefect[] = [];
+  const reported = { defect: (defect: ScmPluginDefect) => { defects.push(defect); } };
+  return { store, audit, plugin, plugins, defects, service: new ScmIntegrationService({ store, plugins, ids, clock, defects: reported }) };
 }
 
 const CREATION: ScmIntegrationCreation = Object.freeze({
@@ -267,4 +270,43 @@ test('a refused creation or update is not audited', async () => {
   failed(await service.update(`i${'f'.repeat(32)}`, { expectedRevision: 1, label: 'Missing' }, INVOCATION));
   failed(await service.update(created.integrationId, { expectedRevision: 2, label: 'Stale' }, INVOCATION));
   assert.deepEqual(value(await audit.trail()).map((event) => [event.kind, event.revision]), [['created', 1]]);
+});
+
+const QUOTED = 'synthetic-quoted-by-the-plugin';
+const MISBEHAVIOURS = ['throws', 'throwing-ok', 'throwing-error', 'no-envelope'] as const;
+type Misbehaviour = (typeof MISBEHAVIOURS)[number];
+
+// An answer of a check outside the result contract, each quoting a value.
+function misbehavingAnswer(misbehaviour: Misbehaviour): unknown {
+  switch (misbehaviour) {
+    case 'throws': throw new Error(QUOTED);
+    case 'throwing-ok': return { get ok(): boolean { throw new Error(QUOTED); } };
+    case 'throwing-error': return { ok: false, get error(): unknown { throw new Error(QUOTED); } };
+    case 'no-envelope': return QUOTED;
+  }
+}
+
+function misbehave(plugin: ExamplePlugin, check: 'checkSettings' | 'checkSecret', misbehaviour: Misbehaviour): void {
+  Object.defineProperty(plugin, check, { value: () => misbehavingAnswer(misbehaviour) });
+}
+
+test('a plugin check that throws or breaks its envelope fails a create or update as internal, quoting nothing', async () => {
+  for (const check of ['checkSettings', 'checkSecret'] as const) {
+    for (const misbehaviour of MISBEHAVIOURS) {
+      const named = `${check} ${misbehaviour}`;
+      const { service, store, audit, plugin, defects } = setup();
+      const { integrationId } = value(await service.create(CREATION, INVOCATION));
+      misbehave(plugin, check, misbehaviour);
+      const change = { expectedRevision: 1, settings: SETTINGS, secrets: { 'webhook-secret': OTHER_SECRET } };
+      const refusals = [failed(await service.create(CREATION, INVOCATION)), failed(await service.update(integrationId, change, INVOCATION))];
+      const sanitized = ['internal', 'the SCM plugin answered outside its contract', {}];
+      assert.deepEqual(refusals.map(({ code, message, details }) => [code, message, details]), [sanitized, sanitized], named);
+      assert.deepEqual(defects.map((defect) => [defect.pluginId, defect.operation]), [['scm-example', check], ['scm-example', check]], named);
+      assert.equal(defects[1]!.integrationId, integrationId, named);
+      assert.deepEqual(value(await audit.trail()).map((event) => event.kind), ['created'], named);
+      assert.equal(value(await store.page(undefined, 100)).length, 1, named);
+      assert.equal(value(await store.get(integrationId))?.revision, 1, named);
+      assert.ok(![refusals, defects, value(await audit.trail())].some((held) => inspect(held).includes(QUOTED)), named);
+    }
+  }
 });
