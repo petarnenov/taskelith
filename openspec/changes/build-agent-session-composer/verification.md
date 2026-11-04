@@ -71,6 +71,12 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
   - Finding 9: 3 fail, the key sent again under another operator, from a composer that left, and after a sign-out.
   - Finding 10: 1 fails, the older snapshot drops turn-3.
   - Finding 11: 5 fail, `clearAll` answering nothing and the sign-in page saying nothing of the turn after the expiry and after the sign-out.
+- Pass 2 fixes (`fb-31b-p2-<n>.log`, `<n>` the finding): each log is the run of the finding's test commit against the sources before its fix commit; findings 4 and 5 change only records.
+  - Finding 1: 1 fails, the notice reverts to "Not sent" once the renewed session read is answered, while the resend is held.
+  - Finding 2: 1 fails, the submission stays `pending` after the session read found no session.
+  - Finding 3: 3 fail, the first-visit text without the note (twice, the second test going on to the later sign-out) and `dropped` false after a StrictMode mount under a signed-out view.
+  - Finding 6 (a test change): a mutation of `client.ts` that logs the token inside an `Error` passes the wiring test's old assertion and fails the new one, both runs in the log; the mutation was restored with `git checkout`.
+  - Finding 7: 2 fail, the focus on the disabled Send button after the send and on `body` after the retry.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -126,8 +132,33 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - After the fixes the whole `apps/web` suite passes: 710 tests in 26 files (`coverage-31b-p1.log`), 99.03% statements, 97.35% branches, 100% functions, and 100% lines; `tsc` of `apps/web/tsconfig.tooling.json`, `npm run verify:comments`, and `npm run openspec -- validate build-agent-session-composer --strict` pass.
 - `make verify` of the fixed, recorded, and routed tree (`a1e7157c`, tree `7d85a035`), `verify-31b-p1.log` in the session scratchpad: passed at the first run, profile full, no rerun of any suite, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 710 tests in 26 files, all passing, with 100% lines. The generated part above records it.
 
+### Pass 2
+
+- Reviewer B `claude claude-fable-5-1#medium`, run by the worker session on `743f4661..0457e5aa` with `env -u JEV_MAF_LAB make review CHANGE=build-agent-session-composer PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' ...`: `make review` printed "recommends effort high; the authorized medium applies (policy version 11)" and ran `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit`; Claude Code reported model `claude-fable-5-1` and session `3ef0365a-7e28-4004-b692-3f12458b3225`. The worktree snapshot was the same before and after the run (`snap-31b-p2-before.txt`, `snap-31b-p2-after.txt`). The prompt, the log, the command output, and the report are in the session scratchpad (`review-31b-p2.md`, `review-31b-p2.log`, `review-31b-p2.out`, `review-31b-p2-report.md`).
+- Findings: Critical 0, High 0, Medium 1, Low 6, as in `passes.jsonl`; one line per finding in `findings.jsonl`. Every claim was checked against the code before its fix and held; none was declined. The reviewer's category "accessibility" for finding 7 is not in `categories.txt`; it is recorded as `contract-drift`, as pass 1 finding 3 was: the code against a product UI design rule that the design claimed to meet, here keyboard operation: the product UI spec keeps the focus where the operator works (the task detail's Drawer returns it, `openspec/specs/product-ui/spec.md` "return the focus"), and the composer's form claimed the same rules. Finding 5, "evidence-mismatch and docs", is one line under `evidence-mismatch`, the count being the claim that differed; its proposal part is fixed in the same commit. Finding 6, "redaction (test strength)", is under `redaction`. The reviewer checked the pass 1 fixes: fixes 1 to 7 and 9 to 11 correct and complete, fix 8 correct in intent and complete once finding 1 is fixed.
+  1. Medium, `useComposer.ts`: `retry` passed the shown submission into `deliver`, so on the next CSRF refusal `spend` wrote its `state` into `sessionStorage` and merged the stale state back, unblocking the composer while the resend was in flight.
+  2. Low, `useComposer.ts`: an `anonymous` session read after a CSRF refusal left the submission `pending` and the composer blocked when the shell left it mounted.
+  3. Low, `TurnRecordsProvider.tsx` and `SignInPage.tsx`: records dropped under the `none` notice gave no "may not have been sent" line, and a second `clearAll` under `StrictMode` reset `dropped`.
+  4. Low, spec delta: the scenario "Sign-in changes during the session read" kept the key for a signed-out shell, against decision 5.
+  5. Low, `verification.md` and `proposal.md`: five new test files where there are six; `signedInGeneration` and `tokenRefreshed` unnamed.
+  6. Low, `composer.test.tsx`: `JSON.stringify` of the console arguments missed an `Error`'s `message` and `stack`.
+  7. Low, `Composer.tsx`: after Send the disabled button lost the keyboard focus to `body`, and nothing returned it.
+
+### Pass 2 fixes
+
+Pass 3 (`agy gemini-4-argon-medium#medium`) reviews these fixes, since pass 2 found a Medium. Fail-before logs are in the session scratchpad (`fb-31b-p2-<n>.log`, see "Fail-before"); each ran the new tests of the finding's test commit against the sources before the fix, and the whole `apps/web` suite passed after each fix.
+
+- Finding 1 (`7080b1ae`, test `c0cc94ef`): `retry` sends the submission's plain `TurnRecord` through `recordOf` of `composer-model.ts`, and `spend` merges only `tokenRefreshed` into the shown submission; the page test holds the renewed session read and then the resend, and checks the "Sending" notice, the disabled field, no Retry button, and the stored record's keys `key`, `sentAt`, `text`, `tokenRefreshed` (design, decision 3).
+- Finding 2 (`154c8db5`, test `73d75d38`): `answerOf` settles an `anonymous` read as `session-changed`, like another sign-in or an unmount, so it always answers; the hook test under the providers reads no session after the refusal and expects the failed state with the composer unblocked (design, decision 6).
+- Finding 3 (`a4d111a1`, test `008b0b16`): the first-visit text of `SignInPage` adds the note; the provider accumulates the drop while the shell stays signed out, `setDropped((was) => was || store.clearAll())`, and, beyond the suggestion, forgets it on the next sign-in, so a later sign-out that drops nothing says nothing of a turn (the existing test "says nothing of a turn..." covers one sign-out only). In the app the provider mounts under the `checking` view, so the move to `signed-out` runs the effect once; the StrictMode test mounts it under a view already signed out, where the effect runs twice (design, decision 5).
+- Finding 4 (`9d0768e6`): the scenario names "no session" among the reads and keeps the key unless the shell is signed out, which drops the records of every session; `npm run openspec -- validate build-agent-session-composer --strict` passes.
+- Finding 5 (`9d0768e6`): the self-check names the six test files; the proposal names `signedInGeneration` on the `Session` context and `tokenRefreshed` in the record.
+- Finding 6 (`04e5236d`): the wiring test maps each console argument through its `stack` or `message` when it is an `Error` before the search; `fb-31b-p2-6.log` shows the mutation that the old assertion let pass.
+- Finding 7 (`df015a0b`, test `f27728b6`): Mantine's `Button` sets `disabled` under `loading` too, so a loading button would lose the focus the same way; the composer remembers a send or retry from its own buttons and focuses the field once `sending` ends and no block holds (a `denied` notice keeps the block, and the focus is not moved). Retry gets the same, since a recorded turn removes the Retry button that held the focus (design, decision 10).
+- After the fixes the whole `apps/web` suite passes: 717 tests in 26 files (`coverage-31b-p2.log`), 99.03% statements, 97.37% branches, 100% functions, and 100% lines; `Composer.tsx` 98.57 / 96.36 / 100 / 100 (the unreachable submit of a disabled form and the singular of "character", as before), `useComposer.ts` 100 / 91.17 / 100 / 100 (the unmounted guard of `spend` and a retry of an unknown key, as before), `TurnRecordsProvider.tsx` 93.75 / 83.33 / 100 / 100 (the missing-provider throw, as before), `composer-model.ts` and `SignInPage.tsx` at 100 on every metric; `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `make findings ARGS="validate"`, and `npm run openspec -- validate build-agent-session-composer --strict` pass.
+
 ## Remaining gates
 
-- Independent review passes (task 4.1) and the architect check by the coordinator (Niki) of any fix no later pass reviews (task 4.2).
+- Pass 3 (task 4.1) over the pass 2 fixes, and the architect check by the coordinator (Niki) of any fix no later pass reviews (task 4.2).
 - Archive (task 4.3).
 - Integration into dev by the coordinator (single pull request).
