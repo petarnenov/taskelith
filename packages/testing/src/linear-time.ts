@@ -3,7 +3,9 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 const RUN_LENGTH = 60_000;
-const MAX_RUN_LENGTH = 2 ** 24;
+// V8's regular expression stack overflows near 2^23 characters of one run,
+// so the long run stays at 2^22 or below.
+const MAX_RUN_LENGTH = 2 ** 22;
 const LENGTH_RATIO = 4;
 const SAMPLES = 5;
 const NOISE_FLOOR_MS = 20;
@@ -103,7 +105,7 @@ function runTime(run: string, samples: readonly number[]): RunTime {
 }
 
 // Under the floor, accounting and compilation make a ratio noise. Only the
-// longest runs can stay under it, where quadratic work would take hours.
+// longest runs can stay under it, where quadratic work would take minutes.
 function flooredRatio(short: RunTime, long: RunTime): number {
   return Math.max(long.medianMs, NOISE_FLOOR_MS) / Math.max(short.medianMs, NOISE_FLOOR_MS);
 }

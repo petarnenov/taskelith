@@ -55,6 +55,12 @@ test('runs double until the short run takes the 20 ms floor', () => {
   assert.deepEqual([...new Set(runs.map((run) => run.length))], [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 128_000]);
 });
 
+test('runs stop doubling before the long run passes 2^22 characters', () => {
+  const runs: string[] = [];
+  assertLinearOnRuns(() => undefined, ['a'], { length: 2 ** 20, timeRun: timesPerCharacter(0, runs) });
+  assert.equal(Math.max(...runs.map((run) => run.length)), 2 ** 22);
+});
+
 test('a short median under the floor doubles the runs again', () => {
   const readings = [25, ...alternate([15, 15, 15, 25, 25], fiveTimes(60)), ...sampleReadings(30, fiveTimes(120))];
   const runs: string[] = [];
@@ -66,13 +72,13 @@ test('a short median under the floor doubles the runs again', () => {
 const longestRunReadings = (long: number) => alternate(fiveTimes(1), fiveTimes(long));
 
 test('on the longest runs, medians under the floor count as the floor', () => {
-  assertLinearOnRuns(() => undefined, ['a'], { length: 2 ** 24, timeRun: scriptedTimer(longestRunReadings(79)) });
+  assertLinearOnRuns(() => undefined, ['a'], { length: 2 ** 22, timeRun: scriptedTimer(longestRunReadings(79)) });
 });
 
 test('on the longest runs, a long median of ten floors fails', () => {
-  assert.throws(() => assertLinearOnRuns(() => undefined, ['a'], { length: 2 ** 24, timeRun: scriptedTimer(longestRunReadings(200)) }), {
+  assert.throws(() => assertLinearOnRuns(() => undefined, ['a'], { length: 2 ** 22, timeRun: scriptedTimer(longestRunReadings(200)) }), {
     name: 'AssertionError',
-    message: '"a" repeated grew 2.5 times faster than its length in CPU time: 1.0 ms at 4194304 and 200.0 ms at 16777216 characters',
+    message: '"a" repeated grew 2.5 times faster than its length in CPU time: 1.0 ms at 1048576 and 200.0 ms at 4194304 characters',
   });
 });
 
