@@ -62,9 +62,9 @@ export function startLiveFeed<View>({ source, openEvents, clock, show }: LiveFee
   let liveness: Liveness = 'connecting';
   let reads = 0;
   let snapshot = 0;
-  // Changes that arrive while a read runs, applied over its snapshot;
-  // undefined while no read runs, so nothing is kept between reads.
-  let duringRead: StreamChange[] | undefined;
+  // Changes and amendments that arrive while a read runs, applied over its
+  // snapshot; undefined while no read runs, so nothing is kept between reads.
+  let duringRead: ((view: View) => View)[] | undefined;
   // Resyncs since the stream last delivered a change.
   let resyncs = 0;
   let closeStream = () => {};
@@ -87,7 +87,7 @@ export function startLiveFeed<View>({ source, openEvents, clock, show }: LiveFee
       show({ status: 'failed', failure: result });
       return false;
     }
-    view = changes.reduce(source.apply, result.value);
+    view = changes.reduce((known, apply) => apply(known), result.value);
     snapshot = thisRead;
     showView();
     return true;
@@ -135,7 +135,7 @@ export function startLiveFeed<View>({ source, openEvents, clock, show }: LiveFee
         resync();
         return;
       }
-      duringRead.push(change);
+      duringRead.push((known) => source.apply(known, change));
     }
     const next = source.apply(view, change);
     if (next === view) return;
@@ -158,8 +158,11 @@ export function startLiveFeed<View>({ source, openEvents, clock, show }: LiveFee
     } else receiveChange(event);
   }
 
+  // An amendment made during a read is kept over the read's snapshot too,
+  // which may be older than what the amendment answered.
   function amend(change: (shown: View) => View): void {
     if (stopped || view === undefined) return;
+    duringRead?.push(change);
     view = change(view);
     showView();
   }
