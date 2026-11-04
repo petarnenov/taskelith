@@ -47,8 +47,7 @@ export class FleetApi {
 
   // The one answer that carries the secret (wire contracts section 7).
   async issueEnrollmentToken({ body }: ApiRequest): Promise<Result<Wire<'IssuedEnrollmentToken'>>> {
-    const issued = await this.#operations.tokens.issue(body as Wire<'HostConstraints'>);
-    return issued.ok ? ok(issuedBody(issued.value)) : issued;
+    return issuedAnswer(await this.#operations.tokens.issue(body as Wire<'HostConstraints'>));
   }
 
   async revokeEnrollmentToken({ parameters }: ApiRequest): Promise<Result<void>> {
@@ -59,9 +58,17 @@ export class FleetApi {
   async rotateEnrollmentToken({ parameters }: ApiRequest): Promise<Result<Wire<'IssuedEnrollmentToken'>>> {
     const tokenId = tokenIdOf(parameters);
     if (!tokenId.ok) return tokenId;
-    const rotated = await this.#operations.tokens.rotate(tokenId.value);
-    return rotated.ok ? ok(issuedBody(rotated.value)) : rotated;
+    return issuedAnswer(await this.#operations.tokens.rotate(tokenId.value));
   }
+}
+
+// A minted identifier or hash that is stored is the server's fault, not a
+// client conflict: the 500 names nothing of the token that was not stored.
+const TOKEN_NOT_STORED = failure('internal', 'the enrollment token could not be stored');
+
+function issuedAnswer(result: Result<IssuedEnrollmentToken>): Result<Wire<'IssuedEnrollmentToken'>> {
+  if (result.ok) return ok(issuedBody(result.value));
+  return result.error.code === 'conflict' ? err(TOKEN_NOT_STORED) : result;
 }
 
 function workersBody(snapshot: WorkerAdmissionSnapshot): Wire<'WorkersView'> {
