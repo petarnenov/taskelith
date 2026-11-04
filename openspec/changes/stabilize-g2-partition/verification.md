@@ -17,6 +17,7 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `e64dfd03` `test: release the held process of the broker partition scenario once the worker is online again` (pass 2 fixes in the test, and the pass 2 line of `passes.jsonl`).
 - `dc80c346` `docs: word the offline exit scenario as asserted and correct the stabilize g2 partition records` (pass 2 record fixes).
 - `3d265a7b` `docs: record the pass 2 review of the stabilize g2 partition change` (`findings.jsonl`).
+- `5ec03ed7` `docs: record the pass 2 fix round of the stabilize g2 partition change`.
 - The commit of the pass 2 checks follows; later review records and the archive commit follow it.
 
 ## Environment
@@ -77,6 +78,8 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 - Run 1, `env -u NODE_ENV make verify` on `fcc8afd5` (tree `94939924`, clean), profile full (`sg2p/verify-1.log`; `sg2p/verify-1.make.log` is the same log without the exit line added by the run script, which `make record` read): passed, `make verify: passed, profile full, tree 94939924a9ef76a0ec81790d888995731b7be69a; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun. Both while-running partition scenarios passed in it.
 - `env -u NODE_ENV make verify-linux-g2-scenarios` on the same tree, through the Linux cgroup supervisor (`sg2p/g2-scenarios-1.log`): `tests 18, pass 17, fail 0, skipped 1` (g, macOS only); cancellation races, worker to NATS, control plane to PostgreSQL, and stale generations passed; exit 0.
 - Run 2, pass 1 fix round, `env -u NODE_ENV make verify` on `8bbcca37` (tree `8f1c56d9`, clean), profile full (`sg2p/verify-2.make.log`, which `make record` read): passed, `make verify: passed, profile full, tree 8f1c56d94f69dc006fc59123610e41e57ec0cfab; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
+- Run 3, pass 2 fix round, `env -u NODE_ENV make verify` on `5ec03ed7` (tree `f5fc4db1`, clean), profile full (`sg2p/verify-3.make.log`): failed only with the known flake secrets linear-time, `✖ value redaction takes linear time on long runs`, `AssertionError [ERR_ASSERTION]: "a b" repeated took 226 ms` (`packages/adapters/secrets/test/secrets.test.ts:220`); tests 4880, pass 4832, fail 1, skipped 47. Both while-running partition scenarios passed in it.
+- Run 4, its one rerun on the same tree (`sg2p/verify-4.make.log`, which `make record` read): passed, `make verify: passed, profile full, tree f5fc4db16643c08e2771ba5d25130742fe532cb7; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 93.00% branches, 98.84% functions; the web suite `Tests  717 passed (717)`. Both while-running partition scenarios passed in it.
 
 ### Route
 
@@ -87,7 +90,7 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8f1c56d94f69dc006fc59123610e41e57ec0cfab`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `f5fc4db16643c08e2771ba5d25130742fe532cb7`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 93.00% branches, 98.84% functions.
 - `npm run openspec -- validate stabilize-g2-partition --strict`: passed, `Change 'stabilize-g2-partition' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`.
 - Spec diff against the merge base `3d40034c1262` with `origin/dev`: no change under `openspec/specs`.
@@ -96,6 +99,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a750-6d97-78b0-90f6-5ada4c73e952` | 0 | 0 | 1 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `4331c26b-17f0-4231-89b9-1e231f5532e8` | 0 | 0 | 1 | 5 |
 <!-- make record: end -->
 
 ## Independent review
