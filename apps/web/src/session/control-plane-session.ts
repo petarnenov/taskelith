@@ -9,9 +9,15 @@ const UNAVAILABLE = { kind: 'unavailable' } as const;
 // The anonymous session or its token is gone; a fresh read replaces it.
 const FORM_EXPIRED = { kind: 'rejected', reason: 'form-expired' } as const;
 
+// The session gateway with the getter of the CSRF token the board gateway's
+// commands send; the token stays in the keeper, read at send time only.
+export interface ControlPlaneSessionGateway extends SessionGateway {
+  readonly csrfToken: () => string | undefined;
+}
+
 // The session operations readSession, logIn, and logOut of the control
 // plane. The gateway keeps the CSRF token of the latest session answer.
-export function createSessionGateway(send?: typeof fetch): SessionGateway {
+export function createSessionGateway(send?: typeof fetch): ControlPlaneSessionGateway {
   const tokens = createTokenKeeper();
   const request: ApiRequest = createApiClient({ csrfToken: tokens.current, fetch: send });
 
@@ -51,7 +57,7 @@ export function createSessionGateway(send?: typeof fetch): SessionGateway {
     return { kind: 'logged-out' };
   }
 
-  return { read, logIn, logOut };
+  return { read, logIn, logOut, csrfToken: tokens.current };
 }
 
 interface TrackedAnswer {

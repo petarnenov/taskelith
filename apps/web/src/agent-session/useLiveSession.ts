@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Turn } from '../board/board';
 import { useBoardServices } from '../board/BoardServices';
 import { startSessionFeed, type SessionFeed, type SessionFeedState } from './session-feed';
 
@@ -6,6 +7,7 @@ export interface LiveSession {
   readonly state: SessionFeedState;
   readonly retry: () => void;
   readonly loadEarlier: () => void;
+  readonly showTurn: (turn: Turn) => void;
 }
 
 const LOADING: SessionFeedState = { status: 'loading' };
@@ -34,6 +36,7 @@ export function useLiveSession(projectId: string, sessionId: string): LiveSessio
 
   const retry = useCallback(() => setLoads((count) => count + 1), []);
   const loadEarlier = useCallback(() => feed.current?.loadEarlier(), []);
+  const showTurn = useCallback((turn: Turn) => feed.current?.showTurn(turn), []);
   const state = shown.key === key ? shown.state : LOADING;
-  return useMemo(() => ({ state, retry, loadEarlier }), [state, retry, loadEarlier]);
+  return useMemo(() => ({ state, retry, loadEarlier, showTurn }), [state, retry, loadEarlier, showTurn]);
 }

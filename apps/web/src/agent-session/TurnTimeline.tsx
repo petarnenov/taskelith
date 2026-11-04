@@ -39,7 +39,7 @@ function TurnTitle({ turn }: { readonly turn: Turn }) {
 
 // A turn's lines, each its own paragraph, wrap at phone width (D17: no
 // style override keeps the newlines).
-function TurnText({ text }: { readonly text: string }) {
+export function TurnText({ text }: { readonly text: string }) {
   return (
     <Stack gap={2}>
       {text.split('\n').map((line, index) => (

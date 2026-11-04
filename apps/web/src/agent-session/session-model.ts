@@ -66,6 +66,13 @@ export function withEarlierTurns(view: SessionTimelineView, pages: readonly Turn
   return { ...view, turns, before, freshness: { ...view.freshness, turns: known } };
 }
 
+// The turn a submission answer carries shows at once (decision Q10); a
+// known turn keeps its state, and the stream's next event for it applies.
+export function withSubmittedTurn(view: SessionTimelineView, turn: Turn): SessionTimelineView {
+  if (view.freshness.turns[turn.turnId] !== undefined) return view;
+  return { ...view, turns: withTurn(view.turns, turn) };
+}
+
 function isFresher(position: string, than: string | undefined): boolean {
   return than === undefined || isAfter(position, than);
 }

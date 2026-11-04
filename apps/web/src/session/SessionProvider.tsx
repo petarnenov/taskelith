@@ -19,6 +19,9 @@ export interface Session {
   // Called as a request starts; the function it returns ends that session
   // after a 401, unless a newer view showed since, as after a new login.
   readonly expiryOfRequest: () => () => void;
+  // Reads the session again, as after a request refused for a stale CSRF
+  // token; a session that ended shows the sign-in page.
+  readonly refresh: () => Promise<void>;
 }
 
 // The session is read again this long after its end, so that a client
@@ -85,9 +88,17 @@ export function SessionProvider({ gateway, clock, children }: SessionProviderPro
     };
   }, [currentView, settled, sinceNow]);
 
+  // An unreachable control plane changes nothing: the request that follows
+  // tells whether the session still stands.
+  const refresh = useCallback(async () => {
+    const showIfUnchanged = sinceNow();
+    const read = await settled.read();
+    if (read.kind !== 'unavailable') showIfUnchanged(viewOf(read, 'expired'));
+  }, [settled, sinceNow]);
+
   const session = useMemo(
-    () => ({ view, retry, logIn, logOut, expiryOfRequest }),
-    [view, retry, logIn, logOut, expiryOfRequest],
+    () => ({ view, retry, logIn, logOut, expiryOfRequest, refresh }),
+    [view, retry, logIn, logOut, expiryOfRequest, refresh],
   );
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }

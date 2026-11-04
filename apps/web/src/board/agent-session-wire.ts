@@ -1,4 +1,13 @@
-import type { AgentSession, AgentSessionPage, AgentSessionView, SessionChange, Turn, TurnChange, TurnPage } from './board';
+import type {
+  AgentSession,
+  AgentSessionPage,
+  AgentSessionView,
+  SessionChange,
+  Turn,
+  TurnChange,
+  TurnPage,
+  TurnSubmitted,
+} from './board';
 import { isInstant, isKey, isPosition, isRecord, isText } from './board-wire';
 import { HARNESS_FAILURE_LABELS, TURN_OUTCOME_LABELS, TURN_STATE_LABELS } from './session-labels';
 
@@ -22,6 +31,11 @@ export function turnPageOf(body: unknown): TurnPage | undefined {
   if (!isRecord(body) || !isSnapshot(body) || !isListOf(body.turns, isTurn)) return undefined;
   if (body.next !== undefined && !isTimelinePosition(body.next)) return undefined;
   return body as unknown as TurnPage;
+}
+
+export function turnSubmittedOf(body: unknown): TurnSubmitted | undefined {
+  if (!isRecord(body) || (body.effect !== 'recorded' && body.effect !== 'duplicate') || !isTurn(body.turn)) return undefined;
+  return body as unknown as TurnSubmitted;
 }
 
 export function sessionChangeOf(data: unknown): SessionChange | undefined {
