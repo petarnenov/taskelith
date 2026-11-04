@@ -131,27 +131,126 @@ test('a token that expires while its rotation waits for the row lock is not rota
   }
 });
 
-test('a revocation and a redemption that wait for the same row lock have exactly one winner', { concurrency: false }, async () => {
+// Token commands and a redemption of the pending token `id-t1` (hash `t1`).
+type TokenWrite<Value> = (registry: CommittingFleetRegistry) => Promise<Result<Value>>;
+const revoke: TokenWrite<void> = (registry) => registry.revokeToken('id-t1', AT);
+const redeem: TokenWrite<void> = (registry) => registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
+const rotate = (hash: string): TokenWrite<void> => (registry) => registry.rotateToken('id-t1', fleetToken(hash), AT);
+const reasonOf = (result: Result<unknown>) => (result.ok ? 'success' : result.error.details.reason);
+const pendingIds = async (registry: CommittingFleetRegistry) => value(await registry.pendingTokens(undefined, 10)).map((token) => token.tokenId);
+const workerCount = async (registry: CommittingFleetRegistry) => value(await registry.activeWorkerIds()).length;
+
+interface RowLockRace {
+  readonly name: string;
+  readonly first: TokenWrite<void>;
+  readonly second: TokenWrite<void>;
+  readonly check: (registry: CommittingFleetRegistry, first: Result<void>, second: Result<void>) => Promise<void>;
+}
+
+// PostgreSQL grants the row lock to its waiters in the order they queued,
+// so the write that waited first is the winner, and the other is refused.
+const ROW_LOCK_RACES: readonly RowLockRace[] = [
+  {
+    name: 'a revocation that waits first wins over a redemption',
+    first: revoke, second: redeem,
+    check: async (registry, revoked, enrolled) => {
+      assert.deepEqual([revoked.ok, reasonOf(enrolled), await workerCount(registry)], [true, 'token-revoked', 0]);
+    },
+  },
+  {
+    name: 'a redemption that waits first wins over a revocation',
+    first: redeem, second: revoke,
+    check: async (registry, enrolled, revoked) => {
+      assert.deepEqual([enrolled.ok, reasonOf(revoked), await workerCount(registry)], [true, 'token-used', 1]);
+    },
+  },
+  {
+    name: 'a rotation that waits first wins over a redemption',
+    first: rotate('t2'), second: redeem,
+    check: async (registry, rotated, enrolled) => {
+      assert.deepEqual([rotated.ok, reasonOf(enrolled), await workerCount(registry), await pendingIds(registry)], [true, 'token-revoked', 0, ['id-t2']]);
+    },
+  },
+  {
+    name: 'a redemption that waits first wins over a rotation, which inserts no replacement',
+    first: redeem, second: rotate('t2'),
+    check: async (registry, enrolled, rotated) => {
+      assert.deepEqual([enrolled.ok, reasonOf(rotated), await workerCount(registry), await pendingIds(registry)], [true, 'token-not-pending', 1, []]);
+      assert.equal(value(await registry.tokenById('id-t2')), undefined);
+    },
+  },
+  {
+    name: 'a rotation that waits first wins over a revocation, which names the replacement',
+    first: rotate('t2'), second: revoke,
+    check: async (registry, rotated, revoked) => {
+      assert.deepEqual([rotated.ok, reasonOf(revoked), !revoked.ok && revoked.error.details.replacementTokenId], [true, 'token-rotated', 'id-t2']);
+      assert.deepEqual(await pendingIds(registry), ['id-t2']);
+    },
+  },
+  {
+    name: 'a revocation that waits first wins over a rotation, which inserts no replacement',
+    first: revoke, second: rotate('t2'),
+    check: async (registry, revoked, rotated) => {
+      assert.deepEqual([revoked.ok, reasonOf(rotated), await pendingIds(registry)], [true, 'token-not-pending', []]);
+      assert.equal(value(await registry.tokenById('id-t2')), undefined);
+    },
+  },
+  {
+    name: 'of two rotations the one that waits first wins, and one replacement is pending',
+    first: rotate('t2'), second: rotate('t3'),
+    check: async (registry, winner, loser) => {
+      assert.deepEqual([winner.ok, reasonOf(loser), await pendingIds(registry)], [true, 'token-not-pending', ['id-t2']]);
+      assert.equal(value(await registry.tokenById('id-t3')), undefined);
+    },
+  },
+];
+
+for (const race of ROW_LOCK_RACES) {
+  test(`under the row lock ${race.name}`, { concurrency: false }, async () => {
+    await truncateAll(url);
+    const registry = new CommittingFleetRegistry(database);
+    value(await registry.addToken(fleetToken('t1')));
+    const [first, second] = await racedForTokenRow(() => race.first(registry), () => race.second(registry));
+    await race.check(registry, first, second);
+    assert.equal(value(await registry.unusedToken(fleetToken('t1').hash)), undefined, 'the token is no longer pending');
+  });
+}
+
+// Runs `first`, then `second` once `first` waits for the locked token row,
+// and releases the row when both wait; the observer polls outside them.
+async function racedForTokenRow<A, B>(first: () => Promise<A>, second: () => Promise<B>): Promise<[A, B]> {
+  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
+  await Promise.all([holder.connect(), observer.connect()]);
+  let racing: Promise<[A, B]> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM enrollment_tokens WHERE token_id = 'id-t1' FOR UPDATE");
+    racing = Promise.all([first(), waitForLockWaiters(observer, 1).then(second)]);
+    await waitForLockWaiters(observer, 2);
+    await holder.query('COMMIT');
+    return await racing;
+  } finally {
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([racing]);
+  }
+}
+
+test('a rotation whose link to the inserted replacement fails is rolled back whole', { concurrency: false }, async () => {
   await truncateAll(url);
   const registry = new CommittingFleetRegistry(database);
   value(await registry.addToken(fleetToken('t1')));
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
-  let racing: Promise<[Result<void>, Result<void>]> | undefined;
+  // The fault between the replacement's INSERT and the token's UPDATE.
+  await query(url, `CREATE FUNCTION fail_rotation_link() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'injected fault after the replacement insert'; END $$`);
+  await query(url, 'CREATE TRIGGER fail_rotation_link BEFORE UPDATE OF replacement_token_id ON enrollment_tokens FOR EACH ROW EXECUTE FUNCTION fail_rotation_link()');
   try {
-    await holder.query('BEGIN');
-    await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
-    racing = Promise.all([registry.revokeToken('id-t1', AT), registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'))]);
-    await waitForLockWaiters(holder, 2);
-    await holder.query('COMMIT');
-    const [revoked, enrolled] = await racing;
-    const workers = value(await registry.activeWorkerIds()).length;
-    if (revoked.ok) assert.deepEqual([!enrolled.ok && enrolled.error.details.reason, workers], ['token-revoked', 0]);
-    else assert.deepEqual([revoked.error.details.reason, enrolled.ok, workers], ['token-used', true, 1]);
-    assert.equal(value(await registry.unusedToken(fleetToken('t1').hash)), undefined);
+    await assert.rejects(registry.rotateToken('id-t1', fleetToken('t2'), AT), /injected fault after the replacement insert/);
+    assert.equal(value(await registry.tokenById('id-t2')), undefined, 'the replacement insert is rolled back');
+    assert.deepEqual(await pendingIds(registry), ['id-t1'], 'the token stays pending');
+    assert.deepEqual(await query(url, 'SELECT count(*)::int AS tokens FROM enrollment_tokens'), [{ tokens: 1 }]);
   } finally {
-    await Promise.allSettled([holder.end()]);
-    await Promise.allSettled([racing]);
+    await query(url, 'DROP TRIGGER IF EXISTS fail_rotation_link ON enrollment_tokens');
+    await query(url, 'DROP FUNCTION IF EXISTS fail_rotation_link()');
   }
 });
 
