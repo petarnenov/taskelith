@@ -18,7 +18,9 @@ This is a product fix of the installation script, not only a test fix: before it
 - `bf20d41f` `docs: record the pass 2 findings of the stabilize admission base ten test change`.
 - `826e2284` (the pass 2 fix record) and `a01ed5e5` (the archive commit, reverted for the return).
 - `308e5dd4` `docs: restore the active stabilize admission base ten test change to merge dev` and `0ffb4b57`, the merge of `origin/dev` at `46cd51b3` ("Return").
-- The commit of the return fix and its record follow; pass 3 and the archive come after them.
+- `42234dce` `chore: start the first admission read whatever the clock says` (the return fix) and `30684a4f` (its record).
+- `e24f01f0` `chore: stop a running admission read when the clock fails and await the read in the capped-poll test` (pass 3 fixes and the pass 3 line of `passes.jsonl`).
+- The record of the pass 3 fix round follows; the archive comes after it.
 
 ## Environment
 
@@ -108,6 +110,30 @@ The coordinator returned the archived branch (head `a01ed5e5`): the integration 
 
 Slow-clock robustness: the same 18 admission tests, 20 consecutive runs with the `node` clock forced for every `checkAdmission` run (a temporary edit of the test file that adds `BASH_ENV` with `unset EPOCHREALTIME`, restored afterwards) and 8 busy-loop shell processes on the 8 logical CPUs: 20 of 20 runs passed 18 of 18, no failure. The decision test on the `node` clock took 7714 to 7944 ms, "a bound with a leading zero is read in base 10" 11977 to 12240 ms, and "the first read starts ..." 54 to 130 ms.
 
+## Pass 3 fix round
+
+Pass 3 (Codex `gpt-6.1-sol`, medium, role A, session `01a1a576-f162-7a60-bb43-a13a2c31de6f`) reviewed the return round at `30684a4f`. It stands in for the coordinator's return check and covered the merge with `origin/dev` `46cd51b3` (`passes.jsonl` has no field for it). Argon unavailable on hpz600: agy binary needs PCLMUL, which the CPU lacks, so `codex gpt-6.1-sol#medium` replaced `agy gemini-4-argon-medium#medium`. The review effort is medium, owner decision 2026-11-02. Findings: 1 Medium, 2 Low, all fixed in `e24f01f0`:
+
+- **Finding 1, Medium (a clock failure left the read running).** `bounded_admission_read` (`scripts/installation.sh:496`) reads the clock itself (`:501`); on a failure `stop_read` (`:489`) kills and reaps the read and the function returns `ADMISSION_CLOCK_FAILED`, which the poll loop exits with. `sleep_at_most` (`:482`) caps the read's 1 s check at the milliseconds already read. Test: "a clock that fails while a read runs stops that read" (`FAKE_CLOCK_FAILS_IN_READ`, `FAKE_READER`).
+- **Finding 2, Low (the capped-poll test could pass without the poll).** With `FAKE_READER`, the fake `docker` writes its pid and the fake `sleep` waits until that read has ended before it moves the clock (design "The capped-poll test awaits its read"). "a wait between reads never sleeps past the bound" asserts that the decision ran, no hung-read message, sleeps `3.000` or `1.000 2.000`, and 3000 ms elapsed.
+- **Finding 3, Low (a failing clock with digits was accepted).** `clock_milliseconds` (`scripts/installation.sh:445`) fails when `read_clock` exits nonzero, whatever it printed. Test: "a clock that prints a time but fails fails the admission check before any read" (`FAKE_CLOCK_STATUS`).
+
+These three fixes are fixed-unreviewed: pass 3 is the last pass under the 3-pass cap, so no later pass reviews them; they are left for the coordinator's architect check.
+
+### Fail-before and after of the pass 3 fix round
+
+`node --experimental-strip-types --test --test-name-pattern=<pattern> test/installation-script.test.ts` from the worktree:
+
+| Tree | Result |
+| --- | --- |
+| `30684a4f` script with the new test file | "a clock that fails while a read runs stops that read" failed, `the read is stopped`, `true !== false`; "a clock that prints a time but fails ..." failed, status `0 !== 2`; "a wait between reads ..." passed |
+| Old capped-poll test, reads hang (`FAKE_DELAY` 30), fixed script | passed in 98 ms without a poll (the finding) |
+| New capped-poll test, reads hang (`FAKE_DELAY` 30), fixed script | failed, `the poll is cut to the bound: 1.000 1.000 1.000` |
+| New capped-poll test, uncapped-poll mutant of `sleep_within` | failed, `the poll is cut to the bound: 1.000 5.000` |
+| Fix (`e24f01f0`) | 24 of 24 tests passed (pattern `admission\|clock\|bound\|read\|wait\|EPOCHREALTIME`) |
+
+Under load: the nine touched and clock tests (pattern `a wait between reads|a clock that fails while|a clock that prints a time but fails|a hung read times out|stops printing a time|prints no time|leading zero|without EPOCHREALTIME|first read starts`), 20 consecutive runs at `e24f01f0` with 8 busy-loop shell processes on the 8 logical CPUs, killed by pid afterwards: 20 of 20 runs passed 9 of 9, load average 10.24 at the end; the capped-poll test took 496 to 801 ms, the leading-zero test 11353 to 11552 ms. The same series with the `node` clock forced for every `checkAdmission` run (a temporary edit adding `BASH_ENV` with `unset EPOCHREALTIME`, restored afterwards): 20 of 20 runs passed 9 of 9, load average 10.26; the capped-poll test 585 to 696 ms, the leading-zero test 11885 to 12157 ms. The fake-clock tests read `TASKELITH_TEST_CLOCK`, so the forced `node` clock reaches only the real-clock tests.
+
 ## Checks
 
 | Check | Revision | Result |
@@ -145,9 +171,9 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run then. Both passes ran at effort medium, owner decision 2026-11-02. The return round ("Return") is not reviewed yet: Zaki runs pass 3 on it before the archive.
+Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run then. Both passes ran at effort medium, owner decision 2026-11-02. Pass 3: Codex `gpt-6.1-sol`, medium, role A, session `01a1a576-f162-7a60-bb43-a13a2c31de6f`, in place of the unavailable Argon; 1 Medium, 2 Low, all fixed in `e24f01f0` ("Pass 3 fix round").
 
-Fixes that no later pass reviewed, for the coordinator's architect check: the four pass 2 fixes in `73d21e34`, namely the unread-clock failure of `scripts/installation.sh` (`read_clock`, `clock_milliseconds`, `deadline_in`, `milliseconds_left`, `deadline_passed`, `sleep_within`, `ADMISSION_CLOCK_FAILED`) with its two tests, the sum of the capped poll's sleeps, the `N` comment placeholders, and the corrected line citations.
+Fixes that no later pass reviewed, for the coordinator's architect check: the three pass 3 fixes in `e24f01f0` (fixed-unreviewed), and the four pass 2 fixes in `73d21e34`, namely the unread-clock failure of `scripts/installation.sh` (`read_clock`, `clock_milliseconds`, `deadline_in`, `milliseconds_left`, `deadline_passed`, `sleep_within`, `ADMISSION_CLOCK_FAILED`) with its two tests, the sum of the capped poll's sleeps, the `N` comment placeholders, and the corrected line citations.
 
 ## Limitations
 
@@ -158,6 +184,6 @@ Fixes that no later pass reviewed, for the coordinator's architect check: the fo
 
 ## Remaining gates
 
-- Independent review pass 3 of the return round, then the archive (Zaki).
-- The coordinator's architect check of the unreviewed pass 2 fixes.
+- The archive (Zaki).
+- The coordinator's architect check of the unreviewed pass 2 and pass 3 fixes.
 - Integration into dev by the coordinator (single pull request).
