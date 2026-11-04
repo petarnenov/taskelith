@@ -86,7 +86,11 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending; Zaki runs the passes.
+Review effort medium: owner decision 2026-11-02.
+
+- Pass 1, reviewer A, Codex CLI `gpt-6-astra` at effort medium, session `01a1a750-6d97-78b0-90f6-5ada4c73e952`, on `27e251f3`: Critical 0, High 0, Medium 1, Low 2 (`passes.jsonl` line 1, `findings.jsonl` lines 1 to 3). The reviewer modified no file; its run of the comment check failed with `spawnSync git EPERM` in its sandbox.
+- Pass 1 fix round, records only, `87eb24f5`: the Medium (both start timeouts attributed to #446) and the two Lows (the parallel-run counts, "every time") were fixed as recorded in `findings.jsonl`; five more injected-delay base runs were made for the second Low ("Fail-before"). No code changed.
+- Pass 2: pending; Zaki runs it.
 
 ## Limitations
 
