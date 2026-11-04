@@ -60,6 +60,12 @@ describe('the turn record store', () => {
     expect(Object.keys(sessionStorage).filter((name) => name.startsWith(TURN_RECORD_PREFIX))).toHaveLength(2);
   });
 
+  it('drops the records a reload left in the storage on clearAll, and says so', () => {
+    sessionStorage.setItem(NAME, JSON.stringify([record('key-1')]));
+    expect(createTurnRecordStore().clearAll()).toBe(true);
+    expect(sessionStorage.getItem(NAME)).toBeNull();
+  });
+
   it('reads the records a reload left in the storage, and removes one by its key', () => {
     sessionStorage.setItem(NAME, JSON.stringify([record('key-1'), record('key-2')]));
     const store = createTurnRecordStore();
@@ -87,12 +93,14 @@ describe('the turn record store', () => {
     expect(keys.at(-1)).toBe(`key-${MAX_TURN_RECORDS + 1}`);
   });
 
-  it('clears the records of every session and leaves other keys', () => {
+  it('clears the records of every session and leaves other keys, saying whether any was dropped', () => {
     const store = createTurnRecordStore();
+    expect(store.clearAll()).toBe(false);
     store.add('project-1', 'session-1', record('key-1'));
     store.add('project-2', 'session-9', record('key-2'));
     sessionStorage.setItem('other', 'kept');
-    store.clearAll();
+    expect(store.clearAll()).toBe(true);
+    expect(store.clearAll()).toBe(false);
     expect(store.list('project-1', 'session-1')).toEqual([]);
     expect(store.list('project-2', 'session-9')).toEqual([]);
     expect(Object.keys(sessionStorage).filter((name) => name.startsWith(TURN_RECORD_PREFIX))).toEqual([]);
@@ -121,9 +129,10 @@ describe('the turn record store', () => {
     expect(store.list('project-1', 'session-1')).toEqual([record('key-1'), record('key-2')]);
     store.remove('project-1', 'session-1', 'key-1');
     expect(store.list('project-1', 'session-1')).toEqual([record('key-2')]);
-    store.clearAll();
+    expect(store.clearAll()).toBe(true);
     expect(store.list('project-1', 'session-1')).toEqual([]);
     expect(sessionStorage.length).toBe(0);
+    expect(store.clearAll()).toBe(false);
   });
 
   it('keeps the records it read and the ones added since in memory once a write throws', () => {

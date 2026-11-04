@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_TURN_TEXT_LENGTH } from '../src/agent-session/composer-model';
 import { createTurnRecordStore, TURN_RECORD_PREFIX, type TurnRecord } from '../src/agent-session/turn-records';
 import { CSRF_HEADER } from '../src/api/client';
+import { EXPIRY_MARGIN_MILLISECONDS } from '../src/session/SessionProvider';
 import type { SubmitResult, TaskDetail } from '../src/board/board';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
 import { sessionPath } from '../src/screens';
@@ -15,6 +16,7 @@ import {
   AUTHENTICATED,
   FakeBoardGateway,
   fakeGateway,
+  HOUR,
   ManualClock,
   OPERATOR,
   PROJECT,
@@ -671,6 +673,56 @@ describe('the records and the shell session', () => {
     await send('Fix the build');
     expect(await screen.findByText('Your session expired')).toBeDefined();
     await waitFor(() => expect(storedRecordNames()).toEqual([]));
+  });
+
+  const MAY_NOT_BE_SENT = 'Your last turn may not have been sent; check the timeline after signing in.';
+
+  it('says on the sign-in page that the last turn may not have been sent when the session expired with a send in flight', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValue({ kind: 'anonymous' });
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockReturnValueOnce(deferred<SubmitResult>().promise);
+    const clock = new ManualClock();
+    renderApp(SESSION_PATH, session, clock, gateway);
+    await shownSession();
+    await send('Fix the build');
+    await composerAlert('Sending');
+    act(() => clock.advance(HOUR + EXPIRY_MARGIN_MILLISECONDS));
+    expect(await screen.findByText('Your session expired')).toBeDefined();
+    expect(await screen.findByText(MAY_NOT_BE_SENT, { exact: false })).toBeDefined();
+    expect(screen.getByRole('main').textContent).not.toContain('Not sent');
+    await waitFor(() => expect(storedRecordNames()).toEqual([]));
+  });
+
+  it('says on the sign-in page that the last turn may not have been sent after a sign-out that follows no answer', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValue({ kind: 'anonymous' });
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'unavailable' });
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    await composerAlert('Not sent');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    expect(await screen.findByText(MAY_NOT_BE_SENT, { exact: false })).toBeDefined();
+    await waitFor(() => expect(storedRecordNames()).toEqual([]));
+  });
+
+  it('says nothing of a turn on the sign-in page when no submission was unconfirmed', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValue({ kind: 'anonymous' });
+    openSession(new FakeBoardGateway(), session);
+    await shownSession();
+    await send('Fix the build');
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    expect(screen.queryByText(MAY_NOT_BE_SENT, { exact: false })).toBeNull();
   });
 
   it('clears the records of every session on sign out', async () => {
