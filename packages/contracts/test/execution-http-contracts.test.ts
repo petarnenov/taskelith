@@ -42,6 +42,10 @@ function violations<T>(result: Result<T, SchemaViolations>): SchemaViolations {
 
 const EXECUTION = document('execution.openapi.json');
 const CONTROL_PLANE = document('control-plane.openapi.json');
+const SUBMIT_TASK_NOT_FOUND =
+  'The stage does not exist in a run that the caller may command; an unknown run is refused with 403.';
+const SDLC_PATH = 'packages/contracts/documents/sdlc.openapi.json';
+const UNKNOWN_RUN_CHANGE = 'submitTask: an unknown run, which answered the owner 404, is refused with 403 role-required';
 const SCHEMAS = EXECUTION.components.schemas;
 const AT = '2026-10-28T10:00:00.000Z';
 const REMOTE = 'https://scm.example/acme/project.git';
@@ -124,6 +128,17 @@ test('createRun answers 404 for an unknown project, and no 403 names the retired
   assert.deepEqual(createRun.responses['404']?.content?.['application/json']?.schema, { $ref: '#/components/schemas/Failure' });
   const denials = [...sdlcOperations.map((found) => found.responses['403']), operation('readTaskResult').responses['403']];
   for (const denial of denials.filter((found) => found !== undefined)) assert.doesNotMatch(denial.description ?? '', /bridge/i);
+});
+
+test('submitTask answers 404 only for an unknown stage, and 403 for an unknown run', () => {
+  const sdlc = document('sdlc.openapi.json');
+  const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
+  const submitTask = sdlcOperations.find((candidate) => candidate.operationId === 'submitTask')!;
+  assert.equal(submitTask.responses['404']?.description, SUBMIT_TASK_NOT_FOUND);
+  assert.match(submitTask.responses['403']?.description ?? '', /unknown run/);
+  const declarations = JSON.parse(readFileSync(new URL('../breaking-changes.json', import.meta.url), 'utf8'));
+  const entry = declarations.declarations.find((found: Json) => found.path === SDLC_PATH && found.version === '0.5.0');
+  assert.ok(entry.behaviorChanges.includes(UNKNOWN_RUN_CHANGE));
 });
 
 test('the session schemes and the shared failures are those of the control-plane document', () => {
