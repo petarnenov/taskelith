@@ -14,26 +14,26 @@ interface AuditRow {
   readonly occurred_at: Date;
 }
 
-// The rows inside one transaction, which the store's writes share.
-export class PostgresScmIntegrationAuditRecords implements ScmIntegrationAudit {
+// The rows inside one transaction, which the store's writes share; a
+// failed statement throws and rolls the transaction back.
+export class PostgresScmIntegrationAuditRecords {
   readonly #session: Session;
 
   constructor(session: Session) {
     this.#session = session;
   }
 
-  async append(event: ScmIntegrationAuditEvent): Promise<Result<void>> {
+  async append(event: ScmIntegrationAuditEvent): Promise<void> {
     const { integrationId, kind, actor, reason, changedFields, revision, occurredAt } = event;
     await this.#session.query(`INSERT INTO scm_integration_audit_events
       (integration_id, kind, actor, reason, changed_fields, revision, occurred_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [integrationId, kind, actor, reason, [...changedFields], revision, occurredAt]);
-    return ok(undefined);
   }
 
-  async trail(): Promise<Result<readonly ScmIntegrationAuditEvent[]>> {
+  async trail(): Promise<readonly ScmIntegrationAuditEvent[]> {
     const { rows } = await this.#session.query<AuditRow>(`SELECT integration_id, kind, actor, reason, changed_fields, revision, occurred_at
       FROM scm_integration_audit_events ORDER BY position`);
-    return ok(Object.freeze(rows.map(eventOf)));
+    return Object.freeze(rows.map(eventOf));
   }
 }
 
@@ -46,11 +46,14 @@ export class PostgresScmIntegrationAudit implements ScmIntegrationAudit {
   }
 
   append(event: ScmIntegrationAuditEvent): Promise<Result<void>> {
-    return this.#database.transaction(({ scmIntegrationAudit }) => scmIntegrationAudit.append(event));
+    return this.#database.transaction(async ({ scmIntegrationAudit }) => {
+      await scmIntegrationAudit.append(event);
+      return ok(undefined);
+    });
   }
 
   trail(): Promise<Result<readonly ScmIntegrationAuditEvent[]>> {
-    return this.#database.readOnly(({ scmIntegrationAudit }) => scmIntegrationAudit.trail());
+    return this.#database.readOnly(async ({ scmIntegrationAudit }) => ok(await scmIntegrationAudit.trail()));
   }
 }
 

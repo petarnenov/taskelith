@@ -110,8 +110,8 @@ export class PostgresScmIntegrations implements ScmIntegrations {
     return this.#database.transaction(async ({ scmIntegrations: records, scmIntegrationAudit }) => {
       await records.insert(integration);
       await records.replaceSecrets(integration.integrationId, this.#sealed(integration, secrets));
-      const appended = await scmIntegrationAudit.append(creationAudit(integration, audit));
-      return appended.ok ? ok((await records.get(integration.integrationId))!) : appended;
+      await scmIntegrationAudit.append(creationAudit(integration, audit));
+      return ok((await records.get(integration.integrationId))!);
     });
   }
 
@@ -136,8 +136,8 @@ export class PostgresScmIntegrations implements ScmIntegrations {
       const { integration, secrets } = changedConfiguration({ integration: current, secrets: kept.value }, change);
       if (!(await records.replace(integration, change.expectedRevision))) return err(failure('conflict', 'the integration changed since its revision'));
       await records.replaceSecrets(integrationId, this.#sealed(integration, secrets));
-      const appended = await scmIntegrationAudit.append(changeAudit(current, integration, change, audit));
-      return appended.ok ? ok((await records.get(integrationId))!) : appended;
+      await scmIntegrationAudit.append(changeAudit(current, integration, change, audit));
+      return ok((await records.get(integrationId))!);
     });
   }
 
