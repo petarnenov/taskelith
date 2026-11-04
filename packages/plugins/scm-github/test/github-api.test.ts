@@ -41,3 +41,10 @@ test('a request that fails before reaching GitHub is internal, not unavailable',
   const issued = await provider.issueRunCredential({ runId: 'run-1', repositories: [PROJECT], permissions: ['read-code'] });
   assert.deepEqual(issued.ok ? undefined : [issued.error.code, issued.error.message.includes('GitHub refused')], ['internal', false]);
 });
+
+test("the plugin's own identity uses tokens narrowed to the route's repository", async () => {
+  const { provider, emulator } = githubTestbed();
+  assert.ok((await provider.resolveRemoteUrl({ repository: PROJECT })).ok);
+  const tokenRequests = emulator.requests.filter((sent) => TOKEN_ROUTE.test(sent.path));
+  assert.deepEqual(tokenRequests.map((sent) => sent.body), [{ repositories: ['project'] }]);
+});

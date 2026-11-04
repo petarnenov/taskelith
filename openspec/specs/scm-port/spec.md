@@ -6,7 +6,7 @@ Define the SCM-neutral port through which SCM plugins issue per-run credentials,
 ## Requirements
 
 ### Requirement: Draft SCM port
-The integrations module SHALL define a draft `SourceControlProvider` port, version `0.2.0`, composed of the `RunCredentialIssuer`, `RepositoryRemoteResolver`, `ChangeRequestHost`, and `WebhookVerifier` ports, whose operations return kernel `Result` values in plain data shapes, and no kernel or module code, type, or test SHALL name a specific SCM.
+The integrations module SHALL define a draft `SourceControlProvider` port, version `0.3.0`, composed of the `RunCredentialIssuer`, `RepositoryRemoteResolver`, `ChangeRequestHost`, and `WebhookVerifier` ports, whose operations return kernel `Result` values in plain data shapes, and no kernel or module code, type, or test SHALL name a specific SCM.
 
 #### Scenario: Client depends on a narrow port
 - **WHEN** a client only verifies webhook deliveries
@@ -50,23 +50,23 @@ A credential's effective permissions SHALL cover the request and MAY exceed it, 
 - **THEN** the conformance report has a finding for that case
 
 ### Requirement: Credential refresh and revocation
-`refreshRunCredential` SHALL return the next version of the credential, with the same `credentialId`, repositories, and permissions, a new secret and `authorization`, and a later expiry, and SHALL end no earlier version. `revokeRunCredential` SHALL end every version of the credential and return no value. Both SHALL fail with `not-found` for an unknown or revoked credential. An ended version SHALL be refused for every permission, reads included.
+`refreshRunCredential` SHALL return the next version of the credential, with the same `credentialId`, repositories, and permissions, a new secret and `authorization`, and a later expiry, and SHALL end no earlier version. `revokeRunCredential` SHALL end every version of the credential and return no value. Both SHALL fail with `not-found` for an unknown or revoked credential. An ended version SHALL be refused for every permission, reads included, within the propagation window.
 
 #### Scenario: Long run
 - **WHEN** a run will outlive its credential's expiry and the credential is refreshed before that expiry
-- **THEN** the refreshed version writes in the project's repository and is refused outside it, and the previous version keeps working until the run's adoption of the new one is confirmed, the credential is revoked, or the previous version's own expiry passes, whichever comes first
+- **THEN** the refreshed version writes in the project's repository and is refused outside it, and the previous version keeps working until the run's adoption of the new one is confirmed, the credential is revoked, or the previous version's own expiry passes, whichever comes first, and is refused within the propagation window of that end
 
 #### Scenario: Revoked read-only credential
 - **WHEN** a read-only credential that could read is revoked
-- **THEN** a read with it fails with `forbidden`
+- **THEN** a read with it fails with `forbidden` within the propagation window after the revocation returns
 
 #### Scenario: Revocation after a refresh
 - **WHEN** a credential is refreshed and then revoked before any adoption is confirmed
-- **THEN** both versions are refused for reads and writes
+- **THEN** both versions are refused for reads and writes within the propagation window after the revocation returns
 
 #### Scenario: Refresh or revocation of a missing credential
 - **WHEN** a credential was revoked, or its identifier was never issued, and it is refreshed or revoked
-- **THEN** the operation fails with `not-found`, and no version of it works again
+- **THEN** the operation fails with `not-found`, and no version of it works again once the propagation window of its revocation has passed
 
 ### Requirement: Merge blocking that binds the plugin
 `ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does. When that would drop or weaken a setting of the branch's current protection, it SHALL fail with `precondition-failed`, name those settings, and change nothing.
@@ -165,11 +165,11 @@ Each run credential SHALL carry a version, 1 at issue and one more per refresh. 
 
 #### Scenario: Adoption ends the predecessor
 - **WHEN** a credential is refreshed and the adoption of the new version is confirmed
-- **THEN** the previous version is refused for reads and writes, and the new one keeps working
+- **THEN** the previous version is refused for reads and writes within the propagation window after the confirmation returns, and the new one keeps working
 
 #### Scenario: Adoption of an earlier refresh
 - **WHEN** a credential is refreshed twice and the adoption of the second version is confirmed
-- **THEN** the first version is refused, and the second and third versions keep working
+- **THEN** the first version is refused within the propagation window, and the second and third versions keep working
 
 #### Scenario: Stale adoption
 - **WHEN** the adoption of the third version was confirmed and a confirmation of the second version arrives
@@ -271,7 +271,7 @@ The `scm-github` plugin SHALL keep credential versions in its process's memory o
 
 #### Scenario: Adoption ends tokens at GitHub
 - **WHEN** a run's adoption of a refreshed version is confirmed
-- **THEN** GitHub no longer accepts the earlier versions' tokens
+- **THEN** GitHub's REST API refuses the earlier versions' tokens at once, and every GitHub surface, Git's smart HTTP included, refuses them within the propagation window after the confirmation returns
 
 #### Scenario: Revocation that GitHub does not confirm
 - **WHEN** GitHub fails a token revocation
@@ -390,3 +390,18 @@ The integrations module SHALL keep at most one repository binding per project th
 #### Scenario: Integration revision moved
 - **WHEN** `put` names an integration revision that an update has moved
 - **THEN** it fails with `conflict` and the binding is unchanged
+
+### Requirement: Credential end propagation window
+An adoption confirmation or a revocation SHALL request the end of its versions before it returns. Every surface of the service, Git's smart HTTP included, SHALL refuse an ended version within `REVOCATION_PROPAGATION_SECONDS`, 30 seconds, counted from the operation's return. A permission or repository that a version was never granted SHALL be refused at once. The suite SHALL record each latency. No consumer SHALL rely on an end alone to isolate runs.
+
+#### Scenario: Refusal within the window
+- **WHEN** a revoked version is still accepted for a few seconds and then refused with `forbidden`
+- **THEN** the suite reports no finding and records the latency of the refusal
+
+#### Scenario: Version accepted past the window
+- **WHEN** a revoked version is still accepted when the window has passed
+- **THEN** the conformance report has a finding for that case
+
+#### Scenario: Refusal answered after the window
+- **WHEN** an attempt with a revoked version is refused, but its answer comes after the window has passed
+- **THEN** the conformance report has a finding for that case

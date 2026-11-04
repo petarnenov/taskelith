@@ -6,6 +6,7 @@ import { FOREIGN, githubTestbed, HIDDEN, PROJECT } from './github-fixture.ts';
 
 const READ_ONLY = { runId: 'run-1', repositories: [PROJECT], permissions: ['read-code'] };
 const TOKEN_ROUTE = /^\/app\/installations\/5678\/access_tokens$/;
+const INSTALLATION_ROUTE = /^\/repos\/[^/]+\/[^/]+\/installation$/;
 
 async function value<T>(result: Promise<{ ok: true; value: T } | { ok: false; error: unknown }>): Promise<T> {
   const settled = await result;
@@ -42,7 +43,7 @@ test('every request names API version 2022-11-28', async () => {
   await value(provider.revokeRunCredential(credential));
   assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'not-found');
   assert.equal(GITHUB_API_VERSION, '2022-11-28');
-  assert.ok(emulator.requests.some((request) => request.path.startsWith('/installation/repositories')));
+  assert.ok(emulator.requests.some((request) => INSTALLATION_ROUTE.test(request.path)));
   assert.ok(emulator.requests.every((request) => request.headers['x-github-api-version'] === '2022-11-28'));
 });
 
@@ -62,10 +63,10 @@ test('two runs with the same grant get distinct tokens', async () => {
   assert.notEqual(first.credentialId, second.credentialId);
 });
 
-test('a mint lists no installation repositories', async () => {
+test('a mint looks up no installation', async () => {
   const { provider, emulator } = githubTestbed();
   await value(provider.issueRunCredential(READ_ONLY));
-  assert.equal(emulator.requests.some((request) => request.path.startsWith('/installation/repositories')), false);
+  assert.equal(emulator.requests.some((request) => INSTALLATION_ROUTE.test(request.path)), false);
 });
 
 test('a repository named in another case is granted under its requested name', async () => {
@@ -80,27 +81,25 @@ test("another owner's repository is not found and leaves no token", async () => 
   assert.equal(emulator.liveRunTokens(), 0);
 });
 
-test('a refused token request reads the installation across pages', async () => {
-  const { provider, emulator } = githubTestbed({}, { pageSize: 1 });
+test('a refused token request for installed repositories keeps its refusal', async () => {
+  const { provider, emulator } = githubTestbed();
   emulator.refuseNext('POST', TOKEN_ROUTE, 422);
-  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [FOREIGN] })), 'invalid');
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [PROJECT, FOREIGN] })), 'invalid');
+  assert.equal(emulator.requests.filter((request) => INSTALLATION_ROUTE.test(request.path)).length, 2);
 });
 
-const LISTING_ROUTE = /^\/installation\/repositories/;
-
-test('a refused token request whose installation listing fails reports the listing failure', async () => {
+test('a refused token request whose installation lookup fails reports the lookup failure', async () => {
   const { provider, emulator } = githubTestbed();
-  emulator.refuseNext('GET', LISTING_ROUTE, 503);
+  emulator.refuseNext('GET', INSTALLATION_ROUTE, 503);
   const refused = await provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] });
   assert.equal(refused.ok ? undefined : refused.error.code, 'unavailable');
   assert.deepEqual(refused.ok ? undefined : refused.error.details, { status: '503' });
 });
 
-test('a refused token request whose later listing page fails reports the listing failure', async () => {
-  const { provider, emulator } = githubTestbed({}, { pageSize: 1 });
-  emulator.refuseNext('GET', /^\/installation\/repositories\?.*\bpage=2\b/, 503);
-  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'unavailable');
-  assert.equal(emulator.requests.filter((request) => LISTING_ROUTE.test(request.path)).length, 2);
+test('a repository of another installation is outside this one', async () => {
+  const { provider, emulator } = githubTestbed();
+  emulator.answerNext('GET', INSTALLATION_ROUTE, 200, { id: 1 });
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'not-found');
 });
 
 test('a request outside the installation or malformed mints no token', async () => {
@@ -306,3 +305,16 @@ for (const status of [403, 404, 422, 500]) {
     assert.equal(emulator.liveRunTokens(), 0);
   });
 }
+
+test('every installation token request is narrowed, also when a refused one resolves its repositories', async () => {
+  const { provider, emulator } = githubTestbed();
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [HIDDEN] })), 'not-found');
+  emulator.refuseNext('POST', TOKEN_ROUTE, 422);
+  assert.equal(await code(provider.issueRunCredential({ ...READ_ONLY, repositories: [FOREIGN] })), 'invalid');
+  const tokenRequests = emulator.requests.filter((request) => TOKEN_ROUTE.test(request.path));
+  assert.ok(tokenRequests.length >= 2);
+  for (const request of tokenRequests) {
+    const repositories = (request.body as { repositories?: unknown } | undefined)?.repositories;
+    assert.ok(Array.isArray(repositories) && repositories.length > 0, 'an installation token request named no repository');
+  }
+});

@@ -45,12 +45,21 @@ export function githubTestbed(
     fetch: emulator.fetch,
     webhookSecret: WEBHOOK_SECRET,
     mergeMethods: ['merge-commit', 'squash', 'rebase'],
-    clock: { now: () => emulator.now(), sleep: async (milliseconds: number) => emulator.advance(milliseconds) },
+    clock: emulatorClock(emulator),
     ...overrides,
   };
   const provider = createGithubSourceControl(options);
   if (!provider.ok) throw new Error(provider.error.message);
   return { emulator, provider: provider.value, options };
+}
+
+function emulatorClock(emulator: GithubEmulator) {
+  return {
+    now: () => emulator.now(),
+    sleep: async (milliseconds: number) => emulator.advance(milliseconds),
+    // Every emulated request answers, so none needs a bound.
+    timeout: () => new Promise<void>(() => {}),
+  };
 }
 
 export function conformanceFixture({ emulator, provider }: GithubTestbed): SourceControlConformanceFixture {
@@ -63,6 +72,7 @@ export function conformanceFixture({ emulator, provider }: GithubTestbed): Sourc
     baseBranch: BASE,
     mergeMethod: 'squash',
     signatureHeader: SIGNATURE_HEADER,
+    clock: emulatorClock(emulator),
     prepareHeadBranch: async () => {
       const branch = `topic-${randomUUID()}`;
       return { branch, commit: emulator.createBranch(PROJECT, branch) };

@@ -1,0 +1,105 @@
+{
+  "change": "run-github-scm-conformance",
+  "generatedAt": "2026-11-03T08:57:01.557Z",
+  "devCommit": "f0ed0139b0f6177ad09762a36b214034d92fead5",
+  "query": {
+    "capabilities": [
+      "scm-port",
+      "scm-qualification",
+      "dependency-register",
+      "engineering-principles"
+    ],
+    "files": [
+      "packages/plugins/scm-github/**",
+      "packages/modules/integrations/**",
+      "docs/dependencies.md",
+      "Makefile"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 19
+      },
+      {
+        "category": "docs",
+        "count": 14
+      },
+      {
+        "category": "error-handling",
+        "count": 12
+      },
+      {
+        "category": "redaction",
+        "count": 5
+      },
+      {
+        "category": "concurrency-race",
+        "count": 2
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 2
+      },
+      {
+        "category": "process",
+        "count": 2
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 855,
+        "inChecklist": 696
+      },
+      "mediumOrWorse": {
+        "findings": 418,
+        "inChecklist": 379
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 138
+      },
+      {
+        "category": "spec-wording",
+        "count": 97
+      },
+      {
+        "category": "docs",
+        "count": 73
+      },
+      {
+        "category": "stale-citation",
+        "count": 52
+      },
+      {
+        "category": "contract-drift",
+        "count": 24
+      },
+      {
+        "category": "process",
+        "count": 24
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 8
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 423,
+        "inChecklist": 416
+      },
+      "mediumOrWorse": {
+        "findings": 66,
+        "inChecklist": 66
+      }
+    }
+  }
+}

@@ -121,7 +121,7 @@ function readFields(record: Record<string, unknown>, names: readonly string[]): 
 
 // A kernel Result: `ok` true with a value, or `ok` false with a failure
 // whose code is a kernel failure code.
-export function readResult(raw: unknown): Reading<Result<unknown>> {
+export function readUntrustedResult(raw: unknown): Reading<Result<unknown>> {
   const envelope = readRecord<{ ok: unknown }>('result', raw, { ok: flag });
   if (!envelope.ok) return envelope;
   if (envelope.value.ok === true) return readValue(raw as { value?: unknown });

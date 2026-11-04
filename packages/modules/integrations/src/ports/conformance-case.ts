@@ -1,5 +1,5 @@
 import type { FailureCode, Result } from '@taskelith/kernel';
-import { describeThrown, readResult, type Reading } from './untrusted-shapes.js';
+import { describeThrown, readUntrustedResult, type Reading } from './untrusted-shapes.js';
 
 export type SourceControlConformanceCheck = 'threw' | 'result' | 'shape' | 'outcome' | 'bypass' | 'fixture';
 
@@ -9,13 +9,22 @@ export interface SourceControlConformanceFinding {
   readonly message: string;
 }
 
+// How long after a revocation or adoption the ended version was refused.
+export interface SourceControlConformanceEnding {
+  readonly caseName: string;
+  readonly when: string;
+  readonly latencyMs: number;
+}
+
 // Ends a case early when a later step would only repeat the same failure.
 // Known by identity, as a thrown value's prototype may run plugin code.
 const abortions = new WeakSet<object>();
 
-// One running case: it collects the case's findings.
+// One running case: it collects the case's findings and endings.
 export class ConformanceCase {
   readonly findings: SourceControlConformanceFinding[] = [];
+
+  readonly endings: SourceControlConformanceEnding[] = [];
 
   constructor(readonly name: string) {}
 
@@ -25,6 +34,10 @@ export class ConformanceCase {
 
   expect(condition: boolean, message: string): void {
     if (!condition) this.report('outcome', message);
+  }
+
+  recordEnding(when: string, latencyMs: number): void {
+    this.endings.push(Object.freeze({ caseName: this.name, when, latencyMs }));
   }
 
   abort(check: SourceControlConformanceCheck, message: string): never {
@@ -86,7 +99,7 @@ async function settle(run: ConformanceCase, operation: string, call: () => Promi
   } catch (error) {
     run.abort('threw', `${operation} threw instead of returning a Result: ${describeThrown(error)}`);
   }
-  const result = readResult(raw);
+  const result = readUntrustedResult(raw);
   if (!result.ok) run.abort('result', `${operation}: ${result.error.join('; ')}`);
   return result.value;
 }
@@ -103,7 +116,7 @@ export async function fixtureStep<Value>(run: ConformanceCase, step: string, cal
 // A fixture step that returns a Result, read as untrusted as a plugin's.
 export async function fixtureResult(run: ConformanceCase, step: string, call: () => Promise<unknown>): Promise<Result<unknown>> {
   const raw = await fixtureStep(run, step, call);
-  const result = readResult(raw);
+  const result = readUntrustedResult(raw);
   if (!result.ok) run.abort('fixture', `${step}: ${result.error.join('; ')}`);
   return result.value;
 }

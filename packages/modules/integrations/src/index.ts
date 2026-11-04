@@ -38,8 +38,16 @@ export type {
   WriteBack,
 } from './ports/write-back.js';
 export * from './port.js';
-export type { SourceControlConformanceCheck, SourceControlConformanceFinding } from './ports/conformance-case.js';
+export type {
+  SourceControlConformanceCheck,
+  SourceControlConformanceEnding,
+  SourceControlConformanceFinding,
+} from './ports/conformance-case.js';
+export { awaitRefusal, awaitRefusals, REVOCATION_POLL_MS, type ConformanceClock, type ObservedEnding } from './ports/revocation-window.js';
 export { runSourceControlConformance, type SourceControlConformanceReport } from './ports/source-control-conformance.js';
+// For conformance cases outside the suite, such as the GitHub long run.
+export { describeThrown, readUntrustedResult } from './ports/untrusted-shapes.js';
+export { readRunCredential } from './ports/source-control-readers.js';
 export type {
   PreparedHead,
   SignedChangeRequestEvent,

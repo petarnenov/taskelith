@@ -2,7 +2,7 @@ import type { Result } from '@taskelith/kernel';
 
 // The port an SCM plugin implements, a draft until a second SCM maps onto it.
 // Plain text shapes, which the module checks: plugin output is untrusted.
-export const SOURCE_CONTROL_PORT_VERSION = '0.2.0';
+export const SOURCE_CONTROL_PORT_VERSION = '0.3.0';
 
 // Permissions a run may need, in SCM-neutral terms; a plugin maps each one to
 // its service's narrowest native permission.
@@ -14,6 +14,10 @@ export const SCM_PERMISSIONS = Object.freeze([
 ] as const);
 
 export type ScmPermission = (typeof SCM_PERMISSIONS)[number];
+
+// An ended version is refused by every surface of the service, Git's
+// included, within this window of its revocation or adoption (section 3).
+export const REVOCATION_PROPAGATION_SECONDS = 30;
 
 export const MERGE_METHODS = Object.freeze(['merge-commit', 'squash', 'rebase'] as const);
 

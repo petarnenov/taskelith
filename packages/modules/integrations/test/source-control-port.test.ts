@@ -25,16 +25,17 @@ test('the port entry loads only the source control port', () => {
   assert.deepEqual(portEntryModules(), ['port.js', 'ports/source-control.js']);
 });
 
-test('the port entry carries only the port constants, at version 0.2.0', () => {
+test('the port entry carries only the port constants, at version 0.3.0', () => {
   assert.deepEqual(Object.keys(portEntry).sort(), [
     'CHANGE_REQUEST_STATES',
     'COMMIT_STATUS_STATES',
     'MERGE_METHODS',
     'REVIEW_EVIDENCE_KINDS',
+    'REVOCATION_PROPAGATION_SECONDS',
     'SCM_PERMISSIONS',
     'SOURCE_CONTROL_PORT_VERSION',
     'WEBHOOK_EVENT_KINDS',
   ]);
-  assert.equal(portEntry.SOURCE_CONTROL_PORT_VERSION, '0.2.0');
+  assert.equal(portEntry.SOURCE_CONTROL_PORT_VERSION, '0.3.0');
   assert.equal(portEntry.MERGE_METHODS, MERGE_METHODS);
 });
