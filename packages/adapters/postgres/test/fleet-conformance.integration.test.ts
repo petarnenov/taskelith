@@ -306,24 +306,29 @@ test('a publisher that waited for the lock pushes every entry committed meanwhil
     value(await registry.enroll(fleetToken(`t-${workerId}`).hash, fleetWorker(workerId, journalId)));
   }
   value(await registry.revoke(fleetWorker('w1', 'j1').workerId, fleetWorker('w1', 'j1').enrolledAt));
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
-  await holder.query('SELECT pg_advisory_lock(1792930400)');
+  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
+  await Promise.all([holder.connect(), observer.connect()]);
   const pushes: string[][] = [];
   const push = async (revocations: readonly { userKey: string }[]) => {
     pushes.push(revocations.map((revocation) => revocation.userKey));
     return ok(undefined);
   };
-  const publishing = registry.publishRevocations(push);
-  // The barrier: the publisher is waiting for the advisory lock.
-  await waitForWaitingLock(holder);
-  value(await registry.revoke(fleetWorker('w2', 'j2').workerId, fleetWorker('w2', 'j2').enrolledAt));
-  await holder.query('SELECT pg_advisory_unlock(1792930400)');
-  await holder.end();
-
-  assert.equal(value(await publishing), 2);
-  assert.deepEqual(pushes, [['U-w1-1', 'U-w2-1']]);
-  assert.equal(value(await registry.publishRevocations(push)), 0);
+  let publishing: ReturnType<CommittingFleetRegistry['publishRevocations']> | undefined;
+  try {
+    await holder.query('SELECT pg_advisory_lock(1792930400)');
+    publishing = registry.publishRevocations(push);
+    await waitForWaitingLock(observer);
+    value(await registry.revoke(fleetWorker('w2', 'j2').workerId, fleetWorker('w2', 'j2').enrolledAt));
+    await holder.query('SELECT pg_advisory_unlock(1792930400)');
+    assert.equal(value(await publishing), 2);
+    assert.deepEqual(pushes, [['U-w1-1', 'U-w2-1']]);
+    assert.equal(value(await registry.publishRevocations(push)), 0);
+  } finally {
+    // Releases the lock also after a failed step; a repeat release is a no-op.
+    await Promise.allSettled([holder.query('SELECT pg_advisory_unlock_all()')]);
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([publishing]);
+  }
 });
 
 test('a renewal that waits for the row lock until past the deadline is refused', { concurrency: false }, async () => {
@@ -334,37 +339,30 @@ test('a renewal that waits for the row lock until past the deadline is refused',
   const deadline = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
   value(await registry.requestRotation(worker.workerId, { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' }));
   let now = worker.enrolledAt;
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
-  await holder.query('BEGIN');
-  await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
-  const renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
-  // The barrier: the renewal is waiting for the row lock.
-  await waitForWaitingRowLock(holder);
-  now = deadline;
-  await holder.query('COMMIT');
-  await holder.end();
-
-  const late = await renewing;
-  assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
-  assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
-  assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
+  await Promise.all([holder.connect(), observer.connect()]);
+  let renewing: ReturnType<CommittingFleetRegistry['renew']> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
+    renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
+    await waitForWaitingStatement(observer, url.username, 'SELECT enrollment FROM workers %FOR UPDATE');
+    now = deadline;
+    await holder.query('COMMIT');
+    const late = await renewing;
+    assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
+    assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
+    assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+  } finally {
+    // A ROLLBACK outside a transaction only warns, so it is safe after COMMIT.
+    await Promise.allSettled([holder.query('ROLLBACK')]);
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([renewing]);
+  }
 });
 
-async function waitForWaitingRowLock(client: pg.Client): Promise<void> {
-  for (let tries = 0; tries < 200; tries++) {
-    const { rows } = await client.query<{ waiting: number }>(
-      `SELECT count(*)::int AS waiting FROM pg_stat_activity
-         WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`,
-    );
-    if (rows[0]!.waiting > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('the renewal never waited for the row lock');
-}
-
 async function waitForWaitingLock(client: pg.Client): Promise<void> {
-  for (let tries = 0; tries < 200; tries++) {
+  for (let tries = 0; tries < 500; tries++) {
     const { rows } = await client.query<{ waiting: number }>(
       `SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND objid = 1792930400 AND NOT granted
          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,

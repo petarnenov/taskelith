@@ -1,0 +1,100 @@
+{
+  "change": "stabilize-fleet-renewal-lock-test",
+  "generatedAt": "2026-11-04T17:56:58.162Z",
+  "devCommit": "a46ae37fce39dfd1b7b77f373638cc6c4751b34f",
+  "query": {
+    "capabilities": [
+      "worker-fleet",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "packages/adapters/postgres/**"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 17
+      },
+      {
+        "category": "error-handling",
+        "count": 10
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      },
+      {
+        "category": "concurrency-race",
+        "count": 8
+      },
+      {
+        "category": "test-flakiness",
+        "count": 5
+      },
+      {
+        "category": "docs",
+        "count": 4
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 4
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1040,
+        "inChecklist": 812
+      },
+      "mediumOrWorse": {
+        "findings": 512,
+        "inChecklist": 427
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 169
+      },
+      {
+        "category": "spec-wording",
+        "count": 108
+      },
+      {
+        "category": "docs",
+        "count": 87
+      },
+      {
+        "category": "stale-citation",
+        "count": 61
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 495,
+        "inChecklist": 488
+      },
+      "mediumOrWorse": {
+        "findings": 79,
+        "inChecklist": 79
+      }
+    }
+  }
+}
