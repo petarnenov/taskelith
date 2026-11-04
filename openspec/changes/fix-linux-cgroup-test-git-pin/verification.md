@@ -11,7 +11,9 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `71d00e13` `chore: route the fix linux cgroup test git pin change` (`route.json` unedited).
 - `d452ca63` `docs: record the checks of the fix linux cgroup test git pin change` (this record before pass 1).
 - Pass 1 fixes: `c84f7927` `test: read the Dockerfile instructions of the worker stages in the Git pin agreement test` (with the pass 1 line of `passes.jsonl`), `863c516c` `docs: specify the pinned Git client of the Linux test image in native-worker-acceptance` (the delta, `.openspec.yaml` without `skip_specs`, proposal, design, tasks), `ab5df31e` and `c1078cb9` (the stale `route.json` dropped and the change routed again), and `f16004f2` `docs: record the pass 1 findings of the fix linux cgroup test git pin change`.
-- The commit that adds this record of the pass 1 fixes follows.
+- `d52c06fb` and `93543a78` record the pass 1 fix round and its checks.
+- Pass 2 fixes: `8b2a5aa8` `test: install the pinned Git client before Node.js in the Linux test image` (with the pass 2 line of `passes.jsonl`) and `635ac3a7` `docs: state the pinned Git client of the Linux test image and correct the citations of its change`.
+- The commits that record the pass 2 fix round and its checks follow, and the archive is the last commit of the branch.
 
 ## Environment
 
@@ -36,6 +38,7 @@ The logs stay outside the repository, in Zaki's session scratchpad `/tmp/claude-
 - `flcgp/fix1-cw.log` and `flcgp/fix1-g2.log`: the runs on `f16004f2`, tree `8f22534b`, after the pass 1 fixes.
 - `flcgp/fix1-fail-before.log`, `flcgp/fix1-after.log`, and `flcgp/fix1-old-dockerfile.log`: the agreement test runs of the pass 1 fixes, with the old-logic copy `flcgp/fb-old-git-package-pin.test.ts`.
 - `flcgp/fix1-archive-test.log`: the archive of the change in a scratch copy.
+- `flcgp/fix2-cw.log` and `flcgp/fix2-g2.log`: the runs on `635ac3a7`, tree `ae824160`, after the pass 2 fixes.
 
 ## Fail-before
 
@@ -51,6 +54,8 @@ The logs stay outside the repository, in Zaki's session scratchpad `/tmp/claude-
 | `make verify-linux-g2-scenarios` | the same tree (`flcgp-after-g2.log`) | `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, `not applicable off macOS: only a macOS adopter leaves a cancel unapplied`; seeds `110679307` (cancellation races), `4283259331` (partitions), and `3067852930` (stale generations) |
 | `env -u NODE_ENV make verify-linux-crash-windows` | `f16004f2`, tree `8f22534b`, clean (`flcgp/fix1-cw.log`) | `exit 0`; `tests 29, suites 1, pass 29, fail 0, cancelled 0, skipped 0`, `duration_ms 66588`; no `git-client-mismatch` in the log |
 | `env -u NODE_ENV make verify-linux-g2-scenarios` | the same tree (`flcgp/fix1-g2.log`) | `exit 0`; `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, as above; seeds `2317296863`, `2097202248`, and `114639551` |
+| `env -u NODE_ENV make verify-linux-crash-windows` | `635ac3a7`, tree `ae824160`, clean, after the pass 2 fixes (`flcgp/fix2-cw.log`) | `exit 0`; `tests 29, suites 1, pass 29, fail 0, cancelled 0, skipped 0`, `duration_ms 68019`; no `git-client-mismatch` in the log |
+| `env -u NODE_ENV make verify-linux-g2-scenarios` | the same tree (`flcgp/fix2-g2.log`) | `exit 0`; `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, as above; seeds `2501117062`, `3500388998`, and `2973150950` |
 | `env -u NODE_ENV make verify` | `71d00e13` (tree `5d33f134`) | Passed on the first run, no known flake, profile full, stamp written; tests 4815, pass 4768, fail 0, skipped 47 (the record before pass 1: all files 99.42% lines, 92.92% branches, 98.86% functions); both tests of `test/git-package-pin.test.ts` passed |
 | `env -u NODE_ENV make verify` | `d52c06fb` (tree `e3661192`), after the pass 1 fixes (`flcgp/fix1-verify-1.log`; `make record` read a copy without the appended `exit 0`) | Passed on the first run, no known flake, profile full, stamp written; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.84% functions; the eight tests of `test/git-package-pin.test.ts` passed |
 
@@ -88,6 +93,15 @@ Codex `gpt-6-astra`, effort medium, role A, session `01a1a5c4-ff35-7f93-abf8-9d5
 - L1 (`missing-fail-before-test`, `test/git-package-pin.test.ts:23`): the test matched literal text. Fixed in `c84f7927`: the test reads the instructions of the worker stage and the last stage (`design.md` "Instructions, not text"), with seven focused cases; fail-before under "Fail-before".
 - The reviewer could not check the crash-window and G2 results against logs; "Logs" now names them, and the runs after pass 1 name their tree.
 
+### Pass 2
+
+Claude Code `claude-fable-5-1`, effort medium, role B, session `7771165c-107e-4d81-8816-c38910b1660f`, on `93543a78`: Critical 0, High 0, Medium 0, Low 4 (`passes.jsonl`, `findings.jsonl`). A Low-only pass ends the review: pass 3 did not run, and the four fixes are recorded as `fixed-unreviewed`. No later pass reviewed them; they are left for the coordinator's check as solution architect.
+
+- L1 (`contract-drift`, `docs/dependencies.md:127`): the Ubuntu 24.04 row said the build adds no package. Fixed in `635ac3a7`: the row states that the test-only image of `make verify-linux-cgroup` installs the pinned `git=1:2.43.0-1ubuntu7.4` since this change; `proposal.md` lists the row, and "Scope and source" no longer claims no doc changes.
+- L2 (`stale-citation`, `design.md:3`): fixed in `635ac3a7`, which cites `infra/installation/Dockerfile:61-69`. The other line citations of the change resolve: `Makefile:16`, `:23`, `:130`, and `:154`, `apps/worker/src/workspace-composition.ts:53`, `packages/modules/workspace/src/domain/git-client.ts:14`, `infra/installation/Dockerfile:61-65`, and, at `009808f2`, `tools/linux-cgroup/Dockerfile:12-19` and `test/git-package-pin.test.ts:23`.
+- L3 (`spec-wording`, `specs/native-worker-acceptance/spec.md:4`): fixed in `635ac3a7`: the build fails "unless that package is installed and `/usr/bin/git --version` prints the Linux Git client pin, `git version 2.43.0`".
+- L4 (`process`, the closest category, `tools/linux-cgroup/Dockerfile:14`): fixed in `8b2a5aa8`: `ARG GIT_PACKAGE_VERSION` and its `RUN` (now lines 5-12) come before `ARG NODE_VERSION`, so a Node.js pin bump keeps the cached Git layer. `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` pass on the fixed tree ("After"); `test/git-package-pin.test.ts` passes 8 of 8 and `npm run verify:comments` passes.
+
 ## Limitations
 
 - The fix was run on one x86_64 Linux host only; the aarch64 build of the test image was not run.
@@ -95,6 +109,5 @@ Codex `gpt-6-astra`, effort medium, role A, session `01a1a5c4-ff35-7f93-abf8-9d5
 
 ## Remaining gates
 
-- Independent review pass 2, and pass 3 if pass 2 reports a Medium or worse finding.
-- Archive of the change.
-- Integration into dev by the coordinator (single pull request)
+- The coordinator's check, as solution architect, of the four pass 2 fixes that no later pass reviewed.
+- Integration into dev by the coordinator (single pull request).

@@ -15,6 +15,7 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review
+- [x] 4.1 Independent review
   - [x] 4.1.1 Pass 1 (Codex `gpt-6-astra`, medium): M1 remove `skip_specs` and add the `native-worker-acceptance` delta; L1 read Dockerfile instructions in the agreement test
+  - [x] 4.1.2 Pass 2 (Claude Code `claude-fable-5-1`, medium, Low only, no pass 3): L1 the dependency row; L2 the design citation; L3 the requirement wording; L4 the Git layer before Node.js
 - [ ] 4.2 Archive the change
