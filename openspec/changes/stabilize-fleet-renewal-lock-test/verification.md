@@ -99,6 +99,7 @@ For the coordinator (flaky queue item 12), no code change here: barriers outside
 | Whole file, 10 consecutive runs | `73dfc4f8` | 10 of 10 passed, 55 tests each, 11322 to 11524 ms, load average 1.76 to 3.13 |
 | The same, 10 runs under the 8 busy loops | `73dfc4f8` | 10 of 10 passed, 55 tests each, 14394 to 15143 ms, load average 6.21 to 12.65; no busy loop left afterwards |
 | `env -u NODE_ENV make verify`, pass 1 fix round, run 1 | `5c37070f` | Failed outside this change: the Node.js suites passed (tests 4880, pass 4833, fail 0, skipped 47; both changed tests passed, 206 ms and 166 ms), and `apps/web` `test/task-detail.test.tsx` "chooses a project by keyboard in its dialog, and keeps the detail for the same project" failed after 5857 ms with `Unable to find role="menuitem" and name "Taskelith"` (1 failed, 815 passed) |
+| `env -u NODE_ENV make verify`, pass 1 fix round, run 2 | `daff87cc` | Passed, profile full, tree `70a37d636e988ab26a45090126c632860540aeec`; `apps/web` 816 of 816 passed; both changed tests passed (199 ms and 187 ms) |
 
 ### Route
 
@@ -109,11 +110,15 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `108132285a8c7c31ab05658c9fad316bf0d30f05`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.98% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `70a37d636e988ab26a45090126c632860540aeec`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.84% functions.
 - `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict`: passed, `Change 'stabilize-fleet-renewal-lock-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 125 file(s); every pass summary file is valid: 105 file(s); every route file is valid: 58 file(s).`.
 - Spec diff against the merge base `a46ae37fce39` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a7e4-71eb-7770-80f0-e2cbc365e98b` | 0 | 0 | 4 | 1 |
 <!-- make record: end -->
 
 ## Independent review
