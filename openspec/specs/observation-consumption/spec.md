@@ -6,7 +6,7 @@ The control plane's consumption of execution and worker observations: authentica
 ## Requirements
 
 ### Requirement: One transaction per observation
-The control plane SHALL apply each observation in one SERIALIZABLE transaction that records its inbox entry, its sequence in the producer cursor of its `(workerId, journalId)`, first contact, its effect, and any confirmation, and SHALL acknowledge it only after that transaction committed. An observation whose identity the inbox already holds SHALL NOT apply its effect again: at a sequence its journal applied, it SHALL change nothing but the worker's contact and a confirmation sent again.
+The control plane SHALL apply each observation in one SERIALIZABLE transaction that records its inbox entry, its sequence in the producer cursor of its `(workerId, journalId)`, its effect, and any confirmation, and SHALL acknowledge it only after that transaction committed. An observation whose identity the inbox already holds SHALL NOT apply its effect again: at a sequence its journal applied, it SHALL change nothing but a confirmation sent again and the worker's contact.
 
 #### Scenario: Redelivered observation
 - **WHEN** an applied acceptance is delivered again under a new broker message identity
@@ -42,15 +42,35 @@ A duplicate from an authenticated producer at or below `confirmedThrough` SHALL 
 - **THEN** it is a duplicate, the cursor is unchanged, and a confirmation through the current prefix is appended again under a new event identity
 
 ### Requirement: First contact
-An authenticated observation of a worker that is not revoked SHALL mark its worker reachable and SHALL move the worker's last contact to the database time, never backward. A duplicate that the inbox already holds SHALL record contact too. An observation of a revoked worker SHALL record no contact, as `launch-reconciliation` requires.
+An authenticated observation SHALL record contact in its own transaction, after the observation's transaction when that commits: the worker becomes reachable and its last contact moves to the database time, never backward, only while it is enrolled, not revoked, and under its enrolled journal, not retired. A failed contact of a consumed observation SHALL be logged and SHALL NOT fail or redeliver it. A duplicate SHALL record contact; a revoked worker's observation SHALL record none.
 
 #### Scenario: New worker
-- **WHEN** a newly enrolled worker's first capacity declaration is applied
+- **WHEN** a newly enrolled worker's first capacity declaration is applied, and its contact is recorded
 - **THEN** the worker is reachable and eligible for placement
 
 #### Scenario: Duplicate after lost contact
-- **WHEN** a worker marked unreachable republishes an observation that was already applied
+- **WHEN** a worker marked unreachable republishes an observation that was already applied, and its contact is recorded
 - **THEN** it is a duplicate, and the worker is reachable again
+
+#### Scenario: Worker row held by a heartbeat
+- **WHEN** a heartbeat's transaction holds the worker's row while an observation whose effect leaves that row unchanged is applied
+- **THEN** the observation commits before the row is free, and its contact commits after the heartbeat
+
+#### Scenario: Contact fails after the commit
+- **WHEN** an observation committed and its contact's transaction fails
+- **THEN** the observation stays applied and acknowledged, and the failure is logged as `execution.observation.contact-unrecorded`
+
+#### Scenario: Journal retired before the contact
+- **WHEN** the worker's journal is retired after an observation committed and before its contact
+- **THEN** no contact is recorded, and the worker stays unreachable
+
+#### Scenario: Worker revoked before the contact
+- **WHEN** a reachable worker is revoked after an observation committed and before its contact
+- **THEN** no contact is recorded: its last contact is unchanged, and it is not eligible for placement
+
+#### Scenario: Newer stored contact
+- **WHEN** an observation is applied while the worker's stored last contact is later than the database time
+- **THEN** its contact keeps that later last contact
 
 ### Requirement: Stale ownership generation
 An observation about an attempt SHALL be rejected without effect, with the reason `stale-ownership-generation`, when its ownership generation differs from its task's, or, for an acceptance or refusal, from its assignment's. A rejected observation SHALL still be recorded in the inbox and the cursor. A stale launch rejection, `not-started`, or exit of a producer's own assignment SHALL still clear its capacity refusal under the epoch gate, and nothing else.

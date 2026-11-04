@@ -86,6 +86,15 @@ export async function isCurrentProducer(tx: ControlPlaneTransaction, producer: P
   return ok(!(await isRetiredJournal(tx, producer)));
 }
 
+// Contact at the database time, never backward, of a current producer only;
+// answers whether the producer was current.
+export async function recordCurrentContact(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<boolean>> {
+  const current = await isCurrentProducer(tx, producer);
+  if (!current.ok || !current.value) return current;
+  const recorded = await tx.reports.recordContact(producer.workerId, await tx.now());
+  return recorded.ok ? ok(true) : recorded;
+}
+
 // A journal never seen has no cursor, so it is not retired.
 export async function isRetiredJournal(tx: ControlPlaneTransaction, journal: WorkerJournal): Promise<boolean> {
   return (await seenJournal(tx, journal))?.retiredAt !== undefined;

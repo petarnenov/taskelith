@@ -149,6 +149,47 @@ test('a duplicate makes a worker that lost contact reachable again', async () =>
   assert.equal((await transaction.workers.get(WORKER))?.reachable, true);
 });
 
+test('the contact after an observation never moves the last contact backward', async () => {
+  const { service, transaction } = await fixture();
+  const later = '2026-10-25T09:05:00.000Z' as Instant;
+  value(await transaction.reports.recordContact(WORKER, later));
+  assert.equal(value(await service.apply(message('worker.capacity.declared', 1, DECLARATION))), 'applied');
+  const worker = await transaction.workers.get(WORKER);
+  assert.deepEqual([worker?.reachable, worker?.lastContactAt], [true, later]);
+});
+
+// Runs `between` after the observation's transaction, before its contact's.
+function betweenConsumeAndContact(store: ControlPlaneStore, between: () => Promise<void>): ControlPlaneStore {
+  let opened = 0;
+  return {
+    ...store,
+    transaction: async (work) => {
+      if (++opened === 2) await between();
+      return store.transaction(work);
+    },
+  };
+}
+
+for (const [loss, lose] of [
+  ['whose journal is retired', async ({ transaction }: Fixture) => {
+    value(await transaction.cursors.retire(WORKER, JOURNAL as never, AT));
+    value(await transaction.reports.recordJournalLoss(WORKER));
+  }],
+  ['revoked', async ({ transaction }: Fixture) => {
+    value(await (transaction.fleet as InMemoryFleetRegistry).revoke(WORKER, AT));
+  }],
+] as const) {
+  test(`a worker ${loss} before an observation's contact commits gets no contact`, async () => {
+    const placed = await fixture();
+    const service = new ObservationService(betweenConsumeAndContact(placed.store, () => lose(placed)), {
+      newConfirmationId: () => 'confirmation-z', newRequestId: () => 'request-z',
+    });
+    assert.equal(value(await service.apply(message('worker.capacity.declared', 1, DECLARATION))), 'applied');
+    const worker = await placed.transaction.workers.get(WORKER);
+    assert.deepEqual([worker?.reachable, worker?.lastContactAt], [false, undefined]);
+  });
+}
+
 test('a known identity at a new journal\'s next sequence advances its cursor without its effect', async () => {
   const { service, transaction, outbox } = await fixture();
   value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
@@ -178,7 +219,7 @@ test('a journal replaced between finding a rollback and retiring it keeps the ne
     return open(work);
   };
   assert.equal(failed(await service.apply(message('worker.capacity.declared', 1, DECLARATION))).details.reason, 'not-consumed');
-  assert.equal(opened, 3, 'the rollback, the replacement, and the retirement');
+  assert.equal(opened, 4, 'the rollback, the replacement and its contact, and the retirement');
   assert.equal((await transaction.workers.get(WORKER))?.reachable, true);
   assert.equal(value(await transaction.fleet.worker(WORKER))?.journalId, 'journal-2');
   assert.equal((await transaction.cursors.listByWorker(WORKER)).find(({ cursor }) => cursor.journalId === JOURNAL)?.retiredAt, AT);
@@ -535,7 +576,7 @@ function scriptedStore(answers: Result<unknown>[]): ControlPlaneStore & { opened
 
 test('a refused effect is recorded again without it and logged; an outage is returned for redelivery', async () => {
   const stale = err(failure('conflict', 'stale', { reason: 'stale-ownership-generation' }));
-  const store = scriptedStore([stale, ok('rejected'), err(failure('unavailable', 'down')), err(failure('unavailable', 'down'))]);
+  const store = scriptedStore([stale, ok('rejected'), ok(true), err(failure('unavailable', 'down')), err(failure('unavailable', 'down'))]);
   const logs = new InMemoryLogSink();
   const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const accepted = message('execution.assignment.accepted', 1, { commandId: 'c', assignmentId: 's' }, { attemptId: 'a', ownershipGeneration: 2 });
@@ -545,7 +586,46 @@ test('a refused effect is recorded again without it and logged; an outage is ret
   ]);
   assert.equal(failed(await service.apply(accepted)).code, 'unavailable');
   assert.equal(failed(await service.apply(message('execution.started', 2, {}))).code, 'unavailable', 'contact failed');
-  assert.equal(store.opened, 4);
+  assert.equal(store.opened, 5);
+});
+
+test('a contact that fails after its observation committed is logged, and the observation stays applied', async () => {
+  const store = scriptedStore([ok('applied'), err(failure('unavailable', 'down'))]);
+  const logs = new InMemoryLogSink();
+  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const started = message('execution.started', 1, {});
+  assert.equal(value(await service.apply(started)), 'applied');
+  assert.equal(store.opened, 2, 'the observation, then its contact');
+  assert.deepEqual(logs.records.map((record) => [record.level, record.event, record.fields.code, record.correlation.observationId]), [
+    ['warn', 'execution.observation.contact-unrecorded', 'unavailable', started.body.metadata.observationId],
+  ]);
+});
+
+// The observation commits, then its contact's transaction throws, as a
+// statement error of `PostgresDatabase` does.
+function throwingContactStore(error: Error): ControlPlaneStore & { opened: number } {
+  const store = {
+    opened: 0,
+    transaction: async () => {
+      if (++store.opened === 1) return ok('applied');
+      throw error;
+    },
+    readCommitted: async () => err(failure('internal', 'not read')),
+  };
+  return store as never;
+}
+
+test('a contact whose transaction throws after its observation committed is logged as an error, redacted, and it stays applied', async () => {
+  const store = throwingContactStore(new Error('permission denied, password=hunter2'));
+  const logs = new InMemoryLogSink();
+  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const started = message('execution.started', 1, {});
+  assert.equal(value(await service.apply(started)), 'applied');
+  assert.equal(store.opened, 2, 'the observation, then its contact');
+  const fields = (record: (typeof logs.records)[number]) => [record.fields.code, record.fields.reason, record.fields.message];
+  assert.deepEqual(logs.records.map((record) => [record.level, record.event, ...fields(record), record.correlation.observationId]), [
+    ['error', 'execution.observation.contact-unrecorded', 'internal', 'threw', 'the contact threw: permission denied, password=[redacted]', started.body.metadata.observationId],
+  ]);
 });
 
 // The first transaction refuses as a rolled-back store would; the others run.

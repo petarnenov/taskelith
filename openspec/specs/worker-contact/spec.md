@@ -21,7 +21,7 @@ The control plane SHALL record an authenticated heartbeat as contact at the data
 - **THEN** it fails as `forbidden` and records no contact
 
 ### Requirement: Lost contact
-The control plane SHALL mark unreachable each reachable worker whose last recorded contact is more than `30s` before the database time. Contact SHALL be recorded from an authenticated heartbeat, observation, a duplicate observation included, or inventory report. Any later contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
+The control plane SHALL mark unreachable each reachable worker whose last recorded contact is more than `30s` before the database time. Contact SHALL be recorded from an authenticated heartbeat, inventory report, or observation, a duplicate included; an observation's contact is best effort and follows it (`observation-consumption` "First contact"). Any later recorded contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
 
 #### Scenario: Silent worker
 - **WHEN** a worker has had no contact for more than the timeout
@@ -32,8 +32,12 @@ The control plane SHALL mark unreachable each reachable worker whose last record
 - **THEN** the check keeps it reachable
 
 #### Scenario: Contact again
-- **WHEN** a worker marked unreachable sends a heartbeat or an observation
+- **WHEN** a worker marked unreachable sends a heartbeat or an observation, and its contact is recorded
 - **THEN** it is reachable again, and the next check keeps it so
+
+#### Scenario: Observation contact fails
+- **WHEN** a worker marked unreachable sends an observation that is consumed, and the observation's contact fails
+- **THEN** the observation stays consumed, the failure is logged as `execution.observation.contact-unrecorded`, and the worker stays unreachable until a later contact
 
 ### Requirement: Bounded lost-contact check
 The lost-contact check SHALL run every `10s`, SHALL mark at most `100` workers per run with the oldest contact first, and SHALL log `fleet.worker.contact-lost` for each worker it marks. A failed check SHALL be logged as `fleet.lost-contact.failed` and run again at the next interval.
