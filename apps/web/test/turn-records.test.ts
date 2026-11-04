@@ -69,6 +69,15 @@ describe('the turn record store', () => {
     expect(createTurnRecordStore().list('project-1', 'session-1')).toEqual([record('key-2')]);
   });
 
+  it('replaces the record of a key it knows in place, as when its session read is spent', () => {
+    const store = createTurnRecordStore();
+    store.add('project-1', 'session-1', record('key-1'));
+    store.add('project-1', 'session-1', record('key-2'));
+    store.add('project-1', 'session-1', { ...record('key-1'), tokenRefreshed: true });
+    expect(store.list('project-1', 'session-1')).toEqual([{ ...record('key-1'), tokenRefreshed: true }, record('key-2')]);
+    expect(createTurnRecordStore().list('project-1', 'session-1')).toEqual([{ ...record('key-1'), tokenRefreshed: true }, record('key-2')]);
+  });
+
   it('keeps at most the latest records of a session', () => {
     const store = createTurnRecordStore();
     for (let count = 1; count <= MAX_TURN_RECORDS + 1; count += 1) store.add('project-1', 'session-1', record(`key-${count}`));
@@ -95,6 +104,7 @@ describe('the turn record store', () => {
     ['a record without a key', JSON.stringify([{ text: 'x', sentAt: SENT_AT }])],
     ['a record whose text is not text', JSON.stringify([{ key: 'k', text: 1, sentAt: SENT_AT }])],
     ['a record without a time', JSON.stringify([{ key: 'k', text: 'x' }])],
+    ['a record whose spent read is not a boolean', JSON.stringify([{ key: 'k', text: 'x', sentAt: SENT_AT, tokenRefreshed: 'yes' }])],
     ['an object instead of a list', JSON.stringify({ key: 'k' })],
   ])('reads %s as no record', (_, stored) => {
     sessionStorage.setItem(NAME, stored);

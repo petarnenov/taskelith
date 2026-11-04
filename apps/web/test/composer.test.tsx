@@ -510,6 +510,63 @@ describe('a submission refused for its token', () => {
     expect(message().disabled).toBe(false);
   });
 
+  it('reads the session again once per key, whatever failures and retries come between the two refusals', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn
+      .mockResolvedValueOnce({ kind: 'csrf-rejected' })
+      .mockResolvedValueOnce({ kind: 'unavailable' })
+      .mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    const failed = await composerAlert('Not sent');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(2);
+    expect(session.read).toHaveBeenCalledTimes(2);
+    expect(storedRecords()).toMatchObject([{ tokenRefreshed: true }]);
+    await userEvent.click(within(failed).getByRole('button', { name: 'Retry' }));
+    const refused = await composerAlert('Refused');
+    expect(refused.textContent).toContain('refused the request’s token twice');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(3);
+    expect(session.read).toHaveBeenCalledTimes(2);
+    expect(storedRecords()).toEqual([]);
+  });
+
+  it('gives each key its own session read', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const gateway = new FakeBoardGateway();
+    const recorded = (position: number): SubmitResult => ({ kind: 'recorded', turn: turn({ turnId: `turn-${position}`, position, state: 'queued' }) });
+    gateway.submitTurn
+      .mockResolvedValueOnce({ kind: 'csrf-rejected' })
+      .mockResolvedValueOnce(recorded(3))
+      .mockResolvedValueOnce({ kind: 'csrf-rejected' })
+      .mockResolvedValueOnce(recorded(4));
+    openSession(gateway, session);
+    await shownSession();
+    await send('One');
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    await send('Two');
+    await waitFor(() => expect(turnEntries()).toHaveLength(4));
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(4);
+    expect(session.read).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps a spent session read across a reload, so the next refusal of the key is final', async () => {
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-restored', text: 'Sent before', sentAt: SENT_AT, tokenRefreshed: true }]));
+    const session = fakeGateway(AUTHENTICATED);
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValue({ kind: 'csrf-rejected' });
+    openSession(gateway, session);
+    await shownSession();
+    const alert = await composerAlert('Not confirmed');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await composerAlert('Refused');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+    expect(session.read).toHaveBeenCalledTimes(1);
+    expect(storedRecords()).toEqual([]);
+  });
+
   it.each([
     ['could not be read', { kind: 'unavailable' } as const],
     ['read threw', new Error('offline')],
