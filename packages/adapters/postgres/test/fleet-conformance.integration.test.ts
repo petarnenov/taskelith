@@ -30,6 +30,7 @@ const database = new PostgresDatabase(url);
 after(() => database.close());
 // A database clock that stands still until a test steps it, ahead of the
 // real one, so the transaction start that `now()` reads is never expired.
+const AT = value(parseInstant('2026-10-25T09:00:00.000Z'));
 const STEPPED_AT = '2099-01-01T00:00:00.000Z';
 const TOKEN_LIFETIME_MILLISECONDS = 1000;
 const STEPPED_EXPIRY = value(parseInstant(new Date(Date.parse(STEPPED_AT) + TOKEN_LIFETIME_MILLISECONDS).toISOString()));
@@ -102,6 +103,42 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
     await Promise.allSettled([enrolling]);
   }
 });
+
+test('a revocation and a redemption that wait for the same row lock have exactly one winner', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  value(await registry.addToken(fleetToken('t1')));
+  const holder = new pg.Client({ connectionString: url.href });
+  await holder.connect();
+  let racing: Promise<[Result<void>, Result<void>]> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
+    racing = Promise.all([registry.revokeToken('id-t1', AT), registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'))]);
+    await waitForLockWaiters(holder, 2);
+    await holder.query('COMMIT');
+    const [revoked, enrolled] = await racing;
+    const workers = value(await registry.activeWorkerIds()).length;
+    if (revoked.ok) assert.deepEqual([!enrolled.ok && enrolled.error.details.reason, workers], ['token-revoked', 0]);
+    else assert.deepEqual([revoked.error.details.reason, enrolled.ok, workers], ['token-used', true, 1]);
+    assert.equal(value(await registry.unusedToken(fleetToken('t1').hash)), undefined);
+  } finally {
+    await Promise.allSettled([holder.end()]);
+    await Promise.allSettled([racing]);
+  }
+});
+
+async function waitForLockWaiters(client: pg.Client, count: number): Promise<void> {
+  for (let tries = 0; tries < 500; tries++) {
+    const { rows } = await client.query<{ waiting: string }>(
+      `SELECT count(*) AS waiting FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
+         AND query LIKE '%enrollment_tokens%'`,
+    );
+    if (Number(rows[0]?.waiting) >= count) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`fewer than ${count} statements wait for the token row`);
+}
 
 async function waitForWaitingEnrollment(client: pg.Client, role: string): Promise<void> {
   for (let tries = 0; tries < 500; tries++) {
