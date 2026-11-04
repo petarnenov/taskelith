@@ -75,7 +75,7 @@ export class ScmIntegrationService {
     const allowedOrigin = normalizeOrigin(creation.allowedOrigin);
     if (!allowedOrigin.ok) return allowedOrigin;
     const integrationId = this.#ports.ids.next();
-    const checks = this.#checksOf(plugin, integrationId);
+    const checks = this.#checksOf(plugin, integrationId, []);
     const settings = await checks.settings(creation.settings);
     if (!settings.ok) return settings;
     const secrets = await checks.secrets(creation.secrets);
@@ -94,25 +94,27 @@ export class ScmIntegrationService {
     if (!current.ok) return current;
     const plugin = this.#ports.plugins.pluginOf(current.value.pluginId);
     if (plugin === undefined) return err(failure('internal', 'the integration names no registered SCM plugin'));
-    const change = await changeOf(this.#checksOf(plugin, current.value.integrationId), update);
+    const { integrationId, settings } = current.value;
+    const change = await changeOf(this.#checksOf(plugin, integrationId, Object.keys(settings)), update);
     if (!change.ok) return change;
     const overflowing = secretPastLimit(current.value, change.value.secrets);
     if (overflowing !== undefined) return err(failure('invalid', `the secret ${overflowing} exceeds the ${MAX_SCM_SECRETS} secrets of an integration`, { setting: overflowing }));
-    return this.#ports.store.update(current.value.integrationId, change.value, this.#auditEntry(invocation));
+    return this.#ports.store.update(integrationId, change.value, this.#auditEntry(invocation));
   }
 
   #auditEntry({ actor, reason }: ScmIntegrationInvocation): ScmIntegrationAuditEntry {
     return { actor, reason, at: this.#ports.clock.now() };
   }
 
-  #checksOf(plugin: SourceControlPlugin, integrationId: ScmIntegrationId): PluginChecks {
+  // `held` names the settings the integration already has.
+  #checksOf(plugin: SourceControlPlugin, integrationId: ScmIntegrationId, held: readonly string[]): PluginChecks {
     const { defects } = this.#ports;
     const defect: ReportedDefect = (operation, kind) => {
       defects.defect({ integrationId, pluginId: plugin.id, operation, kind });
       return pluginDefect();
     };
     return {
-      settings: (settings) => checkedSettings(plugin, settings, defect),
+      settings: (settings) => checkedSettings(plugin, settings, held, defect),
       secrets: (values) => checkedSecrets(plugin, values, defect),
     };
   }
@@ -147,10 +149,17 @@ async function changeOf(checks: PluginChecks, update: ScmIntegrationUpdate): Pro
   });
 }
 
-async function checkedSettings(plugin: SourceControlPlugin, settings: ScmValues, defect: ReportedDefect): Promise<Result<void>> {
+// The plugin may report a value as the setting, so only a name that the
+// request or the integration holds is kept.
+async function checkedSettings(
+  plugin: SourceControlPlugin, settings: ScmValues, held: readonly string[], defect: ReportedDefect,
+): Promise<Result<void>> {
   const checked = await pluginAnswer(() => plugin.checkSettings(settings), noValue, (kind) => defect('checkSettings', kind));
   if (!checked.ok) return checked;
-  return checked.value.ok ? ok(undefined) : err(refusedSetting('setting', checked.value.error.details.setting ?? 'settings'));
+  if (checked.value.ok) return ok(undefined);
+  const trusted = [...Object.keys(settings), ...held];
+  const reported = checked.value.error.details.setting;
+  return err(refusedSetting('setting', reported !== undefined && trusted.includes(reported) ? reported : 'settings'));
 }
 
 // Each named secret is one the plugin knows, with a value it accepts.
