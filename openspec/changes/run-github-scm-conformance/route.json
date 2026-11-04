@@ -1,11 +1,11 @@
 {
   "change": "run-github-scm-conformance",
-  "generatedAt": "2026-11-03T21:38:04.555Z",
-  "devCommit": "d0d59478235781b8b095852b9306fe3e76237de8",
-  "headCommit": "5795b6f30588d381ec20b0bfc12dc6699b0af425",
+  "generatedAt": "2026-11-04T00:00:30.366Z",
+  "devCommit": "2700c16a4620abc0ed0fdd76061110ace3afa341",
+  "headCommit": "9a6b49327981ee15e90f2a01dde982be81391565",
   "features": {
-    "linesChanged": 4459,
-    "filesChanged": 39,
+    "linesChanged": 6430,
+    "filesChanged": 53,
     "capabilities": [
       "scm-port",
       "scm-qualification"
@@ -22,9 +22,9 @@
     "externalFacts": false,
     "size": "M",
     "capabilityHistory": {
-      "changes": 8,
-      "thirdPassShare": 0.75,
-      "mediumOrWorsePerChange": 11.875
+      "changes": 9,
+      "thirdPassShare": 0.6666666666666666,
+      "mediumOrWorsePerChange": 10.88888888888889
     }
   },
   "rule": {
@@ -71,7 +71,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.8,
+    "thirdPassProbability": 0.75,
     "threshold": 0.4,
     "passes": [
       {
@@ -102,6 +102,6 @@
         }
       }
     ],
-    "latencyMs": 370
+    "latencyMs": 326
   }
 }
