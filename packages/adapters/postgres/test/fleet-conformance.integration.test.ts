@@ -92,7 +92,7 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
     enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
-    await waitForWaitingEnrollment(observer, steppedClock.credentials.username);
+    await waitForWaitingStatement(observer, steppedClock.credentials.username, 'UPDATE enrollment_tokens %');
     await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
     await holder.query('COMMIT');
     const enrolled = await enrolling;
@@ -101,6 +101,33 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
     // Ending the holder also releases its lock after a failed step.
     await Promise.allSettled([holder.end(), observer.end()]);
     await Promise.allSettled([enrolling]);
+  }
+});
+
+// The holder only locks the row, so the rotation's locking SELECT meets an
+// unchanged row: an expiry read in its projection would predate the wait.
+test('a token that expires while its rotation waits for the row lock is not rotated', { concurrency: false }, async () => {
+  await truncateAll(url);
+  await steppedClock.stepTo(0);
+  const registry = new CommittingFleetRegistry(steppedDatabase);
+  value(await registry.addToken(fleetToken('t1', {}, STEPPED_EXPIRY)));
+  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
+  await Promise.all([holder.connect(), observer.connect()]);
+  let rotating: Promise<Result<void>> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM enrollment_tokens WHERE token_id = 'id-t1' FOR UPDATE");
+    rotating = registry.rotateToken('id-t1', fleetToken('t2'), AT);
+    await waitForWaitingStatement(observer, steppedClock.credentials.username, 'SELECT used_at%');
+    await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
+    await holder.query('COMMIT');
+    const rotated = await rotating;
+    assert.equal(!rotated.ok && rotated.error.details.reason, 'token-not-pending');
+    assert.equal(value(await registry.tokenById('id-t2')), undefined, 'no replacement is stored');
+    assert.deepEqual(await query(url, 'SELECT revoked_at, replacement_token_id FROM enrollment_tokens'), [{ revoked_at: null, replacement_token_id: null }]);
+  } finally {
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([rotating]);
   }
 });
 
@@ -140,17 +167,19 @@ async function waitForLockWaiters(client: pg.Client, count: number): Promise<voi
   throw new Error(`fewer than ${count} statements wait for the token row`);
 }
 
-async function waitForWaitingEnrollment(client: pg.Client, role: string): Promise<void> {
+// Polled outside any transaction: a snapshot of the activity view is kept
+// for a transaction's duration.
+async function waitForWaitingStatement(client: pg.Client, role: string, statement: string): Promise<void> {
   for (let tries = 0; tries < 500; tries++) {
     const { rows } = await client.query<{ waiting: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-         AND usename = $1 AND query LIKE 'UPDATE enrollment_tokens %') AS waiting`,
-      [role],
+         AND usename = $1 AND query LIKE $2) AS waiting`,
+      [role, statement],
     );
     if (rows[0]!.waiting) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('the enrollment never waited for the row lock');
+  throw new Error(`no statement like ${statement} waited for the row lock`);
 }
 
 test('a publisher that waited for the lock pushes every entry committed meanwhile', { concurrency: false }, async () => {

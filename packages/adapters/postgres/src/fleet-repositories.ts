@@ -46,12 +46,11 @@ interface TokenRow {
   readonly constraints: string;
 }
 
-// A token's locked row beyond its record; `expired` is read after the lock.
+// A token's locked row beyond its record.
 interface TokenStateRow {
   readonly used_at: Date | null;
   readonly revoked_at: Date | null;
   readonly replacement_token_id: string | null;
-  readonly expired: boolean;
 }
 
 const TOKEN_COLUMNS = 'token_id, secret_hash, issued_at, expires_at, constraints';
@@ -130,7 +129,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
   async rotateToken(tokenId: string, replacement: EnrollmentToken, at: Instant): Promise<Result<void>> {
     const state = await this.#lockedToken(tokenId);
     if (state === undefined) return err(unknownToken(tokenId));
-    const refusal = rotationRefusal(state, state.expired);
+    const refusal = rotationRefusal(state, await this.#expiredUnderLock(tokenId));
     if (refusal !== undefined) return err(refusal);
     const added = await this.addToken(replacement);
     if (!added.ok) return added;
@@ -286,10 +285,9 @@ export class PostgresFleetRegistry implements FleetRegistry {
   }
 
   // The row lock serializes a command with a redemption of the same token.
-  async #lockedToken(tokenId: string): Promise<(EnrollmentTokenState & { expired: boolean }) | undefined> {
+  async #lockedToken(tokenId: string): Promise<EnrollmentTokenState | undefined> {
     const { rows } = await this.#session.query<TokenStateRow>(
-      `SELECT used_at, revoked_at, replacement_token_id, expires_at <= clock_timestamp() AS expired FROM enrollment_tokens
-       WHERE token_id = $1 FOR UPDATE`,
+      'SELECT used_at, revoked_at, replacement_token_id FROM enrollment_tokens WHERE token_id = $1 FOR UPDATE',
       [tokenId],
     );
     const row = rows[0];
@@ -298,8 +296,17 @@ export class PostgresFleetRegistry implements FleetRegistry {
       ...(row.used_at === null ? {} : { usedAt: instant(row.used_at) }),
       ...(row.revoked_at === null ? {} : { revokedAt: instant(row.revoked_at) }),
       ...(row.replacement_token_id === null ? {} : { replacementTokenId: row.replacement_token_id }),
-      expired: row.expired,
     };
+  }
+
+  // Its own statement after the lock: the projection of a locking SELECT
+  // can be evaluated before the lock is granted, when the row is unchanged.
+  async #expiredUnderLock(tokenId: string): Promise<boolean> {
+    const { rows } = await this.#session.query<{ expired: boolean }>(
+      'SELECT expires_at <= clock_timestamp() AS expired FROM enrollment_tokens WHERE token_id = $1',
+      [tokenId],
+    );
+    return rows[0]?.expired === true;
   }
 
   // Why a redemption updated no row: the token was revoked, or else used or
