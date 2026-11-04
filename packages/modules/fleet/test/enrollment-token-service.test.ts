@@ -120,7 +120,7 @@ test('a revocation and a redemption of one token have exactly one winner, in eit
     if (revoked.ok) {
       assert.deepEqual([reasonOf(enrolled), workers], [['forbidden', 'token-invalid'], 0], `revoke first ${revokeFirst}`);
     } else {
-      assert.deepEqual([revoked.details.reason, enrolled.ok, workers], ['token-used', true, 1], `revoke first ${revokeFirst}`);
+      assert.deepEqual([failed(revoked).details.reason, enrolled.ok, workers], ['token-used', true, 1], `revoke first ${revokeFirst}`);
     }
   }
 });
@@ -129,7 +129,7 @@ test('no refusal of a token command names a secret', async () => {
   const { registry, tokens: service } = tokens();
   const issued = value(await service.issue({}));
   value(await registry.enroll('hash:enrollment-1' as SecretHash, fleetWorker('w1', 'j1')));
-  const refusals = [await service.revoke('e001'), await service.rotate('e001'), await service.rotate('e999')];
+  const refusals: Result<unknown>[] = [await service.revoke('e001'), await service.rotate('e001'), await service.rotate('e999')];
   for (const refusal of refusals) assert.ok(!JSON.stringify(failed(refusal)).includes(issued.secret));
 });
 
