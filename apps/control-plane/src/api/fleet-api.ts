@@ -2,12 +2,14 @@ import type { HttpSchemas } from '@taskelith/contracts';
 import type {
   EnrollmentTokenRecord,
   EnrollmentTokenService,
+  HostConstraints,
   IssuedEnrollmentToken,
   WorkerAdmissionEntry,
   WorkerAdmissionSnapshot,
   WorkerAdmissionView,
 } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { redactSecrets } from '@taskelith/secrets';
 import { printableWorkerAdmission } from '../application/worker-admission-view.js';
 import type { ApiRequest } from './api-server.js';
 import { afterOf } from './project-api.js';
@@ -66,10 +68,12 @@ function workersBody(snapshot: WorkerAdmissionSnapshot): Wire<'WorkersView'> {
   return { asOf: snapshot.asOf, workers: snapshot.workers.map(workerBody) };
 }
 
+// A host name is text a worker or the owner wrote, so a secret shape in it
+// leaves redacted; the stored constraint still matches the host.
 function workerBody(entry: WorkerAdmissionEntry): Wire<'WorkerAdmissionEntry'> {
   const { workerId, host, enrolledAt, admission, reportedAt, results } = entry;
   return {
-    workerId, host: { ...host }, enrolledAt, admission, ...(reportedAt === undefined ? {} : { reportedAt }),
+    workerId, host: { ...host, hostname: redactSecrets(host.hostname) }, enrolledAt, admission, ...(reportedAt === undefined ? {} : { reportedAt }),
     // The domain result is not a discriminated union; `successResponse`
     // checks the body against `SelfCheckResult` before it leaves.
     results: results.map((result) => ({ ...result, details: [...result.details] })) as Wire<'WorkerAdmissionEntry'>['results'],
@@ -82,7 +86,12 @@ function tokenIdOf(parameters: readonly string[]): Result<string> {
 }
 
 function tokenBody({ tokenId, issuedAt, expiresAt, constraints }: EnrollmentTokenRecord): Wire<'EnrollmentToken'> {
-  return { tokenId, issuedAt, expiresAt, constraints: { ...constraints } };
+  return { tokenId, issuedAt, expiresAt, constraints: printableConstraints(constraints) };
+}
+
+function printableConstraints(constraints: HostConstraints): Wire<'HostConstraints'> {
+  const { hostname } = constraints;
+  return { ...constraints, ...(hostname === undefined ? {} : { hostname: redactSecrets(hostname) }) };
 }
 
 function issuedBody({ token, secret }: IssuedEnrollmentToken): Wire<'IssuedEnrollmentToken'> {

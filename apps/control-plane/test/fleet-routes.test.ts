@@ -299,3 +299,29 @@ test('a token secret reaches only the 201 bodies of issue and rotate: never a li
   assert.ok(!logged.includes('tken_'), 'no secret in the request log');
   for (const value of [secret, replacement.secret]) assert.ok(!logged.includes(value));
 });
+
+test('a secret-shaped hostname of a worker host or a token constraint is redacted on the way out, and only the issue and rotate secret is kept', async (t) => {
+  const { call, registry, OWNER } = await fixture(t);
+  const secrets = new NodeSecrets();
+  const hostSecret = secrets.issue('worker').secret;
+  const constraintSecret = secrets.issue('enrollment').secret;
+  value(await registry.addToken(fleetToken('t-w1')));
+  value(await registry.enroll('t-w1' as SecretHash, fleetWorker('w1', 'j1', { host: { platform: 'linux', architecture: 'x64', hostname: hostSecret } })));
+  const view = await call('GET', '/workers', OWNER);
+  assert.ok(checkHttpSchema('WorkersView', view.body).ok, 'the redacted view keeps its schema');
+  assert.ok((view.body.workers as Array<{ host: { hostname: string } }>)[0]?.host.hostname === REDACTED, 'the host name is redacted');
+  assert.ok(!view.text.includes(hostSecret), 'no host secret in the view');
+  const issued = await call('POST', '/enrollment-tokens', OWNER, { hostname: constraintSecret });
+  assert.equal(issued.status, 201, 'the token is issued');
+  const { token, secret } = issued.body as { token: { tokenId: string; constraints: { hostname: string } }; secret: string };
+  assert.ok(token.constraints.hostname === REDACTED && secret.startsWith('tken_'), 'the issued constraint is redacted, the secret kept');
+  const rotated = await call('POST', `/enrollment-tokens/${token.tokenId}/rotation`, OWNER);
+  const replacement = rotated.body as { token: { constraints: { hostname: string } }; secret: string };
+  assert.ok(replacement.token.constraints.hostname === REDACTED && replacement.secret.startsWith('tken_'), 'the rotated constraint is redacted, the secret kept');
+  const listed = await call('GET', '/enrollment-tokens', OWNER);
+  assert.ok(checkHttpSchema('EnrollmentTokenPage', listed.body).ok, 'the redacted page keeps its schema');
+  assert.ok((listed.body.tokens as Array<{ constraints: { hostname: string } }>)[0]?.constraints.hostname === REDACTED, 'the listed constraint is redacted');
+  for (const answer of [issued, rotated, listed]) assert.ok(!answer.text.includes(constraintSecret), 'no constraint secret in an answer');
+  const stored = value(await registry.unusedToken(secrets.hashOf(replacement.secret)));
+  assert.ok(stored?.constraints.hostname === constraintSecret, 'the stored constraint still matches the host');
+});
