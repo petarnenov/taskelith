@@ -7,6 +7,7 @@ import { useComposer } from '../src/agent-session/useComposer';
 import type { SubmitResult } from '../src/board/board';
 import { BoardServicesProvider } from '../src/board/BoardServices';
 import { SessionProvider, useSession } from '../src/session/SessionProvider';
+import type { SessionGateway } from '../src/session/session';
 import { AUTHENTICATED, FakeBoardGateway, fakeGateway, ManualClock, PROJECT } from './fakes';
 
 const SENT_AT = '2026-11-04T10:00:00.000Z';
@@ -23,11 +24,11 @@ function deferred<T>() {
 }
 
 // The hook under the providers the session page gives it, once signed in.
-async function composerHook(gateway: FakeBoardGateway) {
+async function composerHook(gateway: FakeBoardGateway, session: SessionGateway = fakeGateway(AUTHENTICATED)) {
   const clock = new ManualClock();
   const store = createTurnRecordStore();
   const wrapper = ({ children }: { readonly children: ReactNode }) => (
-    <SessionProvider gateway={fakeGateway(AUTHENTICATED)} clock={clock}>
+    <SessionProvider gateway={session} clock={clock}>
       <BoardServicesProvider gateway={gateway} clock={clock}>
         <TurnRecordsProvider store={store}>{children}</TurnRecordsProvider>
       </BoardServicesProvider>
@@ -69,5 +70,18 @@ describe('useComposer', () => {
     act(() => hook.result.current.composer.retry('key-2'));
     await waitFor(() => expect(gateway.submitTurn).toHaveBeenCalledTimes(2));
     expect(gateway.submitTurn.mock.calls[1]![2].idempotencyKey).toBe('key-2');
+  });
+
+  it('settles a send as session-changed when the session read after a CSRF refusal finds no session', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValue({ kind: 'anonymous' });
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    const hook = await composerHook(gateway, session);
+    act(() => hook.result.current.composer.send('One'));
+    await waitFor(() => expect(hook.result.current.session.view.status).toBe('signed-out'));
+    await waitFor(() => expect(hook.result.current.composer.submissions[0]?.state).toEqual({ status: 'failed', failure: 'session-changed' }));
+    expect(hook.result.current.composer.sending).toBe(false);
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
   });
 });
