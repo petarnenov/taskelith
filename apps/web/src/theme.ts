@@ -30,13 +30,16 @@ const gray = withShade(DEFAULT_THEME.colors.gray, 6, '#6c757d');
 const dark = withShade(DEFAULT_THEME.colors.dark, 2, '#999999');
 // indigo.2 is the light scheme's hovered light variant behind indigo.9.
 const indigo = withShade(DEFAULT_THEME.colors.indigo, 2, '#c8d3ff');
+// red.9 is the light scheme's light variant text and its error color, 3.8:1
+// on the hovered red.2; this shade keeps a red button readable when hovered.
+const red = withShade(DEFAULT_THEME.colors.red, 9, '#b02020');
 
 export const theme = createTheme({
   primaryColor: 'indigo',
   primaryShade: { light: 7, dark: 8 },
   respectReducedMotion: true,
   defaultRadius: 'md',
-  colors: { gray, dark, indigo },
+  colors: { gray, dark, indigo, red },
   components: {
     ActionIcon: ActionIcon.extend({ defaultProps: { size: 'xl' } }),
     Anchor: Anchor.extend({

@@ -67,6 +67,14 @@ function isProblemList(details: unknown[]): details is string[] {
   return details.length > 0 && details.length <= MAX_PROBLEMS && details.every(isDisplayText);
 }
 
+export function isPlatform(value: unknown): value is WorkerHost['platform'] {
+  return isOneOf(PLATFORMS, value);
+}
+
+export function isArchitecture(value: unknown): value is WorkerHost['architecture'] {
+  return isOneOf(ARCHITECTURES, value);
+}
+
 export function isIdentifier(value: unknown): value is string {
   return typeof value === 'string' && IDENTIFIER.test(value);
 }
