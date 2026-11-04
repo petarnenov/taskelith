@@ -13,7 +13,10 @@ This is a product fix of the installation script, not only a test fix: before it
 - `971be0e9` `chore: route the stabilize admission base ten test change` (`route.json` unedited).
 - `4c5a251e` and `51426040`: the record of the first round.
 - `b111eac1` `chore: measure the admission bound in milliseconds and cap its sleeps at the deadline` (pass 1 fixes and the pass 1 line of `passes.jsonl`).
-- The commit of the pass 1 fix record follows.
+- `9acf2f79` and `de413797`: the record of the pass 1 fix round.
+- `73d21e34` `chore: fail the admission wait on an unread clock and sum the capped poll's sleeps` (pass 2 fixes and the pass 2 line of `passes.jsonl`).
+- `bf20d41f` `docs: record the pass 2 findings of the stabilize admission base ten test change`.
+- The commit of the pass 2 fix record and the archive commit follow.
 
 ## Environment
 
@@ -63,6 +66,26 @@ The five new tests (pattern `P='to the millisecond|never sleeps past|1 ms before
 
 The base and draft scripts ignore the fake clock, so their failures show the old behavior under the new tests rather than its timing: the fake `sleep` returns at once, so they poll until bash's real `SECONDS` reaches the deadline. The mutant shows that a clock read in whole seconds fails on every run.
 
+## Pass 2 fix round
+
+Pass 2 (Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`) reported 0 Critical, 0 High, 0 Medium, and 4 Low. A Low-only pass ends the review sequence, so pass 3 is not run; all four are fixed in `73d21e34` without another review and recorded in `findings.jsonl` with the outcome `fixed-unreviewed`.
+
+- **Finding 1, Low (unread clock).** `read_clock` holds the clock sources; `clock_milliseconds` accepts only digits from it and otherwise prints `installation.sh: the clock could not be read` and fails. `deadline_in` and `milliseconds_left` pass the failure on, and `await_worker_admission`, `deadline_passed`, and `sleep_within` then exit the wait's subshell with `ADMISSION_CLOCK_FAILED` (2), never the timeout status 3, so the wait cannot spin. Tests: "a clock that prints no time fails the admission check before any read" (`TASKELITH_TEST_CLOCK=true`) and "a clock that stops printing a time during the wait fails the admission check, not as a timeout" (the fake `node` sets the clock to `not-a-time`). The spec is unchanged: an unreadable host clock is outside its scenarios. A clock that fails while a read runs exits without killing that read; no test covers it.
+- **Finding 2, Low (capped-poll test).** "a wait between reads never sleeps past the bound" also asserts that its sleeps add up to the bound exactly (`3000` ms).
+- **Finding 3, Low (comment placeholders).** The comments of `deadline_in` and `sleep_within` name their seconds parameter `N`, not `SECONDS`.
+- **Finding 4, Low (line citations).** design "Follow-up", `tasks.md` section 6, and "Pass 1 fix round" cite `await_served_certificates` at `:505` and `await_contact_since` at `:519` of `fa3fbce7`; the design cites function names otherwise. Every line cited in the change was checked: "Author self-check" now cites the draft's deadline at `:453` of `78345789` (it said `:451`, the comment above it), and "Pass 1 fix round" cites `:426` to `:458` at `b111eac1`; the `repository-binding-routes.test.ts`, `secrets.test.ts`, and `g2-partition.test.ts` lines are those of the `make verify` output.
+
+### Fail-before of the pass 2 fix round
+
+Run as `node --experimental-strip-types --test --test-name-pattern=<pattern> --test-reporter=spec test/installation-script.test.ts` from the worktree with `73d21e34`'s test file and the script swapped in, then restored:
+
+| Script | Pattern | Result |
+| --- | --- | --- |
+| `de413797` (`git show de413797:scripts/installation.sh > scripts/installation.sh`) | `prints no time\|stops printing a time` | exit 1, pass 0, fail 2: both `actual: 0, expected: 2`; stderr `line 444: 300000 - : syntax error: operand expected` and `[: : integer expression expected` for the empty clock, `line 444: not: unbound variable` for `not-a-time`; the empty clock admitted the worker after about 1.2 s |
+| Mutant without the cap (`if [ "$left" -lt "$wanted" ]; then wanted="$left"; fi` replaced by `:`) | `never sleeps past` | exit 1, fail 1: `the poll of 5 s is cut to the bound` |
+| Mutant whose cap sleeps 1 ms past the deadline (`wanted="$((left + 1))"`) | `never sleeps past` | exit 1, fail 1: `the sleeps add up to the bound exactly`, `actual: 3001, expected: 3000`; the assertions before it pass |
+| Fix (the tree of `73d21e34`) | `to the millisecond\|never sleeps past\|1 ms before\|1 ms after\|without EPOCHREALTIME\|prints no time\|stops printing a time\|leading zero\|bound that is not positive` | exit 0, 9 of 9 passed |
+
 ## Checks
 
 | Check | Revision | Result |
@@ -72,6 +95,7 @@ The base and draft scripts ignore the fake clock, so their failures show the old
 | The five new tests and "a bound with a leading zero is read in base 10", pattern `$P` plus `leading zero`, 20 consecutive runs with 8 busy-loop shell processes on the 8 logical CPUs | `b111eac1` | 20 of 20 runs exit 0, 6 of 6 passed each, no failure; the leading-zero test took 11359 to 11551 ms, the fake-clock tests 123 to 1510 ms, the `node` clock test 1654 to 1932 ms; load average 12.01 right after the series |
 | `env -u NODE_ENV make verify`, five runs on a host shared with other worktrees' services (load average 5 to 9) | `9acf2f79` (tree `084d2e18`) | Runs 1 to 4 failed only in files of the brief's known flakes (its `repository-binding-routes.test.ts` entry names line 269, a test that uses the same login fixture), each at `make test` with tests 4743 and skipped 47: run 1 fail 1, `repository-binding-routes.test.ts:304` (login `503 !== 200` in the fixture at `:92`); run 2 fail 1, `repository-binding-routes.test.ts:247` (the same fixture assertion); run 3 fail 1, `secrets.test.ts:218` linear time (`"a b" repeated took 252 ms`); run 4 fail 2, `secrets.test.ts:218` (`took 203 ms`) and `g2-partition.test.ts:157`. `repository-binding-routes.test.ts` alone passed 12 of 12. Run 5 passed (totals and coverage in "Generated checks"); the six admission tests named above passed there, the leading-zero test in 11263 ms |
 | Archive of a scratch copy of `openspec/` | `9acf2f79` | `~ 1 modified`, archived as `2026-11-04-stabilize-admission-base-ten-test`; `openspec validate --specs --strict` there: `Totals: 71 passed, 0 failed (71 items)`; the MODIFIED requirement is 478 characters |
+| `env -u NODE_ENV make verify` | `bf20d41f` (tree `fb9e171e`) | Passed on the first run, no known flake, profile full, stamp written; tests 4745, pass 4698, fail 0, skipped 47 (totals and coverage in "Generated checks"); the two new clock tests and "a wait between reads never sleeps past the bound" passed, "a bound with a leading zero is read in base 10" in 11292 ms |
 | `npm run openspec -- validate stabilize-admission-base-ten-test --strict` | `78345789` | `Change 'stabilize-admission-base-ten-test' is valid` |
 | `env -u NODE_ENV make verify` | `971be0e9` | Passed on the first run, no known flake, profile full, tree `4930a67e`, stamp written; the totals are in "Generated checks"; "a bound with a leading zero is read in base 10" passed (12266 ms) and the new test passed (3133 ms) |
 
@@ -84,7 +108,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `084d2e186b2ed68eb0e58e583f28e6a905852cae`; tests 4743, pass 4696, fail 0, skipped 47; all files 99.41% lines, 92.85% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `fb9e171e5f3cbd877fb13f9bfefa995813207b66`; tests 4745, pass 4698, fail 0, skipped 47; all files 99.41% lines, 92.84% branches, 98.81% functions.
 - `npm run openspec -- validate stabilize-admission-base-ten-test --strict`: passed, `Change 'stabilize-admission-base-ten-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 114 file(s); every pass summary file is valid: 94 file(s); every route file is valid: 47 file(s).`.
 - Spec diff against the merge base `fa3fbce73c99` with `origin/dev`: no change under `openspec/specs`.
@@ -93,11 +117,14 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a4f4-9535-7802-adee-165439e57aa9` | 0 | 0 | 3 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `9a3afe82-cef1-4bd1-897e-611e2e507c77` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
 ## Independent review
 
-Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2 is pending; the session runs it.
+Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run. Both passes ran at effort medium, owner decision 2026-11-02.
+
+Fixes that no later pass reviewed, for the coordinator's architect check: the four pass 2 fixes in `73d21e34`, namely the unread-clock failure of `scripts/installation.sh` (`read_clock`, `clock_milliseconds`, `deadline_in`, `milliseconds_left`, `deadline_passed`, `sleep_within`, `ADMISSION_CLOCK_FAILED`) with its two tests, the sum of the capped poll's sleeps, the `N` comment placeholders, and the corrected line citations.
 
 ## Limitations
 
@@ -107,5 +134,5 @@ Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-16
 
 ## Remaining gates
 
-- Independent review, passes as `route.json` assigns.
+- The coordinator's architect check of the unreviewed pass 2 fixes.
 - Integration into dev by the coordinator (single pull request).
