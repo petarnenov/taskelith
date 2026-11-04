@@ -42,7 +42,7 @@ macOS 26.6 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). Two `make verify` runs were made before pass 1, both in the session scratchpad, both passing at the first run with no rerun. `verify-31b-1.log` is the run of the clean tree of `75357447` (profile full, tree `c366a364`, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; `apps/web` Vitest 672 tests in 25 files); the command that wrote it appended its exit code as a last line, so `make record` refused the log as one not ending with the stamped result, and it is kept unedited. `verify-31b-2.log` is the run of the clean tree after the hand-written part of this record was committed, which the generated part records.
+The generated part below matches the tree (`make record-check`). Two `make verify` runs were made before pass 1, both in the session scratchpad, both passing at the first run with no rerun. `verify-31b-1.log` is the run of the clean tree of `75357447` (profile full, tree `c366a364`, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; `apps/web` Vitest 672 tests in 25 files); the command that wrote it appended its exit code as a last line, so `make record` refused the log as one not ending with the stamped result, and it is kept unedited. `verify-31b-2.log` is the run of the clean tree after the hand-written part of this record was committed, which the first generated part recorded; `verify-31b-p1.log` is the run after the pass 1 fixes, which the generated part now records.
 
 ## Fail-before
 
@@ -77,11 +77,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `c1fc44da40ec446c89e2366ac8b570ecf8df5028`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `7d85a035befc14674d50f962a94e148e5df92fdd`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.44% lines, 92.83% branches, 98.87% functions.
 - `npm run openspec -- validate build-agent-session-composer --strict`: passed, `Change 'build-agent-session-composer' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 117 file(s); every pass summary file is valid: 97 file(s); every route file is valid: 50 file(s).`.
 - Spec diff against the merge base `743f4661b786` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a5c3-dbd3-7581-8f0e-c0fc44c7e9fd` | 0 | 4 | 7 | 0 |
 <!-- make record: end -->
 
 ## Independent review
@@ -120,6 +124,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 10 (`b862588b`): the live feed keeps the amendments made during a read with the stream changes and applies them over the snapshot (design, decision 7).
 - Finding 11 (`bad8c6e5`, design and spec in `a2a0dfda`): the coordinator decision (Niki, 2026-11-04) replaces the departure: Q4 wins for a 401; `clearAll` answers whether it dropped a record, the provider keeps that, and the sign-in page's expired and signed-out alerts add "Your last turn may not have been sent; check the timeline after signing in." only then (design, decision 5; spec scenario "Signed out with a turn unconfirmed").
 - After the fixes the whole `apps/web` suite passes: 710 tests in 26 files (`coverage-31b-p1.log`), 99.03% statements, 97.35% branches, 100% functions, and 100% lines; `tsc` of `apps/web/tsconfig.tooling.json`, `npm run verify:comments`, and `npm run openspec -- validate build-agent-session-composer --strict` pass.
+- `make verify` of the fixed, recorded, and routed tree (`a1e7157c`, tree `7d85a035`), `verify-31b-p1.log` in the session scratchpad: passed at the first run, profile full, no rerun of any suite, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 710 tests in 26 files, all passing, with 100% lines. The generated part above records it.
 
 ## Remaining gates
 
