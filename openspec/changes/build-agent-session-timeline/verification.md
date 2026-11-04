@@ -51,3 +51,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
   - Live activity (`fb-31a-activity-not-live.log`): the page gives `useTaskDetail` no live card: fail 2, "shows an unreachable worker with its last contact, still, and an uncertain process in the danger color" and "reads the task detail again on a card change of its run, not of another run, and on a new snapshot".
   - Turns below the cursor (`fb-31a-turns-below-cursor.log`): the adapter accepts a turn at or below the cursor: fail 1, "reads a turn at or below the cursor as unreachable".
   - Last window (`fb-31a-window-from-first.log`): the feed reads from the first turn: fail 6, the window, earlier-window, and position-order tests.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `885f09089d89935583c209844cef6a1e0c77943d`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
+- `npm run openspec -- validate build-agent-session-timeline --strict`: passed, `Change 'build-agent-session-timeline' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`.
+- Spec diff against the merge base `46cd51b3050a` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
