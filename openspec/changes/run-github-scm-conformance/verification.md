@@ -24,6 +24,8 @@ The live phase delivers:
 
 The pass 1 fix round delivers the fixes of the 14 review findings, the coordinator's decisions (listed apart below), a live run, a cleanup-only run, and a new long run after the fixes.
 
+The pass 2 fix round delivers the merge of `dev` and the fixes of the seven Low findings of pass 2, which no later pass reviews.
+
 ## Revision
 
 - Base: `dev` `f0ed0139`. The checklist was saved with `--at f0ed0139b0f6177ad09762a36b214034d92fead5 --size M`.
@@ -56,6 +58,12 @@ The pass 1 fix round, oldest first:
 - `72093e05` `docs: record the pass 1 fix round of the run github scm conformance change`. `make verify` run 4 checked its tree, `01300bc6`; the commit after it adds the run to this record.
 
 The fix round needs no new route: governance routes only before pass 1, and later passes never route.
+
+The pass 2 fix round, oldest first:
+
+- `9a6b4932` `chore: merge dev into run-github-scm-conformance`: on the coordinator's instruction, `origin/dev` `2700c16a` (#435 and #436) merged with a merge commit, without a rebase. Git merged `docs/contracts/source-control.md` without a conflict; it keeps this change's propagation window, rule 7, and version `0.3.0` and #436's output-only `remoteUrl` text. `dev` only adds the requirement "Repository binding store" to `openspec/specs/scm-port/spec.md`; the four requirements this change's delta modifies are unchanged on `dev`.
+- `02ac1920` `docs: record review pass 2 and route the run github scm conformance change again after the dev merge`: pass 2's line of `passes.jsonl`, and `route.json` routed again on the coordinator's instruction, as the merge brought in more than documents. It is unedited: elevated (lines, files, security, contracts), as before.
+- `96b581aa` (finding 1), `1794f7e0` (finding 2), `5536deaf` (finding 3), `80f6f5ad` (finding 4), `dd849931` (finding 5), `68c8d37a` (finding 6), `9f4e88ed` (finding 7).
 
 ## Environment
 
@@ -101,6 +109,12 @@ Each behavior fix of pass 1 has a test written before the fix and run against th
 - `test/github-conformance.test.ts`, 10 of 25 failed: "the guarded fetch follows no redirect, to any host" (finding 2: the fake fetch followed the redirect to `petarnenov/taskelith` and to an external host); "the long run reports a refusal check that fails with another code than forbidden" and "the long run stops on a malformed probe result" (finding 4); "the evidence scan finds a known secret of any accepted length and through JSON escaping" (finding 5); "the evidence redacts and scans every GitHub token family" (finding 6); "the long run names no payload of a thrown value" (finding 7); "the outer cleanup revokes every minted token once and records each failure" (finding 8, against the stub); "a branch deletion refused with 422 is done only when the ref is gone" and the updated "a cleanup step is done when GitHub reports it done or already done" (finding 9); "a listing beyond the page limit fails instead of returning a part" (finding 10). "the fixture client mints a new token on renewal and the guard witnesses both" passed before the fix, as the guard already saw every mint; it guards finding 8's input.
 
 Findings 11, 12, and 14 change documents and the spec delta, and finding 13 changes tests only, so they have no fail-before test; finding 12's delta archived into strictly valid specs on a scratch copy of `openspec/` (`openspec archive`, then `openspec validate --specs --strict`: 71 passed, 0 failed).
+
+### Pass 2 fixes
+
+The new tests of finding 1 ran against the code before the fix (`credential-cases.ts` and `revocation-window.ts` of `02ac1920`, with the new tests): 12 of 44 tests in `source-control-conformance.test.ts` and `revocation-window.test.ts` failed, among them "an ended version refused only after the propagation window is reported" and the seven window tests on the new `answeredLate` field. "an ended version refused with another code than forbidden is reported" passed before, as that message did not change; it guards the third case. After the fix all 44 pass.
+
+For finding 2, `describeStop` returning a thrown `Error`'s message, as the stop record did before, failed "a stop names the guard reason and never an arbitrary exception payload"; the mutation was reverted and the file's 26 tests pass. Findings 3 to 7 change documents, a test title, or a name, so they have no fail-before test.
 
 ## Coordinator decisions
 
@@ -155,7 +169,7 @@ Every ending was refused within the window; the evidence README lists each laten
 
 ### Route
 
-Route (`route.json`, rule version 5, routed again in `a018d996`): elevated (lines, files, security, contracts). Pass 1 reviewer A is `codex gpt-6-astra#high`. Pass 2 reviewer B is `claude claude-fable-5-1#high`. Pass 3 reviewer A is `agy gemini-4-argon-medium#medium`, only after a pass 2 with a Medium or worse finding. The shadow router `jev-1.14.0` agrees. The coordinator assigns the reviewers and their effort.
+Route (`route.json`, rule version 5, routed again in `a018d996` and, after the `dev` merge, in `02ac1920`): elevated (lines, files, security, contracts). Pass 1 reviewer A is `codex gpt-6-astra#high`. Pass 2 reviewer B is `claude claude-fable-5-1#high`. Pass 3 reviewer A is `agy gemini-4-argon-medium#medium`, only after a pass 2 with a Medium or worse finding. The shadow router `jev-1.14.0` agrees. The coordinator assigns the reviewers and their effort.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -176,7 +190,9 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Independent review
 
 - Pass 1, reviewer A: Codex CLI `gpt-6-astra` at effort medium, session `01a1a361-8932-7770-9eac-c24aaf5229a3`, against `d0d59478`: 3 High, 10 Medium, 1 Low. All 14 are fixed in the pass 1 fix round and recorded in `findings.jsonl`; the coordinator's decisions above are listed apart.
-- Pass 2 has not run yet.
+- Pass 2, reviewer B: Claude Code `claude-fable-5-1` at effort medium (owner decision 2026-11-02), session `f0eb27e3-9371-4ba0-8d13-d3ccec1487a2`, against `b7d1ffdf`: 0 Critical, 0 High, 0 Medium, 7 Low. It also found the coordinator's decisions above consistent with the records.
+- A pass that reports only Low findings ends the review, so pass 3 did not run. The seven Low findings are fixed without another review and recorded as `fixed-unreviewed` in `findings.jsonl`.
+- Fixes that no later pass reviewed, for the coordinator's check as solution architect: all seven pass 2 fixes, `96b581aa`, `1794f7e0`, `5536deaf`, `80f6f5ad`, `dd849931`, `68c8d37a`, and `9f4e88ed`, and the merge `9a6b4932`.
 
 ## Limitations
 
@@ -189,6 +205,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review passes 2 and 3 as governance requires.
-- Archive of the change.
+- The coordinator's check, as solution architect, of the pass 2 fixes and the merge that no later pass reviewed.
 - Integration into dev by the coordinator (single pull request).

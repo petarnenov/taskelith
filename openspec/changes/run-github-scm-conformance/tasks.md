@@ -35,5 +35,5 @@
 ## 6. Review and archive
 
 - [x] 6.1 Review passes in order until one reports only Low findings or none, at most three
-- [ ] 6.2 Fix the seven Low findings of pass 2 without another review, as a Low-only pass ends the review
+- [x] 6.2 Fix the seven Low findings of pass 2 without another review, as a Low-only pass ends the review
 - [ ] 6.3 Merge `origin/dev` right before the archive, and archive the change in the last commit of the branch
