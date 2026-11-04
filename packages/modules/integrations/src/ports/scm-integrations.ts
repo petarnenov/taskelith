@@ -50,7 +50,8 @@ export interface ScmIntegrations {
   configurationOf(integrationId: ScmIntegrationId): Promise<Result<StoredScmConfiguration | undefined>>;
 }
 
-// The SCM plugins the composition registered, by manifest identifier.
+// The SCM plugins the composition registered, by manifest identifier read
+// at registration, so that a lookup never runs plugin code.
 export interface ScmPlugins {
   pluginOf(pluginId: string): SourceControlPlugin | undefined;
 }
@@ -67,7 +68,12 @@ export interface UnverifiableIntegrations {
   unverifiable(integrationId: ScmIntegrationId, revision: number, reason: UnverifiableReason): void;
 }
 
-export type ScmPluginOperation = 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+// `descriptor`: reading the plugin's identifier or secret names.
+export type ScmPluginOperation =
+  | 'descriptor' | 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+
+// The defect's plugin when the plugin's own identifier cannot be read.
+export const UNREADABLE_PLUGIN_ID = '(unreadable)';
 
 export type ScmPluginDefectKind =
   | 'threw' | 'malformed-envelope' | 'malformed-value' | 'foreign-repository' | 'unnormalizable-origin' | 'unexpected-failure-code';

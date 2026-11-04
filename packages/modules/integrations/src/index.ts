@@ -66,6 +66,7 @@ export {
   type ScmPluginOperation,
   type ScmPlugins,
   type StoredScmConfiguration,
+  UNREADABLE_PLUGIN_ID,
   type UnverifiableIntegrations,
   type UnverifiableReason,
 } from './ports/scm-integrations.js';

@@ -22,6 +22,17 @@ export async function pluginAnswer<Value>(
   }
 }
 
+// Reads a plugin member once, inside the boundary, into a plain value; a
+// throw or a broken shape is the plugin defect, never quoted.
+export function pluginMember<Value>(read: () => unknown, check: (value: unknown) => Reading<Value>, defect: DefectOfCall): Result<Value> {
+  try {
+    const value = check(read());
+    return value.ok ? ok(value.value) : err(defect('malformed-value'));
+  } catch {
+    return err(defect('threw'));
+  }
+}
+
 export function pluginDefect(): Failure {
   return failure('internal', 'the SCM plugin answered outside its contract');
 }
