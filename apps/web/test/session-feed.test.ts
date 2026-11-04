@@ -208,6 +208,40 @@ describe('earlier turns', () => {
     expect(feed.positions()).toHaveLength(200);
   });
 
+  // The contract promises at most 100 turns per page, so a short page is
+  // followed through its next cursor until the window meets the shown turns.
+  it('follows the next cursor of a short earlier page until the window meets the shown turns', async () => {
+    const feed = await startWindowed();
+    feed.gateway.listAgentSessionTurns
+      .mockResolvedValueOnce(read(turnPage({ turns: turnsAt(51, 100), next: 100 })))
+      .mockResolvedValueOnce(read(turnPage({ turns: turnsAt(101, 150), next: 150 })));
+    feed.feed.loadEarlier();
+    await settled();
+    expect(feed.gateway.listAgentSessionTurns.mock.calls.slice(1).map(([, , after]) => after)).toEqual([50, 100]);
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'ready' }, view: { before: 50 } });
+    expect(feed.positions()).toEqual(Array.from({ length: 200 }, (_, offset) => 51 + offset));
+  });
+
+  it('shows a later page of the earlier window that failed, and joins none of the window', async () => {
+    const feed = await startWindowed();
+    feed.gateway.listAgentSessionTurns
+      .mockResolvedValueOnce(read(turnPage({ turns: turnsAt(51, 100), next: 100 })))
+      .mockResolvedValueOnce({ kind: 'denied', requiredRole: 'project-viewer' });
+    feed.feed.loadEarlier();
+    await settled();
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'failed', failure: { kind: 'denied', requiredRole: 'project-viewer' } }, view: { before: 150 } });
+    expect(feed.positions()).toHaveLength(100);
+  });
+
+  it('shows an earlier page whose next cursor does not advance as unreachable instead of looping', async () => {
+    const feed = await startWindowed();
+    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ turns: turnsAt(51, 100), next: 50 })));
+    feed.feed.loadEarlier();
+    await settled();
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'failed', failure: { kind: 'unavailable' } }, view: { before: 150 } });
+    expect(feed.gateway.listAgentSessionTurns).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     [{ kind: 'unavailable' }],
     [{ kind: 'denied', requiredRole: 'project-viewer' }],
