@@ -1,0 +1,102 @@
+{
+  "change": "stabilize-g2-partition",
+  "generatedAt": "2026-11-04T14:12:32.831Z",
+  "devCommit": "3d40034c1262af4430aa4709c9395753246a7ec3",
+  "query": {
+    "capabilities": [
+      "g2-failure-scenarios",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "test/**",
+      "apps/worker/**",
+      "apps/control-plane/**"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "missing-fail-before-test",
+        "count": 39
+      },
+      {
+        "category": "contract-drift",
+        "count": 37
+      },
+      {
+        "category": "error-handling",
+        "count": 34
+      },
+      {
+        "category": "naming",
+        "count": 27
+      },
+      {
+        "category": "test-flakiness",
+        "count": 22
+      },
+      {
+        "category": "docs",
+        "count": 20
+      },
+      {
+        "category": "concurrency-race",
+        "count": 12
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1031,
+        "inChecklist": 857
+      },
+      "mediumOrWorse": {
+        "findings": 508,
+        "inChecklist": 421
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 163
+      },
+      {
+        "category": "spec-wording",
+        "count": 107
+      },
+      {
+        "category": "docs",
+        "count": 83
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 483,
+        "inChecklist": 476
+      },
+      "mediumOrWorse": {
+        "findings": 77,
+        "inChecklist": 77
+      }
+    }
+  }
+}
