@@ -12,6 +12,8 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `be523614` and `48686b26`: this record and `make record`.
 - `73dfc4f8` `test: match fleet lock-wait barriers by the awaited lock and settle early failures` (the pass 1 fixes of the test file, the scoped requirement, and the pass 1 summary in `passes.jsonl`).
 - The commits after it: the pass 1 record, `findings.jsonl`, and `make record`.
+- `e929041c` `test: report the result of a call that ends before its lock-wait barrier` (the pass 2 fixes of the test file, the spec delta, `proposal.md`, `design.md`, and the pass 2 summary in `passes.jsonl`).
+- The commits after it: the pass 2 record, `findings.jsonl`, `make record`, and the archive.
 
 ## Environment
 
@@ -72,12 +74,22 @@ Pass 1 (Codex `gpt-6-astra`, effort medium) reported 4 Medium and 1 Low findings
    - observer unreachable: old `✖ ... (183.997504ms)`, `Error: connect ECONNREFUSED 127.0.0.1:1`, `SFRL holder connections left [ { left: 1 } ]`, and two `generated asynchronous activity after the test ended` notes when the database was dropped; new `✖ ... (214.17724ms)`, the same error, `{ left: 0 }`, no notes.
    - holder unreachable: old `SFRL observer connections left [ { left: 1 } ]` and the same two notes; new `{ left: 0 }`, no notes.
 3. M3, early rejections: `waitUntilWaiting` (`:290-302`) handles the call when the barrier starts and fails with its error after the first poll that follows its settling. The copies replaced the renewal and the publisher call with `Promise.reject(new Error('injected ... fault before the lock'))` and logged `unhandledRejection` events. Old: `SFRL unhandled rejection: injected publisher fault before the lock` and `... injected renewal fault before the lock`; the test runner failed each test with the injected error after 200.661672 ms and 174.722208 ms, long before the barrier's 500 tries ended, and two `generated asynchronous activity after the test ended` notes followed. New: both tests failed with the injected errors (203.603966 ms and 193.717508 ms), with no unhandled rejection and no notes.
-4. M4, `waitForLockWaiters`: matching `pg_blocking_pids(pid)` with the holder's backend alone failed 7 of the 7 row-lock race tests with `Error: fewer than 2 statements wait for the token row`; a diagnostic copy showed why: `{ pid: 118, blocked_by: [ 120 ] }` and `{ pid: 121, blocked_by: [ 118 ] }` with the holder `120`, the second waiter queued behind the first. The barrier therefore counts the waiters blocked by the holder directly or through a counted waiter (`:306-319`). Decoy: with the holder locking the token row, a blocker held `pg_advisory_lock(42)` and a decoy waited in `SELECT pg_advisory_lock(42), 'enrollment_tokens' AS decoy`; the copy asserted that `waitForLockWaiters` for 1 waiter rejects. Old: `✖ sfrl decoy: a waiter that the holder does not block (510.27432ms)`, `AssertionError [ERR_ASSERTION]: Missing expected rejection.`; new: `✔ ... (7580.030799ms)`.
+4. M4, `waitForLockWaiters`: the literal match, `pg_blocking_pids(pid)` containing the holder's backend alone, failed 7 of the 7 row-lock race tests with `Error: fewer than 2 statements wait for the token row`; a diagnostic copy showed why: `{ pid: 118, blocked_by: [ 120 ] }` and `{ pid: 121, blocked_by: [ 118 ] }` with the holder `120`, the second waiter queued behind the first. This is the reason for the transitive match: the barrier counts the waiters blocked by the holder directly or through a counted waiter (`:306-319`). Decoy: with the holder locking the token row, a blocker held `pg_advisory_lock(42)` and a decoy waited in `SELECT pg_advisory_lock(42), 'enrollment_tokens' AS decoy`; the copy asserted that `waitForLockWaiters` for 1 waiter rejects. Old: `✖ sfrl decoy: a waiter that the holder does not block (510.27432ms)`, `AssertionError [ERR_ASSERTION]: Missing expected rejection.`; new: `✔ ... (7580.030799ms)`.
 5. L5, the advisory key: `waitForWaitingLock` matches `classid = 0` and `objsubid = 1` (`:400-401`). Decoys waited for `pg_advisory_lock(0, 1792930400)` and `pg_advisory_lock(6087897696)`, seen in `pg_locks` as `{ classid: 0, objid: 1792930400, objsubid: 2 }` and `{ classid: 1, objid: 1792930400, objsubid: 1 }`; the copy asserted that the barrier rejects. Old: `✖ sfrl decoy: waiters for advisory keys that share the low half (477.81077ms)`, `Missing expected rejection.`; new: `✔ ... (6246.079299ms)`. The new decoy file: `ℹ tests 2 ℹ pass 2 ℹ fail 0`.
+
+## Pass 2 fix round
+
+Pass 2 (Claude `claude-fable-5-1`, effort medium, session `69ca03a3-4ce9-4de3-aa72-bf479c793322`) reported 3 Low findings and nothing worse, so the review ended and pass 3 did not run. All three are fixed in `e929041c` as the reviewer suggested; no later pass reviewed them, so they are left for the coordinator's check as solution architect. Line references are to the test file at `e929041c`.
+
+1. L1, a call that ends first: `waitUntilWaiting` (`:291-301`) now fails with `${failure}: the call ended first with ${inspect(await call)}` (`:296`), which rethrows a rejection unchanged. Fail-before: copies of the file at `04d3f8c8` (old) and `e929041c` (new) whose renewal resolved at once to `{ ok: false, error: { code: 'conflict', message: 'injected refusal before the lock' } }`, run with `--test-name-pattern='a renewal that waits'`, one run each. Old: `✖ ... (229.760067ms)`, `Error: no statement like SELECT enrollment FROM workers %FOR UPDATE waited for the row lock: the call ended first`. New: `✖ ... (219.18368ms)`, the same message followed by `with { ok: false, error: { code: 'conflict', message: 'injected refusal before the lock' } }`. A copy of the new file whose renewal rejected still failed with `Error: injected renewal fault before the lock` (206.027265 ms). No asynchronous-activity notes in these runs.
+2. L2, naming: `waitForLockWaiters` (`:304`) takes `observer` and `holderPid` as separate parameters; `racedForTokenRow` passes them (`:243-246`).
+3. L3, spec wording: the requirement reads "A lock-wait barrier added or modified by a change in a PostgreSQL integration test" (454 characters), the first scenario's THEN names "the lock the test holds", and `design.md` states that the four barriers in "Follow-up" are grandfathered until a change modifies them.
+
+The cause of the original failures stays unconfirmed. Both failure paths remain recorded in "Diagnosis": the holder's transaction keeps the backend list of its first read while it reads wait events live (item 1), and the old bound of about 2.5 s (item 3).
 
 ## Follow-up
 
-For the coordinator (flaky queue item 12), no code change here: barriers outside this file that the requirement, scoped to barriers a change adds or modifies, does not cover, and that do not conform to it.
+For the coordinator (flaky queue item 12), no code change here: barriers outside this file that the requirement, scoped to barriers added or modified by a change, does not cover, and that do not conform to it.
 
 - `packages/adapters/postgres/test/repository-bindings.integration.test.ts:62-71` `untilUpdateWaits`: a fresh connection per poll, but it matches `UPDATE scm_integrations %` without the role or the awaited lock.
 - `apps/control-plane/test/control-plane-api.integration.test.ts:947-949`: counts any lock waiter of the database.
@@ -100,6 +112,10 @@ For the coordinator (flaky queue item 12), no code change here: barriers outside
 | The same, 10 runs under the 8 busy loops | `73dfc4f8` | 10 of 10 passed, 55 tests each, 14394 to 15143 ms, load average 6.21 to 12.65; no busy loop left afterwards |
 | `env -u NODE_ENV make verify`, pass 1 fix round, run 1 | `5c37070f` | Failed outside this change: the Node.js suites passed (tests 4880, pass 4833, fail 0, skipped 47; both changed tests passed, 206 ms and 166 ms), and `apps/web` `test/task-detail.test.tsx` "chooses a project by keyboard in its dialog, and keeps the detail for the same project" failed after 5857 ms with `Unable to find role="menuitem" and name "Taskelith"` (1 failed, 815 passed) |
 | `env -u NODE_ENV make verify`, pass 1 fix round, run 2 | `daff87cc` | Passed, profile full, tree `70a37d636e988ab26a45090126c632860540aeec`; `apps/web` 816 of 816 passed; both changed tests passed (199 ms and 187 ms) |
+| Whole file, 5 consecutive runs | `e929041c` | 5 of 5 passed, 55 tests each, 11372 to 11593 ms, load average 2.08 to 2.84 |
+| The same, 5 runs under the 8 busy loops | `e929041c` | 5 of 5 passed, 55 tests each, 14548 to 15004 ms, load average 5.46 to 10.29; no busy loop left afterwards |
+| `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict` | `e929041c` | `Change 'stabilize-fleet-renewal-lock-test' is valid` |
+| Archive probe in a scratch copy of `openspec/` | `e929041c`, the requirement of 454 characters | `+ 1 added`, archived as `2026-11-04-stabilize-fleet-renewal-lock-test`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
 
 ### Route
 
@@ -123,7 +139,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a7e4-71eb-7770-80f0-e2cbc365e98b`): 4 Medium, 1 Low, all fixed ("Pass 1 fix round"). Pending: pass 2, and pass 3 if pass 2 reports a Medium or worse finding.
+Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a7e4-71eb-7770-80f0-e2cbc365e98b`): 4 Medium, 1 Low, all fixed ("Pass 1 fix round"). Pass 2 ran (session `69ca03a3-4ce9-4de3-aa72-bf479c793322`): 3 Low, nothing worse, so the review ended at a Low-only pass and pass 3 did not run; the three fixes are unreviewed (`fixed-unreviewed` in `findings.jsonl`, "Pass 2 fix round").
 
 ## Limitations
 
@@ -132,6 +148,5 @@ Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass
 
 ## Remaining gates
 
-- Independent review (pass 2, pass 3 if routed).
-- Archive the change.
+- The coordinator's check, as solution architect, of the three unreviewed pass 2 fixes.
 - Integration into dev by the coordinator (single pull request).
