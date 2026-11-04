@@ -161,6 +161,18 @@ describe('the task detail session links', () => {
     expect(await screen.findByRole('link', { name: 'Open the claude-code session session-1' })).toBeDefined();
     expect(screen.queryByText('The agent sessions cannot be listed')).toBeNull();
   });
+
+  it.each([
+    [{ kind: 'denied' }, 'You hold no role on this project that lets you read its agent sessions.'],
+    [{ kind: 'not-found' }, 'The control plane knows no such card in this project.'],
+    [{ kind: 'unavailable' }, 'The control plane did not answer with the agent sessions of this run.'],
+  ] as const)('says why the sessions could not be listed after %o', async (failure, text) => {
+    openSession(gatewayWith(failure), DETAIL_PATH);
+    const alert = await alertNamed('The agent sessions cannot be listed');
+    expect(alert).toContain(text);
+    expect(alert).not.toContain('needs the role');
+    expect(screen.queryByRole('link', { name: /^Open the/ })).toBeNull();
+  });
 });
 
 describe('the session page', () => {
