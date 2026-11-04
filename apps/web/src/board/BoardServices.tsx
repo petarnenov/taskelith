@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { Clock } from '../session/clock';
+import { expiringCall } from '../session/expiring-call';
 import { useSession } from '../session/SessionProvider';
 import type { BoardGateway } from './board';
 
@@ -29,19 +30,8 @@ export function useBoardServices(): BoardServices {
   );
 }
 
-const UNAVAILABLE = { kind: 'unavailable' } as const;
-
-interface Settled {
-  readonly kind: string;
-}
-
 function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => void): BoardGateway {
-  async function checked<R extends Settled>(call: () => Promise<R>): Promise<R | typeof UNAVAILABLE> {
-    const expire = expiryOfRequest();
-    const result = await settle(call);
-    if (result.kind === 'unauthenticated') expire();
-    return result;
-  }
+  const checked = expiringCall(expiryOfRequest);
   return {
     listProjects: () => checked(gateway.listProjects),
     readBoard: (projectId) => checked(() => gateway.readBoard(projectId)),
@@ -53,13 +43,4 @@ function expiringGateway(gateway: BoardGateway, expiryOfRequest: () => () => voi
     submitTurn: (projectId, sessionId, submission) => checked(() => gateway.submitTurn(projectId, sessionId, submission)),
     openEvents: gateway.openEvents,
   };
-}
-
-// A gateway that throws reads as an unreachable control plane.
-async function settle<R>(call: () => Promise<R>): Promise<R | typeof UNAVAILABLE> {
-  try {
-    return await call();
-  } catch {
-    return UNAVAILABLE;
-  }
 }

@@ -1,4 +1,8 @@
 import type { Board, BoardCard, CardChange, Project, WorkersChange } from './board';
+
+export { failureReason, requiredRoleOf } from '../api/read-result';
+export { isInstant, isRecord, isText } from '../api/wire-guards';
+import { type Fields, isInstant, isRecord, isText } from '../api/wire-guards';
 import {
   ACTIVITY_LABELS,
   COLUMN_LABELS,
@@ -13,8 +17,6 @@ import {
 
 // The typed fetch does not check bodies, so each answer is checked for the
 // fields the board shows; anything else reads as an unreachable plane.
-
-type Fields = Record<string, unknown>;
 
 const POSITION = /^(0|[1-9][0-9]{0,15})$/;
 
@@ -44,19 +46,6 @@ export function workersChangeOf(data: unknown): WorkersChange | undefined {
   }
   const { position, occurredAt, workersOnline } = data as { position: string; occurredAt: string; workersOnline: number };
   return { kind: 'board-changed', position, occurredAt, workersOnline };
-}
-
-export function failureReason(body: unknown): unknown {
-  return detailsOf(body)?.reason;
-}
-
-export function requiredRoleOf(body: unknown): string | undefined {
-  const role = detailsOf(body)?.requiredRole;
-  return isText(role) ? role : undefined;
-}
-
-function detailsOf(body: unknown): Record<string, unknown> | undefined {
-  return isRecord(body) && isRecord(body.details) ? body.details : undefined;
 }
 
 export function isBoardCard(value: unknown): value is BoardCard {
@@ -106,18 +95,6 @@ export function isPosition(value: unknown): value is string {
   return typeof value === 'string' && POSITION.test(value);
 }
 
-export function isInstant(value: unknown): value is string {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
-}
-
-export function isText(value: unknown): value is string {
-  return typeof value === 'string' && value !== '';
-}
-
 export function isCount(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
-}
-
-export function isRecord(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null;
 }

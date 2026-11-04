@@ -1,3 +1,4 @@
+import type { ReadFailed, ReadResult } from '../api/read-result';
 import type { components } from '../generated/control-plane';
 
 // The board as the SPA reads it: the control plane's view types, and the
@@ -48,14 +49,7 @@ export interface Project {
   readonly name: string;
 }
 
-export type ReadFailure = 'unauthenticated' | 'denied' | 'not-found' | 'unavailable';
-
-// A 403 names the role it needs, when the control plane says which.
-export type ReadFailed =
-  | { readonly kind: Exclude<ReadFailure, 'denied'> }
-  | { readonly kind: 'denied'; readonly requiredRole?: string };
-
-export type ReadResult<T> = { readonly kind: 'read'; readonly value: T } | ReadFailed;
+export type { ReadFailed, ReadFailure, ReadResult } from '../api/read-result';
 
 // What submitTurn came to: a recorded or duplicate turn, a refusal that
 // ends the key, or a failure after which the same key may be sent again.

@@ -1,0 +1,104 @@
+{
+  "change": "build-workers-screen",
+  "generatedAt": "2026-11-04T13:54:38.946Z",
+  "devCommit": "d0acd304ef722a5a9fec036a66bbb8060db9eb76",
+  "query": {
+    "capabilities": [
+      "product-ui",
+      "worker-contact",
+      "installation-enrollment",
+      "control-plane-wire-contracts"
+    ],
+    "files": [
+      "apps/web/**",
+      "docs/ui-poc/**",
+      "openspec/specs/product-ui/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 45
+      },
+      {
+        "category": "error-handling",
+        "count": 25
+      },
+      {
+        "category": "concurrency-race",
+        "count": 21
+      },
+      {
+        "category": "redaction",
+        "count": 13
+      },
+      {
+        "category": "spec-wording",
+        "count": 13
+      },
+      {
+        "category": "docs",
+        "count": 12
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 6
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1027,
+        "inChecklist": 803
+      },
+      "mediumOrWorse": {
+        "findings": 507,
+        "inChecklist": 435
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 160
+      },
+      {
+        "category": "spec-wording",
+        "count": 106
+      },
+      {
+        "category": "docs",
+        "count": 82
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 477,
+        "inChecklist": 470
+      },
+      "mediumOrWorse": {
+        "findings": 76,
+        "inChecklist": 76
+      }
+    }
+  }
+}
