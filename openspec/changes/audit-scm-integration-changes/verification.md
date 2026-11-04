@@ -12,7 +12,9 @@ G3 plan item 11 (`docs/g3-plan.md`, row 11), sub-change 11b2, which the coordina
 - PostgreSQL: `7038a1ce` `test: specify the scm integration audit table and its write in the postgresql store's transaction`, `88857677` `test: expect the thrown check violation of a refused scm integration audit row` (a check violation throws after the rollback, as every statement error other than a unique violation does, so the rollback test expects the rejection), `c92df7af` `chore: store scm integration audit events in postgresql in the change's transaction`.
 - HTTP: `7166de8a` `test: specify the audited scm integration routes, their refusals, and their redaction`, `fe3159b2` `chore: audit scm integration commands with the caller and the composition clock`.
 - `4e30533b` `docs: state the scm integration audit in the control-plane wire contracts`; `dabca4d3` ticks tasks 2.1 to 2.4.
-- `af641297` `docs: record the review route of the audit scm integration changes change` (`route.json` unedited): the tree that `make verify` run 1 checked; the commits after it add this record and the `make record` output.
+- `af641297` `docs: record the review route of the audit scm integration changes change` (`route.json` unedited): the tree that `make verify` run 1 checked; `175783a7` and `c50b5e2a` add the `make record` output and this record.
+- Coordinator decisions before pass 1 (Niki, 2026-11-04): `595ac1f5` `test: expect scm integration secrets named secrets.<name> in the audit` and `eaec2e61` `chore: name scm integration secrets secrets.<name> in the audit` (Q-1); `c0696a98` `chore: start the scm integration services from one ports object` (Q-3); `5c44de22` `test: refuse an scm integration command without a principal as internal`; `c43300f5` `docs: state the secrets.<name> audit names, the recorded plugin, and the string actor` (Q-1, Q-2, and the actor in `design.md`, the `scm-port` delta, and wire contracts section 4).
+- `53838bef` `docs: record the review route of the audit scm integration changes change after the pre-review fixes` (`route.json` deleted and written again, unedited): the tree that `make verify` run 2 checked; `279d0e4e` adds the `make record` output, and the commit after it this record.
 
 ## Environment
 
@@ -20,12 +22,12 @@ A 2020 Intel iMac, macOS 26.6.2 (Darwin 25.6.0, x86_64), Docker 29.5.2, Node.js 
 
 ## Author self-check
 
-- Scope: only the brief's step 2 items. `git diff --shortstat 2700c16a af641297 -- '*.ts' '*.sql'`: 26 files, 727 insertions, 125 deletions; all files: 39 files, 1077 insertions, 126 deletions.
+- Scope: only the brief's step 2 items and the coordinator's decisions before pass 1. `git diff --shortstat 2700c16a 53838bef -- '*.ts' '*.sql'`: 27 files, 780 insertions, 126 deletions; all files: 40 files, 1239 insertions, 127 deletions. The decisions before pass 1 alone (`c50b5e2a..53838bef`, `*.ts`): 9 files, 70 insertions, 18 deletions.
 - Coordinator decisions, each with its test:
   - Table: `scm_integration_audit_events` with the identity `position`, the foreign key, the kind check, `changed_fields text[]`, the revision, and the `refuse_audit_change()` trigger; the migration test "the SCM integration audit migration keeps immutable rows of known kinds for stored integrations, and its down migration removes them" refuses an unknown kind, a missing integration, an update, and a delete, and its down migration keeps `scm_integrations` and the shared function. No column holds a value.
-  - Q1 same transaction: `ScmIntegrations.add` and `update` take a `ScmIntegrationAuditEntry`; the store computes the changed fields from its before-state (`changeAudit` and `creationAudit` in `ports/scm-integration-audit.ts`). PostgreSQL appends through `tx.scmIntegrationAudit` in the existing SERIALIZABLE write transaction; "an update whose audit row the table refuses rolls back with the integration, its secrets, and its revision intact" writes the row through a double with a kind outside the check and shows that neither the update nor a creation is kept. In memory, the row is appended inside `exclusive()` before the integration is kept; "in memory, a refused audit row fails the creation or update and keeps nothing of it" checks it. `SCM_INTEGRATION_AUDIT_CONFORMANCE` (7 cases) runs against both adapters; `trail` is in position order.
+  - Q1 same transaction: `ScmIntegrations.add` and `update` take a `ScmIntegrationAuditEntry`; the store computes the changed fields from its before-state (`changeAudit` and `creationAudit` in `ports/scm-integration-audit.ts`). PostgreSQL appends through `tx.scmIntegrationAudit` in the existing SERIALIZABLE write transaction; "an update whose audit row the table refuses rolls back with the integration, its secrets, and its revision intact" writes the row through a double with a kind outside the check and shows that neither the update nor a creation is kept. In memory, the row is appended inside `exclusive()` before the integration is kept; "in memory, a refused audit row fails the creation or update and keeps nothing of it" checks it. `SCM_INTEGRATION_AUDIT_CONFORMANCE` (8 cases) runs against both adapters; `trail` is in position order.
   - Q2 actor and reason: the handlers pass the request's `principalId` and `control-plane API createScmIntegration` or `updateScmIntegration`; the route test "each committed create and update is audited with the caller as actor and its operation as reason" checks the operator bearer and a browser session. The module keeps the actor a string, so it does not depend on `@taskelith/access`.
-  - Q3 changed fields: on create `pluginId`, `label`, `allowedOrigin`, `settings.<key>`, and the secret names; on update `label`, `allowedOrigin`, and each `settings.<key>` of the old or new settings whose value differs, then the names in the update's `secrets`. No secret value is compared, decrypted, or hashed (`design.md` decision 4); the conformance case "an update that names only secrets, or unchanged fields beside them, is secret-changed, also with the stored value sent again" sends the stored value again and expects `secret-changed`.
+  - Q3 changed fields: on create `pluginId`, `label`, `allowedOrigin`, `settings.<key>`, and `secrets.<name>` for each secret; on update `label`, `allowedOrigin`, and each `settings.<key>` of the old or new settings whose value differs, then `secrets.<name>` for each name in the update's `secrets`. The conformance case "a secret is named secrets.<name>, so a secret named label stays apart from the label field" creates an integration with a secret named `label`, replaces only it, then renames the label, and expects `secrets.label`, `secret-changed`, and then `label`. No secret value is compared, decrypted, or hashed (`design.md` decision 4); the conformance case "an update that names only secrets, or unchanged fields beside them, is secret-changed, also with the stored value sent again" sends the stored value again and expects `secret-changed`.
   - Q4 one row per update: `secret-changed` only when secrets alone changed, otherwise `updated` with the secret names (conformance and route tests).
   - Q5 no-op: `updated` with no changed field (conformance case).
   - Q6 refusals: no row for 400, 403, 404, or 409 (route test "a refused create or update, 400, 403, 404, or 409, writes no audit row", the service test, and the conformance case for `conflict` and `not-found`).
@@ -33,9 +35,14 @@ A 2020 Intel iMac, macOS 26.6.2 (Darwin 25.6.0, x86_64), Docker 29.5.2, Node.js 
   - Q8 spec: the `control-plane-api` requirement "Request logs without secrets" is MODIFIED with its scenario kept and one scenario added.
   - Q9 redaction: the route test "no secret value of a create, an update, or a secret change reaches the request log or the audit trail" captures the request log and reads the in-memory trail; the PostgreSQL test "the audit rows hold the field and secret names, the actor, and the reason, and no secret value" reads the rows with SQL. The audit write logs nothing.
 - Edits of existing tests: the store conformance suites and every caller of `add` and `update` pass an audit entry; `scm-integration-start.test.ts` passes the clock; `migrations.integration.test.ts` adds the migration to its lists, holds it back where it holds back `1792934300000_project-repository-bindings`, and takes it down first where an earlier down migration drops `scm_integrations`; the PostgreSQL SCM integration test truncates the audit table.
-- Requirement texts, in characters: `control-plane-api` "Request logs without secrets" (MODIFIED) 349, "Audited SCM integration commands" 281; `postgres-state` "SCM integration audit table" 415, "SCM integration audit in the change's transaction" 170; `scm-port` "SCM integration audit" 445, "Secret values outside the audit" 197.
+- Requirement texts, in characters: `control-plane-api` "Request logs without secrets" (MODIFIED) 349, "Audited SCM integration commands" 281; `postgres-state` "SCM integration audit table" 415, "SCM integration audit in the change's transaction" 170; `scm-port` "SCM integration audit" 475 (445 before Q-1), "Secret values outside the audit" 197.
 - Hexagonal boundaries: `npm run check:boundaries` passes. Commit types: `chore`, `test`, and `docs`, with no AI attribution. Comments: `npm run verify:comments` passes. Only synthetic secrets are used.
-- Deviations, for the coordinator: the `ScmIntegrationAuditEntry` actor is a `string`, not `PrincipalId`, because `@taskelith/integrations` does not depend on `@taskelith/access`; the API passes the `PrincipalId`. A creation also names `pluginId`, a supplied field. Secret names are recorded bare, as the decision states, beside the `settings.` prefix of settings. `startScmIntegrationServices` takes the clock as a fifth positional parameter.
+- Coordinator decisions before pass 1 (Niki, 2026-11-04), on the deviations that run 1 reported:
+  - Q-1: secret names carry the `secrets.` prefix, symmetric with `settings.<key>`, in `creationAudit` and `changeAudit`, which both adapters use; the conformance, service, route, and PostgreSQL tests expect it, and the new conformance case covers a secret named `label`.
+  - Q-2: a creation keeps naming `pluginId`; `design.md` decision 4 states it.
+  - Q-3: `startScmIntegrationServices` takes one `ScmIntegrationStartPorts` object (`namespace`, `database`, `projects`, `clock`) and the logger, as `scmIntegrationServices` takes `ScmIntegrationPorts`; the composition and the start test pass it, with no change of behavior.
+  - The missing-principal `internal` branch of `scm-integration-api.ts` has the test "a create or update handler without a principal fails as internal and never reaches the service".
+  - The actor stays a `string`, not `PrincipalId`, because `@taskelith/integrations` does not depend on `@taskelith/access`; `design.md` decision 3 states it. The API passes the `PrincipalId`.
 
 ## Fail-before
 
@@ -44,6 +51,10 @@ Each behavior's tests were committed before its implementation and run with `nod
 - Module (`f949158c`): the build failed (`TS2307` for the missing `scm-integration-audit.js`, `TS2554` for the third argument), so every one of the 15 module test files failed to load (`fb-11b2-1.log`: tests 15, pass 0, fail 15). After `e851454d`: 171 of 171 pass.
 - PostgreSQL (`7038a1ce`): `scm-integrations.integration.test.ts` failed to load (`PostgresScmIntegrationAudit` not exported), and 16 migration tests failed on the missing migration (`fb-11b2-2.log`: tests 62, pass 45, fail 17). After `c92df7af`: 82 of 82 pass.
 - HTTP (`7166de8a`): the control-plane build failed (`TS2554`, `TS2345`), so the three route and start files failed to load (`fb-11b2-3.log`: tests 3, fail 3). After `fe3159b2`: the route, start, binding route, webhook, access requirement, and API server tests 76 of 76 pass.
+
+- Q-1 (`595ac1f5`): the module audit conformance, service, and route tests failed on the bare secret names, the new `label` case among them (`fb-11b2-pre-1.log`: tests 185, pass 175, fail 10). After `eaec2e61`: 185 of 185 pass (`after-11b2-pre-1.log`).
+- Q-3 (`c0696a98`) changes no behavior; the start tests pass (`after-11b2-pre-2.log`: tests 3, pass 3).
+- Missing principal (`5c44de22`): the branch existed, so the test passes on the implementation (`after-11b2-pre-3.log`: 1 of 1); its mutation control, `invocationOf` without the principal check and with the actor `principalId ?? 'anonymous'`, fails it (`fb-11b2-pre-2.log`: tests 1, fail 1).
 
 Because the module and HTTP fail-before runs fail at load, the behavior negative controls below show that each test fails for its behavior.
 
@@ -68,13 +79,14 @@ Each control applied one mutation to the committed implementation, rebuilt, ran 
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `make verify` (run 2) | `53838bef`, tree `fc5a74ff`, clean | Passed, profile full, stamp written: tests 4704, suites 50, pass 4695, fail 0, cancelled 0, skipped 9; all files 99.44 % lines, 92.79 % branches, 98.86 % functions; `scm-integration-api.js` 87.50 % branches (75 % in run 1), the composition `scm-integrations.js` 83.33 % branches, `scm-integration-audit-conformance.js` 90 % branches, the other changed files as in run 1. No rerun |
 | `make verify` (run 1) | `af641297`, tree `5be7372b`, clean | Passed, profile full, stamp written: tests 4701, suites 50, pass 4692, fail 0, cancelled 0, skipped 9; all files 99.44 % lines, 92.76 % branches, 98.86 % functions; new and changed files 100 % lines; branches: module `scm-integration-audit.js` and `in-memory-scm-integration-audit.js` 100 %, `scm-integration-audit-conformance.js` 89.47 %, postgres `scm-integration-audit.js` 100 %, postgres `scm-integrations.js` 94.92 %, `scm-integration-api.js` 75 %; functions: `in-memory-scm-integrations.js` 93.33 %, the others 100 %. No rerun |
-| `npm run openspec -- validate audit-scm-integration-changes --strict` | `9cbbef55` | `Change 'audit-scm-integration-changes' is valid` |
-| `npm run verify:archive`, inside run 1 | tree `5be7372b` | `Every active OpenSpec change archives into strictly valid specs.` |
+| `npm run openspec -- validate audit-scm-integration-changes --strict` | `9cbbef55`, again at `c43300f5` | `Change 'audit-scm-integration-changes' is valid` |
+| `npm run verify:archive`, inside runs 1 and 2 | trees `5be7372b` and `fc5a74ff` | `Every active OpenSpec change archives into strictly valid specs.` |
 
 ### Route
 
-Route (`route.json`, rule version 5): elevated (lines, files, capabilities, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.71). Reviews run at effort medium (owner decision 2026-11-02), although `route.json` recommends high for passes 1 and 2. The coordinator assigns the reviewers.
+Route (`route.json`, rule version 5): elevated (lines, files, capabilities, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.71; 0.73 after the decisions before pass 1, with the same tier and reviewers). Reviews run at effort medium (owner decision 2026-11-02), although `route.json` recommends high for passes 1 and 2. The coordinator assigns the reviewers.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -96,7 +108,7 @@ No review pass has run yet.
 
 - The audit trail has no read operation and no UI; only tests read it.
 - The table has no retention rule, as the other audit tables have none.
-- A handler without a principal answers `internal`; the server always sets one for these operations, so no test reaches that branch, which is why `scm-integration-api.js` has 75 % branches.
+- A handler without a principal answers `internal`; the server always sets one for these operations, so only a direct handler test reaches that branch.
 
 ## Remaining gates
 
