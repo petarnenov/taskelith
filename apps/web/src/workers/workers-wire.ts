@@ -56,13 +56,15 @@ function selfCheckResultOf(value: unknown): SelfCheckResult | undefined {
   if (!Array.isArray(value.details)) return undefined;
   const { checkId, details } = value;
   if (value.outcome === 'passed' && details.length === 0) return { checkId, outcome: 'passed', details: [] };
-  if (value.outcome === 'failed' && details.length > 0 && details.length <= MAX_PROBLEMS && details.every(isDisplayText)) {
-    return { checkId, outcome: 'failed', details: details as string[] };
-  }
+  if (value.outcome === 'failed' && isProblemList(details)) return { checkId, outcome: 'failed', details: [...details] };
   if (value.outcome === 'not-applicable' && details.length === 1 && isOneOf(NOT_APPLICABLE_REASONS, details[0])) {
     return { checkId, outcome: 'not-applicable', details: [details[0]] };
   }
   return undefined;
+}
+
+function isProblemList(details: unknown[]): details is string[] {
+  return details.length > 0 && details.length <= MAX_PROBLEMS && details.every(isDisplayText);
 }
 
 export function isIdentifier(value: unknown): value is string {
