@@ -13,4 +13,4 @@
 
 - [x] 3.1 Show that the reproduction no longer fails the fixed test, and run it 50 times, 20 under a CPU hog.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-placement-capacity-decline-test --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [x] 3.3 Independent review and record it in `verification.md` (pass 1, no findings).
