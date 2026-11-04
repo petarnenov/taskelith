@@ -908,7 +908,8 @@ describe('the token on the wire', () => {
       expect(document.documentElement.outerHTML).not.toContain(TOKEN);
       const stored = [...Object.values(sessionStorage), ...Object.values(localStorage)].join('\n');
       expect(stored).not.toContain(TOKEN);
-      expect(JSON.stringify(consoleCalls)).not.toContain(TOKEN);
+      const logged = consoleCalls.flat().map((arg) => (arg instanceof Error ? (arg.stack ?? arg.message) : arg));
+      expect(JSON.stringify(logged)).not.toContain(TOKEN);
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
