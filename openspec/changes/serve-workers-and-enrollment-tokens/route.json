@@ -1,10 +1,10 @@
 {
   "change": "serve-workers-and-enrollment-tokens",
-  "generatedAt": "2026-11-04T12:31:54.567Z",
+  "generatedAt": "2026-11-04T13:08:05.887Z",
   "devCommit": "79fb713087669993b5301f1646140c933fe9aac3",
-  "headCommit": "f602cb26689904b7bed55b35d683b1a086126053",
+  "headCommit": "1ee09be20feba7d5d625fea4b37ce02b808ba298",
   "features": {
-    "linesChanged": 1832,
+    "linesChanged": 1908,
     "filesChanged": 30,
     "capabilities": [
       "control-plane-api",
@@ -71,7 +71,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.75,
+    "thirdPassProbability": 0.74,
     "threshold": 0.4,
     "passes": [
       {
@@ -102,6 +102,6 @@
         }
       }
     ],
-    "latencyMs": 274
+    "latencyMs": 309
   }
 }
