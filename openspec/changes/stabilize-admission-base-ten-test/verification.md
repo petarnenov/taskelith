@@ -70,6 +70,8 @@ The base and draft scripts ignore the fake clock, so their failures show the old
 | The new test alone, 10 consecutive runs, with the fix | `78345789` working tree, before commit | 10 of 10 passed |
 | "a bound with a leading zero is read in base 10" and the new test, 20 consecutive runs with 8 busy-loop shell processes on the 8 logical CPUs | `78345789` working tree, before commit | 20 of 20 runs passed 2 of 2; the leading-zero test took 11363 to 12533 ms, the new test 2095 to 4037 ms, both including the test's own waits; load average 10.06 right after the series |
 | The five new tests and "a bound with a leading zero is read in base 10", pattern `$P` plus `leading zero`, 20 consecutive runs with 8 busy-loop shell processes on the 8 logical CPUs | `b111eac1` | 20 of 20 runs exit 0, 6 of 6 passed each, no failure; the leading-zero test took 11359 to 11551 ms, the fake-clock tests 123 to 1510 ms, the `node` clock test 1654 to 1932 ms; load average 12.01 right after the series |
+| `env -u NODE_ENV make verify`, five runs on a host shared with other worktrees' services (load average 5 to 9) | `9acf2f79` (tree `084d2e18`) | Runs 1 to 4 failed only in files of the brief's known flakes (its `repository-binding-routes.test.ts` entry names line 269, a test that uses the same login fixture), each at `make test` with tests 4743 and skipped 47: run 1 fail 1, `repository-binding-routes.test.ts:304` (login `503 !== 200` in the fixture at `:92`); run 2 fail 1, `repository-binding-routes.test.ts:247` (the same fixture assertion); run 3 fail 1, `secrets.test.ts:218` linear time (`"a b" repeated took 252 ms`); run 4 fail 2, `secrets.test.ts:218` (`took 203 ms`) and `g2-partition.test.ts:157`. `repository-binding-routes.test.ts` alone passed 12 of 12. Run 5 passed (totals and coverage in "Generated checks"); the six admission tests named above passed there, the leading-zero test in 11263 ms |
+| Archive of a scratch copy of `openspec/` | `9acf2f79` | `~ 1 modified`, archived as `2026-11-04-stabilize-admission-base-ten-test`; `openspec validate --specs --strict` there: `Totals: 71 passed, 0 failed (71 items)`; the MODIFIED requirement is 478 characters |
 | `npm run openspec -- validate stabilize-admission-base-ten-test --strict` | `78345789` | `Change 'stabilize-admission-base-ten-test' is valid` |
 | `env -u NODE_ENV make verify` | `971be0e9` | Passed on the first run, no known flake, profile full, tree `4930a67e`, stamp written; the totals are in "Generated checks"; "a bound with a leading zero is read in base 10" passed (12266 ms) and the new test passed (3133 ms) |
 
@@ -82,11 +84,15 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `4930a67eb4a341c117a0be9cc9fcca81a90772bd`; tests 4739, pass 4692, fail 0, skipped 47; all files 99.41% lines, 92.85% branches, 98.81% functions.
+- `make verify`: passed, profile full, tree `084d2e186b2ed68eb0e58e583f28e6a905852cae`; tests 4743, pass 4696, fail 0, skipped 47; all files 99.41% lines, 92.85% branches, 98.83% functions.
 - `npm run openspec -- validate stabilize-admission-base-ten-test --strict`: passed, `Change 'stabilize-admission-base-ten-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 114 file(s); every pass summary file is valid: 94 file(s); every route file is valid: 47 file(s).`.
 - Spec diff against the merge base `fa3fbce73c99` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a4f4-9535-7802-adee-165439e57aa9` | 0 | 0 | 3 | 1 |
 <!-- make record: end -->
 
 ## Independent review
