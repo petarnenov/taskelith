@@ -100,11 +100,15 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `49818cc01e844b5a38a7dc827f5eae80dc46fd89`; tests 4881, pass 4834, fail 0, skipped 47; all files 99.42% lines, 92.95% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `7f153d78fd21f08929759585a32d05ffab7d35de`; tests 4889, pass 4842, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.85% functions.
 - `npm run openspec -- validate stabilize-secrets-linear-time-test --strict`: passed, `Change 'stabilize-secrets-linear-time-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).`.
 - Spec diff against the merge base `1ef0cb4263e3` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a863-3102-7202-bef8-a517aab3fb55` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Pass 1 fix round
