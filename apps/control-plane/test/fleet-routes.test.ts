@@ -21,6 +21,7 @@ import {
   decideWorkerAdmission,
   fleetToken,
   fleetWorker,
+  type IdentifierSource,
   type WorkerAdmissionView,
 } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, parseInstant, type Instant } from '@taskelith/kernel';
@@ -32,6 +33,8 @@ const OPERATOR = `tkop_${'D'.repeat(43)}`;
 const PASSWORD = 'password of the fleet route test';
 const INVOCATION = { actor: 'root@control-plane-1', reason: 'fleet route test' };
 const BEARER = { authorization: `Bearer ${OPERATOR}` };
+// A worker's bearer, which no owner operation accepts (wire section 4).
+const WORKER = { authorization: `Bearer tkwk_${'B'.repeat(43)}` };
 const TTL = FLEET_LIMITS.enrollmentTokenTtlMilliseconds;
 const UNKNOWN = `e${'f'.repeat(32)}`;
 const LONG_AGO = value(parseInstant('2000-01-01T00:00:00.000Z'));
@@ -83,9 +86,14 @@ async function browser(base: string, loginName: string): Promise<RequestHeaders>
   return { cookie: rotated, 'x-csrf-token': String((await loggedIn.json() as { csrfToken: string }).csrfToken) };
 }
 
+interface FixtureOverrides {
+  readonly workers?: WorkerAdmissionView;
+  readonly ids?: Pick<IdentifierSource, 'newEnrollmentTokenId'>;
+}
+
 // Each test's own stores, clock, and server: the real session and role path
 // over the in-memory access store, the in-memory registry, and a log sink.
-async function fixture(t: TestContext, workers?: WorkerAdmissionView) {
+async function fixture(t: TestContext, { workers, ids }: FixtureOverrides = {}) {
   const store = new InMemoryAccessStore();
   const secrets = new NodeSecrets();
   const clock = new TestClock();
@@ -97,7 +105,7 @@ async function fixture(t: TestContext, workers?: WorkerAdmissionView) {
   value(await administration.setPassword(owner, 'vera', PASSWORD, INVOCATION));
   const registry = new InMemoryFleetRegistry(() => clock.now());
   const admissions = new InMemoryWorkerAdmissions({ registry, now: () => clock.now() });
-  const tokens = new EnrollmentTokenService({ registry, secrets, ids: new RandomIdentifiers(), clock });
+  const tokens = new EnrollmentTokenService({ registry, secrets, ids: ids ?? new RandomIdentifiers(), clock });
   const sink = new InMemoryLogSink();
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
@@ -138,11 +146,15 @@ const commands = (tokenId: string) => [
   ['POST', `/enrollment-tokens/${tokenId}/rotation`, undefined],
 ] as const;
 
-test('every workers and token operation answers 401 without a credential, and 403 role-required for a principal that is no owner, before the body', async (t) => {
+test('every workers and token operation answers 401 without a credential or with a worker bearer, and 403 role-required for a principal that is no owner, before the body', async (t) => {
   const { call, unchanged, issued, VERA } = await fixture(t);
   const { tokenId } = await issued();
   for (const path of ['/workers', '/enrollment-tokens']) assert.equal((await call('GET', path)).status, 401, path);
   for (const [method, path, body] of commands(tokenId)) assert.equal((await unchanged(() => call(method, path, {}, body))).status, 401, path);
+  for (const path of ['/workers', '/enrollment-tokens']) assert.equal((await call('GET', path, WORKER)).status, 401, `${path} with a worker bearer`);
+  for (const [method, path, body] of commands(tokenId)) {
+    assert.equal((await unchanged(() => call(method, path, WORKER, body))).status, 401, `${path} with a worker bearer`);
+  }
   for (const path of ['/workers', '/enrollment-tokens']) {
     assert.deepEqual(denialOf(await call('GET', path, VERA)), [403, { reason: 'role-required', requiredRole: 'installation-owner' }], path);
   }
@@ -181,7 +193,7 @@ test('the workers view lists the enrolled workers in identifier order with every
 
 test('the workers view answers 503 with no partial data when a source cannot be read', async (t) => {
   const down: WorkerAdmissionView = { workers: async () => err(failure('unavailable', 'worker w1 has an unreadable enrollment record', { worker: 'w1' })) };
-  const { call, OWNER } = await fixture(t, down);
+  const { call, OWNER } = await fixture(t, { workers: down });
   const view = await call('GET', '/workers', OWNER);
   assert.deepEqual([view.status, view.body.code, 'workers' in view.body], [503, 'unavailable', false]);
 });
@@ -193,7 +205,7 @@ test('an issued token is revealed once in a 201 with no-store, and is listed as 
   assert.equal(answer.headers.get('cache-control'), 'no-store');
   assert.ok(checkHttpSchema('IssuedEnrollmentToken', answer.body).ok, 'the issued token keeps its schema');
   const { token, secret } = answer.body as { token: Record<string, unknown>; secret: string };
-  assert.match(secret, /^tken_[A-Za-z0-9_-]{43}$/);
+  assert.ok(/^tken_[A-Za-z0-9_-]{43}$/.test(secret), 'the secret has the token shape');
   assert.match(String(token.tokenId), /^e[0-9a-f]{32}$/);
   assert.deepEqual(token, { tokenId: token.tokenId, issuedAt: clock.now(), expiresAt: later(clock.now(), TTL), constraints: { platform: 'linux', hostname: 'build-1' } });
   const operatorIssued = await issued({ architecture: 'arm64' }, BEARER);
@@ -325,4 +337,20 @@ test('a secret-shaped hostname of a worker host or a token constraint is redacte
   for (const answer of [issued, rotated, listed]) assert.ok(!answer.text.includes(constraintSecret), 'no constraint secret in an answer');
   const stored = value(await registry.unusedToken(secrets.hashOf(replacement.secret)));
   assert.ok(stored?.constraints.hostname === constraintSecret, 'the stored constraint still matches the host');
+});
+
+// An identifier collision at insertion is the server's fault: a minted
+// identifier that repeats makes the registry refuse the second token.
+test('an issue or a rotation whose minted identifier is stored answers 500 internal with a fixed message, and the pending token stays', async (t) => {
+  const { call, registry, OWNER } = await fixture(t, { ids: { newEnrollmentTokenId: () => `e${'a'.repeat(32)}` } });
+  const first = await call('POST', '/enrollment-tokens', OWNER, { platform: 'linux' });
+  assert.equal(first.status, 201, 'the first token is issued');
+  const tokenId = (first.body as { token: { tokenId: string } }).token.tokenId;
+  const stored = { code: 'internal', message: 'the enrollment token could not be stored', details: {} };
+  const repeated = await call('POST', '/enrollment-tokens', OWNER, { platform: 'linux' });
+  assert.deepEqual([repeated.status, repeated.body], [500, stored], 'the repeated issue is a server fault');
+  const rotated = await call('POST', `/enrollment-tokens/${tokenId}/rotation`, OWNER);
+  assert.deepEqual([rotated.status, rotated.body], [500, stored], 'the rotation is a server fault');
+  assert.deepEqual(value(await registry.pendingTokens(undefined, 10)).map((token) => token.tokenId), [tokenId], 'the first token stays pending');
+  for (const answer of [repeated, rotated]) assert.ok(!answer.text.includes('tken_'), 'no secret in a fault');
 });
