@@ -167,6 +167,16 @@ None. Pass 3 reviewed `047a875d`, and every commit after it changes only the rec
 2. `submitTask` of an unknown run now answers the owner 403, not 404, because the owner has no pass on commands; the integration test says so.
 3. The owner's principal identifier reaches the smoke and the scenario tool through `TASKELITH_OWNER_PRINCIPAL_ID`, kept by `installation.sh` from the output of `init`, because no HTTP operation names the caller's principal.
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section added, after tasks 4.1 and 4.2 were ticked and `npm run openspec -- archive require-existing-project-for-runs --yes` moved the change to `openspec/changes/archive/2026-11-04-require-existing-project-for-runs/` (`control-plane-api` 2 added, `execution-wire-contracts` 1 added, `local-installation` 1 modified, `sdlc-wire-contracts` 1 added and 2 modified, `trust-and-operational-foundation` 1 removed; totals + 4, ~ 3, - 1). A probe of the same archive in a scratch copy of `openspec/` at `7aadf68c` passed `validate --all --strict` (71 of 71) first.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-require-existing-project-for-runs`; the command fails as a whole on older archived changes (275 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `aca63889`): only this change's edits, in `control-plane-api` (22 lines, the added "Runs of existing projects" and "Roles of the run operations"), `execution-wire-contracts` (7 lines, the added "Task result role denial"), `local-installation` (2 lines, the MODIFIED "Opt-in end-to-end smoke"), `sdlc-wire-contracts` (25 lines, the added "Run project refusals on the wire" and the MODIFIED "Breaking-change declarations" and "Declared breaking changes listed"), and `trust-and-operational-foundation` (7 lines, the REMOVED "Temporary G2 bridge").
+- The moved change has `findings.jsonl` (the 9 findings of passes 1 and 2) and `passes.jsonl` (three passes); `make findings ARGS="validate"`: `Every findings file is valid: 115 file(s); every pass summary file is valid: 95 file(s); every route file is valid: 48 file(s).`
+- `make verify` (`verify-11c-final.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4783, suites 50, pass 4774, fail 0, skipped 9; all files 99.45 % lines, 92.86 % branches, 98.87 % functions. No rerun. The `pre-push` hook verifies the committed tree again.
+
 ## Limitations
 
 - The 404 of `createRun` is reachable only with a role on an identifier without a project (G2 role rows); it is tested through the service and the route mapping, not over PostgreSQL.

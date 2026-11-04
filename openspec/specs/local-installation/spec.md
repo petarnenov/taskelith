@@ -82,7 +82,7 @@ The worker container SHALL run in a private cgroup v2 namespace whose root holds
 - **THEN** the entrypoint fails and names the cause, and the worker does not start
 
 ### Requirement: Opt-in end-to-end smoke
-`make installation-smoke` SHALL build, bootstrap, start, and enroll a throwaway installation with random secrets, then create a run of a test-only workflow and submit an admitted task through the API. It SHALL pass only when the Linux worker container executes the test-only scripted process through the supervisor and the control plane stores an ended result that exited with code 0.
+`make installation-smoke` SHALL build, bootstrap, start, and enroll a throwaway installation with random secrets, then create a Taskelith project, assign the owner `project-operator` on it, create a run of a test-only workflow in that project, and submit an admitted task through the API. It SHALL pass only when the Linux worker container executes the test-only scripted process through the supervisor and the control plane stores an ended result that exited with code 0.
 
 #### Scenario: Successful smoke
 - **WHEN** `make installation-smoke` runs on a Docker host
