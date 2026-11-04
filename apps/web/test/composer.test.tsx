@@ -8,7 +8,7 @@ import type { SubmitResult, TaskDetail } from '../src/board/board';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
 import { sessionPath } from '../src/screens';
 import { createSessionGateway } from '../src/session/control-plane-session';
-import type { SessionGateway } from '../src/session/session';
+import type { SessionGateway, SessionRead } from '../src/session/session';
 import {
   agentSession,
   agentSessionView,
@@ -16,6 +16,7 @@ import {
   FakeBoardGateway,
   fakeGateway,
   ManualClock,
+  OPERATOR,
   PROJECT,
   renderApp,
   task,
@@ -589,6 +590,62 @@ describe('a submission refused for its token', () => {
     await waitFor(() => expect(turnEntries()).toHaveLength(3));
     expect(gateway.submitTurn.mock.calls[1]![2]).toEqual(first);
     expect(storedRecords()).toEqual([]);
+  });
+
+  it('sends nothing more when the session read again names another operator, and keeps the key', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read
+      .mockResolvedValueOnce(AUTHENTICATED)
+      .mockResolvedValueOnce({ kind: 'authenticated', operator: { ...OPERATOR, loginName: 'someone-else' } });
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    const alert = await composerAlert('Not sent');
+    expect(alert.textContent).toContain('Another sign-in replaced the session');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+    expect(storedRecords()).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Account menu' }).textContent).toContain('someone-else');
+  });
+
+  it('sends nothing more when the composer left before the session was read again, and keeps the key', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const held = deferred<SessionRead>();
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(held.promise);
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    const view = openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    await waitFor(() => expect(session.read).toHaveBeenCalledTimes(2));
+    await act(() => view.router.navigate('/sessions/project-1/session-2'));
+    await screen.findByRole('heading', { level: 1, name: 'Agent session session-2' });
+    await act(async () => held.resolve(AUTHENTICATED));
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+    expect(storedRecords()).toHaveLength(1);
+    await act(() => view.router.navigate('/sessions/project-1/session-1'));
+    await composerAlert('Not confirmed');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing more when the operator signed out while the session was being read again', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const held = deferred<SessionRead>();
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockReturnValueOnce(held.promise).mockResolvedValue({ kind: 'anonymous' });
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    await waitFor(() => expect(session.read).toHaveBeenCalledTimes(2));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    await act(async () => held.resolve(AUTHENTICATED));
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+    expect(storedRecordNames()).toEqual([]);
   });
 
   it('shows the sign-in page when the session had ended by the time it was read again', async () => {
