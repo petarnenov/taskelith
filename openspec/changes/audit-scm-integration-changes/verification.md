@@ -94,7 +94,7 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, cont
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e9f6e5f834f492d37e65ce9d13584f54fb33ab38`; tests 4711, pass 4702, fail 0, skipped 9; all files 99.44% lines, 92.80% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `81760273f5108b7238a35001b3a3aa74637309c2`; tests 4715, pass 4706, fail 0, skipped 9; all files 99.44% lines, 92.82% branches, 98.88% functions.
 - `npm run openspec -- validate audit-scm-integration-changes --strict`: passed, `Change 'audit-scm-integration-changes' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 113 file(s); every pass summary file is valid: 93 file(s); every route file is valid: 46 file(s).`.
 - Spec diff against the merge base `2700c16a4620` with `origin/dev`: no change under `openspec/specs`.
@@ -103,6 +103,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a3ed-9608-71b3-8fe3-6fce07b0ddca` | 0 | 1 | 2 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `62bc5f56-1273-4480-937c-f72e50b41d3c` | 0 | 0 | 1 | 8 |
 <!-- make record: end -->
 
 ## Review
