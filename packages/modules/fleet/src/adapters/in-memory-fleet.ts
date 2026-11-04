@@ -224,8 +224,9 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return ok(unpublished.length);
   }
 
+  // The hash and the identifier are each unique, as the table's columns are.
   #add(token: EnrollmentToken): Result<void> {
-    if (this.#tokens.has(token.hash)) return err(failure('conflict', 'the enrollment token exists'));
+    if (this.#tokens.has(token.hash) || this.#byId(token.tokenId) !== undefined) return err(failure('conflict', 'the enrollment token exists'));
     this.#tokens.set(token.hash, { token: Object.freeze({ ...token }), state: {} });
     return ok(undefined);
   }

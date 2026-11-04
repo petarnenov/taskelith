@@ -103,7 +103,9 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       const problems: string[] = [];
       expectSuccess(problems, 'add token', await registry.addToken(fleetToken('t1', { platform: 'linux' })));
       expectCode(problems, 'add twice', await registry.addToken(fleetToken('t1')), 'conflict');
+      expectCode(problems, 'add a known identifier', await registry.addToken({ ...fleetToken('t2'), tokenId: 'id-t1' }), 'conflict');
       expectRead(problems, 'unused', await registry.unusedToken('t1' as SecretHash), fleetToken('t1', { platform: 'linux' }));
+      expectRead(problems, 'refused hash', await registry.unusedToken('t2' as SecretHash), undefined);
       expectRead(problems, 'unknown', await registry.unusedToken('t9' as SecretHash), undefined);
       expectSuccess(problems, 'enroll', await registry.enroll('t1' as SecretHash, fleetWorker('w1', 'j1')));
       expectRead(problems, 'used token', await registry.unusedToken('t1' as SecretHash), undefined);
@@ -527,6 +529,10 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       expectCode(problems, 'unknown', await registry.rotateToken('id-t9', fleetToken('t9'), AT), 'not-found');
       expectCode(problems, 'replacement exists', await registry.rotateToken('id-t3', fleetToken('t5'), AT), 'conflict');
       expectRead(problems, 'kept pending', await registry.unusedToken('t3' as SecretHash), fleetToken('t3', { platform: 'linux' }));
+      expectCode(problems, 'replacement identifier exists', await registry.rotateToken('id-t3', { ...fleetToken('t7'), tokenId: 'id-t5' }, AT), 'conflict');
+      expectRead(problems, 'still pending', await registry.unusedToken('t3' as SecretHash), fleetToken('t3', { platform: 'linux' }));
+      expectRead(problems, 'no replacement', await registry.unusedToken('t7' as SecretHash), undefined);
+      expectRead(problems, 'identifier kept', await registry.tokenById('id-t5'), tokenRecord(fleetToken('t5', { platform: 'linux' })));
       expectSuccess(problems, 'still rotates', await registry.rotateToken('id-t3', fleetToken('t4'), AT));
       const listed = must(await registry.pendingTokens(undefined, 10)).map((token) => token.tokenId).join(',');
       expectSame(problems, 'pending after', listed, 'id-t4,id-t5');
