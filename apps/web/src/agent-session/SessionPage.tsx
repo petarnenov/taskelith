@@ -10,23 +10,35 @@ import type { TaskDetailState } from '../board/task-detail-feed';
 import { useTaskDetail } from '../board/useTaskDetail';
 import { identifierOf, taskDetailPath } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
+import { Composer } from './Composer';
+import { sessionAddress } from './session-address';
 import type { ShownSession } from './session-feed';
 import { TurnTimeline } from './TurnTimeline';
 import { useLiveSession, type LiveSession } from './useLiveSession';
 
 // The agent session of its address (decision Q2): the session, its last
-// turns with the earlier ones on demand, and the activity of its task.
+// turns with the earlier ones on demand, its task's activity, the composer.
 export function SessionPage() {
   const params = useParams();
   const projectId = identifierOf(params.projectId ?? '');
   const sessionId = identifierOf(params.sessionId ?? '');
   const live = useLiveSession(projectId, sessionId);
+  const key = sessionAddress(projectId, sessionId);
+  const { state } = live;
   return (
     <Stack>
       <Title order={1}>
         Agent session <Breakable text={sessionId} />
       </Title>
-      <SessionContent key={`${projectId}/${sessionId}`} projectId={projectId} live={live} />
+      <SessionContent key={key} projectId={projectId} live={live} />
+      <Composer
+        key={`composer ${key}`}
+        projectId={projectId}
+        sessionId={sessionId}
+        session={state.status === 'shown' ? state.view.session : undefined}
+        feedFailed={state.status === 'failed'}
+        showTurn={live.showTurn}
+      />
     </Stack>
   );
 }

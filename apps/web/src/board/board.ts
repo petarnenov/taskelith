@@ -40,6 +40,8 @@ export type TurnState = Schemas['TurnState'];
 export type TurnOutcome = Schemas['TurnOutcome'];
 export type HarnessFailure = Schemas['HarnessFailure'];
 export type TurnAuthor = Schemas['TurnAuthor'];
+export type TurnSubmission = Schemas['TurnSubmission'];
+export type TurnSubmitted = Schemas['TurnSubmitted'];
 
 export interface Project {
   readonly projectId: string;
@@ -54,6 +56,17 @@ export type ReadFailed =
   | { readonly kind: 'denied'; readonly requiredRole?: string };
 
 export type ReadResult<T> = { readonly kind: 'read'; readonly value: T } | ReadFailed;
+
+// What submitTurn came to: a recorded or duplicate turn, a refusal that
+// ends the key, or a failure after which the same key may be sent again.
+export type SubmitResult =
+  | { readonly kind: 'recorded'; readonly turn: Turn }
+  | { readonly kind: 'duplicate'; readonly turn: Turn }
+  | { readonly kind: 'key-reused' }
+  | { readonly kind: 'session-stopped' }
+  | { readonly kind: 'csrf-rejected' }
+  | { readonly kind: 'invalid' }
+  | ReadFailed;
 
 export interface CardChange {
   readonly kind: 'card-changed';
@@ -114,6 +127,7 @@ export interface BoardGateway {
   readonly readAgentSession: (projectId: string, sessionId: string) => Promise<ReadResult<AgentSessionView>>;
   // One page of the session's turns above the cursor, 0 for the first.
   readonly listAgentSessionTurns: (projectId: string, sessionId: string, after: number) => Promise<ReadResult<TurnPage>>;
+  readonly submitTurn: (projectId: string, sessionId: string, submission: TurnSubmission) => Promise<SubmitResult>;
   // Opens the project's event stream after a position; returns its close.
   readonly openEvents: (projectId: string, after: string, listener: BoardStreamListener) => () => void;
 }

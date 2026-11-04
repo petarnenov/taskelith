@@ -1,7 +1,7 @@
-import type { BoardGateway, BoardStreamEvent, BoardStreamListener, ReadFailed, ReadResult, TurnPage } from '../board/board';
+import type { BoardGateway, BoardStreamEvent, BoardStreamListener, ReadFailed, ReadResult, Turn, TurnPage } from '../board/board';
 import { startLiveFeed, type ShownView } from '../board/live-feed';
 import type { Clock } from '../session/clock';
-import { applySessionChange, viewOf, withEarlierTurns, type SessionTimelineView } from './session-model';
+import { applySessionChange, viewOf, withEarlierTurns, withSubmittedTurn, type SessionTimelineView } from './session-model';
 
 // The last turns read on open and each earlier read: the control plane's
 // page, so one read answers one window.
@@ -32,6 +32,8 @@ export interface ShownSession extends ShownView<SessionTimelineView> {
 export interface SessionFeed {
   // Reads the window of turns before the shown ones, while any remain.
   readonly loadEarlier: () => void;
+  // Shows the turn a submission answer carries, while the session is shown.
+  readonly showTurn: (turn: Turn) => void;
   readonly stop: () => void;
 }
 
@@ -128,6 +130,7 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
 
   return {
     loadEarlier,
+    showTurn: (turn) => feed.amend((view) => withSubmittedTurn(view, turn)),
     stop: () => {
       stopped = true;
       feed.stop();

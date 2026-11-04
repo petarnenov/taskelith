@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { theme } from '../src/theme';
+import { cssVariablesResolver, theme } from '../src/theme';
 import { contrastRatio, schemeColors, type Scheme, type SchemeColors } from './contrast';
 
 const MINIMUM = 4.5;
@@ -7,6 +7,8 @@ const BODY = 'var(--mantine-color-body)';
 const TEXT = 'var(--mantine-color-text)';
 const DIMMED = 'var(--mantine-color-dimmed)';
 const ANCHOR = 'var(--mantine-color-anchor)';
+// Input.error text and an erroneous input's own text (Input.css [data-error]).
+const ERROR = 'var(--mantine-color-error)';
 
 // Surfaces that Mantine's stylesheets set per scheme, not its resolvers:
 // Popover, Input, Card, and dot Badge backgrounds, and the hovers.
@@ -70,6 +72,8 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ['text on a dropdown', TEXT, surfaces.dropdown],
     ['text on a hovered menu item', TEXT, surfaces.menuHover],
     ['text in an input', TEXT, surfaces.input],
+    ['error text under an input, on the page', ERROR, BODY],
+    ['text in an erroneous input', ERROR, surfaces.input],
     ['text on a hovered navigation link', TEXT, surfaces.navLinkHover],
     ...variant('primary filled', 'filled', 'indigo'),
     ...variant('primary light', 'light', 'indigo'),
@@ -87,7 +91,7 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
 }
 
 describe.each<Scheme>(['dark', 'light'])('the %s color scheme', (scheme) => {
-  const colors = schemeColors(theme, scheme);
+  const colors = schemeColors(theme, scheme, cssVariablesResolver);
   const page = colors.resolve(BODY);
   it.each(screenPairs(colors, scheme))('keeps %s at 4.5:1 or more', (_, foreground, background) => {
     const ratio = contrastRatio(colors.resolve(foreground), colors.resolve(background), page);
@@ -110,6 +114,13 @@ describe('contrastRatio', () => {
     const defaults = schemeColors({}, 'light');
     const ratio = contrastRatio(defaults.resolve(DIMMED), defaults.resolve(BODY), '#fff');
     expect(ratio).toBeLessThan(MINIMUM);
+  });
+
+  it.each<Scheme>(['light', 'dark'])('fails Mantine default error text in the %s scheme, which the theme corrects', (scheme) => {
+    const defaults = schemeColors({}, scheme);
+    const page = defaults.resolve(BODY);
+    expect(contrastRatio(defaults.resolve(ERROR), page, page)).toBeLessThan(MINIMUM);
+    expect(contrastRatio(defaults.resolve(ERROR), defaults.resolve(SURFACES[scheme].input), page)).toBeLessThan(MINIMUM);
   });
 
   it('refuses an unknown variable and an unsupported color', () => {

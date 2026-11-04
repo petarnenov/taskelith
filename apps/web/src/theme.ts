@@ -13,6 +13,7 @@ import {
   SegmentedControl,
   Textarea,
   TextInput,
+  type CSSVariablesResolver,
   type MantineColorsTuple,
 } from '@mantine/core';
 
@@ -53,6 +54,14 @@ export const theme = createTheme({
     TextInput: TextInput.extend({ defaultProps: { size: 'lg' } }),
     Textarea: Textarea.extend({ defaultProps: { size: 'lg' } }),
   },
+});
+
+// Mantine's error color is red.6 in the light scheme and red.8 in the dark
+// one, 3.3:1 and 3.4:1 on the page; these shades reach 4.5:1 on an input too.
+export const cssVariablesResolver: CSSVariablesResolver = () => ({
+  variables: {},
+  light: { '--mantine-color-error': 'var(--mantine-color-red-9)' },
+  dark: { '--mantine-color-error': 'var(--mantine-color-red-5)' },
 });
 
 function withShade(tuple: MantineColorsTuple, index: number, shade: string): MantineColorsTuple {

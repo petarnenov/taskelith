@@ -17,7 +17,13 @@ const FAILURE_TEXT: Record<LoginRejection | 'unavailable', string> = {
   unavailable: 'The control plane cannot be reached. Try again.',
 };
 
-export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
+interface SignInPageProps {
+  readonly notice: SignedOutNotice;
+  // A turn was being sent, or had no answer, when the session ended.
+  readonly turnUnconfirmed?: boolean;
+}
+
+export function SignInPage({ notice, turnUnconfirmed = false }: SignInPageProps) {
   const { logIn } = useSession();
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +51,7 @@ export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
               Sign in to Taskelith
             </Title>
           </Group>
-          <SignedOutMessage notice={notice} />
+          <SignedOutMessage notice={notice} turnUnconfirmed={turnUnconfirmed} />
           {failure === undefined ? null : (
             <Alert color="red" variant="light" title="Not signed in">
               {failure}
@@ -78,24 +84,29 @@ export function SignInPage({ notice }: { readonly notice: SignedOutNotice }) {
   );
 }
 
-function SignedOutMessage({ notice }: { readonly notice: SignedOutNotice }) {
+// The outcome of an unconfirmed turn is unknown, so the notice claims
+// neither that it was sent nor that it was not.
+const TURN_UNCONFIRMED = ' Your last turn may not have been sent; check the timeline after signing in.';
+
+function SignedOutMessage({ notice, turnUnconfirmed }: { readonly notice: SignedOutNotice; readonly turnUnconfirmed: boolean }) {
+  const turnNote = turnUnconfirmed ? TURN_UNCONFIRMED : '';
   if (notice === 'expired') {
     return (
       <Alert color="indigo" variant="light" title="Your session expired">
-        Agents and merges keep running. Sign in again to continue.
+        Agents and merges keep running. Sign in again to continue.{turnNote}
       </Alert>
     );
   }
   if (notice === 'signed-out') {
     return (
       <Alert color="indigo" variant="light" title="You signed out" icon={<CheckIcon />}>
-        Agents and merges keep running; only this browser session ended.
+        Agents and merges keep running; only this browser session ended.{turnNote}
       </Alert>
     );
   }
   return (
     <Text size="sm" c="dimmed">
-      Sign in with your login name and password.
+      Sign in with your login name and password.{turnNote}
     </Text>
   );
 }
