@@ -73,6 +73,8 @@ Each mutation was restored; `git status` showed no change.
 
 `route.json` (rule version 5): elevated (lines, files, capabilities, security, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.73). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers.
 
+The pass 1 fixes changed the diff, so `route.json` was deleted and routed again (`18dcb7b1`, unedited): again elevated (lines, files, capabilities, security, contracts), rule version 5, the same reviewers, and the shadow router `jev-1.14.0` agrees (P(third) 0.73).
+
 <!-- make record: begin -->
 ## Generated checks
 
