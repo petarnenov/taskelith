@@ -394,6 +394,17 @@ describe('the session feed reconnect', () => {
     expect(feed.gateway.openStreams()).toHaveLength(1);
   });
 
+  it('reads again and opens a new stream after a session frame it could not read', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    stream.emit({ kind: 'resync', unreadable: 'turn-changed' });
+    await settled();
+    expect(stream.isClosed()).toBe(true);
+    expect(feed.gateway.readAgentSession).toHaveBeenCalledTimes(2);
+    expect(feed.gateway.lastStream()).not.toBe(stream);
+  });
+
   it('reads again on a stream end and keeps the stream, which the browser reconnects', async () => {
     const feed = start();
     await settled();

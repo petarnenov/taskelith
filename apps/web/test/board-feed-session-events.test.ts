@@ -49,6 +49,18 @@ describe('the board feed under session events', () => {
     expect(feed.states).toHaveLength(1);
   });
 
+  it('keeps its stream open and reads no board for a session frame it could not read', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    stream.emit({ kind: 'resync', unreadable: 'turn-changed' });
+    stream.emit({ kind: 'resync', unreadable: 'agent-session-changed' });
+    await settled();
+    expect(stream.isClosed()).toBe(false);
+    expect(feed.gateway.readBoard).toHaveBeenCalledTimes(1);
+    expect(feed.states).toHaveLength(1);
+  });
+
   it('waits before a repeated resync as before when only session events came between', async () => {
     const feed = start();
     await settled();

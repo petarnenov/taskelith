@@ -238,9 +238,9 @@ describe('the session events of the stream', () => {
     ['a turn change without its session identifier', 'turn-changed', { type: 'turn-changed', position: '41', occurredAt: '2026-11-03T09:01:00.000Z', turn: turn() }],
     ['a turn change with an unreadable turn', 'turn-changed', { type: 'turn-changed', position: '41', occurredAt: '2026-11-03T09:01:00.000Z', sessionId: 's', turn: {} }],
     ['a turn change that is not JSON', 'turn-changed', undefined],
-  ])('reads %s as a resync', (_, type, data) => {
+  ])('reads %s as a resync that names the unreadable frame', (_, type, data) => {
     const { source, events } = streamOf();
     source.dispatch(type, data === undefined ? '{' : JSON.stringify(data));
-    expect(events).toEqual([{ kind: 'resync' }]);
+    expect(events).toEqual([{ kind: 'resync', unreadable: type }]);
   });
 });
