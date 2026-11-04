@@ -221,13 +221,16 @@ function submittedOf(body: unknown, effect: TurnSubmitted['effect']): SubmitResu
   return submitted?.effect === effect ? { kind: effect, turn: submitted.turn } : { kind: 'unavailable' };
 }
 
-// The refusals of a turn submission (control-plane.openapi.json submitTurn):
-// a 403 is the token's or the role's; a 409 ends the key; a 422 the session.
+// The refusals of a turn submission (control-plane.openapi.json submitTurn),
+// each by its documented reason; a refusal without it is a wrong answer.
 function refusalOf(result: Answer): SubmitResult {
-  if (result.status === 400) return { kind: 'invalid' };
-  if (result.status === 403 && failureReason(result.body) === 'csrf-token-invalid') return { kind: 'csrf-rejected' };
-  if (result.status === 409) return { kind: 'key-reused' };
-  if (result.status === 422) return { kind: 'session-stopped' };
+  const { status, body } = result;
+  const reason = failureReason(body);
+  if (status === 400) return { kind: 'invalid' };
+  if (status === 403 && reason === 'csrf-token-invalid') return { kind: 'csrf-rejected' };
+  if (status === 403) return reason === 'role-required' ? denialOf(requiredRoleOf(body)) : { kind: 'unavailable' };
+  if (status === 409) return reason === 'idempotency-key-reused' ? { kind: 'key-reused' } : { kind: 'unavailable' };
+  if (status === 422) return reason === 'session-stopped' ? { kind: 'session-stopped' } : { kind: 'unavailable' };
   return failureOf(result);
 }
 
