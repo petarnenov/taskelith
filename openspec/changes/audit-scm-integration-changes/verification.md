@@ -99,10 +99,10 @@ Route (`route.json`, rule version 5): elevated (lines, files, capabilities, cont
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `81760273f5108b7238a35001b3a3aa74637309c2`; tests 4715, pass 4706, fail 0, skipped 9; all files 99.44% lines, 92.82% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `f5d0453fe47e3818bdc59b6cbea55af979ec3808`; tests 4769, pass 4760, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
 - `npm run openspec -- validate audit-scm-integration-changes --strict`: passed, `Change 'audit-scm-integration-changes' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 113 file(s); every pass summary file is valid: 93 file(s); every route file is valid: 46 file(s).`.
-- Spec diff against the merge base `2700c16a4620` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 114 file(s); every pass summary file is valid: 94 file(s); every route file is valid: 47 file(s).`.
+- Spec diff against the merge base `fa3fbce73c99` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
