@@ -1,10 +1,10 @@
 {
   "change": "serve-workers-and-enrollment-tokens",
-  "generatedAt": "2026-11-04T11:40:00.702Z",
+  "generatedAt": "2026-11-04T12:31:54.567Z",
   "devCommit": "79fb713087669993b5301f1646140c933fe9aac3",
-  "headCommit": "cced19bf50d58351b78bc8faab9b68c113f68762",
+  "headCommit": "f602cb26689904b7bed55b35d683b1a086126053",
   "features": {
-    "linesChanged": 1550,
+    "linesChanged": 1832,
     "filesChanged": 30,
     "capabilities": [
       "control-plane-api",
@@ -68,8 +68,40 @@
   },
   "shadow": {
     "router": "jev",
-    "status": "failed",
-    "reason": "timeout",
-    "latencyMs": 2003
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.75,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ],
+    "latencyMs": 274
   }
 }
