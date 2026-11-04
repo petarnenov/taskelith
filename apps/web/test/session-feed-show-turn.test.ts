@@ -74,6 +74,23 @@ describe('showing a submitted turn', () => {
     expect(feed.shown().view.turns.filter((known) => known.turnId === 'turn-3').map((known) => known.state)).toEqual(['delivered']);
   });
 
+  it('keeps a turn shown during a snapshot read over the snapshot, even an older one', async () => {
+    const gateway = new FakeBoardGateway();
+    const feed = start(gateway);
+    await settled();
+    let resolve!: (value: ReadResult<ReturnType<typeof agentSessionView>>) => void;
+    gateway.readAgentSession.mockReturnValueOnce(new Promise((settle) => (resolve = settle)));
+    gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    feed.feed.showTurn(turn({ turnId: 'turn-3', position: 3, text: 'Sent', state: 'queued' }));
+    expect(feed.shown().view.turns.map((known) => known.turnId)).toEqual(['turn-1', 'turn-2', 'turn-3']);
+    resolve({ kind: 'read', value: agentSessionView() });
+    await settled();
+    expect(feed.shown().view.turns.map((known) => known.turnId)).toEqual(['turn-1', 'turn-2', 'turn-3']);
+    expect(feed.shown().view.freshness.turns['turn-3']).toBeUndefined();
+    expect(feed.shown().snapshot).toBe(2);
+  });
+
   it('shows nothing before the session is shown, and keeps the turn through a window read but not a new snapshot', async () => {
     const gateway = new FakeBoardGateway();
     let resolve!: (value: ReadResult<ReturnType<typeof agentSessionView>>) => void;
