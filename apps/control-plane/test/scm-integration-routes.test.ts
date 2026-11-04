@@ -13,7 +13,7 @@ import {
 import { ControlPlaneApi, createApiServer, scmIntegrationServices, singlePlugin, type ApiServices, type ScmIntegrationPorts } from '@taskelith/control-plane';
 import {
   InMemoryScmIntegrationAudit, InMemoryScmIntegrations, ScmSecrets, normalizeOrigin,
-  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries, type SourceControlPlugin,
+  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries, type SourceControlPlugin, type SourceControlProvider, type WebhookDelivery,
 } from '@taskelith/integrations';
 import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type Instant } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -381,6 +381,69 @@ test('a webhook whose provider build throws quoting a secret answers 401, with n
     ['error', { integrationId, pluginId: 'scm-github', operation: 'createProvider', kind: 'threw' }],
   ]);
   assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(recorded, []);
+});
+
+// The GitHub plugin whose providers throw on verification while broken, and
+// whose decoy counts its verifications.
+function verifyBreakableGithub() {
+  const github = githubSourceControlPlugin();
+  const state = { broken: false, decoyVerifications: 0 };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    createProvider: async (configuration) => {
+      const built = await github.createProvider(configuration);
+      if (!built.ok) return built;
+      const provider = built.value;
+      const secret = configuration.secrets['webhook-secret']!;
+      const verifyWebhookDelivery = (delivery: WebhookDelivery) => (
+        state.broken ? Promise.reject(new Error(`refused ${secret}`)) : provider.verifyWebhookDelivery(delivery));
+      return ok({ verifyWebhookDelivery } as unknown as SourceControlProvider);
+    },
+    createDecoy: () => {
+      const decoy = github.createDecoy();
+      return { verifyWebhookDelivery: (delivery) => { state.decoyVerifications += 1; return decoy.verifyWebhookDelivery(delivery); } };
+    },
+  };
+  return { plugin, state };
+}
+
+test('a plugin defect, a bad signature, and an unknown integration answer byte-equal 401s', async (t) => {
+  const { plugin, state } = verifyBreakableGithub();
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  const deliver = async (target: string, secret: string) => {
+    const response = await fetch(`${base}/scm-integrations/${target}/webhooks`, {
+      method: 'POST', body, headers: {
+        'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': 'd-1',
+        'x-hub-signature-256': `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
+      },
+    });
+    const perRequest = new Set(['date', 'x-correlation-id']);
+    const headers = [...response.headers].filter(([name]) => !perRequest.has(name));
+    return { status: response.status, headers, text: await response.text() };
+  };
+  const decoyWork: number[] = [];
+  const answerOf = async (target: string, secret: string) => {
+    const before = state.decoyVerifications;
+    const answer = await deliver(target, secret);
+    decoyWork.push(state.decoyVerifications - before);
+    return answer;
+  };
+  const unknown = await answerOf(MISSING, WEBHOOK_SECRET);
+  const badSignature = await answerOf(integrationId, ROTATED_SECRET);
+  state.broken = true;
+  const defect = await answerOf(integrationId, WEBHOOK_SECRET);
+  assert.equal(unknown.status, 401);
+  assert.deepEqual(badSignature, unknown);
+  assert.deepEqual(defect, unknown);
+  assert.deepEqual(decoyWork, [1, 0, 1], 'a defect also does the decoy work of an unknown integration');
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), [
+    ['error', { integrationId, pluginId: 'scm-github', operation: 'verifyWebhookDelivery', kind: 'threw' }],
+  ]);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)) && holdsNoSecret(defect.text));
   assert.deepEqual(recorded, []);
 });
 
