@@ -16,4 +16,5 @@
 ## 4. Review and archive
 
 - [ ] 4.1 Independent review
+  - [x] 4.1.1 Pass 1 (Codex `gpt-6-astra`, medium): M1 remove `skip_specs` and add the `native-worker-acceptance` delta; L1 read Dockerfile instructions in the agreement test
 - [ ] 4.2 Archive the change

@@ -5,16 +5,18 @@ The Linux test image of `make verify-linux-cgroup`, built from `tools/linux-cgro
 ## What Changes
 
 - `tools/linux-cgroup/Dockerfile` installs the pinned package `git=1:2.43.0-1ubuntu7.4` through `ARG GIT_PACKAGE_VERSION`, with the same `dpkg-query` and `git --version` build checks as the worker stage of `infra/installation/Dockerfile`. Both images build on `UBUNTU_BASE` of the `Makefile`, Ubuntu 24.04 (noble).
-- A new test, `test/git-package-pin.test.ts`, checks that both Dockerfiles pin the same package version and check the version string of `GIT_CLIENT_PINS.linux`, so the two pins cannot drift apart.
+- A new test, `test/git-package-pin.test.ts`, reads the instructions of the worker stage of `infra/installation/Dockerfile` and of the last stage of `tools/linux-cgroup/Dockerfile`, with continuations joined and comment lines dropped, and checks that each installs the same package version in one `RUN` with both build checks against `GIT_CLIENT_PINS.linux`, so the two pins cannot drift apart.
 - No change to the Git client pin or to the worker.
 
 ## Capabilities
 
 ### New Capabilities
 
+None.
+
 ### Modified Capabilities
 
-None. No behavior description changes: the `native-worker-acceptance` requirement "Linux test image per architecture" and the `git-workspace-port` requirements on the worker image's Git package stay true as written, and the change makes the opt-in Linux targets run again, so it sets `skip_specs: true`.
+- `native-worker-acceptance`: a new requirement, "Pinned Git client in the Linux test image", says that the Linux test image of the crash-window and G2 scenario suites provides the worker's pinned Git client, and that `make verify` fails when its pin drifts from the worker image's. The existing requirement "Linux test image per architecture" and the `git-workspace-port` requirements on the worker image's Git package stay as written.
 
 ## Impact
 
