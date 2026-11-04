@@ -59,11 +59,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7440f214334489797beb3b6098d740dcd6c52074`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.87% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `24e18d1df2245243488a3a28f78dd0318d0ee644`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.88% branches, 98.88% functions.
 - `npm run openspec -- validate build-workers-screen --strict`: passed, `Change 'build-workers-screen' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 122 file(s); every pass summary file is valid: 102 file(s); every route file is valid: 55 file(s).`.
 - Spec diff against the merge base `d0acd304ef72` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a6f7-07f3-7050-8b27-4d1dcc8f5c1f` | 0 | 0 | 4 | 5 |
 <!-- make record: end -->
 
 ## Independent review
@@ -98,6 +102,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 8 (`d388b739`, test `1f8646d8`): the cards sit in a `SimpleGrid component="section" aria-label="Workers" cols={{ base: 1, sm: 2, xl: 4 }}` as the POC's "Machines" section does, one column at phone width; the design's departure list claims no blanket authority and names the restored grid (design, decision 6 and "Proof of concept"). Fail-before `fb-33a-p1-8.log`: "lays the cards out in the responsive grid of the proof of concept" fails on the missing `mantine-SimpleGrid-root` class.
 - Finding 9 (declined): `docs/agent-task-protocol.md` step 6 lets a change's records link inside the change directory, such as `design.md`, and forbids a link to an active change because archiving moves it; `npm run verify:links` refused the root-relative `/openspec/changes/build-workers-screen/design.md` ("links to the active change build-workers-screen, which moves when archived"), and a link to the future archive path would name an archive date not yet known. The link stays `[design](design.md)`; the review prompt's "root-relative links only" criterion is a follow-up for the coordinator.
 - After the fixes the whole `apps/web` suite passes: 813 tests in 31 files (`coverage-33a-p1.log` in the session scratchpad), 99.11% statements, 97.66% branches, 99.82% functions, and 100% lines; `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, and `npm run verify:links` pass; `git diff d0acd304 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
+- `make verify` of the fixed and recorded tree (`04427644`, tree `24e18d1d`), `verify-33a-p1.log` in the session scratchpad with its exit code in `verify-33a-p1.exit`: passed at the first run, profile full, no rerun of any suite, nothing appended to the log; 4,852 tests, 4,843 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 813 tests in 31 files, all passing, 99.11% statements, 97.66% branches, 99.82% functions, and 100% lines. The generated part above records it.
 
 ## Fixes no later pass reviewed
 
