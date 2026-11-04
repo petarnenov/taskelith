@@ -484,7 +484,8 @@ describe('runs and tasks', () => {
       bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs', artifacts: [{ artifactId: 'spec', digest: DIGEST, nativeReference: 'spec.md' }] },
     });
     assert.equal(otherArtifacts.status, 409, 'a repeat with other planning artifacts conflicts');
-    assert.equal((await call('POST', '/runs/run-9/tasks', { bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs' } })).status, 404);
+    const unknownRun = await call('POST', '/runs/run-9/tasks', { bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs' } });
+    assert.equal(unknownRun.status, 403, 'an unknown run is denied like a foreign one');
 
     const read = await call('GET', `/runs/run-1/admissions/${admission.id}`, { bearer: operator });
     assert.deepEqual([read.status, read.body.id], [200, admission.id]);
