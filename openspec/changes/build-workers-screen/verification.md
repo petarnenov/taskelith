@@ -116,7 +116,10 @@ None yet.
 
 ## Follow-ups for the coordinator
 
-- `scripts/check-comment-length.ts` checks `.ts`, `.mts`, `.cts`, `.js`, `.mjs`, and `.cjs` but not `.tsx`, so `npm run verify:comments` does not enforce the comment rule on the SPA's components and tests (pass 1 finding 6).
+- The contract change for per-worker reachability, capacity, and last contact, an OpenAPI and control-plane change outside this web scope: `reachable` with `lastContactAt`, declared and reserved slots, CPU, and memory, draining, and admission pressure with its cause on `WorkerAdmissionEntry` or a view of its own, so the screen can show the POC's badges and meters (design, "Departures" and "Follow-ups"; plan Q2 (b)).
+- A worker-changed event on `streamProjectEvents` or an installation stream, so the screen can follow the view live instead of a snapshot with Refresh (design, "Follow-ups"; Q5 (b) and (c) were not chosen).
+- Row 33 of `docs/g3-plan.md` still names "reachability and capacity", which this change does not show, and the item's old change name `build-workers-and-pools-screens`, which the coordinator's split replaced with 33a, 33b, and 33c; the row's wording is the coordinator's decision (design, "Departures").
+- `scripts/check-comment-length.ts` checks `.ts`, `.mts`, `.cts`, `.js`, `.mjs`, and `.cjs` but not `.tsx`, and the extension list of the rule in `AGENTS.md` omits `.tsx` too, so `npm run verify:comments` does not enforce the comment rule on the SPA's components and tests (pass 1 finding 6; pass 2 noted the rule wording).
 - The board's index route (`routes.tsx`, 29b) has no element by design and React Router notes it on the console at `/app/`; the page test exempts that one note (pass 1 finding 3).
 - The review prompt's docs criterion "root-relative links only" contradicts protocol step 6 for links inside a change directory (pass 1 finding 9).
 
