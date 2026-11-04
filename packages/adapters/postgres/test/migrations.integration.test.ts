@@ -947,7 +947,7 @@ test('the SCM integration audit migration keeps immutable rows of known kinds fo
   assert.equal((await query(url, "SELECT 1 FROM pg_proc WHERE proname = 'refuse_audit_change'")).length, 1, 'the shared function stays');
 });
 
-test('the enrollment token lifecycle migration gives every stored token an identifier, keeps pending, used, and expired tokens as they were, and its down migration drops its columns', async () => {
+test('the enrollment token lifecycle migration gives every stored token an identifier, keeps pending, used, and expired tokens as they were, and its down migration drops its columns after carrying a revocation into the expiry', async () => {
   const directory = await copiedMigrations();
   await rm(join(directory, `${ENROLLMENT_TOKEN_LIFECYCLE}.sql`));
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
@@ -957,17 +957,22 @@ test('the enrollment token lifecycle migration gives every stored token an ident
   await insert('pending', '2100-01-01T00:00:00Z', null);
   await insert('used', '2100-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
   await insert('expired', '2000-01-01T00:00:00Z', null);
+  await insert('revoked', '2100-01-01T00:00:00Z', null);
   assert.deepEqual(await migrate(url), { ok: true, value: [ENROLLMENT_TOKEN_LIFECYCLE] });
   const rows = await query<{ secret_hash: string; token_id: string; revoked_at: Date | null; replacement_token_id: string | null }>(
     url, 'SELECT secret_hash, token_id, revoked_at, replacement_token_id FROM enrollment_tokens ORDER BY secret_hash',
   );
   for (const row of rows) assert.match(row.token_id, /^e[0-9a-f]{32}$/, row.secret_hash);
-  assert.equal(new Set(rows.map((row) => row.token_id)).size, 3, 'every identifier is its own');
-  assert.deepEqual(rows.map((row) => [row.secret_hash, row.revoked_at, row.replacement_token_id]), [['expired', null, null], ['pending', null, null], ['used', null, null]]);
+  assert.equal(new Set(rows.map((row) => row.token_id)).size, 4, 'every identifier is its own');
+  assert.deepEqual(
+    rows.map((row) => [row.secret_hash, row.revoked_at, row.replacement_token_id]),
+    [['expired', null, null], ['pending', null, null], ['revoked', null, null], ['used', null, null]],
+  );
   const idOf = (hash: string) => rows.find((row) => row.secret_hash === hash)!.token_id;
   const database = new PostgresDatabase(url);
   try {
     const registry = new CommittingFleetRegistry(database);
+    value(await registry.revokeToken(idOf('revoked'), AT));
     assert.deepEqual(value(await registry.pendingTokens(undefined, 10)).map((token) => token.tokenId), [idOf('pending')]);
     assert.equal(failed(await registry.enroll('used' as SecretHash, fleetWorker('w1', 'j1'))).details.reason, 'token-used');
     assert.equal(failed(await registry.enroll('expired' as SecretHash, fleetWorker('w1', 'j1'))).details.reason, 'token-expired');
@@ -987,5 +992,16 @@ test('the enrollment token lifecycle migration gives every stored token an ident
   const columns = await query(url, `SELECT 1 FROM information_schema.columns WHERE table_name = 'enrollment_tokens'
     AND column_name IN ('token_id', 'revoked_at', 'replacement_token_id')`);
   assert.deepEqual(columns, []);
-  assert.equal((await query(url, 'SELECT 1 FROM enrollment_tokens')).length, 3, 'no row is deleted');
+  assert.equal((await query(url, 'SELECT 1 FROM enrollment_tokens')).length, 4, 'no row is deleted');
+  // The old schema reads only the expiry, so a revoked token must read as
+  // expired at its revocation and the others keep their expiry.
+  const expiries = await query<{ secret_hash: string; expires_at: Date; expired: boolean }>(
+    url, 'SELECT secret_hash, expires_at, expires_at <= now() AS expired FROM enrollment_tokens ORDER BY secret_hash',
+  );
+  assert.deepEqual(expiries, [
+    { secret_hash: 'expired', expires_at: new Date('2000-01-01T00:00:00Z'), expired: true },
+    { secret_hash: 'pending', expires_at: new Date('2100-01-01T00:00:00Z'), expired: false },
+    { secret_hash: 'revoked', expires_at: new Date(AT), expired: true },
+    { secret_hash: 'used', expires_at: new Date('2100-01-01T00:00:00Z'), expired: false },
+  ], 'a revoked token is invalid under the old schema');
 });
