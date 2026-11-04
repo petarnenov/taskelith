@@ -1,4 +1,5 @@
 import { Alert, Button, Center, Stack } from '@mantine/core';
+import { useDroppedTurns } from '../agent-session/TurnRecordsProvider';
 import { useSession } from '../session/SessionProvider';
 import { AppLayout } from './AppLayout';
 import { LoadingStatus } from './LoadingStatus';
@@ -7,9 +8,10 @@ import { SignInPage } from './SignInPage';
 // Nothing of the product shows before the control plane names a session.
 export function Shell() {
   const { view, retry } = useSession();
+  const turnUnconfirmed = useDroppedTurns();
   if (view.status === 'checking') return <SessionCheck />;
   if (view.status === 'unavailable') return <ControlPlaneUnavailable onRetry={retry} />;
-  if (view.status === 'signed-out') return <SignInPage notice={view.notice} />;
+  if (view.status === 'signed-out') return <SignInPage notice={view.notice} turnUnconfirmed={turnUnconfirmed} />;
   return <AppLayout operator={view.operator} />;
 }
 

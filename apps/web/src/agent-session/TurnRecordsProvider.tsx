@@ -1,8 +1,14 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useSession } from '../session/SessionProvider';
 import type { TurnRecordStore } from './turn-records';
 
-const TurnRecordsContext = createContext<TurnRecordStore | undefined>(undefined);
+interface TurnRecords {
+  readonly store: TurnRecordStore;
+  // The last sign-out dropped a submission whose answer was not seen.
+  readonly dropped: boolean;
+}
+
+const TurnRecordsContext = createContext<TurnRecords | undefined>(undefined);
 
 interface TurnRecordsProviderProps {
   readonly store: TurnRecordStore;
@@ -14,14 +20,25 @@ interface TurnRecordsProviderProps {
 export function TurnRecordsProvider({ store, children }: TurnRecordsProviderProps) {
   const { view } = useSession();
   const signedOut = view.status === 'signed-out';
+  const [dropped, setDropped] = useState(false);
   useEffect(() => {
-    if (signedOut) store.clearAll();
+    if (signedOut) setDropped(store.clearAll());
   }, [signedOut, store]);
-  return <TurnRecordsContext.Provider value={store}>{children}</TurnRecordsContext.Provider>;
+  return <TurnRecordsContext.Provider value={{ store, dropped }}>{children}</TurnRecordsContext.Provider>;
 }
 
 export function useTurnRecords(): TurnRecordStore {
-  const store = useContext(TurnRecordsContext);
-  if (store === undefined) throw new Error('useTurnRecords needs a TurnRecordsProvider.');
-  return store;
+  return useTurnRecordsContext().store;
+}
+
+// Whether the sign-in page should say that the last turn may not have been
+// sent (coordinator decision on Q3 and Q4, 2026-11-04).
+export function useDroppedTurns(): boolean {
+  return useTurnRecordsContext().dropped;
+}
+
+function useTurnRecordsContext(): TurnRecords {
+  const records = useContext(TurnRecordsContext);
+  if (records === undefined) throw new Error('useTurnRecords needs a TurnRecordsProvider.');
+  return records;
 }

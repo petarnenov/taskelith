@@ -16,8 +16,9 @@ export interface TurnRecordStore {
   // Adds the record, or replaces the one of its key in place.
   readonly add: (projectId: string, sessionId: string, record: TurnRecord) => void;
   readonly remove: (projectId: string, sessionId: string, key: string) => void;
-  // Drops the records of every session, as when the shell's session ends.
-  readonly clearAll: () => void;
+  // Drops the records of every session, as when the shell's session ends,
+  // and says whether any was dropped: a turn whose answer was not seen.
+  readonly clearAll: () => boolean;
 }
 
 export const TURN_RECORD_PREFIX = 'taskelith-turn:';
@@ -77,11 +78,13 @@ export function createTurnRecordStore(storage: () => Storage = () => window.sess
     // The storage is tried whatever threw before: a write over quota
     // leaves the stored text, which must not outlive the shell's session.
     clearAll: () => {
+      const remembered = [...memory.values()].some((list) => list.length > 0);
       memory.clear();
       try {
-        removeAllRecords(storage());
+        return removeAllRecords(storage()) || remembered;
       } catch {
         inMemory = true;
+        return remembered;
       }
     },
   };
@@ -96,11 +99,16 @@ function withRecord(records: readonly TurnRecord[], record: TurnRecord): readonl
   return at === -1 ? [...records, record] : records.map((known, index) => (index === at ? record : known));
 }
 
-function removeAllRecords(store: Storage): void {
+// Whether any stored list held a record.
+function removeAllRecords(store: Storage): boolean {
+  let dropped = false;
   for (let index = store.length - 1; index >= 0; index -= 1) {
     const name = store.key(index);
-    if (name !== null && name.startsWith(TURN_RECORD_PREFIX)) store.removeItem(name);
+    if (name === null || !name.startsWith(TURN_RECORD_PREFIX)) continue;
+    if (recordsOf(store.getItem(name)).length > 0) dropped = true;
+    store.removeItem(name);
   }
+  return dropped;
 }
 
 // Stored text that is not a list of records reads as no record.
