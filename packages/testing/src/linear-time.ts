@@ -3,15 +3,21 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 const RUN_LENGTH = 60_000;
+const MAX_RUN_LENGTH = 2 ** 24;
 const SHORT_RUN_SHARE = 4;
 const SAMPLES = 5;
 const NOISE_FLOOR_MS = 20;
 const GROWTH_LIMIT = 2.5;
 
-// node --test starts each file without --expose-gc, so the flag is set here
-// and gc is taken from a fresh context, where V8 then installs it.
-setFlagsFromString('--expose-gc');
-const collectGarbage = runInNewContext('gc') as () => void;
+type Transform = (text: string) => unknown;
+
+/** Runs the transform once on the run and returns its time in ms. */
+export type RunTimer = (transform: Transform, run: string) => number;
+
+interface Runs {
+  readonly short: string;
+  readonly long: string;
+}
 
 interface RunTime {
   readonly length: number;
@@ -20,32 +26,49 @@ interface RunTime {
 
 // Linear CPU time grows as fast as the run, quadratic time four times faster
 // over a fourfold run, so a growth limit of 2.5 tells them apart.
-export function assertLinearOnRuns(transform: (text: string) => unknown, units: readonly string[], length = RUN_LENGTH): void {
+export function assertLinearOnRuns(transform: Transform, units: readonly string[], length = RUN_LENGTH, timeRun: RunTimer = threadCpuTime): void {
   for (const unit of units) {
-    const [short, long] = timeRuns(transform, unit, length);
-    const growth = timeRatio(short, long) / (long.length / short.length);
+    const [short, long] = timeUnit(transform, unit, length, timeRun);
+    const growth = flooredRatio(short, long) / (long.length / short.length);
     assert.ok(growth < GROWTH_LIMIT, growthMessage(unit, short, long, growth));
   }
 }
 
-// Short and long samples alternate after a forced collection each, so that
-// a pause in one sample leaves both medians.
-function timeRuns(transform: (text: string) => unknown, unit: string, length: number): [RunTime, RunTime] {
-  const short = unit.repeat(Math.ceil(length / SHORT_RUN_SHARE / unit.length));
-  const long = unit.repeat(Math.ceil(length / unit.length));
+// The runs double until the short median reaches the floor, however fast
+// the host, or the long run reaches MAX_RUN_LENGTH characters.
+function timeUnit(transform: Transform, unit: string, startLength: number, timeRun: RunTimer): [RunTime, RunTime] {
+  for (let length = startLength; ; length *= 2) {
+    const runs = unitRuns(unit, length);
+    const canGrow = length * 2 <= MAX_RUN_LENGTH;
+    if (canGrow && timeRun(transform, runs.short) < NOISE_FLOOR_MS) continue;
+    const times = sampledTimes(transform, runs, timeRun);
+    if (times[0].medianMs >= NOISE_FLOOR_MS || !canGrow) return times;
+  }
+}
+
+function unitRuns(unit: string, length: number): Runs {
+  return {
+    short: unit.repeat(Math.ceil(length / SHORT_RUN_SHARE / unit.length)),
+    long: unit.repeat(Math.ceil(length / unit.length)),
+  };
+}
+
+// Short and long samples alternate after one warm-up call, so that a pause
+// in one sample leaves both medians.
+function sampledTimes(transform: Transform, runs: Runs, timeRun: RunTimer): [RunTime, RunTime] {
   const shortSamples: number[] = [];
   const longSamples: number[] = [];
-  transform(short);
+  transform(runs.short);
   for (let sample = 0; sample < SAMPLES; sample += 1) {
-    shortSamples.push(cpuTime(transform, short));
-    longSamples.push(cpuTime(transform, long));
+    shortSamples.push(timeRun(transform, runs.short));
+    longSamples.push(timeRun(transform, runs.long));
   }
-  return [runTime(short, shortSamples), runTime(long, longSamples)];
+  return [runTime(runs.short, shortSamples), runTime(runs.long, longSamples)];
 }
 
 // The thread's CPU time leaves out other processes of a loaded host and the
 // collector's helper threads, which wall and process CPU time count.
-function cpuTime(transform: (text: string) => unknown, run: string): number {
+function threadCpuTime(transform: Transform, run: string): number {
   collectGarbage();
   const started = process.threadCpuUsage();
   transform(run);
@@ -53,14 +76,28 @@ function cpuTime(transform: (text: string) => unknown, run: string): number {
   return (user + system) / 1000;
 }
 
+let garbageCollector: (() => void) | undefined;
+
+// node --test starts files without --expose-gc, so the first timing sets it;
+// V8 then installs gc in a new context. Importing the module changes nothing.
+function collectGarbage(): void {
+  garbageCollector ??= exposedGarbageCollector();
+  garbageCollector();
+}
+
+function exposedGarbageCollector(): () => void {
+  setFlagsFromString('--expose-gc');
+  return runInNewContext('gc') as () => void;
+}
+
 function runTime(run: string, samples: readonly number[]): RunTime {
   const sorted = [...samples].sort((left, right) => left - right);
   return { length: run.length, medianMs: sorted[Math.floor(sorted.length / 2)]! };
 }
 
-// Below the floor, accounting and compilation make the ratio noise, so a
-// long run under 4 x 2.5 x 20 = 200 ms of CPU time always passes.
-function timeRatio(short: RunTime, long: RunTime): number {
+// Under the floor, accounting and compilation make a ratio noise. Only the
+// longest runs can stay under it, where quadratic work would take hours.
+function flooredRatio(short: RunTime, long: RunTime): number {
   return Math.max(long.medianMs, NOISE_FLOOR_MS) / Math.max(short.medianMs, NOISE_FLOOR_MS);
 }
 
@@ -68,3 +105,4 @@ function growthMessage(unit: string, short: RunTime, long: RunTime, growth: numb
   const times = `${short.medianMs.toFixed(1)} ms at ${short.length} and ${long.medianMs.toFixed(1)} ms at ${long.length} characters`;
   return `${JSON.stringify(unit)} repeated grew ${growth.toFixed(1)} times faster than its length in CPU time: ${times}`;
 }
+
