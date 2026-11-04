@@ -34,10 +34,17 @@ export interface StartedScmIntegrationServices extends ScmIntegrationServices {
   readonly bindings: RepositoryBindingService;
 }
 
+export interface ScmIntegrationStartPorts {
+  readonly namespace: ControlPlaneNamespace;
+  readonly database: PostgresDatabase;
+  readonly projects: BindableProjects;
+  readonly clock: Clock;
+}
+
 // The integrations over PostgreSQL with GitHub, the first SCM (ADR 0006); a
 // missing or malformed secret key refuses the start.
 export function startScmIntegrationServices(
-  namespace: ControlPlaneNamespace, database: PostgresDatabase, logger: Logger, projects: BindableProjects, clock: Clock,
+  { namespace, database, projects, clock }: ScmIntegrationStartPorts, logger: Logger,
 ): Result<StartedScmIntegrationServices> {
   const key = new ScmIntegrationSecretKeyFile(namespace).read();
   if (!key.ok) return key;
