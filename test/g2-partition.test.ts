@@ -92,8 +92,8 @@ describe('worker to NATS', SCENARIO_HOST, () => {
     })));
   });
 
-  // Seed: whether the heal comes before or after the process exits; an exit
-  // journaled offline reaches the control plane from the local outbox.
+  // Seed: the process exits offline, its exit waiting in the local outbox
+  // until the heal, or exits once the worker is online again after the heal.
   test('a partition while the process runs keeps its observations, published once after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterExit = random.nextInt(2) === 1;
@@ -115,12 +115,14 @@ describe('worker to NATS', SCENARIO_HOST, () => {
           await nats.heal();
         } else {
           await nats.heal();
+          await waitFor(() => lastContactEvent(worker) === 'worker.contact.online', 20_000, 'the worker is online again');
           worker.releaseScriptedProcesses();
         }
         const executed = await assertExitedOnce(installation, 'task-nats-running');
         const duplicates = installation.logs.records.filter(({ event }) => event === 'execution.observation.duplicate').length;
         return `healed ${healAfterExit ? 'after' : 'before'} the exit; ${executed.executions} execution; ${duplicates} duplicate observations`;
       } finally {
+        worker.releaseScriptedProcesses();
         await worker.stop();
       }
     })));
@@ -234,6 +236,13 @@ describe('control plane to PostgreSQL', SCENARIO_HOST, () => {
     })));
   });
 });
+
+const CONTACT_EVENTS = ['worker.contact.online', 'worker.contact.offline'];
+
+// The worker's latest change of its broker contact, online or offline.
+function lastContactEvent(worker: ScenarioWorker): string | undefined {
+  return worker.logs.records.map(({ event }) => event).filter((event) => CONTACT_EVENTS.includes(event)).at(-1);
+}
 
 async function inventoryRequests(installation: ScenarioInstallation): Promise<number> {
   return (await installation.query(`SELECT 1 FROM outbox WHERE event_type = 'worker.inventory.requested'`)).length;
