@@ -53,22 +53,34 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
     );
   }, []);
 
+  // The key's one session read is spent once the read renewed the token;
+  // the record keeps that across failures, retries, and a reload.
+  const spend = useCallback(
+    (record: TurnRecord): TurnRecord => {
+      const spent = { ...record, tokenRefreshed: true };
+      records.add(projectId, sessionId, spent);
+      if (mounted.current) setSubmissions((known) => known.map((entry) => (entry.key === record.key ? { ...entry, ...spent } : entry)));
+      return spent;
+    },
+    [records, projectId, sessionId],
+  );
+
   // The answer to the record: the session read again once after a CSRF
   // refusal, and the key sent again only with a renewed token (decision Q3).
   const answerOf = useCallback(
     async (record: TurnRecord): Promise<Answer | undefined> => {
-      const { key, text } = record;
-      let tokenRefreshed = false;
+      let current = record;
       for (;;) {
+        const { key, text, tokenRefreshed = false } = current;
         const outcome = outcomeOf(await gateway.submitTurn(projectId, sessionId, { idempotencyKey: key, text }), tokenRefreshed);
         if (outcome.kind !== 'retry-with-new-token') return outcome;
         const renewed = await refresh();
         if (renewed.kind === 'unavailable') return { kind: 'retryable', failure: 'token-not-renewed' };
         if (renewed.kind === 'anonymous') return undefined;
-        tokenRefreshed = true;
+        current = spend(current);
       }
     },
-    [gateway, projectId, sessionId, refresh],
+    [gateway, projectId, sessionId, refresh, spend],
   );
 
   // The record's fate follows the answer whether or not the page still

@@ -7,10 +7,13 @@ export interface TurnRecord {
   readonly key: string;
   readonly text: string;
   readonly sentAt: string;
+  // The key's one session read after a CSRF refusal is spent (decision Q3).
+  readonly tokenRefreshed?: boolean;
 }
 
 export interface TurnRecordStore {
   readonly list: (projectId: string, sessionId: string) => readonly TurnRecord[];
+  // Adds the record, or replaces the one of its key in place.
   readonly add: (projectId: string, sessionId: string, record: TurnRecord) => void;
   readonly remove: (projectId: string, sessionId: string, key: string) => void;
   // Drops the records of every session, as when the shell's session ends.
@@ -62,7 +65,7 @@ export function createTurnRecordStore(storage: () => Storage = () => window.sess
     list: (projectId, sessionId) => read(nameOf(projectId, sessionId)),
     add: (projectId, sessionId, record) => {
       const name = nameOf(projectId, sessionId);
-      write(name, [...read(name), record].slice(-MAX_TURN_RECORDS));
+      write(name, withRecord(read(name), record).slice(-MAX_TURN_RECORDS));
     },
     remove: (projectId, sessionId, key) => {
       const name = nameOf(projectId, sessionId);
@@ -88,6 +91,11 @@ function nameOf(projectId: string, sessionId: string): string {
   return `${TURN_RECORD_PREFIX}${sessionAddress(projectId, sessionId)}`;
 }
 
+function withRecord(records: readonly TurnRecord[], record: TurnRecord): readonly TurnRecord[] {
+  const at = records.findIndex((known) => known.key === record.key);
+  return at === -1 ? [...records, record] : records.map((known, index) => (index === at ? record : known));
+}
+
 function removeAllRecords(store: Storage): void {
   for (let index = store.length - 1; index >= 0; index -= 1) {
     const name = store.key(index);
@@ -108,6 +116,7 @@ function recordsOf(text: string | null): readonly TurnRecord[] {
 
 function isTurnRecord(value: unknown): value is TurnRecord {
   if (typeof value !== 'object' || value === null) return false;
-  const { key, text, sentAt } = value as Record<string, unknown>;
+  const { key, text, sentAt, tokenRefreshed } = value as Record<string, unknown>;
+  if (tokenRefreshed !== undefined && typeof tokenRefreshed !== 'boolean') return false;
   return typeof key === 'string' && key !== '' && typeof text === 'string' && typeof sentAt === 'string';
 }
