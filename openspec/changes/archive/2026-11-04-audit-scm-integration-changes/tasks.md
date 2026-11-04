@@ -16,5 +16,5 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Review passes in order until one reports only Low findings or none, at most three, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
-- [ ] 4.2 Archive the change in the last commit of the branch
+- [x] 4.1 Review passes in order until one reports only Low findings or none, at most three, each recorded in `passes.jsonl`, `findings.jsonl`, and `verification.md`
+- [x] 4.2 Archive the change in the last commit of the branch

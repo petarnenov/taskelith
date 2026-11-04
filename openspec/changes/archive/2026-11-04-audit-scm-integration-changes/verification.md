@@ -178,9 +178,20 @@ Pass 3 reviewed `7a0610b2`; every commit after it is unreviewed:
 - `1718a2f8` M1: the two MODIFIED `scm-port` requirements and contract section 6.1.
 - `36b3bd2e`: the pass 3 records (`passes.jsonl`, `findings.jsonl`) and L1 in this record.
 - `3a4a04c7`: `route.json` deleted and written again, unedited (elevated, P(third) 0.75, 1868 lines and 39 files changed), the tree of run 8.
-- The `make record` commit of run 8 and the archive commit, which change only records and apply the deltas.
+- `b67172d8`: the `make record` output and the checks row of run 8.
+- The archive commit `docs: archive the audit scm integration changes change`, which ticks tasks 4.1 and 4.2, applies the reviewed deltas with the pinned CLI, and adds the archive checks below.
 
 Architect check by the coordinator (Niki): _pending_
+
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section added, after tasks 4.1 and 4.2 were ticked and `npm run openspec -- archive audit-scm-integration-changes --yes` moved the change to `openspec/changes/archive/2026-11-04-audit-scm-integration-changes/` (`scm-port`: 2 added, 2 modified; totals + 5, ~ 3, - 0).
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-audit-scm-integration-changes`; the command fails as a whole on older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `fa3fbce7`): only this change's edits, in `control-plane-api` (13 lines, the MODIFIED "Request logs without secrets" and the added "Audited SCM integration commands"), `postgres-state` (14 lines, two added requirements), and `scm-port` (32 lines: the two added audit requirements and the MODIFIED "Webhook receipt ports" and "One refusal for unauthenticated deliveries").
+- The moved change has `findings.jsonl` (the findings of passes 1 to 3) and `passes.jsonl` (three passes); `make findings ARGS="validate"`: `Every findings file is valid: 114 file(s); every pass summary file is valid: 94 file(s); every route file is valid: 47 file(s).`
+- `make verify` (`verify-11b2-archive.log`): failed only in the timing test `test/installation-script.test.ts:570`, "a bound with a leading zero is read in base 10" (ended after 9.118 s, before 10 s): tests 4769, pass 4759, fail 1, skipped 9. The one rerun (`verify-11b2-archiveb.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4769, suites 50, pass 4760, fail 0, skipped 9; all files 99.45 % lines, 92.81 % branches, 98.87 % functions. The `pre-push` hook verifies the committed tree again.
 
 ## Limitations
 
