@@ -64,6 +64,8 @@ The pass 2 fix round, oldest first:
 - `9a6b4932` `chore: merge dev into run-github-scm-conformance`: on the coordinator's instruction, `origin/dev` `2700c16a` (#435 and #436) merged with a merge commit, without a rebase. Git merged `docs/contracts/source-control.md` without a conflict; it keeps this change's propagation window, rule 7, and version `0.3.0` and #436's output-only `remoteUrl` text. `dev` only adds the requirement "Repository binding store" to `openspec/specs/scm-port/spec.md`; the four requirements this change's delta modifies are unchanged on `dev`.
 - `02ac1920` `docs: record review pass 2 and route the run github scm conformance change again after the dev merge`: pass 2's line of `passes.jsonl`, and `route.json` routed again on the coordinator's instruction, as the merge brought in more than documents. It is unedited: elevated (lines, files, security, contracts), as before.
 - `96b581aa` (finding 1), `1794f7e0` (finding 2), `5536deaf` (finding 3), `80f6f5ad` (finding 4), `dd849931` (finding 5), `68c8d37a` (finding 6), `9f4e88ed` (finding 7).
+- `436cf6a5` `docs: record the pass 2 fix round of the run github scm conformance change`. `make verify` run 5 checked its tree and failed (see "Checks"), so:
+- `2251c825` `test: expect the window messages of ended credential versions in the refresh conformance tests` (finding 1: two assertions in `source-control-refresh.test.ts` still expected the old message). `make verify` run 6 checked its tree, `ce3560cb`.
 
 ## Environment
 
@@ -136,6 +138,8 @@ These are not review findings and are not in `findings.jsonl`; review pass 2 rev
 | `env -u NODE_ENV make verify` (run 2, before the rebase) | `2840a8e5`, tree `2a763a75`, clean | Passed, profile full, stamp written. Tests 4433, suites 49, pass 4386, fail 0, cancelled 0, skipped 47. All files: 99.39 % lines, 92.72 % branches, 98.89 % functions. No known flake failed, and nothing was rerun. |
 | `env -u NODE_ENV make verify` (run 3, after the rebase) | `fc1aa519`, tree `d2d35096`, clean | Passed at the first attempt, profile full, stamp written. Tests 4669, pass 4622, fail 0, skipped 47. All files: 99.41 % lines, 92.80 % branches, 98.84 % functions. No known flake failed, and nothing was rerun. |
 | `env -u NODE_ENV make verify` (run 4, pass 1 fix round) | `72093e05`, tree `01300bc6`, clean | Passed at the first attempt, profile full, stamp written. Tests 4687, suites 50, pass 4640, fail 0, cancelled 0, skipped 47. All files: 99.41 % lines, 92.82 % branches, 98.84 % functions. No known flake failed, and nothing was rerun. |
+| `env -u NODE_ENV make verify` (run 5, pass 2 fix round) | `436cf6a5`, clean | Failed in `npm test`: tests 4738, pass 4688, fail 3, skipped 47. Two failures were real: `source-control-refresh.test.ts` still expected "must fail with forbidden" for an ended version that still works, fixed in `2251c825`. The third, "value redaction takes linear time on long runs" in `packages/adapters/secrets/test/secrets.test.ts` (238 ms for one input), is a timing flake outside this change; it passed alone right after (33 of 33 tests). |
+| `env -u NODE_ENV make verify` (run 6, pass 2 fix round) | `2251c825`, tree `ce3560cb`, clean | Passed, profile full, stamp written. Tests 4738, suites 50, pass 4691, fail 0, cancelled 0, skipped 47. All files: 99.41 % lines, 92.87 % branches, 98.81 % functions. |
 | `test/github-conformance.test.ts` | inside run 2 | 12 tests pass. |
 | `test/github-conformance.test.ts`, `revocation-window.test.ts`, `run-credentials.test.ts` | `fb7b1dc8` | 68 tests pass after the pass 1 fixes. |
 | `npm ls @octokit/plugin-paginate-rest @octokit/core` | `fb7b1dc8` | 16.0.0 and 7.0.8 at the root; 15.0.0 only under `@semantic-release/github`; `@taskelith/scm-github` depends on `@octokit/core` 7.0.8 only. |
@@ -176,15 +180,16 @@ Route (`route.json`, rule version 5, routed again in `a018d996` and, after the `
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `01300bc6d421a2079ecd632c07bc5d9ead75cb1d`; tests 4687, pass 4640, fail 0, skipped 47; all files 99.41% lines, 92.82% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `ce3560cb2bf4ea42fddb5db2f7562ef9681bf6f3`; tests 4738, pass 4691, fail 0, skipped 47; all files 99.41% lines, 92.87% branches, 98.81% functions.
 - `npm run openspec -- validate run-github-scm-conformance --strict`: passed, `Change 'run-github-scm-conformance' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 111 file(s); every pass summary file is valid: 91 file(s); every route file is valid: 44 file(s).`.
-- Spec diff against the merge base `d0d594782357` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 113 file(s); every pass summary file is valid: 93 file(s); every route file is valid: 46 file(s).`.
+- Spec diff against the merge base `2700c16a4620` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a361-8932-7770-9eac-c24aaf5229a3` | 0 | 3 | 10 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `f0eb27e3-9371-4ba0-8d13-d3ccec1487a2` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
 ## Independent review
@@ -192,7 +197,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Pass 1, reviewer A: Codex CLI `gpt-6-astra` at effort medium, session `01a1a361-8932-7770-9eac-c24aaf5229a3`, against `d0d59478`: 3 High, 10 Medium, 1 Low. All 14 are fixed in the pass 1 fix round and recorded in `findings.jsonl`; the coordinator's decisions above are listed apart.
 - Pass 2, reviewer B: Claude Code `claude-fable-5-1` at effort medium (owner decision 2026-11-02), session `f0eb27e3-9371-4ba0-8d13-d3ccec1487a2`, against `b7d1ffdf`: 0 Critical, 0 High, 0 Medium, 7 Low. It also found the coordinator's decisions above consistent with the records.
 - A pass that reports only Low findings ends the review, so pass 3 did not run. The seven Low findings are fixed without another review and recorded as `fixed-unreviewed` in `findings.jsonl`.
-- Fixes that no later pass reviewed, for the coordinator's check as solution architect: all seven pass 2 fixes, `96b581aa`, `1794f7e0`, `5536deaf`, `80f6f5ad`, `dd849931`, `68c8d37a`, and `9f4e88ed`, and the merge `9a6b4932`.
+- Fixes that no later pass reviewed, for the coordinator's check as solution architect: all seven pass 2 fixes, `96b581aa` with `2251c825`, `1794f7e0`, `5536deaf`, `80f6f5ad`, `dd849931`, `68c8d37a`, and `9f4e88ed`, and the merge `9a6b4932`.
 
 ## Limitations
 
