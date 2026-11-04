@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReadResult } from '../src/api/read-result';
@@ -281,8 +281,7 @@ describe('Refresh', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(await screen.findByRole('heading', { level: 2, name: 'fresh.example' })).toBeDefined();
-    first.resolve(read(stale));
-    await new Promise((settle) => setTimeout(settle, 0));
+    await act(async () => first.resolve(read(stale)));
     expect(screen.queryByRole('heading', { level: 2, name: 'stale.example' })).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'fresh.example' })).toBeDefined();
   });
