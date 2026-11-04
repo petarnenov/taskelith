@@ -48,7 +48,7 @@ function event(
 }
 
 const CREATED_FIELDS = Object.freeze([
-  'pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'settings.merge-methods', 'signing-key', 'webhook-secret',
+  'pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'settings.merge-methods', 'secrets.signing-key', 'secrets.webhook-secret',
 ]);
 
 export const SCM_INTEGRATION_AUDIT_CONFORMANCE: readonly ConformanceCase<ScmIntegrationAuditTarget>[] = Object.freeze([
@@ -89,7 +89,7 @@ export const SCM_INTEGRATION_AUDIT_CONFORMANCE: readonly ConformanceCase<ScmInte
       must(await target.store.update(stored.integrationId, { expectedRevision: 2, allowedOrigin: must(normalizeOrigin('https://git.example.org')) }, entry));
       expectRead(problems, 'trail', await target.audit.trail(), [
         event('1', 'created', CREATED_FIELDS, 1),
-        event('1', 'updated', ['label', 'settings.account-id', 'settings.merge-methods', 'settings.region', 'webhook-secret'], 2, entry),
+        event('1', 'updated', ['label', 'settings.account-id', 'settings.merge-methods', 'settings.region', 'secrets.webhook-secret'], 2, entry),
         event('1', 'updated', ['allowedOrigin'], 3, entry),
       ]);
       return problems;
@@ -106,11 +106,28 @@ export const SCM_INTEGRATION_AUDIT_CONFORMANCE: readonly ConformanceCase<ScmInte
       }, auditEntry()));
       expectRead(problems, 'trail', await target.audit.trail(), [
         event('1', 'created', CREATED_FIELDS, 1),
-        event('1', 'secret-changed', ['webhook-secret'], 2),
-        event('1', 'secret-changed', ['signing-key', 'webhook-secret'], 3),
+        event('1', 'secret-changed', ['secrets.webhook-secret'], 2),
+        event('1', 'secret-changed', ['secrets.signing-key', 'secrets.webhook-secret'], 3),
       ]);
       const trail = JSON.stringify(await target.audit.trail());
       if (Object.values(SECRETS).some((secret) => trail.includes(secret))) problems.push('trail: holds a secret value');
+      return problems;
+    },
+  },
+  {
+    name: 'a secret is named secrets.<name>, so a secret named label stays apart from the label field',
+    async check(target) {
+      const problems: string[] = [];
+      const labelled = Object.freeze({ ...integration('1'), secretNames: ['label'] });
+      must(await target.store.add(labelled, secrets({ label: 'synthetic-label-secret' }), auditEntry()));
+      const { integrationId: id } = labelled;
+      must(await target.store.update(id, { expectedRevision: 1, secrets: secrets({ label: 'synthetic-rotated-label' }) }, auditEntry()));
+      must(await target.store.update(id, { expectedRevision: 2, label: 'Renamed' }, auditEntry()));
+      expectRead(problems, 'trail', await target.audit.trail(), [
+        event('1', 'created', ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'settings.merge-methods', 'secrets.label'], 1),
+        event('1', 'secret-changed', ['secrets.label'], 2),
+        event('1', 'updated', ['label'], 3),
+      ]);
       return problems;
     },
   },

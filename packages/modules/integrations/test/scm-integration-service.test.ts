@@ -252,9 +252,9 @@ test('a creation and an update are audited with the caller, its reason, and the 
   assert.deepEqual(value(await audit.trail()), [
     {
       integrationId, kind: 'created', ...INVOCATION, revision: 1, occurredAt: AT,
-      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'signing-key', 'webhook-secret'],
+      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'secrets.signing-key', 'secrets.webhook-secret'],
     },
-    { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'webhook-secret'], revision: 2, occurredAt: AT },
+    { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'secrets.webhook-secret'], revision: 2, occurredAt: AT },
   ]);
   assert.ok(!JSON.stringify(value(await audit.trail())).includes(SECRET));
 });

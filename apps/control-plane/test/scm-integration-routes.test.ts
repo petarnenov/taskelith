@@ -275,10 +275,10 @@ test('each committed create and update is audited with the caller as actor and i
   assert.deepEqual(value(await audit.trail()), [
     {
       integrationId, kind: 'created', ...creating, revision: 1,
-      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.app-id', 'settings.installation-id', 'settings.merge-methods', 'private-key', 'webhook-secret'],
+      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.app-id', 'settings.installation-id', 'settings.merge-methods', 'secrets.private-key', 'secrets.webhook-secret'],
     },
     { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'settings.merge-methods'], revision: 2 },
-    { integrationId, kind: 'secret-changed', ...updating, changedFields: ['webhook-secret'], revision: 3 },
+    { integrationId, kind: 'secret-changed', ...updating, changedFields: ['secrets.webhook-secret'], revision: 3 },
   ]);
 });
 

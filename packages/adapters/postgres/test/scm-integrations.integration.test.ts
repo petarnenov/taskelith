@@ -164,8 +164,8 @@ test('the audit rows hold the field and secret names, the actor, and the reason,
   const rows = await query<Record<string, unknown>>(url, `SELECT kind, actor, reason, changed_fields, revision, occurred_at
     FROM scm_integration_audit_events WHERE integration_id = $1 ORDER BY position`, [stored.integrationId]);
   assert.deepEqual(rows.map((row) => [row.kind, row.actor, row.reason, row.changed_fields, row.revision]), [
-    ['created', ENTRY.actor, ENTRY.reason, ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'signing-key', 'webhook-secret'], 1],
-    ['secret-changed', ENTRY.actor, ENTRY.reason, ['webhook-secret'], 2],
+    ['created', ENTRY.actor, ENTRY.reason, ['pluginId', 'label', 'allowedOrigin', 'settings.account-id', 'secrets.signing-key', 'secrets.webhook-secret'], 1],
+    ['secret-changed', ENTRY.actor, ENTRY.reason, ['secrets.webhook-secret'], 2],
   ]);
   assert.ok(!JSON.stringify(rows).includes(SECRET) && !JSON.stringify(rows).includes('synthetic-rotated'));
 });
