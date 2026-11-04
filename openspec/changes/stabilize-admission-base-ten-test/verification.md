@@ -16,7 +16,9 @@ This is a product fix of the installation script, not only a test fix: before it
 - `9acf2f79` and `de413797`: the record of the pass 1 fix round.
 - `73d21e34` `chore: fail the admission wait on an unread clock and sum the capped poll's sleeps` (pass 2 fixes and the pass 2 line of `passes.jsonl`).
 - `bf20d41f` `docs: record the pass 2 findings of the stabilize admission base ten test change`.
-- The commit of the pass 2 fix record and the archive commit follow.
+- `826e2284` (the pass 2 fix record) and `a01ed5e5` (the archive commit, reverted for the return).
+- `308e5dd4` `docs: restore the active stabilize admission base ten test change to merge dev` and `0ffb4b57`, the merge of `origin/dev` at `46cd51b3` ("Return").
+- The commit of the return fix and its record follow; pass 3 and the archive come after them.
 
 ## Environment
 
@@ -50,7 +52,7 @@ Pass 1 (Codex `gpt-6-astra`, medium, session `01a1a4f4-9535-7802-adee-165439e57a
 - **Finding 2, Medium (deterministic test).** `TASKELITH_TEST_CLOCK`, set only by tests, names the clock command. `checkAdmissionOnClock` runs the script on a fake clock file starting at `1000999` ms that only the fake `sleep` and `node` move (design "Test clock seam"). `awaitLateInSecond` and `lateSleep` are removed. The proposal, design, and this record no longer call the first round's test deterministic. The real-clock test "a bound with a leading zero is read in base 10" is unchanged, with its 10 s lower bound.
 - **Finding 3, Medium (fail-before).** Re-run against the base script, below, with the exact commands.
 - **Finding 4, Low (latency).** Every sleep is capped at the deadline (`sleep_within`), tested by "a wait between reads never sleeps past the bound" and by the second sleep `0.999` of the hung-read test; design "Latency" and the proposal's Impact state the read check and decision time.
-- **Follow-up, not fixed (architect decision of the coordinator, 2026-11-04).** `await_served_certificates` (`:505` at `fa3fbce7`) and `await_contact_since` (`:519` at `fa3fbce7`) keep their whole-second `SECONDS` deadlines and can end up to 1 s early; design "Follow-up" and `tasks.md` section 6 record it.
+- **Follow-up, not fixed (architect decision of the coordinator, 2026-11-04).** `await_served_certificates` (`:505` at `fa3fbce7`) and `await_contact_since` (`:519` at `fa3fbce7`) keep their whole-second `SECONDS` deadlines and can end up to 1 s early; design "Follow-up" and `tasks.md` "Follow-up" record it.
 - `route.json` is not routed again: worker step 4 routes before pass 1 only, and the route gate says later passes never route.
 
 ### Fail-before of the pass 1 fix round
@@ -73,7 +75,7 @@ Pass 2 (Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4
 - **Finding 1, Low (unread clock).** `read_clock` holds the clock sources; `clock_milliseconds` accepts only digits from it and otherwise prints `installation.sh: the clock could not be read` and fails. `deadline_in` and `milliseconds_left` pass the failure on, and `await_worker_admission`, `deadline_passed`, and `sleep_within` then exit the wait's subshell with `ADMISSION_CLOCK_FAILED` (2), never the timeout status 3, so the wait cannot spin. Tests: "a clock that prints no time fails the admission check before any read" (`TASKELITH_TEST_CLOCK=true`) and "a clock that stops printing a time during the wait fails the admission check, not as a timeout" (the fake `node` sets the clock to `not-a-time`). The spec is unchanged: an unreadable host clock is outside its scenarios. A clock that fails while a read runs exits without killing that read; no test covers it.
 - **Finding 2, Low (capped-poll test).** "a wait between reads never sleeps past the bound" also asserts that its sleeps add up to the bound exactly (`3000` ms).
 - **Finding 3, Low (comment placeholders).** The comments of `deadline_in` and `sleep_within` name their seconds parameter `N`, not `SECONDS`.
-- **Finding 4, Low (line citations).** design "Follow-up", `tasks.md` section 6, and "Pass 1 fix round" cite `await_served_certificates` at `:505` and `await_contact_since` at `:519` of `fa3fbce7`; the design cites function names otherwise. Every line cited in the change was checked: "Author self-check" now cites the draft's deadline at `:453` of `78345789` (it said `:451`, the comment above it), and "Pass 1 fix round" cites `:426` to `:458` at `b111eac1`; the `repository-binding-routes.test.ts`, `secrets.test.ts`, and `g2-partition.test.ts` lines are those of the `make verify` output.
+- **Finding 4, Low (line citations).** design "Follow-up", `tasks.md` "Follow-up", and "Pass 1 fix round" cite `await_served_certificates` at `:505` and `await_contact_since` at `:519` of `fa3fbce7`; the design cites function names otherwise. Every line cited in the change was checked: "Author self-check" now cites the draft's deadline at `:453` of `78345789` (it said `:451`, the comment above it), and "Pass 1 fix round" cites `:426` to `:458` at `b111eac1`; the `repository-binding-routes.test.ts`, `secrets.test.ts`, and `g2-partition.test.ts` lines are those of the `make verify` output.
 
 ### Fail-before of the pass 2 fix round
 
@@ -85,6 +87,26 @@ Run as `node --experimental-strip-types --test --test-name-pattern=<pattern> --t
 | Mutant without the cap (`if [ "$left" -lt "$wanted" ]; then wanted="$left"; fi` replaced by `:`) | `never sleeps past` | exit 1, fail 1: `the poll of 5 s is cut to the bound` |
 | Mutant whose cap sleeps 1 ms past the deadline (`wanted="$((left + 1))"`) | `never sleeps past` | exit 1, fail 1: `the sleeps add up to the bound exactly`, `actual: 3001, expected: 3000`; the assertions before it pass |
 | Fix (the tree of `73d21e34`) | `to the millisecond\|never sleeps past\|1 ms before\|1 ms after\|without EPOCHREALTIME\|prints no time\|stops printing a time\|leading zero\|bound that is not positive` | exit 0, 9 of 9 passed |
+
+## Return (2026-11-04)
+
+The coordinator returned the archived branch (head `a01ed5e5`): the integration `make verify` on the iMac (macOS, `/bin/bash` 3.2.57, no `EPOCHREALTIME`) failed "an admission read in time but decided after the bound is a timeout" with status 3 but `admissionReads` 0 instead of 1, after 12.5 s.
+
+- **Restore and merge.** `308e5dd4` reverts the archive commit `a01ed5e5` (worker step 10); `0ffb4b57` merges `origin/dev` at `46cd51b3` without a conflict, merge base `fa3fbce7`. `dev` changed `scripts/installation.sh` (`bootstrap_operator`), `test/installation-script.test.ts` (a smoke test and the `buildDocker` fake), and the `local-installation` requirement "Opt-in end-to-end smoke"; all are kept. `git diff fa3fbce7 46cd51b3 -- openspec/specs` does not touch "Bounded admission wait of the bring-up check", so the restored delta needs no reconciliation beyond the edits below.
+- **Root cause.** On a shell without `EPOCHREALTIME`, `read_clock` starts `node`, and the test's fake `node` slept `FAKE_NODE_DELAY` (6 s) on every run, clock reads included. `deadline_in` therefore took 6 s and set the deadline 4 s after its read; the poll loop checked the deadline before its first read, and that clock read took 6 s more, so the deadline had passed and the loop made no read: status 3, 0 reads, about 12 s. This is deterministic on every bash without `EPOCHREALTIME`, not load. The coordinator's hypothesis is confirmed in its mechanism, clock reads before the first read use up the bound, but their slowness came from the fake, not from the host's load; a slow real `node` start on a loaded host could do the same, which the product fix removes. The other start-up steps before the first read, the bound check, `mktemp`, the `trap`, and the empty log, read no clock: two clock reads preceded the first read, now one.
+- **Fix.** `scripts/installation.sh:512` to `:523`: the poll loop reads, decides, sleeps within the deadline, and only then checks it, so the first read always starts; a read that starts after the deadline is killed at its first check, a decision after the bound is still a timeout (`:525`), sleeps stay capped, and an unread clock still exits with `ADMISSION_CLOCK_FAILED`. The test's fake `node` delays and sets `FAKE_DECIDED_AT` only for an admission decision. New tests: the decision test on both clocks (`checkAdmissionWithoutEpochRealtime`), and "the first read starts even when the clock passed the bound before it" (`FAKE_CLOCK_LEAP_MS`, design "The first read always starts"). The spec delta (496 characters, new scenario "Slow clock before the first read"), `docs/local-installation.md`, the proposal, and the design state it.
+
+### Fail-before and after of the return
+
+`node --experimental-strip-types --test --test-name-pattern='decided after the bound is a timeout, on|first read starts' test/installation-script.test.ts` from the worktree:
+
+| Tree | Result |
+| --- | --- |
+| `0ffb4b57` with only the new tests | pass 1, fail 2: "... on the node clock" `0 !== 1` reads after 12208 ms (as on the iMac), "the first read starts ..." `0 !== 1` after 10348 ms; the `EPOCHREALTIME` variant passed |
+| Read-first loop, old fake `node` | the `node` clock variant still failed (`did not end in time`, after 12200 ms): its 6 s clock reads killed the read; "the first read starts ..." passed |
+| Fix (loop and fake) | 18 of 18 admission tests passed (pattern `admission\|bound\|clock\|EPOCHREALTIME\|first read`) |
+
+Slow-clock robustness: the same 18 admission tests, 20 consecutive runs with the `node` clock forced for every `checkAdmission` run (a temporary edit of the test file that adds `BASH_ENV` with `unset EPOCHREALTIME`, restored afterwards) and 8 busy-loop shell processes on the 8 logical CPUs: 20 of 20 runs passed 18 of 18, no failure. The decision test on the `node` clock took 7714 to 7944 ms, "a bound with a leading zero is read in base 10" 11977 to 12240 ms, and "the first read starts ..." 54 to 130 ms.
 
 ## Checks
 
@@ -122,17 +144,19 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run. Both passes ran at effort medium, owner decision 2026-11-02.
+Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run then. Both passes ran at effort medium, owner decision 2026-11-02. The return round ("Return") is not reviewed yet: Zaki runs pass 3 on it before the archive.
 
 Fixes that no later pass reviewed, for the coordinator's architect check: the four pass 2 fixes in `73d21e34`, namely the unread-clock failure of `scripts/installation.sh` (`read_clock`, `clock_milliseconds`, `deadline_in`, `milliseconds_left`, `deadline_passed`, `sleep_within`, `ADMISSION_CLOCK_FAILED`) with its two tests, the sum of the capped poll's sleeps, the `N` comment placeholders, and the corrected line citations.
 
 ## Limitations
 
 - The intermittent failure was not reproduced on the iMac; the fake-clock tests reproduce its mechanism without depending on the scheduler.
+- The iMac's integration failure of the return was reproduced on this host with `EPOCHREALTIME` unset, not on the iMac.
 - The `node` clock path runs on this host only with `EPOCHREALTIME` unset through `BASH_ENV`, not on a real bash 3.2.
 - A timed-out wait may outlast its bound by a running read's next check, at most about one second, or by a running decision (design "Latency").
 
 ## Remaining gates
 
+- Independent review pass 3 of the return round, then the archive (Zaki).
 - The coordinator's architect check of the unreviewed pass 2 fixes.
 - Integration into dev by the coordinator (single pull request).

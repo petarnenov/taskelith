@@ -472,12 +472,15 @@ esac
 exit 0
 `;
 
-// Delays the decision of every node run by FAKE_NODE_DELAY seconds; with
-// FAKE_DECIDED_AT it first sets the fake clock to that time.
+// Delays each admission decision by FAKE_NODE_DELAY seconds, and with
+// FAKE_DECIDED_AT first sets the fake clock; clock reads run at once.
 const delayedNode = `#!/bin/sh
 printf 'node %s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
-if [ -n "$FAKE_DECIDED_AT" ]; then echo "$FAKE_DECIDED_AT" > "$FAKE_CLOCK"; fi
-/bin/sleep "\${FAKE_NODE_DELAY:-0}"
+case "$*" in
+  *installation-admission.ts*)
+    if [ -n "$FAKE_DECIDED_AT" ]; then echo "$FAKE_DECIDED_AT" > "$FAKE_CLOCK"; fi
+    /bin/sleep "\${FAKE_NODE_DELAY:-0}" ;;
+esac
 exec "$REAL_NODE" "$@"
 `;
 
@@ -492,8 +495,17 @@ fraction="\${fraction#"\${fraction%%[!0]*}"}"
 echo $(($(cat "$FAKE_CLOCK") + \${1%.*} * 1000 + \${fraction:-0} + \${FAKE_LATE_MS:-0})) > "$FAKE_CLOCK"
 `;
 
-// The script's clock seam: prints the fake clock's milliseconds.
+// The script's clock seam: prints the fake clock's milliseconds. With
+// FAKE_CLOCK_LEAP_MS, a later read leaps by it once a view read started.
 const fakeClock = `#!/bin/sh
+if [ -n "$FAKE_CLOCK_LEAP_MS" ] && [ -f "$FAKE_CLOCK.read" ]; then
+  tries=0
+  until grep -q ' admin worker-admission' "$FAKE_DOCKER_CALLS" || [ "$tries" -ge 100 ]; do
+    /bin/sleep 0.1; tries=$((tries + 1))
+  done
+  echo $(($(cat "$FAKE_CLOCK") + FAKE_CLOCK_LEAP_MS)) > "$FAKE_CLOCK"
+fi
+: > "$FAKE_CLOCK.read"
 cat "$FAKE_CLOCK"
 `;
 
@@ -532,6 +544,18 @@ function checkAdmission(views: readonly string[], environment: Record<string, st
     assert.ok(!`${run.stdout}${run.stderr}${recorded.join('\n')}`.includes(OPERATOR_TOKEN), 'the operator secret is never printed');
     assert.deepEqual(readdirSync(temporary), [], 'no temporary file is left');
     return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// Runs the admission check as on bash 3.2, whose clock reads spawn node.
+function checkAdmissionWithoutEpochRealtime(views: readonly string[], environment: Record<string, string>): BuildOutcome {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-bash3-'));
+  try {
+    const startup = join(root, 'environment.sh');
+    writeFileSync(startup, 'unset EPOCHREALTIME\n');
+    return checkAdmission(views, { ...environment, BASH_ENV: startup });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -620,14 +644,18 @@ test('a read that would return an admission only after the bound is killed', () 
   assert.match(outcome.stderr, /the worker was not admitted within 1s/);
 });
 
-test('an admission read in time but decided after the bound is a timeout', () => {
-  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '4', FAKE_NODE_DELAY: '6' });
-  assert.equal(outcome.status, 3);
-  assert.equal(admissionReads(outcome).length, 1);
-  assert.equal(outcome.stdout, '', 'no view time is printed');
-  assert.doesNotMatch(outcome.stderr, /did not end in time/);
-  assert.match(outcome.stderr, /the worker was not admitted within 4s/);
-});
+for (const clock of ['EPOCHREALTIME', 'node'] as const) {
+  test(`an admission read in time but decided after the bound is a timeout, on the ${clock} clock`, () => {
+    const environment = { TASKELITH_ADMISSION_SECONDS: '4', FAKE_NODE_DELAY: '6' };
+    const run = clock === 'node' ? checkAdmissionWithoutEpochRealtime : checkAdmission;
+    const outcome = run([admissionView('admitted', 'passed')], environment);
+    assert.equal(outcome.status, 3);
+    assert.equal(admissionReads(outcome).length, 1);
+    assert.equal(outcome.stdout, '', 'no view time is printed');
+    assert.doesNotMatch(outcome.stderr, /did not end in time/);
+    assert.match(outcome.stderr, /the worker was not admitted within 4s/);
+  });
+}
 
 test('a bound with a leading zero is read in base 10', () => {
   const admitted = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_ADMISSION_SECONDS: '08' });
@@ -699,21 +727,24 @@ test('a clock that stops printing a time during the wait fails the admission che
 });
 
 test('a shell without EPOCHREALTIME reads the clock through node and never ends before its bound', () => {
-  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-bash3-'));
-  try {
-    const environment = join(root, 'environment.sh');
-    writeFileSync(environment, 'unset EPOCHREALTIME\n');
-    const { outcome, seconds } = timed(() => checkAdmission([admissionView('awaiting-self-check')], {
-      TASKELITH_ADMISSION_SECONDS: '1', BASH_ENV: environment,
-    }));
-    assert.equal(outcome.status, 3);
-    assert.match(outcome.stderr, /the worker was not admitted within 1s/);
-    assert.ok(outcome.calls.some((call) => call.includes('Date.now()')), 'node reads the clock');
-    assert.ok(seconds >= 1, `ended after ${seconds}s, before 1`);
-    assert.ok(seconds < 20, `ended after ${seconds}s`);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const { outcome, seconds } = timed(() => checkAdmissionWithoutEpochRealtime([admissionView('awaiting-self-check')], {
+    TASKELITH_ADMISSION_SECONDS: '1',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+  assert.ok(outcome.calls.some((call) => call.includes('Date.now()')), 'node reads the clock');
+  assert.ok(seconds >= 1, `ended after ${seconds}s, before 1`);
+  assert.ok(seconds < 20, `ended after ${seconds}s`);
+});
+
+test('the first read starts even when the clock passed the bound before it', () => {
+  const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '1', FAKE_DELAY: '30', FAKE_CLOCK_LEAP_MS: '5000',
+  });
+  assert.equal(admissionReads(outcome).length, 1, 'the first read starts');
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
+  assert.match(outcome.stderr, /the worker was not admitted within 1s/);
 });
 
 test('a refused read of the workers view fails the admission check at once', () => {

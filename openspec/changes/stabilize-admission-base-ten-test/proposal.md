@@ -4,9 +4,9 @@ The test "a bound with a leading zero is read in base 10" of `test/installation-
 
 ## What Changes
 
-- Product fix: `await_worker_admission` of `scripts/installation.sh` measures its bound in milliseconds through new reusable clock and deadline functions, `EPOCHREALTIME` of bash 5 or else `node`. A wait never ends as a timeout before its bound, an admission decided after the bound is a timeout, and no sleep of the wait runs past the bound.
-- Tests: a test-only clock seam, `TASKELITH_TEST_CLOCK`, runs the script on a fake clock that moves only by the test's fake `sleep` and `node`, so the tests of a hung read, a capped poll, and decisions 1 ms before and after the bound do not depend on the scheduler. A test checks the `node` clock of a shell without `EPOCHREALTIME`.
-- The `local-installation` requirement "Bounded admission wait of the bring-up check" and `docs/local-installation.md` state that the bound is measured in milliseconds and that a wait never ends as a timeout before it nor sleeps past it.
+- Product fix: `await_worker_admission` of `scripts/installation.sh` measures its bound in milliseconds through new reusable clock and deadline functions, `EPOCHREALTIME` of bash 5 or else `node`. A wait never ends as a timeout before its bound, an admission decided after the bound is a timeout, no sleep of the wait runs past the bound, and the first read starts whatever the clock says, so slow `node` clock reads on bash 3.2 cannot use up the bound before it.
+- Tests: a test-only clock seam, `TASKELITH_TEST_CLOCK`, runs the script on a fake clock that moves only by the test's fake `sleep` and `node`, so the tests of a hung read, a capped poll, and decisions 1 ms before and after the bound do not depend on the scheduler. A test checks the `node` clock of a shell without `EPOCHREALTIME`, the decision after the bound runs on both clocks, and a test with a clock that passes the bound before the first read checks that the read still starts. The fake `node` delays only decisions, not clock reads.
+- The `local-installation` requirement "Bounded admission wait of the bring-up check" and `docs/local-installation.md` state that the bound is measured in milliseconds, that a wait never ends as a timeout before it nor sleeps past it, and that the first read always starts.
 
 ## Capabilities
 
@@ -14,7 +14,7 @@ The test "a bound with a leading zero is read in base 10" of `test/installation-
 
 ### Modified Capabilities
 
-- `local-installation`: MODIFIED requirement "Bounded admission wait of the bring-up check", with the new scenarios "Clock tick right after the start" and "Decision just after the bound".
+- `local-installation`: MODIFIED requirement "Bounded admission wait of the bring-up check", with the new scenarios "Clock tick right after the start", "Decision just after the bound", and "Slow clock before the first read".
 
 ## Impact
 

@@ -24,8 +24,17 @@
 - [x] 5.2 Pass 1 fixes: a millisecond clock with reusable deadline functions and sleeps capped at the deadline, a test clock seam with deterministic tests, the fail-before against `fa3fbce7`, and corrected latency claims
 - [x] 5.3 Independent review pass 2 (claude claude-fable-5-1, medium): 4 Low; the review ends there, pass 3 is not run
 - [x] 5.4 Pass 2 fixes: an unread clock fails the wait, the capped-poll test sums its sleeps, comment placeholders, and line citations
-- [ ] 5.5 Archive the change
+- [x] 5.5 Archive the change (reverted in 6.1 for the return)
+- [ ] 5.6 Independent review pass 3 of the return round and the archive
 
-## 6. Follow-up
+## 6. Return (2026-11-04)
+
+- [x] 6.1 Revert the archive commit and merge `origin/dev`; reconcile the delta
+- [x] 6.2 Reproduce the iMac failure with the `node` clock and record a fail-before
+- [x] 6.3 Start the first read whatever the clock says; delay only decisions in the fake `node`
+- [x] 6.4 Update the spec delta, docs, and design; run the admission tests on the `node` clock under load and `make verify`
+
+## 7. Follow-up
+
 
 Not a task of this change, out of scope (coordinator's architect decision, 2026-11-04): `await_served_certificates` (`scripts/installation.sh:505` at `fa3fbce7`) and `await_contact_since` (`:519` at `fa3fbce7`) still end up to 1 s early through the whole-second `SECONDS` clock; a later change can adopt `deadline_in`, `deadline_passed`, and `sleep_within`

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Bounded admission wait of the bring-up check
-Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, a positive whole number of seconds read in base 10, by default 300, killing a read still running then. It SHALL measure the bound in milliseconds, SHALL NOT end as a timeout before it, and SHALL NOT sleep past it. Any other value SHALL be a usage error before any read.
+Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry, starting its first read whatever the clock says, and SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, positive whole seconds in base 10, by default 300, killing a read still running then. It SHALL measure the bound in milliseconds, SHALL neither time out before it nor sleep past it. Any other value SHALL be a usage error before any read.
 
 #### Scenario: Admission timeout
 - **WHEN** the worker is still `awaiting-self-check` when the bound ends
@@ -18,6 +18,10 @@ Each admission wait of `make verify-installation` SHALL read the workers view th
 #### Scenario: Decision just after the bound
 - **WHEN** the worker is found admitted by a decision made 1 ms after the bound
 - **THEN** the check fails as a timeout
+
+#### Scenario: Slow clock before the first read
+- **WHEN** the clock reads already pass the bound before the first read starts
+- **THEN** the first read still starts, and the check fails as a timeout
 
 #### Scenario: Bound of zero
 - **WHEN** `TASKELITH_ADMISSION_SECONDS` is `0`

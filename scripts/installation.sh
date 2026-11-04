@@ -509,8 +509,9 @@ await_worker_admission() (
   deadline="$(deadline_in "$bound")" || exit "$ADMISSION_CLOCK_FAILED"
   files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
   trap 'rm -rf "$files"' EXIT
-  : > "$files/log"
-  until deadline_passed "$deadline"; do
+  # The first read starts whatever the clock says, so that slow clock reads
+  # (node on bash 3.2) cannot use up the bound before it.
+  while :; do
     : > "$files/log"
     if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
     status=0
@@ -518,6 +519,7 @@ await_worker_admission() (
       < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?
     if [ "$status" -ne "$ADMISSION_WAITING" ]; then break; fi
     sleep_within "$deadline" "$ADMISSION_POLL_SECONDS"
+    if deadline_passed "$deadline"; then break; fi
   done
   # An admission decided when the bound has passed is a timeout too.
   if [ "$status" -eq 0 ] && deadline_passed "$deadline"; then status="$ADMISSION_WAITING"; fi
