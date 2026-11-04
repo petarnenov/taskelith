@@ -105,7 +105,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `3d7fad8557d1074e178c398e2bfafe6a505e265e`; tests 4890, pass 4843, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `f33e77279d62e3dbcb76ad8e8c29231ee15c756c`; tests 4896, pass 4849, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
 - `npm run openspec -- validate stabilize-secrets-linear-time-test --strict`: passed, `Change 'stabilize-secrets-linear-time-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).`.
 - Spec diff against the merge base `1ef0cb4263e3` with `origin/dev`: no change under `openspec/specs`.
@@ -179,6 +179,8 @@ After the archive commit `66b1d706`, the coordinator (Niki) reported that integr
 | The same, 5 runs under the 8 busy loops | `236ee1da` | 5 of 5 passed, 5 test passes each; medians 9857.9, 39454.6, and 10424.3 ms; no busy loop left afterwards |
 | `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | the round's working tree | `Change 'stabilize-secrets-linear-time-test' is valid` |
 | `npm run verify:comments` | `236ee1da` working tree | `Every comment is within the comment length rule.` |
+| `env -u NODE_ENV make verify`, round run 1 | `b8128397` | Passed on the first run, profile full, tree `f33e77279d62e3dbcb76ad8e8c29231ee15c756c`; tests 4896, pass 4849, fail 0, skipped 47; `apps/web` 816 of 816 passed; no known flake occurred, so nothing was rerun; all files 99.42% lines, 92.97% branches, 98.85% functions; `redaction-rules.js` and `scrub.js` 100.00% lines, branches, and functions, `linear-time.js` 100.00%, 95.45%, and 100.00%; `duration_ms` 305813.7. The secrets linear-time tests took 4288.1, 22871.0, and 9089.3 ms, the observability ones 8069.4 and 29797.1 ms |
+| `make record` and `make record-check CHANGE=stabilize-secrets-linear-time-test` | `b8128397` | `make record-check: the generated part matches the tree` |
 
 ## Independent review
 
