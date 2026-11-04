@@ -42,6 +42,13 @@ describe('listWorkers', () => {
     ['500', json(500, { code: 'internal', message: 'Broken.', details: {} }), 'unavailable'],
     ['503, a source of the view unreadable', json(503, { code: 'unavailable', message: 'Later.', details: {} }), 'unavailable'],
     ['a body without the view', json(200, { asOf: '2026-11-03T09:10:00.000Z' }), 'unavailable'],
+    ['a view with a date-only asOf', json(200, workersView({ asOf: '2026-11-03' })), 'unavailable'],
+    ['a view with a worker identifier holding a space', json(200, workersView({ workers: [worker({ workerId: 'worker 1' })] })), 'unavailable'],
+    [
+      'a view with a hostname holding a control character',
+      json(200, workersView({ workers: [worker({ host: { platform: 'linux', architecture: 'x64', hostname: 'b\u0007' } })] })),
+      'unavailable',
+    ],
     ['an HTML page', new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html' } }), 'unavailable'],
   ])('reads %s as %s', async (_, answer, kind) => {
     expect(await createWorkersGateway({ fetch: sendAnswers(answer) }).listWorkers()).toEqual({ kind });

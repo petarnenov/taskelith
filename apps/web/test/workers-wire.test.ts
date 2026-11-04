@@ -30,6 +30,47 @@ describe('workersViewOf', () => {
     expect(view?.workers[0]).not.toHaveProperty('reportedAt');
   });
 
+  // The OpenAPI scalars: Identifier (1 to 128 printable ASCII characters),
+  // DisplayText (1 to 1,024 characters, no control character), UTC Instant.
+  describe('the scalar bounds', () => {
+    const withProblem = (problem: string) => workersView({ workers: [worker({ results: [{ ...FAILED, details: [problem] }] })] });
+    const withHostname = (hostname: string) => workersView({ workers: [worker({ host: { platform: 'linux', architecture: 'x64', hostname } })] });
+
+    it.each<[string, unknown]>([
+      ['an identifier of 128 printable characters', workersView({ workers: [worker({ workerId: '!'.repeat(64) + '~'.repeat(64) })] })],
+      ['a hostname of 1,024 characters', withHostname('h'.repeat(1024))],
+      ['a hostname with a non-ASCII letter', withHostname('bürø-1.example')],
+      ['a problem of 1,024 astral characters', withProblem('\u{1F600}'.repeat(1024))],
+      ['an instant at the end of a day', workersView({ asOf: '2026-12-31T23:59:59.999Z' })],
+    ])('reads %s', (_, body) => {
+      expect(workersViewOf(JSON.parse(JSON.stringify(body)))).toEqual(body);
+    });
+
+    it.each<[string, unknown]>([
+      ['an identifier of 129 characters', workersView({ workers: [worker({ workerId: 'w'.repeat(129) })] })],
+      ['an identifier with a space', workersView({ workers: [worker({ workerId: 'worker 1' })] })],
+      ['an identifier with a non-ASCII letter', workersView({ workers: [worker({ workerId: 'wörker-1' })] })],
+      ['an identifier with a control character', workersView({ workers: [worker({ workerId: 'worker-1\u0007' })] })],
+      ['a hostname of 1,025 characters', withHostname('h'.repeat(1025))],
+      ['a hostname with a control character', withHostname('build-1\u0000.example')],
+      ['a hostname with a delete character', withHostname('build-1\u007f.example')],
+      ['a hostname with a C1 control character', withHostname('build-1\u0085.example')],
+      ['a hostname with a line break', withHostname('build-1\n.example')],
+      ['a problem of 1,025 characters', withProblem('p'.repeat(1025))],
+      ['a problem of 1,025 astral characters', withProblem('\u{1F600}'.repeat(1025))],
+      ['a problem with a control character', withProblem('launch\u001b[31m refused')],
+      ['a date-only asOf', workersView({ asOf: '2026-11-03' })],
+      ['an asOf without milliseconds', workersView({ asOf: '2026-11-03T09:10:00Z' })],
+      ['an asOf with an offset', workersView({ asOf: '2026-11-03T09:10:00.000+00:00' })],
+      ['an asOf with microseconds', workersView({ asOf: '2026-11-03T09:10:00.000000Z' })],
+      ['an asOf of the pattern that is no date', workersView({ asOf: '2026-13-45T09:10:00.000Z' })],
+      ['a date-only enrolledAt', workersView({ workers: [worker({ enrolledAt: '2026-11-03' })] })],
+      ['a reportedAt without the zone', workersView({ workers: [worker({ reportedAt: '2026-11-03T09:05:00.000' })] })],
+    ])('reads %s as no view', (_, body) => {
+      expect(workersViewOf(body)).toBeUndefined();
+    });
+  });
+
   it.each<[string, unknown]>([
     ['no body', undefined],
     ['an unreadable asOf', { ...workersView(), asOf: 'yesterday' }],
