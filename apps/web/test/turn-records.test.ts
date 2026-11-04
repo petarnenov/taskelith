@@ -51,6 +51,15 @@ describe('the turn record store', () => {
     expect(JSON.parse(sessionStorage.getItem(NAME) ?? '[]')).toEqual([record('key-1')]);
   });
 
+  it('keeps the records of a/b + c apart from those of a + b/c', () => {
+    const store = createTurnRecordStore();
+    store.add('a/b', 'c', record('key-1'));
+    store.add('a', 'b/c', record('key-2'));
+    expect(store.list('a/b', 'c')).toEqual([record('key-1')]);
+    expect(store.list('a', 'b/c')).toEqual([record('key-2')]);
+    expect(Object.keys(sessionStorage).filter((name) => name.startsWith(TURN_RECORD_PREFIX))).toHaveLength(2);
+  });
+
   it('reads the records a reload left in the storage, and removes one by its key', () => {
     sessionStorage.setItem(NAME, JSON.stringify([record('key-1'), record('key-2')]));
     const store = createTurnRecordStore();

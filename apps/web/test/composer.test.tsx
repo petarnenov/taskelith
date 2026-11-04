@@ -6,6 +6,7 @@ import { createTurnRecordStore, TURN_RECORD_PREFIX, type TurnRecord } from '../s
 import { CSRF_HEADER } from '../src/api/client';
 import type { SubmitResult, TaskDetail } from '../src/board/board';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
+import { sessionPath } from '../src/screens';
 import { createSessionGateway } from '../src/session/control-plane-session';
 import type { SessionGateway } from '../src/session/session';
 import {
@@ -279,6 +280,25 @@ describe('a submission that is not confirmed', () => {
       text: 'Sent before the reload',
     });
     expect(storedRecords()).toEqual([]);
+  });
+
+  it('shows the submissions of a/b + c to no composer of a + b/c, whose feed reads its own session', async () => {
+    const store = createTurnRecordStore();
+    store.add('a/b', 'c', { key: 'key-restored', text: 'Sent to a/b + c', sentAt: SENT_AT });
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockImplementation(async (_project, sessionId) => ({
+      kind: 'read',
+      value: agentSessionView({ session: agentSession({ sessionId }) }),
+    }));
+    const view = renderApp(`/app${sessionPath('a/b', 'c')}`, fakeGateway(AUTHENTICATED), new ManualClock(), gateway, store);
+    await screen.findByRole('heading', { level: 1, name: 'Agent session c' });
+    await composerAlert('Not confirmed');
+    await act(() => view.router.navigate(sessionPath('a', 'b/c')));
+    await screen.findByRole('heading', { level: 1, name: 'Agent session b/c' });
+    await waitFor(() => expect(gateway.readAgentSession).toHaveBeenCalledWith('a', 'b/c'));
+    await waitFor(() => expect(screen.getByRole('main').textContent).toContain('Agent session b/c'));
+    expect(screen.queryByText('Not confirmed')).toBeNull();
+    expect(message().disabled).toBe(false);
   });
 
   it('keeps the records of a session whose storage cannot be reached in memory for a retry', async () => {
