@@ -122,6 +122,8 @@ Per-file coverage of the changed `dist` files in `make verify` run 4, after the 
 
 The pass 1 fixes changed the diff again, so `route.json` was deleted and routed again at `f602cb26` and committed unedited (`24ecd210`): elevated (lines, files, security, contracts), rule version 5, the same reviewer table with effort high for passes 1 and 2; the shadow router `jev-1.14.0` answered elevated (P(third) 0.75) and agrees with the rule. The authorized medium applies (policy version 11).
 
+The pass 2 fixes changed the diff again, so `route.json` was deleted and routed again at `1ee09be2` and committed unedited (`447bbbbf`): elevated (lines 1908, files 30; triggers lines, files, security, contracts), rule version 5, the same reviewer table with effort high for passes 1 and 2 and medium for pass 3; the shadow router `jev-1.14.0` answered elevated (P(third) 0.74) and agrees with the rule. The authorized medium applies to pass 3 as to the earlier passes (policy version 11).
+
 ## Deviations
 
 1. `afterOf` of `project-api.ts` is exported and reused by `FleetApi`; `scm-integration-api.ts` keeps its own copy, named below.
