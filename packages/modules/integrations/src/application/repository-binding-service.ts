@@ -5,8 +5,7 @@ import type { BindableProjects, RepositoryBinding, RepositoryBindings } from '..
 import type { ScmIntegrations, ScmPluginDefects, ScmPlugins } from '../ports/scm-integrations.js';
 import type { MergeMethod, RepositoryRemote, SourceControlProvider } from '../ports/source-control.js';
 import { readCapabilities, readRepositoryRemote } from '../ports/source-control-readers.js';
-import type { Reading } from '../ports/untrusted-shapes.js';
-import { pluginAnswer, pluginDefect, type DefectOfCall, type ReportedDefect } from './plugin-answer.js';
+import { asProvider, pluginAnswer, pluginDefect, type DefectOfCall, type ReportedDefect } from './plugin-answer.js';
 
 // The binding a maintainer sends: no remote URL, which the plugin resolves.
 export interface RepositoryBindingRequest {
@@ -110,12 +109,6 @@ export class RepositoryBindingService {
       return pluginDefect();
     };
   }
-}
-
-// A provider is an object whose operations are called in their own boundary.
-function asProvider(value: unknown): Reading<SourceControlProvider> {
-  const isObject = typeof value === 'object' && value !== null;
-  return isObject ? ok(value as SourceControlProvider) : err(['provider must be an object']);
 }
 
 // The plugin's message may quote a secret, so only its code is kept.

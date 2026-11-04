@@ -68,6 +68,7 @@ class AnySecretPlugin extends ExamplePlugin {
 }
 
 const IGNORED = { unverifiable: () => undefined };
+const NO_DEFECTS = { defect: () => undefined };
 
 let minted = 0;
 function setup(plugin: ExamplePlugin = new ExamplePlugin()) {
@@ -200,7 +201,7 @@ test('secrets never show their values in a string, JSON, or inspection', () => {
 test('stored verifiers serve the integration plugin, cached by revision, and none for an unknown integration', async () => {
   const { service, store, plugin, plugins } = setup();
   const created = value(await service.create(CREATION, INVOCATION));
-  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, IGNORED);
+  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, IGNORED, NO_DEFECTS);
   const delivery: WebhookDelivery = { headers: {}, rawBody: new Uint8Array() };
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
   assert.ok(value(await verifiers.verifierOf(created.integrationId)) !== undefined);
@@ -215,9 +216,9 @@ test('stored verifiers serve the integration plugin, cached by revision, and non
 test('stored verifiers answer none when the plugin is gone or cannot be built', async () => {
   const { service, store } = setup();
   const created = value(await service.create(CREATION, INVOCATION));
-  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => undefined }, IGNORED).verifierOf(created.integrationId)), undefined);
+  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => undefined }, IGNORED, NO_DEFECTS).verifierOf(created.integrationId)), undefined);
   const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', 'cannot build')) } as unknown as SourceControlPlugin;
-  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => broken }, IGNORED).verifierOf(created.integrationId)), undefined);
+  assert.equal(value(await new StoredScmIntegrationVerifiers(store, { pluginOf: () => broken }, IGNORED, NO_DEFECTS).verifierOf(created.integrationId)), undefined);
 });
 
 test('stored verifiers report once per revision an integration that cannot verify, never with a value', async () => {
@@ -227,7 +228,7 @@ test('stored verifiers report once per revision an integration that cannot verif
   const reporter = { unverifiable: (...report: unknown[]) => { reports.push(report); } };
   const broken = { ...new ExamplePlugin(), createProvider: () => err(failure('invalid', `cannot build with ${SECRET}`)) } as unknown as SourceControlPlugin;
   for (const plugin of [undefined, broken]) {
-    const verifiers = new StoredScmIntegrationVerifiers(store, { pluginOf: () => plugin }, reporter);
+    const verifiers = new StoredScmIntegrationVerifiers(store, { pluginOf: () => plugin }, reporter, NO_DEFECTS);
     assert.equal(value(await verifiers.verifierOf(created.integrationId)), undefined);
     assert.equal(value(await verifiers.verifierOf(created.integrationId)), undefined, 'the next delivery reports nothing new');
   }
@@ -320,7 +321,7 @@ function misbuildingPlugin(misbehaviour: Misbehaviour | 'no-provider'): SourceCo
 }
 
 test('a stored verifier whose provider build throws or breaks answers none, one defect a revision, quoting nothing', async () => {
-  const cases = [['throws', 'threw'], ['throwing-ok', 'threw'], ['no-envelope', 'malformed-envelope'], ['no-provider', 'malformed-value']] as const;
+  const cases = [['throws', 'threw'], ['throwing-ok', 'malformed-envelope'], ['no-envelope', 'malformed-envelope'], ['no-provider', 'malformed-value']] as const;
   for (const [misbehaviour, kind] of cases) {
     const { service, store } = setup();
     const created = value(await service.create(CREATION, INVOCATION));

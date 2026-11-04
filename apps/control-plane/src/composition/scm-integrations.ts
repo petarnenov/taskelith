@@ -72,9 +72,10 @@ export interface ScmIntegrationPorts {
 export function scmIntegrationServices(
   { store, deliveries, plugin, plugins, clock }: ScmIntegrationPorts, logger: Logger,
 ): ScmIntegrationServices {
-  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger));
+  const defects = pluginDefectLog(logger);
+  const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger), defects);
   return {
-    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock, defects: pluginDefectLog(logger) }),
+    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock, defects }),
     webhooks: new ScmWebhookReceiver({ verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin }),
   };
 }

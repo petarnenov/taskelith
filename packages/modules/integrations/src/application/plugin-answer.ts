@@ -1,5 +1,6 @@
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { ScmPluginDefectKind, ScmPluginOperation } from '../ports/scm-integrations.js';
+import type { SourceControlProvider } from '../ports/source-control.js';
 import { readResult, type Reading } from '../ports/untrusted-shapes.js';
 
 export type ReportedDefect = (operation: ScmPluginOperation, kind: ScmPluginDefectKind) => Failure;
@@ -23,4 +24,10 @@ export async function pluginAnswer<Value>(
 
 export function pluginDefect(): Failure {
   return failure('internal', 'the SCM plugin answered outside its contract');
+}
+
+// A provider is an object whose operations are called in their own boundary.
+export function asProvider(value: unknown): Reading<SourceControlProvider> {
+  const isObject = typeof value === 'object' && value !== null;
+  return isObject ? ok(value as SourceControlProvider) : err(['provider must be an object']);
 }
