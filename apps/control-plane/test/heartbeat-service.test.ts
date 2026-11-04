@@ -9,7 +9,7 @@ import {
 } from '@taskelith/control-plane';
 import { InMemoryTaskRepository, type WorkerId } from '@taskelith/execution';
 import { fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
-import { instantFromEpochMilliseconds, ok, type Instant } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Instant } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { InMemoryTaskLineage, type WorkerPlacementRecord } from '@taskelith/scheduling';
 import { failed, SimulatedHost, value } from '@taskelith/testing';
@@ -74,6 +74,26 @@ test('a heartbeat on another worker\'s subject, of another journal, a revoked or
     assert.equal(failed(await heartbeats.record(refused)).code, 'forbidden', JSON.stringify(refused));
   }
   assert.deepEqual([await reachable('worker-1'), await reachable('worker-2')], [false, false]);
+});
+
+// A store whose worker read or contact write answers an outage.
+function failingStore(failing: 'fleet' | 'reports'): ControlPlaneStore {
+  const down = async () => err(failure('unavailable', `${failing} down`));
+  const enrolled = async () => ok(fleetWorker('worker-1', JOURNAL));
+  const transaction = {
+    fleet: { worker: failing === 'fleet' ? down : enrolled },
+    cursors: { listByWorker: async () => [] },
+    reports: { recordContact: failing === 'reports' ? down : async () => ok(undefined) },
+    now: async () => after(0),
+  } as unknown as ControlPlaneTransaction;
+  return { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
+}
+
+test('a heartbeat returns the outage of its worker read or of its contact write', async () => {
+  for (const failing of ['fleet', 'reports'] as const) {
+    const recorded = await new HeartbeatService(failingStore(failing)).record(heartbeat('worker-1'));
+    assert.deepEqual([failed(recorded).code, failed(recorded).message], ['unavailable', `${failing} down`]);
+  }
 });
 
 test('a worker without contact for the timeout becomes unreachable, and contact again makes it reachable', async () => {

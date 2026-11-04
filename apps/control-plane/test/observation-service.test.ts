@@ -596,8 +596,8 @@ test('a contact that fails after its observation committed is logged, and the ob
   const started = message('execution.started', 1, {});
   assert.equal(value(await service.apply(started)), 'applied');
   assert.equal(store.opened, 2, 'the observation, then its contact');
-  assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code, record.correlation.observationId]), [
-    ['execution.observation.contact-unrecorded', 'unavailable', started.body.metadata.observationId],
+  assert.deepEqual(logs.records.map((record) => [record.level, record.event, record.fields.code, record.correlation.observationId]), [
+    ['warn', 'execution.observation.contact-unrecorded', 'unavailable', started.body.metadata.observationId],
   ]);
 });
 
@@ -615,15 +615,16 @@ function throwingContactStore(error: Error): ControlPlaneStore & { opened: numbe
   return store as never;
 }
 
-test('a contact whose transaction throws after its observation committed is logged redacted, and it stays applied', async () => {
+test('a contact whose transaction throws after its observation committed is logged as an error, redacted, and it stays applied', async () => {
   const store = throwingContactStore(new Error('permission denied, password=hunter2'));
   const logs = new InMemoryLogSink();
   const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const started = message('execution.started', 1, {});
   assert.equal(value(await service.apply(started)), 'applied');
   assert.equal(store.opened, 2, 'the observation, then its contact');
-  assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code, record.fields.message, record.correlation.observationId]), [
-    ['execution.observation.contact-unrecorded', 'internal', 'the contact threw: permission denied, password=[redacted]', started.body.metadata.observationId],
+  const fields = (record: (typeof logs.records)[number]) => [record.fields.code, record.fields.reason, record.fields.message];
+  assert.deepEqual(logs.records.map((record) => [record.level, record.event, ...fields(record), record.correlation.observationId]), [
+    ['error', 'execution.observation.contact-unrecorded', 'internal', 'threw', 'the contact threw: permission denied, password=[redacted]', started.body.metadata.observationId],
   ]);
 });
 
