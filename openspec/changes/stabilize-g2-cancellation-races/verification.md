@@ -13,7 +13,7 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, first as si
 - `a7a2d000` `docs: record the review route of the stabilize g2 cancellation races change` (`route.json` unedited).
 - `d543ef0d` `docs: record the checks of the stabilize g2 cancellation races change`.
 - Pass 1 fix round: `98318b66` `docs: record pass 1 of the stabilize g2 cancellation races review` (`passes.jsonl`), `558dc21f` `chore: log a contact transaction that throws after its observation committed`, `b50db636` `test: cover a thrown contact and a reachable worker revoked before its contact`, `183b577e` `docs: record the pass 1 findings of the stabilize g2 cancellation races change`, `fbc92e5e` `docs: record the checks of the pass 1 fix round of the stabilize g2 cancellation races change`.
-- Pass 2 fix round: `9dad73d6` `docs: record pass 2 of the stabilize g2 cancellation races review` (`passes.jsonl`), `1fec1cfa` `chore: log a thrown contact as an error and name the unconsumed contact`, `29862807` `test: cover the thrown contact's level and the heartbeat contact's outages`, `114be9b2` `docs: correct the citations and the known-flake list of the stabilize g2 cancellation races records`; the commit of these records follows, then the archive.
+- Pass 2 fix round: `9dad73d6` `docs: record pass 2 of the stabilize g2 cancellation races review` (`passes.jsonl`), `1fec1cfa` `chore: log a thrown contact as an error and name the unconsumed contact`, `29862807` `test: cover the thrown contact's level and the heartbeat contact's outages`, `114be9b2` `docs: correct the citations and the known-flake list of the stabilize g2 cancellation races records`, `7eb45847` `docs: record the pass 2 fix round of the stabilize g2 cancellation races change`; the commit of these checks follows, then the archive.
 
 ## Environment
 
@@ -74,6 +74,9 @@ Pass 2 reported only Low findings, so the review ended there and pass 3 did not 
 - Pass 1 fix round, run 2, `env -u NODE_ENV make verify` on `183b577e`, profile full (`sgcr/fix1/verify-2.make.log`): failed only in the known flake apps/web `test/app.test.tsx` "keeps the signed-out page over an expiry read that ends after the logout" with `TestingLibraryElementError: Unable to find role="menuitem" and name "Sign out"` (`Tests  1 failed | 716 passed (717)`); the Node.js tests had `tests 4829, pass 4782, fail 0, skipped 47`.
 - Run 3, the one rerun, same tree (`sgcr/fix1/verify-3.make.log`): passed, `make verify: passed, profile full, tree 8c44975b1412ca9b3bac816e01d562539618ea56; stamp written`; tests 4829, pass 4782, fail 0, skipped 47; apps/web `Tests  717 passed (717)`; all files 99.42% lines, 92.89% branches, 98.83% functions. `make record` read this log.
 - `env -u NODE_ENV make verify-linux-g2-scenarios` on `183b577e` (`sgcr/fix1/g2-scenarios-2.log`): `tests 18, pass 17, fail 0, skipped 1` (g); exit 0.
+- Pass 2 fix round, run 4, `env -u NODE_ENV make verify` on `7eb45847`, profile full (`sgcr/fix2/verify-4.make.log`): failed only in the known flake apps/web `test/app.test.tsx` "signs out and says that only the browser session ended" with `TestingLibraryElementError: Unable to find role="menuitem" and name "Sign out"` (`Tests  1 failed | 716 passed (717)`); the Node.js tests had `tests 4830, pass 4783, fail 0, skipped 47`.
+- Run 5, the one rerun, same tree (`sgcr/fix2/verify-5.make.log`): passed, `make verify: passed, profile full, tree 4d55f8d90643cf230df81038cc5282b6365acb21; stamp written`; tests 4830, pass 4783, fail 0, skipped 47; apps/web `Tests  717 passed (717)`; all files 99.42% lines, 92.93% branches, 98.83% functions. `make record` read this log.
+- `env -u NODE_ENV make verify-linux-g2-scenarios` on `7eb45847` (`sgcr/fix2/g2-scenarios-3.log`): `tests 18, pass 17, fail 0, skipped 1` (g); exit 0.
 
 ### Route
 
@@ -84,7 +87,7 @@ Pass 2 reported only Low findings, so the review ended there and pass 3 did not 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8c44975b1412ca9b3bac816e01d562539618ea56`; tests 4829, pass 4782, fail 0, skipped 47; all files 99.42% lines, 92.89% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `4d55f8d90643cf230df81038cc5282b6365acb21`; tests 4830, pass 4783, fail 0, skipped 47; all files 99.42% lines, 92.93% branches, 98.83% functions.
 - `npm run openspec -- validate stabilize-g2-cancellation-races --strict`: passed, `Change 'stabilize-g2-cancellation-races' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 121 file(s); every pass summary file is valid: 101 file(s); every route file is valid: 54 file(s).`.
 - Spec diff against the merge base `6dab1d26b271` with `origin/dev`: no change under `openspec/specs`.
@@ -93,6 +96,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a694-ceb1-7c13-a34e-6d5f27353c64` | 0 | 0 | 2 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `a8861d47-c92c-4c6a-abf9-13662e865f43` | 0 | 0 | 0 | 5 |
 <!-- make record: end -->
 
 ## Independent review
