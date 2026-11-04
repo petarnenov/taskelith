@@ -123,6 +123,8 @@ Fail-before: the helper's tests of `4f37008e` and the import test against the he
 | The three secrets tests, 10 consecutive runs | `4f37008e` | 10 of 10 passed, 30 test passes; medians 3342.4, 18744.1, and 6332.3 ms (ranges 3291.2 to 3453.7, 18098.4 to 20159.8, and 6248.5 to 8259.3 ms) for "Basic credentials ...", "text is redacted ...", and "value redaction ..." |
 | The same, 10 runs under the 8 busy loops | `4f37008e` | 10 of 10 passed, 30 test passes; medians 6049.4, 28736.2, and 9635.9 ms; no busy loop left afterwards |
 | The observability linear-time tests, one run | the round's working tree, the helper of `4f37008e` | 2 of 2 passed, 6059.5 and 26495.3 ms |
+| `env -u NODE_ENV make verify`, round run 1 | `d81755a8` | Failed on the known flake `apps/web` `test/app.test.tsx` "session expiry > stops waiting for the end once the operator signed out" (`Unable to find role="menuitem" and name "Sign out"`), 815 of 816 passed; Node.js tests 4889, pass 4842, fail 0, skipped 47. Rerun once |
+| `env -u NODE_ENV make verify`, round run 2 | `d81755a8` | Passed, profile full, tree `7f153d78fd21f08929759585a32d05ffab7d35de`; tests 4889, pass 4842, fail 0, skipped 47; `apps/web` 816 of 816 passed; all files 99.42% lines, 92.96% branches, 98.85% functions, `linear-time.js` 100.00%, 95.45%, and 100.00%. The secrets tests took 4188.885034, 23637.539111, and 6552.646878 ms, the observability ones 9176.890858 and 29243.854682 ms |
 | Archive probe in a scratch copy of `openspec/` | the round's working tree, the requirement of 498 characters | `+ 1 added`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
 
 ## Independent review
