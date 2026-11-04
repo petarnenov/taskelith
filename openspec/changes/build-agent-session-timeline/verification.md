@@ -67,7 +67,7 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b23276e6c3da85f4db57e9459707b7194b041e0a`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `cf1979fe05f6e4c5f8aeb9d427d623174f71b269`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.44% lines, 92.85% branches, 98.87% functions.
 - `npm run openspec -- validate build-agent-session-timeline --strict`: passed, `Change 'build-agent-session-timeline' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`.
 - Spec diff against the merge base `46cd51b3050a` with `origin/dev`: no change under `openspec/specs`.
@@ -76,6 +76,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a541-0625-72a1-b222-aded605c19c7` | 0 | 0 | 6 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `01ef03a1-6b3d-4324-9c91-eb83e4b26da6` | 0 | 0 | 0 | 6 |
 <!-- make record: end -->
 
 ## Independent review
@@ -135,7 +136,7 @@ No later pass reviews these fixes (see "Fixes no later pass reviewed"). Fail-bef
 - Finding 5 (`501c4e4b`): the requirement reads "the up to 100 turns ending at `lastTurnPosition`" (476 characters); `npm run openspec -- validate build-agent-session-timeline --strict` passes.
 - Finding 6 (`76aef3bb`): `agent-session-wire.ts`, `session-labels.ts` (which the wire reads its enums from, so moving the wire alone would have kept the cycle), and `useCardSessions.ts` moved under `board/` beside `board-wire.ts` and `board-labels.ts`; `TurnTimeline.tsx` and `session-labels.test.ts` import the labels from there; `board/` imports nothing from `agent-session/` (design, decision 2). No behaviour changed; the whole suite, `tsc` of both configurations, and the SPA build pass.
 - After the fixes the whole `apps/web` suite passes: 590 tests in 20 files (`coverage-31a-p2.log`), 98.88% statements, 97.53% branches, 99.76% functions, and 100% lines; `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run build --workspace=@taskelith/web`, and `npm run verify:comments` pass; `git diff 46cd51b3 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
-- `make verify` of the fixed and recorded tree, `verify-31a-p2.log` in the session scratchpad: see the generated part above, which records it.
+- `make verify` of the fixed and recorded tree (`f994bdb7`), two runs in the session scratchpad. Run 1, `verify-31a-p2.log`, failed in `make test` on one test outside this branch, `apps/control-plane/test/web-app.test.ts:279` "the request log names the web app as the operation and holds no path": its `assert.doesNotMatch(…, /index-AbC123|token|abc/)` matched the random correlation identifier `c-c3b2ce93-1f64-443f-bb41-7c1eabc3a3ed`, which happens to contain `abc`; `apps/control-plane` is unchanged by this branch (`git diff 46cd51b3 HEAD -- apps/control-plane` is empty), so the coordinator (Niki, 2026-11-04) authorized one rerun and put the test in the flaky queue as item 10, not to be fixed in this change. Run 2, `verify-31a-p2b.log`, passed, profile full, no further rerun; the generated part above records it.
 
 ## Fixes no later pass reviewed
 
