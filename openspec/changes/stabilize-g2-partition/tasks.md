@@ -2,7 +2,7 @@
 
 - [x] 1.1 Collect the past partition failures from the `make verify` logs and compare them with the mechanism of #446.
 - [x] 1.2 Run the base scenario file under load with the control plane's and the worker's logs saved.
-- [x] 1.3 Reproduce the failure deterministically by delaying the worker's start publication past the process's exit.
+- [x] 1.3 Reproduce the failure by delaying the worker's start publication past the process's exit.
 
 ## 2. Fix
 
