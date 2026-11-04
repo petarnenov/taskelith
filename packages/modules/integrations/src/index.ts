@@ -79,7 +79,7 @@ export {
   type ScmIntegrationAuditKind,
 } from './ports/scm-integration-audit.js';
 export { SCM_INTEGRATION_AUDIT_CONFORMANCE, type ScmIntegrationAuditTarget } from './ports/scm-integration-audit-conformance.js';
-export { InMemoryScmIntegrationAudit } from './adapters/in-memory-scm-integration-audit.js';
+export { InMemoryScmIntegrationAudit, type PublishAuditRow } from './adapters/in-memory-scm-integration-audit.js';
 export {
   SCM_INTEGRATION_PAGE_SIZE,
   ScmIntegrationService,

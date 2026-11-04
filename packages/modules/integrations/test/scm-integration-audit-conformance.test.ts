@@ -22,10 +22,10 @@ class RefusingAudit extends InMemoryScmIntegrationAudit {
     this.#accepted = accepted;
   }
 
-  override async append(...event: Parameters<InMemoryScmIntegrationAudit['append']>) {
+  override async stage(...event: Parameters<InMemoryScmIntegrationAudit['stage']>) {
     if (this.#accepted === 0) return err(failure('internal', 'the audit refused the row'));
     this.#accepted -= 1;
-    return super.append(...event);
+    return super.stage(...event);
   }
 }
 

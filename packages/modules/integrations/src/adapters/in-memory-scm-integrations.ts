@@ -1,17 +1,17 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { codeUnitOrder, type ScmIntegration, type ScmIntegrationId, type ScmSecrets } from '../domain/scm-integration.js';
-import { changeAudit, creationAudit, type ScmIntegrationAudit, type ScmIntegrationAuditEntry, type ScmIntegrationAuditEvent } from '../ports/scm-integration-audit.js';
+import { changeAudit, creationAudit, type ScmIntegrationAuditEntry, type ScmIntegrationAuditEvent } from '../ports/scm-integration-audit.js';
 import { changedConfiguration, type ScmIntegrationChange, type ScmIntegrations, type StoredScmConfiguration } from '../ports/scm-integrations.js';
 import { InMemoryScmIntegrationAudit } from './in-memory-scm-integration-audit.js';
 
-// The store in memory, for tests and tools; writes run one at a time in
-// `exclusive`, which a binding put shares, as a row lock would serialize.
+// The store in memory; writes run one at a time in `exclusive`, which a
+// binding put shares, and show the integration and audit row in one step.
 export class InMemoryScmIntegrations implements ScmIntegrations {
   readonly #stored = new Map<ScmIntegrationId, StoredScmConfiguration>();
-  readonly #audit: ScmIntegrationAudit;
+  readonly #audit: InMemoryScmIntegrationAudit;
   #queue: Promise<unknown> = Promise.resolve();
 
-  constructor(audit: ScmIntegrationAudit = new InMemoryScmIntegrationAudit()) {
+  constructor(audit: InMemoryScmIntegrationAudit = new InMemoryScmIntegrationAudit()) {
     this.#audit = audit;
   }
 
@@ -54,8 +54,10 @@ export class InMemoryScmIntegrations implements ScmIntegrations {
 
   // Keeps nothing when the audit refuses its row, as a rollback would.
   async #keepAudited(stored: StoredScmConfiguration, event: ScmIntegrationAuditEvent): Promise<Result<ScmIntegration>> {
-    const appended = await this.#audit.append(event);
-    return appended.ok ? ok(this.#keep(stored)) : appended;
+    const staged = await this.#audit.stage(event);
+    if (!staged.ok) return staged;
+    staged.value();
+    return ok(this.#keep(stored));
   }
 
   #keep(stored: StoredScmConfiguration): ScmIntegration {
