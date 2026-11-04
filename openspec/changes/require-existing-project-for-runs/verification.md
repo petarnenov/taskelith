@@ -65,6 +65,9 @@ Each mutation was restored; `git status` showed no change.
 | Focused `control-plane-api.integration.test.ts` (`int-11c-2.log`) | after `2b0659c4` with the `bfdcedb3` fix | tests 32, pass 32 |
 | `make contract-compatibility` | `c1aae7f7` | `Contract documents have no undeclared breaking change.` |
 | `make installation-smoke` (`installation-11c-1.log`) | `e22650ce` | Passed: the task result is `ended`, exited with code 0 and a proven start, after the smoke created a project and assigned the owner `project-operator`; `installation.sh: submitted, assigned, executed, stored the result, removed` |
+| `make verify-macos-g2-scenarios` (`scenario-11c-verify-macos-g2-scenarios.log`) | `143aa6fd`; the working tree differed only by pass 1 test and record edits that no scenario reads | Passed: the cancellation races, stale generations, and partitions of `g2-cancellation-races.test.ts`, `g2-stale-generations.test.ts`, and `g2-partition.test.ts` through `ScenarioInstallation.create`, which now creates a project and assigns the owner `project-operator`: tests 18, pass 18, fail 0, skipped 0 (2026-11-04 03:28 to 03:30 UTC) |
+| `make scenario-worker-kill` (`scenario-11c-scenario-worker-kill.log`) | `143aa6fd`; the working tree differed only by pass 1 test and record edits that no scenario reads | Passed: `installation-scenario.ts submit` created the scenario's project, assigned the owner, and submitted; the worker was killed after 10866 ms, restarted, and reconciled; `installation.sh: killed and restarted the worker, reconciled, removed`, exit 0 |
+| Crash windows and duplicate delivery of `crash-windows.integration.test.ts` through `HarnessInstallation.submitTask` | `9b380f56`, in `make verify` run 2 (`verify-11c-2.log`) | Passed natively on macOS, where `make verify` runs them: "a redelivered offer and assignment give one execution and one result" and "a crash at each launch and supervisor window recovers to one durable outcome" |
 
 ### Route
 
@@ -91,7 +94,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Limitations
 
 - The 404 of `createRun` is reachable only with a role on an identifier without a project (G2 role rows); it is tested through the service and the route mapping, not over PostgreSQL.
-- The crash-window and G2 scenario suites (opt-in Linux and macOS targets) were not run; their harnesses changed.
+- `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` need a Linux host (privileged image on the host network, which Docker Desktop gives only inside its virtual machine) and were not run on this macOS host; their macOS counterparts above passed.
 
 ## Remaining gates
 
