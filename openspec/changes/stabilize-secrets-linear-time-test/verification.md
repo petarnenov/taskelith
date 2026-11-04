@@ -9,7 +9,8 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - Base: `dev` `1ef0cb42` (#449); the brief's checklist was saved with `--at 1ef0cb4263e386a16ad7a282160b637e742a4120 --size S`.
 - `92d8f7f7` `test: judge linear-time redaction by CPU time growth instead of a wall-clock limit` (the helper, its tests, proposal, design, tasks, the spec delta, `checklist.json`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `d94583a2` `chore: route the stabilize secrets linear time test change` (`route.json` unedited).
-- The commits after it: this record and `make record`.
+- `1e847ae8` `docs: record the stabilize secrets linear time test change` (this record), verified by `make verify`.
+- The commit after it: `make record` and the results of that run.
 
 ## Environment
 
@@ -87,12 +88,22 @@ Line references are to `packages/testing/src/linear-time.ts` at `92d8f7f7`.
 | The observability linear-time tests, 5 runs under the 8 busy loops | `92d8f7f7` working tree | 5 of 5 passed, 10 test passes |
 | `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | `92d8f7f7` | `Change 'stabilize-secrets-linear-time-test' is valid` |
 | Archive probe in a scratch copy of `openspec/` | `92d8f7f7` working tree, the requirement of 431 characters | `+ 1 added`, archived as `2026-11-04-stabilize-secrets-linear-time-test`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
+| `env -u NODE_ENV make verify`, run 1 | `1e847ae8` | Passed on the first run, profile full, tree `49818cc01e844b5a38a7dc827f5eae80dc46fd89`; tests 4881, pass 4834, fail 0, skipped 47; `apps/web` 816 of 816 passed; no known flake occurred, so nothing was rerun. The secrets tests took 493.827135, 4090.016613, and 3544.866877 ms, the observability ones 1120.909638 and 6367.247174 ms, and the helper's tests 263.284728, 466.778786, and 2751.408879 ms |
 
 ### Route
 
 Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `codex gpt-6-astra#medium`, pass 2 reviewer B `claude claude-fable-5-1#medium`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router agreed (P(third) 0.22, threshold 0.4). The brief assigns `codex gpt-6.1-sol#medium` as the replacement for Antigravity on `hpz600` for pass 3.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `49818cc01e844b5a38a7dc827f5eae80dc46fd89`; tests 4881, pass 4834, fail 0, skipped 47; all files 99.42% lines, 92.95% branches, 98.84% functions.
+- `npm run openspec -- validate stabilize-secrets-linear-time-test --strict`: passed, `Change 'stabilize-secrets-linear-time-test' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).`.
+- Spec diff against the merge base `1ef0cb4263e3` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review

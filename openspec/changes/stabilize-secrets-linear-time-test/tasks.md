@@ -19,7 +19,7 @@
 - [x] 4.1 Fail-before run of the helper's new tests against the old helper
 - [x] 4.2 Mutation controls: the helper's quadratic redactor and a quadratic `mergedSpans`
 - [x] 4.3 Thirty runs of the three secrets tests, fifteen under 8 busy loops
-- [ ] 4.4 `make verify`, `make record`, and `make record-check`
+- [x] 4.4 `make verify`, `make record`, and `make record-check`
 
 ## 5. Review and archive
 
