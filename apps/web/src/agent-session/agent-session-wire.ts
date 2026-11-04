@@ -1,5 +1,5 @@
 import type { AgentSession, AgentSessionPage, AgentSessionView, SessionChange, Turn, TurnChange, TurnPage } from '../board/board';
-import { isCount, isInstant, isKey, isPosition, isRecord, isText } from '../board/board-wire';
+import { isInstant, isKey, isPosition, isRecord, isText } from '../board/board-wire';
 import { HARNESS_FAILURE_LABELS, TURN_OUTCOME_LABELS, TURN_STATE_LABELS } from './session-labels';
 
 // The agent session answers and events, checked for every field the
@@ -40,7 +40,7 @@ export function turnChangeOf(data: unknown): TurnChange | undefined {
 
 export function isAgentSession(value: unknown): value is AgentSession {
   if (!isRecord(value) || !isText(value.sessionId) || !isText(value.taskId) || !isText(value.runId)) return false;
-  if (!isText(value.harness) || !isCount(value.lastTurnPosition) || !isCount(value.lastRequestPosition)) return false;
+  if (!isText(value.harness) || !isTimelineCursor(value.lastTurnPosition) || !isTimelineCursor(value.lastRequestPosition)) return false;
   if (!isOutputWindow(value.output) || !isOptional(value.runningGeneration, isTimelinePosition)) return false;
   if (!isOptional(value.limit, isLimit) || !isOptional(value.activeAttempt, isActiveAttempt)) return false;
   return isOptional(value.handoff, isHandoff);
@@ -67,7 +67,7 @@ function isRequestKey(value: unknown): boolean {
 }
 
 function isOutputWindow(value: unknown): boolean {
-  if (!isRecord(value) || !isCount(value.lastPosition)) return false;
+  if (!isRecord(value) || !isTimelineCursor(value.lastPosition)) return false;
   return isOptional(value.earliestRetained, isTimelinePosition);
 }
 
@@ -87,9 +87,14 @@ function isHandoff(value: unknown): boolean {
   return isOptional(value.takenBy, isText);
 }
 
-// Timeline positions and generations count from 1.
+// Cursors count from 0 and positions and generations from 1, each at most
+// the largest safe integer, as the OpenAPI schemas cap them.
+function isTimelineCursor(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
 function isTimelinePosition(value: unknown): value is number {
-  return isCount(value) && value >= 1;
+  return isTimelineCursor(value) && value >= 1;
 }
 
 function isSnapshot(value: Fields): boolean {
