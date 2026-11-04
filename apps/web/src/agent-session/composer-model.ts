@@ -27,8 +27,9 @@ export function turnTextLength(text: string): number {
   return [...text].length;
 }
 
-// A failure after which the same key may be sent again.
-export type RetryableFailure = 'unavailable' | 'unauthenticated';
+// A failure after which the same key may be sent again: no usable answer,
+// a 401, or a CSRF refusal whose session read gave no renewed token.
+export type RetryableFailure = 'unavailable' | 'unauthenticated' | 'token-not-renewed';
 
 export type RefusalReason = 'key-reused' | 'session-stopped' | 'csrf-rejected' | 'invalid' | 'not-found';
 

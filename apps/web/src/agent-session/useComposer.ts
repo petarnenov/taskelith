@@ -58,8 +58,10 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
       show(key, PENDING);
       const outcome = outcomeOf(await gateway.submitTurn(projectId, sessionId, { idempotencyKey: key, text }), tokenRefreshed);
       if (outcome.kind === 'retry-with-new-token') {
-        await refresh();
-        return deliver(record, true);
+        const renewed = await refresh();
+        if (renewed.kind === 'authenticated') return deliver(record, true);
+        if (renewed.kind === 'unavailable') show(key, { status: 'failed', failure: 'token-not-renewed' });
+        return;
       }
       if (outcome.kind === 'retryable') {
         show(key, { status: 'failed', failure: outcome.failure });

@@ -20,8 +20,8 @@ export interface Session {
   // after a 401, unless a newer view showed since, as after a new login.
   readonly expiryOfRequest: () => () => void;
   // Reads the session again, as after a request refused for a stale CSRF
-  // token; a session that ended shows the sign-in page.
-  readonly refresh: () => Promise<void>;
+  // token, and answers what it read; a session that ended shows the sign-in.
+  readonly refresh: () => Promise<SessionRead>;
 }
 
 // The session is read again this long after its end, so that a client
@@ -94,6 +94,7 @@ export function SessionProvider({ gateway, clock, children }: SessionProviderPro
     const showIfUnchanged = sinceNow();
     const read = await settled.read();
     if (read.kind !== 'unavailable') showIfUnchanged(viewOf(read, 'expired'));
+    return read;
   }, [settled, sinceNow]);
 
   const session = useMemo(

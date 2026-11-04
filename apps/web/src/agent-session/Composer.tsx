@@ -2,7 +2,14 @@ import { Alert, Button, Group, Loader, Paper, Stack, Text, Textarea } from '@man
 import { useReducedMotion } from '@mantine/hooks';
 import { useState, type FormEvent } from 'react';
 import type { AgentSession, Turn } from '../board/board';
-import { checkTurnText, COUNTER_FROM_LENGTH, MAX_TURN_TEXT_LENGTH, type Submission, type TextCheck } from './composer-model';
+import {
+  checkTurnText,
+  COUNTER_FROM_LENGTH,
+  MAX_TURN_TEXT_LENGTH,
+  type RetryableFailure,
+  type Submission,
+  type TextCheck,
+} from './composer-model';
 import { TurnText } from './TurnTimeline';
 import { useComposer, type Composer as ComposerModel } from './useComposer';
 
@@ -197,9 +204,7 @@ function stateText(state: Exclude<Submission['state'], { status: 'pending' }>): 
     case 'unconfirmed':
       return `This message was sent before the page was reloaded and its answer was not seen. ${RETRY_SAME_KEY}`;
     case 'failed':
-      return state.failure === 'unauthenticated'
-        ? `The control plane answered as to a request without a session. ${RETRY_SAME_KEY}`
-        : `The control plane did not answer, so whether it recorded the turn is unknown. ${RETRY_SAME_KEY}`;
+      return `${FAILURE_TEXTS[state.failure]} ${RETRY_SAME_KEY}`;
     case 'duplicate':
       return `The control plane had recorded this message as turn #${state.turn.position}; nothing was sent again.`;
     case 'refused':
@@ -208,6 +213,12 @@ function stateText(state: Exclude<Submission['state'], { status: 'pending' }>): 
       return deniedText(state.requiredRole);
   }
 }
+
+const FAILURE_TEXTS: Readonly<Record<RetryableFailure, string>> = {
+  unavailable: 'The control plane did not answer, so whether it recorded the turn is unknown.',
+  unauthenticated: 'The control plane answered as to a request without a session.',
+  'token-not-renewed': 'The control plane refused the request’s token, and the session could not be read again to renew it.',
+};
 
 const REFUSAL_TEXTS: Readonly<Record<RefusedState['reason'], string>> = {
   'key-reused': 'The control plane knows this key for another message, so it refused this one. Send the message again to use a new key.',
