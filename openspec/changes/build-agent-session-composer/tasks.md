@@ -13,7 +13,7 @@
 ## 3. Records and checks
 
 - [x] 3.1 Write the proposal, the design, the spec delta, this task list, and the README status
-- [ ] 3.2 Route the change, run `make verify`, and write `verification.md`
+- [x] 3.2 Route the change, run `make verify`, and write `verification.md`
 
 ## 4. Review and archive
 

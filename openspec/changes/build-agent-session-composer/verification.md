@@ -12,7 +12,9 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `fea4d676` `chore: start the build-agent-session-composer change`: `.openspec.yaml`, the brief's `checklist.json` saved with `--save build-agent-session-composer --at 743f4661b78657f2c2656574d912d7e7d0f9ac5c --size M` (unedited), and the empty `findings.jsonl` and `passes.jsonl`.
 - `9ffc223d` `test: expect the web agent session composer, its submission states, the turn retry records, and submitTurn`: the tests, before the implementation.
 - `98dc9377` `chore: build the web agent session composer with submitTurn, the CSRF token getter, and the turn retry records`. The first `npm run verify:comments` of the implementation failed on one three-line comment of `turn-records.ts`; the comment was shortened and, because the branch was never pushed, the implementation commit was amended with the fix instead of a fix commit, so one route record describes the reviewed diff.
-- `docs: record the build-agent-session-composer proposal, design, spec delta, and SPA status`, then `docs: route the build-agent-session-composer change` (`route.json`, unedited) and `docs: record the make verify run of the build-agent-session-composer change`; their identifiers and the route's content are under "Route and verify run" below, written with the record commit.
+- `e972915d` `docs: record the build-agent-session-composer proposal, design, spec delta, and SPA status`: the proposal, the design, the spec delta, `tasks.md`, this record's hand-written part, and the README status.
+- `75357447` `docs: route the build-agent-session-composer change` (`route.json`, unedited, at head `e972915d`): "route: elevated (lines, files), rule version 5", 1,665 lines in 26 files, size M; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.60) and agrees; recommendation only, the brief's effort medium applies.
+- `docs: name the route and the first verify run in the build-agent-session-composer record`, then `docs: record the make verify run of the build-agent-session-composer change`: the record commit, with the generated part below; pass 1 reviews `743f4661..` that commit.
 
 ## Environment
 
@@ -36,7 +38,7 @@ macOS 26.6 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). It records the run named under "Route and verify run".
+The generated part below matches the tree (`make record-check`). Two `make verify` runs were made before pass 1, both in the session scratchpad, both passing at the first run with no rerun. `verify-31b-1.log` is the run of the clean tree of `75357447` (profile full, tree `c366a364`, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; `apps/web` Vitest 672 tests in 25 files); the command that wrote it appended its exit code as a last line, so `make record` refused the log as one not ending with the stamped result, and it is kept unedited. `verify-31b-2.log` is the run of the clean tree after the hand-written part of this record was committed, which the generated part records.
 
 ## Fail-before
 
@@ -59,10 +61,6 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 <!-- make record: end -->
-
-## Route and verify run
-
-Written with the record commit.
 
 ## Independent review
 
