@@ -60,6 +60,9 @@ Logs in `sgcr/fix1/`. The new tests were written before the fix and run on the b
 ## make verify
 
 - Run 1, `env -u NODE_ENV make verify` on `a7a2d000` (tree `3202ccdc`, clean), profile full (`sgcr/verify-1.log`): passed, `make verify: passed, profile full, tree 3202ccdc8a961d0a892b7e088b0055eb4a0ac37c; stamp written`; tests 4827, pass 4780, fail 0, skipped 47; all files 99.42% lines, 92.93% branches, 98.83% functions. None of the known flakes failed, so no rerun was needed. `make record` read `sgcr/verify-1.make.log`, the same log without the `exit 0` line that the run's wrapper appended.
+- Pass 1 fix round, run 2, `env -u NODE_ENV make verify` on `183b577e`, profile full (`sgcr/fix1/verify-2.make.log`): failed only in the known flake apps/web `test/app.test.tsx` "keeps the signed-out page over an expiry read that ends after the logout" with `TestingLibraryElementError: Unable to find role="menuitem" and name "Sign out"` (`Tests  1 failed | 716 passed (717)`); the Node.js tests had `tests 4829, pass 4782, fail 0, skipped 47`.
+- Run 3, the one rerun, same tree (`sgcr/fix1/verify-3.make.log`): passed, `make verify: passed, profile full, tree 8c44975b1412ca9b3bac816e01d562539618ea56; stamp written`; tests 4829, pass 4782, fail 0, skipped 47; apps/web `Tests  717 passed (717)`; all files 99.42% lines, 92.89% branches, 98.83% functions. `make record` read this log.
+- `env -u NODE_ENV make verify-linux-g2-scenarios` on `183b577e` (`sgcr/fix1/g2-scenarios-2.log`): `tests 18, pass 17, fail 0, skipped 1` (g); exit 0.
 
 ### Route
 
@@ -70,16 +73,20 @@ Logs in `sgcr/fix1/`. The new tests were written before the fix and run on the b
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `3202ccdc8a961d0a892b7e088b0055eb4a0ac37c`; tests 4827, pass 4780, fail 0, skipped 47; all files 99.42% lines, 92.93% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `8c44975b1412ca9b3bac816e01d562539618ea56`; tests 4829, pass 4782, fail 0, skipped 47; all files 99.42% lines, 92.89% branches, 98.83% functions.
 - `npm run openspec -- validate stabilize-g2-cancellation-races --strict`: passed, `Change 'stabilize-g2-cancellation-races' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 121 file(s); every pass summary file is valid: 101 file(s); every route file is valid: 54 file(s).`.
 - Spec diff against the merge base `6dab1d26b271` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a694-ceb1-7c13-a34e-6d5f27353c64` | 0 | 0 | 2 | 3 |
 <!-- make record: end -->
 
 ## Independent review
 
-Not run yet: Zaki runs the passes.
+- Pass 1, role A, `codex gpt-6-astra` at effort medium (owner decision 2026-11-02), session `01a1a694-ceb1-7c13-a34e-6d5f27353c64`, on `d543ef0d`: Critical 0, High 0, Medium 2, Low 3. All five were fixed in the pass 1 fix round ("Pass 1 fix round"; `findings.jsonl`). Pass 2 follows per `route.json`.
 
 ## Limitations
 
