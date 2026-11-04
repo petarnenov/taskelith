@@ -1,6 +1,6 @@
 import { Alert, Button, Group, Loader, Paper, Stack, Text, Textarea } from '@mantine/core';
 import { useReducedMotion } from '@mantine/hooks';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AgentSession, Turn } from '../board/board';
 import {
   checkTurnText,
@@ -34,19 +34,35 @@ export function Composer({ projectId, sessionId, session, feedFailed, showTurn }
   const check = checkTurnText(draft);
   const block = blockOf({ session, feedFailed, composer });
   const blocked = block !== undefined;
+  const field = useRef<HTMLTextAreaElement>(null);
+  // The send disables the button or hides the Retry that held the focus; the
+  // answer gives it back to the field, unless a block still holds.
+  const awaitingAnswer = useRef(false);
+  useEffect(() => {
+    if (composer.sending || !awaitingAnswer.current) return;
+    awaitingAnswer.current = false;
+    if (!blocked) field.current?.focus();
+  }, [composer.sending, blocked]);
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (blocked || check.kind !== 'ok') return;
+    awaitingAnswer.current = true;
     composer.send(check.text);
     setDraft('');
+  }
+
+  function retry(key: string): void {
+    awaitingAnswer.current = true;
+    composer.retry(key);
   }
 
   return (
     <Paper component="form" aria-label="Composer" onSubmit={submit} pos="sticky" bottom={0} withBorder p="md" radius="md">
       <Stack gap="sm">
-        <SubmissionList submissions={composer.submissions} blocked={blocked} onRetry={composer.retry} onDismiss={composer.dismiss} />
+        <SubmissionList submissions={composer.submissions} blocked={blocked} onRetry={retry} onDismiss={composer.dismiss} />
         <Textarea
+          ref={field}
           label="Message the agent"
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
