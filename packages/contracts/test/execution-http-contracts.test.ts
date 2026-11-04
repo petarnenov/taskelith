@@ -22,7 +22,7 @@ interface Operation {
 
 interface Document {
   readonly openapi: string;
-  readonly info: { readonly version: string };
+  readonly info: { readonly version: string; readonly description?: string };
   readonly paths: Record<string, Record<string, Operation>>;
   readonly components: { readonly schemas: Record<string, Json>; readonly securitySchemes: Record<string, Json> };
 }
@@ -110,6 +110,7 @@ test('the execution document is OpenAPI 3.1.0 at version 0.10.0 with the 9c oper
 test('the role-checked G2 operator operations declare the 403 AccessDenial, the SDLC document at version 0.5.0', () => {
   const sdlc = document('sdlc.openapi.json');
   assert.equal(sdlc.info.version, '0.5.0');
+  assert.match(sdlc.info.description ?? '', /createRun` and `submitTask` also require `project-operator`/);
   assert.deepEqual(sdlc.components.schemas.AccessDenial, CONTROL_PLANE.components.schemas.AccessDenial);
   const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
   for (const id of ['createRun', 'submitTask', 'readAdmission']) {
