@@ -45,7 +45,7 @@ export function Composer({ projectId, sessionId, session, feedFailed, showTurn }
   return (
     <Paper component="form" aria-label="Composer" onSubmit={submit} pos="sticky" bottom={0} withBorder p="md" radius="md">
       <Stack gap="sm">
-        <SubmissionList submissions={composer.submissions} onRetry={composer.retry} onDismiss={composer.dismiss} />
+        <SubmissionList submissions={composer.submissions} blocked={blocked} onRetry={composer.retry} onDismiss={composer.dismiss} />
         <Textarea
           label="Message the agent"
           value={draft}
@@ -109,16 +109,18 @@ function overLimit(length: number): string {
 
 interface SubmissionListProps {
   readonly submissions: readonly Submission[];
+  // A retry sends a turn, so it waits for the same reasons as a send.
+  readonly blocked: boolean;
   readonly onRetry: (key: string) => void;
   readonly onDismiss: (key: string) => void;
 }
 
-function SubmissionList({ submissions, onRetry, onDismiss }: SubmissionListProps) {
+function SubmissionList({ submissions, blocked, onRetry, onDismiss }: SubmissionListProps) {
   if (submissions.length === 0) return null;
   return (
     <Stack gap="xs">
       {submissions.map((submission) => (
-        <SubmissionNotice key={submission.key} submission={submission} onRetry={onRetry} onDismiss={onDismiss} />
+        <SubmissionNotice key={submission.key} submission={submission} blocked={blocked} onRetry={onRetry} onDismiss={onDismiss} />
       ))}
     </Stack>
   );
@@ -126,13 +128,14 @@ function SubmissionList({ submissions, onRetry, onDismiss }: SubmissionListProps
 
 interface SubmissionNoticeProps {
   readonly submission: Submission;
+  readonly blocked: boolean;
   readonly onRetry: (key: string) => void;
   readonly onDismiss: (key: string) => void;
 }
 
 // Each submission's honest state with its text, which shows here and in
 // the timeline only; a retry sends the same key, a dismiss hides a settled one.
-function SubmissionNotice({ submission, onRetry, onDismiss }: SubmissionNoticeProps) {
+function SubmissionNotice({ submission, blocked, onRetry, onDismiss }: SubmissionNoticeProps) {
   const { key, text, state } = submission;
   const notice = noticeOf(state);
   return (
@@ -141,7 +144,7 @@ function SubmissionNotice({ submission, onRetry, onDismiss }: SubmissionNoticePr
         <TurnText text={text} />
         <NoticeText state={state} />
         {notice.action === 'retry' ? (
-          <Button variant="default" size="compact-md" onClick={() => onRetry(key)}>
+          <Button variant="default" size="compact-md" disabled={blocked} onClick={() => onRetry(key)}>
             Retry
           </Button>
         ) : null}
