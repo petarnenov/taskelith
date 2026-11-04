@@ -123,7 +123,8 @@ function invocationOf(actor: PrincipalId, operationId: string): AdministrativeIn
   return { actor, reason: `control-plane API ${operationId}` };
 }
 
-function afterOf({ query }: ApiRequest): Result<string | undefined> {
+// The `after` cursor of a list, which the document types as an `Identifier`.
+export function afterOf({ query }: ApiRequest): Result<string | undefined> {
   const after = query.get('after');
   if (after === null) return ok(undefined);
   const parsed = parseIdentifier('Identifier', after);

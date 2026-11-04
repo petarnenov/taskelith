@@ -28,6 +28,7 @@ import { AgentSessionApi, type AgentSessionOperations } from './agent-session-ap
 import { ruleOf, type RequirementRule } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
 import { BoardApi, type BoardOperations } from './board-api.js';
+import { FleetApi, type FleetOperations } from './fleet-api.js';
 import { INBOX_ANSWER_OPERATIONS, InboxAnswerApi } from './inbox-answer-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
 import { RepositoryBindingApi, type RepositoryBindingOperations } from './repository-binding-api.js';
@@ -96,6 +97,8 @@ export interface ApiServices {
   readonly scmIntegrations: ScmIntegrationOperations;
   // Project repository bindings (wire section 4).
   readonly repositoryBindings: RepositoryBindingOperations;
+  // The workers view and the enrollment token commands (wire section 4).
+  readonly fleet: FleetOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -109,6 +112,7 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #inboxAnswers: InboxAnswerApi;
   readonly #scmIntegrations: ScmIntegrationApi;
   readonly #repositoryBindings: RepositoryBindingApi;
+  readonly #fleet: FleetApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
@@ -119,6 +123,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#inboxAnswers = new InboxAnswerApi(services.board);
     this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
     this.#repositoryBindings = new RepositoryBindingApi(services.repositoryBindings);
+    this.#fleet = new FleetApi(services.fleet);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -254,6 +259,16 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#scmIntegrations.readScmIntegration(request);
       case 'updateScmIntegration':
         return this.#scmIntegrations.updateScmIntegration(request);
+      case 'listWorkers':
+        return this.#fleet.listWorkers();
+      case 'listEnrollmentTokens':
+        return this.#fleet.listEnrollmentTokens(request);
+      case 'issueEnrollmentToken':
+        return this.#fleet.issueEnrollmentToken(request);
+      case 'revokeEnrollmentToken':
+        return this.#fleet.revokeEnrollmentToken(request);
+      case 'rotateEnrollmentToken':
+        return this.#fleet.rotateEnrollmentToken(request);
       default:
         return this.#dispatchBoard(operationId, request);
     }
