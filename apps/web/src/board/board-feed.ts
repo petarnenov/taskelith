@@ -9,7 +9,16 @@ export type Liveness = 'connecting' | 'live' | 'lost';
 export type BoardFeedState =
   | { readonly status: 'loading' }
   | { readonly status: 'failed'; readonly failure: ReadFailed }
-  | { readonly status: 'shown'; readonly view: BoardView; readonly liveness: Liveness };
+  | ShownBoard;
+
+// snapshot counts the board reads, so a view from a new read, such as one
+// after a resync, differs from the view it replaces, whatever its position.
+export interface ShownBoard {
+  readonly status: 'shown';
+  readonly view: BoardView;
+  readonly liveness: Liveness;
+  readonly snapshot: number;
+}
 
 // After a stream that closed for good, the board waits this long before it
 // opens a new one, so a stream that keeps failing is not opened in a loop.
@@ -36,6 +45,7 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
   let view: BoardView | undefined;
   let liveness: Liveness = 'connecting';
   let reads = 0;
+  let snapshot = 0;
   // Changes that arrive while a read runs, applied over its snapshot;
   // undefined while no read runs, so nothing is kept between reads.
   let duringRead: BoardChange[] | undefined;
@@ -45,7 +55,7 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
   let cancelRetry = () => {};
 
   const showView = () => {
-    if (view !== undefined) show({ status: 'shown', view, liveness });
+    if (view !== undefined) show({ status: 'shown', view, liveness, snapshot });
   };
 
   async function read(): Promise<boolean> {
@@ -62,6 +72,7 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
       return false;
     }
     view = changes.reduce(applyChange, viewOf(result.value));
+    snapshot = thisRead;
     showView();
     return true;
   }

@@ -272,6 +272,17 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'readAutoMergeSetting', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/auto-merge$`), security: BROWSER_OR_OPERATOR,
     response: 'AutoMergeSetting', success: 200, statuses: PROJECT_READ,
   },
+  // Control-plane wire contracts section 4: the repository binding, whose
+  // remote URL the integration's plugin resolves (section 4.1).
+  {
+    operationId: 'readRepositoryBinding', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/repository$`), security: BROWSER_OR_OPERATOR,
+    response: 'RepositoryBinding', success: 200, statuses: PROJECT_READ,
+  },
+  {
+    operationId: 'bindRepository', method: 'PUT', pattern: new RegExp(`${PROJECT_PATH}/repository$`), security: BROWSER_OR_OPERATOR,
+    body: 'RepositoryBindingUpdate', response: 'RepositoryBinding', success: 200,
+    statuses: { ...PROJECT_UPDATE, 'precondition-failed': 422 },
+  },
   {
     operationId: 'readSession', method: 'GET', pattern: /^\/session$/, security: ['browserSession', 'none'], browserOnly: true,
     response: 'SessionState', success: 200, statuses: { unavailable: 503, internal: 500 },

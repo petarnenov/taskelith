@@ -31,6 +31,7 @@ import { EventStreamApi, type EventStreamOperations } from './event-stream-api.j
 import { BoardApi, type BoardOperations } from './board-api.js';
 import { INBOX_ANSWER_OPERATIONS, InboxAnswerApi } from './inbox-answer-api.js';
 import { ProjectApi, type ProjectOperations } from './project-api.js';
+import { RepositoryBindingApi, type RepositoryBindingOperations } from './repository-binding-api.js';
 import { ScmIntegrationApi, type ScmIntegrationOperations } from './scm-integration-api.js';
 import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 import { parseSlotCredentialFetch, slotCredentialBody } from './slot-credential-wire.js';
@@ -92,6 +93,8 @@ export interface ApiServices {
   readonly board: BoardOperations;
   // SCM integrations (wire section 4), whose secrets no answer carries.
   readonly scmIntegrations: ScmIntegrationOperations;
+  // Project repository bindings (wire section 4).
+  readonly repositoryBindings: RepositoryBindingOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -104,6 +107,7 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #board: BoardApi;
   readonly #inboxAnswers: InboxAnswerApi;
   readonly #scmIntegrations: ScmIntegrationApi;
+  readonly #repositoryBindings: RepositoryBindingApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
@@ -113,6 +117,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#board = new BoardApi(services.board);
     this.#inboxAnswers = new InboxAnswerApi(services.board);
     this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
+    this.#repositoryBindings = new RepositoryBindingApi(services.repositoryBindings);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -236,6 +241,10 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#projects.updateProjectDefaults(request);
       case 'readAutoMergeSetting':
         return this.#projects.readAutoMergeSetting(request);
+      case 'readRepositoryBinding':
+        return this.#repositoryBindings.readRepositoryBinding(request);
+      case 'bindRepository':
+        return this.#repositoryBindings.bindRepository(request);
       case 'listScmIntegrations':
         return this.#scmIntegrations.listScmIntegrations(request);
       case 'createScmIntegration':

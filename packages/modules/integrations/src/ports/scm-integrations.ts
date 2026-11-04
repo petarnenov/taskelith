@@ -64,3 +64,21 @@ export type UnverifiableReason = 'plugin-missing' | 'provider-refused';
 export interface UnverifiableIntegrations {
   unverifiable(integrationId: ScmIntegrationId, revision: number, reason: UnverifiableReason): void;
 }
+
+export type ScmPluginOperation = 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+
+export type ScmPluginDefectKind =
+  | 'threw' | 'malformed-envelope' | 'malformed-value' | 'foreign-repository' | 'unnormalizable-origin' | 'unexpected-failure-code';
+
+// A plugin answer outside the source control contract, by its kind only.
+export interface ScmPluginDefect {
+  readonly integrationId: ScmIntegrationId;
+  readonly pluginId: string;
+  readonly operation: ScmPluginOperation;
+  readonly kind: ScmPluginDefectKind;
+}
+
+// Never given the plugin's message, stack, or a value it returned.
+export interface ScmPluginDefects {
+  defect(defect: ScmPluginDefect): void;
+}

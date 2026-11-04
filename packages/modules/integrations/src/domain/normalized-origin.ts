@@ -6,6 +6,7 @@ export type NormalizedOrigin = string & { readonly __brand: 'NormalizedOrigin' }
 
 export const MAX_ORIGIN_LENGTH = 300;
 const DEFAULT_HTTPS_PORT = 443;
+const HTTPS_PREFIX = 'https://';
 const MAX_PORT = 65535;
 const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
 // No IPv6 literal, user information, path, query, or fragment.
@@ -18,6 +19,13 @@ export function normalizeOrigin(origin: string, field = 'allowedOrigin'): Result
   if (match === null || port === undefined || port > MAX_PORT) return err(notAnOrigin(field));
   const normalized = `https://${match[1]!}:${port}`;
   return normalized.length <= MAX_ORIGIN_LENGTH ? ok(normalized as NormalizedOrigin) : err(notAnOrigin(field));
+}
+
+// The origin of a remote URL is its scheme and authority as written, with no
+// URL canonicalization, normalized as an allowed origin is.
+export function normalizeRemoteOrigin(remoteUrl: string): Result<NormalizedOrigin> {
+  const authorityEnd = remoteUrl.indexOf('/', HTTPS_PREFIX.length);
+  return normalizeOrigin(authorityEnd === -1 ? remoteUrl : remoteUrl.slice(0, authorityEnd), 'remoteUrl');
 }
 
 function notAnOrigin(field: string) {

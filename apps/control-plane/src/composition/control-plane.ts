@@ -68,6 +68,7 @@ import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
 import { readWebAppDirectory } from './web-app-directory.js';
+import { bindableProjects } from './repository-bindings.js';
 import { startScmIntegrationServices } from './scm-integrations.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
@@ -214,7 +215,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   });
   const inbox = startInboxServices(database, agentSessions.value);
   const board = startBoardServices(database, inbox.viewSources);
-  const scm = startScmIntegrationServices(admin.value.namespace, database, logger);
+  const scm = startScmIntegrationServices(admin.value.namespace, database, logger, bindableProjects(projectSetup));
   if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
     runs,
@@ -234,6 +235,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     agentSessions: agentSessions.value,
     scmWebhooks: scm.value.webhooks,
     scmIntegrations: scm.value.integrations,
+    repositoryBindings: scm.value.bindings,
     projects: {
       setup: projectSetup,
       members: new PrincipalAdministration({ store: access.store, hasher: access.hasher, random: access.secrets, clock }),

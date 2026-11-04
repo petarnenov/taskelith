@@ -17,8 +17,8 @@ export const BOARD: PlannedScreen = {
   change: 'build-board-view',
 };
 
-// Reserved for the task detail of a card, which change 29b builds as a
-// Drawer over the board; it is not in the navigation.
+// The task detail of a card, a Drawer over the board; it is not in the
+// navigation, and its address names the project and the card's run.
 export const TASK_DETAIL: PlannedScreen = {
   path: '/projects/:projectId/cards/:runId',
   label: 'Task detail',
@@ -26,6 +26,24 @@ export const TASK_DETAIL: PlannedScreen = {
   item: 29,
   change: 'build-task-detail',
 };
+
+export function taskDetailPath(projectId: string, runId: string): string {
+  return `/projects/${routeSegment(projectId)}/cards/${routeSegment(runId)}`;
+}
+
+// The SPA's server answers 404 for a dot in the last segment or a decoded
+// separator, so each other character is written as ~ and two hex digits.
+function routeSegment(identifier: string): string {
+  return identifier.replace(/[^A-Za-z0-9_-]/g, (character) => `~${hex(character)}`);
+}
+
+export function identifierOf(segment: string): string {
+  return segment.replace(/~([0-9A-F]{2})/g, (_escape, code: string) => String.fromCharCode(Number.parseInt(code, 16)));
+}
+
+function hex(character: string): string {
+  return character.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+}
 
 const SESSIONS: PlannedScreen = {
   path: '/sessions',
@@ -88,4 +106,4 @@ export const MAIN_NAVIGATION: readonly PlannedScreen[] = [BOARD, SESSIONS, REVIE
 export const SCREENS: readonly PlannedScreen[] = [...MAIN_NAVIGATION, NEW_TASK, NEEDS_YOU];
 
 // The routed screens whose page is still the empty planned page.
-export const PLANNED_SCREENS: readonly PlannedScreen[] = [...SCREENS.filter((screen) => screen !== BOARD), TASK_DETAIL];
+export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => screen !== BOARD);

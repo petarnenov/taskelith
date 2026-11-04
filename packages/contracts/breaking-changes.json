@@ -12,6 +12,15 @@
       ]
     },
     {
+      "path": "packages/contracts/documents/control-plane.openapi.json",
+      "version": "0.5.0",
+      "reason": "G3 sub-change 11b1 (bind-project-repository): the plugin resolves a binding's remote URL, so RepositoryBindingInput loses remoteUrl, refused with 400 under additionalProperties false, RemoteUrlCandidate goes, and BindingRefusal gains repository-not-visible and integration-credential-refused and loses remote-not-https, remote-userinfo, remote-query, and remote-fragment (coordinator, Q1, Q4, Q7); no client binds before 11b1 serves bindRepository, which answered 500; listed against 634080a0.",
+      "breakingChanges": [
+        "response-property-enum-value-added (bindRepository): added the new `integration-credential-refused` enum value to the `details/reason` response property for the response status `422`",
+        "response-property-enum-value-added (bindRepository): added the new `repository-not-visible` enum value to the `details/reason` response property for the response status `422`"
+      ]
+    },
+    {
       "path": "packages/contracts/documents/execution.asyncapi.json",
       "version": "0.8.0",
       "reason": "G3 sub-change 26c (deliver-rotated-worker-credentials): the command channel gains the notice worker.credentials.rotation-requested; listed against 7efc48d3.",

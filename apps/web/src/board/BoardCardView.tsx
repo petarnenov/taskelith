@@ -1,32 +1,47 @@
-import { Badge, Card, Stack, Text } from '@mantine/core';
-import type { BoardCard, PlacementObstacle, TaskEndKind } from './board';
+import { Anchor, Badge, Card, Stack, Text } from '@mantine/core';
+import { Link } from 'react-router';
+import { taskDetailPath } from '../screens';
+import type { BoardCard, TaskEndKind } from './board';
+import { BOARD_ENTRY_STATE } from './board-entry';
 import {
   END_LABELS,
-  formatInstant,
   GATE_LABELS,
   MERGE_GATE_LABELS,
-  reasonLabel,
   STAGE_STATE_LABELS,
+  stepOf,
   WAIT_LABELS,
   WORK_TYPE_LABELS,
 } from './board-labels';
+import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
 
+interface BoardCardViewProps {
+  readonly projectId: string;
+  readonly card: BoardCard;
+}
+
 // One root workflow run (product ports section 3.3); it shows only what
-// readBoard or its card-changed event answered.
-export function BoardCardView({ card }: { readonly card: BoardCard }) {
+// readBoard or its card-changed event answered, and links to its detail.
+export function BoardCardView({ projectId, card }: BoardCardViewProps) {
   const titleId = `card-${card.runId}`;
   return (
     <Card withBorder padding="sm" radius="md" component="article" aria-labelledby={titleId}>
       <Stack gap={8}>
-        <Text id={titleId} fw={600} size="sm">
+        <Anchor
+          id={titleId}
+          component={Link}
+          to={taskDetailPath(projectId, card.runId)}
+          state={BOARD_ENTRY_STATE}
+          fw={600}
+          size="sm"
+        >
           {card.title}
-        </Text>
+        </Anchor>
         <Text size="xs" c="dimmed">
           {WORK_TYPE_LABELS[card.workType]} · {card.framework.pluginId} {card.framework.pluginVersion}
         </Text>
         <Text size="sm">
-          Step: {stepOf(card)} · {STAGE_STATE_LABELS[card.stage.state]}
+          Step: {stepOf(card.stage)} · {STAGE_STATE_LABELS[card.stage.state]}
         </Text>
         {card.gate === undefined ? null : (
           <Badge variant="dot" color={GATE_LABELS[card.gate].color} tt="none">
@@ -43,22 +58,6 @@ export function BoardCardView({ card }: { readonly card: BoardCard }) {
         {card.needsYou === 0 ? null : <Text size="sm">{openItems(card.needsYou)} in “Needs you”</Text>}
       </Stack>
     </Card>
-  );
-}
-
-// Product ports section 3.2: the native step, or a gap in the mapping.
-function stepOf({ stage }: BoardCard): string {
-  return stage.origin === 'native' ? stage.stageId : 'platform-managed';
-}
-
-function ObstacleText({ obstacle }: { readonly obstacle: PlacementObstacle }) {
-  const verdict = obstacle.disposition === 'rejected' ? 'Rejected' : 'Not placed';
-  const retry = 'retryNumber' in obstacle ? `, retry ${obstacle.retryNumber}` : '';
-  return (
-    <Text size="sm">
-      {verdict}: {reasonLabel(obstacle.reason)}
-      {retry} ({obstacle.source}, <time dateTime={obstacle.observedAt}>{formatInstant(obstacle.observedAt)}</time>)
-    </Text>
   );
 }
 

@@ -315,13 +315,13 @@ test('a per-run SCM credential carries its version and the remote URL it may be 
   assert.ok(violations(checkHttpSchema('ScmCredentialDelivery', { ...SCM_DELIVERY, authorization: 'Basic a\r\nX-Injected: 1' })).length > 0);
 });
 
-test('every SCM credential issue and fetch re-checks the bound remote with the binding reasons', () => {
+test('every SCM credential issue and fetch re-checks the stored remote URL and the binding origin', () => {
   const binding = (CONTROL_PLANE.components.schemas.BindingRefusal as unknown as RefusalSchema).properties.details.properties.reason.enum;
-  const remote = binding.filter((reason) => reason !== 'merge-method-undeclared');
+  const remote = ['remote-not-https', 'remote-userinfo', 'remote-query', 'remote-fragment', 'remote-origin-mismatch'];
   const reasons = reasonsOf('ScmCredentialRefusal');
 
   assert.deepEqual(reasons.slice(reasons.indexOf('repository-unbound') + 1, reasons.indexOf('credential-ended')), remote);
-  assert.ok(!reasons.includes('merge-method-undeclared'));
+  assert.deepEqual(reasons.filter((reason) => binding.includes(reason)), ['remote-origin-mismatch']);
   for (const id of ['issueRunScmCredential', 'fetchRunScmCredential']) assert.deepEqual(responseSchema(id, '422'), { $ref: '#/components/schemas/ScmCredentialRefusal' }, id);
   for (const reason of reasons) assert.ok(checkHttpSchema('ScmCredentialRefusal', refusal(reason)).ok, reason);
   assert.ok(violations(checkHttpSchema('ScmCredentialRefusal', { ...refusal('remote-origin-mismatch'), code: 'forbidden' })).some((text) => text.includes('/code')));

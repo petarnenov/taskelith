@@ -24,9 +24,9 @@ import {
 
 const CSRF = 'A'.repeat(43);
 
-test('the control-plane document is OpenAPI 3.1.0 at version 0.4.0 and every reference resolves', () => {
+test('the control-plane document is OpenAPI 3.1.0 at version 0.5.0 and every reference resolves', () => {
   assert.equal(CONTROL_PLANE.openapi, '3.1.0');
-  assert.equal(CONTROL_PLANE.info.version, '0.4.0');
+  assert.equal(CONTROL_PLANE.info.version, '0.5.0');
   for (const reference of referencesIn(CONTROL_PLANE)) {
     assert.match(reference, /^#\/components\/schemas\//);
     assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
@@ -208,10 +208,9 @@ test('projects carry their defaults, members, auto-merge setting, and repository
     noEligibleSlot: 'wait',
   };
   const binding: HttpComponents['schemas']['RepositoryBindingUpdate'] = {
-    binding: {
-      integrationId: 'i1', repository: 'owner/repository', remoteUrl: 'https://scm.example/owner/repository.git', integrationBranch: 'dev', mergeMethod: 'merge-commit',
-    },
+    binding: { integrationId: 'i1', repository: 'owner/repository', integrationBranch: 'dev', mergeMethod: 'merge-commit' },
   };
+  const remoteUrl = 'https://scm.example/owner/repository.git';
 
   assert.ok(checkHttpSchema('ProjectCreation', { name: 'Taskelith', defaults }).ok);
   assert.ok(violations(checkHttpSchema('ProjectDefaultsInput', { ...defaults, implementers: ['harness-a', 'harness-a'] })).some((text) => text.includes('/implementers')));
@@ -220,9 +219,9 @@ test('projects carry their defaults, members, auto-merge setting, and repository
   assert.ok(violations(checkHttpSchema('MemberAssignment', { role: 'installation-owner' })).some((text) => text.includes('/role')));
   assert.ok(checkHttpSchema('AutoMergeSetting', { enabled: true, revision: 1 }).ok);
   assert.ok(checkHttpSchema('RepositoryBindingUpdate', binding).ok);
-  assert.ok(checkHttpSchema('RepositoryBinding', { ...binding.binding, revision: 1 }).ok);
-  const { remoteUrl: _remoteUrl, ...withoutRemote } = binding.binding;
-  assert.ok(violations(checkHttpSchema('RepositoryBindingInput', withoutRemote)).some((text) => text.includes('remoteUrl')));
+  assert.ok(checkHttpSchema('RepositoryBinding', { ...binding.binding, remoteUrl, revision: 1 }).ok);
+  assert.ok(violations(checkHttpSchema('RepositoryBinding', { ...binding.binding, revision: 1 })).some((text) => text.includes('remoteUrl')));
+  assert.ok(violations(checkHttpSchema('RepositoryBindingInput', { ...binding.binding, remoteUrl })).length > 0);
 });
 
 test('a binding branch is any name that git check-ref-format --branch accepts', () => {
@@ -251,18 +250,20 @@ test('a bound remote is an HTTPS URL without user information, query, or fragmen
   for (const remote of refused) assert.ok(violations(checkHttpSchema('RemoteUrl', remote)).length > 0, remote);
 });
 
-test('bindRepository refuses a remote outside the integration origin with a typed 422', () => {
-  const reachesRefusal = ['http://scm.example/a.git', 'https://agent@scm.example/a.git', 'https://scm.example/a.git?x', 'https://scm.example/a.git#y'];
-  const reasons = ['remote-not-https', 'remote-userinfo', 'remote-query', 'remote-fragment', 'remote-origin-mismatch', 'merge-method-undeclared'];
+test('bindRepository takes no remote URL, which the plugin resolves, and refuses with a typed 422', () => {
+  const reasons = ['repository-not-visible', 'integration-credential-refused', 'remote-origin-mismatch', 'merge-method-undeclared'];
   const refusal = SCHEMAS.BindingRefusal as { properties: { details: { properties: { reason: { enum: string[] } } } } };
+  const input = SCHEMAS.RepositoryBindingInput as { required: string[]; properties: Record<string, Json>; additionalProperties: boolean };
   const mismatch = { code: 'precondition-failed', message: 'the remote is outside the origin', details: { reason: 'remote-origin-mismatch' } };
 
-  for (const remote of reachesRefusal) assert.ok(checkHttpSchema('RemoteUrlCandidate', remote).ok, remote);
-  for (const remote of ['scm.example:acme/a.git', 'https://scm.example/a b']) assert.ok(violations(checkHttpSchema('RemoteUrlCandidate', remote)).length > 0, remote);
-  assert.deepEqual((SCHEMAS.RepositoryBindingInput as { properties: Record<string, Json> }).properties.remoteUrl, { $ref: '#/components/schemas/RemoteUrlCandidate' });
+  assert.ok(!('RemoteUrlCandidate' in SCHEMAS));
+  assert.deepEqual([input.required, Object.keys(input.properties), input.additionalProperties], [
+    ['integrationId', 'repository', 'integrationBranch', 'mergeMethod'], ['integrationId', 'repository', 'integrationBranch', 'mergeMethod'], false,
+  ]);
   assert.deepEqual(operation('bindRepository').responses['422']!.content!['application/json']!.schema, { $ref: '#/components/schemas/BindingRefusal' });
   assert.deepEqual(refusal.properties.details.properties.reason.enum, reasons);
   assert.ok(checkHttpSchema('BindingRefusal', mismatch).ok);
+  assert.ok(violations(checkHttpSchema('BindingRefusal', { ...mismatch, details: { reason: 'remote-userinfo' } })).length > 0);
   assert.ok(violations(checkHttpSchema('BindingRefusal', { ...mismatch, code: 'invalid' })).some((text) => text.includes('/code')));
 });
 
