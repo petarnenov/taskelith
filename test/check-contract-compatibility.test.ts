@@ -241,7 +241,12 @@ test('a malformed declarations file fails and names each problem', () => {
     [JSON.stringify({ entries: [] }), [`${FILE}: / must have required property 'declarations'`, `${FILE}: / must NOT have additional properties`]],
     [fileText([{ path: API, version: '0.5.0', breakingChanges: ['a'] }]), [`${FILE}: /declarations/0 must have required property 'reason'`]],
     [fileText([{ ...declaration('0.5.0', ['a']), reason: '  ' }]), [`${FILE}: /declarations/0/reason must match pattern "\\S"`]],
-    [fileText([declaration('0.5.0', [])]), [`${FILE}: /declarations/0/breakingChanges must NOT have fewer than 1 items`]],
+    [fileText([declaration('0.5.0', [])]), [
+      `${FILE}: /declarations/0/breakingChanges must NOT have fewer than 1 items`,
+      `${FILE}: /declarations/0 must have required property 'behaviorChanges'`,
+      `${FILE}: /declarations/0 must match a schema in anyOf`,
+    ]],
+    [fileText([{ ...declaration('0.5.0', ['a']), behaviorChanges: [] }]), [`${FILE}: /declarations/0/behaviorChanges must NOT have fewer than 1 items`]],
     [fileText([declaration('0.4', ['a'])]), [`${FILE}: declarations/0: version 0.4 is not a semantic version`]],
     [fileText([declaration('0.5.0', ['a'], 'packages/contracts/documents/unknown.json')]), [`${FILE}: declarations/0: packages/contracts/documents/unknown.json is not a contract document`]],
     [fileText([declaration('0.5.0', ['a']), declaration('0.5.0', ['b'])]), [`${FILE}: declarations/1: repeats ${API} 0.5.0`]],
@@ -251,6 +256,18 @@ test('a malformed declarations file fails and names each problem', () => {
     [fileText([declaration('0.5.0', ['a', 'a'])]), [`${FILE}: declarations/0: breakingChanges are not sorted and unique`]],
   ];
   for (const [text, problems] of cases) assert.deepEqual(readDeclarations(text, DOCUMENT_PATHS), { declarations: [], problems }, text);
+});
+
+test('a behavior change that the check cannot find is declared in its own list', () => {
+  const behavior = { ...declaration('0.5.0', []), behaviorChanges: ['the operator bearer is refused without a project role'] };
+  const read = readDeclarations(fileText([behavior]), DOCUMENT_PATHS);
+  const document = { path: API, baseVersion: '0.4.0', headVersion: '0.5.0', breakingChanges: [] };
+
+  assert.deepEqual(read, { declarations: [behavior], problems: [] });
+  assert.deepEqual(declarationProblems(document, read.declarations), []);
+  assert.deepEqual(declarationProblems({ ...document, breakingChanges: ['remove /channels/a'] }, read.declarations), [
+    `${API}: breaking change of 0.5.0 over 0.4.0 not listed in ${FILE}: remove /channels/a`,
+  ]);
 });
 
 test('the tracked declarations file is valid and keeps the SDLC AsyncAPI 0.4.0 history', () => {
