@@ -122,6 +122,19 @@ describe('the session feed', () => {
     expect(view).toMatchObject({ position: '47', knownAt: '2026-11-03T09:04:00.000Z', session: { lastTurnPosition: 3 } });
   });
 
+  it('keeps the later time of its snapshot over a delayed event, and takes the time of a new snapshot', async () => {
+    const feed = start();
+    await settled();
+    const delayed = { position: '41', occurredAt: '2026-11-03T08:59:00.000Z' };
+    feed.gateway.lastStream().emit({ kind: 'turn-changed', ...delayed, sessionId: 'session-1', turn: turn({ turnId: 'turn-3', position: 3 }) });
+    expect(feed.shown().view).toMatchObject({ position: '41', knownAt: '2026-11-03T09:00:00.000Z' });
+    feed.gateway.readAgentSession.mockResolvedValueOnce(read(agentSessionView({ asOf: '2026-11-03T08:50:00.000Z' })));
+    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ asOf: '2026-11-03T08:55:00.000Z' })));
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    expect(feed.shown().view.knownAt).toBe('2026-11-03T08:50:00.000Z');
+  });
+
   it('keeps the run card the stream last showed, for the activity read', async () => {
     const feed = start();
     await settled();
