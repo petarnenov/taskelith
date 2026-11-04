@@ -179,13 +179,14 @@ for (const [loss, lose] of [
     value(await (transaction.fleet as InMemoryFleetRegistry).revoke(WORKER, AT));
   }],
 ] as const) {
-  test(`a worker ${loss} before an observation's contact commits stays unreachable`, async () => {
+  test(`a worker ${loss} before an observation's contact commits gets no contact`, async () => {
     const placed = await fixture();
     const service = new ObservationService(betweenConsumeAndContact(placed.store, () => lose(placed)), {
       newConfirmationId: () => 'confirmation-z', newRequestId: () => 'request-z',
     });
     assert.equal(value(await service.apply(message('worker.capacity.declared', 1, DECLARATION))), 'applied');
-    assert.equal((await placed.transaction.workers.get(WORKER))?.reachable, false);
+    const worker = await placed.transaction.workers.get(WORKER);
+    assert.deepEqual([worker?.reachable, worker?.lastContactAt], [false, undefined]);
   });
 }
 
@@ -597,6 +598,32 @@ test('a contact that fails after its observation committed is logged, and the ob
   assert.equal(store.opened, 2, 'the observation, then its contact');
   assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code, record.correlation.observationId]), [
     ['execution.observation.contact-unrecorded', 'unavailable', started.body.metadata.observationId],
+  ]);
+});
+
+// The observation commits, then its contact's transaction throws, as a
+// statement error of `PostgresDatabase` does.
+function throwingContactStore(error: Error): ControlPlaneStore & { opened: number } {
+  const store = {
+    opened: 0,
+    transaction: async () => {
+      if (++store.opened === 1) return ok('applied');
+      throw error;
+    },
+    readCommitted: async () => err(failure('internal', 'not read')),
+  };
+  return store as never;
+}
+
+test('a contact whose transaction throws after its observation committed is logged redacted, and it stays applied', async () => {
+  const store = throwingContactStore(new Error('permission denied, password=hunter2'));
+  const logs = new InMemoryLogSink();
+  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const started = message('execution.started', 1, {});
+  assert.equal(value(await service.apply(started)), 'applied');
+  assert.equal(store.opened, 2, 'the observation, then its contact');
+  assert.deepEqual(logs.records.map((record) => [record.event, record.fields.code, record.fields.message, record.correlation.observationId]), [
+    ['execution.observation.contact-unrecorded', 'internal', 'the contact threw: permission denied, password=[redacted]', started.body.metadata.observationId],
   ]);
 });
 
