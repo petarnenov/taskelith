@@ -129,10 +129,11 @@ function SelfChecks({ results }: { readonly results: readonly SelfCheckResult[] 
   );
 }
 
+// A div, not a paragraph, since the problems of a failed check are a list.
 function SelfCheck({ result }: { readonly result: SelfCheckResult }) {
   const failed = result.outcome === 'failed';
   return (
-    <Text c={failed ? ERROR_COLOR : 'dimmed'}>
+    <Text component="div" c={failed ? ERROR_COLOR : 'dimmed'}>
       <Text span ff="monospace" inherit>
         <Breakable text={result.checkId} />
       </Text>{' '}
