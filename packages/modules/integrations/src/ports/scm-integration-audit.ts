@@ -33,7 +33,7 @@ export interface ScmIntegrationAudit {
 // Every field that the creation supplies, the secrets by name.
 export function creationAudit(integration: ScmIntegration, entry: ScmIntegrationAuditEntry): ScmIntegrationAuditEvent {
   const settings = Object.keys(integration.settings).sort(codeUnitOrder).map((key) => `settings.${key}`);
-  const changedFields = ['pluginId', 'label', 'allowedOrigin', ...settings, ...integration.secretNames];
+  const changedFields = ['pluginId', 'label', 'allowedOrigin', ...settings, ...integration.secretNames.map(secretField)];
   return auditEvent(integration, 'created', changedFields, entry);
 }
 
@@ -47,9 +47,15 @@ export function changeAudit(
     ...(before.allowedOrigin === after.allowedOrigin ? [] : ['allowedOrigin']),
     ...changedSettings(before.settings, after.settings),
   ];
-  const secrets = change.secrets?.names() ?? [];
+  const secrets = (change.secrets?.names() ?? []).map(secretField);
   const kind = fields.length === 0 && secrets.length > 0 ? 'secret-changed' : 'updated';
   return auditEvent(after, kind, [...fields, ...secrets], entry);
+}
+
+// Apart from the fields, as `settings.<key>` is, so a secret named
+// `label` does not read as the label.
+function secretField(name: string): string {
+  return `secrets.${name}`;
 }
 
 function changedSettings(before: Readonly<Record<string, string>>, after: Readonly<Record<string, string>>): string[] {
