@@ -1,4 +1,4 @@
-import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
 import type { ScmPluginDefects } from '../ports/scm-integrations.js';
 import { readWebhookEvent } from '../ports/source-control-readers.js';
 import type { WebhookDelivery, WebhookVerifier } from '../ports/source-control.js';
@@ -60,7 +60,7 @@ export class ScmWebhookReceiver {
     const refusal = verified.value.error;
     if (refusal.code === 'forbidden') return ok(err(signatureInvalid()));
     if (refusal.code === 'invalid') return this.#unmapped(delivery, defect);
-    return ok(err(refusal));
+    return ok(err(verificationRefusal(refusal.code)));
   }
 
   // A verified delivery the plugin maps to no event is accepted only when
@@ -93,6 +93,21 @@ export class ScmWebhookReceiver {
 // missing or failed signature, which does not say which.
 function signatureInvalid(): Failure {
   return failure('forbidden', 'the delivery has no valid signature', { reason: 'signature-invalid' });
+}
+
+// The messages of the other refusal codes of a verification.
+const VERIFICATION_REFUSALS: Readonly<Record<Exclude<FailureCode, 'forbidden' | 'invalid'>, string>> = {
+  'not-found': 'the SCM plugin found nothing to verify the delivery against',
+  conflict: 'the SCM plugin could not verify the delivery because of a conflict',
+  'precondition-failed': 'the SCM plugin cannot verify the delivery in its current state',
+  unavailable: 'the SCM service is unavailable to verify the delivery',
+  internal: 'the SCM plugin failed to verify the delivery',
+};
+
+// The plugin's message and details may quote a secret, so only its code is
+// kept, with a fixed message.
+function verificationRefusal(code: keyof typeof VERIFICATION_REFUSALS): Failure {
+  return failure(code, VERIFICATION_REFUSALS[code]);
 }
 
 function asFlag(value: unknown): Reading<boolean> {
