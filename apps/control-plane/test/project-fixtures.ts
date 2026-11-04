@@ -1,4 +1,5 @@
 import type { AccessStore, ProjectDefaults } from '@taskelith/access';
+import type { ProjectDirectory } from '@taskelith/control-plane';
 import { ok, type Instant } from '@taskelith/kernel';
 import type { ProjectId } from '@taskelith/sdlc';
 import { value } from '@taskelith/testing';
@@ -19,3 +20,6 @@ export async function addProjects(store: AccessStore, projectIds: readonly strin
     return ok(undefined);
   }));
 }
+
+// For the run fixtures of tests that need no project store.
+export const EVERY_PROJECT_EXISTS: ProjectDirectory = Object.freeze({ exists: async () => ok(true) });
