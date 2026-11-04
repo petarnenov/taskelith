@@ -93,16 +93,16 @@ const handlers: ApiHandlers = {
     ? ok(undefined)
     : api.handle(operationId, request, bearer)),
 };
-// `createRun` as a session would reach it, with the 403 that item 11 adds to
-// its document; its role check follows its body.
+// `createRun` as a session would reach it, with its route's statuses; its
+// role check follows its body.
 const SESSION_RUN_PROBE: RouteDefinition = {
   ...ROUTES.find((route) => route.operationId === 'createRun')!, pattern: /^\/session-runs$/,
-  security: ['browserSession', 'operatorToken'], reasons: { 'role-required': 403 },
+  security: ['browserSession', 'operatorToken'],
 };
 // `submitTask` likewise; its role check comes before its body.
 const SESSION_TASK_PROBE: RouteDefinition = {
   ...ROUTES.find((route) => route.operationId === 'submitTask')!, pattern: /^\/session-runs\/([^/]+)\/tasks$/,
-  security: ['browserSession', 'operatorToken'], reasons: { 'role-required': 403 },
+  security: ['browserSession', 'operatorToken'],
 };
 const server = createApiServer(handlers, { routes: [...ROUTES, ...PROBES, SESSION_RUN_PROBE, SESSION_TASK_PROBE], logger: new Logger(sink, { now: () => '2026-10-28T09:00:00.000Z' as never }) });
 let base: string;
@@ -327,16 +327,34 @@ test('a foreign evidence record and an unknown one answer the same 404, to a ses
   assert.ok((await api.handle('readEvidence', request(owner, 'e-beta'), '')).ok, 'an installation-owner reads every project');
 });
 
-test('a foreign run and an unknown one are denied alike, and the G2 bridge passes the owner', async () => {
+test('a foreign run and an unknown one are denied alike, and an owner reads every run', async () => {
   const foreignRun = await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-beta', 't']);
   const unknownRun = await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-none', 't']);
   assert.ok(!foreignRun.ok && !unknownRun.ok);
   assert.deepEqual([foreignRun.error.code, foreignRun.error.details], ['forbidden', { reason: 'role-required', requiredRole: 'project-viewer' }]);
   assert.deepEqual(unknownRun.error, foreignRun.error);
   value(await api.authorizeResource('readTaskResult', { principalId: alice }, ['r-alpha', 't']));
-  value(await api.authorizeResource('readTaskResult', { principalId: owner }, ['r-none', 't']));
+  for (const operationId of ['readAdmission', 'readTaskResult']) {
+    for (const runId of ['r-beta', 'r-none']) value(await api.authorizeResource(operationId, { principalId: owner }, [runId, 't']));
+  }
   assert.equal(failed(await api.authorizeResource('readTaskResult', {}, ['r-alpha', 't'])).details.reason, 'unauthenticated');
   assert.deepEqual(value(await api.handle('readTaskResult', request(alice, 'r-beta', 't'), '')), 'read', 'checked before the handler');
+});
+
+test('the operator bearer of an owner without a project role is refused createRun and submitTask with 403', async () => {
+  const bearer = { authorization: `Bearer ${OPERATOR}` };
+  const reads = stateReads.length;
+  const created = await call('POST', '/runs', bearer, { runId: 'r-1', projectId: 'alpha', binding: BINDING });
+  assert.deepEqual([created.status, created.body.code, created.body.details], [403, 'forbidden', { reason: 'role-required', requiredRole: 'project-operator' }]);
+  const missing = await call('POST', '/runs', bearer, { runId: 'r-1', projectId: 'project-that-does-not-exist', binding: BINDING });
+  assert.deepEqual([missing.status, missing.text], [created.status, created.text], 'a missing project is denied alike');
+  for (const runId of ['r-alpha', 'r-none']) {
+    const submitted = await call('POST', `/runs/${runId}/tasks`, bearer, { taskId: 't', kind: 'planning', stageId: 'specs' });
+    assert.deepEqual([submitted.status, submitted.text], [created.status, created.text], runId);
+  }
+  assert.equal(stateReads.length, reads, 'no run is created');
+  const refused = await call('POST', '/runs', { authorization: 'Bearer tkop_wrong' }, { runId: 'r-1', projectId: 'alpha', binding: BINDING });
+  assert.deepEqual([refused.status, refused.body.code], [401, 'forbidden']);
 });
 
 test('submitTask checks the role on its run\'s project before it reads the body', async () => {

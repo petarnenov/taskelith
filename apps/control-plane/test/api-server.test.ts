@@ -162,6 +162,29 @@ test('a failure code maps to the status of its operation, and an unknown one to 
   assert.equal((await call('GET', '/runs/r/admissions/a')).status, 500);
 });
 
+test('a role denial of a run operation is 403, and createRun answers an unknown project 404', async () => {
+  const denial = { reason: 'role-required', requiredRole: 'project-operator' };
+  const binding = {
+    pluginId: 'p', pluginVersion: '1', upstreamToolVersion: '1', workflowId: 'w', workflowVersion: '1',
+    workflowDigest: `sha256:${'0'.repeat(64)}`, configurationRevision: 'c', policyRevision: 'r',
+  };
+  const requests: readonly [string, string, string, string?][] = [
+    ['createRun', 'POST', '/runs', JSON.stringify({ runId: 'r', projectId: 'p', binding })],
+    ['submitTask', 'POST', '/runs/r/tasks', JSON.stringify({ taskId: 't', kind: 'planning', stageId: 'specs' })],
+    ['readAdmission', 'GET', '/runs/r/admissions/a'],
+    ['readTaskResult', 'GET', '/runs/r/tasks/t/result'],
+  ];
+  for (const [operationId, method, path, body] of requests) {
+    answers = { [operationId]: () => err(failure('forbidden', 'the role is missing', denial)) };
+    const denied = await call(method, path, { 'content-type': 'application/json' }, body);
+    assert.deepEqual([denied.status, denied.body.details], [403, denial], operationId);
+    assert.ok(checkHttpSchema('AccessDenial', denied.body).ok, operationId);
+  }
+  answers = { createRun: () => err(failure('not-found', 'no project has this identifier')) };
+  const [, method, path, body] = requests[0]!;
+  assert.equal((await call(method, path, { 'content-type': 'application/json' }, body)).status, 404);
+});
+
 test('a correlation that carries a secret is replaced, so no log line holds it', async () => {
   answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
   const answered = await call('GET', '/runs/r/tasks/t/result', { 'x-correlation-id': OPERATOR });
