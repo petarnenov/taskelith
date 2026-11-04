@@ -34,7 +34,7 @@ Zaki's host `hpz600`: Linux 6.8.0-147-generic, x86_64, 8 logical CPUs, GNU bash 
 
 ## Fail-before
 
-At `78345789` with `scripts/installation.sh` restored to the base (`git show HEAD:scripts/installation.sh > scripts/installation.sh`), the new test alone, 10 consecutive runs: 10 of 10 failed, each with `AssertionError [ERR_ASSERTION]: ended after <seconds>s, before 2`, with <seconds> from 1.224 s to 1.229 s (for example `ended after 1.228s, before 2`). With the fix restored, the same 10 runs passed 10 of 10.
+At `78345789` with `scripts/installation.sh` restored to the base (`git show HEAD:scripts/installation.sh > scripts/installation.sh`), the new test alone, 10 consecutive runs: 10 of 10 failed, each with `AssertionError [ERR_ASSERTION]: ended after <seconds>s, before 2`, with `<seconds>` from 1.224 s to 1.229 s (for example `ended after 1.228s, before 2`). With the fix restored, the same 10 runs passed 10 of 10.
 
 ## Checks
 
