@@ -1,11 +1,11 @@
 {
   "change": "audit-scm-integration-changes",
-  "generatedAt": "2026-11-04T01:02:01.720Z",
-  "devCommit": "2700c16a4620abc0ed0fdd76061110ace3afa341",
-  "headCommit": "71c28c78e10035390adf046db692adacb5304444",
+  "generatedAt": "2026-11-04T01:20:56.709Z",
+  "devCommit": "fa3fbce73c999c7ba920119a0cab5ea8060837a4",
+  "headCommit": "22b482f4c2ea5280a0c586ae6ec01008fdfb42fb",
   "features": {
-    "linesChanged": 1500,
-    "filesChanged": 33,
+    "linesChanged": 1723,
+    "filesChanged": 38,
     "capabilities": [
       "control-plane-api",
       "postgres-state",
@@ -23,9 +23,9 @@
     "externalFacts": false,
     "size": "S-M",
     "capabilityHistory": {
-      "changes": 23,
-      "thirdPassShare": 0.6956521739130435,
-      "mediumOrWorsePerChange": 9
+      "changes": 24,
+      "thirdPassShare": 0.6666666666666666,
+      "mediumOrWorsePerChange": 9.166666666666666
     }
   },
   "rule": {
@@ -72,7 +72,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.73,
+    "thirdPassProbability": 0.74,
     "threshold": 0.4,
     "passes": [
       {
@@ -103,6 +103,6 @@
         }
       }
     ],
-    "latencyMs": 290
+    "latencyMs": 296
   }
 }
