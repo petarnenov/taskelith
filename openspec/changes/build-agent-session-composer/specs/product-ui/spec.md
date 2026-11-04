@@ -43,8 +43,8 @@ The composer SHALL show each submission's state honestly: sending; not sent afte
 - **THEN** the SPA sends nothing again, shows the submission as not sent with a retry, and keeps its key
 
 #### Scenario: Sign-in changes during the session read
-- **WHEN** the session read after a 403 for the CSRF token finds another operator, a signed-out shell, or the composer gone
-- **THEN** the SPA sends nothing again under the new state and keeps the key
+- **WHEN** the session read after a 403 for the CSRF token finds another operator, the composer gone, or no session
+- **THEN** the SPA sends nothing again under the new state, and keeps the key unless the shell is signed out, which drops the records of every session
 
 #### Scenario: Refusal without its reason
 - **WHEN** `submitTurn` answers 403, 409, or 422 without the documented reason of that status
