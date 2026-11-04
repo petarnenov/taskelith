@@ -134,12 +134,21 @@ export class ObservationService {
   // A duplicate is contact too; a failure is only logged, as the consumed
   // observation stays acknowledged and the next contact replaces this one.
   async #recordContact(observation: Observation): Promise<void> {
-    const contact = await this.#store.transaction((tx) => recordCurrentContact(tx, producerOf(observation)));
+    const contact = await this.#contactTransaction(observation);
     if (contact.ok) return;
     const { workerId, observationId } = observation.position;
     this.#logger.with({ workerId, observationId, correlationId: observation.correlationId }).warn('execution.observation.contact-unrecorded', {
       type: observation.type, code: contact.error.code, message: contact.error.message,
     });
+  }
+
+  // A store that throws, as on a statement error, fails the contact too.
+  async #contactTransaction(observation: Observation): Promise<Result<boolean>> {
+    try {
+      return await this.#store.transaction((tx) => recordCurrentContact(tx, producerOf(observation)));
+    } catch (error) {
+      return err(failure('internal', `the contact threw: ${error instanceof Error ? error.message : String(error)}`));
+    }
   }
 
   // Writes the warnings of the attempt that settled: one that committed,
