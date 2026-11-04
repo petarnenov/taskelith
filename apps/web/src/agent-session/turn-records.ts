@@ -1,3 +1,5 @@
+import { sessionAddress } from './session-address';
+
 // The retry records of this tab (decision Q4): the key and text of each
 // unconfirmed submission, per session, so a reload keeps the key to retry.
 
@@ -83,7 +85,7 @@ export function createTurnRecordStore(storage: () => Storage = () => window.sess
 }
 
 function nameOf(projectId: string, sessionId: string): string {
-  return `${TURN_RECORD_PREFIX}${projectId}/${sessionId}`;
+  return `${TURN_RECORD_PREFIX}${sessionAddress(projectId, sessionId)}`;
 }
 
 function removeAllRecords(store: Storage): void {

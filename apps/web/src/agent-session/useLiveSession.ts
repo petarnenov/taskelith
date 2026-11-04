@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../board/board';
 import { useBoardServices } from '../board/BoardServices';
+import { sessionAddress } from './session-address';
 import { startSessionFeed, type SessionFeed, type SessionFeedState } from './session-feed';
 
 export interface LiveSession {
@@ -21,7 +22,7 @@ interface ShownState {
 // shown; a state of another session is never returned.
 export function useLiveSession(projectId: string, sessionId: string): LiveSession {
   const { gateway, clock } = useBoardServices();
-  const key = `${projectId}/${sessionId}`;
+  const key = sessionAddress(projectId, sessionId);
   const [shown, setShown] = useState<ShownState>({ key, state: LOADING });
   const [loads, setLoads] = useState(0);
   const feed = useRef<SessionFeed | undefined>(undefined);

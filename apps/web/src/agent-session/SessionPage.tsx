@@ -11,6 +11,7 @@ import { useTaskDetail } from '../board/useTaskDetail';
 import { identifierOf, taskDetailPath } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import { Composer } from './Composer';
+import { sessionAddress } from './session-address';
 import type { ShownSession } from './session-feed';
 import { TurnTimeline } from './TurnTimeline';
 import { useLiveSession, type LiveSession } from './useLiveSession';
@@ -22,7 +23,7 @@ export function SessionPage() {
   const projectId = identifierOf(params.projectId ?? '');
   const sessionId = identifierOf(params.sessionId ?? '');
   const live = useLiveSession(projectId, sessionId);
-  const key = `${projectId}/${sessionId}`;
+  const key = sessionAddress(projectId, sessionId);
   const { state } = live;
   return (
     <Stack>
