@@ -1,0 +1,101 @@
+{
+  "change": "stabilize-placement-capacity-decline-test",
+  "generatedAt": "2026-11-04T10:43:08.780Z",
+  "devCommit": "44bd35924520870b0c5be829487c9c4156d64a36",
+  "headCommit": "b7f908c182b1dbe7c8a1495a3a9ac9bc360024e0",
+  "features": {
+    "linesChanged": 8,
+    "filesChanged": 1,
+    "capabilities": [
+      "execution-placement"
+    ],
+    "touches": {
+      "code": false,
+      "tests": true,
+      "contracts": false,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "S",
+    "capabilityHistory": {
+      "changes": 7,
+      "thirdPassShare": 0.5714285714285714,
+      "mediumOrWorsePerChange": 2.142857142857143
+    }
+  },
+  "rule": {
+    "version": 5,
+    "tier": "standard",
+    "triggers": [],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "standard",
+    "thirdPassProbability": 0.37,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "medium"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ],
+    "latencyMs": 433
+  }
+}

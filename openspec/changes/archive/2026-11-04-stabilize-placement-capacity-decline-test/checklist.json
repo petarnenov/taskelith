@@ -1,0 +1,102 @@
+{
+  "change": "stabilize-placement-capacity-decline-test",
+  "generatedAt": "2026-11-04T10:27:43.790Z",
+  "devCommit": "44bd35924520870b0c5be829487c9c4156d64a36",
+  "query": {
+    "capabilities": [
+      "execution-placement",
+      "capacity-reservation",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/**"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 78
+      },
+      {
+        "category": "error-handling",
+        "count": 41
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 38
+      },
+      {
+        "category": "naming",
+        "count": 38
+      },
+      {
+        "category": "docs",
+        "count": 25
+      },
+      {
+        "category": "concurrency-race",
+        "count": 17
+      },
+      {
+        "category": "redaction",
+        "count": 17
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 999,
+        "inChecklist": 862
+      },
+      "mediumOrWorse": {
+        "findings": 488,
+        "inChecklist": 437
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 156
+      },
+      {
+        "category": "spec-wording",
+        "count": 103
+      },
+      {
+        "category": "docs",
+        "count": 81
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 468,
+        "inChecklist": 461
+      },
+      "mediumOrWorse": {
+        "findings": 74,
+        "inChecklist": 74
+      }
+    }
+  }
+}
