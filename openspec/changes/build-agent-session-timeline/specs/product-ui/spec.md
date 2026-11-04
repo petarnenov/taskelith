@@ -22,7 +22,7 @@ Under `/app/` the SPA SHALL route the board, agent sessions, reviews, workers an
 ## ADDED Requirements
 
 ### Requirement: Web SPA agent session timeline
-The agent session screen SHALL show the session as `readAgentSession` answers it (harness, task, run, running generation, attempt, limit, handoff) and its turns in position order with author, state, outcome or failure, generation, and text, reading first the window of up to 100 turns before `lastTurnPosition` and each earlier window on demand; it SHALL show loading, a failed read with the role a 403 names and a retry, no turn, a failed earlier read with a retry, and no data it did not read.
+The agent session screen SHALL show the session as `readAgentSession` answers it (harness, task, run, running generation, attempt, limit, handoff) and its turns in position order with author, state, outcome or failure, generation, and text, reading first the up to 100 turns before `lastTurnPosition`, then each earlier window on demand; it SHALL show loading, a failed read or earlier read with why, the role a 403 names, and a retry, no turn, and no data it did not read.
 
 #### Scenario: Last window first
 - **WHEN** `readAgentSession` answers `lastTurnPosition` 250
@@ -30,7 +30,11 @@ The agent session screen SHALL show the session as `readAgentSession` answers it
 
 #### Scenario: Earlier window
 - **WHEN** the operator loads the earlier turns
-- **THEN** the screen reads the turns after position 50, shows them before the known ones in position order, and offers the next earlier window until the first turn is shown
+- **THEN** the screen reads the turns after position 50, following a short page's `next` cursor up to the shown turns, shows them before the known ones in position order, and offers the next earlier window until the first turn is shown
+
+#### Scenario: Earlier read fails
+- **WHEN** a read of the earlier turns gets no answer, a 403, or a 404
+- **THEN** the screen says why, with the role a 403 names, keeps the shown turns, and offers a retry of that window
 
 #### Scenario: Turn states
 - **WHEN** a turn is queued, delivered, ended with an outcome, ended with a failure, of an unknown outcome, or refused
@@ -45,11 +49,15 @@ The agent session screen SHALL show the session as `readAgentSession` answers it
 - **THEN** the SPA shows the sign-in page saying that the session expired, and reads the session again
 
 ### Requirement: Web SPA live agent session
-While it shows an agent session, the SPA SHALL follow `streamProjectEvents` after the lowest position of its reads and apply each `turn-changed` and `agent-session-changed` of that session above it, whole records replacing the known ones, so that no event is lost or shown twice; it SHALL read again and reopen the stream by the rules of "Web SPA live board updates", show the time of its last known state while the live updates are lost, and drop an earlier read that a new snapshot overtook.
+While showing an agent session, the SPA SHALL follow `streamProjectEvents` after its reads' lowest position and apply each `turn-changed` and `agent-session-changed` of that session above the read that supplied its record, whole records replacing known ones, so no event is lost, repeated, or shown over a newer read; it SHALL read again and reopen the stream as "Web SPA live board updates" says, show its last known time while updates are lost, and drop an earlier read a new snapshot overtook.
 
 #### Scenario: Turn changes in the SPA
 - **WHEN** a `turn-changed` of the shown session arrives above the view's position
 - **THEN** the screen shows the turn in its new state, once, in position order
+
+#### Scenario: Event below the read that supplied its record
+- **WHEN** the turns were read at position 50, the session at 40, and a `turn-changed` of a read turn arrives at position 45
+- **THEN** the turn keeps its read state, and an `agent-session-changed` at position 45 replaces the session
 
 #### Scenario: Event of another session
 - **WHEN** a `turn-changed` or `agent-session-changed` of another session arrives
