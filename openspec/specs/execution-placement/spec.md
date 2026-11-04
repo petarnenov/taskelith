@@ -28,6 +28,10 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 - **WHEN** one project has an older backlog, another project waits, and the rotation cursor is the first project
 - **THEN** the other project's task is offered before the first project's next task
 
+#### Scenario: Older stored stamp of a later submit
+- **WHEN** two tasks of one project wait and the later-submitted one has the older stored waiting stamp
+- **THEN** the task with the older stamp is served first
+
 ### Requirement: Project rotation
 Each waiting read SHALL take each project's oldest task before any project's next, starting after the rotation cursor, wrapping around. A pass SHALL make no offer after its first decline for lack of fleet capacity; the cursor SHALL move only by its offers before it, one the store failed not counting: to the project of the last of them placed, else of the last of them, else it SHALL stay, so that, while offers move it, every project with a waiting task is read within a bounded number of passes.
 

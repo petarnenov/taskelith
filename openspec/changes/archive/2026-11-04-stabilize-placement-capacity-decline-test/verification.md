@@ -94,3 +94,13 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive stabilize-placement-capacity-decline-test --yes`, which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-stabilize-placement-capacity-decline-test`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `44bd3592`): only this change's delta, the scenario "Older stored stamp of a later submit" added to "Waiting placements" in `execution-placement`.
+- The moved change has `findings.jsonl`, empty because the review found nothing, and `passes.jsonl` (pass 1); `make findings ARGS="validate"`: every findings file is valid, 119 files.
+- `make verify` runs on the committed archive tree, so that its stamp covers the pushed head; its result is in the handoff to the coordinator.
