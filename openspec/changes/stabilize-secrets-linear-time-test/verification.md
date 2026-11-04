@@ -10,7 +10,8 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `92d8f7f7` `test: judge linear-time redaction by CPU time growth instead of a wall-clock limit` (the helper, its tests, proposal, design, tasks, the spec delta, `checklist.json`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `d94583a2` `chore: route the stabilize secrets linear time test change` (`route.json` unedited).
 - `1e847ae8` `docs: record the stabilize secrets linear time test change` (this record), verified by `make verify`.
-- The commit after it: `make record` and the results of that run.
+- `1c9fe6d3` `docs: record the make verify run of the stabilize secrets linear time test change`.
+- Pass 1 fix round: `4f37008e` `test: size linear-time runs to the host and expose gc only when timing` (the helper, its tests, the import test, and the pass 1 line of `passes.jsonl`), then the records of the round and `make record` ("Pass 1 fix round").
 
 ## Environment
 
@@ -32,7 +33,7 @@ The host `hpz600` (Linux 6.8.0-147-generic, x86_64, 2 sockets of 4 cores of the 
    | `"a."`, no values | 0.7, 1.4, 2.8, 5.6, 11.1 |
    | `"Authorization: Basic a"`, no values | 1.1, 2.2, 4.3, 8.5, 17.5 |
 
-   Over all 29 unit runs of the three tests, the wall time grew at most 1.08 times as fast as the length from a quarter run to a full one, the measure the new helper applies with wall time; the final helper's measure, the thread's CPU time, gave at most 1.25, on the unit `"a"` of the value call (3.0 ms at 15000, 15.0 ms at 60000, both under the 20 ms floor). No unit shows superlinear growth.
+   Over all 29 unit runs of the three tests, the wall time grew at most 1.08 times as fast as the length from a quarter run to a full one (the raw ratio, without the floor). With the thread's CPU time and the helper of `92d8f7f7`, the largest raw ratio was 1.25, on the unit `"a"` of the value call (3.0 ms at 15000, 15.0 ms at 60000); both medians were under the 20 ms floor, so that unit's floored score, the value the assertion compares with 2.5, was 0.25. The largest floored score of that helper over all units was not recorded; the helper of the pass 1 fix round, whose runs make every short median at least 20 ms here, gave at most 1.095 ("Pass 1 fix round"). These measurements are consistent with linear scaling over the tested inputs; they do not prove linear complexity.
 3. The old tests under load: 10 runs of the three tests at `1ef0cb42` under the 8 busy loops, 8 passed and 2 failed, both on `"a b"`: `"a b" repeated took 202 ms` and `"a b" repeated took 232 ms`.
 
 The cause is the test: a linear run of about 80 ms against an absolute limit of 200 ms, which load or a pause in the one wall-clock sample exceeds.
@@ -50,7 +51,7 @@ The new helper restored afterwards and rebuilt: `ℹ pass 3`, `ℹ fail 0`.
 ## Mutation controls
 
 1. The helper's quadratic redactor (`linear-time.test.ts`, `quadraticRedact`), which searches the rest of the text for `ab` from every position, run with the final helper once outside the test runner: `AssertionError [ERR_ASSERTION]: "a b" repeated grew 4.0 times faster than its length in CPU time: 27.0 ms at 4002 and 428.6 ms at 16002 characters`. Within the test runner it failed the assertion in every run of "Checks".
-2. A quadratic product: `mergedSpans` in `packages/adapters/secrets/src/revealed-spans.ts` changed by hand to copy its result array for each new span (`result = [...result, span]` instead of `result.push(span)`), rebuilt, and the three secrets tests run once with the final helper: `✖ value redaction takes linear time on long runs (77699.270268ms)`, `"ab" repeated grew 16.7 times faster than its length in CPU time: 221.6 ms at 15000 and 14838.8 ms at 60000 characters`, `ℹ pass 2`, `ℹ fail 1`, exit 1. The other two tests passed, as they do not reveal values. The file was restored with `git checkout` and rebuilt; the growth measure then gave at most 1.25 ("Diagnosis" item 2).
+2. A quadratic product: `mergedSpans` in `packages/adapters/secrets/src/revealed-spans.ts` changed by hand to copy its result array for each new span (`result = [...result, span]` instead of `result.push(span)`), rebuilt, and the three secrets tests run once with the final helper: `✖ value redaction takes linear time on long runs (77699.270268ms)`, `"ab" repeated grew 16.7 times faster than its length in CPU time: 221.6 ms at 15000 and 14838.8 ms at 60000 characters`, `ℹ pass 2`, `ℹ fail 1`, exit 1. The other two tests passed, as they do not reveal values. The file was restored with `git checkout` and rebuilt; the measures of the restored redactor are in "Diagnosis" item 2.
 
 ## Rejected measurements
 
@@ -106,15 +107,33 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
+## Pass 1 fix round
+
+Pass 1 (`codex gpt-6-astra#medium`, role A) reported 1 Medium and 2 Low findings, all fixed (`findings.jsonl`). Runs use Node.js v24.22.1 on `hpz600` as in "Environment".
+
+- **M1, the quadratic control depended on the host's speed.** The helper now doubles both runs from the caller's length until the short median reaches 20 ms, up to a long run of 2^24 characters (`packages/testing/src/linear-time.ts`, `timeUnit`), and takes the timer as an optional fourth parameter, `RunTimer`. The helper's tests drive the doubling, the floor at the longest runs, the limit of 2.5 (20 and 200 ms fail with `grew 2.5`, 20 and 199.9 ms pass, 25 and 400 ms fail with `grew 4.0`), and a paused sample with scripted readings; the quadratic redactor, timed by the thread's CPU time, now starts at the length 1000 and failed with `"a b" repeated grew 4.0 times faster than its length in CPU time: 26.8 ms at 4002 and 427.9 ms at 16002 characters` in one run outside the runner. The same control with every reading divided by 4, the reviewer's simulation of a host four times faster, doubled once more and failed with `26.6 ms at 8001 and 427.2 ms at 32001 characters`, growth 4.0; the helper of `92d8f7f7` passed it at the length 1000 (fail-before below). The spec delta's scenarios now name these cases.
+- **The callers.** All 29 units of the three secrets tests reached a short median of 20.5 to 40.4 ms in one run, so raw and floored scores were equal, at most 1.095 (`"tkop_"`, 34.9 ms at 960000 and 152.6 ms at 3840000 characters) and at least 0.924. One observability unit, `"-----BEGIN PRIVATE KEY-----"` of `packages/modules/observability/test/logger.test.ts:164`, stopped at the longest runs, 7.2 ms at 3200013 and 27.7 ms at 12800025 characters, and passed by the floor. The quadratic `mergedSpans` mutation of "Mutation controls" item 2, repeated with this helper: `"ab" repeated grew 18.4 times faster than its length in CPU time: 201.8 ms at 15000 and 14854.7 ms at 60000 characters`, `ℹ pass 2`, `ℹ fail 1`; the file was restored with `git checkout` and rebuilt.
+- **L1, importing the package set a V8 flag.** `gc` is now exposed on the first timing with the default timer (`collectGarbage`), not at import; `packages/testing/test/linear-time-import.test.ts` imports `@taskelith/testing` and checks that `typeof gc` in a new context is `'undefined'`. `design.md`, "A forced collection before each sample", states the scope.
+- **L2, the recorded growth.** "Diagnosis" item 2 now separates raw ratios from the floored score that the assertion compares and calls the results consistent with linear scaling over the tested inputs. The checklist names the capability `secrets-port`, which has no directory under `openspec/specs`; `checklist.json` is the saved brief checklist and stays unedited, and no other record cites it.
+
+Fail-before: the helper's tests of `4f37008e` and the import test against the helper of `1c9fe6d3` (with a placeholder `RunTimer` type export), rebuilt, one run: `ℹ pass 4`, `ℹ fail 7`, exit 1. Failed: the import test (`+ 'function'`, `- 'undefined'`), both doubling tests, the longest-runs failure, the 2.5 and 4.0 failures, and the quadratic redactor at the length 1000 (`Missing expected exception`). With the new helper rebuilt: `ℹ pass 11`, `ℹ fail 0`.
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| The three secrets tests, 10 consecutive runs | `4f37008e` | 10 of 10 passed, 30 test passes; medians 3342.4, 18744.1, and 6332.3 ms (ranges 3291.2 to 3453.7, 18098.4 to 20159.8, and 6248.5 to 8259.3 ms) for "Basic credentials ...", "text is redacted ...", and "value redaction ..." |
+| The same, 10 runs under the 8 busy loops | `4f37008e` | 10 of 10 passed, 30 test passes; medians 6049.4, 28736.2, and 9635.9 ms; no busy loop left afterwards |
+| The observability linear-time tests, one run | the round's working tree, the helper of `4f37008e` | 2 of 2 passed, 6059.5 and 26495.3 ms |
+| Archive probe in a scratch copy of `openspec/` | the round's working tree, the requirement of 498 characters | `+ 1 added`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
+
 ## Independent review
 
-Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. No pass has run yet.
+Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round.
 
 ## Limitations
 
-- The floor passes a superlinear run whose long sample stays under 200 ms of CPU time, as the old wall-clock limit did.
+- Runs double until the short median reaches 20 ms, so the floor decides only at the longest runs, of 2^24 characters, where a quadratic transform cannot stay under it. A slower superlinear growth below the limit of 2.5 passes.
 - A transform whose extra cost grows only slightly faster than linear, such as n log n, passes by design; the limit of 2.5 separates linear from quadratic growth.
-- The linear-time tests take longer: about 0.33, 2.24, and 1.65 s instead of 0.015 to 0.51 s.
+- The linear-time tests take longer: medians of 3.34, 18.74, and 6.33 s unloaded instead of 0.015 to 0.51 s ("Pass 1 fix round").
 
 ## Remaining gates
 

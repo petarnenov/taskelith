@@ -23,6 +23,7 @@
 
 ## 5. Review and archive
 
-- [ ] 5.1 Independent review pass 1
-- [ ] 5.2 Independent review pass 2
-- [ ] 5.3 Archive the change
+- [x] 5.1 Independent review pass 1
+- [x] 5.2 Pass 1 fix round: runs sized to the host, an injected timer, gc exposed only when timing, and the recorded scores
+- [ ] 5.3 Independent review pass 2
+- [ ] 5.4 Archive the change

@@ -4,8 +4,8 @@ The linear-time redaction tests of `@taskelith/secrets` failed intermittently in
 
 ## What Changes
 
-- `assertLinearOnRuns` in `@taskelith/testing` no longer compares one wall-clock sample with 200 ms. It measures the CPU time of the test's thread for each unit's run and of a run of a quarter of its length, in five alternating samples each after a forced garbage collection, and fails when the median time grows 2.5 or more times faster than the length, with a floor of 20 ms on both medians.
-- The helper's tests cover a short and a long run of every unit, a pause in one sample, and a quadratic redactor as a mutation control.
+- `assertLinearOnRuns` in `@taskelith/testing` no longer compares one wall-clock sample with 200 ms. It measures the CPU time of the test's thread for each unit's run and of a run of a quarter of its length, in five alternating samples each after a forced garbage collection, doubles both runs until the short median reaches 20 ms or the long run 2^24 characters, and fails when the median time grows 2.5 or more times faster than the length, with a floor of 20 ms on both medians. It takes the timer as an optional fourth parameter and exposes garbage collection only when it first times a run.
+- The helper's tests drive the doubling, the floor, the limit of 2.5, and a pause in one sample with injected timer readings, check that importing the package exposes no garbage collection, and keep a quadratic redactor timed by the thread's CPU time as a mutation control.
 - A new `deterministic-test-harness` requirement, "Linear-time assertions", states the rule. No product code changes: the published `taskelith` package and the redactor are unchanged.
 
 ## Capabilities
@@ -18,4 +18,4 @@ The linear-time redaction tests of `@taskelith/secrets` failed intermittently in
 
 ## Impact
 
-Test reliability of `make verify` for every caller of `assertLinearOnRuns`: the three secrets tests and the observability tests `packages/modules/observability/test/basic-credentials.test.ts` and `packages/modules/observability/test/logger.test.ts`. `@taskelith/testing` is a private workspace package. The calls take longer: each unit runs eleven times instead of once (`design.md`).
+Test reliability of `make verify` for every caller of `assertLinearOnRuns`: the three secrets tests and the observability tests `packages/modules/observability/test/basic-credentials.test.ts` and `packages/modules/observability/test/logger.test.ts`. `@taskelith/testing` is a private workspace package. The calls take longer: each unit runs at least eleven times instead of once, on runs long enough for a short median of 20 ms (`design.md`, "Cost").
