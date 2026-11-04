@@ -62,6 +62,8 @@ Each mutation was restored; `git status` showed no change.
 | --- | --- | --- |
 | `make verify` run 1 (`verify-11c-1.log`) | `9b380f56`, clean | Failed only `test/installation-script.test.ts:570` "a bound with a leading zero is read in base 10" (ended after 9.149 s, before 10), the known flake the brief allows to rerun once: tests 4779, pass 4769, fail 1, skipped 9 |
 | `make verify` run 2 (`verify-11c-2.log`) | `9b380f56`, tree `d97b44d7`, clean | Passed, profile full, stamp written; recorded below. New files 100 % lines; `run-service.js` 73.53 % branches, `requirement.js` 71.43 % branches, above the 75 % gate overall (92.85 %) |
+| `make verify` after the pass 2 fixes, run 1 (`verify-11c-p2.log`) | `42922779`, clean | Failed before any test: `make test` could not create its Docker network (`all predefined address pools have been fully subnetted`), a host condition outside the tree; the coordinator pruned stale networks (2026-11-04 03:57 UTC) |
+| `make verify` after the pass 2 fixes, run 2 (`verify-11c-p2b.log`) | `42922779`, tree `a99259ca`, clean | Passed, profile full, stamp written (2026-11-04 04:56 UTC); recorded below: tests 4783, pass 4774, fail 0, skipped 9 |
 | Focused `control-plane-api.integration.test.ts` (`int-11c-2.log`) | after `2b0659c4` with the `bfdcedb3` fix | tests 32, pass 32 |
 | `make contract-compatibility` | `c1aae7f7` | `Contract documents have no undeclared breaking change.` |
 | `make installation-smoke` (`installation-11c-1.log`) | `e22650ce` | Passed: the task result is `ended`, exited with code 0 and a proven start, after the smoke created a project and assigned the owner `project-operator`; `installation.sh: submitted, assigned, executed, stored the result, removed` |
@@ -82,7 +84,7 @@ That route named `headCommit` `6ffbb1df`, which is not in the branch (pass 2, L1
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `fbe20f718ec1ef4a231c86556ef9ac6b2e878596`; tests 4781, pass 4772, fail 0, skipped 9; all files 99.45% lines, 92.86% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `a99259ca7124a01cd0cd79c0693ed2733251f15d`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.84% branches, 98.88% functions.
 - `npm run openspec -- validate require-existing-project-for-runs --strict`: passed, `Change 'require-existing-project-for-runs' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 115 file(s); every pass summary file is valid: 95 file(s); every route file is valid: 48 file(s).`.
 - Spec diff against the merge base `aca638890748` with `origin/dev`: no change under `openspec/specs`.
@@ -91,6 +93,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a495-42d8-7780-82d5-25d605a0491a` | 0 | 0 | 2 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `7692c8cf-9d1f-4b62-9212-6a315e2cd32a` | 0 | 0 | 1 | 5 |
 <!-- make record: end -->
 
 ## Review
