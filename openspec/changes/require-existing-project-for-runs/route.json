@@ -1,10 +1,10 @@
 {
   "change": "require-existing-project-for-runs",
-  "generatedAt": "2026-11-04T03:04:29.717Z",
+  "generatedAt": "2026-11-04T03:34:38.585Z",
   "devCommit": "aca6388907482197ea80cfd740926ed8a8779c71",
-  "headCommit": "90ddd310771080813680ac81ca6129aa27a05092",
+  "headCommit": "6ffbb1df5d19bcc860a33706cb63080134fff58c",
   "features": {
-    "linesChanged": 630,
+    "linesChanged": 646,
     "filesChanged": 43,
     "capabilities": [
       "control-plane-api",
@@ -106,6 +106,6 @@
         }
       }
     ],
-    "latencyMs": 276
+    "latencyMs": 296
   }
 }
