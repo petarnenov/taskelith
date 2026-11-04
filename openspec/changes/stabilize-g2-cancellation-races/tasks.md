@@ -17,3 +17,11 @@
 - [x] 3.2 Run `make verify-linux-g2-scenarios`.
 - [x] 3.3 Run `npm run openspec -- validate stabilize-g2-cancellation-races --strict`, probe the archive in a scratch copy, and run `make verify`.
 - [ ] 3.4 Independent review, recorded in `verification.md`.
+
+## 4. Pass 1 fix round
+
+- [x] 4.1 Log a contact transaction that throws, and keep the consumed outcome (M1).
+- [x] 4.2 Add the `worker-contact` delta and qualify the successful-contact scenarios (M2).
+- [x] 4.3 Separate retirement from revocation, with a test of a reachable worker revoked before its contact (L1).
+- [x] 4.4 Correct the evidence and assertion claims in `verification.md` (L2, L3).
+- [x] 4.5 Record the findings, run `make verify` and `make verify-linux-g2-scenarios`, and record the checks.

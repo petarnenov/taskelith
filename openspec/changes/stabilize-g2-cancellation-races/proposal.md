@@ -11,7 +11,8 @@ The coordinator (Niki) chose a product fix (option 1) on 2026-11-04.
 - `ObservationService.apply` records an observation's contact in a transaction of its own after the observation's transaction committed, instead of inside it. That transaction authenticates the producer again as a heartbeat does (`recordCurrentContact`, shared with `HeartbeatService`), so a journal retired or a worker revoked meanwhile gets no contact. Its failure is logged as `execution.observation.contact-unrecorded` and does not fail or redeliver the observation.
 - The not-consumed path keeps its own contact transaction, unchanged.
 - Tests: a deterministic PostgreSQL test in which a heartbeat's transaction holds the worker row while an observation is applied, which failed at the base; the monotonic contact in memory and in PostgreSQL; the logged failure; and the retired or revoked worker that stays unreachable.
-- `observation-consumption`: "One transaction per observation" no longer lists contact, and "First contact" states the separate, re-authenticated, never-backward contact and its logged failure, with four added scenarios.
+- `observation-consumption`: "One transaction per observation" no longer lists contact, and "First contact" states the separate, re-authenticated, never-backward contact and its logged failure, with five added scenarios.
+- `worker-contact`: "Lost contact" makes an observation's contact best effort, as "First contact" states, with a qualified "Contact again" and an added scenario for a failed contact.
 
 ## Capabilities
 
@@ -20,7 +21,8 @@ The coordinator (Niki) chose a product fix (option 1) on 2026-11-04.
 ### Modified Capabilities
 
 - `observation-consumption`: requirements "One transaction per observation" and "First contact".
+- `worker-contact`: requirement "Lost contact".
 
 ## Impact
 
-`@taskelith/control-plane`, a private workspace package. An observation now takes two transactions, the second short. No migration, contract, or configuration change. The worker-contact requirements already name an observation as contact and are unchanged.
+`@taskelith/control-plane`, a private workspace package. An observation now takes two transactions, the second short. No migration, contract, or configuration change.

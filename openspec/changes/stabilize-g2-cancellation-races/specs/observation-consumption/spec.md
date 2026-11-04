@@ -15,11 +15,11 @@ The control plane SHALL apply each observation in one SERIALIZABLE transaction t
 An authenticated observation SHALL record contact in its own transaction, after the observation's transaction when that commits: the worker becomes reachable and its last contact moves to the database time, never backward, only while it is enrolled, not revoked, and under its enrolled journal, not retired. A failed contact of a consumed observation SHALL be logged and SHALL NOT fail or redeliver it. A duplicate SHALL record contact; a revoked worker's observation SHALL record none.
 
 #### Scenario: New worker
-- **WHEN** a newly enrolled worker's first capacity declaration is applied
+- **WHEN** a newly enrolled worker's first capacity declaration is applied, and its contact is recorded
 - **THEN** the worker is reachable and eligible for placement
 
 #### Scenario: Duplicate after lost contact
-- **WHEN** a worker marked unreachable republishes an observation that was already applied
+- **WHEN** a worker marked unreachable republishes an observation that was already applied, and its contact is recorded
 - **THEN** it is a duplicate, and the worker is reachable again
 
 #### Scenario: Worker row held by a heartbeat
@@ -31,8 +31,12 @@ An authenticated observation SHALL record contact in its own transaction, after 
 - **THEN** the observation stays applied and acknowledged, and the failure is logged as `execution.observation.contact-unrecorded`
 
 #### Scenario: Journal retired before the contact
-- **WHEN** the worker's journal is retired, or the worker revoked, after an observation committed and before its contact
+- **WHEN** the worker's journal is retired after an observation committed and before its contact
 - **THEN** no contact is recorded, and the worker stays unreachable
+
+#### Scenario: Worker revoked before the contact
+- **WHEN** a reachable worker is revoked after an observation committed and before its contact
+- **THEN** no contact is recorded: its last contact is unchanged, and it is not eligible for placement
 
 #### Scenario: Newer stored contact
 - **WHEN** an observation is applied while the worker's stored last contact is later than the database time
