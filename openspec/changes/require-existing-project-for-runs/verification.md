@@ -109,6 +109,15 @@ Coordinator items of the pass 1 round (Niki, 2026-11-04), apart from the finding
 - `5655acf9`: `design.md` decision 10 says why the owner principal comes from the `init` output.
 - `bb2037b8`: the follow-up on `behaviorChanges` below.
 
+#### Coverage
+
+Branch coverage of `make verify` on `dist`, before (`verify-11c-2.log`) and after (`verify-11c-p1.log`) the pass 1 round:
+
+| File | Before | After | Note |
+| --- | --- | --- | --- |
+| `apps/control-plane/dist/application/run-service.js` | 73.53 % (25 of 34) | 73.53 % | The branches this change added, `#knownProject` and its result check in `createRun`, are covered; the 9 uncovered ones predate it (invalid identifiers and store failures) and are outside its scope |
+| `packages/modules/access/dist/domain/requirement.js` | 71.43 % (5 of 7) | 100 % | Removing the covered `g2BridgeRequirement` left the two untested `requiredRoleOf` paths; `c5952e53` tests both |
+
 ## Deviations
 
 1. Q9 asked for a `breaking-changes.json` entry, but the check reports no change and the schema required at least one. `breaking-changes.schema.json` gains an optional `behaviorChanges` list, with `breakingChanges` empty only beside it; `make contract-compatibility` compares only the tool-reported list. The `sdlc-wire-contracts` requirement "Breaking-change declarations" is MODIFIED for it.
