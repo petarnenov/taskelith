@@ -14,6 +14,7 @@ G3 plan item 33 (`docs/g3-plan.md`, row 33), change 1 of the item (backend, size
 - `3c273b4c` the wire contracts note (task 2.4), `0d4f28c9` this record and the tasks, `0cc99e5b` `route.json` (unedited), `d20ee8bb` the typecheck fix of two test files after `make verify` run 1, `cced19bf` its record and the stale route's removal, `91352dd7` the second route (unedited), `4e02394e` the `make record` output with the coverage notes and task 3.1.
 - Pass 1 fixes (see "Pass 1 fixes"): `9bce1a9e` (finding 1), `63b5bc06` (finding 2), `b035cf3f` (finding 3), `2168ff07` (findings 4 and 6, the PostgreSQL side of 5), `3e27dcac` (the in-memory side of 5, the failure-path tests of 10), `b9344064` (finding 8), then the record corrections (findings 7, 9, 10), the review record, the third route, and the `make record` output.
 - Pass 2 fixes (see "Pass 2 fixes"): `e5fe2f47` (test) and `d61bc9dc` (finding 1), `d271e0be` (the tests of findings 2 and 5), `a8eedb0e` (finding 2 and the `spentTokenFailure` nit), `eaf13da4` (findings 3 and 4, the test of 7), `fc8780fa` (finding 7), then the record corrections and the spec wording (findings 6 and 8), the review record, the fourth route, and the `make record` output.
+- Pass 3 fix (see "Pass 3"): `5cce95ba` (the design's decisions 2 and 8), then the review record (`passes.jsonl`, `findings.jsonl`, this record), the merge of `origin/dev`, and the `make record` output of the merged tree.
 
 ## Environment
 
@@ -154,6 +155,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a670-bde1-7300-8a45-7256ab7eace8` | 0 | 2 | 6 | 2 |
 | 2 | B | `claude claude-fable-5-1#medium` | `43a64494-e177-409f-833a-da18370b7371` | 0 | 0 | 1 | 7 |
+| 3 | A | `agy gemini-4-argon-medium#medium` | `e7bb7895-8a12-47b1-9b5a-a0f44b78135d` | 0 | 0 | 0 | 1 |
 <!-- make record: end -->
 
 ## Independent review
@@ -218,6 +220,17 @@ Pass 3 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 8 (`f7ac73e2`): "the coordinator (Niki)".
 - After the fixes: the routes 12 of 12 (`run-33-1-p2-routes-2.log`), the fleet module 86 of 86 (`run-33-1-p2-fleet-1.log`), the PostgreSQL fleet suite 55 of 55 (`run-33-1-p2-pg-1.log`), the lifecycle migration test (`run-33-1-p2-migration-1.log`), the composition over PostgreSQL 33 of 33 (`run-33-1-p2-int-1.log`); `tsc -p tsconfig.check.json`, `npm run verify:comments`, `npm run openspec -- validate serve-workers-and-enrollment-tokens --strict`, and `make findings ARGS="validate"` pass. The `make verify` run of the fixed, recorded, and routed tree is under "Checks".
 
+### Pass 3
+
+- Reviewer A `agy gemini-4-argon-medium#medium` (Antigravity CLI, effort medium, read-only), run by the worker session on `79fb7130..2791cff0` with `env -u JEV_MAF_LAB make review CHANGE=serve-workers-and-enrollment-tokens PASS=3 ROLE=A REVIEWER='agy gemini-4-argon-medium#medium' ...`: `make review` printed "route: recommends agy gemini-4-argon-medium#medium" and ran `agy -p <prompt> --model gemini-4-argon-medium --effort medium --mode plan --output-format json`; the CLI log resolved model `gemini-4-argon-medium` (`Print mode: starting (... model="gemini-4-argon-medium" ...)`), and the reviewer reported model `gemini-4-argon-medium` and session `e7bb7895-8a12-47b1-9b5a-a0f44b78135d`. The worktree snapshot was the same before and after the run (`snap-33-1-p3-before.txt`, `snap-33-1-p3-after.txt`). The prompt, the log, the command output, and the report are in the session scratchpad (`review-33-1-p3.md`, `review-33-1-p3.log`, `review-33-1-p3.out`, `review-33-1-p3-report.md`). The reviewer ran the comment check, strict validation, `make findings ARGS="validate"`, the link check, `make record-check`, `tsc -p tsconfig.check.json`, and the fleet, route, access-requirement, and API server suites (131 of 131).
+- The pass reviewed the whole diff with every pass 1 and pass 2 fix and found each correct and complete: the expiry read after the row lock, the host name redaction, the identifier conflict of the in-memory registry, the observer connection of the row-lock race, the gated service races and the seven PostgreSQL race pairs, the rotation rollback fault, the mutation controls, the fixed assertion messages, the diff statistics, the service failure-path coverage, the down-migration expiry clamp, the `C` collation of the cursor, the worker bearer on every owner operation, the rotated-then-expired revocation, the scenario wording, the `conflict` answer of issue and rotate, and the coordinator attribution.
+- Counts: Critical 0, High 0, Medium 0, Low 1, recorded in `passes.jsonl`; one line in `findings.jsonl`. The pass is Low-only, so the review loop ends here and the finding is fixed without another review (governance: a Low-only pass is fixed without another pass).
+  1. Low, `design.md`: decision 2 still said the down migration only drops the three columns, and decision 8 did not state that a registry `conflict` on issue or rotate answers 500 `internal` with a fixed message. Fixed in `5cce95ba`: decision 2 states the `LEAST(expires_at, revoked_at)` clamp before the drop (`d61bc9dc`), and decision 8 states the 500 `internal` answer with the fixed message `the enrollment token could not be stored` (`fc8780fa`). The fix changes only the design record, so no test and no fail-before run; `make record-check` compares `design.md`, so the fixed tree gets `make verify` run 6 under "Checks", together with the merge of `origin/dev` that followed.
+
+## Fixes no later pass reviewed
+
+One docs commit, `5cce95ba` (the pass 3 Low finding): it edits two sentences of `design.md`, decisions 2 and 8, so that the design states the down-migration expiry clamp of `d61bc9dc` and the 500 `internal` answer of `fc8780fa`, which pass 3 itself verified in the code. No source, test, spec, or contract file changes. Every later commit changes only the records of this change (`passes.jsonl`, `findings.jsonl`, `tasks.md`, this record, and the `make record` output) or archives the change, which applies the reviewed deltas with the pinned CLI. Architect check by the coordinator (Niki): `5cce95ba` against the migration and `issuedAnswer` in `fleet-api.ts`.
+
 ## Remaining gates
 
-Review pass 3 (reviewer A `agy gemini-4-argon-medium#medium`, due after the Medium finding of pass 2; task 4.1), the archive (task 4.2), and the integration into `dev` by the coordinator.
+The archive (task 4.2), the coordinator's architect check of `5cce95ba`, and the integration into `dev` by the coordinator (single pull request).
