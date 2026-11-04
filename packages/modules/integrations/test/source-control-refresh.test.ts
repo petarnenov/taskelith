@@ -22,7 +22,8 @@ test('an adoption that leaves the previous secret working is reported', async ()
   const lines = await defective({ adoptionKeepsPrevious: true });
   assert.deepEqual(cases(lines), ['refreshed credential outcome', 'adopted credential outcome']);
   assert.ok(lines.includes(
-    'refreshed credential outcome: read-code to the project repository after the adoption of its successor must fail with forbidden',
+    'refreshed credential outcome: read-code to the project repository after the adoption of its successor'
+      + ' was not refused within REVOCATION_PROPAGATION_SECONDS',
   ));
 });
 
@@ -73,7 +74,7 @@ test('a stale adoption that restores an ended version is reported', async () => 
 test('a revocation that leaves an earlier version working is reported', async () => {
   const lines = await defective({ revocationKeepsEarlier: true });
   assert.deepEqual(cases(lines), ['revoked credential outcome']);
-  assert.ok(lines.every((line) => line.endsWith('after the revocation of its credential must fail with forbidden')));
+  assert.ok(lines.every((line) => line.endsWith('after the revocation of its credential was not refused within REVOCATION_PROPAGATION_SECONDS')));
 });
 
 test('a refresh that keeps the version or the credential identifier is reported', async () => {
