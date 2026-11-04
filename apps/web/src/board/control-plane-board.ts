@@ -7,6 +7,7 @@ import {
   turnSubmittedOf,
 } from './agent-session-wire';
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
+import { denialOf, failureOf, failureReason, reachable, requiredRoleOf } from '../api/read-result';
 import type {
   AgentSession,
   AgentSessionView,
@@ -15,7 +16,6 @@ import type {
   BoardStreamEvent,
   BoardStreamListener,
   Project,
-  ReadFailed,
   ReadResult,
   SubmitResult,
   TaskDetail,
@@ -23,7 +23,7 @@ import type {
   TurnSubmission,
   TurnSubmitted,
 } from './board';
-import { boardOf, cardChangeOf, failureReason, projectPageOf, requiredRoleOf, workersChangeOf } from './board-wire';
+import { boardOf, cardChangeOf, projectPageOf, workersChangeOf } from './board-wire';
 import { taskDetailOf } from './task-detail-wire';
 
 // The board's reads, the agent session reads, submitTurn, and
@@ -234,31 +234,11 @@ function refusalOf(result: Answer): SubmitResult {
   return failureOf(result);
 }
 
-function failureOf({ status, body }: { readonly status: number; readonly body: unknown }): ReadFailed {
-  if (status === 401) return { kind: failureReason(body) === 'unauthenticated' ? 'unauthenticated' : 'unavailable' };
-  if (status === 403) return denialOf(requiredRoleOf(body));
-  if (status === 404) return { kind: 'not-found' };
-  return { kind: 'unavailable' };
-}
-
-function denialOf(requiredRole: string | undefined): ReadFailed {
-  return requiredRole === undefined ? { kind: 'denied' } : { kind: 'denied', requiredRole };
-}
-
 function dataOf(event: Event): unknown {
   const { data } = event as MessageEvent<unknown>;
   if (typeof data !== 'string') return undefined;
   try {
     return JSON.parse(data);
-  } catch {
-    return undefined;
-  }
-}
-
-// A network failure or an unreadable body reaches no documented status.
-async function reachable<T>(call: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await call();
   } catch {
     return undefined;
   }
