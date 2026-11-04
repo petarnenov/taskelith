@@ -23,3 +23,26 @@
 #### Scenario: Behavior change alone
 - **WHEN** an entry lists no breaking change and one behavior change, for a version whose check finds no breaking change
 - **THEN** the file is valid, and an entry with neither list fails the check
+
+### Requirement: Declared breaking changes listed
+When the head `info.version` of a document present at the merge base declares a breaking change over its merge-base version, the check SHALL fail unless the found breaking changes equal, as a set, the `breakingChanges` of the file's entry for that path and version, and SHALL name each found change the entry lacks and each listed one not found. When it finds none, no entry SHALL be required and each listed breaking change SHALL count as stale. The check SHALL not compare `behaviorChanges`.
+
+#### Scenario: Undeclared change under a minor bump
+- **WHEN** a document goes from 0.4.0 to 0.5.0 and removes a message that no entry for 0.5.0 lists
+- **THEN** the check fails and names the removed message
+
+#### Scenario: Stale listed change
+- **WHEN** the entry for 0.5.0 lists a change that the check does not find
+- **THEN** the check fails and names the listed change
+
+#### Scenario: Matching entry
+- **WHEN** the file's entry for 0.5.0 is valid, so its changes are sorted, and lists exactly the found changes, whatever order the check finds them in
+- **THEN** the check passes
+
+#### Scenario: Bump without found changes
+- **WHEN** a document goes from 0.4.0 to 0.5.0 and the check finds no breaking change
+- **THEN** the check passes without an entry for 0.5.0, and fails and names each breaking change that such an entry lists
+
+#### Scenario: Declared behavior changes
+- **WHEN** the entry for 0.5.0 lists behavior changes and no breaking change, and the check finds none
+- **THEN** the check passes and names no behavior change
