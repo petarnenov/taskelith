@@ -181,7 +181,7 @@
             }
           },
           "403": {
-            "description": "The principal lacks `project-operator` or above on the run's project; an `installation-owner` needs that role too. A principal without the role gets this denial for a missing run as well.",
+            "description": "The principal lacks `project-operator` or above on the run's project; an `installation-owner` needs that role too. Every caller gets this denial for an unknown run, like a foreign one.",
             "content": {
               "application/json": {
                 "schema": {
@@ -191,7 +191,7 @@
             }
           },
           "404": {
-            "description": "The run or the stage does not exist.",
+            "description": "The stage does not exist in a run that the caller may command; an unknown run is refused with 403.",
             "content": {
               "application/json": {
                 "schema": {

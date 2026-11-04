@@ -468,6 +468,7 @@
       "behaviorChanges": [
         "createRun: the operator bearer without project-operator on the body's project, which succeeded for any project, is refused with 403 role-required",
         "createRun: a project identifier that names no project, which was accepted, is refused with 404 not-found after the role check",
+        "submitTask: an unknown run, which answered the owner 404, is refused with 403 role-required",
         "submitTask: the operator bearer without project-operator on the run's project, which succeeded, is refused with 403 role-required"
       ]
     }

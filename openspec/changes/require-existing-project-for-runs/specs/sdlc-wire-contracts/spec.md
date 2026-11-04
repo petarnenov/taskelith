@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Run project refusals on the wire
-`sdlc.openapi.json` SHALL declare, from version 0.5.0, a 404 `Failure` on `createRun` for a project that does not exist, and 403 descriptions of `createRun`, `submitTask`, and `readAdmission` that name the required role with no G2 bridge. `breaking-changes.json` SHALL declare, as a behavior change, that the operator bearer is refused on `createRun` and `submitTask` without a project role.
+`sdlc.openapi.json` SHALL declare, from version 0.5.0, a 404 `Failure` on `createRun` for a project that does not exist, a `submitTask` 404 for an unknown stage only, and 403 descriptions of `createRun`, `submitTask`, and `readAdmission` that name the required role with no G2 bridge. `breaking-changes.json` SHALL declare, as a behavior change, that the operator bearer is refused on `createRun` and `submitTask` without a project role, and an unknown run of `submitTask` with 403.
 
 #### Scenario: Unknown project in the document
 - **WHEN** the `createRun` responses of `sdlc.openapi.json` are read
 - **THEN** they include a 404 with the `Failure` schema, and no 403 description names the G2 bridge
+
+#### Scenario: Unknown run of a submission
+- **WHEN** the `submitTask` responses of `sdlc.openapi.json` are read
+- **THEN** the 404 names only an unknown stage of a run that the caller may command, and the 403 covers an unknown run
 
 ## MODIFIED Requirements
 
