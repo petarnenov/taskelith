@@ -37,7 +37,7 @@ macOS 26.6 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). The `make verify` run before pass 1 is `verify-33b-1.log` in the session scratchpad with its exit code in `verify-33b-1.exit`, the run of the clean committed tree of the route commit; its result, reruns if any, and the identifiers of the records, route, and record commits are named here by the record commit.
+The generated part below matches the tree (`make record-check`). The `make verify` run before pass 1 is `verify-33b-1.log` in the session scratchpad with its exit code `0` in `verify-33b-1.exit`: the clean committed tree `62908d3ae7c367309b4e163e851c960506045a41` of the route commit `09c3d268`, profile full, 4,861 Node tests (4,852 passed, 9 skipped, 0 failed), the `apps/web` Vitest suite 37 files and 1,012 tests passed, no flaky rerun (the `rerun with TASKELITH_TEST_SEED` lines are the property tests' seed hints after passing runs). The records commit is `772004de`; the record commit adds the generated part, ticks task 3.2, and names itself in the branch history as `docs: record the make verify run of the build-enrollment-tokens-screen change`. `make findings ARGS="route ..."` recommends `#high` for passes 1 and 2 (tier elevated: lines, files, security) and notes that the brief names the reviewers and that an effort above standard needs governance authorization; the brief's plan at effort medium stands unless the coordinator decides otherwise.
 
 ## Fail-before
 
@@ -60,6 +60,12 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `62908d3ae7c367309b4e163e851c960506045a41`; tests 4861, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.91% branches, 98.90% functions.
+- `npm run openspec -- validate build-enrollment-tokens-screen --strict`: passed, `Change 'build-enrollment-tokens-screen' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 124 file(s); every pass summary file is valid: 104 file(s); every route file is valid: 57 file(s).`.
+- Spec diff against the merge base `3191c26217da` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
