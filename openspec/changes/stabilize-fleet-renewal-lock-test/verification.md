@@ -63,13 +63,23 @@ Runs from the worktree, as in "Diagnosis". Temporary copies were created in `pac
 | The same, 10 runs under the 8 busy loops | final test file | 10 of 10 passed, 55 tests each, 14609 to 15600 ms, load average 6.63 to 11.98; no busy loop left afterwards |
 | `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict` | final | `Change 'stabilize-fleet-renewal-lock-test' is valid` |
 | Archive probe in a scratch copy of `openspec/` | final | `+ 1 added`, archived as `2026-11-04-stabilize-fleet-renewal-lock-test`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
-VERIFY_PLACEHOLDER
+| `env -u NODE_ENV make verify`, run 1 | `be523614` | Failed outside this change: `✖ value redaction takes linear time on long runs (560.555731ms)`, the known secrets linear-time flake; tests 4880, pass 4832, fail 1, skipped 47; both tests of this change passed (300 ms and 166 ms) |
+| `env -u NODE_ENV make verify`, run 2 on the same tree | `be523614` | Passed, profile full, tree `108132285a8c7c31ab05658c9fad316bf0d30f05` (see "Generated checks"); this change's tests passed (182 ms and 270 ms) |
 
 ### Route
 
 Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `codex gpt-6-astra#medium`, pass 2 reviewer B `claude claude-fable-5-1#medium`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router agreed (P(third) 0.16, threshold 0.4). The brief assigns `codex gpt-6.1-sol#medium` as the replacement for Antigravity on `hpz600` for pass 3.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `108132285a8c7c31ab05658c9fad316bf0d30f05`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.98% branches, 98.85% functions.
+- `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict`: passed, `Change 'stabilize-fleet-renewal-lock-test' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 125 file(s); every pass summary file is valid: 105 file(s); every route file is valid: 58 file(s).`.
+- Spec diff against the merge base `a46ae37fce39` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review

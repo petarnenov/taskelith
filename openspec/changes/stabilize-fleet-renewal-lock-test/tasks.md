@@ -18,7 +18,7 @@
 
 - [x] 4.1 Fail-before runs of both barriers and their cleanup
 - [x] 4.2 Twenty runs of the whole file, ten under 8 busy-loop processes
-- [ ] 4.3 `make verify`, `make record`, and `make record-check`
+- [x] 4.3 `make verify`, `make record`, and `make record-check`
 
 ## 5. Review and archive
 
