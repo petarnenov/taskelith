@@ -12,11 +12,14 @@ import type {
   BoardStreamListener,
   Project,
   ReadResult,
+  SubmitResult,
   TaskDetail,
   TaskView,
   Turn,
   TurnPage,
+  TurnSubmission,
 } from '../src/board/board';
+import { createTurnRecordStore, type TurnRecordStore } from '../src/agent-session/turn-records';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
 import type { LoginOutcome, LogoutOutcome, Operator, SessionGateway, SessionRead } from '../src/session/session';
@@ -217,6 +220,14 @@ export class FakeBoardGateway implements BoardGateway {
     }),
   );
 
+  // A submission is recorded as the next turn after the fixture page.
+  readonly submitTurn = vi.fn(
+    async (_projectId: string, _sessionId: string, submission: TurnSubmission): Promise<SubmitResult> => ({
+      kind: 'recorded',
+      turn: turn({ turnId: 'turn-3', position: 3, text: submission.text, state: 'queued' }),
+    }),
+  );
+
   readonly openEvents = (projectId: string, after: string, listener: BoardStreamListener) => {
     let closed = false;
     this.streams.push({
@@ -248,8 +259,9 @@ export function renderApp(
   gateway: SessionGateway = fakeGateway(AUTHENTICATED),
   clock = new ManualClock(),
   boardGateway: BoardGateway = new FakeBoardGateway(),
+  turnRecords: TurnRecordStore = createTurnRecordStore(),
 ) {
   const router = createMemoryRouter(appRoutes(), { basename: APP_BASENAME, initialEntries: [path] });
-  const view = render(<App router={router} gateway={gateway} board={boardGateway} clock={clock} />);
-  return { ...view, router, gateway, clock, boardGateway };
+  const view = render(<App router={router} gateway={gateway} board={boardGateway} clock={clock} turnRecords={turnRecords} />);
+  return { ...view, router, gateway, clock, boardGateway, turnRecords };
 }
