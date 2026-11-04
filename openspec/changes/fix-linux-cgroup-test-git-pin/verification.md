@@ -51,7 +51,8 @@ The logs stay outside the repository, in Zaki's session scratchpad `/tmp/claude-
 | `make verify-linux-g2-scenarios` | the same tree (`flcgp-after-g2.log`) | `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, `not applicable off macOS: only a macOS adopter leaves a cancel unapplied`; seeds `110679307` (cancellation races), `4283259331` (partitions), and `3067852930` (stale generations) |
 | `env -u NODE_ENV make verify-linux-crash-windows` | `f16004f2`, tree `8f22534b`, clean (`flcgp/fix1-cw.log`) | `exit 0`; `tests 29, suites 1, pass 29, fail 0, cancelled 0, skipped 0`, `duration_ms 66588`; no `git-client-mismatch` in the log |
 | `env -u NODE_ENV make verify-linux-g2-scenarios` | the same tree (`flcgp/fix1-g2.log`) | `exit 0`; `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, as above; seeds `2317296863`, `2097202248`, and `114639551` |
-| `env -u NODE_ENV make verify` | `71d00e13` (tree `5d33f134`) | Passed on the first run, no known flake, profile full, stamp written; tests 4815, pass 4768, fail 0, skipped 47 (totals and coverage in "Generated checks"); both tests of `test/git-package-pin.test.ts` passed |
+| `env -u NODE_ENV make verify` | `71d00e13` (tree `5d33f134`) | Passed on the first run, no known flake, profile full, stamp written; tests 4815, pass 4768, fail 0, skipped 47 (the record before pass 1: all files 99.42% lines, 92.92% branches, 98.86% functions); both tests of `test/git-package-pin.test.ts` passed |
+| `env -u NODE_ENV make verify` | `d52c06fb` (tree `e3661192`), after the pass 1 fixes (`flcgp/fix1-verify-1.log`; `make record` read a copy without the appended `exit 0`) | Passed on the first run, no known flake, profile full, stamp written; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.84% functions; the eight tests of `test/git-package-pin.test.ts` passed |
 
 ### Route
 
@@ -64,11 +65,15 @@ The pass 1 fixes changed the diff, a spec delta and a new test, so `ab5df31e` dr
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `5d33f134ef3aa51380ecb3a694902ca3e2156f46`; tests 4815, pass 4768, fail 0, skipped 47; all files 99.42% lines, 92.92% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `e36611921170e722b107484c3c8c2a97450875b3`; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.84% functions.
 - `npm run openspec -- validate fix-linux-cgroup-test-git-pin --strict`: passed, `Change 'fix-linux-cgroup-test-git-pin' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 118 file(s); every pass summary file is valid: 98 file(s); every route file is valid: 51 file(s).`.
 - Spec diff against the merge base `163fe9e56e43` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a5c4-ff35-7f93-abf8-9d51d745fdd8` | 0 | 0 | 1 | 1 |
 <!-- make record: end -->
 
 ## Independent review
