@@ -7,6 +7,10 @@ The control plane SHALL serve `listWorkers`, `listEnrollmentTokens`, `issueEnrol
 - **WHEN** an `installation-owner` issues or rotates a token
 - **THEN** the 201 carries the token's record and its secret with `Cache-Control: no-store`, and no list, failure, or log record carries the secret
 
+#### Scenario: Secret-shaped host name
+- **WHEN** a worker's host name or a token constraint's host name has a known secret shape
+- **THEN** every answer carries it redacted, the stored constraint still matches the host, and only the `secret` of a 201 is kept
+
 #### Scenario: Principal without the owner role
 - **WHEN** a principal that is no `installation-owner` calls any of the five operations
 - **THEN** the answer is 403 `role-required` naming `installation-owner`, and nothing is recorded
