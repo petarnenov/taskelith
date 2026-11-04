@@ -68,6 +68,7 @@ import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 import { startAgentSessionServices } from './session-timeline.js';
 import { readWebAppDirectory } from './web-app-directory.js';
+import { projectDirectory } from './project-directory.js';
 import { bindableProjects } from './repository-bindings.js';
 import { startScmIntegrationServices } from './scm-integrations.js';
 
@@ -198,11 +199,11 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     throttle: new LoginThrottle({ clock, sleep: (milliseconds) => sleep(milliseconds), ...(settings.loginThrottle === undefined ? {} : { settings: settings.loginThrottle }) }),
     ...(settings.sessionLifetime === undefined ? {} : { lifetime: settings.sessionLifetime }),
   });
-  const runs = new RunService(database, workflows);
+  const projectSetup = new ProjectSetupService({ store: access.store, random: access.secrets, clock });
+  const runs = new RunService(database, workflows, projectDirectory(projectSetup));
   const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
   if (!agentSessions.ok) return agentSessions;
   const authorization = new AuthorizationService(access.store);
-  const projectSetup = new ProjectSetupService({ store: access.store, random: access.secrets, clock });
   const eventLog = new PostgresUiEventLog(database);
   const hub = new EventStreamHub({ log: eventLog, scheduler: NODE_SCHEDULER, clock, logger });
   const notifications = new PostgresUiEventNotifications(settings.postgres, { logger });
