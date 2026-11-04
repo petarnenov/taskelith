@@ -111,6 +111,8 @@ Per-file coverage of the changed `dist` files in `make verify` run 3 (lines, bra
 
 `route.json` (rule version 5) at `0cc99e5b`: elevated; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.75). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers. The typecheck fix after it changed the diff, so `route.json` was deleted (`cced19bf`) and routed again at `cced19bf` and committed unedited (`91352dd7`): again elevated, rule version 5, the same reviewers; the shadow router `jev-1.14.0` timed out on that run, so the rule decided alone, as the route records.
 
+The pass 1 fixes changed the diff again, so `route.json` was deleted and routed again at `f602cb26` and committed unedited (`24ecd210`): elevated (lines, files, security, contracts), rule version 5, the same reviewer table with effort high for passes 1 and 2; the shadow router `jev-1.14.0` answered elevated (P(third) 0.75) and agrees with the rule. The authorized medium applies (policy version 11).
+
 ## Deviations
 
 1. `afterOf` of `project-api.ts` is exported and reused by `FleetApi`; `scm-integration-api.ts` keeps its own copy, named below.
@@ -123,7 +125,7 @@ Per-file coverage of the changed `dist` files in `make verify` run 3 (lines, bra
 - `afterOf` is duplicated in `scm-integration-api.ts`; a later change can import the exported one.
 - The reachability and capacity fields of the workers view stay as the contract declares them; nothing in this change reads them.
 - The pre-existing assertion of "a worker enrolls over the API with its token once" (`control-plane-api.integration.test.ts`) prints the enrollment body, which carries worker credentials, on failure; it predates this change (pass 1, finding 8 asked only for the new assertions).
-- `printableWorkerAdmission`, which the admin CLI prints, re-redacts the self-check details but not the host name; the API redacts it in `FleetApi` (pass 1, finding 2). The CLI's `show-workers` output could apply the same.
+- `printableWorkerAdmission`, which the admin CLI prints, re-redacts the self-check details but not the host name; the API redacts it in `FleetApi` (pass 1, finding 2). The CLI's `worker-admission` output could apply the same.
 
 <!-- make record: begin -->
 ## Generated checks
