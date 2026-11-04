@@ -109,7 +109,7 @@ async function fixture(t: TestContext, workers?: WorkerAdmissionView) {
   const call = (method: string, path: string, headers: RequestHeaders = {}, body?: unknown) => fetched(base, method, path, headers, body);
   const issued = async (constraints: Record<string, string> = {}, headers: RequestHeaders = BEARER): Promise<{ tokenId: string; secret: string }> => {
     const answer = await call('POST', '/enrollment-tokens', headers, constraints);
-    assert.equal(answer.status, 201, answer.text);
+    assert.equal(answer.status, 201, 'the fixture token is issued');
     const { token, secret } = answer.body as { token: { tokenId: string }; secret: string };
     return { tokenId: token.tokenId, secret };
   };
@@ -169,7 +169,7 @@ test('the workers view lists the enrolled workers in identifier order with every
   const failed = { checkId: 'linux-containment', outcome: 'failed', details: [`probe saw ${secret}`, 'no cgroup.kill'] } as const;
   value(await admissions.record(first, decideWorkerAdmission([failed], 'linux'), 1 as never, clock.now()));
   const view = await call('GET', '/workers', OWNER);
-  assert.equal(view.status, 200, view.text);
+  assert.equal(view.status, 200, 'the view is answered');
   assert.ok(checkHttpSchema('WorkersView', view.body).ok);
   const workers = view.body.workers as Array<{ workerId: string; admission: string; results: Array<{ details: string[] }> }>;
   assert.deepEqual([view.body.asOf, workers.map((worker) => [worker.workerId, worker.admission])], [clock.now(), [[first, 'self-check-failed'], [second, 'awaiting-self-check']]]);
@@ -189,9 +189,9 @@ test('the workers view answers 503 with no partial data when a source cannot be 
 test('an issued token is revealed once in a 201 with no-store, and is listed as pending without its secret', async (t) => {
   const { call, clock, issued, OWNER } = await fixture(t);
   const answer = await call('POST', '/enrollment-tokens', OWNER, { platform: 'linux', hostname: 'build-1' });
-  assert.equal(answer.status, 201, answer.text);
+  assert.equal(answer.status, 201, 'the token is issued');
   assert.equal(answer.headers.get('cache-control'), 'no-store');
-  assert.ok(checkHttpSchema('IssuedEnrollmentToken', answer.body).ok, answer.text);
+  assert.ok(checkHttpSchema('IssuedEnrollmentToken', answer.body).ok, 'the issued token keeps its schema');
   const { token, secret } = answer.body as { token: Record<string, unknown>; secret: string };
   assert.match(secret, /^tken_[A-Za-z0-9_-]{43}$/);
   assert.match(String(token.tokenId), /^e[0-9a-f]{32}$/);
@@ -199,7 +199,7 @@ test('an issued token is revealed once in a 201 with no-store, and is listed as 
   const operatorIssued = await issued({ architecture: 'arm64' }, BEARER);
   assert.notEqual(operatorIssued.tokenId, token.tokenId);
   const listed = await call('GET', '/enrollment-tokens', OWNER);
-  assert.equal(listed.status, 200, listed.text);
+  assert.equal(listed.status, 200, 'the tokens are listed');
   assert.ok(checkHttpSchema('EnrollmentTokenPage', listed.body).ok);
   const tokens = listed.body.tokens as Array<{ tokenId: string }>;
   assert.deepEqual(tokens.map((entry) => entry.tokenId).sort(), [String(token.tokenId), operatorIssued.tokenId].sort());
@@ -258,12 +258,12 @@ test('a rotation answers 201 with a new token of the same constraints and TTL, a
   const old = await issued({ architecture: 'arm64' });
   clock.advance(5 * 60_000);
   const rotated = await call('POST', `/enrollment-tokens/${old.tokenId}/rotation`, OWNER);
-  assert.equal(rotated.status, 201, rotated.text);
+  assert.equal(rotated.status, 201, 'the token is rotated');
   assert.equal(rotated.headers.get('cache-control'), 'no-store');
-  assert.ok(checkHttpSchema('IssuedEnrollmentToken', rotated.body).ok, rotated.text);
+  assert.ok(checkHttpSchema('IssuedEnrollmentToken', rotated.body).ok, 'the rotated token keeps its schema');
   const { token, secret } = rotated.body as { token: Record<string, unknown>; secret: string };
   assert.notEqual(token.tokenId, old.tokenId);
-  assert.notEqual(secret, old.secret);
+  assert.ok(secret !== old.secret, 'the replacement has its own secret');
   assert.deepEqual(token, { tokenId: token.tokenId, issuedAt: clock.now(), expiresAt: later(clock.now(), TTL), constraints: { architecture: 'arm64' } });
   const listed = await call('GET', '/enrollment-tokens', OWNER);
   assert.deepEqual((listed.body.tokens as Array<{ tokenId: string }>).map((entry) => entry.tokenId), [token.tokenId]);
@@ -293,7 +293,8 @@ test('a token secret reaches only the 201 bodies of issue and rotate: never a li
     await call('POST', '/enrollment-tokens', BEARER, { platform: 'windows' }),
   ];
   assert.deepEqual(others.map((answer) => answer.status), [200, 200, 422, 422, 422, 403, 400]);
-  for (const answer of others) assert.ok(!answer.text.includes('tken_'), answer.text);
+  // A fixed message: the answer itself is what would carry the secret.
+  others.forEach((answer, index) => assert.ok(!answer.text.includes('tken_'), `no secret in answer ${index}, status ${answer.status}`));
   const logged = JSON.stringify(sink.records);
   assert.ok(sink.records.some((record) => record.event === 'api.request'), 'the request log was captured');
   assert.ok(!logged.includes('tken_'), 'no secret in the request log');

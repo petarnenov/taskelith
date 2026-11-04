@@ -848,17 +848,17 @@ describe('enrollment and quarantine', () => {
 
   test('the owner lists the workers and issues, lists, rotates, and revokes enrollment tokens over the API', async () => {
     const workers = await call('GET', '/workers', { bearer: operator });
-    assert.equal(workers.status, 200, JSON.stringify(workers.body));
+    assert.equal(workers.status, 200, 'the workers view is answered');
     assert.ok(checkHttpSchema('WorkersView', workers.body).ok);
     assert.ok((workers.body.workers as unknown[]).length >= 1, 'the enrolled workers are listed');
     const issued = await call('POST', '/enrollment-tokens', { bearer: operator, body: { platform: 'linux' } });
-    assert.equal(issued.status, 201, JSON.stringify(issued.body));
+    assert.equal(issued.status, 201, 'the token is issued');
     assert.ok(checkHttpSchema('IssuedEnrollmentToken', issued.body).ok);
     const token = issued.body.token as { tokenId: string };
     const listed = await call('GET', '/enrollment-tokens', { bearer: operator });
     assert.ok((listed.body.tokens as Array<{ tokenId: string }>).some((entry) => entry.tokenId === token.tokenId));
     const rotated = await call('POST', `/enrollment-tokens/${token.tokenId}/rotation`, { bearer: operator });
-    assert.equal(rotated.status, 201, JSON.stringify(rotated.body));
+    assert.equal(rotated.status, 201, 'the token is rotated');
     const replacement = rotated.body.token as { tokenId: string };
     const refused = await call('DELETE', `/enrollment-tokens/${token.tokenId}`, { bearer: operator });
     assert.deepEqual([refused.status, refused.body.details], [422, { reason: 'token-rotated', replacementTokenId: replacement.tokenId }]);
