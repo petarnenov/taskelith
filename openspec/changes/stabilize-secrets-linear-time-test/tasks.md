@@ -28,3 +28,14 @@
 - [x] 5.3 Independent review pass 2
 - [x] 5.4 Pass 2 fix round: an options object, the Node.js requirement, the cap wording, the suite runtime, and the boundary exponent
 - [x] 5.5 Archive the change
+
+## 6. Integration failure and product fix
+
+- [x] 6.1 Reopen the change by reverting its archive commit
+- [x] 6.2 Redact a text whole when a rule throws a `RangeError` in `redactWith`, rethrowing any other error
+- [x] 6.3 Fail-before tests through `redactSecrets`, `redactText`, `Logger`, and `redactFailure`, and a rethrow test
+- [x] 6.4 Cap the linear-time runs at 2^22 characters, with a fail-before test of the cap
+- [x] 6.5 Modify "Logs without secrets" and add "Redaction of text of any length" in `execution-observability`
+- [x] 6.6 Load runs, `make verify`, `make record`, and `make record-check`
+- [ ] 6.7 Independent review pass 3
+- [ ] 6.8 Archive the change
