@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith SDLC API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
   },
   "paths": {
@@ -57,11 +57,21 @@
             }
           },
           "403": {
-            "description": "The principal lacks `project-operator` or above on the project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "description": "The principal lacks `project-operator` or above on the project; an `installation-owner` needs that role too. A principal without the role gets this denial for a missing project as well.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccessDenial"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No project has the identifier the body names. The role check comes first, so only a principal that holds a role on that identifier gets this answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -171,7 +181,7 @@
             }
           },
           "403": {
-            "description": "The principal lacks `project-operator` or above on the run's project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "description": "The principal lacks `project-operator` or above on the run's project; an `installation-owner` needs that role too. A principal without the role gets this denial for a missing run as well.",
             "content": {
               "application/json": {
                 "schema": {
@@ -294,7 +304,7 @@
             }
           },
           "403": {
-            "description": "The principal lacks `project-viewer` or above on the run's project. The temporary G2 bridge passes the installation-owner, the only principal the operator credential authenticates, so no denial is answered until it is retired.",
+            "description": "The principal lacks `project-viewer` or above on the run's project and is not an `installation-owner`. A principal without the role gets this denial for a missing run as well.",
             "content": {
               "application/json": {
                 "schema": {

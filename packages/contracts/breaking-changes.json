@@ -459,6 +459,17 @@
         "edit /operations/sendSdlcEvent/messages/7/payload/description",
         "edit /operations/sendSdlcEvent/messages/7/summary"
       ]
+    },
+    {
+      "path": "packages/contracts/documents/sdlc.openapi.json",
+      "version": "0.5.0",
+      "reason": "G3 sub-change 11c (require-existing-project-for-runs): the temporary G2 bridge is retired and createRun requires an existing project (coordinator, Q1, Q2, Q9), so the operator bearer, which authenticates the installation-owner, is refused without a project role; the documents change only descriptions and add a 404, which the check does not report; listed against aca63889.",
+      "breakingChanges": [],
+      "behaviorChanges": [
+        "createRun: the operator bearer without project-operator on the body's project, which succeeded for any project, is refused with 403 role-required",
+        "createRun: a project identifier that names no project, which was accepted, is refused with 404 not-found after the role check",
+        "submitTask: the operator bearer without project-operator on the run's project, which succeeded, is refused with 403 role-required"
+      ]
     }
   ]
 }
