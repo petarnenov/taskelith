@@ -7,7 +7,7 @@ import {
   PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
 } from './g2-scenarios/scenario-run.ts';
 import { REDELIVERY_BUDGET_MILLISECONDS, SCENARIO_LIMITS, ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
-import { ScenarioWorker } from './g2-scenarios/scenario-worker.ts';
+import { HELD_RUN, ScenarioWorker, type ScriptedRun } from './g2-scenarios/scenario-worker.ts';
 import { assertExitedOnce, journalOf, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
@@ -30,9 +30,11 @@ async function assertOneIntentPerAssignment(installation: ScenarioInstallation, 
 describe('worker to NATS', SCENARIO_HOST, () => {
   const proxied = integrationEndpoint('TASKELITH_NATS_PROXY_URL');
 
-  async function connectedWorker(installation: ScenarioInstallation, name: string, random: SeededRandom): Promise<ScenarioWorker> {
+  async function connectedWorker(
+    installation: ScenarioInstallation, name: string, random: SeededRandom, runMilliseconds: ScriptedRun = 2_500,
+  ): Promise<ScenarioWorker> {
     const worker = new ScenarioWorker(installation, {
-      name, random, nats: proxied, runMilliseconds: 2_500, enrollmentToken: await installation.enrollmentToken(),
+      name, random, nats: proxied, runMilliseconds, enrollmentToken: await installation.enrollmentToken(),
     });
     await worker.start();
     await waitFor(() => reachable(installation, worker.workerId), 20_000, 'the worker is reachable');
@@ -97,17 +99,24 @@ describe('worker to NATS', SCENARIO_HOST, () => {
     const healAfterExit = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-worker-nats-while-running', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');
-      const worker = await connectedWorker(installation, 'nats-while-running', random);
+      // Held until the worker is offline, so the exit cannot be published
+      // before the cut, however late the control plane records the start.
+      const worker = await connectedWorker(installation, 'nats-while-running', random, HELD_RUN);
       try {
         await installation.submitTask('task-nats-running');
         await waitFor(async () => (await startedExecutions(installation, 'task-nats-running')) === 1, 20_000, 'the start is recorded');
         await nats.disconnect();
         await waitFor(() => worker.logs.records.some(({ event }) => event === 'worker.contact.offline'), 20_000, 'the worker is offline');
+        assert.equal(journaledState(worker), 'started', 'the process runs through the cut');
         if (healAfterExit) {
+          worker.releaseScriptedProcesses();
           await waitFor(() => journaledState(worker) === 'exited', 20_000, 'the exit is journaled offline');
           assert.equal((await installation.result('task-nats-running')).state, 'pending', 'the exit waits in the local outbox');
+          await nats.heal();
+        } else {
+          await nats.heal();
+          worker.releaseScriptedProcesses();
         }
-        await nats.heal();
         const executed = await assertExitedOnce(installation, 'task-nats-running');
         const duplicates = installation.logs.records.filter(({ event }) => event === 'execution.observation.duplicate').length;
         return `healed ${healAfterExit ? 'after' : 'before'} the exit; ${executed.executions} execution; ${duplicates} duplicate observations`;
