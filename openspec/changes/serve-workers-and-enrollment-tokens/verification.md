@@ -59,11 +59,12 @@ Each mutation was restored and its `dist` rebuilt; `git status` showed no change
 | Check | Revision | Result |
 | --- | --- | --- |
 | Focused fleet, PostgreSQL, route, and composition runs | `9f649f84` | Listed under "Fail-before": all pass |
-| `make verify` | see "Generated checks" | recorded below |
+| `make verify` run 1 (`verify-33-1-1.log`) | `0cc99e5b`, clean | Failed in `check:boundaries` before any test: `tsc -p tsconfig.check.json` rejected the five `ApiServices` fixtures of `api-server.test.ts` without `fleet` and two result types in `enrollment-token-service.test.ts`; fixed in the `test:` commit after `0cc99e5b`, which the route of the next commit covers |
+| `make verify` run 2 (`verify-33-1-2.log`) | the routed commit, clean | recorded below |
 
 ### Route
 
-Recorded after `make findings ARGS="route --change serve-workers-and-enrollment-tokens"`.
+`route.json` (rule version 5) at `0cc99e5b`: elevated; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.75). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers. The typecheck fix after it changed the diff, so `route.json` was deleted and routed again at the fix commit, unedited; see the commit list under "Revision".
 
 ## Deviations
 
