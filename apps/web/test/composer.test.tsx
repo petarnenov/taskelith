@@ -606,7 +606,7 @@ describe('a submission refused for its token', () => {
     expect(alert.textContent).toContain('Another sign-in replaced the session');
     expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
     expect(storedRecords()).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Account menu' }).textContent).toContain('someone-else');
+    expect(screen.getByRole('button', { name: 'Account menu' }).textContent).toBe('SO');
   });
 
   it('sends nothing more when the composer left before the session was read again, and keeps the key', async () => {

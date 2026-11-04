@@ -22,6 +22,9 @@ export interface Session {
   // Reads the session again, as after a request refused for a stale CSRF
   // token, and answers what it read; a session that ended shows the sign-in.
   readonly refresh: () => Promise<SessionRead>;
+  // Which signed-in session shows, read at call time: a new number for each
+  // sign-in or operator, undefined while none is signed in.
+  readonly signedInGeneration: () => number | undefined;
 }
 
 // The session is read again this long after its end, so that a client
@@ -44,7 +47,7 @@ interface SessionProviderProps {
 
 export function SessionProvider({ gateway, clock, children }: SessionProviderProps) {
   const settled = useMemo(() => settledGateway(gateway), [gateway]);
-  const { view, currentView, show, sinceNow } = useSessionView();
+  const { view, currentView, show, sinceNow, signedInGeneration } = useSessionView();
   const [checks, setChecks] = useState(0);
   useInitialCheck(settled, checks, sinceNow);
   useExpiryCheck(settled, clock, view, sinceNow);
@@ -98,8 +101,8 @@ export function SessionProvider({ gateway, clock, children }: SessionProviderPro
   }, [settled, sinceNow]);
 
   const session = useMemo(
-    () => ({ view, retry, logIn, logOut, expiryOfRequest, refresh }),
-    [view, retry, logIn, logOut, expiryOfRequest, refresh],
+    () => ({ view, retry, logIn, logOut, expiryOfRequest, refresh, signedInGeneration }),
+    [view, retry, logIn, logOut, expiryOfRequest, refresh, signedInGeneration],
   );
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
@@ -115,12 +118,15 @@ function useSessionView() {
   const [view, setView] = useState<SessionView>({ status: 'checking' });
   const latest = useRef(view);
   const changes = useRef(0);
+  const signIns = useRef(0);
   const currentView = useCallback(() => latest.current, []);
   const show = useCallback((next: SessionView) => {
     changes.current += 1;
+    if (isNewSignIn(latest.current, next)) signIns.current += 1;
     latest.current = next;
     setView(next);
   }, []);
+  const signedInGeneration = useCallback(() => (latest.current.status === 'signed-in' ? signIns.current : undefined), []);
   const sinceNow = useCallback((): ShowIfUnchanged => {
     const sentAt = changes.current;
     return (next) => {
@@ -129,7 +135,14 @@ function useSessionView() {
       return true;
     };
   }, [show]);
-  return { view, currentView, show, sinceNow };
+  return { view, currentView, show, sinceNow, signedInGeneration };
+}
+
+// A signed-in view after none, or with another operator, is a new sign-in;
+// the same operator read again is the same session.
+function isNewSignIn(previous: SessionView, next: SessionView): boolean {
+  if (next.status !== 'signed-in') return false;
+  return previous.status !== 'signed-in' || previous.operator.loginName !== next.operator.loginName;
 }
 
 function useInitialCheck(gateway: SessionGateway, checks: number, sinceNow: () => ShowIfUnchanged): void {

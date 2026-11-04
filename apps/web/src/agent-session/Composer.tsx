@@ -221,6 +221,7 @@ const FAILURE_TEXTS: Readonly<Record<RetryableFailure, string>> = {
   unavailable: 'The control plane did not answer, so whether it recorded the turn is unknown.',
   unauthenticated: 'The control plane answered as to a request without a session.',
   'token-not-renewed': 'The control plane refused the request’s token, and the session could not be read again to renew it.',
+  'session-changed': 'Another sign-in replaced the session before the turn could be sent again, so it was not.',
 };
 
 const REFUSAL_TEXTS: Readonly<Record<RefusedState['reason'], string>> = {

@@ -31,7 +31,7 @@ type Answer = Exclude<Outcome, { kind: 'retry-with-new-token' }>;
 // (decision Q2), kept in the records until the control plane settles it.
 export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions): Composer {
   const { gateway, clock } = useBoardServices();
-  const { refresh } = useSession();
+  const { refresh, signedInGeneration } = useSession();
   const records = useTurnRecords();
   const [submissions, setSubmissions] = useState<readonly Submission[]>(() =>
     restoredSubmissions(records.list(projectId, sessionId)),
@@ -65,10 +65,11 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
     [records, projectId, sessionId],
   );
 
-  // The answer to the record: the session read again once after a CSRF
-  // refusal, and the key sent again only with a renewed token (decision Q3).
+  // The answer to the record; after a CSRF refusal the session is read again
+  // once and the key sent again with the renewed token under the same sign-in.
   const answerOf = useCallback(
     async (record: TurnRecord): Promise<Answer | undefined> => {
+      const sentUnder = signedInGeneration();
       let current = record;
       for (;;) {
         const { key, text, tokenRefreshed = false } = current;
@@ -77,10 +78,11 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
         const renewed = await refresh();
         if (renewed.kind === 'unavailable') return { kind: 'retryable', failure: 'token-not-renewed' };
         if (renewed.kind === 'anonymous') return undefined;
+        if (!mounted.current || signedInGeneration() !== sentUnder) return { kind: 'retryable', failure: 'session-changed' };
         current = spend(current);
       }
     },
-    [gateway, projectId, sessionId, refresh, spend],
+    [gateway, projectId, sessionId, refresh, signedInGeneration, spend],
   );
 
   // The record's fate follows the answer whether or not the page still
