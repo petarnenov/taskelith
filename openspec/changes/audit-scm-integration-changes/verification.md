@@ -84,6 +84,7 @@ Each control applied one mutation to the committed implementation, rebuilt, ran 
 
 | Check | Revision | Result |
 | --- | --- | --- |
+| `make verify` (run 8, `verify-11b2-p3.log`, after the pass 3 fixes) | `3a4a04c7`, tree `3c949228`, clean; recorded by the commit after it | Passed, profile full, stamp written: tests 4769, suites 50, pass 4760, fail 0, skipped 9; all files 99.45 % lines, 92.83 % branches, 98.87 % functions. No rerun |
 | `make verify` (run 7, `verify-11b2-p2d.log`, after `make setup`) | `7657c268`, tree `f5d0453f`, clean; recorded by `7a0610b2` | Passed, profile full, stamp written: tests 4769, suites 50, pass 4760, fail 0, skipped 9; all files 99.45 % lines, 92.83 % branches, 98.87 % functions; the tree that pass 3 reviewed, apart from the records |
 | `make verify` (run 6, `verify-11b2-p2c.log`, after the fixed plugin failure messages) | `7657c268`, tree `f5d0453f`, clean | Failed only in `verify:dependencies`: `node_modules` predated the dev merge's lockfile (`@octokit/plugin-paginate-rest` 15.0.0 for 16.0.0); its tests 4769, pass 4760, fail 0, skipped 9. `make setup` reinstalled the dependencies (`60b0c409`), and run 7 passed |
 | `make verify` (run 5, `verify-11b2-merge.log`, after the dev merge and the webhook plugin boundary) | `bba93298`, tree `f13c06b5`, clean | Failed only in the timing test `test/installation-script.test.ts:570` (ended after 9.116 s, before 10 s): tests 4765, pass 4755, fail 1, skipped 9. Not rerun on that tree, because the fixed plugin failure messages followed; runs 6 and 7 check the later tree |
@@ -96,14 +97,14 @@ Each control applied one mutation to the committed implementation, rebuilt, ran 
 
 ### Route
 
-Route (`route.json`, rule version 5): elevated (lines, files, capabilities, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.71; 0.73 after the decisions before pass 1; 0.74 in `route.json` of `7657c268`, against `fa3fbce7` with 1861 lines and 38 files changed; each time with the same tier and reviewers). Reviews run at effort medium (owner decision 2026-11-02), although `route.json` recommends high for passes 1 and 2. The coordinator assigns the reviewers.
+Route (`route.json`, rule version 5): elevated (lines, files, capabilities, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.71; 0.73 after the decisions before pass 1; 0.74 in `route.json` of `7657c268`, against `fa3fbce7` with 1861 lines and 38 files changed; 0.75 in that of `3a4a04c7` after the pass 3 fixes, with 1868 lines and 39 files; each time with the same tier and reviewers). Reviews run at effort medium (owner decision 2026-11-02), although `route.json` recommends high for passes 1 and 2. The coordinator assigns the reviewers.
 
 <!-- make record: begin -->
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f5d0453fe47e3818bdc59b6cbea55af979ec3808`; tests 4769, pass 4760, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `3c949228f94d1fe9436a5ee125cad1b0906550ff`; tests 4769, pass 4760, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
 - `npm run openspec -- validate audit-scm-integration-changes --strict`: passed, `Change 'audit-scm-integration-changes' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 114 file(s); every pass summary file is valid: 94 file(s); every route file is valid: 47 file(s).`.
 - Spec diff against the merge base `fa3fbce73c99` with `origin/dev`: no change under `openspec/specs`.
@@ -113,6 +114,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a3ed-9608-71b3-8fe3-6fce07b0ddca` | 0 | 1 | 2 | 1 |
 | 2 | B | `claude claude-fable-5-1#medium` | `62bc5f56-1273-4480-937c-f72e50b41d3c` | 0 | 0 | 1 | 8 |
+| 3 | A | `agy gemini-4-argon-medium#medium` | `fcf0fadc-08a7-4373-aac2-fc895c27fa36` | 0 | 0 | 1 | 1 |
 <!-- make record: end -->
 
 ## Review
@@ -174,8 +176,9 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 Pass 3 reviewed `7a0610b2`; every commit after it is unreviewed:
 
 - `1718a2f8` M1: the two MODIFIED `scm-port` requirements and contract section 6.1.
-- The commit after `1718a2f8`: the pass 3 records (`passes.jsonl`, `findings.jsonl`) and L1 in this record.
-- The route, `make record`, and archive commits that follow, which change only records.
+- `36b3bd2e`: the pass 3 records (`passes.jsonl`, `findings.jsonl`) and L1 in this record.
+- `3a4a04c7`: `route.json` deleted and written again, unedited (elevated, P(third) 0.75, 1868 lines and 39 files changed), the tree of run 8.
+- The `make record` commit of run 8 and the archive commit, which change only records and apply the deltas.
 
 Architect check by the coordinator (Niki): _pending_
 
