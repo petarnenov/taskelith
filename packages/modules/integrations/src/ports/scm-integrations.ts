@@ -1,6 +1,7 @@
 import type { Result } from '@taskelith/kernel';
 import type { NormalizedOrigin } from '../domain/normalized-origin.js';
 import type { ScmIntegration, ScmIntegrationId, ScmSecrets } from '../domain/scm-integration.js';
+import type { ScmIntegrationAuditEntry } from './scm-integration-audit.js';
 import type { SourceControlPlugin } from './source-control-plugin.js';
 
 // A change by compare-and-set on `expectedRevision`: settings replace every
@@ -37,18 +38,20 @@ export function changedConfiguration(current: StoredScmConfiguration, change: Sc
 }
 
 // The integrations with their secrets, which only `configurationOf` opens.
-// Pages are in code-unit order of the identifier, after `after`.
+// Each write appends its audit row in its own transaction.
 export interface ScmIntegrations {
-  add(integration: ScmIntegration, secrets: ScmSecrets): Promise<Result<ScmIntegration>>;
+  add(integration: ScmIntegration, secrets: ScmSecrets, audit: ScmIntegrationAuditEntry): Promise<Result<ScmIntegration>>;
   get(integrationId: ScmIntegrationId): Promise<Result<ScmIntegration | undefined>>;
+  // Pages are in code-unit order of the identifier, after `after`.
   page(after: string | undefined, limit: number): Promise<Result<readonly ScmIntegration[]>>;
   // `not-found` for an unknown integration; `conflict` when the revision
   // moved, so of two concurrent changes exactly one wins.
-  update(integrationId: ScmIntegrationId, change: ScmIntegrationChange): Promise<Result<ScmIntegration>>;
+  update(integrationId: ScmIntegrationId, change: ScmIntegrationChange, audit: ScmIntegrationAuditEntry): Promise<Result<ScmIntegration>>;
   configurationOf(integrationId: ScmIntegrationId): Promise<Result<StoredScmConfiguration | undefined>>;
 }
 
-// The SCM plugins the composition registered, by manifest identifier.
+// The SCM plugins the composition registered, by manifest identifier read
+// at registration, so that a lookup never runs plugin code.
 export interface ScmPlugins {
   pluginOf(pluginId: string): SourceControlPlugin | undefined;
 }
@@ -65,14 +68,21 @@ export interface UnverifiableIntegrations {
   unverifiable(integrationId: ScmIntegrationId, revision: number, reason: UnverifiableReason): void;
 }
 
-export type ScmPluginOperation = 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+// `descriptor`: reading the plugin's identifier or secret names.
+export type ScmPluginOperation =
+  | 'descriptor' | 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities'
+  | 'verifyWebhookDelivery' | 'isEventless';
+
+// The defect's plugin when the plugin's own identifier cannot be read.
+export const UNREADABLE_PLUGIN_ID = '(unreadable)';
 
 export type ScmPluginDefectKind =
   | 'threw' | 'malformed-envelope' | 'malformed-value' | 'foreign-repository' | 'unnormalizable-origin' | 'unexpected-failure-code';
 
 // A plugin answer outside the source control contract, by its kind only.
+// No integration for the webhook decoy, which serves none.
 export interface ScmPluginDefect {
-  readonly integrationId: ScmIntegrationId;
+  readonly integrationId: ScmIntegrationId | undefined;
   readonly pluginId: string;
   readonly operation: ScmPluginOperation;
   readonly kind: ScmPluginDefectKind;

@@ -3,6 +3,7 @@ import { expectCode, expectOneWinner, expectRead, expectSame, type ConformanceCa
 import { normalizeOrigin } from '../domain/normalized-origin.js';
 import { ScmSecrets, type ScmIntegration, type ScmIntegrationId } from '../domain/scm-integration.js';
 import type { BindingPut, RepositoryBinding, RepositoryBindings, RepositoryBindingValues } from './repository-bindings.js';
+import { auditEntry } from './scm-integration-audit-conformance.js';
 import type { ScmIntegrations } from './scm-integrations.js';
 
 // A store under test with the integrations it checks against and two
@@ -42,7 +43,7 @@ async function added(target: RepositoryBindingsTarget, digit: string): Promise<S
     integrationId: integrationId(digit), pluginId: 'scm-example', label: 'Example', allowedOrigin: must(normalizeOrigin('https://git.example.com')),
     settings: {}, secretNames: ['webhook-secret'], revision: 1,
   };
-  return must(await target.integrations.add(integration, must(ScmSecrets.of({ 'webhook-secret': 'synthetic-webhook-secret' }))));
+  return must(await target.integrations.add(integration, must(ScmSecrets.of({ 'webhook-secret': 'synthetic-webhook-secret' })), auditEntry()));
 }
 
 function values(integration: ScmIntegration, repository = 'acme/project'): RepositoryBindingValues {
@@ -126,7 +127,7 @@ export const REPOSITORY_BINDINGS_CONFORMANCE: readonly ConformanceCase<Repositor
       const integration = await added(target, '1');
       const put = firstPut(projectId, integration);
       must(await target.bindings.put(put));
-      must(await target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }));
+      must(await target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }, auditEntry()));
       expectCode(problems, 'moved', await target.bindings.put({ ...put, expectedRevision: 1, values: { ...put.values, integrationBranch: 'dev' } }), 'conflict');
       expectRead(problems, 'unchanged', await target.bindings.get(projectId), bound(projectId, put, 1));
       const missing = { ...firstPut(other, integration), values: { ...values(integration), integrationId: integrationId('9') } };
@@ -164,7 +165,7 @@ export const REPOSITORY_BINDINGS_CONFORMANCE: readonly ConformanceCase<Repositor
       const put = firstPut(projectId, integration);
       const putting = pausing.put(put).finally(() => finished.push('put'));
       await snapshot.promise;
-      const updating = target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' })
+      const updating = target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }, auditEntry())
         .finally(() => finished.push('update'));
       expectSame(problems, 'the update waits for the put', await target.untilUpdateWaits(), true);
       expectSame(problems, 'while the put holds the integration', [...finished], []);
@@ -182,7 +183,7 @@ export const REPOSITORY_BINDINGS_CONFORMANCE: readonly ConformanceCase<Repositor
       const problems: string[] = [];
       const [projectId] = target.projectIds;
       const integration = await added(target, '1');
-      must(await target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }));
+      must(await target.integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }, auditEntry()));
       expectCode(problems, 'stale put', await target.bindings.put(firstPut(projectId, integration)), 'conflict');
       expectRead(problems, 'still unbound', await target.bindings.get(projectId), undefined);
       return problems;

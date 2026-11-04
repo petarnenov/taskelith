@@ -215,7 +215,9 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   });
   const inbox = startInboxServices(database, agentSessions.value);
   const board = startBoardServices(database, inbox.viewSources);
-  const scm = startScmIntegrationServices(admin.value.namespace, database, logger, bindableProjects(projectSetup));
+  const scm = startScmIntegrationServices(
+    { namespace: admin.value.namespace, database, projects: bindableProjects(projectSetup), clock }, logger,
+  );
   if (!scm.ok) return scm;
   const api = new ControlPlaneApi({
     runs,

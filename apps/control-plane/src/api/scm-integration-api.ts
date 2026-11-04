@@ -1,5 +1,5 @@
 import type { HttpSchemas } from '@taskelith/contracts';
-import type { ScmIntegration, ScmIntegrationService } from '@taskelith/integrations';
+import type { ScmIntegration, ScmIntegrationInvocation, ScmIntegrationService } from '@taskelith/integrations';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { ApiRequest } from './api-server.js';
 
@@ -24,8 +24,10 @@ export class ScmIntegrationApi {
     return ok({ integrations: page.value.items.map(integrationBody), ...(page.value.next === undefined ? {} : { next: page.value.next }) });
   }
 
-  async createScmIntegration({ body }: ApiRequest): Promise<Result<Wire<'ScmIntegration'>>> {
-    const created = await this.#integrations.create(body as Wire<'ScmIntegrationCreation'>);
+  async createScmIntegration(request: ApiRequest): Promise<Result<Wire<'ScmIntegration'>>> {
+    const invocation = invocationOf(request, 'createScmIntegration');
+    if (!invocation.ok) return invocation;
+    const created = await this.#integrations.create(request.body as Wire<'ScmIntegrationCreation'>, invocation.value);
     return created.ok ? ok(integrationBody(created.value)) : created;
   }
 
@@ -34,10 +36,19 @@ export class ScmIntegrationApi {
     return read.ok ? ok(integrationBody(read.value)) : read;
   }
 
-  async updateScmIntegration({ parameters, body }: ApiRequest): Promise<Result<Wire<'ScmIntegration'>>> {
-    const updated = await this.#integrations.update(parameters[0] ?? '', body as Wire<'ScmIntegrationUpdate'>);
+  async updateScmIntegration(request: ApiRequest): Promise<Result<Wire<'ScmIntegration'>>> {
+    const invocation = invocationOf(request, 'updateScmIntegration');
+    if (!invocation.ok) return invocation;
+    const update = request.body as Wire<'ScmIntegrationUpdate'>;
+    const updated = await this.#integrations.update(request.parameters[0] ?? '', update, invocation.value);
     return updated.ok ? ok(integrationBody(updated.value)) : updated;
   }
+}
+
+// The caller is the audited actor; the operation is the reason.
+function invocationOf({ principalId }: ApiRequest, operationId: string): Result<ScmIntegrationInvocation> {
+  if (principalId === undefined) return err(failure('internal', 'an SCM integration command reached its handler without a principal'));
+  return ok({ actor: principalId, reason: `control-plane API ${operationId}` });
 }
 
 function integrationBody(integration: ScmIntegration): Wire<'ScmIntegration'> {

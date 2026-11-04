@@ -52,6 +52,7 @@ export {
   scmIntegrationServices,
   startScmIntegrationServices,
   type ScmIntegrationPorts,
+  type ScmIntegrationStartPorts,
   type ScmIntegrationServices,
   type StartedScmIntegrationServices,
 } from './composition/scm-integrations.js';

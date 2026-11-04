@@ -12,9 +12,12 @@ import {
 } from '@taskelith/access';
 import { ControlPlaneApi, createApiServer, scmIntegrationServices, singlePlugin, type ApiServices, type ScmIntegrationPorts } from '@taskelith/control-plane';
 import {
-  InMemoryScmIntegrations, ScmSecrets, normalizeOrigin, type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries,
+  InMemoryScmIntegrationAudit, InMemoryScmIntegrations, ScmSecrets, normalizeOrigin,
+  type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries, type SourceControlPlugin, type SourceControlProvider, type WebhookDelivery,
 } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
+import {
+  FAILURE_CODES, err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Instant,
+} from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { githubSourceControlPlugin } from '@taskelith/scm-github';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
@@ -31,6 +34,8 @@ const WEBHOOK_SECRET = 'synthetic-route-webhook-secret';
 const ROTATED_SECRET = 'synthetic-rotated-webhook-secret';
 const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const PEM_LINE = PRIVATE_KEY.split('\n')[1]!;
+const AT = value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z')));
+const CLOCK = { now: (): Instant => AT };
 const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
 const CREATION = Object.freeze({
   pluginId: 'scm-github', label: 'GitHub', allowedOrigin: 'HTTPS://GitHub.COM',
@@ -46,10 +51,10 @@ interface Answer {
 
 type Headers = Record<string, string>;
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, plugin: SourceControlPlugin = githubSourceControlPlugin()) {
   const store = new InMemoryAccessStore();
   const secrets = new NodeSecrets();
-  const clock = { now: () => value(instantFromEpochMilliseconds(Date.parse('2026-11-03T09:00:00.000Z'))) };
+  const clock = CLOCK;
   const sessions = new SessionService({ store, hasher, secrets, random: secrets, clock, throttle: new LoginThrottle({ clock, sleep: async () => undefined }) });
   const administration = new PrincipalAdministration({ store, hasher, random: secrets, clock });
   const owner = value(await new OwnerBootstrapService({ store, random: secrets, clock }).ensureOwner(INVOCATION)).principalId;
@@ -59,7 +64,8 @@ async function fixture(t: TestContext) {
   const recorded: string[] = [];
   const deliveries = { record: async (_id: string, event: { deliveryId: string }) => { recorded.push(event.deliveryId); return ok<DeliveryRecording>('recorded'); } };
   const sink = new InMemoryLogSink();
-  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(), deliveries), new Logger(sink, clock));
+  const audit = new InMemoryScmIntegrationAudit();
+  const scm = scmIntegrationServices(githubPorts(new InMemoryScmIntegrations(audit), deliveries, plugin), new Logger(sink, clock));
   const server = createApiServer(new ControlPlaneApi({
     operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },
     sessions, authorization: new AuthorizationService(store), scmIntegrations: scm.integrations, scmWebhooks: scm.webhooks,
@@ -80,7 +86,7 @@ async function fixture(t: TestContext) {
     assert.equal(answer.status, 201, answer.text);
     return String(answer.body.integrationId);
   };
-  return { base, call, created, sink, recorded, VERA: await browser(base, 'vera'), OWNER: await browser(base, 'owner') };
+  return { base, call, created, sink, recorded, audit, owner, VERA: await browser(base, 'vera'), OWNER: await browser(base, 'owner') };
 }
 
 // A logged-in browser's headers, with the CSRF header of its session.
@@ -98,9 +104,10 @@ async function browser(base: string, loginName: string): Promise<Headers> {
 
 const holdsNoSecret = (text: string) => ![WEBHOOK_SECRET, ROTATED_SECRET, PEM_LINE].some((secret) => text.includes(secret));
 
-function githubPorts(store: ScmIntegrations, deliveries: ScmWebhookDeliveries): ScmIntegrationPorts {
-  const plugin = githubSourceControlPlugin();
-  return { store, deliveries, plugin, plugins: singlePlugin(plugin) };
+function githubPorts(
+  store: ScmIntegrations, deliveries: ScmWebhookDeliveries, plugin: SourceControlPlugin = githubSourceControlPlugin(),
+): ScmIntegrationPorts {
+  return { store, deliveries, plugin, plugins: singlePlugin(plugin), clock: CLOCK };
 }
 
 test('an owner creates and reads an integration, with its origin normalized and its secrets only by name', async (t) => {
@@ -250,9 +257,290 @@ test('the composition logs an integration that cannot verify its webhooks, witho
   value(await store.add({
     integrationId, pluginId: 'scm-retired', label: 'Retired', allowedOrigin: value(normalizeOrigin('https://git.example.com')),
     settings: {}, secretNames: ['webhook-secret'], revision: 1,
-  }, value(ScmSecrets.of({ 'webhook-secret': WEBHOOK_SECRET }))));
+  }, value(ScmSecrets.of({ 'webhook-secret': WEBHOOK_SECRET })), { actor: 'test', reason: 'unverifiable test', at: AT }));
   assert.equal((await scm.webhooks.receive(integrationId, { headers: {}, rawBody: new Uint8Array() })).ok, false);
   const warnings = sink.records.map((record) => [record.level, record.event, record.fields]);
   assert.deepEqual(warnings, [['warn', 'scm.integration.unverifiable', { integrationId, revision: 1, reason: 'plugin-missing' }]]);
   assert.ok(!JSON.stringify(sink.records).includes(WEBHOOK_SECRET));
+});
+
+test('each committed create and update is audited with the caller as actor and its operation as reason', async (t) => {
+  const { call, created, audit, owner, OWNER } = await fixture(t);
+  const integrationId = await created();
+  const changed = await call('PATCH', `/scm-integrations/${integrationId}`, OWNER, {
+    expectedRevision: 1, label: 'Renamed', settings: { ...CREATION.settings, 'merge-methods': 'rebase' },
+  });
+  assert.equal(changed.status, 200, changed.text);
+  const rotated = await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, secrets: { 'webhook-secret': WEBHOOK_SECRET } });
+  assert.equal(rotated.status, 200, rotated.text);
+  const creating = { actor: owner, reason: 'control-plane API createScmIntegration', occurredAt: AT };
+  const updating = { actor: owner, reason: 'control-plane API updateScmIntegration', occurredAt: AT };
+  assert.deepEqual(value(await audit.trail()), [
+    {
+      integrationId, kind: 'created', ...creating, revision: 1,
+      changedFields: ['pluginId', 'label', 'allowedOrigin', 'settings.app-id', 'settings.installation-id', 'settings.merge-methods', 'secrets.private-key', 'secrets.webhook-secret'],
+    },
+    { integrationId, kind: 'updated', ...updating, changedFields: ['label', 'settings.merge-methods'], revision: 2 },
+    { integrationId, kind: 'secret-changed', ...updating, changedFields: ['secrets.webhook-secret'], revision: 3 },
+  ]);
+});
+
+test('a refused create or update, 400, 403, 404, or 409, writes no audit row', async (t) => {
+  const { call, created, audit, VERA } = await fixture(t);
+  const integrationId = await created();
+  const refusals = [
+    await call('POST', '/scm-integrations', BEARER, { ...CREATION, settings: { ...CREATION.settings, 'app-id': 'twelve' } }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, secrets: { token: ROTATED_SECRET } }),
+    await call('POST', '/scm-integrations', VERA, CREATION),
+    await call('PATCH', `/scm-integrations/${integrationId}`, VERA, { expectedRevision: 1, label: 'Refused' }),
+    await call('POST', '/scm-integrations', BEARER, { ...CREATION, pluginId: 'scm-forgejo' }),
+    await call('PATCH', `/scm-integrations/${MISSING}`, BEARER, { expectedRevision: 1, label: 'Missing' }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, label: 'Stale' }),
+  ];
+  assert.deepEqual(refusals.map((answer) => answer.status), [400, 400, 403, 403, 404, 404, 409]);
+  assert.deepEqual(value(await audit.trail()).map((event) => [event.kind, event.revision]), [['created', 1]]);
+});
+
+test('no secret value of a create, an update, or a secret change reaches the request log or the audit trail', async (t) => {
+  const { call, created, sink, audit } = await fixture(t);
+  const integrationId = await created();
+  const answers = [
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, label: 'Renamed', secrets: { 'webhook-secret': ROTATED_SECRET } }),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 2, secrets: { 'private-key': PRIVATE_KEY } }),
+  ];
+  assert.deepEqual(answers.map((answer) => answer.status), [200, 200]);
+  const trail = value(await audit.trail());
+  assert.deepEqual(trail.map((event) => event.kind), ['created', 'updated', 'secret-changed']);
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.ok(holdsNoSecret(JSON.stringify(trail)));
+});
+
+test('a create or update handler without a principal fails as internal and never reaches the service', async () => {
+  const reached: string[] = [];
+  const reach = (operation: string) => async () => { reached.push(operation); return err(failure('unavailable', 'reached')); };
+  const api = new ControlPlaneApi({
+    scmIntegrations: { list: reach('list'), read: reach('read'), create: reach('create'), update: reach('update') },
+  } as unknown as ApiServices);
+  const request = { parameters: [MISSING], body: { expectedRevision: 1 }, query: new URLSearchParams(), correlationId: 'c' as never };
+  for (const operationId of ['createScmIntegration', 'updateScmIntegration']) {
+    const anonymous = await api.handle(operationId, request, '');
+    assert.deepEqual(!anonymous.ok && [anonymous.error.code, anonymous.error.message],
+      ['internal', 'an SCM integration command reached its handler without a principal'], operationId);
+  }
+  assert.deepEqual(reached, []);
+});
+
+// The GitHub plugin, whose secret check throws quoting it once `broken`.
+function breakableGithub() {
+  const github = githubSourceControlPlugin();
+  const state = { broken: false };
+  const quoting = (secret: string): never => { throw new Error(`refused ${secret}`); };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    checkSecret: (name, secret) => (state.broken ? quoting(secret) : github.checkSecret(name, secret)),
+  };
+  return { plugin, state };
+}
+
+test('a plugin check that throws answers 500 to a create or update, with no value in the answer, the log, or the audit', async (t) => {
+  const { plugin, state } = breakableGithub();
+  const { call, created, sink, audit } = await fixture(t, plugin);
+  const integrationId = await created();
+  state.broken = true;
+  const answers = [
+    await call('POST', '/scm-integrations', BEARER, CREATION),
+    await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, { expectedRevision: 1, secrets: { 'webhook-secret': ROTATED_SECRET } }),
+  ];
+  assert.deepEqual(answers.map((answer) => answer.status), [500, 500]);
+  assert.ok(answers.every((answer) => holdsNoSecret(answer.text) && !answer.text.includes('refused')));
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map((record) => record.fields.operation), ['checkSecret', 'checkSecret']);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  const trail = value(await audit.trail());
+  assert.deepEqual(trail.map((event) => event.kind), ['created']);
+  assert.ok(holdsNoSecret(JSON.stringify(trail)));
+});
+
+test('a webhook whose provider build throws quoting a secret answers 401, with no value in the answer or the log', async (t) => {
+  const github = githubSourceControlPlugin();
+  const quoting = (secret: string): never => { throw new Error(`refused ${secret}`); };
+  const plugin: SourceControlPlugin = { ...github, createProvider: ({ secrets }) => quoting(secrets['webhook-secret']!) };
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  const answer = await fetch(`${base}/scm-integrations/${integrationId}/webhooks`, {
+    method: 'POST', body, headers: {
+      'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': 'd-1',
+      'x-hub-signature-256': `sha256=${createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')}`,
+    },
+  });
+  const text = await answer.text();
+  assert.equal(answer.status, 401, text);
+  assert.ok(holdsNoSecret(text) && !text.includes('refused'));
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), [
+    ['error', { integrationId, pluginId: 'scm-github', operation: 'createProvider', kind: 'threw' }],
+  ]);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(recorded, []);
+});
+
+// The GitHub plugin whose providers throw on verification while broken, and
+// whose decoy counts its verifications.
+function verifyBreakableGithub() {
+  const github = githubSourceControlPlugin();
+  const state = { broken: false, decoyVerifications: 0 };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    createProvider: (configuration) => {
+      const built = github.createProvider(configuration);
+      if (!built.ok) return built;
+      const provider = built.value;
+      const secret = configuration.secrets['webhook-secret']!;
+      const verifyWebhookDelivery = (delivery: WebhookDelivery) => (
+        state.broken ? Promise.reject(new Error(`refused ${secret}`)) : provider.verifyWebhookDelivery(delivery));
+      return ok({ verifyWebhookDelivery } as unknown as SourceControlProvider);
+    },
+    createDecoy: () => {
+      const decoy = github.createDecoy();
+      return { verifyWebhookDelivery: (delivery) => { state.decoyVerifications += 1; return decoy.verifyWebhookDelivery(delivery); } };
+    },
+  };
+  return { plugin, state };
+}
+
+test('a plugin defect, a bad signature, and an unknown integration answer byte-equal 401s', async (t) => {
+  const { plugin, state } = verifyBreakableGithub();
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  const deliver = async (target: string, secret: string) => {
+    const response = await fetch(`${base}/scm-integrations/${target}/webhooks`, {
+      method: 'POST', body, headers: {
+        'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': 'd-1',
+        'x-hub-signature-256': `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
+      },
+    });
+    const perRequest = new Set(['date', 'x-correlation-id']);
+    const headers = [...response.headers].filter(([name]) => !perRequest.has(name));
+    return { status: response.status, headers, text: await response.text() };
+  };
+  const decoyWork: number[] = [];
+  const answerOf = async (target: string, secret: string) => {
+    const before = state.decoyVerifications;
+    const answer = await deliver(target, secret);
+    decoyWork.push(state.decoyVerifications - before);
+    return answer;
+  };
+  const unknown = await answerOf(MISSING, WEBHOOK_SECRET);
+  const badSignature = await answerOf(integrationId, ROTATED_SECRET);
+  state.broken = true;
+  const defect = await answerOf(integrationId, WEBHOOK_SECRET);
+  assert.equal(unknown.status, 401);
+  assert.deepEqual(badSignature, unknown);
+  assert.deepEqual(defect, unknown);
+  assert.deepEqual(decoyWork, [1, 0, 1], 'a defect also does the decoy work of an unknown integration');
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), [
+    ['error', { integrationId, pluginId: 'scm-github', operation: 'verifyWebhookDelivery', kind: 'threw' }],
+  ]);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)) && holdsNoSecret(defect.text));
+  assert.deepEqual(recorded, []);
+});
+
+test('the plugin registry reads the plugin identifier once, so a lookup never runs plugin code', () => {
+  const github = githubSourceControlPlugin();
+  let reads = 0;
+  const plugin = Object.defineProperty({ ...github }, 'id', {
+    get: () => {
+      reads += 1;
+      if (reads > 1) throw new Error(`refused ${WEBHOOK_SECRET}`);
+      return github.id;
+    },
+  });
+  const plugins = singlePlugin(plugin);
+  assert.equal(plugins.pluginOf('scm-github'), plugin);
+  assert.equal(plugins.pluginOf('scm-other'), undefined);
+  assert.equal(reads, 1);
+});
+
+// The GitHub plugin whose checks refuse with the code a test sets, quoting
+// the value under check in the message and the details.
+function refusingGithub() {
+  const github = githubSourceControlPlugin();
+  const state: { refusing?: 'settings' | 'secret'; code: FailureCode } = { code: 'invalid' };
+  const refusal = (quoted: string) => err(failure(state.code, `refused ${quoted}`, { quoted }));
+  const plugin: SourceControlPlugin = {
+    ...github,
+    checkSettings: (settings) => (state.refusing === 'settings' ? refusal(WEBHOOK_SECRET) : github.checkSettings(settings)),
+    checkSecret: (name, secret) => (state.refusing === 'secret' ? refusal(secret) : github.checkSecret(name, secret)),
+  };
+  return { plugin, state };
+}
+
+test('a plugin check refusal of any code quoting a secret answers 400 with neither its message nor the secret', async (t) => {
+  const { plugin, state } = refusingGithub();
+  const { call, created, sink, audit } = await fixture(t, plugin);
+  const integrationId = await created();
+  const update = { expectedRevision: 1, settings: CREATION.settings, secrets: { 'webhook-secret': ROTATED_SECRET } };
+  for (const refusing of ['settings', 'secret'] as const) {
+    for (const code of FAILURE_CODES) {
+      Object.assign(state, { refusing, code });
+      const answers = [
+        await call('POST', '/scm-integrations', BEARER, CREATION),
+        await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, update),
+      ];
+      for (const answer of answers) {
+        assert.deepEqual([answer.status, answer.body.code], [400, 'invalid'], `${refusing} ${code}`);
+        assert.ok(holdsNoSecret(answer.text) && !answer.text.includes('refused'), answer.text);
+      }
+    }
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(value(await audit.trail()).map((event) => event.kind), ['created']);
+});
+
+// The GitHub plugin whose providers refuse every verification with the
+// code a test sets, quoting the webhook secret in the message and details.
+function verifyRefusingGithub() {
+  const github = githubSourceControlPlugin();
+  const state: { code: FailureCode } = { code: 'invalid' };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    createProvider: (configuration) => {
+      const secret = configuration.secrets['webhook-secret']!;
+      const verifyWebhookDelivery = async () => err(failure(state.code, `refused ${secret}`, { quoted: secret }));
+      return ok({ verifyWebhookDelivery } as unknown as SourceControlProvider);
+    },
+  };
+  return { plugin, state };
+}
+
+// The webhook route declares no 404, 409, or 422, so those codes answer 500.
+const VERIFICATION_STATUSES: Readonly<Record<FailureCode, number>> = {
+  invalid: 400, forbidden: 401, 'not-found': 500, conflict: 500, 'precondition-failed': 500, internal: 500, unavailable: 503,
+};
+
+test('a verification refusal of any code quoting a secret keeps its status, with neither its message nor the secret', async (t) => {
+  const { plugin, state } = verifyRefusingGithub();
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  for (const code of FAILURE_CODES) {
+    state.code = code;
+    const answer = await fetch(`${base}/scm-integrations/${integrationId}/webhooks`, {
+      method: 'POST', body, headers: {
+        'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': `d-${code}`,
+        'x-hub-signature-256': `sha256=${createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')}`,
+      },
+    });
+    const text = await answer.text();
+    assert.equal(answer.status, VERIFICATION_STATUSES[code], `${code} ${text}`);
+    assert.ok(holdsNoSecret(text) && !text.includes('refused'), text);
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(recorded, []);
 });

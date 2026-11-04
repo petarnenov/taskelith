@@ -2,12 +2,10 @@ import { err, failure, ok, parseIdentifier, type Failure, type Result } from '@t
 import { normalizeRemoteOrigin } from '../domain/normalized-origin.js';
 import type { ScmIntegration, ScmIntegrationId } from '../domain/scm-integration.js';
 import type { BindableProjects, RepositoryBinding, RepositoryBindings } from '../ports/repository-bindings.js';
-import type {
-  ScmIntegrations, ScmPluginDefectKind, ScmPluginDefects, ScmPluginOperation, ScmPlugins,
-} from '../ports/scm-integrations.js';
+import type { ScmIntegrations, ScmPluginDefects, ScmPlugins } from '../ports/scm-integrations.js';
 import type { MergeMethod, RepositoryRemote, SourceControlProvider } from '../ports/source-control.js';
 import { readCapabilities, readRepositoryRemote } from '../ports/source-control-readers.js';
-import { readUntrustedResult, type Reading } from '../ports/untrusted-shapes.js';
+import { asProvider, pluginAnswer, pluginDefect, type DefectOfCall, type ReportedDefect } from './plugin-answer.js';
 
 // The binding a maintainer sends: no remote URL, which the plugin resolves.
 export interface RepositoryBindingRequest {
@@ -113,31 +111,6 @@ export class RepositoryBindingService {
   }
 }
 
-type ReportedDefect = (operation: ScmPluginOperation, kind: ScmPluginDefectKind) => Failure;
-type DefectOfCall = (kind: ScmPluginDefectKind) => Failure;
-
-// Calls the plugin and reads its envelope and value once, inside one
-// boundary; a throw or a broken shape is the plugin defect, never quoted.
-async function pluginAnswer<Value>(
-  call: () => Result<unknown> | Promise<Result<unknown>>, read: (value: unknown) => Reading<Value>, defect: DefectOfCall,
-): Promise<Result<Result<Value>>> {
-  try {
-    const envelope = readUntrustedResult(await call());
-    if (!envelope.ok) return err(defect('malformed-envelope'));
-    if (!envelope.value.ok) return ok(err(envelope.value.error));
-    const value = read(envelope.value.value);
-    return value.ok ? ok(ok(value.value)) : err(defect('malformed-value'));
-  } catch {
-    return err(defect('threw'));
-  }
-}
-
-// A provider is an object whose operations are called in their own boundary.
-function asProvider(value: unknown): Reading<SourceControlProvider> {
-  const isObject = typeof value === 'object' && value !== null;
-  return isObject ? ok(value as SourceControlProvider) : err(['provider must be an object']);
-}
-
 // The plugin's message may quote a secret, so only its code is kept.
 async function resolvedRemote(provider: SourceControlProvider, repository: string, defect: DefectOfCall): Promise<Result<RepositoryRemote>> {
   const resolved = await pluginAnswer(() => provider.resolveRemoteUrl({ repository }), readRepositoryRemote, defect);
@@ -179,8 +152,4 @@ function refusal(reason: string, message: string): Failure {
 function unusableConfiguration(): Failure {
   const reason = 'integration-configuration-unusable';
   return failure('unavailable', "the integration's stored configuration is unusable", { reason });
-}
-
-function pluginDefect(): Failure {
-  return failure('internal', 'the SCM plugin answered outside its contract');
 }

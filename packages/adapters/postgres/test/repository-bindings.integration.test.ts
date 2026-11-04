@@ -6,7 +6,7 @@ import {
   REPOSITORY_BINDINGS_CONFORMANCE, ScmSecrets, normalizeOrigin,
   type BindingPut, type RepositoryBinding, type ScmIntegration, type ScmIntegrationId,
 } from '@taskelith/integrations';
-import { parseIdentifier } from '@taskelith/kernel';
+import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
 import {
   PostgresDatabase, PostgresRepositoryBindings, PostgresScmIntegrations,
   type PostgresTransaction, type TransactionWork,
@@ -22,6 +22,7 @@ after(() => database.close());
 const PROJECT_IDS = [`p${'1'.repeat(32)}`, `p${'2'.repeat(32)}`] as const;
 const integrations = new PostgresScmIntegrations(database, value(scmSecretCipher(randomBytes(32))));
 const bindings = new PostgresRepositoryBindings(database);
+const ENTRY = { actor: `p${'a'.repeat(32)}`, reason: 'repository bindings test', at: value(instantFromEpochMilliseconds(0)) };
 
 async function emptied(): Promise<void> {
   await query(url, 'TRUNCATE project_repository_bindings, scm_integration_secrets, scm_integrations, projects CASCADE');
@@ -82,7 +83,7 @@ async function added(): Promise<ScmIntegration> {
     integrationId: value(parseIdentifier('ScmIntegrationId', `i${'1'.repeat(32)}`)) as ScmIntegrationId, pluginId: 'scm-example',
     label: 'Example', allowedOrigin: value(normalizeOrigin('https://git.example.com')), settings: {}, secretNames: ['webhook-secret'], revision: 1,
   };
-  return value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': 'synthetic-webhook-secret' }))));
+  return value(await integrations.add(integration, value(ScmSecrets.of({ 'webhook-secret': 'synthetic-webhook-secret' })), ENTRY));
 }
 
 function firstPut(integration: ScmIntegration): BindingPut {
@@ -120,7 +121,7 @@ test('an integration update that commits while a put is open makes the put a con
     transaction: <Value>(work: TransactionWork<Value>) => database.transaction(async (tx) => {
       attempts += 1;
       await tx.scmIntegrations.page(undefined, 1);
-      if (attempts === 1) value(await integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }));
+      if (attempts === 1) value(await integrations.update(integration.integrationId, { expectedRevision: 1, label: 'Moved' }, ENTRY));
       return work(tx);
     }),
   };

@@ -47,6 +47,7 @@ export {
 export { PostgresTransaction } from './postgres-transaction.js';
 export { PostgresRunCatalog } from './run-catalog.js';
 export { CommittingScmWebhookDeliveries, PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
+export { PostgresScmIntegrationAudit, PostgresScmIntegrationAuditRecords } from './scm-integration-audit.js';
 export {
   PostgresScmIntegrationRecords,
   PostgresScmIntegrations,
