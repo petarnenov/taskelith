@@ -25,6 +25,19 @@ describe('workersViewOf', () => {
     expect(JSON.stringify(view)).not.toContain('10.0.0.1');
   });
 
+  it('copies the problems of a failed check, so the view shares nothing with the body', () => {
+    const details = Object.assign(['the launch command exited with 1'], { planted: 'planted' });
+    const body = workersView({ workers: [worker({ results: [{ ...FAILED, details }] })] });
+    const view = workersViewOf(body)!;
+    const problems = view.workers[0]!.results[0]!.details;
+    expect(problems).not.toBe(details);
+    expect(problems).toEqual(['the launch command exited with 1']);
+    expect(Object.keys(problems)).toEqual(['0']);
+    details.push('added after the read');
+    details[0] = 'changed after the read';
+    expect(problems).toEqual(['the launch command exited with 1']);
+  });
+
   it('reads an entry without a report as one without reportedAt', () => {
     const view = workersViewOf(workersView({ workers: [worker({ reportedAt: undefined })] }));
     expect(view?.workers[0]).not.toHaveProperty('reportedAt');
