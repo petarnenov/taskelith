@@ -1,8 +1,10 @@
 import type { RouteObject } from 'react-router';
+import { SessionPage } from './agent-session/SessionPage';
+import { SessionsIndexPage } from './agent-session/SessionsIndexPage';
 import { BoardPage } from './board/BoardPage';
 import { TaskDetailRoute } from './board/TaskDetailDrawer';
 import { NotFoundPage, PlannedPage } from './pages';
-import { PLANNED_SCREENS, TASK_DETAIL, type PlannedScreen } from './screens';
+import { AGENT_SESSION, PLANNED_SCREENS, SESSIONS, TASK_DETAIL, type PlannedScreen } from './screens';
 import { Shell } from './shell/Shell';
 
 // The SPA's base path, as in vite.config.ts; route paths sit below it.
@@ -19,6 +21,8 @@ export function appRoutes(): RouteObject[] {
           element: <BoardPage />,
           children: [{ index: true }, { path: TASK_DETAIL.path, element: <TaskDetailRoute /> }],
         },
+        { path: SESSIONS.path, element: <SessionsIndexPage /> },
+        { path: AGENT_SESSION.path, element: <SessionPage /> },
         ...PLANNED_SCREENS.map(screenRoute),
         { path: '*', element: <NotFoundPage /> },
       ],

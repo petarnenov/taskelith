@@ -1,25 +1,44 @@
-import { Paper, Stack, Text } from '@mantine/core';
-import type { AttemptOutcome, TaskEnd, TaskView } from './board';
+import { Anchor, Paper, Stack, Text } from '@mantine/core';
+import { Link } from 'react-router';
+import { LoadingStatus } from '../shell/LoadingStatus';
+import { sessionPath } from '../screens';
+import type { AgentSession, AttemptOutcome, TaskEnd, TaskView } from './board';
 import { ADMISSION_STATE_LABELS, END_LABELS, formatInstant, OUTCOME_LABELS } from './board-labels';
+import { LoadError, withRequiredRole } from './LoadError';
 import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
+import type { SessionLinks } from './TaskDetailView';
 import { Breakable } from './Breakable';
 import { ItemList } from './ItemList';
 
 // Every task of the run and its delegated children, in admission order,
-// each with its admission, ownership generation, and session.
-export function TaskList({ tasks }: { readonly tasks: readonly TaskView[] }) {
+// each with its admission, ownership generation, session, and session links.
+export function TaskList({ tasks, links }: { readonly tasks: readonly TaskView[]; readonly links: SessionLinks }) {
   if (tasks.length === 0) return <Text size="sm">No task of this run was admitted yet.</Text>;
+  const { state } = links;
   return (
-    <ItemList component="ol" gap="sm">
-      {tasks.map((task) => (
-        <TaskItem key={task.taskId} task={task} />
-      ))}
-    </ItemList>
+    <Stack gap="sm">
+      <ItemList component="ol" gap="sm">
+        {tasks.map((task) => (
+          <TaskItem key={task.taskId} task={task} links={links} />
+        ))}
+      </ItemList>
+      {state.status === 'loading' ? <LoadingStatus text="Looking up the agent sessions…" /> : null}
+      {state.status === 'failed' ? (
+        <LoadError title="The agent sessions cannot be listed" onRetry={links.retry}>
+          {withRequiredRole('The control plane did not answer with the agent sessions of this run.', state.failure)}
+        </LoadError>
+      ) : null}
+    </Stack>
   );
 }
 
-function TaskItem({ task }: { readonly task: TaskView }) {
+function sessionsOf(links: SessionLinks, taskId: string): readonly AgentSession[] {
+  if (links.state.status !== 'listed') return [];
+  return links.state.sessions.filter((session) => session.taskId === taskId);
+}
+
+function TaskItem({ task, links }: { readonly task: TaskView; readonly links: SessionLinks }) {
   const { admission } = task;
   return (
     <Paper component="li" withBorder p="xs" radius="md">
@@ -49,6 +68,13 @@ function TaskItem({ task }: { readonly task: TaskView }) {
             : `, dispatched generation ${admission.dispatchedGeneration}`}
         </Text>
         <SessionIndicator activity={task.session} />
+        {sessionsOf(links, task.taskId).map((session) => (
+          <Text key={session.sessionId} size="sm">
+            <Anchor component={Link} to={sessionPath(links.projectId, session.sessionId)} inherit>
+              Open the <Breakable text={session.harness} /> session <Breakable text={session.sessionId} />
+            </Anchor>
+          </Text>
+        ))}
         {task.obstacle === undefined ? null : <ObstacleText obstacle={task.obstacle} />}
         {task.end === undefined ? null : <EndText end={task.end} />}
       </Stack>

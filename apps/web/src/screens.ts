@@ -31,6 +31,20 @@ export function taskDetailPath(projectId: string, runId: string): string {
   return `/projects/${routeSegment(projectId)}/cards/${routeSegment(runId)}`;
 }
 
+// An agent session, linked from its task in the task detail; it is not in
+// the navigation, and its address names the project and the session.
+export const AGENT_SESSION: PlannedScreen = {
+  path: '/sessions/:projectId/:sessionId',
+  label: 'Agent session',
+  title: 'Agent session',
+  item: 31,
+  change: 'build-agent-session-timeline',
+};
+
+export function sessionPath(projectId: string, sessionId: string): string {
+  return `/sessions/${routeSegment(projectId)}/${routeSegment(sessionId)}`;
+}
+
 // The SPA's server answers 404 for a dot in the last segment or a decoded
 // separator, so each other character is written as ~ and two hex digits.
 function routeSegment(identifier: string): string {
@@ -45,12 +59,13 @@ function hex(character: string): string {
   return character.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
 }
 
-const SESSIONS: PlannedScreen = {
+// The navigation's entry: a page that says where sessions open from.
+export const SESSIONS: PlannedScreen = {
   path: '/sessions',
   label: 'Sessions',
   title: 'Agent sessions',
   item: 31,
-  change: 'build-agent-session-screen',
+  change: 'build-agent-session-timeline',
 };
 
 const REVIEWS: PlannedScreen = {
@@ -106,4 +121,4 @@ export const MAIN_NAVIGATION: readonly PlannedScreen[] = [BOARD, SESSIONS, REVIE
 export const SCREENS: readonly PlannedScreen[] = [...MAIN_NAVIGATION, NEW_TASK, NEEDS_YOU];
 
 // The routed screens whose page is still the empty planned page.
-export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => screen !== BOARD);
+export const PLANNED_SCREENS: readonly PlannedScreen[] = SCREENS.filter((screen) => screen !== BOARD && screen !== SESSIONS);
