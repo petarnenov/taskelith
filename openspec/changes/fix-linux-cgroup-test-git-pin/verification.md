@@ -26,7 +26,7 @@ Zaki's host `hpz600`: Linux 6.8.0-147-generic, x86_64, 8 logical CPUs, Docker En
 - Single source of truth: no mechanism shares a Dockerfile pin today; the `Makefile` passes only the base and Node.js pins. `test/git-package-pin.test.ts` keeps the two pins equal and ties both version checks to `GIT_CLIENT_PINS.linux.version` (`design.md` "One pin, checked by a test").
 - `npm run verify:comments`: "Every comment is within the comment length rule."; the new Dockerfile comment is two lines of at most 80 characters. No AI attribution in commits.
 - `npm run openspec -- validate fix-linux-cgroup-test-git-pin --strict`: `Change 'fix-linux-cgroup-test-git-pin' is valid`, before pass 1 and again with the delta of `863c516c`.
-- Archive test after pass 1: a copy of `openspec/` in the scratchpad, `openspec archive fix-linux-cgroup-test-git-pin -y` with the worktree's pinned CLI (`native-worker-acceptance`: `+ 1 added`), then `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` (`flcgp/fix1-archive-test.log`). The new requirement has 355 characters.
+- Archive test after pass 1: a copy of `openspec/` in the scratchpad, `openspec archive fix-linux-cgroup-test-git-pin -y` with the worktree's pinned CLI (`native-worker-acceptance`: `+ 1 added`), then `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` (`flcgp/fix1-archive-test.log`). The new requirement has 355 characters. After the pass 2 fixes, the same test on a fresh copy at `a44055c7` (`native-worker-acceptance: update`): `Totals: 71 passed, 0 failed (71 items)` (`flcgp/fix2-archive-test.log`); the reworded requirement has 408 characters.
 - This also exercises the crash-harness edits of 11c (`require-existing-project-for-runs`, #439) in `apps/control-plane/test/harness-composition.ts` and `test/g2-scenarios/scenario-installation.ts` on Linux, whose verification left `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` as a remaining gate.
 
 ## Logs
@@ -39,6 +39,8 @@ The logs stay outside the repository, in Zaki's session scratchpad `/tmp/claude-
 - `flcgp/fix1-fail-before.log`, `flcgp/fix1-after.log`, and `flcgp/fix1-old-dockerfile.log`: the agreement test runs of the pass 1 fixes, with the old-logic copy `flcgp/fb-old-git-package-pin.test.ts`.
 - `flcgp/fix1-archive-test.log`: the archive of the change in a scratch copy.
 - `flcgp/fix2-cw.log` and `flcgp/fix2-g2.log`: the runs on `635ac3a7`, tree `ae824160`, after the pass 2 fixes.
+- `flcgp/fix2-verify-1.log` and `flcgp/fix2-verify-2.log`: the `make verify` runs on `a44055c7`, tree `3339aaae`.
+- `flcgp/fix2-archive-test.log`: the archive of the change in a scratch copy after the pass 2 fixes.
 
 ## Fail-before
 
@@ -58,6 +60,8 @@ The logs stay outside the repository, in Zaki's session scratchpad `/tmp/claude-
 | `env -u NODE_ENV make verify-linux-g2-scenarios` | the same tree (`flcgp/fix2-g2.log`) | `exit 0`; `tests 18, suites 4, pass 17, fail 0, cancelled 0, skipped 1`; the skip is race g, as above; seeds `2501117062`, `3500388998`, and `2973150950` |
 | `env -u NODE_ENV make verify` | `71d00e13` (tree `5d33f134`) | Passed on the first run, no known flake, profile full, stamp written; tests 4815, pass 4768, fail 0, skipped 47 (the record before pass 1: all files 99.42% lines, 92.92% branches, 98.86% functions); both tests of `test/git-package-pin.test.ts` passed |
 | `env -u NODE_ENV make verify` | `d52c06fb` (tree `e3661192`), after the pass 1 fixes (`flcgp/fix1-verify-1.log`; `make record` read a copy without the appended `exit 0`) | Passed on the first run, no known flake, profile full, stamp written; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.84% functions; the eight tests of `test/git-package-pin.test.ts` passed |
+| `env -u NODE_ENV make verify` | `a44055c7` (tree `3339aaae`), after the pass 2 fixes, run 1 (`flcgp/fix2-verify-1.log`) | Failed on the known flake secrets linear-time: `value redaction takes linear time on long runs` with `"a b" repeated took 305 ms` (`packages/adapters/secrets/test/secrets.test.ts:218`); tests 4821, pass 4773, fail 1, skipped 47; `make: *** [Makefile:42: verify] Error 2` |
+| `env -u NODE_ENV make verify` | the same tree, run 2, the one rerun (`flcgp/fix2-verify-2.log`; `make record` read a copy without the appended `exit 0`) | Passed, profile full, stamp written; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.89% branches, 98.83% functions; the flaky test passed in 528 ms |
 
 ### Route
 
@@ -70,7 +74,7 @@ The pass 1 fixes changed the diff, a spec delta and a new test, so `ab5df31e` dr
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e36611921170e722b107484c3c8c2a97450875b3`; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `3339aaae1d05436aecc5f9fa9a1e729309f902c0`; tests 4821, pass 4774, fail 0, skipped 47; all files 99.42% lines, 92.89% branches, 98.83% functions.
 - `npm run openspec -- validate fix-linux-cgroup-test-git-pin --strict`: passed, `Change 'fix-linux-cgroup-test-git-pin' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 118 file(s); every pass summary file is valid: 98 file(s); every route file is valid: 51 file(s).`.
 - Spec diff against the merge base `163fe9e56e43` with `origin/dev`: no change under `openspec/specs`.
@@ -79,6 +83,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a5c4-ff35-7f93-abf8-9d51d745fdd8` | 0 | 0 | 1 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `7771165c-107e-4d81-8816-c38910b1660f` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
 ## Independent review
