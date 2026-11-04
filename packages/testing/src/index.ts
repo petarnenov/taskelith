@@ -8,7 +8,7 @@ export {
   type CrashAction,
 } from './crash-points.js';
 export { COVERAGE_VARIABLE, uncoveredEnvironment, withholdCoverageFromDescendants } from './coverage-environment.js';
-export { assertLinearOnRuns, type RunTimer } from './linear-time.js';
+export { assertLinearOnRuns, type LinearTimeOptions, type RunTimer } from './linear-time.js';
 export { seededUuids, sequentialIds, type IdSource } from './identifier-sources.js';
 export { ScenarioProcess, type ProcessExit, type ScenarioProcessOptions } from './scenario-process.js';
 export { SEED_VARIABLE, SeededRandom, rerunHint, seedFromEnvironment } from './seeded-random.js';

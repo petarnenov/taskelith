@@ -1,1 +1,2 @@
 {"change":"stabilize-secrets-linear-time-test","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a863-3102-7202-bef8-a517aab3fb55","counts":{"critical":0,"high":0,"medium":1,"low":2}}
+{"change":"stabilize-secrets-linear-time-test","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"daeb4593-d738-4245-908c-b2da8f77056a","counts":{"critical":0,"high":0,"medium":0,"low":5}}

@@ -120,7 +120,7 @@ test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa', 'eyJa.b.', 'proxy-', 'x.eyJ'];
   assertLinearOnRuns(redactSecrets, [...units, 'tkop_', 'ghs_', 'SA', 'a://', 'a://b@']);
   const begin = '-----BEGIN NATS USER JWT-----';
-  assertLinearOnRuns(redactSecrets, [begin, `${begin}a`], 400_000);
+  assertLinearOnRuns(redactSecrets, [begin, `${begin}a`], { length: 400_000 });
 });
 
 test('a creds block without its end stays, and a URL may have empty user information', () => {

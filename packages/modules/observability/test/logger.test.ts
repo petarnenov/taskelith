@@ -159,9 +159,9 @@ test('a marked secret in front of a PEM key leaves no part of the key', () => {
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
   assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'ghs_', 'SA', 'a://', 'a://b@']);
-  assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], 400_000);
+  assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], { length: 400_000 });
   const keyBegin = pem('BEGIN', 'PRIVATE KEY');
-  assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], 400_000);
+  assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], { length: 400_000 });
 });
 
 test('a name redacts only by whole segments', () => {

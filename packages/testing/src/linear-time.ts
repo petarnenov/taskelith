@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 
 const RUN_LENGTH = 60_000;
 const MAX_RUN_LENGTH = 2 ** 24;
-const SHORT_RUN_SHARE = 4;
+const LENGTH_RATIO = 4;
 const SAMPLES = 5;
 const NOISE_FLOOR_MS = 20;
 const GROWTH_LIMIT = 2.5;
@@ -13,6 +13,12 @@ type Transform = (text: string) => unknown;
 
 /** Runs the transform once on the run and returns its time in ms. */
 export type RunTimer = (transform: Transform, run: string) => number;
+
+export interface LinearTimeOptions {
+  /** The length of each unit's long run before any doubling. */
+  readonly length?: number;
+  readonly timeRun?: RunTimer;
+}
 
 interface Runs {
   readonly short: string;
@@ -26,7 +32,7 @@ interface RunTime {
 
 // Linear CPU time grows as fast as the run, quadratic time four times faster
 // over a fourfold run, so a growth limit of 2.5 tells them apart.
-export function assertLinearOnRuns(transform: Transform, units: readonly string[], length = RUN_LENGTH, timeRun: RunTimer = threadCpuTime): void {
+export function assertLinearOnRuns(transform: Transform, units: readonly string[], { length = RUN_LENGTH, timeRun = threadCpuTime }: LinearTimeOptions = {}): void {
   for (const unit of units) {
     const [short, long] = timeUnit(transform, unit, length, timeRun);
     const growth = flooredRatio(short, long) / (long.length / short.length);
@@ -34,8 +40,8 @@ export function assertLinearOnRuns(transform: Transform, units: readonly string[
   }
 }
 
-// The runs double until the short median reaches the floor, however fast
-// the host, or the long run reaches MAX_RUN_LENGTH characters.
+// The runs double until the short median reaches the floor on any host, or
+// until doubling the long run would pass MAX_RUN_LENGTH characters.
 function timeUnit(transform: Transform, unit: string, startLength: number, timeRun: RunTimer): [RunTime, RunTime] {
   for (let length = startLength; ; length *= 2) {
     const runs = unitRuns(unit, length);
@@ -48,7 +54,7 @@ function timeUnit(transform: Transform, unit: string, startLength: number, timeR
 
 function unitRuns(unit: string, length: number): Runs {
   return {
-    short: unit.repeat(Math.ceil(length / SHORT_RUN_SHARE / unit.length)),
+    short: unit.repeat(Math.ceil(length / LENGTH_RATIO / unit.length)),
     long: unit.repeat(Math.ceil(length / unit.length)),
   };
 }
@@ -69,6 +75,7 @@ function sampledTimes(transform: Transform, runs: Runs, timeRun: RunTimer): [Run
 // The thread's CPU time leaves out other processes of a loaded host and the
 // collector's helper threads, which wall and process CPU time count.
 function threadCpuTime(transform: Transform, run: string): number {
+  assert.equal(typeof process.threadCpuUsage, 'function', 'assertLinearOnRuns needs Node.js 23.9 or later');
   collectGarbage();
   const started = process.threadCpuUsage();
   transform(run);
