@@ -11,8 +11,14 @@ export const TURN_WINDOW = 100;
 export const MAX_TURN_PAGES = 100;
 
 // ready: an earlier window may be read; reading: one is; failed: the last
-// read got no answer, and a retry reads it again.
-export type EarlierRead = 'ready' | 'reading' | 'failed';
+// read got no answer, which shows why, and a retry reads it again.
+export type EarlierRead =
+  | { readonly status: 'ready' }
+  | { readonly status: 'reading' }
+  | { readonly status: 'failed'; readonly failure: ReadFailed };
+
+const READY: EarlierRead = { status: 'ready' };
+const READING: EarlierRead = { status: 'reading' };
 
 export type SessionFeedState =
   | { readonly status: 'loading' }
@@ -42,7 +48,7 @@ interface SessionFeedOptions {
 export function startSessionFeed({ projectId, sessionId, gateway, clock, show }: SessionFeedOptions): SessionFeed {
   let stopped = false;
   let shown: ShownView<SessionTimelineView> | undefined;
-  let earlier: EarlierRead = 'ready';
+  let earlier: EarlierRead = READY;
 
   function showSession(): void {
     if (shown !== undefined) show({ ...shown, earlier });
@@ -84,27 +90,27 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
       }
       // A new snapshot shows the last window again, so an earlier read
       // that was running or failed no longer applies to it.
-      if (state.snapshot !== shown?.snapshot) earlier = 'ready';
+      if (state.snapshot !== shown?.snapshot) earlier = READY;
       shown = state;
       showSession();
     },
   });
 
   function loadEarlier(): void {
-    if (stopped || shown === undefined || earlier === 'reading' || shown.view.before === 0) return;
+    if (stopped || shown === undefined || earlier.status === 'reading' || shown.view.before === 0) return;
     const { snapshot } = shown;
     const { before } = shown.view;
     const after = Math.max(0, before - TURN_WINDOW);
-    earlier = 'reading';
+    earlier = READING;
     showSession();
     void gateway.listAgentSessionTurns(projectId, sessionId, after).then((page) => {
       if (stopped || shown?.snapshot !== snapshot) return;
       if (page.kind !== 'read') {
-        earlier = 'failed';
+        earlier = { status: 'failed', failure: page };
         showSession();
         return;
       }
-      earlier = 'ready';
+      earlier = READY;
       feed.amend((view) => withEarlierTurns(view, page.value, after));
     });
   }

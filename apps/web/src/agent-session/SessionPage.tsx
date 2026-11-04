@@ -160,16 +160,16 @@ interface EarlierTurnsProps {
 // Decision Q5: the last window first, and each earlier one on demand.
 function EarlierTurns({ before, earlier, onLoad }: EarlierTurnsProps) {
   if (before === 0) return null;
-  if (earlier === 'reading') return <LoadingStatus text="Loading earlier turns…" />;
+  if (earlier.status === 'reading') return <LoadingStatus text="Loading earlier turns…" />;
   return (
     <Group gap="sm" wrap="wrap">
-      {earlier === 'failed' ? (
+      {earlier.status === 'failed' ? (
         <Alert color="red" variant="light" title="Earlier turns cannot be loaded" role="alert">
-          The control plane did not answer with the earlier turns.
+          {withRequiredRole(EARLIER_FAILURES[earlier.failure.kind], earlier.failure)}
         </Alert>
       ) : null}
       <Button variant="default" onClick={onLoad}>
-        {earlier === 'failed' ? 'Retry' : `Load earlier turns (${before} before these)`}
+        {earlier.status === 'failed' ? 'Retry' : `Load earlier turns (${before} before these)`}
       </Button>
     </Group>
   );
@@ -192,6 +192,13 @@ const FAILURES: Readonly<Record<ReadFailure, { readonly title: string; readonly 
     title: 'Agent session not found',
     text: 'The control plane knows no such agent session in this project.',
   },
+};
+
+const EARLIER_FAILURES: Readonly<Record<ReadFailure, string>> = {
+  unauthenticated: 'The control plane answered the earlier turns read as one without a session. Retry reads them again.',
+  unavailable: 'The control plane did not answer with the earlier turns, so none is shown rather than turns that may be wrong.',
+  denied: 'You hold no role on this project that lets you read its agent sessions.',
+  'not-found': 'The control plane knows no such agent session in this project.',
 };
 
 const ACTIVITY_FAILURES: Readonly<Record<ReadFailure, string>> = {
