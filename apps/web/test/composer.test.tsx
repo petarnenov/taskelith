@@ -268,6 +268,76 @@ describe('the composer while the session cannot take a turn', () => {
   });
 });
 
+describe('a retry while the composer cannot take a turn', () => {
+  const restored = () =>
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-restored', text: 'Sent before the reload', sentAt: SENT_AT }]));
+
+  async function retryButton(): Promise<HTMLElement> {
+    return within(await composerAlert('Not confirmed')).getByRole('button', { name: 'Retry' });
+  }
+
+  it('waits while the session loads', async () => {
+    restored();
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockReturnValueOnce(deferred<never>().promise);
+    openSession(gateway);
+    expect(await retryButton()).toHaveProperty('disabled', true);
+  });
+
+  it('waits while the session could not be loaded', async () => {
+    restored();
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockResolvedValueOnce({ kind: 'unavailable' });
+    openSession(gateway);
+    await (await composer()).findByText('The session could not be loaded, so no turn can be sent.');
+    expect(await retryButton()).toHaveProperty('disabled', true);
+  });
+
+  it('waits while the session stopped at an account limit', async () => {
+    restored();
+    const gateway = new FakeBoardGateway();
+    const session = agentSession({ limit: { resetsAt: '2026-11-03T10:00:00.000Z' } });
+    gateway.readAgentSession.mockResolvedValue({ kind: 'read', value: agentSessionView({ session }) });
+    openSession(gateway);
+    await shownSession();
+    expect(await retryButton()).toHaveProperty('disabled', true);
+  });
+
+  it('waits while another submission is being sent', async () => {
+    sessionStorage.setItem(
+      RECORD_NAME,
+      JSON.stringify([
+        { key: 'key-1', text: 'One', sentAt: SENT_AT },
+        { key: 'key-2', text: 'Two', sentAt: SENT_AT },
+      ]),
+    );
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockReturnValueOnce(deferred<SubmitResult>().promise);
+    openSession(gateway);
+    await shownSession();
+    const form = await composer();
+    const [first] = form.getAllByRole('button', { name: 'Retry' });
+    await userEvent.click(first!);
+    await composerAlert('Sending');
+    expect(form.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+    expect(form.getByRole('button', { name: 'Retry' })).toHaveProperty('disabled', true);
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits while a 403 that named the role is shown', async () => {
+    restored();
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'denied', requiredRole: 'project-operator' });
+    openSession(gateway);
+    await shownSession();
+    await send('Fix the build');
+    const denied = await composerAlert('No access');
+    expect(await retryButton()).toHaveProperty('disabled', true);
+    await userEvent.click(within(denied).getByRole('button', { name: 'Dismiss' }));
+    expect(await retryButton()).toHaveProperty('disabled', false);
+  });
+});
+
 describe('a submission that is not confirmed', () => {
   it('shows a failed submission with a retry that sends the same key again, and keeps its record meanwhile', async () => {
     const gateway = new FakeBoardGateway();
