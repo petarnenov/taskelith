@@ -1,10 +1,12 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_TURN_TEXT_LENGTH } from '../src/agent-session/composer-model';
-import { createTurnRecordStore, TURN_RECORD_PREFIX, type TurnRecord } from '../src/agent-session/turn-records';
+import { createTurnRecordStore, TURN_RECORD_PREFIX, type TurnRecord, type TurnRecordStore } from '../src/agent-session/turn-records';
+import { TurnRecordsProvider, useDroppedTurns } from '../src/agent-session/TurnRecordsProvider';
 import { CSRF_HEADER } from '../src/api/client';
-import { EXPIRY_MARGIN_MILLISECONDS } from '../src/session/SessionProvider';
+import { EXPIRY_MARGIN_MILLISECONDS, SessionProvider, useSession } from '../src/session/SessionProvider';
 import type { SubmitResult, TaskDetail } from '../src/board/board';
 import { createBoardGateway, type EventSourceLike } from '../src/board/control-plane-board';
 import { sessionPath } from '../src/screens';
@@ -756,6 +758,53 @@ describe('the records and the shell session', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
     expect(await screen.findByText('You signed out')).toBeDefined();
     expect(screen.queryByText(MAY_NOT_BE_SENT, { exact: false })).toBeNull();
+  });
+
+  it('says on the sign-in page that the last turn may not have been sent when a visit without a session dropped a record', async () => {
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-1', text: 'One', sentAt: SENT_AT }]));
+    openSession(new FakeBoardGateway(), fakeGateway());
+    expect(await screen.findByText('Sign in with your login name and password.', { exact: false })).toBeDefined();
+    expect(await screen.findByText(MAY_NOT_BE_SENT, { exact: false })).toBeDefined();
+    await waitFor(() => expect(storedRecordNames()).toEqual([]));
+  });
+
+  it('says nothing of a turn after a later sign-out that dropped no record', async () => {
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-1', text: 'One', sentAt: SENT_AT }]));
+    openSession(new FakeBoardGateway(), fakeGateway());
+    expect(await screen.findByText(MAY_NOT_BE_SENT, { exact: false })).toBeDefined();
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText(/Login name/), 'operator');
+    await user.type(screen.getByLabelText(/Password/), 'fixture-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await shownSession();
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByText('You signed out')).toBeDefined();
+    expect(screen.queryByText(MAY_NOT_BE_SENT, { exact: false })).toBeNull();
+  });
+
+  // Mounts the records under a view already signed out, as a shell that
+  // opens them late would; StrictMode then runs their mount effect twice.
+  function OnceSignedOut({ store, children }: { readonly store: TurnRecordStore; readonly children: ReactNode }) {
+    const { view } = useSession();
+    return view.status === 'signed-out' ? <TurnRecordsProvider store={store}>{children}</TurnRecordsProvider> : null;
+  }
+
+  it('keeps that a record was dropped when StrictMode runs the clearing effect twice', async () => {
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-1', text: 'One', sentAt: SENT_AT }]));
+    const session = fakeGateway();
+    const clock = new ManualClock();
+    const store = createTurnRecordStore();
+    const wrapper = ({ children }: { readonly children: ReactNode }) => (
+      <StrictMode>
+        <SessionProvider gateway={session} clock={clock}>
+          <OnceSignedOut store={store}>{children}</OnceSignedOut>
+        </SessionProvider>
+      </StrictMode>
+    );
+    const hook = renderHook(() => useDroppedTurns(), { wrapper });
+    await waitFor(() => expect(storedRecordNames()).toEqual([]));
+    await waitFor(() => expect(hook.result.current).toBe(true));
   });
 
   it('clears the records of every session on sign out', async () => {
