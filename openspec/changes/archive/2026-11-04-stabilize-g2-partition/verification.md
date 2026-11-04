@@ -106,6 +106,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a1a790-f7dc-7023-96b1-03f0d9187798` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive stabilize-g2-partition --yes` (`Totals: + 0, ~ 1, - 0, → 0`), which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-stabilize-g2-partition`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `3d40034c`): only this change's delta in `g2-failure-scenarios`, the modified requirement "Worker broker partition" with the new scenario "Exit while the worker is offline" (4 insertions).
+- The moved change has `findings.jsonl` (3 pass 1 and 6 pass 2 findings) and `passes.jsonl` (passes 1 to 3); `make findings ARGS="validate"`: `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`
+- Run 6, `env -u NODE_ENV make verify` (`sg2p/verify-6-archive.make.log`): passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4880, suites 50, pass 4833, fail 0, cancelled 0, skipped 47; all files 99.43% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
+
 ## Independent review
 
 Review effort medium: owner decision 2026-11-02.
