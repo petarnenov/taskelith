@@ -68,7 +68,7 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
   // The answer to the record; after a CSRF refusal the session is read again
   // once and the key sent again with the renewed token under the same sign-in.
   const answerOf = useCallback(
-    async (record: TurnRecord): Promise<Answer | undefined> => {
+    async (record: TurnRecord): Promise<Answer> => {
       const sentUnder = signedInGeneration();
       let current = record;
       for (;;) {
@@ -77,8 +77,9 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
         if (outcome.kind !== 'retry-with-new-token') return outcome;
         const renewed = await refresh();
         if (renewed.kind === 'unavailable') return { kind: 'retryable', failure: 'token-not-renewed' };
-        if (renewed.kind === 'anonymous') return undefined;
-        if (!mounted.current || signedInGeneration() !== sentUnder) return { kind: 'retryable', failure: 'session-changed' };
+        if (renewed.kind === 'anonymous' || !mounted.current || signedInGeneration() !== sentUnder) {
+          return { kind: 'retryable', failure: 'session-changed' };
+        }
         current = spend(current);
       }
     },
@@ -92,7 +93,6 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
       const { key } = record;
       show(key, PENDING);
       const outcome = await answerOf(record);
-      if (outcome === undefined) return;
       if (outcome.kind === 'retryable') {
         show(key, { status: 'failed', failure: outcome.failure });
         return;
