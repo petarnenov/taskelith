@@ -47,3 +47,33 @@ test('in memory, a refused audit row fails the creation or update and keeps noth
   assert.deepEqual(value(await refusingUpdates.get(INTEGRATION.integrationId)), INTEGRATION);
   assert.deepEqual(value(await refusingUpdates.configurationOf(INTEGRATION.integrationId))?.secrets.reveal(), SECRETS.reveal());
 });
+
+type Snapshot = readonly [stored: number | undefined, audited: number | undefined];
+
+// Reads the store and the trail in one step after every microtask of
+// `write`, so a reader between its two publications would see it.
+async function snapshotsDuring(write: Promise<unknown>, read: () => Promise<Snapshot>): Promise<Snapshot[]> {
+  let settled = false;
+  const finished = write.then(() => { settled = true; });
+  const reads: Promise<Snapshot>[] = [];
+  while (!settled) {
+    reads.push(read());
+    await Promise.resolve();
+  }
+  await finished;
+  return Promise.all(reads);
+}
+
+test('in memory, a reader during a write sees the integration and its audit row together or neither', async () => {
+  const audit = new InMemoryScmIntegrationAudit();
+  const store = new InMemoryScmIntegrations(audit);
+  const read = async (): Promise<Snapshot> => {
+    const [stored, trail] = [store.get(INTEGRATION.integrationId), audit.trail()];
+    return [value(await stored)?.revision, value(await trail).at(-1)?.revision];
+  };
+  const created = await snapshotsDuring(store.add(INTEGRATION, SECRETS, ENTRY), read);
+  const updated = await snapshotsDuring(store.update(INTEGRATION.integrationId, { expectedRevision: 1, label: 'Moved' }, ENTRY), read);
+  const torn = [...created, ...updated].filter(([stored, audited]) => stored !== audited);
+  assert.deepEqual(torn, []);
+  assert.ok(created.length > 0 && updated.length > 0, 'the reads ran while the writes were in flight');
+});
