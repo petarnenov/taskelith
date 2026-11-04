@@ -5,13 +5,13 @@
 
 ## 2. Implementation and tests
 
-- [ ] 2.1 The declarations schema's `behaviorChanges`, with a test failing before it
-- [ ] 2.2 The contract: `sdlc.openapi.json` 0.5.0 with the `createRun` 404, `execution.openapi.json` 0.10.0, the 403 descriptions without the bridge, and the `breaking-changes.json` entry, with contract tests failing before it
-- [ ] 2.3 The bridge removed from `@taskelith/access`, with a test failing before it
-- [ ] 2.4 The roles and refusals of the four run operations: the access rules, `ControlPlaneApi`, and the routes' 403 and 404, with tests failing before them
-- [ ] 2.5 `ProjectDirectory` in `RunService`, its composition, and the shared fixture, with tests failing before them
-- [ ] 2.6 The smoke, the scenario tool, `installation.sh`, the G2 scenario installations, and the integration tests on a project with an owner role
-- [ ] 2.7 Control-plane wire contracts section 2 and execution wire contracts section 7
+- [x] 2.1 The declarations schema's `behaviorChanges`, with a test failing before it
+- [x] 2.2 The contract: `sdlc.openapi.json` 0.5.0 with the `createRun` 404, `execution.openapi.json` 0.10.0, the 403 descriptions without the bridge, and the `breaking-changes.json` entry, with contract tests failing before it
+- [x] 2.3 The bridge removed from `@taskelith/access`, with a test failing before it
+- [x] 2.4 The roles and refusals of the four run operations: the access rules, `ControlPlaneApi`, and the routes' 403 and 404, with tests failing before them
+- [x] 2.5 `ProjectDirectory` in `RunService`, its composition, and the shared fixture, with tests failing before them
+- [x] 2.6 The smoke, the scenario tool, `installation.sh`, the G2 scenario installations, and the integration tests on a project with an owner role
+- [x] 2.7 Control-plane wire contracts section 2 and execution wire contracts section 7
 
 ## 3. Records and checks
 
