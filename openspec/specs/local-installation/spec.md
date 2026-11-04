@@ -153,7 +153,7 @@ The composition's NATS SHALL refuse plain clients, the control plane SHALL publi
 - **THEN** the browser endpoint still serves the installation's API certificate
 
 ### Requirement: Bounded admission wait of the bring-up check
-Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, a positive whole number of seconds read in base 10, by default 300, killing a read still running then. Any other value SHALL be a usage error before any read.
+Each admission wait of `make verify-installation` SHALL read the workers view through the administrative entry and SHALL fail as a timeout when the worker is not admitted within `TASKELITH_ADMISSION_SECONDS`, a positive whole number of seconds read in base 10, by default 300, killing a read still running then. It SHALL measure the bound in milliseconds, SHALL NOT end as a timeout before it, and SHALL NOT sleep past it. Any other value SHALL be a usage error before any read.
 
 #### Scenario: Admission timeout
 - **WHEN** the worker is still `awaiting-self-check` when the bound ends
@@ -162,6 +162,14 @@ Each admission wait of `make verify-installation` SHALL read the workers view th
 #### Scenario: Hung read
 - **WHEN** a read of the workers view is still running when the bound ends
 - **THEN** the read is killed and the check fails as a timeout
+
+#### Scenario: Clock tick right after the start
+- **WHEN** a read hangs and the wall clock passes a whole second right after the wait starts
+- **THEN** the check fails as a timeout only after the whole bound has passed
+
+#### Scenario: Decision just after the bound
+- **WHEN** the worker is found admitted by a decision made 1 ms after the bound
+- **THEN** the check fails as a timeout
 
 #### Scenario: Bound of zero
 - **WHEN** `TASKELITH_ADMISSION_SECONDS` is `0`
