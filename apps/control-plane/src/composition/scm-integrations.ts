@@ -19,7 +19,7 @@ import type { Clock } from '@taskelith/sdlc';
 import { CommittingScmWebhookDeliveries, PostgresRepositoryBindings, PostgresScmIntegrations, type PostgresDatabase } from '@taskelith/postgres';
 import { registerGithubSourceControlPlugin } from '@taskelith/scm-github';
 import { scmSecretCipher } from '@taskelith/secrets';
-import { repositoryBindingService } from './repository-bindings.js';
+import { pluginDefectLog, repositoryBindingService } from './repository-bindings.js';
 import { singlePlugin } from './scm-plugins.js';
 
 // The ports the composition offers SCM plugins.
@@ -74,7 +74,7 @@ export function scmIntegrationServices(
 ): ScmIntegrationServices {
   const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger));
   return {
-    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock }),
+    integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock, defects: pluginDefectLog(logger) }),
     webhooks: new ScmWebhookReceiver({ verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin }),
   };
 }

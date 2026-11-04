@@ -1,10 +1,12 @@
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { Clock } from '@taskelith/sdlc';
 import { normalizeOrigin } from '../domain/normalized-origin.js';
-import { MAX_SCM_SECRETS, ScmSecrets, type ScmIntegration } from '../domain/scm-integration.js';
+import { MAX_SCM_SECRETS, ScmSecrets, type ScmIntegration, type ScmIntegrationId } from '../domain/scm-integration.js';
 import type { ScmIntegrationAuditEntry } from '../ports/scm-integration-audit.js';
-import type { ScmIntegrationChange, ScmIntegrationIds, ScmIntegrations, ScmPlugins } from '../ports/scm-integrations.js';
+import type { ScmIntegrationChange, ScmIntegrationIds, ScmIntegrations, ScmPluginDefects, ScmPlugins } from '../ports/scm-integrations.js';
 import type { ScmValues, SourceControlPlugin } from '../ports/source-control-plugin.js';
+import type { Reading } from '../ports/untrusted-shapes.js';
+import { pluginAnswer, pluginDefect, type ReportedDefect } from './plugin-answer.js';
 
 export const SCM_INTEGRATION_PAGE_SIZE = 100;
 
@@ -40,6 +42,7 @@ export interface ScmIntegrationServicePorts {
   readonly plugins: ScmPlugins;
   readonly ids: ScmIntegrationIds;
   readonly clock: Clock;
+  readonly defects: ScmPluginDefects;
 }
 
 // Wire contracts section 4: the plugin checks its settings and secrets,
@@ -71,14 +74,16 @@ export class ScmIntegrationService {
     if (plugin === undefined) return err(failure('not-found', 'no SCM plugin has this identifier', { pluginId: creation.pluginId }));
     const allowedOrigin = normalizeOrigin(creation.allowedOrigin);
     if (!allowedOrigin.ok) return allowedOrigin;
-    const settings = checkedSettings(plugin, creation.settings);
+    const integrationId = this.#ports.ids.next();
+    const checks = this.#checksOf(plugin, integrationId);
+    const settings = await checks.settings(creation.settings);
     if (!settings.ok) return settings;
-    const secrets = checkedSecrets(plugin, creation.secrets);
+    const secrets = await checks.secrets(creation.secrets);
     if (!secrets.ok) return secrets;
     const missing = plugin.secretNames.find((name) => !Object.hasOwn(creation.secrets, name));
     if (missing !== undefined) return err(failure('invalid', `the secret ${missing} is missing`, { setting: missing }));
     const integration: ScmIntegration = {
-      integrationId: this.#ports.ids.next(), pluginId: plugin.id, label: creation.label, allowedOrigin: allowedOrigin.value,
+      integrationId, pluginId: plugin.id, label: creation.label, allowedOrigin: allowedOrigin.value,
       settings: { ...creation.settings }, secretNames: secrets.value.names(), revision: 1,
     };
     return this.#ports.store.add(integration, secrets.value, this.#auditEntry(invocation));
@@ -89,7 +94,7 @@ export class ScmIntegrationService {
     if (!current.ok) return current;
     const plugin = this.#ports.plugins.pluginOf(current.value.pluginId);
     if (plugin === undefined) return err(failure('internal', 'the integration names no registered SCM plugin'));
-    const change = changeOf(plugin, update);
+    const change = await changeOf(this.#checksOf(plugin, current.value.integrationId), update);
     if (!change.ok) return change;
     const overflowing = secretPastLimit(current.value, change.value.secrets);
     if (overflowing !== undefined) return err(failure('invalid', `the secret ${overflowing} exceeds the ${MAX_SCM_SECRETS} secrets of an integration`, { setting: overflowing }));
@@ -99,6 +104,24 @@ export class ScmIntegrationService {
   #auditEntry({ actor, reason }: ScmIntegrationInvocation): ScmIntegrationAuditEntry {
     return { actor, reason, at: this.#ports.clock.now() };
   }
+
+  #checksOf(plugin: SourceControlPlugin, integrationId: ScmIntegrationId): PluginChecks {
+    const { defects } = this.#ports;
+    const defect: ReportedDefect = (operation, kind) => {
+      defects.defect({ integrationId, pluginId: plugin.id, operation, kind });
+      return pluginDefect();
+    };
+    return {
+      settings: (settings) => checkedSettings(plugin, settings, defect),
+      secrets: (values) => checkedSecrets(plugin, values, defect),
+    };
+  }
+}
+
+// The plugin's checks of one integration, each inside the plugin boundary.
+interface PluginChecks {
+  settings(settings: ScmValues): Promise<Result<void>>;
+  secrets(values: ScmValues): Promise<Result<ScmSecrets>>;
 }
 
 // The first added secret, in code-unit order, beyond `MAX_SCM_SECRETS`.
@@ -107,13 +130,13 @@ function secretPastLimit(current: ScmIntegration, replacements: ScmSecrets | und
   return added[MAX_SCM_SECRETS - current.secretNames.length];
 }
 
-function changeOf(plugin: SourceControlPlugin, update: ScmIntegrationUpdate): Result<ScmIntegrationChange> {
+async function changeOf(checks: PluginChecks, update: ScmIntegrationUpdate): Promise<Result<ScmIntegrationChange>> {
   const { expectedRevision, label, allowedOrigin, settings, secrets } = update;
   const origin = allowedOrigin === undefined ? ok(undefined) : normalizeOrigin(allowedOrigin);
   if (!origin.ok) return origin;
-  const settingsChecked = settings === undefined ? ok(undefined) : checkedSettings(plugin, settings);
+  const settingsChecked = settings === undefined ? ok(undefined) : await checks.settings(settings);
   if (!settingsChecked.ok) return settingsChecked;
-  const replaced = secrets === undefined ? ok(undefined) : checkedSecrets(plugin, secrets);
+  const replaced = secrets === undefined ? ok(undefined) : await checks.secrets(secrets);
   if (!replaced.ok) return replaced;
   return ok({
     expectedRevision,
@@ -124,19 +147,27 @@ function changeOf(plugin: SourceControlPlugin, update: ScmIntegrationUpdate): Re
   });
 }
 
-function checkedSettings(plugin: SourceControlPlugin, settings: ScmValues): Result<void> {
-  const checked = plugin.checkSettings(settings);
-  return checked.ok ? checked : err(refusedSetting('setting', checked.error.details.setting ?? 'settings'));
+async function checkedSettings(plugin: SourceControlPlugin, settings: ScmValues, defect: ReportedDefect): Promise<Result<void>> {
+  const checked = await pluginAnswer(() => plugin.checkSettings(settings), noValue, (kind) => defect('checkSettings', kind));
+  if (!checked.ok) return checked;
+  return checked.value.ok ? ok(undefined) : err(refusedSetting('setting', checked.value.error.details.setting ?? 'settings'));
 }
 
 // Each named secret is one the plugin knows, with a value it accepts.
-function checkedSecrets(plugin: SourceControlPlugin, values: ScmValues): Result<ScmSecrets> {
+async function checkedSecrets(plugin: SourceControlPlugin, values: ScmValues, defect: ReportedDefect): Promise<Result<ScmSecrets>> {
   const secrets = ScmSecrets.of(values);
   if (!secrets.ok) return secrets;
   for (const name of secrets.value.names()) {
-    if (!plugin.checkSecret(name, values[name]!).ok) return err(refusedSetting('secret', name));
+    const checked = await pluginAnswer(() => plugin.checkSecret(name, values[name]!), noValue, (kind) => defect('checkSecret', kind));
+    if (!checked.ok) return checked;
+    if (!checked.value.ok) return err(refusedSetting('secret', name));
   }
   return secrets;
+}
+
+// A check answers no value, so whatever it carries is ignored.
+function noValue(): Reading<void> {
+  return ok(undefined);
 }
 
 // The plugin's own message may quote a value, so only the name is kept.

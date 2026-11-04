@@ -15,7 +15,8 @@ export function repositoryBindingService(ports: RepositoryBindingPorts, logger: 
   return new RepositoryBindingService({ ...ports, defects: pluginDefectLog(logger) });
 }
 
-function pluginDefectLog(logger: Logger): ScmPluginDefects {
+// One sanitized error record per plugin defect, of any SCM plugin call.
+export function pluginDefectLog(logger: Logger): ScmPluginDefects {
   return {
     defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', { integrationId, pluginId, operation, kind }),
   };

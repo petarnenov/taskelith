@@ -67,7 +67,7 @@ export interface UnverifiableIntegrations {
   unverifiable(integrationId: ScmIntegrationId, revision: number, reason: UnverifiableReason): void;
 }
 
-export type ScmPluginOperation = 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+export type ScmPluginOperation = 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
 
 export type ScmPluginDefectKind =
   | 'threw' | 'malformed-envelope' | 'malformed-value' | 'foreign-repository' | 'unnormalizable-origin' | 'unexpected-failure-code';
