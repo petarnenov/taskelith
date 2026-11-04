@@ -448,7 +448,9 @@ await_worker_admission() (
     exit 2
   fi
   bound=$((10#$ADMISSION_SECONDS))
-  deadline=$((SECONDS + bound))
+  # SECONDS ticks on wall-clock seconds, possibly right after this read, so
+  # the deadline is one past the bound and the wait never ends before it.
+  deadline=$((SECONDS + bound + 1))
   files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
   trap 'rm -rf "$files"' EXIT
   : > "$files/log"

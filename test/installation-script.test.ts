@@ -467,6 +467,15 @@ sleep "\${FAKE_NODE_DELAY:-0}"
 exec "$REAL_NODE" "$@"
 `;
 
+// Sleeps as asked; with FAKE_LATE_WAKE it then wakes only just past the next
+// wall-clock second, as a loaded host may, so the poll reads every tick.
+const lateSleep = `#!/bin/sh
+/bin/sleep "$@"
+if [ -n "$FAKE_LATE_WAKE" ]; then
+  /bin/sleep "$("$REAL_NODE" -e 'process.stdout.write(String((1010 - Date.now() % 1000) / 1000))')"
+fi
+`;
+
 const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
 const VIEW_TIME = '2026-10-28T10:00:05.000Z';
 
@@ -478,7 +487,7 @@ function admissionView(admission: string, outcome?: string, details: readonly st
 function checkAdmission(views: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-'));
   try {
-    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode]]) {
+    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode], ['sleep', lateSleep]]) {
       writeFileSync(join(root, name), source);
       chmodSync(join(root, name), 0o755);
     }
@@ -576,6 +585,24 @@ test('a bound with a leading zero is read in base 10', () => {
   assert.equal(outcome.status, 3);
   assert.match(outcome.stderr, /the worker was not admitted within 10s/);
   assert.ok(seconds >= 10, `ended after ${seconds}s, before 10`);
+});
+
+// Blocks until late in a wall-clock second, so that a shell started next
+// sees its whole-second clock tick almost at once.
+function awaitLateInSecond(): void {
+  const remaining = 800 - (Date.now() % 1000);
+  if (remaining > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, remaining);
+}
+
+test('a wait never ends before its bound, even when its clock ticks right after it starts', () => {
+  awaitLateInSecond();
+  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30', FAKE_LATE_WAKE: '1',
+  }));
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /the worker was not admitted within 2s/);
+  assert.ok(seconds >= 2, `ended after ${seconds}s, before 2`);
+  assert.ok(seconds < 20, `ended after ${seconds}s`);
 });
 
 test('a refused read of the workers view fails the admission check at once', () => {

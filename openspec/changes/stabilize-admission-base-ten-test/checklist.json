@@ -1,0 +1,100 @@
+{
+  "change": "stabilize-admission-base-ten-test",
+  "generatedAt": "2026-11-04T04:44:43.520Z",
+  "devCommit": "fa3fbce73c999c7ba920119a0cab5ea8060837a4",
+  "query": {
+    "capabilities": [
+      "engineering-principles"
+    ],
+    "files": [
+      "scripts/**",
+      "test/installation-script.test.ts"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 53
+      },
+      {
+        "category": "contract-drift",
+        "count": 37
+      },
+      {
+        "category": "redaction",
+        "count": 15
+      },
+      {
+        "category": "concurrency-race",
+        "count": 8
+      },
+      {
+        "category": "naming",
+        "count": 8
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 4
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 4
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 961,
+        "inChecklist": 723
+      },
+      "mediumOrWorse": {
+        "findings": 474,
+        "inChecklist": 416
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 147
+      },
+      {
+        "category": "spec-wording",
+        "count": 100
+      },
+      {
+        "category": "docs",
+        "count": 79
+      },
+      {
+        "category": "stale-citation",
+        "count": 57
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 25
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 450,
+        "inChecklist": 443
+      },
+      "mediumOrWorse": {
+        "findings": 69,
+        "inChecklist": 69
+      }
+    }
+  }
+}
