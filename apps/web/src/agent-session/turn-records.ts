@@ -69,9 +69,15 @@ export function createTurnRecordStore(storage: () => Storage = () => window.sess
         read(name).filter((record) => record.key !== key),
       );
     },
+    // The storage is tried whatever threw before: a write over quota
+    // leaves the stored text, which must not outlive the shell's session.
     clearAll: () => {
       memory.clear();
-      attempt(removeAllRecords, () => {});
+      try {
+        removeAllRecords(storage());
+      } catch {
+        inMemory = true;
+      }
     },
   };
 }
