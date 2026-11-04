@@ -32,6 +32,8 @@ ADMISSION_SECONDS="${TASKELITH_ADMISSION_SECONDS:-300}"
 ADMISSION_POLL_SECONDS=5
 # WAITING of scripts/installation-admission.ts; the wait's timeout status.
 ADMISSION_WAITING=3
+# An unread clock; like a usage error, not the timeout status.
+ADMISSION_CLOCK_FAILED=2
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -424,20 +426,88 @@ read_worker_admission() {
     run --rm --no-deps -T --env TASKELITH_OPERATOR_TOKEN admin worker-admission
 }
 
-# Reads the view into OUTPUT and its diagnostics into LOG; a read still
-# running at DEADLINE is killed, and the function then fails.
+# Wall-clock milliseconds, from bash 5's EPOCHREALTIME or else from node;
+# TASKELITH_TEST_CLOCK, set only by tests, names a command printing them.
+read_clock() {
+  if [ -n "${TASKELITH_TEST_CLOCK:-}" ]; then
+    "$TASKELITH_TEST_CLOCK"
+  elif [ -n "${EPOCHREALTIME:-}" ]; then
+    echo "$((10#${EPOCHREALTIME//[!0-9]/} / 1000))"
+  else
+    node -e 'process.stdout.write(String(Date.now()))'
+  fi
+}
+
+# The clock's milliseconds; fails with a message when the clock fails or
+# prints anything else.
+clock_milliseconds() {
+  local now
+  if ! now="$(read_clock)" || ! [[ "$now" =~ ^[0-9]+$ ]]; then
+    echo "installation.sh: the clock could not be read" >&2
+    return 1
+  fi
+  echo "$((10#$now))"
+}
+
+# The clock time, in milliseconds, N whole seconds from now.
+deadline_in() {
+  local now
+  now="$(clock_milliseconds)" || return 1
+  echo "$((now + $1 * 1000))"
+}
+
+# Milliseconds left until DEADLINE, 0 once it has passed.
+milliseconds_left() {
+  local now left
+  now="$(clock_milliseconds)" || return 1
+  left=$(($1 - now))
+  echo "$((left > 0 ? left : 0))"
+}
+
+# Exits the admission wait with ADMISSION_CLOCK_FAILED on an unread clock.
+deadline_passed() {
+  local left
+  left="$(milliseconds_left "$1")" || exit "$ADMISSION_CLOCK_FAILED"
+  [ "$left" -eq 0 ]
+}
+
+# Sleeps N seconds, but never past DEADLINE.
+sleep_within() {
+  local left
+  left="$(milliseconds_left "$1")" || exit "$ADMISSION_CLOCK_FAILED"
+  sleep_at_most "$left" "$2"
+}
+
+# Sleeps N seconds, but at most LEFT milliseconds.
+sleep_at_most() {
+  local left="$1" wanted=$(($2 * 1000))
+  if [ "$left" -lt "$wanted" ]; then wanted="$left"; fi
+  sleep "$((wanted / 1000)).$(printf '%03d' "$((wanted % 1000))")"
+}
+
+# Kills the background read READER and reaps it.
+stop_read() {
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+}
+
+# Reads the view into OUTPUT and its diagnostics into LOG. A read still
+# running at DEADLINE, or when the clock fails, is stopped; both then fail.
 bounded_admission_read() {
-  local output="$1" log="$2" deadline="$3" reader
+  local output="$1" log="$2" deadline="$3" reader left
   read_worker_admission > "$output" 2>> "$log" &
   reader=$!
   while kill -0 "$reader" 2>/dev/null; do
-    if [ "$SECONDS" -ge "$deadline" ]; then
-      kill "$reader" 2>/dev/null || true
-      wait "$reader" 2>/dev/null || true
+    if ! left="$(milliseconds_left "$deadline")"; then
+      stop_read "$reader"
+      return "$ADMISSION_CLOCK_FAILED"
+    fi
+    if [ "$left" -eq 0 ]; then
+      stop_read "$reader"
       echo "installation.sh: a read of the workers view did not end in time" >> "$log"
       return 1
     fi
-    sleep 1
+    sleep_at_most "$left" 1
   done
   wait "$reader" || true
 }
@@ -445,27 +515,32 @@ bounded_admission_read() {
 # Polls the workers view until the one worker is admitted with a passed
 # linux-containment check reported after AFTER; prints the view's asOf.
 await_worker_admission() (
-  local bound deadline status="$ADMISSION_WAITING" files
+  local bound deadline status="$ADMISSION_WAITING" read_status files
   if ! [[ "$ADMISSION_SECONDS" =~ ^[0-9]+$ ]] || [ "$((10#$ADMISSION_SECONDS))" -eq 0 ]; then
     echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be positive whole seconds" >&2
     exit 2
   fi
   bound=$((10#$ADMISSION_SECONDS))
-  deadline=$((SECONDS + bound))
+  deadline="$(deadline_in "$bound")" || exit "$ADMISSION_CLOCK_FAILED"
   files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
   trap 'rm -rf "$files"' EXIT
-  : > "$files/log"
-  while [ "$SECONDS" -lt "$deadline" ]; do
+  # The first read starts whatever the clock says, so that slow clock reads
+  # (node on bash 3.2) cannot use up the bound before it.
+  while :; do
     : > "$files/log"
-    if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
+    read_status=0
+    bounded_admission_read "$files/view" "$files/log" "$deadline" || read_status=$?
+    if [ "$read_status" -eq "$ADMISSION_CLOCK_FAILED" ]; then exit "$read_status"; fi
+    if [ "$read_status" -ne 0 ]; then break; fi
     status=0
     node --experimental-strip-types "$repository/scripts/installation-admission.ts" linux-containment "$1" \
       < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?
     if [ "$status" -ne "$ADMISSION_WAITING" ]; then break; fi
-    sleep "$ADMISSION_POLL_SECONDS"
+    sleep_within "$deadline" "$ADMISSION_POLL_SECONDS"
+    if deadline_passed "$deadline"; then break; fi
   done
   # An admission decided when the bound has passed is a timeout too.
-  if [ "$status" -eq 0 ] && [ "$SECONDS" -ge "$deadline" ]; then status="$ADMISSION_WAITING"; fi
+  if [ "$status" -eq 0 ] && deadline_passed "$deadline"; then status="$ADMISSION_WAITING"; fi
   report_admission "$status" "$files" "$bound"
   exit "$status"
 )
