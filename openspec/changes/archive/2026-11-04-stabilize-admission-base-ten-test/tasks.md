@@ -27,7 +27,7 @@
 - [x] 5.5 Archive the change (reverted in 6.1 for the return)
 - [x] 5.6 Independent review pass 3 of the return round (codex gpt-6.1-sol, medium): 1 Medium, 2 Low
 - [x] 5.7 Pass 3 fixes: a clock failure stops a running read, the capped-poll test awaits its read, and a failing clock fails the wait even when it prints digits
-- [ ] 5.8 Archive the change
+- [x] 5.8 Archive the change
 
 ## 6. Return (2026-11-04)
 

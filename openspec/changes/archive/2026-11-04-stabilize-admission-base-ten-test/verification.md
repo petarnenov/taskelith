@@ -172,6 +172,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 3 | A | `codex gpt-6.1-sol#medium` | `01a1a576-f162-7a60-bb43-a13a2c31de6f` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive stabilize-admission-base-ten-test --yes`, which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-stabilize-admission-base-ten-test`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `46cd51b3`): only this change's delta in `local-installation`, the modified requirement "Bounded admission wait of the bring-up check" with the three new scenarios "Clock tick right after the start", "Decision just after the bound", and "Slow clock before the first read".
+- The moved change has `findings.jsonl` (4 pass 1, 4 pass 2, and 3 pass 3 findings) and `passes.jsonl` (passes 1 to 3); `make findings ARGS="validate"`: every findings file is valid, 116 files.
+- `env -u NODE_ENV make verify`: passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4813, suites 50, pass 4766, fail 0, cancelled 0, skipped 47. All files: 99.42 % lines, 92.89 % branches, 98.84 % functions.
+
 ## Independent review
 
 Pass 1: Codex `gpt-6-astra`, medium, role A, session `01a1a4f4-9535-7802-adee-165439e57aa9`; 3 Medium, 1 Low, all fixed in `b111eac1` ("Pass 1 fix round"). Pass 2: Claude Code `claude-fable-5-1`, medium, role B, session `9a3afe82-cef1-4bd1-897e-611e2e507c77`; 4 Low, all fixed in `73d21e34` ("Pass 2 fix round"). The review ended at this Low-only pass; pass 3 was not run then. Both passes ran at effort medium, owner decision 2026-11-02. Pass 3: Codex `gpt-6.1-sol`, medium, role A, session `01a1a576-f162-7a60-bb43-a13a2c31de6f`, in place of the unavailable Argon; 1 Medium, 2 Low, all fixed in `e24f01f0` ("Pass 3 fix round").
