@@ -11,6 +11,7 @@
 
 ## 3. Verify
 
-- [x] 3.1 Show that the reproduction no longer fails the fixed scenario, and run the fixed file 30 times, 15 under a CPU hog.
+- [x] 3.1 Show that the reproduction no longer fails the fixed scenario, and run the fixed file 30 times, 15 under 8 CPU hogs.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-g2-partition --strict`, `make verify`, and `make verify-linux-g2-scenarios`.
 - [ ] 3.3 Independent review, recorded in `verification.md`.
+- [x] 3.4 Pass 2 fix round: release the held process after the heal only once the worker is online again, and in `finally`; run the fixed file 20 times, 10 under 8 CPU hogs.

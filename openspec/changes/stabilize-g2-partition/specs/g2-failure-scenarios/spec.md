@@ -13,4 +13,4 @@ On a test-side composition against the `make` services, a Toxiproxy partition of
 
 #### Scenario: Exit while the worker is offline
 - **WHEN** the process exits after the cut, once the worker reports its broker contact offline, and before the heal
-- **THEN** the control plane has no exit and the task stays pending until the heal, and after it the exit is published from the local outbox and the attempt ends once
+- **THEN** the task stays pending until the heal, and after the heal the attempt exits once with one started execution

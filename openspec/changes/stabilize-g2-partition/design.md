@@ -10,11 +10,11 @@ The scenario "a partition while the process runs keeps its observations, publish
 
 ## Decisions
 
-- Hold the scripted process (`HELD_RUN`) and release it only once the worker is offline: before the heal when the seed heals after the exit, after the heal otherwise. The seeded choice stays; both of its orders are now certain rather than likely. Alternative rejected: a longer run, which only widens the margin.
+- Hold the scripted process (`HELD_RUN`) and release it only once the worker is offline: before the heal when the seed heals after the exit, otherwise after the heal once the worker reports its contact online again. The seeded choice stays; in the first order the exit is certainly journaled while the worker is offline, in the second while it is online again. Alternative rejected: a longer run, which only widens the margin.
 - Assert that the journal shows the execution `started` when the worker goes offline, so a future change that lets the process end before the cut fails by name instead of on the outbox assertion.
 - Keep the other two broker scenarios at the 2.5 s run, through a `runMilliseconds` parameter of `connectedWorker` with that default.
 - Add the scenario "Exit while the worker is offline" to "Worker broker partition" instead of `skip_specs` (coordinator decision): it states what the held process pins.
 
 ## Risks / Trade-offs
 
-- The held process exits only on release; a failure before the release leaves it to the worker's stop and the installation's leftover process kill, as for the cancellation race scenarios that hold their processes.
+- The held process exits only on release; the scenario's `finally` releases it before the worker's stop, so a failure before the release does not leave it running, as in the cancellation race g (`test/g2-cancellation-races.test.ts:391`).
