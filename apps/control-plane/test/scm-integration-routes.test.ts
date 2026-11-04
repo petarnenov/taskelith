@@ -359,3 +359,27 @@ test('a plugin check that throws answers 500 to a create or update, with no valu
   assert.deepEqual(trail.map((event) => event.kind), ['created']);
   assert.ok(holdsNoSecret(JSON.stringify(trail)));
 });
+
+test('a webhook whose provider build throws quoting a secret answers 401, with no value in the answer or the log', async (t) => {
+  const github = githubSourceControlPlugin();
+  const quoting = (secret: string): never => { throw new Error(`refused ${secret}`); };
+  const plugin: SourceControlPlugin = { ...github, createProvider: ({ secrets }) => quoting(secrets['webhook-secret']!) };
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  const answer = await fetch(`${base}/scm-integrations/${integrationId}/webhooks`, {
+    method: 'POST', body, headers: {
+      'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': 'd-1',
+      'x-hub-signature-256': `sha256=${createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')}`,
+    },
+  });
+  const text = await answer.text();
+  assert.equal(answer.status, 401, text);
+  assert.ok(holdsNoSecret(text) && !text.includes('refused'));
+  const defects = sink.records.filter((record) => record.event === 'scm.plugin.defect');
+  assert.deepEqual(defects.map(({ level, fields }) => [level, fields]), [
+    ['error', { integrationId, pluginId: 'scm-github', operation: 'createProvider', kind: 'threw' }],
+  ]);
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(recorded, []);
+});

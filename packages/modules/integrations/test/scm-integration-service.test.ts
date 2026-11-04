@@ -311,6 +311,33 @@ test('a plugin check that throws or breaks its envelope fails a create or update
   }
 });
 
+// A plugin whose provider answer misbehaves as `misbehaviour` says.
+function misbuildingPlugin(misbehaviour: Misbehaviour | 'no-provider'): SourceControlPlugin {
+  const plugin = new ExamplePlugin();
+  const answer = () => (misbehaviour === 'no-provider' ? ok(QUOTED) : misbehavingAnswer(misbehaviour));
+  Object.defineProperty(plugin, 'createProvider', { value: answer });
+  return plugin;
+}
+
+test('a stored verifier whose provider build throws or breaks answers none, one defect a revision, quoting nothing', async () => {
+  const cases = [['throws', 'threw'], ['throwing-ok', 'threw'], ['no-envelope', 'malformed-envelope'], ['no-provider', 'malformed-value']] as const;
+  for (const [misbehaviour, kind] of cases) {
+    const { service, store } = setup();
+    const created = value(await service.create(CREATION, INVOCATION));
+    const defects: ScmPluginDefect[] = [];
+    const unverifiable: unknown[] = [];
+    const reporter = { unverifiable: (...report: unknown[]) => { unverifiable.push(report); } };
+    const plugin = misbuildingPlugin(misbehaviour);
+    const verifiers = new StoredScmIntegrationVerifiers(store, { pluginOf: () => plugin }, reporter, { defect: (defect) => { defects.push(defect); } });
+    const answers = [await verifiers.verifierOf(created.integrationId), await verifiers.verifierOf(created.integrationId)];
+    assert.deepEqual(answers.map((answer) => value(answer)), [undefined, undefined], misbehaviour);
+    const expected = { integrationId: created.integrationId, pluginId: 'scm-example', operation: 'createProvider', kind };
+    assert.deepEqual(defects, [expected], misbehaviour);
+    assert.deepEqual(unverifiable, [], misbehaviour);
+    assert.ok(![answers, defects].some((held) => inspect(held).includes(QUOTED)), misbehaviour);
+  }
+});
+
 // Refuses every set of settings, naming in its details what `named` says.
 function namingPlugin(named: (settings: Readonly<Record<string, string>>) => unknown): ExamplePlugin {
   const plugin = new ExamplePlugin();
