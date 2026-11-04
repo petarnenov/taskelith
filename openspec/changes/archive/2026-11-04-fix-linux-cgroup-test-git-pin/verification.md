@@ -116,3 +116,13 @@ Claude Code `claude-fable-5-1`, effort medium, role B, session `7771165c-107e-4d
 
 - The coordinator's check, as solution architect, of the four pass 2 fixes that no later pass reviewed.
 - Integration into dev by the coordinator (single pull request).
+
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive fix-linux-cgroup-test-git-pin --yes`, which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-fix-linux-cgroup-test-git-pin`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `163fe9e5`): only this change's delta, the new requirement "Pinned Git client in the Linux test image" in `native-worker-acceptance`.
+- The moved change has `findings.jsonl` (2 pass 1 and 4 pass 2 findings) and `passes.jsonl` (passes 1 and 2); `make findings ARGS="validate"`: every findings file is valid, 118 files.
+- `env -u NODE_ENV make verify` (`flcgp/fix2-verify-archive.log`): passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4821, suites 50, pass 4774, fail 0, cancelled 0, skipped 47. All files: 99.42 % lines, 92.93 % branches, 98.84 % functions.
