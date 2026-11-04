@@ -79,6 +79,7 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ...variant('primary light', 'light', 'indigo'),
     ...variant('gray subtle', 'subtle', 'gray'),
     ...variant('default', 'default', 'gray'),
+    ...variant('danger light', 'light', 'red'),
     ...alert('indigo'),
     ...alert('red'),
     ...alert('gray'),

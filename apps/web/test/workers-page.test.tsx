@@ -257,13 +257,15 @@ describe('the shown workers', () => {
     expect(region.queryByText(/Last report/)).toBeNull();
   });
 
-  it('says that no worker is enrolled for an empty view, without a link', async () => {
+  it('says that no worker is enrolled for an empty view, linking to the enrollment tokens', async () => {
     openWorkers(workersGatewayWith(read(workersView({ workers: [] }))));
     await screen.findByRole('heading', { level: 1, name: TITLE });
-    expect(await screen.findByText('No worker is enrolled. Enroll one with an enrollment token.')).toBeDefined();
+    expect((await screen.findByText(/No worker is enrolled\./)).textContent).toBe('No worker is enrolled. Enroll one with an enrollment token.');
     expect(screen.queryByRole('region', { name: 'Workers' })).toBeNull();
     expect(screen.getByText(/As of/)).toBeDefined();
-    expect(within(screen.getByRole('main')).queryAllByRole('link')).toEqual([]);
+    const link = within(screen.getByRole('main')).getByRole('link', { name: 'enrollment token' });
+    expect(link.getAttribute('href')).toBe('#enrollment-tokens');
+    expect(screen.getByRole('region', { name: 'Enrollment tokens' }).id).toBe('enrollment-tokens');
   });
 
   it('lays the cards out in the responsive grid of the proof of concept', async () => {
@@ -438,6 +440,7 @@ describe('redaction', () => {
       const url = String(input);
       if (url === '/session') return json(200, SESSION);
       if (url === '/workers') return json(200, { asOf: '2026-11-03T09:10:00.000Z', workers: [entry] });
+      if (url === '/enrollment-tokens') return json(200, { tokens: [] });
       throw new Error(`Unexpected request ${url}`);
     });
     return send;
