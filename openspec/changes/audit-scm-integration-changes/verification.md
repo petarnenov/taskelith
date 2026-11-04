@@ -88,6 +88,8 @@ Each control applied one mutation to the committed implementation, rebuilt, ran 
 | `npm run openspec -- validate audit-scm-integration-changes --strict` | `9cbbef55`, again at `c43300f5` | `Change 'audit-scm-integration-changes' is valid` |
 | `npm run verify:archive`, inside runs 1 and 2 | trees `5be7372b` and `fc5a74ff` | `Every active OpenSpec change archives into strictly valid specs.` |
 
+verify-11b2-p2c failed only in verify:dependencies because node_modules predated the dev merge's lockfile (@octokit/plugin-paginate-rest 15.0.0 vs 16.0.0); make setup reinstalled them and the rerun passed.
+
 ### Route
 
 Route (`route.json`, rule version 5): elevated (lines, files, capabilities, contracts); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.71; 0.73 after the decisions before pass 1, with the same tier and reviewers). Reviews run at effort medium (owner decision 2026-11-02), although `route.json` recommends high for passes 1 and 2. The coordinator assigns the reviewers.
