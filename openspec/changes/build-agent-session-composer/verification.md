@@ -86,7 +86,7 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7d85a035befc14674d50f962a94e148e5df92fdd`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.44% lines, 92.83% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `83d306784f65578008a60580618bcb5588810a90`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
 - `npm run openspec -- validate build-agent-session-composer --strict`: passed, `Change 'build-agent-session-composer' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 117 file(s); every pass summary file is valid: 97 file(s); every route file is valid: 50 file(s).`.
 - Spec diff against the merge base `743f4661b786` with `origin/dev`: no change under `openspec/specs`.
@@ -95,6 +95,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a5c3-dbd3-7581-8f0e-c0fc44c7e9fd` | 0 | 4 | 7 | 0 |
+| 2 | B | `claude claude-fable-5-1#medium` | `3ef0365a-7e28-4004-b692-3f12458b3225` | 0 | 0 | 1 | 6 |
 <!-- make record: end -->
 
 ## Independent review
@@ -159,6 +160,7 @@ Pass 3 (`agy gemini-4-argon-medium#medium`) reviews these fixes, since pass 2 fo
 - Finding 6 (`04e5236d`): the wiring test maps each console argument through its `stack` or `message` when it is an `Error` before the search; `fb-31b-p2-6.log` shows the mutation that the old assertion let pass.
 - Finding 7 (`df015a0b`, test `f27728b6`): Mantine's `Button` sets `disabled` under `loading` too, so a loading button would lose the focus the same way; the composer remembers a send or retry from its own buttons and focuses the field once `sending` ends and no block holds (a `denied` notice keeps the block, and the focus is not moved). Retry gets the same, since a recorded turn removes the Retry button that held the focus (design, decision 10).
 - After the fixes the whole `apps/web` suite passes: 717 tests in 26 files (`coverage-31b-p2.log`), 99.03% statements, 97.37% branches, 100% functions, and 100% lines; `Composer.tsx` 98.57 / 96.36 / 100 / 100 (the unreachable submit of a disabled form and the singular of "character", as before), `useComposer.ts` 100 / 91.17 / 100 / 100 (the unmounted guard of `spend` and a retry of an unknown key, as before), `TurnRecordsProvider.tsx` 93.75 / 83.33 / 100 / 100 (the missing-provider throw, as before), `composer-model.ts` and `SignInPage.tsx` at 100 on every metric; `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `make findings ARGS="validate"`, and `npm run openspec -- validate build-agent-session-composer --strict` pass.
+- `make verify` of the fixed, recorded, and routed tree (`bc835902`, tree `83d30678`), `verify-31b-p2.log` in the session scratchpad: passed at the first run, profile full, no rerun of any suite, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 717 tests in 26 files, all passing, with 100% lines. The generated part above records it.
 
 ## Remaining gates
 
