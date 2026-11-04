@@ -212,3 +212,45 @@ test('a heartbeat of the enrolled journal after a rollback retired it records no
   const [after] = await sql<{ reachable: boolean; last_contact_at: Date }>(`SELECT reachable, last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
   assert.deepEqual(after, before);
 });
+
+function unrecordedProcess(workerId: string, sequence: number) {
+  const metadata = {
+    observationId: `unrecorded-${workerId}-${sequence}`, observationType: 'execution.unrecorded-process', schemaVersion: 1, protocolVersion: 1,
+    occurredAt: '2026-10-26T09:00:00.000Z', correlationId: 'correlation-1', workerId, journalId: journalOf(workerId), sequence,
+  };
+  const payload = { containment: 'cgroup x', recoveryEpoch: 1, processes: [{ pid: 7, startedAt: '2026-10-26T09:00:00.000Z' }] };
+  return { subjectWorkerId: workerId, type: 'execution.unrecorded-process', body: { metadata, payload } };
+}
+
+test('an observation commits while a heartbeat holds the worker row, and its contact follows', async () => {
+  await enroll('worker-a');
+  const contacted = gate();
+  const release = gate();
+  const holding = database.transaction(async (tx) => {
+    const recorded = await tx.reports.recordContact('worker-a' as never, await tx.now());
+    contacted.open();
+    await release.opened;
+    return recorded;
+  });
+  await contacted.opened;
+  const applying = observations.apply(unrecordedProcess('worker-a', 1));
+  try {
+    await until(waitsForLock);
+    assert.deepEqual(await sql('SELECT message_id FROM inbox'), [{ message_id: 'unrecorded-worker-a-1' }], 'committed before the row is free');
+  } finally {
+    release.open();
+  }
+  value(await holding);
+  assert.equal(value(await applying), 'applied');
+  assert.equal(await reachable('worker-a'), true);
+});
+
+test('the contact after an observation never moves the last contact backward', async () => {
+  await enroll('worker-a');
+  value(await heartbeats.record(heartbeat('worker-a')));
+  await sql(`UPDATE workers SET last_contact_at = now() + interval '1 hour' WHERE worker_id = 'worker-a'`);
+  const [before] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.equal(value(await observations.apply(declaration('worker-a', 1))), 'applied');
+  const [after] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.deepEqual(after, before);
+});
