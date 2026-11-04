@@ -116,6 +116,8 @@ For the coordinator (flaky queue item 12), no code change here: barriers outside
 | The same, 5 runs under the 8 busy loops | `e929041c` | 5 of 5 passed, 55 tests each, 14548 to 15004 ms, load average 5.46 to 10.29; no busy loop left afterwards |
 | `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict` | `e929041c` | `Change 'stabilize-fleet-renewal-lock-test' is valid` |
 | Archive probe in a scratch copy of `openspec/` | `e929041c`, the requirement of 454 characters | `+ 1 added`, archived as `2026-11-04-stabilize-fleet-renewal-lock-test`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
+| `env -u NODE_ENV make verify`, pass 2 fix round, run 1 | `70e81596` | Failed outside this change: the Node.js suites passed (tests 4880, pass 4833, fail 0, skipped 47; both changed tests passed, 167 ms and 165 ms), and `apps/web` `test/app.test.tsx` failed 2 tests: "says when the operator has no installation-wide role" after 5569 ms with `Unable to find role="menu"`, and "stops waiting for the end once the operator signed out" after 5442 ms with `Unable to find role="menuitem" and name "Sign out"` (2 failed, 814 passed) |
+| `env -u NODE_ENV make verify`, pass 2 fix round, run 2 on the same tree | `70e81596` | Passed, profile full, tree `5a3311c23f00438f1734ce2bd65564a473b4c1c5`; tests 4880, pass 4833, fail 0, skipped 47; `apps/web` 816 of 816 passed; both changed tests passed (220 ms and 241 ms) |
 
 ### Route
 
@@ -126,7 +128,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `70a37d636e988ab26a45090126c632860540aeec`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.84% functions.
+- `make verify`: passed, profile full, tree `5a3311c23f00438f1734ce2bd65564a473b4c1c5`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.43% lines, 92.99% branches, 98.85% functions.
 - `npm run openspec -- validate stabilize-fleet-renewal-lock-test --strict`: passed, `Change 'stabilize-fleet-renewal-lock-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 125 file(s); every pass summary file is valid: 105 file(s); every route file is valid: 58 file(s).`.
 - Spec diff against the merge base `a46ae37fce39` with `origin/dev`: no change under `openspec/specs`.
@@ -135,6 +137,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a7e4-71eb-7770-80f0-e2cbc365e98b` | 0 | 0 | 4 | 1 |
+| 2 | B | `claude claude-fable-5-1#medium` | `69ca03a3-4ce9-4de3-aa72-bf479c793322` | 0 | 0 | 0 | 3 |
 <!-- make record: end -->
 
 ## Independent review
