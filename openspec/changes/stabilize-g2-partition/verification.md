@@ -10,7 +10,10 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `7ecbfa3a` `test: hold the process of the broker partition scenario until the worker is offline` (the fix).
 - `b3d642c2` `docs: propose the stabilize g2 partition change` (proposal, design, tasks, the spec delta, `checklist.json`, `.openspec.yaml`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `fcc8afd5` `docs: record the review route of the stabilize g2 partition change` (`route.json` unedited).
-- The commit of these records follows; the review record and the archive commit follow it.
+- `27e251f3` `docs: record the checks of the stabilize g2 partition change`.
+- `87eb24f5` `docs: separate the start timeouts and correct the counts of the stabilize g2 partition records` (pass 1 fixes and the pass 1 line of `passes.jsonl`).
+- `8bbcca37` `docs: record the pass 1 review of the stabilize g2 partition change` (`findings.jsonl`).
+- The commit of the pass 1 checks follows; later review records and the archive commit follow it.
 
 ## Environment
 
@@ -67,6 +70,7 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 
 - Run 1, `env -u NODE_ENV make verify` on `fcc8afd5` (tree `94939924`, clean), profile full (`sg2p/verify-1.log`; `sg2p/verify-1.make.log` is the same log without the exit line added by the run script, which `make record` read): passed, `make verify: passed, profile full, tree 94939924a9ef76a0ec81790d888995731b7be69a; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun. Both while-running partition scenarios passed in it.
 - `env -u NODE_ENV make verify-linux-g2-scenarios` on the same tree, through the Linux cgroup supervisor (`sg2p/g2-scenarios-1.log`): `tests 18, pass 17, fail 0, skipped 1` (g, macOS only); cancellation races, worker to NATS, control plane to PostgreSQL, and stale generations passed; exit 0.
+- Run 2, pass 1 fix round, `env -u NODE_ENV make verify` on `8bbcca37` (tree `8f1c56d9`, clean), profile full (`sg2p/verify-2.make.log`, which `make record` read): passed, `make verify: passed, profile full, tree 8f1c56d94f69dc006fc59123610e41e57ec0cfab; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
 
 ### Route
 
@@ -77,11 +81,15 @@ A run on the parent of the #446 merge (`d0acd304`) under the same load was not d
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `94939924a9ef76a0ec81790d888995731b7be69a`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `8f1c56d94f69dc006fc59123610e41e57ec0cfab`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
 - `npm run openspec -- validate stabilize-g2-partition --strict`: passed, `Change 'stabilize-g2-partition' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`.
 - Spec diff against the merge base `3d40034c1262` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a750-6d97-78b0-90f6-5ada4c73e952` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Independent review
