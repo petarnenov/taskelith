@@ -159,6 +159,41 @@ describe('listAgentSessionTurns', () => {
   });
 });
 
+// The OpenAPI schemas cap TimelineCursor, TimelinePosition, and
+// AgentSessionGeneration at the largest safe integer, from 0 or from 1.
+describe('the timeline numbers', () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+  const sessionWith = (fields: object) => json(200, agentSessionView({ session: { ...agentSession(), ...fields } as never }));
+  const pageWith = (fields: object) => json(200, { ...turnPage(), ...fields });
+  const gatewayOf = (answer: Response) => createBoardGateway({ fetch: sendAnswers(answer) });
+
+  it.each([
+    ['a last turn position', (value: number) => sessionWith({ lastTurnPosition: value }), 0],
+    ['a last request position', (value: number) => sessionWith({ lastRequestPosition: value }), 0],
+    ['an output position', (value: number) => sessionWith({ output: { lastPosition: value } }), 0],
+    ['an earliest retained position', (value: number) => sessionWith({ output: { lastPosition: MAX, earliestRetained: value } }), 1],
+    ['a running generation', (value: number) => sessionWith({ runningGeneration: value }), 1],
+    ['an ownership generation', (value: number) => sessionWith({ activeAttempt: { attemptId: 'a', ownershipGeneration: value } }), 1],
+  ])('reads %s from its lowest value to the largest safe integer, and one above it as unreachable', async (_, answerWith, lowest) => {
+    const readOf = async (value: number) => (await gatewayOf(answerWith(value)).readAgentSession('project-1', 'session-1')).kind;
+    expect(await readOf(lowest)).toBe('read');
+    expect(await readOf(MAX)).toBe('read');
+    expect(await readOf(MAX + 1)).toBe('unavailable');
+  });
+
+  it.each([
+    ['a turn position', (value: number) => pageWith({ turns: [turn({ position: value })] }), 1],
+    ['a turn generation', (value: number) => pageWith({ turns: [turn({ generation: value })] }), 1],
+    ['a request generation', (value: number) => pageWith({ turns: [turn({ author: { kind: 'host', delegationRequest: { generation: value, nativeRequestId: 'r' } } })] }), 1],
+    ['a next cursor', (value: number) => pageWith({ next: value }), 1],
+  ])('reads %s from its lowest value to the largest safe integer, and one above it as unreachable', async (_, answerWith, lowest) => {
+    const readOf = async (value: number) => (await gatewayOf(answerWith(value)).listAgentSessionTurns('project-1', 'session-1', 0)).kind;
+    expect(await readOf(lowest)).toBe('read');
+    expect(await readOf(MAX)).toBe('read');
+    expect(await readOf(MAX + 1)).toBe('unavailable');
+  });
+});
+
 // An EventSource the test drives: it dispatches typed events.
 class FakeEventSource implements EventSourceLike {
   readyState = 0;
