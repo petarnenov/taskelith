@@ -175,7 +175,16 @@ Pass 3 (`agy gemini-4-argon-medium#medium`) reviews these fixes, since pass 2 fo
 
 None. Pass 3 reviewed `2c8bb248`, which holds every pass 1 and pass 2 fix, and every commit after it changes only the records of this change (`passes.jsonl`, `tasks.md`, this record, and the `make record` output) or archives the change, which applies the reviewed delta with the pinned CLI. Architect check by the coordinator (Niki, task 4.2): not needed, nothing to check.
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section's `make verify` line added, after tasks 4.1 to 4.3 were ticked, as the protocol's step 7 asks, and `npm run openspec -- archive build-agent-session-composer --yes` moved the change to `openspec/changes/archive/2026-11-04-build-agent-session-composer/` (`product-ui` 3 added; totals + 3, ~ 0, - 0). A probe of the same archive in a scratch copy of `openspec/` at `2212fcf0` passed `validate --all --strict` (71 of 71) first, with the three added requirements at 496, 492, and 485 characters (`archive-probe-31b-2.log`); the command output of the archive and its checks is `archive-31b.log` in the session scratchpad.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-build-agent-session-composer`; the command fails as a whole on older archived changes (279 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `44bd3592`): only this change's edits, in `product-ui` (81 insertions, 0 deletions: the added "Web SPA agent session composer", "Web SPA turn submission states", and "Web SPA turn retry records").
+- The moved change has `findings.jsonl` (the 18 findings of passes 1 and 2) and `passes.jsonl` (three passes); `make findings ARGS="validate"`: `Every findings file is valid: 119 file(s); every pass summary file is valid: 99 file(s); every route file is valid: 52 file(s).`
+- `make verify` (`verify-31b-final.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4802, suites 50, pass 4793, fail 0, skipped 9; all files 99.45% lines, 92.82% branches, 98.87% functions; `apps/web` 717 tests in 26 files, 99.03% statements, 97.37% branches, 100% functions, 100% lines. No rerun. The `pre-push` hook verifies the committed tree again.
+
 ## Remaining gates
 
-- Archive (task 4.3).
 - Integration into dev by the coordinator (single pull request).
