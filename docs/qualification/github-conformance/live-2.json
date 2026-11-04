@@ -1,0 +1,525 @@
+{
+  "mode": "run",
+  "startedAt": "2026-11-03T19:42:40.536Z",
+  "finishedAt": "2026-11-03T19:52:08.817Z",
+  "repositories": {
+    "project": "petarnenov/taskelith-conformance-project",
+    "foreign": "petarnenov/taskelith-conformance-foreign",
+    "hidden": "petarnenov/taskelith-conformance-hidden"
+  },
+  "cases": 17,
+  "findings": [
+    {
+      "caseName": "adopted credential",
+      "check": "outcome",
+      "message": "read-code to the project repository after the adoption of a later version must fail with forbidden"
+    },
+    {
+      "caseName": "credential isolation",
+      "check": "outcome",
+      "message": "read-code to the project repository after its revocation must fail with forbidden"
+    }
+  ],
+  "longRun": "not run",
+  "cleanup": {
+    "steps": [
+      {
+        "action": {
+          "kind": "remove-protection",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "main"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 22
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 18
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 17
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 16
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 14
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 13
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 12
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 11
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 10
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 9
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 8
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 7
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "close-pull",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "number": 6
+        },
+        "status": 200,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/00a8bec2-a23d-4c8a-9a9f-eb201324a210"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/091fbdd7-79b1-4dd3-8942-f371ec93f986"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/241f930e-9088-4aa4-8083-fbc679c82cbd"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/2d2d851b-1c32-4334-b5d5-8bb78501cd41"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/305cde68-e530-4217-94e3-3c372142d6f8"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/38d2716b-d10c-45b2-bb18-8f9ffec774d3"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/3979f73d-432c-4412-862b-d527cb409f12"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/4c171f5b-b639-4f14-a3b9-6b81d93db39c"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/5224d600-7ecc-4a7c-b915-4323b110d265"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/5f4f4203-5c7d-4960-ad71-522e2a4f5a50"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/64c428f1-4e92-44c4-bf2a-4d67ec366977"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/692d583c-8293-4adb-b0da-9582bda7139e"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/7827d315-7d3c-438f-9641-232d6447de29"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/860d768e-ab08-4010-baf4-dc6750f5c989"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/8640b658-43b4-4634-ba87-873edbc76b34"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/86665627-31f5-46f3-bb2c-b2bb390656f9"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/891f08d9-f746-43c6-9616-c947e3641226"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/8f3d0df1-cc0d-478f-a2a8-deb39de44a43"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/93f8c69c-8f8e-4803-8544-1338be527baa"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/9c09b4df-fd43-410c-b889-fa55f1578fcf"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/9da8bb60-154f-479d-9054-374f7987a3bc"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/b39ff523-806e-4653-ad07-11e86399cabe"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/b93fcac6-4fbb-474c-9ac2-fbb2a885f33b"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/c1212e53-abb0-4236-b010-3e0ecc7ef477"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/ce618f21-24a7-421d-b6e3-0d93d686d61d"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/de2f87b1-e5b4-42a1-9034-585d89d3453b"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/e255ef46-304d-4d8d-8127-3e7c88c76fd4"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/ed88ba3f-12ac-40f3-a4ed-837a47c4b357"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/f8f59bd4-1afb-49a4-93cc-7f05d50fa1c2"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-project",
+          "branch": "taskelith-conformance/fbd6f1a9-cdc1-42ac-b00b-585f4cc0db11"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/1b47b1f7-fad1-4255-9a83-3ccdb2fbce74"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/214d12e4-ccca-4c1c-af35-ccb118d0dc82"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/2dea4337-2953-4a77-b451-916377a60aa2"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/401a469a-b1a9-4f10-a4e9-4cf613618717"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/41f112a1-000e-410a-96e9-7370c216eabe"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/49083764-8f46-48b6-a5bf-ea86a396cb8b"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/5d3ad735-daad-400c-b054-7802f0f80bee"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/6f759376-34e3-48f9-ad66-3b23d5e6374a"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/f61233ec-d3a6-4610-a78f-62f5d4905e85"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/fab522cd-0bf2-49ff-9a4d-ee881b113606"
+        },
+        "status": 204,
+        "done": true
+      },
+      {
+        "action": {
+          "kind": "delete-branch",
+          "repository": "petarnenov/taskelith-conformance-foreign",
+          "branch": "taskelith-conformance/ffa2e79d-6c82-4d71-8ad5-d5dfc3715cce"
+        },
+        "status": 204,
+        "done": true
+      }
+    ],
+    "unobserved": []
+  },
+  "guardRefusals": []
+}

@@ -1,0 +1,28 @@
+{
+  "installations": [
+    {
+      "repository": "petarnenov/taskelith-conformance-project",
+      "status": 200,
+      "installationId": "174871289",
+      "account": "petarnenov"
+    },
+    {
+      "repository": "petarnenov/taskelith-conformance-foreign",
+      "status": 200,
+      "installationId": "174871289",
+      "account": "petarnenov"
+    },
+    {
+      "repository": "petarnenov/taskelith-conformance-hidden",
+      "status": 404
+    }
+  ],
+  "installationId": "174871289",
+  "visibleRepositories": [
+    "petarnenov/taskelith-conformance-project",
+    "petarnenov/taskelith-conformance-foreign"
+  ],
+  "hiddenStatus": 404,
+  "problems": [],
+  "guardRefusals": []
+}

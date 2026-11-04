@@ -81,20 +81,25 @@ export class InstallationTokens {
   }
 
   // GitHub refuses a repository outside the installation with 422, as it
-  // does other invalid requests; only then is the installation listed.
+  // does other invalid requests; only then are the repositories looked up.
   private async mintRefusal(refused: GithubRefusal, repositories: readonly string[]): Promise<Failure> {
     const failed = refusal(refused, 'issue an installation token');
     if (refused.status !== 422) return failed;
-    const installed = await this.installedRepositories();
-    if (!installed.ok) return installed.error;
-    if (repositories.every((repository) => installed.value.has(repositoryKey(repository)))) return failed;
-    return outsideInstallation();
+    for (const repository of repositories) {
+      const installed = await this.isInstalled(repository);
+      if (!installed.ok) return installed.error;
+      if (!installed.value) return outsideInstallation();
+    }
+    return failed;
   }
 
-  private async installedRepositories(): Promise<Result<ReadonlySet<string>>> {
-    const listed = await this.api.listAsApp('GET /installation/repositories');
-    if (!listed.ok) return err(refusal(listed.error, "list the installation's repositories"));
-    return ok(new Set(listed.value.map((repository) => repositoryKey(textOf(recordOf(repository)['full_name']) ?? ''))));
+  // By the App's JWT, so no installation token is needed for the answer.
+  private async isInstalled(repository: string): Promise<Result<boolean>> {
+    const name = parseRepository(repository);
+    if (!name.ok) return name;
+    const read = await this.api.asApp('GET /repos/{owner}/{repo}/installation', { ...name.value });
+    if (!read.ok) return read.error.status === 404 ? ok(false) : err(refusal(read.error, "read a repository's installation"));
+    return ok(String(recordOf(read.value.data)['id']) === this.installationId);
   }
 }
 

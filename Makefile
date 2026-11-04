@@ -32,7 +32,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility contract-breaking-changes findings integrate record record-check review progress progress-refresh \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-git-workspace verify-linux-crash-windows verify-linux-g2-scenarios verify-macos-g2-scenarios installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
-	installation-stop installation-enroll web-build web-dev web-test installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
+	installation-stop installation-enroll web-build web-dev web-test installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses conformance-github \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
 	scenario-worker-lifecycle scenario-native-worker-lifecycle native-acceptance
@@ -296,6 +296,14 @@ worker-seccomp-profile:
 qualify-harnesses:
 	@if [ -z "$$OUT" ]; then echo "make qualify-harnesses: set OUT to a directory outside the worktree" >&2; exit 2; fi
 	@$(INSTALLATION_PINS) PLATFORMS="$$PLATFORMS" bash scripts/harness-qualification.sh "$$OUT"
+
+# Opt-in, on SCM changes: the SCM conformance suite against GitHub.com on
+# the disposable repositories, into OUT; LONG_RUN=1 adds the hour-long case.
+conformance-github:
+	@if [ -z "$$OUT" ]; then echo "make conformance-github: set OUT to a directory outside the worktree" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash -c \
+		'npm run --silent build && node --experimental-strip-types scripts/github-conformance.ts "$$@"' \
+		github-conformance --out "$$OUT" $(if $(filter 1,$(LONG_RUN)),--long-run) $(if $(filter 1,$(CLEANUP_ONLY)),--cleanup-only) $(if $(filter 1,$(DISCOVER)),--discover)
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.

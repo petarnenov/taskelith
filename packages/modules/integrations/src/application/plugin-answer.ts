@@ -1,7 +1,7 @@
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { ScmPluginDefectKind, ScmPluginOperation } from '../ports/scm-integrations.js';
 import type { SourceControlProvider } from '../ports/source-control.js';
-import { readResult, type Reading } from '../ports/untrusted-shapes.js';
+import { readUntrustedResult, type Reading } from '../ports/untrusted-shapes.js';
 
 export type ReportedDefect = (operation: ScmPluginOperation, kind: ScmPluginDefectKind) => Failure;
 export type DefectOfCall = (kind: ScmPluginDefectKind) => Failure;
@@ -12,7 +12,7 @@ export async function pluginAnswer<Value>(
   call: () => Result<unknown> | Promise<Result<unknown>>, read: (value: unknown) => Reading<Value>, defect: DefectOfCall,
 ): Promise<Result<Result<Value>>> {
   try {
-    const envelope = readResult(await call());
+    const envelope = readUntrustedResult(await call());
     if (!envelope.ok) return err(defect('malformed-envelope'));
     if (!envelope.value.ok) return ok(err(envelope.value.error));
     const value = read(envelope.value.value);

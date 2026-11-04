@@ -1,0 +1,2 @@
+{"change":"run-github-scm-conformance","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a361-8932-7770-9eac-c24aaf5229a3","counts":{"critical":0,"high":3,"medium":10,"low":1}}
+{"change":"run-github-scm-conformance","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"f0eb27e3-9371-4ba0-8d13-d3ccec1487a2","counts":{"critical":0,"high":0,"medium":0,"low":7}}

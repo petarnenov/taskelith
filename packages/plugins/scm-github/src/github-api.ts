@@ -1,6 +1,5 @@
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/core';
-import { paginateRest } from '@octokit/plugin-paginate-rest';
 import { err, ok, type Result } from '@taskelith/kernel';
 
 // The adapter over Octokit: the rest of the plugin sees routes, plain data,
@@ -32,13 +31,15 @@ export interface GithubRefusal {
 
 export type GithubResult<T = GithubReply> = Result<T, GithubRefusal>;
 
-const PaginatingOctokit = Octokit.plugin(paginateRest);
 // Octokit and auth-app log GitHub's messages to the console; none escape.
 const SILENT_LOG = Object.freeze({ debug: discard, info: discard, warn: discard, error: discard });
 type Parameters = Record<string, unknown>;
 
+// Routes that GitHub answers only to the App's JWT, which auth-app signs.
+export type AppRoute = 'POST /app/installations/{installation_id}/access_tokens' | 'GET /repos/{owner}/{repo}/installation';
+
 export class GithubApi {
-  private readonly app: InstanceType<typeof PaginatingOctokit>;
+  private readonly app: Octokit;
   private readonly anonymous: Octokit;
 
   constructor(connection: GithubConnection) {
@@ -49,18 +50,33 @@ export class GithubApi {
       request: connection.fetch === undefined ? {} : { fetch: connection.fetch },
     };
     const auth = { appId: connection.appId, installationId: connection.installationId, privateKey: connection.privateKey };
-    this.app = withApiVersion(new PaginatingOctokit({ ...defaults, authStrategy: createAppAuth, auth }));
+    this.app = withApiVersion(new Octokit({ ...defaults, authStrategy: createAppAuth, auth }));
     this.anonymous = withApiVersion(new Octokit(defaults));
   }
 
-  // As the App or its installation, as the route requires: the plugin's
-  // own identity.
-  asApp(route: string, parameters: Parameters = {}): Promise<GithubResult> {
-    return settle(async () => reply(await this.app.request(route, parameters)));
+  // As the App itself, by its JWT.
+  asApp(route: AppRoute, parameters: Parameters = {}): Promise<GithubResult> {
+    const untypedRoute: string = route;
+    return settle(async () => reply(await this.app.request(untypedRoute, parameters)));
   }
 
-  listAsApp(route: string, parameters: Parameters = {}): Promise<GithubResult<readonly unknown[]>> {
-    return settle(() => this.app.paginate(route, { per_page: 100, ...parameters }));
+  // As the App's installation, only with a token narrowed to the route's
+  // repository: an installation-wide token is never requested.
+  async asInstallation(route: string, parameters: Parameters): Promise<GithubResult> {
+    const repository = parameters['repo'];
+    if (typeof repository !== 'string') return err({ status: 0 });
+    const token = await this.repositoryToken(repository);
+    return token.ok ? this.withToken(token.value, route, parameters) : token;
+  }
+
+  // GitHub refuses a token for a repository the installation cannot see
+  // with 422; to the caller that repository is not found, as with 404.
+  private async repositoryToken(repository: string): Promise<GithubResult<string>> {
+    const minted = await settle(async () => {
+      const authentication = await this.app.auth({ type: 'installation', repositoryNames: [repository] });
+      return (authentication as { token: string }).token;
+    });
+    return !minted.ok && minted.error.status === 422 ? err({ status: 404 }) : minted;
   }
 
   // As the holder of an installation token, such as a run's.

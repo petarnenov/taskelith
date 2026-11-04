@@ -42,7 +42,7 @@ export class GithubChangeRequests {
   async resolveRemoteUrl({ repository }: draft.RepositoryRequest): Promise<Result<draft.RepositoryRemote>> {
     const name = parseRepository(repository);
     if (!name.ok) return name;
-    const read = await this.api.asApp('GET /repos/{owner}/{repo}', { ...name.value });
+    const read = await this.api.asInstallation('GET /repos/{owner}/{repo}', { ...name.value });
     if (!read.ok) return err(refusal(read.error, 'read a repository'));
     const remoteUrl = textOf(recordOf(read.value.data)['clone_url']);
     if (remoteUrl === undefined || !isRemoteUrl(remoteUrl)) return err(malformed('a repository read'));
@@ -65,7 +65,7 @@ export class GithubChangeRequests {
       return err(failure('precondition-failed', 'The branch protection has settings this plugin would weaken', { settings }));
     }
     if (ensured) return ok(protectionData(request, current.value));
-    const protectedBranch = await this.api.asApp('PUT /repos/{owner}/{repo}/branches/{branch}/protection', {
+    const protectedBranch = await this.api.asInstallation('PUT /repos/{owner}/{repo}/branches/{branch}/protection', {
       ...branch,
       required_status_checks: { strict: false, contexts },
       enforce_admins: true,
@@ -79,7 +79,7 @@ export class GithubChangeRequests {
   async openChangeRequest(request: draft.OpenChangeRequest): Promise<Result<draft.ChangeRequestData>> {
     const name = parseRepository(request.repository);
     if (!name.ok) return name;
-    const opened = await this.api.asApp('POST /repos/{owner}/{repo}/pulls', {
+    const opened = await this.api.asInstallation('POST /repos/{owner}/{repo}/pulls', {
       ...name.value,
       title: request.title,
       body: request.description,
@@ -93,7 +93,7 @@ export class GithubChangeRequests {
   async readChangeRequest(request: draft.ChangeRequestReference): Promise<Result<draft.ChangeRequestData>> {
     const pull = pullOf(request);
     if (!pull.ok) return pull;
-    const read = await this.api.asApp('GET /repos/{owner}/{repo}/pulls/{pull_number}', { ...pull.value });
+    const read = await this.api.asInstallation('GET /repos/{owner}/{repo}/pulls/{pull_number}', { ...pull.value });
     if (!read.ok) return err(refusal(read.error, 'read a pull request'));
     return changeRequestData(request.repository, read.value.data);
   }
@@ -102,7 +102,7 @@ export class GithubChangeRequests {
     const name = parseRepository(request.repository);
     if (!name.ok) return name;
     if (!STATUS_STATES.has(request.state)) return err(failure('invalid', 'Unknown commit status state'));
-    const posted = await this.api.asApp('POST /repos/{owner}/{repo}/statuses/{sha}', {
+    const posted = await this.api.asInstallation('POST /repos/{owner}/{repo}/statuses/{sha}', {
       ...name.value,
       sha: request.commit,
       state: request.state,
@@ -124,7 +124,7 @@ export class GithubChangeRequests {
     }
     const pull = pullOf(request);
     if (!pull.ok) return pull;
-    const merged = await this.api.asApp('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge', {
+    const merged = await this.api.asInstallation('PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge', {
       ...pull.value,
       sha: request.expectedHead,
       merge_method: GITHUB_MERGE_METHODS[request.method],
@@ -141,7 +141,7 @@ export class GithubChangeRequests {
 
   // An unprotected branch reads as an empty protection.
   private async currentProtection(branch: RepositoryName & { branch: string }): Promise<Result<JsonRecord>> {
-    const read = await this.api.asApp('GET /repos/{owner}/{repo}/branches/{branch}/protection', { ...branch });
+    const read = await this.api.asInstallation('GET /repos/{owner}/{repo}/branches/{branch}/protection', { ...branch });
     if (!read.ok && read.error.status === 404) return ok({});
     if (!read.ok) return err(refusal(read.error, "read a branch's protection"));
     return ok(recordOf(read.value.data));

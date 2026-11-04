@@ -1,0 +1,19 @@
+{
+  "mode": "cleanup-only",
+  "startedAt": "2026-11-03T20:13:34.276Z",
+  "finishedAt": "2026-11-03T20:13:37.546Z",
+  "repositories": {
+    "project": "petarnenov/taskelith-conformance-project",
+    "foreign": "petarnenov/taskelith-conformance-foreign",
+    "hidden": "petarnenov/taskelith-conformance-hidden"
+  },
+  "cases": 0,
+  "findings": [],
+  "endings": [],
+  "longRun": "not run",
+  "cleanup": {
+    "steps": [],
+    "unobserved": []
+  },
+  "guardRefusals": []
+}
