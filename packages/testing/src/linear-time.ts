@@ -45,19 +45,34 @@ export function assertLinearOnRuns(transform: Transform, units: readonly string[
 // The runs double until the short median reaches the floor on any host, or
 // until doubling the long run would pass MAX_RUN_LENGTH characters.
 function timeUnit(transform: Transform, unit: string, startLength: number, timeRun: RunTimer): [RunTime, RunTime] {
+  assertRunFits(unit, startLength);
   for (let length = startLength; ; length *= 2) {
     const runs = unitRuns(unit, length);
-    const canGrow = length * 2 <= MAX_RUN_LENGTH;
+    const canGrow = longRunLength(unit, length * 2) <= MAX_RUN_LENGTH;
     if (canGrow && timeRun(transform, runs.short) < NOISE_FLOOR_MS) continue;
     const times = sampledTimes(transform, runs, timeRun);
     if (times[0].medianMs >= NOISE_FLOOR_MS || !canGrow) return times;
   }
 }
 
+function assertRunFits(unit: string, length: number): void {
+  const longLength = longRunLength(unit, length);
+  assert.ok(longLength <= MAX_RUN_LENGTH, `assertLinearOnRuns takes runs of at most ${MAX_RUN_LENGTH} characters: a unit of ${unit.length} at the length ${length} makes ${longLength}`);
+}
+
+function longRunLength(unit: string, length: number): number {
+  return unitCount(unit, length) * unit.length;
+}
+
+// Whole units, so a run can pass its length by less than one unit.
+function unitCount(unit: string, length: number): number {
+  return Math.ceil(length / unit.length);
+}
+
 function unitRuns(unit: string, length: number): Runs {
   return {
-    short: unit.repeat(Math.ceil(length / LENGTH_RATIO / unit.length)),
-    long: unit.repeat(Math.ceil(length / unit.length)),
+    short: unit.repeat(unitCount(unit, length / LENGTH_RATIO)),
+    long: unit.repeat(unitCount(unit, length)),
   };
 }
 
@@ -105,7 +120,7 @@ function runTime(run: string, samples: readonly number[]): RunTime {
 }
 
 // Under the floor, accounting and compilation make a ratio noise. Only the
-// longest runs can stay under it, where quadratic work would take minutes.
+// longest runs stay under it, where cheap enough quadratic work passes.
 function flooredRatio(short: RunTime, long: RunTime): number {
   return Math.max(long.medianMs, NOISE_FLOOR_MS) / Math.max(short.medianMs, NOISE_FLOOR_MS);
 }

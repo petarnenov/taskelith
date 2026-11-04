@@ -23,6 +23,10 @@
 - **WHEN** an injected timer reads 0 ms for every sample of the unit `a` from the length 2^20
 - **THEN** the runs stop doubling with a long run of 2^22 characters, and the assertion passes
 
+#### Scenario: Runs of whole units stay below the cap
+- **WHEN** an injected timer reads 0 ms for every sample of the unit `abc` from the length 2^21, or the same unit is checked from the length 2^22
+- **THEN** the long run has 2,097,153 characters, and the length 2^22 is rejected, as its long run of whole units would have 4,194,306
+
 #### Scenario: A pause in one sample passes
 - **WHEN** an injected timer reads 30 ms for each short sample and 420 ms for the first long sample and 120 ms for the others
 - **THEN** the assertion passes, because the median of the five long samples leaves the pause out

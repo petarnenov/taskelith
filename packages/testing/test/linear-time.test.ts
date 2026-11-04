@@ -61,6 +61,26 @@ test('runs stop doubling before the long run passes 2^22 characters', () => {
   assert.equal(Math.max(...runs.map((run) => run.length)), 2 ** 22);
 });
 
+test('runs of a unit of three characters stop doubling before the long run passes 2^22 characters', () => {
+  const runs: string[] = [];
+  assertLinearOnRuns(() => undefined, ['abc'], { length: 2 ** 21, timeRun: timesPerCharacter(0, runs) });
+  assert.equal(Math.max(...runs.map((run) => run.length)), 2_097_153);
+});
+
+test('a length whose long run of whole units passes 2^22 characters is rejected', () => {
+  assert.throws(() => assertLinearOnRuns(() => undefined, ['abc'], { length: 2 ** 22, timeRun: timesPerCharacter(0) }), {
+    name: 'AssertionError',
+    message: 'assertLinearOnRuns takes runs of at most 4194304 characters: a unit of 3 at the length 4194304 makes 4194306',
+  });
+});
+
+test('a unit longer than 2^22 characters is rejected', () => {
+  assert.throws(() => assertLinearOnRuns(() => undefined, ['a'.repeat(2 ** 22 + 1)], { length: 1, timeRun: timesPerCharacter(0) }), {
+    name: 'AssertionError',
+    message: 'assertLinearOnRuns takes runs of at most 4194304 characters: a unit of 4194305 at the length 1 makes 4194305',
+  });
+});
+
 test('a short median under the floor doubles the runs again', () => {
   const readings = [25, ...alternate([15, 15, 15, 25, 25], fiveTimes(60)), ...sampleReadings(30, fiveTimes(120))];
   const runs: string[] = [];
@@ -98,6 +118,11 @@ test('quadratic readings above the floor fail', () => {
     name: 'AssertionError',
     message: '"a" repeated grew 4.0 times faster than its length in CPU time: 25.0 ms at 1000 and 400.0 ms at 4000 characters',
   });
+});
+
+// A known limit: quadratic work that stays under the floor at the cap passes.
+test('quadratic readings under the floor on the longest runs pass', () => {
+  assertLinearOnRuns(() => undefined, ['a'], { timeRun: (_transform, run) => run.length ** 2 / 1e12 });
 });
 
 test('a pause in one sample, as a garbage collection causes, passes', () => {
