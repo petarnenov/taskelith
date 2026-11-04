@@ -22,6 +22,7 @@ import type { BrokerCredentials } from '../ports/broker-credentials.js';
 import type { WorkerCommandConsumers } from '../ports/command-consumers.js';
 import type { FleetRegistry } from '../ports/fleet-registry.js';
 import type { IdentifierSource } from '../ports/identifier-source.js';
+import { EnrollmentTokenService } from './enrollment-token-service.js';
 
 // What enrollment returns, once; `credentials` are the worker's secrets.
 export interface Enrollment {
@@ -77,19 +78,18 @@ export interface EnrollmentServiceDependencies {
 export class EnrollmentService {
   readonly #deps: EnrollmentServiceDependencies;
   readonly #limits: FleetLimits;
+  readonly #tokens: EnrollmentTokenService;
 
   constructor(dependencies: EnrollmentServiceDependencies) {
     this.#deps = dependencies;
     this.#limits = dependencies.limits ?? FLEET_LIMITS;
+    this.#tokens = new EnrollmentTokenService({ ...dependencies, limits: this.#limits });
   }
 
   // Returns the token's secret, which the owner hands to the worker host.
   async issueToken(constraints: HostConstraints): Promise<Result<string>> {
-    const issued = this.#deps.secrets.issue('enrollment');
-    const issuedAt = this.#deps.clock.now();
-    const expiresAt = this.#after(issuedAt, this.#limits.enrollmentTokenTtlMilliseconds);
-    const added = await this.#deps.registry.addToken({ hash: issued.hash, issuedAt, expiresAt, constraints: Object.freeze({ ...constraints }) });
-    return added.ok ? ok(issued.secret) : added;
+    const issued = await this.#tokens.issue(constraints);
+    return issued.ok ? ok(issued.value.secret) : issued;
   }
 
   async enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>> {
@@ -97,7 +97,9 @@ export class EnrollmentService {
     const tokenHash = this.#deps.secrets.hashOf(tokenSecret);
     const token = await this.#deps.registry.unusedToken(tokenHash);
     if (!token.ok) return token;
-    if (token.value === undefined || isExpired(token.value, now)) return err(reasoned('forbidden', 'token-invalid', 'the enrollment token is unknown, used, or expired'));
+    if (token.value === undefined || isExpired(token.value, now)) {
+      return err(reasoned('forbidden', 'token-invalid', 'the enrollment token is unknown, used, revoked, or expired'));
+    }
     const field = hostMismatch(token.value.constraints, request.host);
     if (field !== undefined) return err(reasoned('precondition-failed', 'host-mismatch', `the host ${field} does not match the token`));
     const protocolVersion = commonProtocolVersion(request.protocolVersions, this.#deps.serverProtocolVersions);
@@ -296,11 +298,14 @@ function notAuthorized() {
   return reasoned('forbidden', 'worker-not-authorized', 'the worker credential is not valid');
 }
 
+// The registry reasons that a redemption answers alike as `token-invalid`.
+const SPENT_TOKEN_REASONS: ReadonlySet<string> = new Set(['token-used', 'token-revoked', 'token-expired']);
+
 // A broker user issued for an enrollment that failed is never handed out,
 // so it grants nothing to anyone.
 function enrollFailure(error: ReturnType<typeof failure>): Result<never> {
-  if (error.details.reason === 'token-used' || error.details.reason === 'token-expired') {
-    return err(reasoned('forbidden', 'token-invalid', 'the enrollment token was used or expired meanwhile'));
+  if (SPENT_TOKEN_REASONS.has(error.details.reason ?? '')) {
+    return err(reasoned('forbidden', 'token-invalid', 'the enrollment token was used, revoked, or expired meanwhile'));
   }
   if (error.details.reason === 'journal-enrolled') return err(reasoned('conflict', 'journal-enrolled', 'the journal is already enrolled'));
   return err(error);

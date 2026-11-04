@@ -3,17 +3,35 @@ import type { AuditEvent, SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import type { Clock } from '@taskelith/sdlc';
 import type { RotationOrder } from '../domain/credential-rotation.js';
-import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken, RotationRequest } from '../domain/enrollment.js';
+import type {
+  BrokerRevocation,
+  CredentialGeneration,
+  EnrolledWorker,
+  EnrollmentToken,
+  EnrollmentTokenRecord,
+  RotationRequest,
+} from '../domain/enrollment.js';
 
 // Tokens, enrolled workers, and the durable list of broker users to revoke;
 // every write is atomic at SERIALIZABLE, since placement reads the workers.
 export interface FleetRegistry {
   addToken(token: EnrollmentToken): Promise<Result<void>>;
-  // An unused token by its hash; a used one reads as absent.
+  // An unused, unrevoked token by its hash; any other reads as absent.
   unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>>;
-  // Uses the token if unused and unexpired at that moment, and adds the worker;
-  // else `conflict`: `token-used`, `token-expired`, or `journal-enrolled`.
+  // Uses a pending, unexpired token and adds the worker; else `conflict`:
+  // `token-used`, `token-revoked`, `token-expired`, or `journal-enrolled`.
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>>;
+  // At most `limit` unused, unrevoked, unexpired tokens after `after`, in
+  // identifier order (control-plane wire contracts section 6).
+  pendingTokens(after: string | undefined, limit: number): Promise<Result<readonly EnrollmentTokenRecord[]>>;
+  // The token's record, pending or not, without its hash.
+  tokenById(tokenId: string): Promise<Result<EnrollmentTokenRecord | undefined>>;
+  // Revokes the token at `at` under its row lock, or repeats; `not-found` if
+  // unknown, else `precondition-failed` as `revocationRefusal` decides.
+  revokeToken(tokenId: string, at: Instant): Promise<Result<void>>;
+  // Revokes the token and adds `replacement` as what replaced it, in one
+  // write; `not-found`, or `precondition-failed` as `rotationRefusal` decides.
+  rotateToken(tokenId: string, replacement: EnrollmentToken, at: Instant): Promise<Result<void>>;
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
   // A new journal incarnation: `conflict` unless `previous` is still enrolled
   // and no worker holds `journalId`; `forbidden` if revoked.
