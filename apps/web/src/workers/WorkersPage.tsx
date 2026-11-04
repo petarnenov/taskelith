@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Group, List, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { useId } from 'react';
 import type { ReadFailed, ReadFailure } from '../api/read-result';
 import { formatInstant } from '../board/board-labels';
@@ -66,11 +66,11 @@ function ShownWorkers({ view, refreshing, onRefresh }: ShownWorkersProps) {
       {view.workers.length === 0 ? (
         <Text c="dimmed">No worker is enrolled. Enroll one with an enrollment token.</Text>
       ) : (
-        <Stack component="section" aria-label="Workers">
+        <SimpleGrid component="section" aria-label="Workers" cols={{ base: 1, sm: 2, xl: 4 }}>
           {view.workers.map((worker) => (
             <WorkerCard key={worker.workerId} worker={worker} />
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
     </Stack>
   );
