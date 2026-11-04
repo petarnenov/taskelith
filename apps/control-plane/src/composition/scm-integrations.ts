@@ -67,8 +67,8 @@ export interface ScmIntegrationPorts {
   readonly clock: Clock;
 }
 
-// The installation's SCM plugin also gives the receiver its decoy and its
-// eventless rule, so no plugin fact is copied here.
+// The installation's SCM plugin also gives the receiver its decoy, its
+// eventless rule, and its identifier, each read once here.
 export function scmIntegrationServices(
   { store, deliveries, plugin, plugins, clock }: ScmIntegrationPorts, logger: Logger,
 ): ScmIntegrationServices {
@@ -76,7 +76,9 @@ export function scmIntegrationServices(
   const verifiers = new StoredScmIntegrationVerifiers(store, plugins, unverifiableLog(logger), defects);
   return {
     integrations: new ScmIntegrationService({ store, plugins, ids: { next: mintIntegrationId }, clock, defects }),
-    webhooks: new ScmWebhookReceiver({ verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin }),
+    webhooks: new ScmWebhookReceiver({
+      verifiers, deliveries, decoy: plugin.createDecoy(), eventless: plugin, pluginId: plugin.id, defects,
+    }),
   };
 }
 

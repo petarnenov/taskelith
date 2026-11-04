@@ -70,7 +70,8 @@ export interface UnverifiableIntegrations {
 
 // `descriptor`: reading the plugin's identifier or secret names.
 export type ScmPluginOperation =
-  | 'descriptor' | 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities';
+  | 'descriptor' | 'checkSettings' | 'checkSecret' | 'createProvider' | 'resolveRemoteUrl' | 'capabilities'
+  | 'verifyWebhookDelivery' | 'isEventless';
 
 // The defect's plugin when the plugin's own identifier cannot be read.
 export const UNREADABLE_PLUGIN_ID = '(unreadable)';
@@ -79,8 +80,9 @@ export type ScmPluginDefectKind =
   | 'threw' | 'malformed-envelope' | 'malformed-value' | 'foreign-repository' | 'unnormalizable-origin' | 'unexpected-failure-code';
 
 // A plugin answer outside the source control contract, by its kind only.
+// No integration for the webhook decoy, which serves none.
 export interface ScmPluginDefect {
-  readonly integrationId: ScmIntegrationId;
+  readonly integrationId: ScmIntegrationId | undefined;
   readonly pluginId: string;
   readonly operation: ScmPluginOperation;
   readonly kind: ScmPluginDefectKind;

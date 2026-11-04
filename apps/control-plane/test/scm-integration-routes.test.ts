@@ -391,8 +391,8 @@ function verifyBreakableGithub() {
   const state = { broken: false, decoyVerifications: 0 };
   const plugin: SourceControlPlugin = {
     ...github,
-    createProvider: async (configuration) => {
-      const built = await github.createProvider(configuration);
+    createProvider: (configuration) => {
+      const built = github.createProvider(configuration);
       if (!built.ok) return built;
       const provider = built.value;
       const secret = configuration.secrets['webhook-secret']!;

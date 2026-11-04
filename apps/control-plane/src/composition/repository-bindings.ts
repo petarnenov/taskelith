@@ -15,10 +15,13 @@ export function repositoryBindingService(ports: RepositoryBindingPorts, logger: 
   return new RepositoryBindingService({ ...ports, defects: pluginDefectLog(logger) });
 }
 
-// One sanitized error record per plugin defect, of any SCM plugin call.
+// One sanitized error record per plugin defect, of any SCM plugin call; a
+// defect of the webhook decoy names no integration.
 export function pluginDefectLog(logger: Logger): ScmPluginDefects {
   return {
-    defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', { integrationId, pluginId, operation, kind }),
+    defect: ({ integrationId, pluginId, operation, kind }) => logger.error('scm.plugin.defect', {
+      ...(integrationId === undefined ? {} : { integrationId }), pluginId, operation, kind,
+    }),
   };
 }
 

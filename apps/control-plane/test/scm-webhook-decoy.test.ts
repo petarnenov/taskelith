@@ -22,6 +22,8 @@ const receiver = new ScmWebhookReceiver({
   deliveries: { record: async () => ok('recorded') },
   decoy: plugin.createDecoy(),
   eventless: plugin,
+  pluginId: 'scm-github',
+  defects: { defect: () => undefined },
 });
 
 const BODY = new Uint8Array(Buffer.from('{"repository":{"full_name":"acme/project"}}'));
