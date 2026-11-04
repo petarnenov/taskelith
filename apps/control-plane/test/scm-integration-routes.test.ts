@@ -383,3 +383,19 @@ test('a webhook whose provider build throws quoting a secret answers 401, with n
   assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
   assert.deepEqual(recorded, []);
 });
+
+test('the plugin registry reads the plugin identifier once, so a lookup never runs plugin code', () => {
+  const github = githubSourceControlPlugin();
+  let reads = 0;
+  const plugin = Object.defineProperty({ ...github }, 'id', {
+    get: () => {
+      reads += 1;
+      if (reads > 1) throw new Error(`refused ${WEBHOOK_SECRET}`);
+      return github.id;
+    },
+  });
+  const plugins = singlePlugin(plugin);
+  assert.equal(plugins.pluginOf('scm-github'), plugin);
+  assert.equal(plugins.pluginOf('scm-other'), undefined);
+  assert.equal(reads, 1);
+});

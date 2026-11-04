@@ -12,6 +12,7 @@ import {
   type ScmIntegrationId,
   type ScmIntegrationUpdate,
   type ScmPluginDefect,
+  type ScmPlugins,
   type SourceControlPlugin,
   type WebhookDelivery,
   type WebhookVerifier,
@@ -68,13 +69,16 @@ class AnySecretPlugin extends ExamplePlugin {
 }
 
 const IGNORED = { unverifiable: () => undefined };
+
+function byIdentifier(plugin: ExamplePlugin): ScmPlugins {
+  return { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
+}
 const NO_DEFECTS = { defect: () => undefined };
 
 let minted = 0;
-function setup(plugin: ExamplePlugin = new ExamplePlugin()) {
+function setup(plugin: ExamplePlugin = new ExamplePlugin(), plugins: ScmPlugins = byIdentifier(plugin)) {
   const audit = new InMemoryScmIntegrationAudit();
   const store = new InMemoryScmIntegrations(audit);
-  const plugins = { pluginOf: (pluginId: string) => (pluginId === plugin.id ? plugin : undefined) };
   const ids = { next: () => value(parseIdentifier('ScmIntegrationId', `i${String(++minted).padStart(32, '0')}`)) as ScmIntegrationId };
   const clock = { now: () => AT };
   const defects: ScmPluginDefect[] = [];
@@ -336,6 +340,42 @@ test('a stored verifier whose provider build throws or breaks answers none, one 
     assert.deepEqual(defects, [expected], misbehaviour);
     assert.deepEqual(unverifiable, [], misbehaviour);
     assert.ok(![answers, defects].some((held) => inspect(held).includes(QUOTED)), misbehaviour);
+  }
+});
+
+const DESCRIPTOR_BREAKS = [
+  ['id', 'throws', 'threw'], ['id', 'no-text', 'malformed-value'],
+  ['secretNames', 'throws', 'threw'], ['secretNames', 'no-text', 'malformed-value'],
+] as const;
+
+// Breaks the plugin's `member` once `broken.now` is set, quoting a value.
+function breakDescriptor(plugin: ExamplePlugin, member: 'id' | 'secretNames', how: 'throws' | 'no-text', broken: { now: boolean }): void {
+  const healthy = plugin[member];
+  const answer = () => {
+    if (!broken.now) return healthy;
+    if (how === 'throws') throw new Error(QUOTED);
+    return member === 'id' ? 42 : [QUOTED, 42];
+  };
+  Object.defineProperty(plugin, member, { get: answer });
+}
+
+test('a plugin identifier or secret names that throw or are malformed fail a create or update as internal, quoting nothing', async () => {
+  for (const [member, how, kind] of DESCRIPTOR_BREAKS) {
+    const named = `${member} ${how}`;
+    const plugin = new ExamplePlugin();
+    const broken = { now: false };
+    breakDescriptor(plugin, member, how, broken);
+    const { service, audit, defects } = setup(plugin, { pluginOf: () => plugin });
+    const { integrationId } = value(await service.create(CREATION, INVOCATION));
+    broken.now = true;
+    const refusals = [failed(await service.create(CREATION, INVOCATION)), failed(await service.update(integrationId, { expectedRevision: 1, label: 'Renamed' }, INVOCATION))];
+    const sanitized = ['internal', 'the SCM plugin answered outside its contract', {}];
+    assert.deepEqual(refusals.map(({ code, message, details }) => [code, message, details]), [sanitized, sanitized], named);
+    const pluginId = member === 'id' ? '(unreadable)' : 'scm-example';
+    assert.deepEqual(defects.map((defect) => [defect.pluginId, defect.operation, defect.kind]), [[pluginId, 'descriptor', kind], [pluginId, 'descriptor', kind]], named);
+    assert.equal(defects[1]!.integrationId, integrationId, named);
+    assert.deepEqual(value(await audit.trail()).map((event) => event.kind), ['created'], named);
+    assert.ok(![refusals, defects].some((held) => inspect(held).includes(QUOTED)), named);
   }
 });
 
