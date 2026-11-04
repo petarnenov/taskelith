@@ -103,6 +103,8 @@ export interface BreakingChangeDeclaration {
   readonly version: string;
   readonly reason: string;
   readonly breakingChanges: readonly string[];
+  // Breaks without a schema change, which no check computes.
+  readonly behaviorChanges?: readonly string[];
 }
 
 export interface DocumentComparison {

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:taskelith:contract-breaking-changes",
   "title": "Taskelith contract breaking-change declarations",
-  "description": "packages/contracts/breaking-changes.json: per contract document and per version that declared breaking changes, the reason and the exact changes make contract-compatibility computes. Entries of earlier versions stay as history. make contract-compatibility also checks the paths, the versions, and the order.",
+  "description": "packages/contracts/breaking-changes.json: per contract document and per version that declared breaking changes, the reason, the exact changes make contract-compatibility computes, and the behavior changes it cannot compute. Entries of earlier versions stay as history. make contract-compatibility also checks the paths, the versions, and the order.",
   "type": "object",
   "additionalProperties": false,
   "required": ["declarations"],
@@ -17,6 +17,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "version", "reason", "breakingChanges"],
+      "anyOf": [
+        { "properties": { "breakingChanges": { "type": "array", "minItems": 1 } } },
+        { "properties": { "behaviorChanges": { "type": "array" } }, "required": ["behaviorChanges"] }
+      ],
       "properties": {
         "path": {
           "description": "A contract document path of CONTRACT_DOCUMENTS in scripts/generate-contracts.ts.",
@@ -35,7 +39,12 @@
           "maxLength": 500
         },
         "breakingChanges": {
-          "description": "The changes as the check reports them, sorted by UTF-16 code units and unique.",
+          "description": "The changes as the check reports them, sorted by UTF-16 code units and unique; empty only beside behaviorChanges.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "behaviorChanges": {
+          "description": "Breaks of behavior without a schema change, such as a request that succeeded and is now refused, which the check cannot report.",
           "type": "array",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
