@@ -1,4 +1,4 @@
-import { err, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import type { HardControl } from '@taskelith/scheduling';
@@ -19,13 +19,48 @@ export interface HostConstraints {
   readonly hostname?: string;
 }
 
-// A short-lived, single-use enrollment token (trust model section 4); only
-// its hash is stored.
-export interface EnrollmentToken {
-  readonly hash: SecretHash;
+// A token's record without its hash: what the owner lists and is answered.
+export interface EnrollmentTokenRecord {
+  readonly tokenId: string;
   readonly issuedAt: Instant;
   readonly expiresAt: Instant;
   readonly constraints: HostConstraints;
+}
+
+// A short-lived, single-use enrollment token (trust model section 4); only
+// its hash is stored.
+export interface EnrollmentToken extends EnrollmentTokenRecord {
+  readonly hash: SecretHash;
+}
+
+// What a token's locked row says beyond pending: used, revoked, and the
+// replacement a rotation made (control-plane wire contracts section 4).
+export interface EnrollmentTokenState {
+  readonly usedAt?: Instant;
+  readonly revokedAt?: Instant;
+  readonly replacementTokenId?: string;
+}
+
+export function tokenRecord({ hash: _hash, ...record }: EnrollmentToken): EnrollmentTokenRecord {
+  return Object.freeze(record);
+}
+
+// Why a locked token is not revoked: used, or replaced by a rotation, which
+// counts before expiry; `undefined` applies the revocation or repeats it.
+export function revocationRefusal(state: EnrollmentTokenState): Failure | undefined {
+  if (state.usedAt !== undefined) {
+    return failure('precondition-failed', 'the enrollment token was used; revoke the worker instead', { reason: 'token-used' });
+  }
+  if (state.replacementTokenId !== undefined) {
+    return failure('precondition-failed', 'a rotation replaced the enrollment token', { reason: 'token-rotated', replacementTokenId: state.replacementTokenId });
+  }
+  return undefined;
+}
+
+// Why a locked token is not rotated: it is used, revoked, or expired.
+export function rotationRefusal(state: EnrollmentTokenState, expired: boolean): Failure | undefined {
+  if (state.usedAt === undefined && state.revokedAt === undefined && !expired) return undefined;
+  return failure('precondition-failed', 'the enrollment token is used, revoked, or expired', { reason: 'token-not-pending' });
 }
 
 export interface ProtocolWindow {

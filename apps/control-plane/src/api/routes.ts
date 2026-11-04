@@ -54,6 +54,8 @@ const PROJECT_PATH = `^/projects/${SEGMENT}`;
 const PROJECT_READ: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404 };
 const INBOX_ANSWER: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409, 'precondition-failed': 422 };
 const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409 };
+// A token command refusal: unknown is 404, and not pending is 422.
+const TOKEN_COMMAND: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404, 'precondition-failed': 422 };
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
 const BROWSER_OR_OPERATOR: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
@@ -230,6 +232,29 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     operationId: 'updateScmIntegration', method: 'PATCH', pattern: new RegExp(`^/scm-integrations/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
     body: 'ScmIntegrationUpdate', writeOnlyBody: true, settingMaps: SCM_SETTING_MAPS, response: 'ScmIntegration', success: 200,
     statuses: { ...COMMON, 'not-found': 404, conflict: 409 },
+  },
+  // Control-plane wire contracts section 4: the workers view, unpaged, and
+  // the enrollment tokens, whose secret only the 201 of issue or rotate has.
+  {
+    operationId: 'listWorkers', method: 'GET', pattern: /^\/workers$/, security: BROWSER_OR_OPERATOR, response: 'WorkersView', success: 200,
+    // As the document declares: no 400, and 503 without partial data.
+    statuses: { forbidden: 401, unavailable: 503, internal: 500 }, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'listEnrollmentTokens', method: 'GET', pattern: /^\/enrollment-tokens$/, security: BROWSER_OR_OPERATOR, query: ['after'],
+    response: 'EnrollmentTokenPage', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'issueEnrollmentToken', method: 'POST', pattern: /^\/enrollment-tokens$/, security: BROWSER_OR_OPERATOR, body: 'HostConstraints',
+    response: 'IssuedEnrollmentToken', success: 201, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'revokeEnrollmentToken', method: 'DELETE', pattern: new RegExp(`^/enrollment-tokens/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    response: 'empty', success: 204, statuses: TOKEN_COMMAND, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'rotateEnrollmentToken', method: 'POST', pattern: new RegExp(`^/enrollment-tokens/${SEGMENT}/rotation$`), security: BROWSER_OR_OPERATOR,
+    response: 'IssuedEnrollmentToken', success: 201, statuses: TOKEN_COMMAND, reasons: ROLE_DENIAL,
   },
   // Control-plane wire contracts section 4: projects, members, and defaults.
   {

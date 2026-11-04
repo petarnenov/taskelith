@@ -2,7 +2,7 @@ import { err, failure, ok, parseIdentifier, parseInstant, type Instant, type Res
 import type { SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import { expectCode, expectRead, expectSame, expectSuccess, type Clock, type ConformanceCase } from '@taskelith/sdlc';
-import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
+import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken, EnrollmentTokenRecord } from '../domain/enrollment.js';
 import { installationIdentity } from '../domain/installation.js';
 import type { RotationOrder } from '../domain/credential-rotation.js';
 import type { FleetRegistry } from './fleet-registry.js';
@@ -26,8 +26,14 @@ const LONG_AGO = at('2000-01-01T00:00:00.000Z');
 // A registry reads it after its row lock, as a renewal or confirmation does.
 const clockAt = (instant: Instant): Clock => ({ now: () => instant });
 
+// The identifier derives from the hash, so each fixture token has its own.
 export function fleetToken(hash: string, constraints: EnrollmentToken['constraints'] = {}, expiresAt: Instant = FAR_AHEAD): EnrollmentToken {
-  return Object.freeze({ hash: hash as SecretHash, issuedAt: LONG_AGO, expiresAt, constraints });
+  return Object.freeze({ tokenId: `id-${hash}`, hash: hash as SecretHash, issuedAt: LONG_AGO, expiresAt, constraints });
+}
+
+// The record a listing or a lookup returns: the token without its hash.
+function tokenRecord({ hash: _hash, ...record }: EnrollmentToken): EnrollmentTokenRecord {
+  return record;
 }
 
 function generation(number: number, workerId = 'w1'): CredentialGeneration {
@@ -75,6 +81,12 @@ function expectReason(problems: string[], label: string, result: Result<unknown>
   if (!result.ok && result.error.details.reason !== reason) problems.push(`${label}: reason ${String(result.error.details.reason)}, expected ${reason}`);
 }
 
+// A token command refusal: `precondition-failed` with the given reason.
+function expectRefusal(problems: string[], label: string, result: Result<unknown>, reason: string): void {
+  expectCode(problems, label, result, 'precondition-failed');
+  if (!result.ok && result.error.details.reason !== reason) problems.push(`${label}: reason ${String(result.error.details.reason)}, expected ${reason}`);
+}
+
 function recordingPush(fail = false) {
   const pushes: string[][] = [];
   const push = async (revocations: readonly BrokerRevocation[]): Promise<Result<void>> => {
@@ -91,7 +103,9 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       const problems: string[] = [];
       expectSuccess(problems, 'add token', await registry.addToken(fleetToken('t1', { platform: 'linux' })));
       expectCode(problems, 'add twice', await registry.addToken(fleetToken('t1')), 'conflict');
+      expectCode(problems, 'add a known identifier', await registry.addToken({ ...fleetToken('t2'), tokenId: 'id-t1' }), 'conflict');
       expectRead(problems, 'unused', await registry.unusedToken('t1' as SecretHash), fleetToken('t1', { platform: 'linux' }));
+      expectRead(problems, 'refused hash', await registry.unusedToken('t2' as SecretHash), undefined);
       expectRead(problems, 'unknown', await registry.unusedToken('t9' as SecretHash), undefined);
       expectSuccess(problems, 'enroll', await registry.enroll('t1' as SecretHash, fleetWorker('w1', 'j1')));
       expectRead(problems, 'used token', await registry.unusedToken('t1' as SecretHash), undefined);
@@ -455,6 +469,98 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       const results = await Promise.all([registry.publishRevocations(push), registry.publishRevocations(push)]);
       expectSame(problems, 'overlap', overlapped, false);
       expectSame(problems, 'published once', results.map((result) => (result.ok ? result.value : -1)).sort(), [0, 2]);
+      return problems;
+    },
+  },
+  {
+    name: 'the pending tokens are listed by identifier after a cursor, without used, expired, or revoked ones',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const hash of ['t1', 't2', 't3', 't4', 't5']) must(await registry.addToken(fleetToken(hash)));
+      must(await registry.addToken(fleetToken('t0', {}, LONG_AGO)));
+      must(await registry.enroll('t2' as SecretHash, fleetWorker('w1', 'j1')));
+      must(await registry.revokeToken('id-t3', AT));
+      // An upper-case identifier sorts first by code unit; the cursor
+      // comparison shares that order, whatever the store's own collation.
+      must(await registry.addToken(fleetToken('T6')));
+      const pending = (tokens: readonly EnrollmentTokenRecord[]) => tokens.map((token) => token.tokenId).join(',');
+      expectSame(problems, 'first page', pending(must(await registry.pendingTokens(undefined, 2))), 'id-T6,id-t1');
+      expectSame(problems, 'after the first', pending(must(await registry.pendingTokens('id-T6', 2))), 'id-t1,id-t4');
+      expectSame(problems, 'after cursor', pending(must(await registry.pendingTokens('id-t4', 2))), 'id-t5');
+      expectSame(problems, 'past the end', pending(must(await registry.pendingTokens('id-t5', 2))), '');
+      expectRead(problems, 'by id', await registry.tokenById('id-t1'), tokenRecord(fleetToken('t1')));
+      expectRead(problems, 'used by id', await registry.tokenById('id-t2'), tokenRecord(fleetToken('t2')));
+      expectRead(problems, 'unknown by id', await registry.tokenById('id-t9'), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'a token revocation applies once, repeats, and refuses a used or rotated token',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const hash of ['t1', 't2', 't3', 't4']) must(await registry.addToken(fleetToken(hash)));
+      expectSuccess(problems, 'revoke', await registry.revokeToken('id-t1', AT));
+      expectSuccess(problems, 'repeat', await registry.revokeToken('id-t1', LATER));
+      expectRead(problems, 'revoked token', await registry.unusedToken('t1' as SecretHash), undefined);
+      expectCode(problems, 'unknown', await registry.revokeToken('id-t9', AT), 'not-found');
+      must(await registry.enroll('t2' as SecretHash, fleetWorker('w1', 'j1')));
+      const used = await registry.revokeToken('id-t2', AT);
+      expectRefusal(problems, 'used', used, 'token-used');
+      must(await registry.rotateToken('id-t3', fleetToken('t5'), AT));
+      const rotated = await registry.revokeToken('id-t3', AT);
+      expectRefusal(problems, 'rotated', rotated, 'token-rotated');
+      expectSame(problems, 'replacement', rotated.ok ? undefined : rotated.error.details.replacementTokenId, 'id-t5');
+      must(await registry.addToken(fleetToken('t6', {}, LONG_AGO)));
+      expectSuccess(problems, 'expired', await registry.revokeToken('id-t6', AT));
+      expectSuccess(problems, 'replacement revoked', await registry.revokeToken('id-t5', AT));
+      expectRefusal(problems, 'rotated after its replacement is revoked', await registry.revokeToken('id-t3', AT), 'token-rotated');
+      return problems;
+    },
+  },
+  {
+    name: 'a token rotation replaces a pending token in one write and refuses one that is not pending',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const hash of ['t1', 't2', 't3']) must(await registry.addToken(fleetToken(hash, { platform: 'linux' })));
+      must(await registry.addToken(fleetToken('t0', {}, LONG_AGO)));
+      expectSuccess(problems, 'rotate', await registry.rotateToken('id-t1', fleetToken('t5', { platform: 'linux' }), AT));
+      expectRead(problems, 'old token', await registry.unusedToken('t1' as SecretHash), undefined);
+      expectRead(problems, 'replacement', await registry.unusedToken('t5' as SecretHash), fleetToken('t5', { platform: 'linux' }));
+      expectRefusal(problems, 'rotated again', await registry.rotateToken('id-t1', fleetToken('t6'), AT), 'token-not-pending');
+      expectRefusal(problems, 'expired', await registry.rotateToken('id-t0', fleetToken('t7'), AT), 'token-not-pending');
+      must(await registry.enroll('t2' as SecretHash, fleetWorker('w1', 'j1')));
+      expectRefusal(problems, 'used', await registry.rotateToken('id-t2', fleetToken('t8'), AT), 'token-not-pending');
+      expectCode(problems, 'unknown', await registry.rotateToken('id-t9', fleetToken('t9'), AT), 'not-found');
+      expectCode(problems, 'replacement exists', await registry.rotateToken('id-t3', fleetToken('t5'), AT), 'conflict');
+      expectRead(problems, 'kept pending', await registry.unusedToken('t3' as SecretHash), fleetToken('t3', { platform: 'linux' }));
+      expectCode(problems, 'replacement identifier exists', await registry.rotateToken('id-t3', { ...fleetToken('t7'), tokenId: 'id-t5' }, AT), 'conflict');
+      expectRead(problems, 'still pending', await registry.unusedToken('t3' as SecretHash), fleetToken('t3', { platform: 'linux' }));
+      expectRead(problems, 'no replacement', await registry.unusedToken('t7' as SecretHash), undefined);
+      expectRead(problems, 'identifier kept', await registry.tokenById('id-t5'), tokenRecord(fleetToken('t5', { platform: 'linux' })));
+      expectSuccess(problems, 'still rotates', await registry.rotateToken('id-t3', fleetToken('t4'), AT));
+      const listed = must(await registry.pendingTokens(undefined, 10)).map((token) => token.tokenId).join(',');
+      expectSame(problems, 'pending after', listed, 'id-t4,id-t5');
+      return problems;
+    },
+  },
+  {
+    name: 'a revoked token enrolls nothing, and a revocation racing a redemption has one winner',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const hash of ['t1', 't2']) must(await registry.addToken(fleetToken(hash)));
+      must(await registry.revokeToken('id-t1', AT));
+      expectReason(problems, 'revoked', await registry.enroll('t1' as SecretHash, fleetWorker('w1', 'j1')), 'token-revoked');
+      expectRead(problems, 'no worker', await registry.worker(fleetWorker('w1', 'j1').workerId), undefined);
+      const [revoked, enrolled] = await Promise.all([registry.revokeToken('id-t2', AT), registry.enroll('t2' as SecretHash, fleetWorker('w2', 'j2'))]);
+      const workers = must(await registry.activeWorkerIds()).length;
+      if (revoked.ok) {
+        expectReason(problems, 'race redemption', enrolled, 'token-revoked');
+        expectSame(problems, 'race workers', workers, 0);
+      } else {
+        expectRefusal(problems, 'race revocation', revoked, 'token-used');
+        expectSuccess(problems, 'race enrolled', enrolled);
+        expectSame(problems, 'race workers', workers, 1);
+      }
       return problems;
     },
   },

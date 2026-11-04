@@ -11,6 +11,7 @@ import {
   type SessionLifetime,
 } from '@taskelith/access';
 import { parseLaunchParameters, type LaunchParametersInput } from '@taskelith/execution';
+import { EnrollmentTokenService } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
@@ -38,11 +39,13 @@ import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
 import {
   CommittingFleetRegistry,
+  CommittingWorkerAdmissions,
   PostgresControlPlaneSignals,
   PostgresOutboxRelay,
   PostgresUiEventLog,
   PostgresUiEventNotifications,
 } from '@taskelith/postgres';
+import { RandomIdentifiers } from '@taskelith/secrets';
 import { Administration, START_OWNER_INVOCATION, type AdministrationSettings } from '../admin/administration.js';
 import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
@@ -245,6 +248,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     },
     events: { hub, projects: projectSetup, authorization, sessions, logger },
     board: { views: board.views, projects: projectSetup, authorization, answers: inbox.answers },
+    fleet: {
+      workers: new CommittingWorkerAdmissions(database),
+      tokens: new EnrollmentTokenService({ registry, secrets: access.secrets, ids: new RandomIdentifiers(), clock }),
+    },
   });
   // The session operations are served on the browser endpoint only, and a
   // secret only on the worker endpoint, under the installation CA.

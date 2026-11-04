@@ -52,4 +52,8 @@ export class RandomIdentifiers implements IdentifierSource {
   newWorkerId(): string {
     return `w${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
   }
+
+  newEnrollmentTokenId(): string {
+    return `e${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
+  }
 }

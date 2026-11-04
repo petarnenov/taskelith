@@ -3,4 +3,6 @@
 export interface IdentifierSource {
   newInstallationId(): string;
   newWorkerId(): string;
+  // `e` and 32 hexadecimal digits (control-plane wire contracts section 6).
+  newEnrollmentTokenId(): string;
 }

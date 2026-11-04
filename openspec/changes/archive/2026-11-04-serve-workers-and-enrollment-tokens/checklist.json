@@ -1,0 +1,104 @@
+{
+  "change": "serve-workers-and-enrollment-tokens",
+  "generatedAt": "2026-11-04T10:57:29.726Z",
+  "devCommit": "79fb713087669993b5301f1646140c933fe9aac3",
+  "query": {
+    "capabilities": [
+      "control-plane-api",
+      "installation-enrollment",
+      "worker-contact",
+      "control-plane-wire-contracts"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/**",
+      "packages/adapters/postgres/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 111
+      },
+      {
+        "category": "error-handling",
+        "count": 56
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 44
+      },
+      {
+        "category": "naming",
+        "count": 38
+      },
+      {
+        "category": "docs",
+        "count": 29
+      },
+      {
+        "category": "concurrency-race",
+        "count": 28
+      },
+      {
+        "category": "redaction",
+        "count": 27
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1014,
+        "inChecklist": 877
+      },
+      "mediumOrWorse": {
+        "findings": 499,
+        "inChecklist": 448
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 157
+      },
+      {
+        "category": "spec-wording",
+        "count": 105
+      },
+      {
+        "category": "docs",
+        "count": 81
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 471,
+        "inChecklist": 464
+      },
+      "mediumOrWorse": {
+        "findings": 75,
+        "inChecklist": 75
+      }
+    }
+  }
+}

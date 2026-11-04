@@ -1,11 +1,12 @@
 import { parseArgs } from 'node:util';
 import { readConfirmedSecret } from './secret-input.js';
 import { resolveDataRoot } from '@taskelith/data-root';
-import type { HostArchitecture, HostConstraints, HostPlatform, WorkerAdmissionSnapshot } from '@taskelith/fleet';
+import type { HostArchitecture, HostConstraints, HostPlatform } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { readBrokerTls } from '../broker-tls.js';
 import { readServiceEndpoints, type Environment } from '../service-endpoints.js';
+import { printableWorkerAdmission } from '../application/worker-admission-view.js';
 import { Administration } from './administration.js';
 import { readServerHosts } from './server-hosts.js';
 
@@ -153,18 +154,6 @@ async function run(admin: Administration, command: Command, io: AdminIo): Promis
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }
-}
-
-// The workers view with each detail redacted again, since a worker wrote
-// it (worker admission contract section 3).
-export function printableWorkerAdmission(snapshot: WorkerAdmissionSnapshot): WorkerAdmissionSnapshot {
-  return {
-    ...snapshot,
-    workers: snapshot.workers.map((worker) => ({
-      ...worker,
-      results: worker.results.map((result) => ({ ...result, details: result.details.map((detail) => redactSecrets(detail)) })),
-    })),
-  };
 }
 
 function constraints(values: Command['values']): HostConstraints {

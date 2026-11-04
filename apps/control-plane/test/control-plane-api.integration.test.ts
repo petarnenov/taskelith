@@ -846,6 +846,35 @@ describe('enrollment and quarantine', () => {
     assert.equal(kept.status, 201, 'a refused capacity does not consume the token');
   });
 
+  test('the owner lists the workers and issues, lists, rotates, and revokes enrollment tokens over the API', async () => {
+    const workers = await call('GET', '/workers', { bearer: operator });
+    assert.equal(workers.status, 200, 'the workers view is answered');
+    assert.ok(checkHttpSchema('WorkersView', workers.body).ok);
+    assert.ok((workers.body.workers as unknown[]).length >= 1, 'the enrolled workers are listed');
+    const issued = await call('POST', '/enrollment-tokens', { bearer: operator, body: { platform: 'linux' } });
+    assert.equal(issued.status, 201, 'the token is issued');
+    assert.ok(checkHttpSchema('IssuedEnrollmentToken', issued.body).ok);
+    const token = issued.body.token as { tokenId: string };
+    const listed = await call('GET', '/enrollment-tokens', { bearer: operator });
+    assert.ok((listed.body.tokens as Array<{ tokenId: string }>).some((entry) => entry.tokenId === token.tokenId));
+    const rotated = await call('POST', `/enrollment-tokens/${token.tokenId}/rotation`, { bearer: operator });
+    assert.equal(rotated.status, 201, 'the token is rotated');
+    const replacement = rotated.body.token as { tokenId: string };
+    const refused = await call('DELETE', `/enrollment-tokens/${token.tokenId}`, { bearer: operator });
+    assert.deepEqual([refused.status, refused.body.details], [422, { reason: 'token-rotated', replacementTokenId: replacement.tokenId }]);
+    const revoked = await fetch(`https://127.0.0.1:${running.api.port}/enrollment-tokens/${replacement.tokenId}`, {
+      method: 'DELETE', headers: { authorization: `Bearer ${operator}` },
+    });
+    assert.equal(revoked.status, 204);
+    const after = await call('GET', '/enrollment-tokens', { bearer: operator });
+    assert.ok(!(after.body.tokens as Array<{ tokenId: string }>).some((entry) => [token.tokenId, replacement.tokenId].includes(entry.tokenId)));
+    const reused = await call('POST', '/workers/enrollments', { bearer: rotated.body.secret as string, body: {
+      journalId: 'journal-revoked', host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
+      protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, enforceableControls: ['cpu-limit'] },
+    } });
+    assert.equal(reused.status, 401, 'a revoked token enrolls nothing');
+  });
+
   test('a worker bearer reaches authorizeLaunch, whose decision is recorded and replayed', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const enrolled = await call('POST', '/workers/enrollments', {
