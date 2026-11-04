@@ -1,4 +1,5 @@
-import { Alert, Anchor, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { useReducedMotion } from '@mantine/hooks';
 import { Link, useParams } from 'react-router';
 import type { AgentSession, ReadFailed, ReadFailure, SessionActivity, TaskDetail } from '../board/board';
 import { formatInstant } from '../board/board-labels';
@@ -161,10 +162,12 @@ interface EarlierTurnsProps {
   readonly onLoad: () => void;
 }
 
-// Decision Q5: the last window first, and each earlier one on demand.
+// Decision Q5: the last window first, and each earlier one on demand. The
+// button stays while it loads, so the focus stays; the feed ignores a repeat.
 function EarlierTurns({ before, earlier, onLoad }: EarlierTurnsProps) {
+  const reducedMotion = useReducedMotion();
   if (before === 0) return null;
-  if (earlier.status === 'reading') return <LoadingStatus text="Loading earlier turns…" />;
+  const reading = earlier.status === 'reading';
   return (
     <Group gap="sm" wrap="wrap">
       {earlier.status === 'failed' ? (
@@ -172,11 +175,21 @@ function EarlierTurns({ before, earlier, onLoad }: EarlierTurnsProps) {
           {withRequiredRole(EARLIER_FAILURES[earlier.failure.kind], earlier.failure)}
         </Alert>
       ) : null}
-      <Button variant="default" onClick={onLoad}>
-        {earlier.status === 'failed' ? 'Retry' : `Load earlier turns (${before} before these)`}
+      <Button
+        variant="default"
+        onClick={onLoad}
+        aria-busy={reading}
+        leftSection={reading && !reducedMotion ? <Loader size="xs" aria-hidden="true" /> : undefined}
+      >
+        {earlierLabel(before, earlier)}
       </Button>
     </Group>
   );
+}
+
+function earlierLabel(before: number, earlier: ShownSession['earlier']): string {
+  if (earlier.status === 'reading') return 'Loading earlier turns…';
+  return earlier.status === 'failed' ? 'Retry' : `Load earlier turns (${before} before these)`;
 }
 
 const FAILURES: Readonly<Record<ReadFailure, { readonly title: string; readonly text: string }>> = {
