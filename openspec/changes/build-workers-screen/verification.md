@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 item 33 (`docs/g3-plan.md`, row 33), sub-change 33a under the coordinator's split (`brief-33-plan.md`, Niki, 2026-11-04), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `d0acd304` (#445): the workers screen at `/app/workers` with the admission and self-check results of every enrolled worker as `listWorkers` answers them (decisions Q3 (a), Q6 (a), Q7 (a)), over a `WorkersGateway` port of its own with an adapter on the shared typed fetch and the shared expiry wrapper (Q8 (b)), the installation-owner gate (Q2 (a)), `asOf` with a Refresh that keeps the shown list (Q5 (a)), the empty state (Q4 (a)), the failed states, the contrast pair of a failed check on a card, and the redaction test (Q9 (a) and (b)) ([design](design.md), decisions 1 to 9). Out of scope: enrollment tokens (33b), account slots (33c), per-worker reachability, capacity, and last contact (departure with a follow-up for the contract change), live updates, and any OpenAPI or control-plane change.
+G3 item 33 (`docs/g3-plan.md`, row 33), sub-change 33a under the coordinator's split (`brief-33-plan.md`, Niki, 2026-11-04), developed by a briefed subagent of the worker session Desi for the coordinator Niki (architect), from `dev` `d0acd304` (#445): the workers screen at `/app/workers` with the admission and self-check results of every enrolled worker as `listWorkers` answers them (decisions Q3 (a), Q6 (a), Q7 (a)), over a `WorkersGateway` port of its own with an adapter on the shared typed fetch and the shared expiry wrapper (Q8 (b)), the installation-owner gate (Q2 (a)), `asOf` with a Refresh that keeps the shown list (Q5 (a)), the empty state (Q4 (a)), the failed states, the contrast pair of a failed check on a card, and the redaction test (Q9 (a) and (b)) ([design](/openspec/changes/build-workers-screen/design.md), decisions 1 to 9). Out of scope: enrollment tokens (33b), account slots (33c), per-worker reachability, capacity, and last contact (departure with a follow-up for the contract change), live updates, and any OpenAPI or control-plane change.
 
 Commit type: `apps/web` is a private workspace; the published `taskelith` package ships only `dist/cli.js`, `docs/architecture.md`, `README.md`, and `LICENSE`, so every commit uses `chore`, `test`, or `docs`, never `feat` or `fix`.
 
@@ -34,7 +34,7 @@ macOS 26.6 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s
 - Links: `npm run verify:links` passes.
 - Type checks: `tsc -p apps/web/tsconfig.json` and `tsc -p apps/web/tsconfig.tooling.json`, which includes the tests, pass.
 - Coverage (Vitest, `apps/web`, 780 tests in 30 files, `coverage-33a-0.log` in the session scratchpad, before the comment fix, which changed no code), per file changed or added by this change, as statements, branches, functions, and lines: `control-plane-workers.ts` 91.66 / 100 / 75 / 100 (its one uncovered function is the CSRF getter that answers nothing, which the client never calls for a GET), `src/workers` as a whole 98.36 / 99.02 / 97.29 / 100, `src/session` 100 / 99.09 / 100 / 100, `src/board` 98.41 / 97.29 / 100 / 100 (`control-plane-board.ts` 98.5 / 97.72 / 100 / 100 and `board-wire.ts` 98.3 / 99.13 / 100 / 100, their uncovered branches predating this change), and `WorkersPage.tsx`, `WorkersServices.tsx`, `useWorkers.ts`, `workers-labels.ts`, `workers-wire.ts`, `workers.ts`, `read-result.ts`, `expiring-call.ts`, `BoardServices.tsx`, `board.ts`, `App.tsx`, `routes.tsx`, and `screens.ts` at 100 on every metric; `apps/web` overall 98.99% statements, 97.5% branches, 99.82% functions, and 100% lines, every file at or above the 75% thresholds.
-- Test authoring: no sleeps but one zero-delay `setTimeout` that drains the dropped answer of the overtaken read; the page tests hold answers in deferred promises and wait on rendered roles and `waitFor`; the redaction test's control plane answers only `/session` and `/workers` and throws on any other request.
+- Test authoring: no sleeps and no timers; the page tests hold answers in deferred promises, settle them inside `act`, and wait on rendered roles and `waitFor` (the overtaken read's answer settled through a zero-delay `setTimeout` until pass 1 finding 5); the redaction test's control plane answers only `/session` and `/workers` and throws on any other request.
 
 ## Evidence check
 
@@ -75,7 +75,7 @@ None yet.
 
 ## Limitations
 
-- The session's installation roles are a snapshot of the sign-in; the gate follows them, and the control plane's 403 is the authority for a role that changed since (design, decision 4 and "Risks").
+- The session's installation roles are a snapshot of the last successful session read (at the announced end of the session and on `refresh`); the gate follows them, and the control plane's 403 is the authority for a role that changed since (design, decision 4 and "Risks").
 - The view is a snapshot with a manual Refresh; no worker event exists on the wire (design, "Follow-ups").
 - The screen shows no reachability, capacity, or last contact, which the plan row names and the wire does not carry (design, "Departures").
 
