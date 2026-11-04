@@ -1,11 +1,11 @@
 {
   "change": "build-workers-screen",
-  "generatedAt": "2026-11-04T14:17:13.749Z",
+  "generatedAt": "2026-11-04T14:44:51.979Z",
   "devCommit": "d0acd304ef722a5a9fec036a66bbb8060db9eb76",
-  "headCommit": "52ab84bd35953da5c53dbdd8c6370d661954805a",
+  "headCommit": "11c318a8bb9220394c69e1f67854ddcddfd2cb1b",
   "features": {
-    "linesChanged": 1172,
-    "filesChanged": 25,
+    "linesChanged": 1337,
+    "filesChanged": 26,
     "capabilities": [
       "product-ui"
     ],
@@ -68,7 +68,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.62,
+    "thirdPassProbability": 0.64,
     "threshold": 0.4,
     "passes": [
       {
@@ -99,6 +99,6 @@
         }
       }
     ],
-    "latencyMs": 314
+    "latencyMs": 251
   }
 }
