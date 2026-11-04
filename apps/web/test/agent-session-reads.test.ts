@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BoardStreamEvent } from '../src/board/board';
-import { createBoardGateway, MAX_PROJECT_PAGES, type EventSourceLike } from '../src/board/control-plane-board';
+import { createBoardGateway, MAX_PAGES, type EventSourceLike } from '../src/board/control-plane-board';
 import { agentSession, agentSessionView, turn, turnPage } from './fakes';
 
 function json(status: number, body: unknown): Response {
@@ -49,7 +49,7 @@ describe('listAgentSessions', () => {
       return json(200, { ...STAMP, sessions: [], next: `page-${pages}` });
     });
     expect(await createBoardGateway({ fetch: send }).listAgentSessions('project-1', 'run-1')).toEqual({ kind: 'unavailable' });
-    expect(send).toHaveBeenCalledTimes(MAX_PROJECT_PAGES);
+    expect(send).toHaveBeenCalledTimes(MAX_PAGES);
   });
 
   it.each([

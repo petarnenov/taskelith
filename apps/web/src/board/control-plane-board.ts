@@ -42,8 +42,12 @@ const UNREADABLE: BoardStreamEvent = { kind: 'resync' };
 const UNREADABLE_SESSION: BoardStreamEvent = { kind: 'resync', unreadable: 'agent-session-changed' };
 const UNREADABLE_TURN: BoardStreamEvent = { kind: 'resync', unreadable: 'turn-changed' };
 
-// A server that names new cursors beyond this many pages reads as unreachable.
-export const MAX_PROJECT_PAGES = 100;
+// A project list or a session list whose server names new cursors beyond
+// this many pages reads as unreachable.
+export const MAX_PAGES = 100;
+
+// The name the board's tests of the project list know the limit by.
+export const MAX_PROJECT_PAGES = MAX_PAGES;
 
 interface Page<T> {
   readonly items: readonly T[];
@@ -115,7 +119,7 @@ export function createBoardGateway({
   }
 
   function cannotFollow(next: string | undefined, visited: ReadonlySet<string>): boolean {
-    return next !== undefined && (visited.has(next) || visited.size + 1 >= MAX_PROJECT_PAGES);
+    return next !== undefined && (visited.has(next) || visited.size + 1 >= MAX_PAGES);
   }
 
   // A session other than the one asked for is a wrong answer.
