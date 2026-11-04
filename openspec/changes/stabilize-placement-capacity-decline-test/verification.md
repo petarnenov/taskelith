@@ -73,7 +73,11 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - `npm run openspec -- validate stabilize-placement-capacity-decline-test --strict`: passed, `Change 'stabilize-placement-capacity-decline-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 119 file(s); every pass summary file is valid: 99 file(s); every route file is valid: 52 file(s).`.
 - Spec diff against the merge base `44bd35924520` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a643-dd48-77f2-aa61-a8b9537f63f7` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Independent review
