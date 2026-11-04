@@ -12,6 +12,7 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `1e847ae8` `docs: record the stabilize secrets linear time test change` (this record), verified by `make verify`.
 - `1c9fe6d3` `docs: record the make verify run of the stabilize secrets linear time test change`.
 - Pass 1 fix round: `4f37008e` `test: size linear-time runs to the host and expose gc only when timing` (the helper, its tests, the import test, and the pass 1 line of `passes.jsonl`), then the records of the round and `make record` ("Pass 1 fix round").
+- Pass 2 fix round: `ee0693f8` `test: take linear-time options as an object and name the Node.js the timer needs` (the helper, its tests, the three calls with a length, and the pass 2 line of `passes.jsonl`), then the records of the round ("Pass 2 fix round").
 
 ## Environment
 
@@ -131,18 +132,20 @@ Fail-before: the helper's tests of `4f37008e` and the import test against the he
 | `env -u NODE_ENV make verify`, round run 2 | `d81755a8` | Passed, profile full, tree `7f153d78fd21f08929759585a32d05ffab7d35de`; tests 4889, pass 4842, fail 0, skipped 47; `apps/web` 816 of 816 passed; all files 99.42% lines, 92.96% branches, 98.85% functions, `linear-time.js` 100.00%, 95.45%, and 100.00%. The secrets tests took 4188.885034, 23637.539111, and 6552.646878 ms, the observability ones 9176.890858 and 29243.854682 ms |
 | Archive probe in a scratch copy of `openspec/` | the round's working tree, the requirement of 498 characters | `+ 1 added`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
 
+Suite runtime, measured in the pass 2 fix round (pass 2 L3): `env -u NODE_ENV make test` once with the base helper, its test, and the callers of `1ef0cb42` checked out over `ee0693f8`, and once on `ee0693f8`, unloaded, one run each. Both runs failed the same 3 tests of `test/findings.test.ts` and `test/verification-record.test.ts`, because the pass 2 lines of `findings.jsonl` were not written yet. The Node.js suite took `duration_ms` 288043.5 before and 305107.7 after, 17.1 s or 5.9% more; `make test` took 382.5 and 396.7 s of wall time. The five callers took 0.96 s together before (0.014, 0.124, 0.479, 0.026, and 0.315 s) and 68.3 s after (3.80, 20.73, 6.88, 7.62, and 29.30 s); the suite runs test files in parallel, so most of that time overlaps other files.
+
 ## Independent review
 
-Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round.
+Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round. Pass 2 ran (session `daeb4593-d738-4245-908c-b2da8f77056a`): Critical 0, High 0, Medium 0, Low 5. The review ended at this Low-only pass, so pass 3 did not run; the five fixes of the pass 2 fix round are unreviewed and go to the coordinator's check as solution architect.
 
 ## Limitations
 
-- Runs double until the short median reaches 20 ms, so the floor decides only at the longest runs, of 2^24 characters, where a quadratic transform cannot stay under it. A slower superlinear growth below the limit of 2.5 passes.
+- Runs double until the short median reaches 20 ms, so the floor decides only at the longest runs, of 2^24 characters, where a quadratic transform cannot stay under it. A slower superlinear growth below the limit of 2.5 passes: a transform of time n^k passes for k below log4(10), about 1.66, so n^1.5 passes and n^1.7 fails.
 - A transform whose extra cost grows only slightly faster than linear, such as n log n, passes by design; the limit of 2.5 separates linear from quadratic growth.
-- The linear-time tests take longer: medians of 3.34, 18.74, and 6.33 s unloaded instead of 0.015 to 0.51 s ("Pass 1 fix round").
+- The linear-time tests take longer: medians of 3.34, 18.74, and 6.33 s unloaded instead of 0.015 to 0.51 s, and the Node.js suite 17.1 s more in one measured run ("Pass 1 fix round").
+- Follow-up, not in this change: a cheaper helper, `SAMPLES = 3` or `NOISE_FLOOR_MS = 10`, each with its own load evidence (pass 2 L3).
 
 ## Remaining gates
 
-- Independent review passes 1 and 2, and pass 3 only after a pass 2 with a Medium or worse finding.
-- Archive of the change.
+- The coordinator's check, as solution architect, of the five unreviewed fixes of the pass 2 fix round.
 - Integration into dev by the coordinator (single pull request).

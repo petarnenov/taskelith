@@ -25,5 +25,6 @@
 
 - [x] 5.1 Independent review pass 1
 - [x] 5.2 Pass 1 fix round: runs sized to the host, an injected timer, gc exposed only when timing, and the recorded scores
-- [ ] 5.3 Independent review pass 2
-- [ ] 5.4 Archive the change
+- [x] 5.3 Independent review pass 2
+- [x] 5.4 Pass 2 fix round: an options object, the Node.js requirement, the cap wording, the suite runtime, and the boundary exponent
+- [x] 5.5 Archive the change

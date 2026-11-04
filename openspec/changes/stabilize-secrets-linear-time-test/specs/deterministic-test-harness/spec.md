@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Linear-time assertions
-`assertLinearOnRuns` SHALL judge a transform by how the CPU time of its thread grows with the run length: it SHALL time each unit's run and a quarter run in five alternating samples after a forced garbage collection, double both runs until the short median reaches 20 ms or the run 2^24 characters, floor both medians at 20 ms, and fail, naming the unit, both lengths, and both medians, when the time grows 2.5 or more times faster than the length. Importing it SHALL NOT expose garbage collection.
+`assertLinearOnRuns` SHALL judge a transform by how its thread's CPU time grows with run length: it SHALL time each unit's run and a quarter run in five alternating samples after a forced garbage collection, double the runs until the short median reaches 20 ms or doubling the long run would pass 2^24 characters, floor medians at 20 ms, and fail, naming the unit, lengths, and medians, when the time grows 2.5 or more times faster than the length. Importing it SHALL NOT expose garbage collection.
 
 #### Scenario: A quadratic redactor fails on runs sized to the host
 - **WHEN** a redactor that searches the rest of the text for a revealed value from every position is checked with the thread's CPU time on the unit `a b`, which never holds the value, from the length 1000
