@@ -1,4 +1,4 @@
-import { isInstant, isRecord } from '../board/board-wire';
+import { isInstant, isRecord } from '../api/wire-guards';
 import type { NotApplicableReason, SelfCheckResult, WorkerAdmissionEntry, WorkerHost, WorkersView } from './workers';
 
 // The typed fetch does not check bodies, so the view is checked for the

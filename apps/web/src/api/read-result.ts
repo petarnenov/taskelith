@@ -1,3 +1,5 @@
+import { isRecord } from './wire-guards';
+
 // The outcome of one read of the control plane, as every gateway answers
 // it: the value, or the documented failure the status and body name.
 
@@ -37,10 +39,6 @@ export function requiredRoleOf(body: unknown): string | undefined {
 
 function detailsOf(body: unknown): Record<string, unknown> | undefined {
   return isRecord(body) && isRecord(body.details) ? body.details : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 // A network failure or an unreadable body reaches no documented status.
