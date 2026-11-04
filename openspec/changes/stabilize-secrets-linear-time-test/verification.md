@@ -134,6 +134,26 @@ Fail-before: the helper's tests of `4f37008e` and the import test against the he
 
 Suite runtime, measured in the pass 2 fix round (pass 2 L3): `env -u NODE_ENV make test` once with the base helper, its test, and the callers of `1ef0cb42` checked out over `ee0693f8`, and once on `ee0693f8`, unloaded, one run each. Both runs failed the same 3 tests of `test/findings.test.ts` and `test/verification-record.test.ts`, because the pass 2 lines of `findings.jsonl` were not written yet. The Node.js suite took `duration_ms` 288043.5 before and 305107.7 after, 17.1 s or 5.9% more; `make test` took 382.5 and 396.7 s of wall time. The five callers took 0.96 s together before (0.014, 0.124, 0.479, 0.026, and 0.315 s) and 68.3 s after (3.80, 20.73, 6.88, 7.62, and 29.30 s); the suite runs test files in parallel, so most of that time overlaps other files.
 
+## Pass 2 fix round
+
+Pass 2 (`claude claude-fable-5-1#medium`, role B) reported 5 Low findings. The review ended at this Low-only pass, so all five are fixed without another review (`findings.jsonl`, outcome `fixed-unreviewed`) and go to the coordinator's check as solution architect. Runs use Node.js v24.22.1 on `hpz600` as in "Environment".
+
+- **L1, the Node.js the timer needs.** `threadCpuTime` in `packages/testing/src/linear-time.ts` first asserts that `process.threadCpuUsage` is a function, with the message `assertLinearOnRuns needs Node.js 23.9 or later`; the test "the default timer names the Node.js it needs when threadCpuUsage is missing" in `packages/testing/test/linear-time.test.ts` removes it and restores it. `design.md`, "The thread's CPU time instead of wall time", names the requirement. Fail-before: the test against the helper without the assertion, rebuilt, one run: `ℹ pass 0`, `ℹ fail 1`, exit 1, with `TypeError: process.threadCpuUsage is not a function`; with the assertion restored and rebuilt, `ℹ pass 1`, `ℹ fail 0`.
+- **L2, the cap.** The requirement, `proposal.md`, and the comment of `timeUnit` say the runs double until doubling the long run would pass 2^24 characters. The requirement has 498 characters.
+- **L3, the suite runtime.** Measured and recorded in "Pass 1 fix round"; `SAMPLES` and the floor are unchanged, and the cheaper variants are a follow-up ("Limitations").
+- **L4, the options object.** `assertLinearOnRuns(transform, units, { length, timeRun }?: LinearTimeOptions)`, exported with `RunTimer` from `@taskelith/testing`; the constant is `LENGTH_RATIO`. The three calls with a length (`packages/adapters/secrets/test/secrets.test.ts:123`, `packages/modules/observability/test/logger.test.ts:162` and `:164`) pass `{ length: 400_000 }`; the other calls are unchanged.
+- **L5, the boundary exponent.** `design.md`, "Growth, not an absolute limit", and "Limitations" state log4(10), about 1.66.
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| The helper's tests and the import test, 5 consecutive runs | `ee0693f8` | 5 of 5 passed, 12 test passes each; the quadratic control took 2420.6 to 2444.1 ms |
+| The same, 5 runs under the 8 busy loops | `ee0693f8` | 5 of 5 passed, 12 test passes each; the quadratic control took 2983.7 to 4131.3 ms |
+| The five linear-time callers (`--test-name-pattern='linear time'` on the two secrets and two observability files), 5 consecutive runs | `ee0693f8` | 5 of 5 passed, 5 test passes each; medians 4.86 s for the two "Basic credentials ..." tests, 22.44 s for the two "text is redacted ..." tests, and 6.37 s for "value redaction ..." |
+| The same, 5 runs under the 8 busy loops | `ee0693f8` | 5 of 5 passed, 5 test passes each; medians 9.73, 39.71, and 12.28 s; no busy loop left afterwards |
+| `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | `52a96161` | `Change 'stabilize-secrets-linear-time-test' is valid` |
+| Archive probe in a scratch copy of `openspec/` | `52a96161` working tree, the requirement of 498 characters | `+ 1 added`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
+| `make findings ARGS="validate"` | the round's working tree, with the 5 pass 2 lines | `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).` |
+
 ## Independent review
 
 Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round. Pass 2 ran (session `daeb4593-d738-4245-908c-b2da8f77056a`): Critical 0, High 0, Medium 0, Low 5. The review ended at this Low-only pass, so pass 3 did not run; the five fixes of the pass 2 fix round are unreviewed and go to the coordinator's check as solution architect.
