@@ -1,1 +1,2 @@
 {"change": "build-workers-screen", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1a6f7-07f3-7050-8b27-4d1dcc8f5c1f", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 5}}
+{"change": "build-workers-screen", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "4995efd9-aa91-4106-9c64-91b6ed8cc968", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 3}}
