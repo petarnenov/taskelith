@@ -4,6 +4,7 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileS
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
+import { isDeepStrictEqual } from 'node:util';
 
 const script = resolve('scripts/installation.sh');
 
@@ -459,11 +460,12 @@ test('a failed read of the commit time stops every build before any image is bui
 });
 
 // Prints the views FAKE_VIEWS/1, /2, ... of successive `worker-admission`
-// runs, and FAKE_VIEWS/last after them, each after FAKE_DELAY seconds.
+// runs, then FAKE_VIEWS/last, each after FAKE_DELAY s; pid in FAKE_READER.
 const admissionDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case " $* " in
   *" admin worker-admission "*)
+    if [ -n "$FAKE_READER" ]; then echo "$$" > "$FAKE_READER"; fi
     if [ -n "$FAKE_DELAY" ]; then /bin/sleep "$FAKE_DELAY"; fi
     count=$(($(cat "$FAKE_VIEWS/count") + 1))
     echo "$count" > "$FAKE_VIEWS/count"
@@ -484,10 +486,17 @@ esac
 exec "$REAL_NODE" "$@"
 `;
 
-// With FAKE_SLEEPS, records each sleep and moves the fake clock by it plus
-// FAKE_LATE_MS instead of sleeping; the script prints three decimals.
+// With FAKE_SLEEPS, awaits the end of a FAKE_READER read, then moves the
+// fake clock by the sleep plus FAKE_LATE_MS; the script prints 3 decimals.
 const clockSleep = `#!/bin/sh
 if [ -z "$FAKE_SLEEPS" ]; then exec /bin/sleep "$@"; fi
+if [ -n "$FAKE_READER" ]; then
+  tries=0
+  until [ -s "$FAKE_READER" ] || [ "$tries" -ge 100 ]; do /bin/sleep 0.1; tries=$((tries + 1)); done
+  while kill -0 "$(cat "$FAKE_READER")" 2>/dev/null && [ "$tries" -lt 300 ]; do
+    /bin/sleep 0.05; tries=$((tries + 1))
+  done
+fi
 printf '%s\\n' "$1" >> "$FAKE_SLEEPS"
 fraction=000
 case "$1" in *.*) fraction="\${1#*.}" ;; esac
@@ -495,18 +504,20 @@ fraction="\${fraction#"\${fraction%%[!0]*}"}"
 echo $(($(cat "$FAKE_CLOCK") + \${1%.*} * 1000 + \${fraction:-0} + \${FAKE_LATE_MS:-0})) > "$FAKE_CLOCK"
 `;
 
-// The script's clock seam: prints the fake clock's milliseconds. With
-// FAKE_CLOCK_LEAP_MS, a later read leaps by it once a view read started.
+// The clock seam: prints the fake clock's ms, exits FAKE_CLOCK_STATUS. A
+// later read leaps by FAKE_CLOCK_LEAP_MS, or fails, once a view read began.
 const fakeClock = `#!/bin/sh
-if [ -n "$FAKE_CLOCK_LEAP_MS" ] && [ -f "$FAKE_CLOCK.read" ]; then
+if [ -n "$FAKE_CLOCK_LEAP_MS$FAKE_CLOCK_FAILS_IN_READ" ] && [ -f "$FAKE_CLOCK.read" ]; then
   tries=0
   until grep -q ' admin worker-admission' "$FAKE_DOCKER_CALLS" || [ "$tries" -ge 100 ]; do
     /bin/sleep 0.1; tries=$((tries + 1))
   done
+  if [ -n "$FAKE_CLOCK_FAILS_IN_READ" ]; then exit 1; fi
   echo $(($(cat "$FAKE_CLOCK") + FAKE_CLOCK_LEAP_MS)) > "$FAKE_CLOCK"
 fi
 : > "$FAKE_CLOCK.read"
 cat "$FAKE_CLOCK"
+exit "\${FAKE_CLOCK_STATUS:-0}"
 `;
 
 const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
@@ -590,6 +601,25 @@ function checkAdmissionOnClock(views: readonly string[], environment: Record<str
     };
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// Runs RUN with a file that the fake docker fills with its reader's pid.
+function withReader<T>(run: (reader: string) => T): T {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-reader-'));
+  try {
+    return run(join(root, 'pid'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -680,14 +710,15 @@ test('a hung read times out at its bound to the millisecond, though each wake is
 });
 
 test('a wait between reads never sleeps past the bound', () => {
-  const { outcome, elapsed, sleeps } = checkAdmissionOnClock([admissionView('awaiting-self-check')], {
-    TASKELITH_ADMISSION_SECONDS: '3', FAKE_SLEEPS_MOVE_CLOCK: '1',
-  });
+  const { outcome, elapsed, sleeps } = withReader((reader) => checkAdmissionOnClock([admissionView('awaiting-self-check')], {
+    TASKELITH_ADMISSION_SECONDS: '3', FAKE_DELAY: '0.2', FAKE_SLEEPS_MOVE_CLOCK: '1', FAKE_READER: reader,
+  }));
   assert.equal(outcome.status, 3);
   assert.equal(admissionReads(outcome).length, 1);
-  assert.ok(!sleeps.includes('5.000'), 'the poll of 5 s is cut to the bound');
-  const slept = sleeps.reduce((sum, sleep) => sum + Math.round(Number(sleep) * 1000), 0);
-  assert.equal(slept, 3000, 'the sleeps add up to the bound exactly');
+  assert.ok(outcome.calls.some((call) => call.includes('installation-admission.ts')), 'the admission is decided');
+  assert.doesNotMatch(outcome.stderr, /did not end in time/);
+  const polls = [['3.000'], ['1.000', '2.000']];
+  assert.ok(polls.some((poll) => isDeepStrictEqual(sleeps, poll)), `the poll is cut to the bound: ${sleeps.join(' ')}`);
   assert.equal(elapsed, 3000);
 });
 
@@ -724,6 +755,27 @@ test('a clock that stops printing a time during the wait fails the admission che
   assert.equal(outcome.stdout, '', 'no view time is printed');
   assert.match(outcome.stderr, /installation\.sh: the clock could not be read/);
   assert.doesNotMatch(outcome.stderr, /not admitted within/);
+});
+
+test('a clock that fails while a read runs stops that read', () => {
+  const { outcome, alive } = withReader((reader) => {
+    const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+      TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30', FAKE_READER: reader, FAKE_CLOCK_FAILS_IN_READ: '1',
+    });
+    return { outcome, alive: isRunning(Number(readFileSync(reader, 'utf8'))) };
+  });
+  assert.equal(outcome.status, 2, outcome.stderr);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.equal(alive, false, 'the read is stopped');
+  assert.match(outcome.stderr, /installation\.sh: the clock could not be read/);
+  assert.doesNotMatch(outcome.stderr, /not admitted within/);
+});
+
+test('a clock that prints a time but fails fails the admission check before any read', () => {
+  const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], { FAKE_CLOCK_STATUS: '1' });
+  assert.equal(outcome.status, 2, outcome.stderr);
+  assert.equal(admissionReads(outcome).length, 0);
+  assert.match(outcome.stderr, /installation\.sh: the clock could not be read/);
 });
 
 test('a shell without EPOCHREALTIME reads the clock through node and never ends before its bound', () => {

@@ -1,2 +1,3 @@
 {"change":"stabilize-admission-base-ten-test","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a4f4-9535-7802-adee-165439e57aa9","counts":{"critical":0,"high":0,"medium":3,"low":1}}
 {"change":"stabilize-admission-base-ten-test","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"9a3afe82-cef1-4bd1-897e-611e2e507c77","counts":{"critical":0,"high":0,"medium":0,"low":4}}
+{"change":"stabilize-admission-base-ten-test","pass":3,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a1a576-f162-7a60-bb43-a13a2c31de6f","counts":{"critical":0,"high":0,"medium":1,"low":2}}

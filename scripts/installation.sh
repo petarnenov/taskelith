@@ -438,11 +438,11 @@ read_clock() {
   fi
 }
 
-# The clock's milliseconds; fails with a message on any other output.
+# The clock's milliseconds; fails with a message when the clock fails or
+# prints anything else.
 clock_milliseconds() {
   local now
-  now="$(read_clock)"
-  if ! [[ "$now" =~ ^[0-9]+$ ]]; then
+  if ! now="$(read_clock)" || ! [[ "$now" =~ ^[0-9]+$ ]]; then
     echo "installation.sh: the clock could not be read" >&2
     return 1
   fi
@@ -473,26 +473,41 @@ deadline_passed() {
 
 # Sleeps N seconds, but never past DEADLINE.
 sleep_within() {
-  local wanted=$(($2 * 1000)) left
+  local left
   left="$(milliseconds_left "$1")" || exit "$ADMISSION_CLOCK_FAILED"
+  sleep_at_most "$left" "$2"
+}
+
+# Sleeps N seconds, but at most LEFT milliseconds.
+sleep_at_most() {
+  local left="$1" wanted=$(($2 * 1000))
   if [ "$left" -lt "$wanted" ]; then wanted="$left"; fi
   sleep "$((wanted / 1000)).$(printf '%03d' "$((wanted % 1000))")"
 }
 
-# Reads the view into OUTPUT and its diagnostics into LOG; a read still
-# running at DEADLINE is killed, and the function then fails.
+# Kills the background read READER and reaps it.
+stop_read() {
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+}
+
+# Reads the view into OUTPUT and its diagnostics into LOG. A read still
+# running at DEADLINE, or when the clock fails, is stopped; both then fail.
 bounded_admission_read() {
-  local output="$1" log="$2" deadline="$3" reader
+  local output="$1" log="$2" deadline="$3" reader left
   read_worker_admission > "$output" 2>> "$log" &
   reader=$!
   while kill -0 "$reader" 2>/dev/null; do
-    if deadline_passed "$deadline"; then
-      kill "$reader" 2>/dev/null || true
-      wait "$reader" 2>/dev/null || true
+    if ! left="$(milliseconds_left "$deadline")"; then
+      stop_read "$reader"
+      return "$ADMISSION_CLOCK_FAILED"
+    fi
+    if [ "$left" -eq 0 ]; then
+      stop_read "$reader"
       echo "installation.sh: a read of the workers view did not end in time" >> "$log"
       return 1
     fi
-    sleep_within "$deadline" 1
+    sleep_at_most "$left" 1
   done
   wait "$reader" || true
 }
@@ -500,7 +515,7 @@ bounded_admission_read() {
 # Polls the workers view until the one worker is admitted with a passed
 # linux-containment check reported after AFTER; prints the view's asOf.
 await_worker_admission() (
-  local bound deadline status="$ADMISSION_WAITING" files
+  local bound deadline status="$ADMISSION_WAITING" read_status files
   if ! [[ "$ADMISSION_SECONDS" =~ ^[0-9]+$ ]] || [ "$((10#$ADMISSION_SECONDS))" -eq 0 ]; then
     echo "installation.sh: TASKELITH_ADMISSION_SECONDS must be positive whole seconds" >&2
     exit 2
@@ -513,7 +528,10 @@ await_worker_admission() (
   # (node on bash 3.2) cannot use up the bound before it.
   while :; do
     : > "$files/log"
-    if ! bounded_admission_read "$files/view" "$files/log" "$deadline"; then break; fi
+    read_status=0
+    bounded_admission_read "$files/view" "$files/log" "$deadline" || read_status=$?
+    if [ "$read_status" -eq "$ADMISSION_CLOCK_FAILED" ]; then exit "$read_status"; fi
+    if [ "$read_status" -ne 0 ]; then break; fi
     status=0
     node --experimental-strip-types "$repository/scripts/installation-admission.ts" linux-containment "$1" \
       < "$files/view" > "$files/as-of" 2>> "$files/log" || status=$?

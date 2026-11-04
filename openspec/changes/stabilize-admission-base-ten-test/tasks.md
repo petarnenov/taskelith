@@ -25,7 +25,9 @@
 - [x] 5.3 Independent review pass 2 (claude claude-fable-5-1, medium): 4 Low; the review ends there, pass 3 is not run
 - [x] 5.4 Pass 2 fixes: an unread clock fails the wait, the capped-poll test sums its sleeps, comment placeholders, and line citations
 - [x] 5.5 Archive the change (reverted in 6.1 for the return)
-- [ ] 5.6 Independent review pass 3 of the return round and the archive
+- [x] 5.6 Independent review pass 3 of the return round (codex gpt-6.1-sol, medium): 1 Medium, 2 Low
+- [x] 5.7 Pass 3 fixes: a clock failure stops a running read, the capped-poll test awaits its read, and a failing clock fails the wait even when it prints digits
+- [ ] 5.8 Archive the change
 
 ## 6. Return (2026-11-04)
 
