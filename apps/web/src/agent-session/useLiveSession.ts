@@ -1,0 +1,39 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useBoardServices } from '../board/BoardServices';
+import { startSessionFeed, type SessionFeed, type SessionFeedState } from './session-feed';
+
+export interface LiveSession {
+  readonly state: SessionFeedState;
+  readonly retry: () => void;
+  readonly loadEarlier: () => void;
+}
+
+const LOADING: SessionFeedState = { status: 'loading' };
+
+interface ShownState {
+  readonly key: string;
+  readonly state: SessionFeedState;
+}
+
+// The agent session, kept current by the project's event stream while
+// shown; a state of another session is never returned.
+export function useLiveSession(projectId: string, sessionId: string): LiveSession {
+  const { gateway, clock } = useBoardServices();
+  const key = `${projectId}/${sessionId}`;
+  const [shown, setShown] = useState<ShownState>({ key, state: LOADING });
+  const [loads, setLoads] = useState(0);
+  const feed = useRef<SessionFeed | undefined>(undefined);
+
+  useEffect(() => {
+    setShown({ key, state: LOADING });
+    const show = (state: SessionFeedState) => setShown({ key, state });
+    const started = startSessionFeed({ projectId, sessionId, gateway, clock, show });
+    feed.current = started;
+    return started.stop;
+  }, [key, projectId, sessionId, gateway, clock, loads]);
+
+  const retry = useCallback(() => setLoads((count) => count + 1), []);
+  const loadEarlier = useCallback(() => feed.current?.loadEarlier(), []);
+  const state = shown.key === key ? shown.state : LOADING;
+  return useMemo(() => ({ state, retry, loadEarlier }), [state, retry, loadEarlier]);
+}

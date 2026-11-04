@@ -1,5 +1,6 @@
 import { Badge, Box, Group, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { useId, type ReactNode } from 'react';
+import type { CardSessionsState } from './useCardSessions';
 import type { BoardCard, GateView, StageView, TaskDetail, TraceLink, WorkflowRunBinding } from './board';
 import {
   COLUMN_LABELS,
@@ -19,9 +20,17 @@ import { ObstacleText } from './ObstacleText';
 import { SessionIndicator } from './SessionIndicator';
 import { TaskList } from './TaskList';
 
+// The agent sessions of the card's tasks, each linked from its task
+// (decision Q3 of item 31), with the state of their listing.
+export interface SessionLinks {
+  readonly projectId: string;
+  readonly state: CardSessionsState;
+  readonly retry: () => void;
+}
+
 // Product ports section 3.7: one readTaskDetail snapshot, with nothing
 // shown that the control plane did not answer.
-export function TaskDetailView({ detail }: { readonly detail: TaskDetail }) {
+export function TaskDetailView({ detail, links }: { readonly detail: TaskDetail; readonly links: SessionLinks }) {
   return (
     <Stack gap="lg">
       <CardSummary card={detail.card} />
@@ -36,7 +45,7 @@ export function TaskDetailView({ detail }: { readonly detail: TaskDetail }) {
         <RunBinding binding={detail.runBinding} />
       </Section>
       <Section title="Tasks in admission order">
-        <TaskList tasks={detail.tasks} />
+        <TaskList tasks={detail.tasks} links={links} />
       </Section>
     </Stack>
   );

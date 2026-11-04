@@ -1,6 +1,7 @@
 import { Alert, Box, Drawer } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router';
+import { useCardSessions } from './useCardSessions';
 import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';
@@ -11,9 +12,9 @@ import type { BoardOutlet } from './BoardPage';
 import { LoadError, withRequiredRole } from './LoadError';
 import { ProjectPicker } from './ProjectPicker';
 import type { TaskDetailState } from './task-detail-feed';
-import { TaskDetailView } from './TaskDetailView';
+import { TaskDetailView, type SessionLinks } from './TaskDetailView';
 import type { LiveBoard } from './useLiveBoard';
-import { useTaskDetail } from './useTaskDetail';
+import { liveCardOf, useTaskDetail } from './useTaskDetail';
 
 // The task detail address opens the Drawer over the board, so a reload or
 // a link keeps it; closing it leads back to the board.
@@ -68,9 +69,11 @@ interface TaskDetailDrawerProps {
 function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawerProps) {
   const boardState = board?.state;
   const shownBoard = boardState?.status === 'shown' ? boardState : undefined;
-  const detail = useTaskDetail(projectId, runId, shownBoard);
+  const detail = useTaskDetail(projectId, runId, liveCardOf(shownBoard, runId));
   const boardFailure = boardState?.status === 'failed' ? boardState.failure : undefined;
   const shown = boardFailure === undefined && detail.state.status === 'shown' ? detail.state.detail : undefined;
+  const sessions = useCardSessions(projectId, runId, shown);
+  const links: SessionLinks = { projectId, state: sessions.state, retry: sessions.retry };
   const retryBoth = () => {
     board?.retry();
     detail.retry();
@@ -89,7 +92,7 @@ function TaskDetailDrawer({ projectId, runId, board, onClose }: TaskDetailDrawer
         <ProjectPicker />
       </Box>
       {boardFailure === undefined ? (
-        <DetailContent state={detail.state} lost={shownBoard?.liveness === 'lost'} onRetry={detail.retry} />
+        <DetailContent state={detail.state} lost={shownBoard?.liveness === 'lost'} onRetry={detail.retry} links={links} />
       ) : (
         <DetailFailure failure={boardFailure} texts={BOARD_FAILURES} onRetry={retryBoth} />
       )}
@@ -101,15 +104,16 @@ interface DetailContentProps {
   readonly state: TaskDetailState;
   readonly lost: boolean;
   readonly onRetry: () => void;
+  readonly links: SessionLinks;
 }
 
-function DetailContent({ state, lost, onRetry }: DetailContentProps) {
+function DetailContent({ state, lost, onRetry, links }: DetailContentProps) {
   if (state.status === 'loading') return <LoadingStatus text="Loading the task detail…" />;
   if (state.status === 'failed') return <DetailFailure failure={state.failure} texts={FAILURES} onRetry={onRetry} />;
   return (
     <>
       {lost ? <LostNotice asOf={state.detail.asOf} /> : null}
-      <TaskDetailView detail={state.detail} />
+      <TaskDetailView detail={state.detail} links={links} />
     </>
   );
 }

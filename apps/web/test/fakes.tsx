@@ -3,6 +3,8 @@ import { createMemoryRouter, type InitialEntry } from 'react-router';
 import { vi } from 'vitest';
 import { App } from '../src/App';
 import type {
+  AgentSession,
+  AgentSessionView,
   Board,
   BoardCard,
   BoardGateway,
@@ -12,6 +14,8 @@ import type {
   ReadResult,
   TaskDetail,
   TaskView,
+  Turn,
+  TurnPage,
 } from '../src/board/board';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
@@ -147,6 +151,34 @@ export function taskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
   };
 }
 
+export function agentSession(overrides: Partial<AgentSession> = {}): AgentSession {
+  return {
+    sessionId: 'session-1',
+    taskId: 'task-1',
+    runId: 'run-1',
+    harness: 'claude-code',
+    runningGeneration: 1,
+    lastTurnPosition: 2,
+    lastRequestPosition: 0,
+    output: { lastPosition: 0 },
+    ...overrides,
+  };
+}
+
+export function agentSessionView(overrides: Partial<AgentSessionView> = {}): AgentSessionView {
+  return { asOf: '2026-11-03T09:00:00.000Z', position: '40', session: agentSession(), ...overrides };
+}
+
+export function turn(overrides: Partial<Turn> = {}): Turn {
+  const base = { turnId: 'turn-1', position: 1, author: { kind: 'principal', principalId: 'operator' }, text: 'Start' } as const;
+  return { ...base, state: 'ended', generation: 1, outcome: 'completed', ...overrides } as Turn;
+}
+
+export function turnPage(overrides: Partial<TurnPage> = {}): TurnPage {
+  const turns = [turn(), turn({ turnId: 'turn-2', position: 2, text: 'Continue', state: 'delivered', generation: 1 })];
+  return { asOf: '2026-11-03T09:00:00.000Z', position: '40', turns, ...overrides };
+}
+
 export interface FakeStream {
   readonly projectId: string;
   readonly after: string;
@@ -165,6 +197,24 @@ export class FakeBoardGateway implements BoardGateway {
 
   readonly readTaskDetail = vi.fn(
     async (_projectId: string, _runId: string): Promise<ReadResult<TaskDetail>> => ({ kind: 'read', value: taskDetail() }),
+  );
+
+  readonly listAgentSessions = vi.fn(
+    async (_projectId: string, _runId: string): Promise<ReadResult<readonly AgentSession[]>> => ({ kind: 'read', value: [] }),
+  );
+
+  readonly readAgentSession = vi.fn(
+    async (_projectId: string, _sessionId: string): Promise<ReadResult<AgentSessionView>> => ({
+      kind: 'read',
+      value: agentSessionView(),
+    }),
+  );
+
+  readonly listAgentSessionTurns = vi.fn(
+    async (_projectId: string, _sessionId: string, _after: number): Promise<ReadResult<TurnPage>> => ({
+      kind: 'read',
+      value: turnPage(),
+    }),
   );
 
   readonly openEvents = (projectId: string, after: string, listener: BoardStreamListener) => {
