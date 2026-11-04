@@ -1,0 +1,104 @@
+{
+  "change": "stabilize-g2-cancellation-races",
+  "generatedAt": "2026-11-04T12:02:27.252Z",
+  "devCommit": "6dab1d26b271c7210f6929e29394780a80e4b7a2",
+  "query": {
+    "capabilities": [
+      "observation-consumption",
+      "worker-contact",
+      "g2-failure-scenarios",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/adapters/postgres/**",
+      "test/**"
+    ],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 50
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 43
+      },
+      {
+        "category": "error-handling",
+        "count": 34
+      },
+      {
+        "category": "naming",
+        "count": 26
+      },
+      {
+        "category": "test-flakiness",
+        "count": 26
+      },
+      {
+        "category": "docs",
+        "count": 20
+      },
+      {
+        "category": "concurrency-race",
+        "count": 16
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1014,
+        "inChecklist": 843
+      },
+      "mediumOrWorse": {
+        "findings": 499,
+        "inChecklist": 414
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 157
+      },
+      {
+        "category": "spec-wording",
+        "count": 105
+      },
+      {
+        "category": "docs",
+        "count": 81
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 471,
+        "inChecklist": 464
+      },
+      "mediumOrWorse": {
+        "findings": 75,
+        "inChecklist": 75
+      }
+    }
+  }
+}
