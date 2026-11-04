@@ -50,6 +50,9 @@ test('in memory, a refused audit row fails the creation or update and keeps noth
 
 type Snapshot = readonly [stored: number | undefined, audited: number | undefined];
 
+// A write that waits on a macrotask fails here instead of hanging.
+const MAX_MICROTASKS = 10_000;
+
 // Reads the store and the trail in one step after every microtask of
 // `write`, so a reader between its two publications would see it.
 async function snapshotsDuring(write: Promise<unknown>, read: () => Promise<Snapshot>): Promise<Snapshot[]> {
@@ -57,6 +60,7 @@ async function snapshotsDuring(write: Promise<unknown>, read: () => Promise<Snap
   const finished = write.then(() => { settled = true; });
   const reads: Promise<Snapshot>[] = [];
   while (!settled) {
+    assert.ok(reads.length < MAX_MICROTASKS, `the write did not settle within ${MAX_MICROTASKS} microtasks`);
     reads.push(read());
     await Promise.resolve();
   }
