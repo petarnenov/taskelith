@@ -24,7 +24,7 @@
 - [x] 5.2 Pass 1 fixes: a millisecond clock with reusable deadline functions and sleeps capped at the deadline, a test clock seam with deterministic tests, the fail-before against `fa3fbce7`, and corrected latency claims
 - [x] 5.3 Independent review pass 2 (claude claude-fable-5-1, medium): 4 Low; the review ends there, pass 3 is not run
 - [x] 5.4 Pass 2 fixes: an unread clock fails the wait, the capped-poll test sums its sleeps, comment placeholders, and line citations
-- [x] 5.5 Archive the change
+- [ ] 5.5 Archive the change
 
 ## 6. Follow-up
 

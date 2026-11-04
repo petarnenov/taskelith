@@ -136,13 +136,3 @@ Fixes that no later pass reviewed, for the coordinator's architect check: the fo
 
 - The coordinator's architect check of the unreviewed pass 2 fixes.
 - Integration into dev by the coordinator (single pull request).
-
-## Archive
-
-The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive stabilize-admission-base-ten-test --yes`, which is the tree of the archive commit apart from this section:
-
-- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
-- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-stabilize-admission-base-ten-test`.
-- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `fa3fbce7`): only this change's delta, in `local-installation`: the modified text of "Bounded admission wait of the bring-up check" and its new scenarios "Clock tick right after the start" and "Decision just after the bound".
-- The moved change has `findings.jsonl` (4 pass 1 and 4 pass 2 findings) and `passes.jsonl` (passes 1 and 2); `make findings ARGS="validate"`: every findings file is valid, 114 files.
-- `env -u NODE_ENV make verify`: passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4745, suites 50, pass 4698, fail 0, cancelled 0, skipped 47. All files: 99.41 % lines, 92.84 % branches, 98.83 % functions.
