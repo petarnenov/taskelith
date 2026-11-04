@@ -40,7 +40,7 @@ The logger SHALL replace the value of every field whose name may hold a secret w
 ## ADDED Requirements
 
 ### Requirement: Redaction of text of any length
-Redacting text, in log records and in the secrets adapter's redaction of failures and output, SHALL NOT throw for a text of any length. A text the regular expression engine cannot scan, as it overflows the engine's backtrack stack, SHALL be replaced whole with `[redacted]`, since a secret may span words; a rule failure of any other kind SHALL propagate.
+Redacting text, in log records and in the secrets adapter's redaction of failures and output, SHALL NOT throw for a text of any length. A text on which a rule throws a `RangeError`, of any cause, as the regular expression engine does when a text overflows its backtrack stack, SHALL be replaced whole with `[redacted]`, since a secret may span words; any other rule error SHALL propagate.
 
 #### Scenario: A logged field too long to scan
 - **WHEN** a logged field holds `ghs_` repeated 1,400,000 times
@@ -49,6 +49,10 @@ Redacting text, in log records and in the secrets adapter's redaction of failure
 #### Scenario: A failure message too long to scan
 - **WHEN** a failure's message is `a` repeated 2^23 + 1 times
 - **THEN** redacting the failure does not throw, its message is `[redacted]`, and its details stay
+
+#### Scenario: A rule's RangeError of another cause
+- **WHEN** a redaction rule that uses no regular expression throws `RangeError('invalid array length')` on the text `keep`
+- **THEN** redacting with that rule returns `[redacted]`
 
 #### Scenario: Another rule failure
 - **WHEN** a redaction rule throws a `TypeError`

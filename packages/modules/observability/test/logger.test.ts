@@ -179,6 +179,14 @@ test('a logged field too long to scan is redacted whole', () => {
   assert.deepEqual(sink.records.map((record) => record.fields), [{ output: REDACTED }]);
 });
 
+// Fail closed: a RangeError of any cause redacts the whole text.
+test('a RangeError of a rule that is not a regular expression redacts the text whole', () => {
+  const failing = () => {
+    throw new RangeError('invalid array length');
+  };
+  assert.equal(redactWith('keep', [failing]), REDACTED);
+});
+
 test('a rule failure other than a RangeError is rethrown', () => {
   const failing = () => {
     throw new TypeError('rule failed');
