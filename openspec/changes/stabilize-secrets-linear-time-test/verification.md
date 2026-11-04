@@ -17,6 +17,7 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `f1447aac` `docs: reopen the stabilize secrets linear time test change` reverts `66b1d706`.
 - `7605f19c` `fix: redact a text too long to scan whole instead of throwing` (`redactWith` and its tests in the observability and secrets packages).
 - `236ee1da` `test: keep linear-time runs under the regular expression stack of V8` (the cap of 2^22 and the helper's tests), then the records of the round.
+- Pass 3 fix round: `22edac49` `test: cap linear-time runs of whole units and show cheap quadratic work under the floor` (with the pass 3 line of `passes.jsonl`), `2f9241b2` `test: redact a text whole on a rule's RangeError of any cause`, `b7d9a671` (`design.md`), then the records of the round ("Pass 3 fix round").
 
 ## Environment
 
@@ -182,19 +183,37 @@ After the archive commit `66b1d706`, the coordinator (Niki) reported that integr
 | `env -u NODE_ENV make verify`, round run 1 | `b8128397` | Passed on the first run, profile full, tree `f33e77279d62e3dbcb76ad8e8c29231ee15c756c`; tests 4896, pass 4849, fail 0, skipped 47; `apps/web` 816 of 816 passed; no known flake occurred, so nothing was rerun; all files 99.42% lines, 92.97% branches, 98.85% functions; `redaction-rules.js` and `scrub.js` 100.00% lines, branches, and functions, `linear-time.js` 100.00%, 95.45%, and 100.00%; `duration_ms` 305813.7. The secrets linear-time tests took 4288.1, 22871.0, and 9089.3 ms, the observability ones 8069.4 and 29797.1 ms |
 | `make record` and `make record-check CHANGE=stabilize-secrets-linear-time-test` | `b8128397` | `make record-check: the generated part matches the tree` |
 
+## Pass 3 fix round
+
+Pass 3 (`codex gpt-6.1-sol#medium`, role A, the replacement for `gemini-4-argon-medium` on `hpz600`, session `01a1a8ec-fde7-7dc0-9288-93548079beae`) reviewed the reopened change, the product fix `7605f19c..04535022` included, and reported 3 Low findings. It is a Low-only pass and the last under the cap of three, so all three are fixed without another review (`findings.jsonl`, outcome `fixed-unreviewed`) and go to the coordinator's check as solution architect. Runs use Node.js v24.22.1 on `hpz600`.
+
+- **L1, which errors redact whole.** The fail-closed policy stays: `redactWith` returns `[redacted]` for a `RangeError` of any cause. "Redaction of text of any length" now says so, 388 characters, with the ADDED scenario "A rule's RangeError of another cause"; the test "a RangeError of a rule that is not a regular expression redacts the text whole" (`packages/modules/observability/test/logger.test.ts`) throws `RangeError('invalid array length')` from a plain function. It passes before as after, as the behaviour is unchanged: it guards the stated policy. `design.md`, "Fail closed, whole", gives the reason.
+- **L2, the cap on whole units.** `timeUnit` (`packages/testing/src/linear-time.ts:47-56`) stops doubling when the long run of whole units would pass 2^22 characters, and `assertRunFits` rejects a unit or length whose first long run passes it. Fail-before: the helper's tests of `22edac49` against `linear-time.ts` of `04535022`, rebuilt, one run: `ℹ tests 16`, `ℹ pass 13`, `ℹ fail 3`, exit 1; `abc` from 2^21 gave `actual: 4194306, expected: 2097153`, and the length 2^22 with `abc` and a unit of 4194305 characters gave `Missing expected exception`. With the fix, rebuilt: `ℹ pass 16`, `ℹ fail 0`. The requirement "Linear-time assertions" stays at 498 characters with the ADDED scenario "Runs of whole units stay below the cap".
+- **L3, cheap quadratic work under the floor.** `design.md`, "A floor of 20 ms, and runs sized to the host", the comment of `flooredRatio`, and "Limitations" restrict the claim to the measured controls; the test "quadratic readings under the floor on the longest runs pass" documents the limit with readings of run.length^2 / 10^12 ms.
+- **Spec.** Archive probe in a scratch copy of `openspec/`: `+ 1 added`, `+ 1 added`, `~ 1 modified`, `Totals: + 2, ~ 1, - 0, → 0`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| The helper's tests and the import test, 5 consecutive runs | `b7d9a671` | 5 of 5 passed, 17 test passes each; the quadratic control took 2444.4 to 3094.0 ms |
+| The same, 5 runs under the 8 busy loops | `b7d9a671` | 5 of 5 passed, 17 test passes each; the quadratic control took 2450.3 to 3757.6 ms |
+| The five linear-time callers (`--test-name-pattern='linear time'` on the two secrets and two observability files), 5 consecutive runs | `b7d9a671` | 5 of 5 passed, 5 test passes each; medians over the 10 times of each test name, secrets and observability together: 5.23 s for "Basic credentials ...", 21.57 s for "text is redacted ...", and 6.46 s (5 times) for "value redaction ..." |
+| The same, 5 runs under the 8 busy loops | `b7d9a671` | 5 of 5 passed, 5 test passes each; medians 8.83, 38.71, and 10.93 s; no busy loop left afterwards |
+| `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | `b7d9a671` | `Change 'stabilize-secrets-linear-time-test' is valid` |
+| `npm run verify:comments` | the round's working tree | `Every comment is within the comment length rule.` |
+| `make findings ARGS="validate"` | the round's working tree, with the 3 pass 3 lines | `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).` |
+
 ## Independent review
 
-Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round. Pass 2 ran (session `daeb4593-d738-4245-908c-b2da8f77056a`): Critical 0, High 0, Medium 0, Low 5. The review ended at this Low-only pass, so pass 3 did not run; the five fixes of the pass 2 fix round are unreviewed and go to the coordinator's check as solution architect. After the integration failure the coordinator decided that pass 3 reviews the reopened change, its product fix included, before the archive; it has not run yet.
+Every pass runs at effort medium, the owner decision 2026-11-02. Reviewers: pass 1 role A `codex gpt-6-astra#medium`; pass 2 role B `claude claude-fable-5-1#medium`; pass 3 role A `codex gpt-6.1-sol#medium`, the replacement for Antigravity `gemini-4-argon-medium` on `hpz600`, only after a pass 2 with a Medium or worse finding. Pass 1 ran (session `01a1a863-3102-7202-bef8-a517aab3fb55`): Critical 0, High 0, Medium 1, Low 2, all fixed in the pass 1 fix round. Pass 2 ran (session `daeb4593-d738-4245-908c-b2da8f77056a`): Critical 0, High 0, Medium 0, Low 5. The review ended at this Low-only pass, so pass 3 did not run; the five fixes of the pass 2 fix round are unreviewed and go to the coordinator's check as solution architect. After the integration failure the coordinator decided that pass 3 reviews the reopened change, its product fix included, before the archive. Pass 3 ran (session `01a1a8ec-fde7-7dc0-9288-93548079beae`): Critical 0, High 0, Medium 0, Low 3. The review ended there, at a Low-only pass and the cap of three passes; the three fixes of the pass 3 fix round are unreviewed and go to the coordinator's check as solution architect.
 
 ## Limitations
 
-- Runs double until the short median reaches 20 ms, so the floor decides only at the longest runs, of up to 2^22 characters, where a quadratic transform cannot stay under it. A slower superlinear growth below the limit of 2.5 passes: a transform of time n^k passes for k below log4(10), about 1.66, so n^1.5 passes and n^1.7 fails.
+- Runs double until the short median reaches 20 ms, so the floor decides only at the longest runs, of up to 2^22 characters. The measured quadratic controls cannot stay under it there, but quadratic work cheap enough to do so passes: readings of run.length^2 / 10^12 ms end at medians of 0.9216 and 14.7456 ms, both counted as 20 ms (pass 3 L3). A slower superlinear growth below the limit of 2.5 passes: a transform of time n^k passes for k below log4(10), about 1.66, so n^1.5 passes and n^1.7 fails.
 - A transform whose extra cost grows only slightly faster than linear, such as n log n, passes by design; the limit of 2.5 separates linear from quadratic growth.
 - The linear-time tests take longer: medians of 3.34, 18.74, and 6.33 s unloaded instead of 0.015 to 0.51 s, and the Node.js suite 17.1 s more in one measured run ("Pass 1 fix round").
 - Follow-up, not in this change: a cheaper helper, `SAMPLES = 3` or `NOISE_FLOOR_MS = 10`, each with its own load evidence (pass 2 L3).
 
 ## Remaining gates
 
-- Independent review pass 3 of the reopened change, the coordinator's decision, then the archive.
-- The coordinator's check, as solution architect, of the five unreviewed fixes of the pass 2 fix round, unless pass 3 reviews them.
+- The coordinator's check, as solution architect, of the three unreviewed fixes of the pass 3 fix round, of the product fix `7605f19c..04535022` as pass 3 reviewed it, and of the five fixes of the pass 2 fix round.
 - Integration into dev by the coordinator (single pull request).

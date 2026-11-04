@@ -37,5 +37,6 @@
 - [x] 6.4 Cap the linear-time runs at 2^22 characters, with a fail-before test of the cap
 - [x] 6.5 Modify "Logs without secrets" and add "Redaction of text of any length" in `execution-observability`
 - [x] 6.6 Load runs, `make verify`, `make record`, and `make record-check`
-- [ ] 6.7 Independent review pass 3
-- [ ] 6.8 Archive the change
+- [x] 6.7 Independent review pass 3
+- [x] 6.8 Pass 3 fix round: any `RangeError` in the spec, the cap on whole units, and the limit of cheap quadratic work
+- [x] 6.9 Archive the change
