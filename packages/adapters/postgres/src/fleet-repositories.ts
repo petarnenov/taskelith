@@ -86,7 +86,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
        RETURNING expires_at <= clock_timestamp() AS expired`,
       [tokenHash],
     );
-    if (rows[0] === undefined) return err(await this.#spentToken(tokenHash));
+    if (rows[0] === undefined) return err(await this.#spentTokenFailure(tokenHash));
     if (rows[0].expired) return err(failure('conflict', 'the enrollment token expired', { reason: 'token-expired' }));
     const journal = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [worker.journalId]);
     if (journal.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
@@ -105,7 +105,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
   async pendingTokens(after: string | undefined, limit: number): Promise<Result<readonly EnrollmentTokenRecord[]>> {
     const { rows } = await this.#session.query<TokenRow>(
       `SELECT ${TOKEN_COLUMNS} FROM enrollment_tokens WHERE used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-       AND ($1::text IS NULL OR token_id > $1) ORDER BY token_id COLLATE "C" LIMIT $2`,
+       AND ($1::text IS NULL OR token_id COLLATE "C" > $1::text COLLATE "C") ORDER BY token_id COLLATE "C" LIMIT $2`,
       [after ?? null, limit],
     );
     return ok(Object.freeze(rows.map((row) => recordOf(row))));
@@ -311,7 +311,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
 
   // Why a redemption updated no row: the token was revoked, or else used or
   // unknown, which read alike.
-  async #spentToken(tokenHash: SecretHash): Promise<ReturnType<typeof failure>> {
+  async #spentTokenFailure(tokenHash: SecretHash): Promise<ReturnType<typeof failure>> {
     const { rows } = await this.#session.query<{ revoked: boolean }>(
       'SELECT revoked_at IS NOT NULL AS revoked FROM enrollment_tokens WHERE secret_hash = $1',
       [tokenHash],
