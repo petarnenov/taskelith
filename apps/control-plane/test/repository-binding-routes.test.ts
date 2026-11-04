@@ -138,7 +138,10 @@ async function fixture(t: TestContext) {
     const text = await response.text();
     return { status: response.status, text, body: text === '' ? {} : JSON.parse(text) as Record<string, unknown> };
   };
-  const [OWNER, MARIA, OTTO, VERA, NORA] = await Promise.all(['owner', 'maria', 'otto', 'vera', 'nora'].map((name) => browser(base, name)));
+  // One login at a time: the throttle answers 503 past 4 pending per address.
+  const logins: Headers[] = [];
+  for (const name of ['owner', 'maria', 'otto', 'vera', 'nora']) logins.push(await browser(base, name));
+  const [OWNER, MARIA, OTTO, VERA, NORA] = logins;
   const path = `/projects/${ALPHA}/repository`;
   const stored = async () => value(await bindings.get(ALPHA));
   return { call, scm, integrations, path, stored, sink, ALPHA, OWNER: OWNER!, MARIA: MARIA!, OTTO: OTTO!, VERA: VERA!, NORA: NORA! };
