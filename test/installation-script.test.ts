@@ -453,7 +453,7 @@ const admissionDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case " $* " in
   *" admin worker-admission "*)
-    if [ -n "$FAKE_DELAY" ]; then sleep "$FAKE_DELAY"; fi
+    if [ -n "$FAKE_DELAY" ]; then /bin/sleep "$FAKE_DELAY"; fi
     count=$(($(cat "$FAKE_VIEWS/count") + 1))
     echo "$count" > "$FAKE_VIEWS/count"
     if [ -f "$FAKE_VIEWS/$count" ]; then cat "$FAKE_VIEWS/$count"; else cat "$FAKE_VIEWS/last"; fi ;;
@@ -461,19 +461,29 @@ esac
 exit 0
 `;
 
-// Delays the decision of every node run by FAKE_NODE_DELAY seconds.
+// Delays the decision of every node run by FAKE_NODE_DELAY seconds; with
+// FAKE_DECIDED_AT it first sets the fake clock to that time.
 const delayedNode = `#!/bin/sh
-sleep "\${FAKE_NODE_DELAY:-0}"
+printf 'node %s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+if [ -n "$FAKE_DECIDED_AT" ]; then echo "$FAKE_DECIDED_AT" > "$FAKE_CLOCK"; fi
+/bin/sleep "\${FAKE_NODE_DELAY:-0}"
 exec "$REAL_NODE" "$@"
 `;
 
-// Sleeps as asked; with FAKE_LATE_WAKE it then wakes only just past the next
-// wall-clock second, as a loaded host may, so the poll reads every tick.
-const lateSleep = `#!/bin/sh
-/bin/sleep "$@"
-if [ -n "$FAKE_LATE_WAKE" ]; then
-  /bin/sleep "$("$REAL_NODE" -e 'process.stdout.write(String((1010 - Date.now() % 1000) / 1000))')"
-fi
+// With FAKE_SLEEPS, records each sleep and moves the fake clock by it plus
+// FAKE_LATE_MS instead of sleeping; the script prints three decimals.
+const clockSleep = `#!/bin/sh
+if [ -z "$FAKE_SLEEPS" ]; then exec /bin/sleep "$@"; fi
+printf '%s\\n' "$1" >> "$FAKE_SLEEPS"
+fraction=000
+case "$1" in *.*) fraction="\${1#*.}" ;; esac
+fraction="\${fraction#"\${fraction%%[!0]*}"}"
+echo $(($(cat "$FAKE_CLOCK") + \${1%.*} * 1000 + \${fraction:-0} + \${FAKE_LATE_MS:-0})) > "$FAKE_CLOCK"
+`;
+
+// The script's clock seam: prints the fake clock's milliseconds.
+const fakeClock = `#!/bin/sh
+cat "$FAKE_CLOCK"
 `;
 
 const OPERATOR_TOKEN = 'tkop_installation-script-test-secret';
@@ -487,7 +497,7 @@ function admissionView(admission: string, outcome?: string, details: readonly st
 function checkAdmission(views: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-'));
   try {
-    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode], ['sleep', lateSleep]]) {
+    for (const [name, source] of [['docker', admissionDocker], ['node', delayedNode], ['sleep', clockSleep], ['clock', fakeClock]]) {
       writeFileSync(join(root, name), source);
       chmodSync(join(root, name), 0o755);
     }
@@ -511,6 +521,38 @@ function checkAdmission(views: readonly string[], environment: Record<string, st
     assert.ok(!`${run.stdout}${run.stderr}${recorded.join('\n')}`.includes(OPERATOR_TOKEN), 'the operator secret is never printed');
     assert.deepEqual(readdirSync(temporary), [], 'no temporary file is left');
     return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// Just before a whole second, so a clock read in whole seconds ticks early.
+const CLOCK_START = 1_000_999;
+
+interface ClockedOutcome {
+  readonly outcome: BuildOutcome;
+  readonly elapsed: number;
+  readonly sleeps: readonly string[];
+}
+
+// Runs the admission check on a fake clock that starts at CLOCK_START.
+// FAKE_SLEEPS_MOVE_CLOCK makes the fake sleep move it instead of sleeping.
+function checkAdmissionOnClock(views: readonly string[], environment: Record<string, string>): ClockedOutcome {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-clock-'));
+  try {
+    const clock = join(root, 'clock');
+    const sleeps = join(root, 'sleeps');
+    writeFileSync(clock, String(CLOCK_START));
+    writeFileSync(sleeps, '');
+    const { FAKE_SLEEPS_MOVE_CLOCK: movesClock, ...rest } = environment;
+    const outcome = checkAdmission(views, {
+      TASKELITH_TEST_CLOCK: 'clock', FAKE_CLOCK: clock, ...(movesClock ? { FAKE_SLEEPS: sleeps } : {}), ...rest,
+    });
+    return {
+      outcome,
+      elapsed: Number(readFileSync(clock, 'utf8')) - CLOCK_START,
+      sleeps: readFileSync(sleeps, 'utf8').split('\n').filter((line) => line !== ''),
+    };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -587,22 +629,60 @@ test('a bound with a leading zero is read in base 10', () => {
   assert.ok(seconds >= 10, `ended after ${seconds}s, before 10`);
 });
 
-// Blocks until late in a wall-clock second, so that a shell started next
-// sees its whole-second clock tick almost at once.
-function awaitLateInSecond(): void {
-  const remaining = 800 - (Date.now() % 1000);
-  if (remaining > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, remaining);
-}
-
-test('a wait never ends before its bound, even when its clock ticks right after it starts', () => {
-  awaitLateInSecond();
-  const { outcome, seconds } = timed(() => checkAdmission([admissionView('admitted', 'passed')], {
-    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30', FAKE_LATE_WAKE: '1',
-  }));
+test('a hung read times out at its bound to the millisecond, though each wake is late', () => {
+  const { outcome, elapsed, sleeps } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DELAY: '30', FAKE_SLEEPS_MOVE_CLOCK: '1', FAKE_LATE_MS: '1',
+  });
   assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /a read of the workers view did not end in time/);
   assert.match(outcome.stderr, /the worker was not admitted within 2s/);
-  assert.ok(seconds >= 2, `ended after ${seconds}s, before 2`);
-  assert.ok(seconds < 20, `ended after ${seconds}s`);
+  assert.deepEqual(sleeps, ['1.000', '0.999'], 'the second sleep stops at the bound');
+  assert.equal(elapsed, 2001);
+});
+
+test('a wait between reads never sleeps past the bound', () => {
+  const { outcome, elapsed, sleeps } = checkAdmissionOnClock([admissionView('awaiting-self-check')], {
+    TASKELITH_ADMISSION_SECONDS: '3', FAKE_SLEEPS_MOVE_CLOCK: '1',
+  });
+  assert.equal(outcome.status, 3);
+  assert.equal(admissionReads(outcome).length, 1);
+  assert.ok(!sleeps.includes('5.000'), 'the poll of 5 s is cut to the bound');
+  assert.equal(elapsed, 3000);
+});
+
+test('an admission decided 1 ms before the bound is admitted', () => {
+  const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DECIDED_AT: String(CLOCK_START + 1999),
+  });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(outcome.stdout.trim(), VIEW_TIME);
+});
+
+test('an admission decided 1 ms after the bound is a timeout', () => {
+  const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DECIDED_AT: String(CLOCK_START + 2001),
+  });
+  assert.equal(outcome.status, 3);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /the worker was not admitted within 2s/);
+});
+
+test('a shell without EPOCHREALTIME reads the clock through node and never ends before its bound', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-admission-bash3-'));
+  try {
+    const environment = join(root, 'environment.sh');
+    writeFileSync(environment, 'unset EPOCHREALTIME\n');
+    const { outcome, seconds } = timed(() => checkAdmission([admissionView('awaiting-self-check')], {
+      TASKELITH_ADMISSION_SECONDS: '1', BASH_ENV: environment,
+    }));
+    assert.equal(outcome.status, 3);
+    assert.match(outcome.stderr, /the worker was not admitted within 1s/);
+    assert.ok(outcome.calls.some((call) => call.includes('Date.now()')), 'node reads the clock');
+    assert.ok(seconds >= 1, `ended after ${seconds}s, before 1`);
+    assert.ok(seconds < 20, `ended after ${seconds}s`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a refused read of the workers view fails the admission check at once', () => {
