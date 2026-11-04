@@ -101,7 +101,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `7f153d78fd21f08929759585a32d05ffab7d35de`; tests 4889, pass 4842, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `3d7fad8557d1074e178c398e2bfafe6a505e265e`; tests 4890, pass 4843, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
 - `npm run openspec -- validate stabilize-secrets-linear-time-test --strict`: passed, `Change 'stabilize-secrets-linear-time-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).`.
 - Spec diff against the merge base `1ef0cb4263e3` with `origin/dev`: no change under `openspec/specs`.
@@ -110,6 +110,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a863-3102-7202-bef8-a517aab3fb55` | 0 | 0 | 1 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `daeb4593-d738-4245-908c-b2da8f77056a` | 0 | 0 | 0 | 5 |
 <!-- make record: end -->
 
 ## Pass 1 fix round
@@ -148,10 +149,11 @@ Pass 2 (`claude claude-fable-5-1#medium`, role B) reported 5 Low findings. The r
 | --- | --- | --- |
 | The helper's tests and the import test, 5 consecutive runs | `ee0693f8` | 5 of 5 passed, 12 test passes each; the quadratic control took 2420.6 to 2444.1 ms |
 | The same, 5 runs under the 8 busy loops | `ee0693f8` | 5 of 5 passed, 12 test passes each; the quadratic control took 2983.7 to 4131.3 ms |
-| The five linear-time callers (`--test-name-pattern='linear time'` on the two secrets and two observability files), 5 consecutive runs | `ee0693f8` | 5 of 5 passed, 5 test passes each; medians 4.86 s for the two "Basic credentials ..." tests, 22.44 s for the two "text is redacted ..." tests, and 6.37 s for "value redaction ..." |
+| The five linear-time callers (`--test-name-pattern='linear time'` on the two secrets and two observability files), 5 consecutive runs | `ee0693f8` | 5 of 5 passed, 5 test passes each; medians over the 10 times of each test name, secrets and observability together: 4.86 s for "Basic credentials ...", 22.44 s for "text is redacted ...", and 6.37 s (5 times) for "value redaction ..." |
 | The same, 5 runs under the 8 busy loops | `ee0693f8` | 5 of 5 passed, 5 test passes each; medians 9.73, 39.71, and 12.28 s; no busy loop left afterwards |
 | `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | `52a96161` | `Change 'stabilize-secrets-linear-time-test' is valid` |
 | Archive probe in a scratch copy of `openspec/` | `52a96161` working tree, the requirement of 498 characters | `+ 1 added`; `openspec validate --specs --strict`: `Totals: 71 passed, 0 failed (71 items)` |
+| `env -u NODE_ENV make verify`, round run 1 | `abcb675e` | Passed on the first run, profile full, tree `3d7fad8557d1074e178c398e2bfafe6a505e265e`; tests 4890, pass 4843, fail 0, skipped 47; `apps/web` 816 of 816 passed; no known flake occurred, so nothing was rerun; all files 99.42% lines, 92.97% branches, 98.85% functions, `linear-time.js` 100.00%, 95.45%, and 100.00%; `duration_ms` 304782.3. The secrets tests took 3763.7, 21237.5, and 6916.3 ms, the observability ones 8482.6 and 30353.4 ms |
 | `make findings ARGS="validate"` | the round's working tree, with the 5 pass 2 lines | `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).` |
 
 ## Independent review
