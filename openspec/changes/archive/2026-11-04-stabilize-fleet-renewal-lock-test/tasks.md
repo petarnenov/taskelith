@@ -25,4 +25,4 @@
 - [x] 5.1 Independent review pass 1
 - [x] 5.2 Pass 1 fix round: the snapshot record, `connectedPair`, early failures in `waitUntilWaiting`, `waitForLockWaiters` by the awaited lock, the full advisory key, and the scoped requirement, each with a fail-before run
 - [x] 5.3 Independent review pass 2 (Low only, so pass 3 did not run) and its fixes: the call's result in the barrier message, separate barrier parameters, and the requirement wording
-- [ ] 5.4 Archive the change
+- [x] 5.4 Archive the change
