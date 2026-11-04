@@ -4,7 +4,6 @@ import {
   ACCESS_STORE_CONFORMANCE,
   AUTHENTICATED,
   AuthorizationService,
-  g2BridgeRequirement,
   InMemoryAccessStore,
   OperatorAuthentication,
   OWNER_ONLY,
@@ -17,6 +16,7 @@ import {
   type PrincipalId,
   type ProjectRole,
 } from '@taskelith/access';
+import * as access from '@taskelith/access';
 import { err, failure, ok } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 import { addProject, countingRandom, ManualClock } from './access-fixtures.ts';
@@ -69,13 +69,17 @@ test('project roles include the roles below them and no other project', async ()
   assert.ok((await authorization.authorize(OWNER, OWNER_ONLY)).ok);
 });
 
-test('an owner passes section 3 reads and the G2 bridge, never a project mutation', async () => {
+test('an owner passes section 3 reads, never another project requirement', async () => {
   const authorization = new AuthorizationService(await storeWith({}));
   assert.ok((await authorization.authorize(OWNER, projectRead('project-1'))).ok);
   assert.ok((await authorization.authorize(OWNER, projectRead(undefined))).ok, 'an owner may learn 404');
-  assert.ok((await authorization.authorize(OWNER, g2BridgeRequirement('project-1', 'project-operator'))).ok, 'the temporary G2 bridge');
+  assert.deepEqual(failed(await authorization.authorize(OWNER, projectRequirement('project-1', 'project-operator'))), denial('project-operator'));
+  assert.deepEqual(failed(await authorization.authorize(OWNER, projectRequirement(undefined, 'project-operator'))), denial('project-operator'));
   assert.deepEqual(failed(await authorization.authorize(OWNER, projectRequirement('project-1', 'project-maintainer'))), denial('project-maintainer'));
-  assert.deepEqual(failed(await authorization.authorize(ALICE, g2BridgeRequirement('project-1', 'project-operator'))), denial('project-operator'));
+});
+
+test('the module no longer exports the retired G2 bridge', () => {
+  assert.equal(Object.hasOwn(access, 'g2BridgeRequirement'), false);
 });
 
 test('a caller without the role gets the same denial for a missing resource as for a foreign one', async () => {
