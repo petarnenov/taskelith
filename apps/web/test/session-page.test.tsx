@@ -279,14 +279,14 @@ describe('earlier turns', () => {
   const turnsAt = (first: number, last: number) =>
     Array.from({ length: last - first + 1 }, (_, offset) => turn({ turnId: `turn-${first + offset}`, position: first + offset, text: `Turn ${first + offset}` }));
 
-  function windowed() {
+  function windowed(lastTurnPosition = 150) {
     const gateway = new FakeBoardGateway();
-    gateway.readAgentSession.mockResolvedValue({ kind: 'read', value: agentSessionView({ session: agentSession({ lastTurnPosition: 150 }) }) });
-    gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'read', value: turnPage({ turns: turnsAt(51, 150) }) });
+    gateway.readAgentSession.mockResolvedValue({ kind: 'read', value: agentSessionView({ session: agentSession({ lastTurnPosition }) }) });
+    gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'read', value: turnPage({ turns: turnsAt(lastTurnPosition - 99, lastTurnPosition) }) });
     return gateway;
   }
 
-  it('shows the last window with a button that loads the earlier one, and says while it loads', async () => {
+  it('shows the last window with a button that loads the earlier one, and says on the button while it loads', async () => {
     const gateway = windowed();
     const held = deferred<ReadResult<TurnPage>>();
     gateway.listAgentSessionTurns.mockReturnValueOnce(held.promise);
@@ -295,13 +295,27 @@ describe('earlier turns', () => {
     expect(turnEntries()).toHaveLength(100);
     expect(region.getByText('Turn 51')).toBeDefined();
     await userEvent.click(region.getByRole('button', { name: 'Load earlier turns (50 before these)' }));
-    expect(region.getByText('Loading earlier turns…')).toBeDefined();
-    expect(region.queryByRole('button')).toBeNull();
+    const loading = region.getByRole('button', { name: 'Loading earlier turns…' });
+    expect(loading.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(loading);
+    await userEvent.click(loading);
+    expect(gateway.listAgentSessionTurns).toHaveBeenCalledTimes(2);
     await act(async () => held.resolve({ kind: 'read', value: turnPage({ turns: turnsAt(1, 50) }) }));
     expect(turnEntries()).toHaveLength(150);
     expect(turnEntries()[0]!.textContent).toContain('Turn 1');
     expect(region.queryByRole('button')).toBeNull();
     expect(gateway.listAgentSessionTurns).toHaveBeenLastCalledWith(PROJECT.projectId, 'session-1', 0);
+  });
+
+  it('keeps the focus on the button through a load after which earlier turns remain', async () => {
+    const gateway = windowed(250);
+    gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'read', value: turnPage({ turns: turnsAt(51, 150) }) });
+    openSession(gateway);
+    const region = await shownSession();
+    await userEvent.click(region.getByRole('button', { name: 'Load earlier turns (150 before these)' }));
+    await waitFor(() => expect(turnEntries()).toHaveLength(200));
+    const button = region.getByRole('button', { name: 'Load earlier turns (50 before these)' });
+    expect(document.activeElement).toBe(button);
   });
 
   it.each([
