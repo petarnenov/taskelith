@@ -6,7 +6,12 @@ export type RequirementRule =
   | { readonly kind: 'none' }
   | { readonly kind: 'fixed'; readonly requirement: AccessRequirement }
   | { readonly kind: 'path-project'; readonly role: ProjectRole; readonly ownerReads: boolean }
-  | { readonly kind: 'resource-project'; readonly role: ProjectRole; readonly projectIn: 'path-resource' | 'body' }
+  | {
+    readonly kind: 'resource-project';
+    readonly role: ProjectRole;
+    readonly projectIn: 'path-resource' | 'body';
+    readonly ownerReads: boolean;
+  }
   | { readonly kind: 'evidence-project' };
 
 const NONE: RequirementRule = Object.freeze({ kind: 'none' });
@@ -15,10 +20,10 @@ const OWNER: RequirementRule = Object.freeze({ kind: 'fixed', requirement: OWNER
 const PROJECT_READ: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-viewer', ownerReads: true });
 const PROJECT_OPERATOR: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-operator', ownerReads: false });
 const PROJECT_MAINTAINER: RequirementRule = Object.freeze({ kind: 'path-project', role: 'project-maintainer', ownerReads: false });
-// The G2 operator operations, which the temporary G2 bridge covers (Q5).
-const NEW_RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'body' });
-const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'path-resource' });
-const RUN_VIEWER: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-viewer', projectIn: 'path-resource' });
+// The G2 operator operations: commands of a role, and section 3 reads.
+const NEW_RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'body', ownerReads: false });
+const RUN_OPERATOR: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-operator', projectIn: 'path-resource', ownerReads: false });
+const RUN_READ: RequirementRule = Object.freeze({ kind: 'resource-project', role: 'project-viewer', projectIn: 'path-resource', ownerReads: true });
 // A section 3 read of the record's project (execution section 8.2).
 const EVIDENCE_READER: RequirementRule = Object.freeze({ kind: 'evidence-project' });
 
@@ -43,7 +48,7 @@ export const ACCESS_REQUIREMENTS: Readonly<Record<string, RequirementRule>> = Ob
   reinstateAccountSlot: OWNER, rotateSlotCredential: OWNER, removeAccountSlot: OWNER,
   createScmIntegration: OWNER, updateScmIntegration: OWNER,
   createRun: NEW_RUN_OPERATOR, submitTask: RUN_OPERATOR,
-  readAdmission: RUN_VIEWER, readTaskResult: RUN_VIEWER, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
+  readAdmission: RUN_READ, readTaskResult: RUN_READ, readEvidence: EVIDENCE_READER, downloadEvidence: EVIDENCE_READER,
   listQuarantine: OWNER, redriveQuarantined: OWNER,
   readInstallationCa: NONE, enrollWorker: NONE, authorizeLaunch: NONE, publishEvidence: NONE, requestDelegation: NONE,
   renewWorkerCredentials: NONE, confirmWorkerCredentials: NONE, openWorkerRelay: NONE, fetchSlotCredential: NONE,

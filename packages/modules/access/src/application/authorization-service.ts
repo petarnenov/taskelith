@@ -25,7 +25,7 @@ export async function authorizeIn(tx: AccessTransaction, principalId: PrincipalI
   const owner = await tx.principals.isInstallationOwner(principalId);
   if (!owner.ok) return owner;
   if (requirement.kind === 'installation-owner') return owner.value ? ok(undefined) : err(roleDenial(INSTALLATION_OWNER));
-  if (owner.value && requirement.ownerPass !== 'never') return ok(undefined);
+  if (owner.value && requirement.ownerPass === 'section-3-read') return ok(undefined);
   if (requirement.projectId === undefined) return err(roleDenial(requirement.role));
   const held = await tx.projectRoles.roleOf(requirement.projectId, principalId);
   if (!held.ok) return held;

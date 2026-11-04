@@ -72,7 +72,6 @@ export {
 } from './domain/project.js';
 export {
   AUTHENTICATED,
-  g2BridgeRequirement,
   OWNER_ONLY,
   projectRead,
   projectRequirement,
