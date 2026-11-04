@@ -5,10 +5,11 @@ import type { ReadResult } from '../src/api/read-result';
 import { createBoardGateway } from '../src/board/control-plane-board';
 import { WORKERS } from '../src/screens';
 import { createSessionGateway } from '../src/session/control-plane-session';
+import { EXPIRY_MARGIN_MILLISECONDS } from '../src/session/SessionProvider';
 import type { SessionRead } from '../src/session/session';
 import { createWorkersGateway } from '../src/workers/control-plane-workers';
 import type { SelfCheckResult, WorkersView } from '../src/workers/workers';
-import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, ManualClock, OPERATOR, renderApp, worker, workersView } from './fakes';
+import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, HOUR, ManualClock, NOW, OPERATOR, renderApp, worker, workersView } from './fakes';
 
 // Every console argument of a test: the page writes nothing to the console,
 // and React's warnings, as for invalid HTML, count as unexpected output.
@@ -44,6 +45,12 @@ afterEach(() => {
 const WORKERS_PATH = '/app/workers';
 const TITLE = 'Workers and account pools';
 const VIEWER: SessionRead = { kind: 'authenticated', operator: { ...OPERATOR, installationRoles: [] } };
+const EXPIRY_CHECK = HOUR + EXPIRY_MARGIN_MILLISECONDS;
+
+// The same operator read again at the session's end, with its roles.
+function renewedWith(installationRoles: readonly string[]): SessionRead {
+  return { kind: 'authenticated', operator: { ...OPERATOR, installationRoles: [...installationRoles], expiresAt: NOW + 3 * HOUR } };
+}
 
 // A promise the test resolves when it chooses, so no read races it.
 function deferred<T>() {
@@ -140,6 +147,41 @@ describe('the installation-owner gate', () => {
     await screen.findByRole('heading', { level: 1, name: 'Project board' });
     const navigation = within(screen.getByRole('navigation', { name: 'Main' }));
     expect(navigation.getByRole('link', { name: 'Workers' }).getAttribute('href')).toBe(WORKERS_PATH);
+  });
+
+  it('mounts the reader once a session read at the expiry check grants the role', async () => {
+    const gateway = new FakeWorkersGateway();
+    const session = fakeGateway(VIEWER);
+    session.read.mockResolvedValueOnce(VIEWER).mockResolvedValueOnce(renewedWith(['installation-owner']));
+    const { clock } = openWorkers(gateway, session);
+    expect(await screen.findByText('Needs installation-owner')).toBeDefined();
+    expect(gateway.listWorkers).not.toHaveBeenCalled();
+    act(() => clock.advance(EXPIRY_CHECK));
+    await shownWorkers();
+    expect(screen.queryByText('Needs installation-owner')).toBeNull();
+    expect(session.read).toHaveBeenCalledTimes(2);
+    expect(gateway.listWorkers).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmounts the reader and drops its outstanding read once a session read revokes the role', async () => {
+    const outstanding = deferred<ReadResult<WorkersView>>();
+    const gateway = workersGatewayWith(read(workersView()));
+    gateway.listWorkers.mockReturnValueOnce(outstanding.promise);
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(renewedWith([]));
+    const { clock } = openWorkers(gateway, session);
+    await shownWorkers();
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText('Refreshing the workers…')).toBeDefined();
+    act(() => clock.advance(EXPIRY_CHECK));
+    expect(await screen.findByText('Needs installation-owner')).toBeDefined();
+    expect(screen.queryByRole('region', { name: 'Workers' })).toBeNull();
+    await act(async () => outstanding.resolve(read(workersView())));
+    expect(screen.queryByRole('region', { name: 'Workers' })).toBeNull();
+    expect(screen.queryByText('Refreshing the workers…')).toBeNull();
+    expect(screen.getByText('Needs installation-owner')).toBeDefined();
+    expect(session.read).toHaveBeenCalledTimes(2);
+    expect(gateway.listWorkers).toHaveBeenCalledTimes(2);
   });
 
   it('shows the denied state with the role when the control plane refuses a role the session named', async () => {
