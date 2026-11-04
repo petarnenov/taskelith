@@ -1,5 +1,5 @@
-import type { AgentSession, AgentSessionPage, AgentSessionView, SessionChange, Turn, TurnChange, TurnPage } from '../board/board';
-import { isInstant, isKey, isPosition, isRecord, isText } from '../board/board-wire';
+import type { AgentSession, AgentSessionPage, AgentSessionView, SessionChange, Turn, TurnChange, TurnPage } from './board';
+import { isInstant, isKey, isPosition, isRecord, isText } from './board-wire';
 import { HARNESS_FAILURE_LABELS, TURN_OUTCOME_LABELS, TURN_STATE_LABELS } from './session-labels';
 
 // The agent session answers and events, checked for every field the

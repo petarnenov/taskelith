@@ -6,7 +6,7 @@ import {
   TURN_OUTCOME_LABELS,
   TURN_STATE_LABELS,
   turnStateLabel,
-} from '../src/agent-session/session-labels';
+} from '../src/board/session-labels';
 import { turn } from './fakes';
 
 interface Schema {

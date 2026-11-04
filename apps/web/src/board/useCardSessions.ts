@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentSession, ReadFailed, TaskDetail } from '../board/board';
-import { useBoardServices } from '../board/BoardServices';
+import type { AgentSession, ReadFailed, TaskDetail } from './board';
+import { useBoardServices } from './BoardServices';
 
 export type CardSessionsState =
   | { readonly status: 'loading' }

@@ -1,7 +1,7 @@
 import { Badge, Group, Stack, Text, Timeline } from '@mantine/core';
 import type { Turn, TurnAuthor } from '../board/board';
 import { Breakable } from '../board/Breakable';
-import { turnStateLabel } from './session-labels';
+import { turnStateLabel } from '../board/session-labels';
 
 // The turns in position order, each with its author, state, generation,
 // and text; a queued turn has no generation yet.

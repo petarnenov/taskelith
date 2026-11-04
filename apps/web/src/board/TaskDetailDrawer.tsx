@@ -1,7 +1,7 @@
 import { Alert, Box, Drawer } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router';
-import { useCardSessions } from '../agent-session/useCardSessions';
+import { useCardSessions } from './useCardSessions';
 import { identifierOf } from '../screens';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import type { ReadFailed, ReadFailure } from './board';

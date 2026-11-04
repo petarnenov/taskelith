@@ -1,6 +1,6 @@
 import { Badge, Box, Group, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { useId, type ReactNode } from 'react';
-import type { CardSessionsState } from '../agent-session/useCardSessions';
+import type { CardSessionsState } from './useCardSessions';
 import type { BoardCard, GateView, StageView, TaskDetail, TraceLink, WorkflowRunBinding } from './board';
 import {
   COLUMN_LABELS,

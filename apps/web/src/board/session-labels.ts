@@ -1,5 +1,5 @@
 import type { MantineColor } from '@mantine/core';
-import type { HarnessFailure, Turn, TurnOutcome, TurnState } from '../board/board';
+import type { HarnessFailure, Turn, TurnOutcome, TurnState } from './board';
 
 // The words the session screen shows for each turn state and outcome; a
 // test keeps every record's keys equal to the OpenAPI enum it labels.

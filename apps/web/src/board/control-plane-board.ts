@@ -4,7 +4,7 @@ import {
   sessionChangeOf,
   turnChangeOf,
   turnPageOf,
-} from '../agent-session/agent-session-wire';
+} from './agent-session-wire';
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
 import type {
   AgentSession,
