@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { theme } from '../src/theme';
+import { cssVariablesResolver, theme } from '../src/theme';
 import { contrastRatio, schemeColors, type Scheme, type SchemeColors } from './contrast';
 
 const MINIMUM = 4.5;
@@ -91,7 +91,7 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
 }
 
 describe.each<Scheme>(['dark', 'light'])('the %s color scheme', (scheme) => {
-  const colors = schemeColors(theme, scheme);
+  const colors = schemeColors(theme, scheme, cssVariablesResolver);
   const page = colors.resolve(BODY);
   it.each(screenPairs(colors, scheme))('keeps %s at 4.5:1 or more', (_, foreground, background) => {
     const ratio = contrastRatio(colors.resolve(foreground), colors.resolve(background), page);
