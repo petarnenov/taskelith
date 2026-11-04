@@ -13,6 +13,7 @@ import {
   InstallationService,
   installationIdentity,
   parseWorkerId,
+  type FleetRegistry,
 } from '@taskelith/fleet';
 import { failed, value } from '@taskelith/testing';
 import { MutableClock, RecordingConsumers, countingIds, countingSecrets, enrollment, request } from './enrollment-fixtures.ts';
@@ -248,7 +249,7 @@ test('a renewal whose registry write waits past the deadline is refused', async 
 });
 
 test('a confirmation after the deadline expires the predecessor as unconfirmed, before or after the sweep', async () => {
-  const kinds = async (registry: InMemoryFleetRegistry, workerId: WorkerId) =>
+  const kinds = async (registry: FleetRegistry, workerId: WorkerId) =>
     value(await registry.credentialAuditTrail(workerId)).map(({ kind, reason }) => `${kind}:${reason}`);
   for (const sweepFirst of [false, true]) {
     const { clock, broker, registry, service, enrolled, principal } = await enrolledWorker();

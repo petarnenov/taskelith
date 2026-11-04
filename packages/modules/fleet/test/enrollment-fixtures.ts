@@ -7,6 +7,7 @@ import {
   type BrokerCredentials,
   type BrokerRevocation,
   type EnrollmentRequest,
+  type FleetRegistry,
   type WorkerCommandConsumers,
 } from '@taskelith/fleet';
 import { id, value } from '@taskelith/testing';
@@ -91,17 +92,36 @@ export class RecordingBroker implements BrokerCredentials {
   }
 }
 
-export function enrollment() {
+// `registry` whose first call of `method` waits until `open`, so that a
+// test decides which of two racing writes reaches the store first.
+export function gated<Method extends keyof FleetRegistry>(registry: FleetRegistry, method: Method): { registry: FleetRegistry; open: () => void } {
+  let open = (): void => undefined;
+  const opened = new Promise<void>((resolve) => { open = resolve; });
+  let held = false;
+  const member = (target: FleetRegistry, key: string | symbol): unknown => {
+    const found: unknown = Reflect.get(target, key);
+    if (typeof found !== 'function') return found;
+    const bound = found.bind(target) as (...args: unknown[]) => unknown;
+    if (key !== method || held) return bound;
+    held = true;
+    return async (...args: unknown[]) => { await opened; return bound(...args); };
+  };
+  return { registry: new Proxy(registry, { get: member }), open };
+}
+
+// With `held`, the registry's first call of that method waits for `open`.
+export function enrollment(held?: keyof FleetRegistry) {
   const clock = new MutableClock();
   const broker = new RecordingBroker();
   const consumers = new RecordingConsumers();
-  const registry = new InMemoryFleetRegistry(() => clock.now());
+  const store = new InMemoryFleetRegistry(() => clock.now());
+  const { registry, open } = held === undefined ? { registry: store as FleetRegistry, open: (): void => undefined } : gated(store, held);
   const service = new EnrollmentService({
     installation: value(installationIdentity('install-1', 1)),
     serverProtocolVersions: { minimum: 1, maximum: 1 },
     registry, secrets: countingSecrets(), ids: countingIds(), broker, commandConsumers: consumers, clock,
   });
-  return { clock, broker, consumers, registry, service };
+  return { clock, broker, consumers, registry, service, open };
 }
 
 export function request(journalId = 'journal-1', overrides: Partial<EnrollmentRequest> = {}): EnrollmentRequest {

@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SecretHash } from '@taskelith/access';
-import type { Result } from '@taskelith/kernel';
-import { ENROLLMENT_TOKEN_PAGE_SIZE, EnrollmentTokenService, FLEET_LIMITS, fleetWorker } from '@taskelith/fleet';
+import { err, failure, parseInstant, type Result } from '@taskelith/kernel';
+import { ENROLLMENT_TOKEN_PAGE_SIZE, EnrollmentTokenService, FLEET_LIMITS, fleetWorker, type FleetRegistry } from '@taskelith/fleet';
 import { failed, value } from '@taskelith/testing';
-import { countingIds, countingSecrets, enrollment, request } from './enrollment-fixtures.ts';
+import { MutableClock, countingIds, countingSecrets, enrollment, request } from './enrollment-fixtures.ts';
 
 const TTL = FLEET_LIMITS.enrollmentTokenTtlMilliseconds;
 
 // The token service over the registry of an enrollment service, so that a
-// redemption and a command see one store.
-function tokens() {
-  const fixture = enrollment();
+// redemption and a command see one store; `held` as in `enrollment`.
+function tokens(held?: keyof FleetRegistry) {
+  const fixture = enrollment(held);
   const service = new EnrollmentTokenService({ registry: fixture.registry, secrets: countingSecrets(), ids: countingIds(), clock: fixture.clock });
   return { ...fixture, tokens: service };
 }
@@ -109,20 +109,91 @@ test('a revoked or rotated token enrolls nothing, and the replacement enrolls', 
   assert.equal(value(await registry.activeWorkerIds()).length, 1);
 });
 
-test('a revocation and a redemption of one token have exactly one winner, in either order', async () => {
-  for (const revokeFirst of [true, false]) {
-    const { registry, service: enrollment, tokens: service } = tokens();
-    const issued = value(await service.issue({}));
-    const revoke = () => service.revoke(issued.token.tokenId);
-    const redeem = () => enrollment.enroll(issued.secret, request());
-    const [revoked, enrolled] = revokeFirst ? await Promise.all([revoke(), redeem()]) : (await Promise.all([redeem(), revoke()])).reverse() as [Result<void>, Result<unknown>];
-    const workers = value(await registry.activeWorkerIds()).length;
-    if (revoked.ok) {
-      assert.deepEqual([reasonOf(enrolled), workers], [['forbidden', 'token-invalid'], 0], `revoke first ${revokeFirst}`);
-    } else {
-      assert.deepEqual([failed(revoked).details.reason, enrolled.ok, workers], ['token-used', true, 1], `revoke first ${revokeFirst}`);
-    }
+// Each race holds one side at the registry until the other side is written.
+const listedIds = async (service: EnrollmentTokenService) => value(await service.list()).tokens.map((token) => token.tokenId);
+
+test('a revocation written before a redemption wins, and the redemption is refused', async () => {
+  const { registry, service: enrollment, tokens: service, open } = tokens('enroll');
+  const issued = value(await service.issue({}));
+  const redeeming = enrollment.enroll(issued.secret, request());
+  value(await service.revoke(issued.token.tokenId));
+  open();
+  assert.deepEqual([reasonOf(await redeeming), value(await registry.activeWorkerIds()).length], [['forbidden', 'token-invalid'], 0]);
+});
+
+test('a redemption written before a revocation wins, and the revocation is refused as used', async () => {
+  const { registry, service: enrollment, tokens: service, open } = tokens('revokeToken');
+  const issued = value(await service.issue({}));
+  const revoking = service.revoke(issued.token.tokenId);
+  value(await enrollment.enroll(issued.secret, request()));
+  open();
+  assert.deepEqual([reasonOf(await revoking), value(await registry.activeWorkerIds()).length], [['precondition-failed', 'token-used'], 1]);
+});
+
+test('a redemption between the lookup of a rotation and its write makes the rotation refuse, with no replacement', async () => {
+  const { registry, service: enrollment, tokens: service, open } = tokens('rotateToken');
+  const issued = value(await service.issue({}));
+  const rotating = service.rotate(issued.token.tokenId);
+  value(await enrollment.enroll(issued.secret, request()));
+  open();
+  assert.deepEqual(reasonOf(await rotating), ['precondition-failed', 'token-not-pending']);
+  assert.deepEqual([await listedIds(service), value(await registry.activeWorkerIds()).length], [[], 1]);
+});
+
+test('a rotation written before a redemption wins, and the old secret is refused', async () => {
+  const { registry, service: enrollment, tokens: service, open } = tokens('enroll');
+  const issued = value(await service.issue({}));
+  const redeeming = enrollment.enroll(issued.secret, request());
+  const replacement = value(await service.rotate(issued.token.tokenId));
+  open();
+  assert.deepEqual([reasonOf(await redeeming), value(await registry.activeWorkerIds()).length], [['forbidden', 'token-invalid'], 0]);
+  assert.deepEqual(await listedIds(service), [replacement.token.tokenId]);
+});
+
+test('a revocation between the lookup of a rotation and its write makes the rotation refuse, with no replacement', async () => {
+  const { tokens: service, open } = tokens('rotateToken');
+  const issued = value(await service.issue({}));
+  const rotating = service.rotate(issued.token.tokenId);
+  value(await service.revoke(issued.token.tokenId));
+  open();
+  assert.deepEqual([reasonOf(await rotating), await listedIds(service)], [['precondition-failed', 'token-not-pending'], []]);
+});
+
+test('a rotation written before a revocation wins, and the revocation names the replacement', async () => {
+  const { tokens: service, open } = tokens('revokeToken');
+  const issued = value(await service.issue({}));
+  const revoking = service.revoke(issued.token.tokenId);
+  const replacement = value(await service.rotate(issued.token.tokenId));
+  open();
+  const revoked = failed(await revoking);
+  assert.deepEqual([revoked.code, revoked.details], ['precondition-failed', { reason: 'token-rotated', replacementTokenId: replacement.token.tokenId }]);
+  assert.deepEqual(await listedIds(service), [replacement.token.tokenId]);
+});
+
+test('of two rotations of one token the one written first wins, and one replacement is pending', async () => {
+  const { tokens: service, open } = tokens('rotateToken');
+  const issued = value(await service.issue({}));
+  const held = service.rotate(issued.token.tokenId);
+  const winner = value(await service.rotate(issued.token.tokenId));
+  open();
+  assert.deepEqual([reasonOf(await held), await listedIds(service)], [['precondition-failed', 'token-not-pending'], [winner.token.tokenId]]);
+});
+
+test('a registry failure is answered as it is, and names no secret', async () => {
+  const down = err(failure('unavailable', 'the store is down'));
+  const registry = { addToken: async () => down, pendingTokens: async () => down, tokenById: async () => down, revokeToken: async () => down, rotateToken: async () => down };
+  const service = new EnrollmentTokenService({ registry, secrets: countingSecrets(), ids: countingIds(), clock: new MutableClock() });
+  for (const result of [await service.issue({}), await service.list(), await service.revoke('e001'), await service.rotate('e001')]) {
+    assert.deepEqual(result, down);
+    assert.ok(!JSON.stringify(result).includes('enrollment-1'), 'no secret in the failure');
   }
+});
+
+test('a clock past the representable expiry makes an issue throw before any token is stored', async () => {
+  const { clock, registry, tokens: service } = tokens();
+  clock.current = value(parseInstant('9999-12-31T23:59:59.999Z'));
+  await assert.rejects(service.issue({}), RangeError);
+  assert.deepEqual(value(await registry.pendingTokens(undefined, 10)), []);
 });
 
 test('no refusal of a token command names a secret', async () => {
