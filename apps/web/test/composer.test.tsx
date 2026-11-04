@@ -164,6 +164,30 @@ describe('the composer', () => {
     expect(turnEntries()[2]!.textContent).not.toContain('next turn boundary');
   });
 
+  it('keeps a turn answered after a move to another session out of that session, and settles its record', async () => {
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockImplementation(async (_project, sessionId) => ({
+      kind: 'read',
+      value: agentSessionView({ session: agentSession({ sessionId }) }),
+    }));
+    const held = deferred<SubmitResult>();
+    gateway.submitTurn.mockReturnValueOnce(held.promise);
+    const view = openSession(gateway);
+    await shownSession();
+    await send('Fix the build');
+    const [, , submission] = gateway.submitTurn.mock.calls[0]!;
+    await act(() => view.router.navigate('/sessions/project-1/session-2'));
+    await screen.findByRole('heading', { level: 1, name: 'Agent session session-2' });
+    await waitFor(() => expect(turnEntries()).toHaveLength(2));
+    await act(async () =>
+      held.resolve({ kind: 'recorded', turn: turn({ turnId: 'turn-3', position: 3, text: 'Fix the build', state: 'queued' }) }),
+    );
+    await waitFor(() => expect(storedRecords()).toEqual([]));
+    expect(turnEntries().map((entry) => entry.dataset.turn)).toEqual(['turn-1', 'turn-2']);
+    expect(screen.getByRole('main').textContent).not.toContain('Fix the build');
+    expect(submission.text).toBe('Fix the build');
+  });
+
   it('shows a sending submission without a loader under reduced motion', async () => {
     await withReducedMotion(async () => {
       const gateway = new FakeBoardGateway();
