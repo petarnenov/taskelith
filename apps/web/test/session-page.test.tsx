@@ -67,6 +67,14 @@ function indicator(): HTMLElement {
 
 const at = (position: string) => ({ position, occurredAt: '2026-11-03T09:01:00.000Z' });
 
+const LONG = 'x'.repeat(128);
+
+// The longest run of characters without a break opportunity or a tag.
+function longestUnbroken(element: Element): number {
+  const text = element.innerHTML.replace(/<wbr>/g, ' ').replace(/<[^>]*>/g, ' ');
+  return Math.max(...text.split(/\s+/).map((word) => word.length));
+}
+
 // Runs a test while the system asks for reduced motion.
 async function withReducedMotion(run: () => Promise<void>): Promise<void> {
   const matchMedia = window.matchMedia;
@@ -383,6 +391,17 @@ describe('the session activity', () => {
     await shownSession();
     expect(await screen.findByText('The task detail of run run-1 lists no task task-1, so no activity is shown.')).toBeDefined();
     expect(screen.getByRole('main').querySelector('[data-indicator]')).toBeNull();
+  });
+
+  it('fits the longest identifiers of the missing-task notice at phone width', async () => {
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockResolvedValue({ kind: 'read', value: agentSessionView({ session: agentSession({ runId: LONG, taskId: LONG }) }) });
+    gateway.readTaskDetail.mockResolvedValue({ kind: 'read', value: detailWith({ state: 'working' }, 'task-9') });
+    openSession(gateway);
+    await shownSession();
+    const notice = await screen.findByText(/lists no task/);
+    expect(notice.textContent).toBe(`The task detail of run ${LONG} lists no task ${LONG}, so no activity is shown.`);
+    expect(longestUnbroken(notice)).toBeLessThanOrEqual(24);
   });
 
   it('spins nowhere under reduced motion, and keeps the labels', async () => {
