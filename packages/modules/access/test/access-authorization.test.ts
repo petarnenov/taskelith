@@ -82,6 +82,11 @@ test('the module no longer exports the retired G2 bridge', () => {
   assert.equal(Object.hasOwn(access, 'g2BridgeRequirement'), false);
 });
 
+test('a denial names the owner role of an owner-only operation and the role of a project one', () => {
+  assert.equal(requiredRoleOf(OWNER_ONLY), 'installation-owner');
+  assert.equal(requiredRoleOf(projectRequirement('project-1', 'project-operator')), 'project-operator');
+});
+
 test('a caller without the role gets the same denial for a missing resource as for a foreign one', async () => {
   const authorization = new AuthorizationService(await storeWith({ 'project-1': 'project-maintainer' }));
   const foreign = failed(await authorization.authorize(ALICE, projectRead('project-2')));
