@@ -177,8 +177,8 @@ const tarTrailer = `trailed() {
   return "$status"
 }`;
 
-// Models builds tagged -first and -second: a saved manifest.json, layers, and
-// an image ID the check ignores; FAKE_ statuses fail steps.
+// Models builds tagged -first and -second (manifest.json, layers, an ignored
+// image ID) and the init output FAKE_INIT; FAKE_ statuses fail steps.
 const buildDocker = `#!/bin/sh
 ${tarTrailer}
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
@@ -202,6 +202,7 @@ case "$*" in
   "image inspect --format {{.Id}} "*) echo "$id" ;;
   "image inspect --format {{range .RootFS.Layers}}"*) echo "$layers"; exit "\${FAKE_LAYERS_STATUS:-0}" ;;
   "image rm "*) exit "\${FAKE_REMOVE_STATUS:-0}" ;;
+  *" admin init "*) printf '%s\\n' "$FAKE_INIT" ;;
 esac
 exit 0
 `;
@@ -308,6 +309,16 @@ function builds(calls: readonly string[]): readonly string[] {
 }
 
 const COMMIT_EPOCH_ARGUMENT = ` --build-arg SOURCE_DATE_EPOCH=${COMMIT_TIME} `;
+
+test('the smoke stops when the init output names no owner principal', () => {
+  const outcome = runInFixture('installation.sh', ['smoke', 'installation-script-test'], {
+    FAKE_INIT: '{"operatorSecret":"tkop_fixture-secret"}',
+  });
+  assert.equal(outcome.status, 2);
+  assert.match(outcome.stderr, /set TASKELITH_OWNER_PRINCIPAL_ID \(bootstrap printed no ownerPrincipalId\)/);
+  assert.doesNotMatch(outcome.stderr, /tkop_fixture-secret/);
+  assert.equal(indexOfCall(outcome.calls, 'postgres nats control-plane'), -1);
+});
 
 test('the images are built with the commit time of the built revision as SOURCE_DATE_EPOCH', () => {
   const outcome = runInFixture('installation.sh', ['build', 'installation-script-test']);
