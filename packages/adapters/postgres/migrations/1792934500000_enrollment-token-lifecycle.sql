@@ -17,6 +17,10 @@ ALTER TABLE enrollment_tokens
 
 -- Down Migration
 
+-- The old schema reads only the expiry, so a revoked or rotated token must
+-- read as expired at its revocation and stay unredeemable.
+UPDATE enrollment_tokens SET expires_at = LEAST(expires_at, revoked_at) WHERE revoked_at IS NOT NULL;
+
 ALTER TABLE enrollment_tokens
   DROP COLUMN replacement_token_id,
   DROP COLUMN revoked_at,
