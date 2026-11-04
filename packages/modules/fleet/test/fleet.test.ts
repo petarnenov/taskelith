@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { InMemoryOperatorCredentials, OperatorCredentialService, type SecretHash, type Secrets } from '@taskelith/access';
-import { err, failure, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { InMemoryOperatorCredentials, OperatorCredentialService, type SecretHash } from '@taskelith/access';
+import { err, failure, parseInstant, type Result } from '@taskelith/kernel';
 import type { WorkerId } from '@taskelith/execution';
 import {
   EnrollmentService,
@@ -13,12 +13,9 @@ import {
   InstallationService,
   installationIdentity,
   parseWorkerId,
-  type BrokerCredentials,
-  type WorkerCommandConsumers,
-  type BrokerRevocation,
-  type EnrollmentRequest,
 } from '@taskelith/fleet';
-import { failed, id, value } from '@taskelith/testing';
+import { failed, value } from '@taskelith/testing';
+import { MutableClock, RecordingConsumers, countingIds, countingSecrets, enrollment, request } from './enrollment-fixtures.ts';
 
 const realNow = () => value(parseInstant(new Date().toISOString()));
 
@@ -34,76 +31,6 @@ for (const conformance of INSTALLATION_TABLE_CONFORMANCE) {
   });
 }
 
-function countingSecrets(): Secrets {
-  let issued = 0;
-  return {
-    issue: (kind) => {
-      issued += 1;
-      return { secret: `${kind}-${issued}`, hash: `hash:${kind}-${issued}` as SecretHash };
-    },
-    hashOf: (secret) => `hash:${secret}` as SecretHash,
-    matches: (secret, hash) => hash === `hash:${secret}`,
-  };
-}
-
-function countingIds() {
-  let next = 0;
-  return { newInstallationId: () => `install-${++next}`, newWorkerId: () => `worker-${++next}` };
-}
-
-class MutableClock {
-  current: Instant = value(parseInstant('2026-10-25T09:00:00.000Z'));
-
-  now(): Instant {
-    return this.current;
-  }
-
-  advance(milliseconds: number): void {
-    this.current = value(parseInstant(new Date(Date.parse(this.current) + milliseconds).toISOString()));
-  }
-}
-
-class RecordingConsumers implements WorkerCommandConsumers {
-  readonly ensured: string[] = [];
-  readonly removed: string[] = [];
-  down = false;
-
-  async ensure(workerId: string) {
-    if (this.down) return err(failure('unavailable', 'the broker is down'));
-    this.ensured.push(workerId);
-    return ok(undefined);
-  }
-
-  async remove(workerId: string) {
-    if (this.down) return err(failure('unavailable', 'the broker is down'));
-    this.removed.push(workerId);
-    return ok(undefined);
-  }
-}
-
-// Keeps the last published revocation list, as the broker's account does.
-class RecordingBroker implements BrokerCredentials {
-  readonly issued: string[] = [];
-  revoked: string[] = [];
-  down = false;
-
-  async issue(_installation: unknown, workerId: string, generation: number) {
-    const userKey = `U-${workerId}-${generation}`;
-    this.issued.push(userKey);
-    return ok({ creds: `creds-${userKey}`, userKey, issuedAt: value(parseInstant('2026-10-25T08:00:00.000Z')) });
-  }
-
-  async sign(_installation: unknown, workerId: string, generation: number, userKey: string) {
-    if (!userKey.startsWith('U')) return err(failure('invalid', 'not a user key'));
-    return ok({ jwt: `jwt-${workerId}-${generation}-${userKey}`, issuedAt: value(parseInstant('2026-10-25T08:00:00.000Z')) });
-  }
-
-  async publishRevocations(revocations: readonly BrokerRevocation[]) {
-    if (this.down) return err(failure('unavailable', 'the broker is down'));
-    this.revoked = revocations.map((revocation) => revocation.userKey);
-    return ok(undefined);
-  }
-}
 
 const ADMIN = { actor: 'root@control-plane-1', reason: 'initial installation' };
 
@@ -146,28 +73,6 @@ test('a database copy without its record, or a mismatch, keeps the installation 
   assert.equal(failed(await restored.service.initialize(ADMIN)).code, 'precondition-failed');
 });
 
-function enrollment() {
-  const clock = new MutableClock();
-  const broker = new RecordingBroker();
-  const consumers = new RecordingConsumers();
-  const registry = new InMemoryFleetRegistry(() => clock.now());
-  const service = new EnrollmentService({
-    installation: value(installationIdentity('install-1', 1)),
-    serverProtocolVersions: { minimum: 1, maximum: 1 },
-    registry, secrets: countingSecrets(), ids: countingIds(), broker, commandConsumers: consumers, clock,
-  });
-  return { clock, broker, consumers, registry, service };
-}
-
-function request(journalId = 'journal-1', overrides: Partial<EnrollmentRequest> = {}): EnrollmentRequest {
-  return {
-    journalId: id('JournalId', journalId),
-    host: { platform: 'linux', architecture: 'arm64', hostname: 'build-1' },
-    protocolVersions: { minimum: 1, maximum: 2 },
-    capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit'] },
-    ...overrides,
-  };
-}
 
 test('a token enrolls one worker with both credentials of generation 1', async () => {
   const { broker, registry, service } = enrollment();
