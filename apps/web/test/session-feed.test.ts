@@ -122,6 +122,54 @@ describe('the session feed', () => {
     expect(view).toMatchObject({ position: '47', knownAt: '2026-11-03T09:04:00.000Z', session: { lastTurnPosition: 3 } });
   });
 
+  // Wire contracts section 10: an event is skipped when the read that
+  // supplied its record, the session's or the turns', already reflects it.
+  async function startAt(sessionPosition: string, turnsPosition: string) {
+    const gateway = new FakeBoardGateway();
+    gateway.readAgentSession.mockResolvedValueOnce(read(agentSessionView({ position: sessionPosition })));
+    gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ position: turnsPosition })));
+    const feed = start(gateway);
+    await settled();
+    return feed;
+  }
+
+  const stateOf = (feed: ReturnType<typeof start>, turnId: string) => feed.shown().view.turns.find((known) => known.turnId === turnId)?.state;
+
+  it('skips a turn event the turns read already reflects, though the stream opened below it', async () => {
+    const feed = await startAt('40', '50');
+    const stream = feed.gateway.lastStream();
+    expect(stream.after).toBe('40');
+    stream.emit({ kind: 'turn-changed', ...at('45'), sessionId: 'session-1', turn: turn({ turnId: 'turn-2', position: 2, state: 'queued' }) });
+    expect(stateOf(feed, 'turn-2')).toBe('delivered');
+    expect(feed.shown().view.position).toBe('40');
+    stream.emit({ kind: 'agent-session-changed', ...at('46'), session: agentSession({ lastTurnPosition: 3 }) });
+    expect(feed.shown().view).toMatchObject({ position: '46', session: { lastTurnPosition: 3 } });
+    stream.emit({ kind: 'turn-changed', ...at('51'), sessionId: 'session-1', turn: turn({ turnId: 'turn-2', position: 2, state: 'ended', generation: 1, outcome: 'completed' }) });
+    expect(stateOf(feed, 'turn-2')).toBe('ended');
+  });
+
+  it('skips a session event the session read already reflects, and applies the turn event beside it', async () => {
+    const feed = await startAt('50', '40');
+    const stream = feed.gateway.lastStream();
+    expect(stream.after).toBe('40');
+    stream.emit({ kind: 'agent-session-changed', ...at('45'), session: agentSession({ lastTurnPosition: 9 }) });
+    expect(feed.shown().view).toMatchObject({ position: '40', session: { lastTurnPosition: 2 } });
+    stream.emit({ kind: 'turn-changed', ...at('46'), sessionId: 'session-1', turn: turn({ turnId: 'turn-2', position: 2, state: 'ended', generation: 1, outcome: 'completed' }) });
+    expect(stateOf(feed, 'turn-2')).toBe('ended');
+    stream.emit({ kind: 'agent-session-changed', ...at('51'), session: agentSession({ lastTurnPosition: 9 }) });
+    expect(feed.shown().view).toMatchObject({ position: '51', session: { lastTurnPosition: 9 } });
+  });
+
+  it('shows no older turn state when the stream is interrupted while it replays below the turns read', async () => {
+    const feed = await startAt('40', '50');
+    const stream = feed.gateway.lastStream();
+    stream.emit({ kind: 'opened' });
+    stream.emit({ kind: 'turn-changed', ...at('41'), sessionId: 'session-1', turn: turn({ turnId: 'turn-1', position: 1, state: 'delivered', generation: 1 }) });
+    stream.emit({ kind: 'interrupted' });
+    expect(feed.shown().liveness).toBe('lost');
+    expect(stateOf(feed, 'turn-1')).toBe('ended');
+  });
+
   it('keeps the later time of its snapshot over a delayed event, and takes the time of a new snapshot', async () => {
     const feed = start();
     await settled();
@@ -219,6 +267,22 @@ describe('earlier turns', () => {
     await settled();
     expect(feed.shown().view.turns.find((known) => known.turnId === 'turn-150')?.text).toBe('Changed');
     expect(feed.positions()).toHaveLength(200);
+  });
+
+  it('takes the state of an earlier page read above the event that showed a turn, not of one read below it', async () => {
+    const feed = await startWindowed();
+    const changed = turn({ turnId: 'turn-150', position: 150, text: 'Changed' });
+    feed.gateway.lastStream().emit({ kind: 'turn-changed', ...at('41'), sessionId: 'session-1', turn: changed });
+    const read150 = turn({ turnId: 'turn-150', position: 150, text: 'Read' });
+    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ position: '60', turns: [...turnsAt(51, 149), read150] })));
+    feed.feed.loadEarlier();
+    await settled();
+    expect(feed.shown().view.turns.find((known) => known.turnId === 'turn-150')?.text).toBe('Read');
+    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ position: '40', turns: [...turnsAt(1, 49), turn({ turnId: 'turn-150', position: 150, text: 'Stale' })] })));
+    feed.feed.loadEarlier();
+    await settled();
+    expect(feed.shown().view.turns.find((known) => known.turnId === 'turn-150')?.text).toBe('Read');
+    expect(feed.positions()).toHaveLength(249);
   });
 
   // The contract promises at most 100 turns per page, so a short page is
