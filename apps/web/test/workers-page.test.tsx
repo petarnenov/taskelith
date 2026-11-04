@@ -10,14 +10,35 @@ import { createWorkersGateway } from '../src/workers/control-plane-workers';
 import type { SelfCheckResult, WorkersView } from '../src/workers/workers';
 import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, ManualClock, OPERATOR, renderApp, worker, workersView } from './fakes';
 
+// Every console argument of a test: the page writes nothing to the console,
+// and React's warnings, as for invalid HTML, count as unexpected output.
+let consoleCalls: unknown[][] = [];
+let consoleSpies: Array<ReturnType<typeof vi.spyOn>> = [];
+
+// The board's index route of 29b has no element by design; the router notes
+// it at /app/, before this screen opens, so that one note is expected.
+const BOARD_INDEX_NOTE = /^Matched leaf route at location "\/" does not have an element/;
+
+function unexpectedConsoleCalls(): unknown[][] {
+  return consoleCalls.filter((args) => !(args.length === 1 && typeof args[0] === 'string' && BOARD_INDEX_NOTE.test(args[0])));
+}
+
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  consoleCalls = [];
+  consoleSpies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((name) =>
+    vi.spyOn(console, name).mockImplementation((...args: unknown[]) => {
+      consoleCalls.push(args);
+    }),
+  );
 });
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = '';
+  for (const spy of consoleSpies) spy.mockRestore();
+  expect(unexpectedConsoleCalls()).toEqual([]);
 });
 
 const WORKERS_PATH = '/app/workers';
@@ -173,7 +194,7 @@ describe('the shown workers', () => {
     const region = await shownWorkers();
     const checks = within(region.getByRole('list', { name: 'Self-checks' }));
     const items = checks.getAllByRole('listitem').filter((item) => item.parentElement?.getAttribute('aria-label') === 'Self-checks');
-    const wording = (item: HTMLElement) => [...item.querySelector('p')!.childNodes].filter((node) => node.nodeName !== 'UL');
+    const wording = (item: HTMLElement) => [...item.querySelector('.mantine-Text-root')!.childNodes].filter((node) => node.nodeName !== 'UL');
     expect(items.map((item) => wording(item).map((node) => node.textContent).join(''))).toEqual([
       'launch-command failed',
       'disk-space passed',
@@ -379,28 +400,19 @@ describe('redaction', () => {
     const send = controlPlane();
     const session = createSessionGateway(send);
     const board = createBoardGateway({ fetch: send, csrfToken: session.csrfToken });
-    const consoleCalls: unknown[][] = [];
-    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((name) =>
-      vi.spyOn(console, name).mockImplementation((...args: unknown[]) => {
-        consoleCalls.push(args);
-      }),
-    );
-    try {
-      renderApp(WORKERS_PATH, session, new ManualClock(), board, undefined, createWorkersGateway({ fetch: send }));
-      const region = await shownWorkers();
-      expect(region.getByRole('heading', { level: 2, name: 'build-[redacted].example' })).toBeDefined();
-      expect(region.getByText('launch refused for [redacted]')).toBeDefined();
-      const page = document.documentElement.outerHTML;
-      expect(page).not.toContain(SECRET);
-      expect(page).not.toContain('tken_');
-      expect(page).not.toContain(TOKEN);
-      expect(sessionStorage.length).toBe(0);
-      expect(localStorage.length).toBe(0);
-      const logged = consoleCalls.flat().map((arg) => (arg instanceof Error ? (arg.stack ?? arg.message) : arg));
-      expect(JSON.stringify(logged)).not.toContain('tken_');
-      expect(JSON.stringify(logged)).not.toContain(TOKEN);
-    } finally {
-      for (const spy of spies) spy.mockRestore();
-    }
+    renderApp(WORKERS_PATH, session, new ManualClock(), board, undefined, createWorkersGateway({ fetch: send }));
+    const region = await shownWorkers();
+    expect(region.getByRole('heading', { level: 2, name: 'build-[redacted].example' })).toBeDefined();
+    expect(region.getByText('launch refused for [redacted]')).toBeDefined();
+    const page = document.documentElement.outerHTML;
+    expect(page).not.toContain(SECRET);
+    expect(page).not.toContain('tken_');
+    expect(page).not.toContain(TOKEN);
+    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
+    const logged = consoleCalls.flat().map((arg) => (arg instanceof Error ? (arg.stack ?? arg.message) : arg));
+    expect(JSON.stringify(logged)).not.toContain('tken_');
+    expect(JSON.stringify(logged)).not.toContain(TOKEN);
+    expect(consoleCalls).toEqual([]);
   });
 });
