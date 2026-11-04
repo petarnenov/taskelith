@@ -152,6 +152,16 @@ The commits after them change only the records of this change (`route.json`, `pa
 - The board's index route (`routes.tsx`, 29b) has no element by design and React Router notes it on the console at `/app/`; the page test exempts that one note (pass 1 finding 3).
 - The review prompt's docs criterion "root-relative links only" contradicts protocol step 6 for links inside a change directory (pass 1 finding 9).
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section's `make verify` line added, after tasks 4.1 to 4.3 were ticked, as the protocol's step 7 asks (4.2, the coordinator's architect check of the pass 2 fixes, is ticked for the archive and stays a remaining gate below), and `npm run openspec -- archive build-workers-screen --yes` moved the change to `openspec/changes/archive/2026-11-04-build-workers-screen/` (`product-ui` 3 added; totals + 3, ~ 0, - 0). A probe of the same archive in a scratch copy of `openspec/` at `98676dff` passed `validate --all --strict` (71 of 71) first, with the three requirements at 492, 462, and 357 characters (`archive-probe-33a-p2.log`); the command output of the archive and its checks is `archive-33a.log` in the session scratchpad.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-build-workers-screen`; the command fails as a whole on older archived changes (283 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `3d40034c`): only this change's edits, in `product-ui` (57 insertions, 0 deletions: the added "Web SPA workers screen", "Web SPA workers screen access", and "Web SPA workers screen redaction").
+- The moved change has `findings.jsonl` (the 12 findings of passes 1 and 2) and `passes.jsonl` (two passes); `make findings ARGS="validate"`: `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`
+- `make verify` (`verify-33a-final.log`, exit code 0 in `verify-33a-final.exit`): passed, profile full, uncommitted working tree, no stamp written: tests 4861, suites 50, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.89% branches, 98.87% functions; `apps/web` 816 tests in 32 files, 99.11% statements, 97.66% branches, 99.82% functions, 100% lines. No rerun. The `pre-push` hook verifies the committed tree again.
+
 ## Remaining gates
 
 - Architect check by the coordinator (Niki) of the three pass 2 fixes listed under "Fixes no later pass reviewed" (task 4.2); no pass 3 runs, since pass 2 was Low-only.
