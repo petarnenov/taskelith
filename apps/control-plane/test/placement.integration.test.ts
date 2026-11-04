@@ -182,9 +182,15 @@ describe('placement', () => {
 
   test('a slot freed after a fleet capacity decline goes to the next project, not the larger backlog', async () => {
     await enroll('worker-a', { slots: 1 });
-    for (let index = 1; index <= 50; index++) await submit(`task-a${String(index).padStart(2, '0')}`);
+    const backlog = Array.from({ length: 50 }, (_, index) => `task-a${String(index + 1).padStart(2, '0')}`);
+    for (const taskId of backlog) await submit(taskId);
     await createSecondRun();
     await submit('task-b', 'run-2');
+    // Ages a second apart in submit order: a database clock that steps back
+    // between the submits would otherwise make a later task-a the oldest.
+    for (const [index, taskId] of [...backlog, 'task-b'].entries()) {
+      await waitingSince(taskId, new Date(Date.UTC(2026, 9, 25, 9, 0, index)).toISOString());
+    }
     const clock = { at: Date.now() };
     // A long jitter, were the fleet capacity decline to back off.
     const draws = [0.9];
