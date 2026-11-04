@@ -5,7 +5,7 @@ import { createTurnRecordStore } from '../src/agent-session/turn-records';
 import { App } from '../src/App';
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import { pageStyleNonce } from '../src/style-nonce';
-import { AUTHENTICATED, FakeBoardGateway, fakeGateway, ManualClock } from './fakes';
+import { AUTHENTICATED, FakeBoardGateway, fakeGateway, FakeWorkersGateway, ManualClock } from './fakes';
 
 afterEach(cleanup);
 
@@ -34,7 +34,17 @@ describe('the style nonce', () => {
     const session = fakeGateway(AUTHENTICATED);
     const board = new FakeBoardGateway();
     const turnRecords = createTurnRecordStore();
-    render(<App router={router} gateway={session} board={board} turnRecords={turnRecords} clock={new ManualClock()} styleNonce="bm9uY2U=" />);
+    render(
+      <App
+        router={router}
+        gateway={session}
+        board={board}
+        workers={new FakeWorkersGateway()}
+        turnRecords={turnRecords}
+        clock={new ManualClock()}
+        styleNonce="bm9uY2U="
+      />,
+    );
     await screen.findAllByRole('link', { name: /board/i });
     const styles = [...document.querySelectorAll('style[data-mantine-styles]')];
     expect(styles.length).toBeGreaterThan(0);

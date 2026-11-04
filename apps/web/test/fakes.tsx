@@ -23,6 +23,7 @@ import { createTurnRecordStore, type TurnRecordStore } from '../src/agent-sessio
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
 import type { LoginOutcome, LogoutOutcome, Operator, SessionGateway, SessionRead } from '../src/session/session';
+import type { WorkerAdmissionEntry, WorkersGateway, WorkersView } from '../src/workers/workers';
 
 export const NOW = Date.parse('2026-11-02T10:00:00.000Z');
 export const HOUR = 3_600_000;
@@ -254,14 +255,37 @@ export class FakeBoardGateway implements BoardGateway {
   }
 }
 
+export function worker(overrides: Partial<WorkerAdmissionEntry> = {}): WorkerAdmissionEntry {
+  return {
+    workerId: 'worker-1',
+    host: { platform: 'linux', architecture: 'x64', hostname: 'build-1.example' },
+    enrolledAt: '2026-11-03T09:00:00.000Z',
+    admission: 'admitted',
+    reportedAt: '2026-11-03T09:05:00.000Z',
+    results: [{ checkId: 'launch-command', outcome: 'passed', details: [] }],
+    ...overrides,
+  };
+}
+
+export function workersView(overrides: Partial<WorkersView> = {}): WorkersView {
+  return { asOf: '2026-11-03T09:10:00.000Z', workers: [worker()], ...overrides };
+}
+
+export class FakeWorkersGateway implements WorkersGateway {
+  readonly listWorkers = vi.fn(async (): Promise<ReadResult<WorkersView>> => ({ kind: 'read', value: workersView() }));
+}
+
 export function renderApp(
   path: InitialEntry,
   gateway: SessionGateway = fakeGateway(AUTHENTICATED),
   clock = new ManualClock(),
   boardGateway: BoardGateway = new FakeBoardGateway(),
   turnRecords: TurnRecordStore = createTurnRecordStore(),
+  workersGateway: WorkersGateway = new FakeWorkersGateway(),
 ) {
   const router = createMemoryRouter(appRoutes(), { basename: APP_BASENAME, initialEntries: [path] });
-  const view = render(<App router={router} gateway={gateway} board={boardGateway} clock={clock} turnRecords={turnRecords} />);
-  return { ...view, router, gateway, clock, boardGateway, turnRecords };
+  const view = render(
+    <App router={router} gateway={gateway} board={boardGateway} workers={workersGateway} clock={clock} turnRecords={turnRecords} />,
+  );
+  return { ...view, router, gateway, clock, boardGateway, turnRecords, workersGateway };
 }
