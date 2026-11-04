@@ -186,6 +186,5 @@ Fixes that no later pass reviewed, for the coordinator's architect check: the th
 
 ## Remaining gates
 
-- The archive (Zaki).
 - The coordinator's architect check of the unreviewed pass 2 and pass 3 fixes.
 - Integration into dev by the coordinator (single pull request).
