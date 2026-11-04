@@ -5,7 +5,8 @@ import {
   SCM_INTEGRATIONS_CONFORMANCE, SCM_INTEGRATION_AUDIT_CONFORMANCE, ScmSecrets, normalizeOrigin, type ScmIntegration, type ScmIntegrationId,
 } from '@taskelith/integrations';
 import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
-import { PostgresDatabase, PostgresScmIntegrationAudit, PostgresScmIntegrations, type TransactionWork } from '@taskelith/postgres';
+import pg from 'pg';
+import { PostgresDatabase, PostgresScmIntegrationAudit, PostgresScmIntegrations, StatementError, type TransactionWork } from '@taskelith/postgres';
 import { scmSecretCipher } from '@taskelith/secrets';
 import { failed, value } from '@taskelith/testing';
 import { rendezvous } from './gated-transactions.ts';
@@ -131,6 +132,41 @@ test('of two concurrent updates at one revision exactly one wins and the other f
   assert.deepEqual(outcomes.map((outcome) => (outcome.ok ? 'won' : outcome.error.code)).sort(), ['conflict', 'won']);
   assert.equal(value(await store.get(stored.integrationId))?.revision, 2);
   assert.ok(attempts >= 3, 'the losing transaction was retried');
+  assert.deepEqual(await auditedOf(stored.integrationId), [['created', 1], ['updated', 2]]);
+});
+
+async function auditedOf(integrationId: ScmIntegrationId): Promise<[string, number][]> {
+  const rows = await query<{ kind: string; revision: number }>(url,
+    'SELECT kind, revision FROM scm_integration_audit_events WHERE integration_id = $1 ORDER BY position', [integrationId]);
+  return rows.map((row) => [row.kind, row.revision]);
+}
+
+function serializationFailure(): StatementError {
+  const lost = new pg.DatabaseError('could not serialize access', 0, 'error');
+  lost.code = '40001';
+  return new StatementError(lost);
+}
+
+// The first attempt loses a serialization race after its audit row is in,
+// so only the rollback keeps the retry from leaving a second row.
+test('a command retried after its audit row was appended leaves exactly one row', async () => {
+  const stored = await added();
+  let attempts = 0;
+  const losingOnce = {
+    readOnly: <Value>(work: TransactionWork<Value>) => database.readOnly(work),
+    transaction: <Value>(work: TransactionWork<Value>) => database.transaction(async (tx) => {
+      attempts += 1;
+      const first = attempts === 1;
+      const result = await work(tx);
+      if (first) throw serializationFailure();
+      return result;
+    }),
+  };
+  const retrying = new PostgresScmIntegrations(losingOnce, cipher);
+  value(await retrying.update(stored.integrationId, { expectedRevision: 1, label: 'Retried' }, ENTRY));
+  assert.equal(attempts, 2);
+  assert.equal(value(await store.get(stored.integrationId))?.revision, 2);
+  assert.deepEqual(await auditedOf(stored.integrationId), [['created', 1], ['updated', 2]]);
 });
 
 // The double writes each row with a kind outside the table's check, whose
