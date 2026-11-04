@@ -18,7 +18,8 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, dev
 - `dc80c346` `docs: word the offline exit scenario as asserted and correct the stabilize g2 partition records` (pass 2 record fixes).
 - `3d265a7b` `docs: record the pass 2 review of the stabilize g2 partition change` (`findings.jsonl`).
 - `5ec03ed7` `docs: record the pass 2 fix round of the stabilize g2 partition change`.
-- The commit of the pass 2 checks follows; later review records and the archive commit follow it.
+- `c98923f7` `docs: record the checks of the pass 2 fix round of the stabilize g2 partition change`.
+- The commit of the pass 3 review record follows (the pass 3 line of `passes.jsonl`), then its checks and the archive commit.
 
 ## Environment
 
@@ -110,7 +111,8 @@ Review effort medium: owner decision 2026-11-02.
 - Pass 1 fix round, records only, `87eb24f5`: the Medium (both start timeouts attributed to #446) and the two Lows (the parallel-run counts, "every time") were fixed as recorded in `findings.jsonl`; five more injected-delay base runs were made for the second Low ("Fail-before"). No code changed.
 - Pass 2, reviewer B, Claude Code `claude-fable-5-1` at effort medium, session `4331c26b-17f0-4231-89b9-1e231f5532e8`, on `7e3c5939`: Critical 0, High 0, Medium 1, Low 5 (`passes.jsonl` line 2, `findings.jsonl` lines 4 to 9). The reviewer modified no file.
 - Pass 2 fix round, `e64dfd03` and `dc80c346`: the Medium (the heal-before-the-exit branch released the process before the reconnect) and the Low on the `finally` were fixed in the test; the Lows on the spec THEN, the `worker-contact.ts` citation, `tasks.md`, and `proposal.md` in the records, as recorded in `findings.jsonl`. The reviewer's second citation for the `finally`, `test/g2-cancellation-races.test.ts:502`, is a release in `settleRace`, not in a `finally`, so `design.md` cites `:391` only.
-- Pass 3: pending; the pass 2 Medium calls for it under the route.
+- Pass 3, reviewer A, Codex CLI `gpt-6.1-sol` at effort medium, session `01a1a790-f7dc-7023-96b1-03f0d9187798`, on `c98923f7` (diff `3d40034c..c98923f7`): Critical 0, High 0, Medium 0, Low 0 (`passes.jsonl` line 3). The pass 2 Medium called for it under the route. Argon unavailable on hpz600: agy binary needs PCLMUL, which the CPU lacks, so `codex gpt-6.1-sol#medium` replaced `agy gemini-4-argon-medium#medium`. The reviewer modified no file; its standard comment check failed with `spawnSync git EPERM` in its sandbox, and the same check on a separately supplied tracked-file list found no violation.
+- The review ended with pass 3, a pass without findings. No fix is unreviewed: pass 3 reviewed all pass 1 and pass 2 fixes, so `findings.jsonl` has no `fixed-unreviewed` outcome.
 
 ## Limitations
 
@@ -120,5 +122,5 @@ Review effort medium: owner decision 2026-11-02.
 
 ## Remaining gates
 
-- Independent review.
+- The coordinator's architect check.
 - Integration into dev by the coordinator (single pull request).
