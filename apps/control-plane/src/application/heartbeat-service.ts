@@ -1,7 +1,7 @@
 import type { JournalId, WorkerId } from '@taskelith/execution';
-import { err, failure, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
-import { isCurrentProducer } from './journal-reconciliation.js';
+import { recordCurrentContact } from './journal-reconciliation.js';
 
 // The queue group in which control-plane instances share the heartbeats.
 export const HEARTBEAT_QUEUE = 'control-plane-heartbeats';
@@ -31,8 +31,7 @@ export class HeartbeatService {
 async function recordContact(tx: ControlPlaneTransaction, message: HeartbeatMessage): Promise<Result<void>> {
   const workerId = message.body['workerId'] as WorkerId;
   const producer = { subjectWorkerId: message.subjectWorkerId, workerId, journalId: message.body['journalId'] as JournalId };
-  const authentic = await isCurrentProducer(tx, producer);
-  if (!authentic.ok) return authentic;
-  if (!authentic.value) return err(failure('forbidden', `the heartbeat of ${workerId} is not authenticated`, { worker: workerId }));
-  return tx.reports.recordContact(workerId, await tx.now());
+  const recorded = await recordCurrentContact(tx, producer);
+  if (!recorded.ok) return recorded;
+  return recorded.value ? ok(undefined) : err(failure('forbidden', `the heartbeat of ${workerId} is not authenticated`, { worker: workerId }));
 }
