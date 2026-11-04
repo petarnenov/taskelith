@@ -3,7 +3,7 @@
   "info": {
     "title": "Taskelith SDLC API",
     "version": "0.5.0",
-    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
+    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a)). Since 0.5.0, `createRun` and `submitTask` also require `project-operator` or above on the run's project, which the installation-owner must assign itself."
   },
   "paths": {
     "/runs": {
