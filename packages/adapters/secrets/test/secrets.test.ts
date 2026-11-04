@@ -123,6 +123,19 @@ test('text is redacted in linear time on long runs', () => {
   assertLinearOnRuns(redactSecrets, [begin, `${begin}a`], { length: 400_000 });
 });
 
+// One word past the regular expression stack of V8, about 2^23 entries.
+const UNSCANNABLE_TEXT = 'a'.repeat(2 ** 23 + 1);
+
+test('a text too long to scan is redacted whole instead of throwing', () => {
+  assert.doesNotThrow(() => redactSecrets(UNSCANNABLE_TEXT));
+  assert.equal(redactSecrets(UNSCANNABLE_TEXT), REDACTED);
+});
+
+test('a failure message too long to scan is redacted whole', () => {
+  const redacted = redactFailure(failure('internal', UNSCANNABLE_TEXT, { worker: 'w1' }));
+  assert.deepEqual({ message: redacted.message, details: redacted.details }, { message: REDACTED, details: { worker: 'w1' } });
+});
+
 test('a creds block without its end stays, and a URL may have empty user information', () => {
   const begin = '-----BEGIN NATS USER JWT-----';
   assert.equal(redactSecrets(`${begin} no end`), `${begin} no end`);

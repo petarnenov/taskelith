@@ -8,6 +8,7 @@ import {
   pickCorrelation,
   REDACTED,
   redactText,
+  redactWith,
   SILENT_LOGGER,
 } from '@taskelith/observability';
 import { parseInstant } from '@taskelith/kernel';
@@ -162,6 +163,27 @@ test('text is redacted in linear time on long runs', () => {
   assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], { length: 400_000 });
   const keyBegin = pem('BEGIN', 'PRIVATE KEY');
   assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], { length: 400_000 });
+});
+
+// Past the regular expression stack of V8, about 2^23 backtrack entries.
+const UNSCANNABLE_TEXT = 'ghs_'.repeat(1_400_000);
+
+test('a text too long to scan is redacted whole instead of throwing', () => {
+  assert.doesNotThrow(() => redactText(UNSCANNABLE_TEXT));
+  assert.equal(redactText(UNSCANNABLE_TEXT), REDACTED);
+});
+
+test('a logged field too long to scan is redacted whole', () => {
+  const { sink, logger: log } = logger();
+  assert.doesNotThrow(() => log.warn('push.failed', { output: UNSCANNABLE_TEXT }));
+  assert.deepEqual(sink.records.map((record) => record.fields), [{ output: REDACTED }]);
+});
+
+test('a rule failure other than a RangeError is rethrown', () => {
+  const failing = () => {
+    throw new TypeError('rule failed');
+  };
+  assert.throws(() => redactWith('text', [failing]), TypeError);
 });
 
 test('a name redacts only by whole segments', () => {
