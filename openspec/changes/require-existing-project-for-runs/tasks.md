@@ -15,7 +15,7 @@
 
 ## 3. Records and checks
 
-- [ ] 3.1 Route the change, run `make verify`, `make record`, the installation smoke, and write `verification.md`
+- [x] 3.1 Route the change, run `make verify`, `make record`, the installation smoke, and write `verification.md`
 
 ## 4. Review and archive
 
