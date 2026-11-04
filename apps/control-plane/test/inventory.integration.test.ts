@@ -27,6 +27,7 @@ import type { Assignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 import { issueGrant, launchAuthority } from './launch-fixtures.ts';
+import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_inventory_${process.pid}`;
@@ -101,7 +102,7 @@ beforeEach(async () => {
   placement = new PlacementService(database, TIMING);
   await sql(`TRUNCATE ${TABLES.join(', ')}`);
   await sql('INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
-  value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
+  value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
 });
 
 async function enroll(workerId = WORKER, journalId = JOURNAL): Promise<void> {

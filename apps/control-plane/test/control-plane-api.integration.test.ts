@@ -45,6 +45,7 @@ import {
   failed, integrationEndpoint, integrationSecret, integrationSecretPath, trustCertificateAuthority, value, withTestBrokerCa,
 } from '@taskelith/testing';
 import { productionDependencies, workerMain } from '@taskelith/worker';
+import { WIRE_DEFAULTS } from './project-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
@@ -114,7 +115,7 @@ async function admin(argv: string[], extra: Record<string, string> = {}): Promis
 }
 
 const initialized = await admin(['init', '--actor', 'root@test', '--reason', 'api test']) as {
-  identity: { installationId: string }; operatorSecret: string; installationCa: string;
+  identity: { installationId: string }; operatorSecret: string; installationCa: string; ownerPrincipalId: string;
 };
 const installationCa = readFileSync(initialized.installationCa, 'utf8');
 trustCertificateAuthority(installationCa);
@@ -203,6 +204,19 @@ async function call(method: string, path: string, options: { bearer?: string; bo
   });
   return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
 }
+
+// A project the owner operates: creating one gives the owner no role.
+async function operatedProject(name: string): Promise<string> {
+  const created = await call('POST', '/projects', { bearer: operator, body: { name, defaults: WIRE_DEFAULTS } });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const projectId = String(created.body.projectId);
+  const member = `/projects/${projectId}/members/${initialized.ownerPrincipalId}`;
+  assert.equal((await call('PUT', member, { bearer: operator, body: { role: 'project-operator' } })).status, 200);
+  return projectId;
+}
+
+// The project of run-1, which the later suites use.
+let runProject = '';
 
 const BINDING = {
   pluginId: 'openspec', pluginVersion: '0.1.0', upstreamToolVersion: '1.6.0', workflowId: 'api-workflow', workflowVersion: '1',
@@ -436,15 +450,19 @@ describe('event streams', () => {
 });
 
 describe('runs and tasks', () => {
-  test('a run is created once; a retry returns it, and another binding is 409', async () => {
-    const unknown = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-0', projectId: 'project-1', binding: { ...BINDING, workflowDigest: `sha256:${'cd'.repeat(32)}` } } });
+  before(async () => {
+    runProject = await operatedProject('Run project');
+  });
+
+  test('a run is created once in an unbound project; a retry returns it, and another binding is 409', async () => {
+    const unknown = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-0', projectId: runProject, binding: { ...BINDING, workflowDigest: `sha256:${'cd'.repeat(32)}` } } });
     assert.equal(unknown.status, 422);
-    const created = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: 'project-1', binding: BINDING } });
+    const created = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: runProject, binding: BINDING } });
     assert.equal(created.status, 201);
     assert.ok(checkHttpSchema('Run', created.body).ok);
-    const again = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: 'project-1', binding: BINDING } });
+    const again = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: runProject, binding: BINDING } });
     assert.deepEqual([again.status, again.body.createdAt], [201, created.body.createdAt]);
-    const other = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: 'project-2', binding: BINDING } });
+    const other = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-1', projectId: runProject, binding: { ...BINDING, policyRevision: 'policy-2' } } });
     assert.equal(other.status, 409);
   });
 
@@ -466,7 +484,8 @@ describe('runs and tasks', () => {
       bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs', artifacts: [{ artifactId: 'spec', digest: DIGEST, nativeReference: 'spec.md' }] },
     });
     assert.equal(otherArtifacts.status, 409, 'a repeat with other planning artifacts conflicts');
-    assert.equal((await call('POST', '/runs/run-9/tasks', { bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs' } })).status, 404);
+    const unknownRun = await call('POST', '/runs/run-9/tasks', { bearer: operator, body: { taskId: 'task-1', kind: 'planning', stageId: 'specs' } });
+    assert.equal(unknownRun.status, 403, 'an unknown run is denied like a foreign one');
 
     const read = await call('GET', `/runs/run-1/admissions/${admission.id}`, { bearer: operator });
     assert.deepEqual([read.status, read.body.id], [200, admission.id]);
@@ -505,6 +524,32 @@ describe('runs and tasks', () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     assert.equal((await sql(database, 'SELECT 1 FROM outbox WHERE published_at IS NULL')).length, 1);
     await sql(database, 'UPDATE installation SET quarantined = false');
+    await waitFor(async () => (await sql(database, 'SELECT 1 FROM outbox WHERE published_at IS NULL')).length === 0);
+  });
+
+  test('the owner without a project role is refused createRun and submitTask with 403, and still reads the run', async () => {
+    const projectId = await operatedProject('Left project');
+    const created = await call('POST', '/runs', { bearer: operator, body: { runId: 'run-left', projectId, binding: BINDING } });
+    assert.equal(created.status, 201);
+    const submitted = await call('POST', '/runs/run-left/tasks', { bearer: operator, body: { taskId: 'task-left', kind: 'planning', stageId: 'specs' } });
+    assert.equal(submitted.status, 201);
+    const admissionId = (submitted.body.admission as { id: string }).id;
+    const member = `/projects/${projectId}/members/${initialized.ownerPrincipalId}`;
+    const removed = await fetch(`https://127.0.0.1:${running.api.port}${member}`, { method: 'DELETE', headers: { authorization: `Bearer ${operator}` } });
+    assert.equal(removed.status, 204);
+    const denial = { reason: 'role-required', requiredRole: 'project-operator' };
+    const missing = `p${'0'.repeat(32)}`;
+    for (const body of [{ runId: 'run-left-2', projectId, binding: BINDING }, { runId: 'run-left-2', projectId: missing, binding: BINDING }]) {
+      const refused = await call('POST', '/runs', { bearer: operator, body });
+      assert.deepEqual([refused.status, refused.body.details], [403, denial], body.projectId);
+      assert.ok(checkHttpSchema('AccessDenial', refused.body).ok);
+    }
+    const task = await call('POST', '/runs/run-left/tasks', { bearer: operator, body: { taskId: 'task-left-2', kind: 'planning', stageId: 'specs' } });
+    assert.deepEqual([task.status, task.body.details], [403, denial]);
+    assert.equal((await call('GET', `/runs/run-left/admissions/${admissionId}`, { bearer: operator })).status, 200);
+    assert.equal((await call('GET', '/runs/run-left/tasks/task-left/result', { bearer: operator })).status, 200);
+    const [stored] = await sql<{ runs: number }>(database, "SELECT count(*)::int AS runs FROM workflow_runs WHERE id = 'run-left-2'");
+    assert.equal(stored!.runs, 0);
     await waitFor(async () => (await sql(database, 'SELECT 1 FROM outbox WHERE published_at IS NULL')).length === 0);
   });
 });
@@ -569,7 +614,7 @@ async function placedWorker(journalId: string, taskId = 'task-1'): Promise<{ bea
       if (!attempted.ok) return attempted;
       const replaced = await tx.tasks.replace(attempted.value, task.value.generation);
       if (!replaced.ok) return replaced;
-      const scope = { projectId: 'project-1', runId: 'run-1', taskId, rootTaskId: taskId } as never;
+      const scope = { projectId: runProject, runId: 'run-1', taskId, rootTaskId: taskId } as never;
       const requested = value(parseResourceRequest({ cpuMillicores: 100, memoryMebibytes: 128, hardControls: [] }));
       const reservation = { id: `reservation-${journalId}` as never, scope, requested, providerCredentials: [] };
       const generation = attempted.value.ownershipGeneration;
@@ -596,7 +641,7 @@ describe('evidence', () => {
     const content = new Uint8Array([0, 1, 2, 255, 13, 10]);
     const hex = createHash('sha256').update(content).digest('hex');
     const record = {
-      evidenceId: 'evidence-e2e-1', projectId: 'project-1', runId: 'run-1', taskId: 'task-1', attemptId: holder.attemptId,
+      evidenceId: 'evidence-e2e-1', projectId: runProject, runId: 'run-1', taskId: 'task-1', attemptId: holder.attemptId,
       ownershipGeneration: holder.generation, kind: 'execution-log', inputArtifacts: [], codeRevision: 'c0ffee',
       validator: { name: 'runner', version: '1.0.0' }, outcome: 'exited-0', contentDigest: `sha256:${hex}`,
       contentType: 'application/octet-stream', sizeBytes: content.length, capturedAt: '2026-10-25T09:00:00.000Z',

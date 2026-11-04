@@ -1,6 +1,7 @@
 import { scenarioRecorderFromEnvironment, seedFromEnvironment, type ScenarioRecorder } from '@taskelith/testing';
 import {
   awaitExitedWithZero,
+  createOperatedProject,
   httpOperatorApi,
   readSmokeWorkflow,
   resultPath,
@@ -19,14 +20,18 @@ import {
 export const USAGE = 'usage: installation-scenario.ts seed | submit API_URL WORKFLOWS_FILE TASK'
   + ' | await-exit API_URL TASK | result API_URL TASK | record SCENARIO SEED passed|failed DETAIL';
 
+type SubmitCommand = { readonly name: 'submit'; readonly apiUrl: string; readonly workflows: string; readonly task: SmokeTask };
+
 export type ScenarioCommand =
   | { readonly name: 'seed' }
-  | { readonly name: 'submit'; readonly apiUrl: string; readonly workflows: string; readonly task: SmokeTask }
+  | SubmitCommand
   | { readonly name: 'await-exit' | 'result'; readonly apiUrl: string; readonly task: SmokeTask }
   | { readonly name: 'record'; readonly scenario: string; readonly seed: number; readonly outcome: string; readonly detail: string };
 
 export interface ScenarioDependencies {
   readonly api: (apiUrl: string) => OperatorApi;
+  // The installation-owner, which operates each scenario's project.
+  readonly ownerPrincipalId: string;
   readonly recorder: () => ScenarioRecorder;
   readonly seed: () => number;
   readonly clock: SmokeClock;
@@ -54,7 +59,7 @@ export async function runScenarioCommand(command: ScenarioCommand, dependencies:
     case 'seed':
       return String(dependencies.seed());
     case 'submit':
-      await submitTask(dependencies.api(command.apiUrl), readSmokeWorkflow(command.workflows), command.task);
+      await submitInOwnProject(dependencies, command);
       return '';
     case 'await-exit':
       return JSON.stringify(await awaitExitedWithZero(dependencies.api(command.apiUrl), command.task, dependencies.clock));
@@ -67,6 +72,13 @@ export async function runScenarioCommand(command: ScenarioCommand, dependencies:
       });
       return '';
   }
+}
+
+// Each scenario task's run also gets a project of its own.
+async function submitInOwnProject(dependencies: ScenarioDependencies, command: SubmitCommand): Promise<void> {
+  const api = dependencies.api(command.apiUrl);
+  const projectId = await createOperatedProject(api, dependencies.ownerPrincipalId, `Scenario ${command.task.taskId}`);
+  await submitTask(api, readSmokeWorkflow(command.workflows), command.task, projectId);
 }
 
 interface StoredResult {
@@ -95,20 +107,24 @@ function seedText(text: string): number {
   return /^\d+$/.test(text) ? Number(text) : Number.NaN;
 }
 
-function systemDependencies(operatorToken: string): ScenarioDependencies {
+function systemDependencies(operatorToken: string, ownerPrincipalId: string): ScenarioDependencies {
   return {
     api: (apiUrl) => httpOperatorApi(apiUrl, operatorToken),
+    ownerPrincipalId,
     recorder: () => scenarioRecorderFromEnvironment(),
     seed: () => seedFromEnvironment(),
     clock: SYSTEM_SMOKE_CLOCK,
   };
 }
 
-// The operator secret comes from TASKELITH_OPERATOR_TOKEN.
+// The operator secret comes from TASKELITH_OPERATOR_TOKEN and the owner's
+// principal from TASKELITH_OWNER_PRINCIPAL_ID, which init printed.
 if (import.meta.main) {
   try {
     const command = parseScenarioCommand(process.argv.slice(2));
-    const output = await runScenarioCommand(command, systemDependencies(process.env.TASKELITH_OPERATOR_TOKEN ?? ''));
+    const environment = process.env;
+    const dependencies = systemDependencies(environment.TASKELITH_OPERATOR_TOKEN ?? '', environment.TASKELITH_OWNER_PRINCIPAL_ID ?? '');
+    const output = await runScenarioCommand(command, dependencies);
     if (output !== '') process.stdout.write(`${output}\n`);
   } catch (error) {
     process.stderr.write(`installation-scenario: ${error instanceof Error ? error.message : String(error)}\n`);

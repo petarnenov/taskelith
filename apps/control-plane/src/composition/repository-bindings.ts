@@ -5,8 +5,8 @@ import {
   type RepositoryBindingServicePorts,
   type ScmPluginDefects,
 } from '@taskelith/integrations';
-import { ok } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
+import { projectDirectory } from './project-directory.js';
 
 export type RepositoryBindingPorts = Omit<RepositoryBindingServicePorts, 'defects'>;
 
@@ -27,11 +27,5 @@ export function pluginDefectLog(logger: Logger): ScmPluginDefects {
 
 // The Access module's projects as the integrations module asks for them.
 export function bindableProjects(projects: Pick<ProjectSetupService, 'readProject'>): BindableProjects {
-  return {
-    exists: async (projectId) => {
-      const read = await projects.readProject(projectId);
-      if (read.ok) return ok(true);
-      return read.error.code === 'not-found' ? ok(false) : read;
-    },
-  };
+  return projectDirectory(projects);
 }

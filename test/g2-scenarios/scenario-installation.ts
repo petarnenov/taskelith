@@ -12,6 +12,7 @@ import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCred
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { admitExecutionAccount, integrationEndpoint, integrationSecret, integrationSecretPath, requestFailure, trustCertificateAuthority, value } from '@taskelith/testing';
+import { createOperatedProject, type OperatorApi } from '../../scripts/installation-smoke.ts';
 import { SCENARIO_LAUNCH } from './scenario-launch.ts';
 import { waitFor } from './waiting.ts';
 
@@ -95,7 +96,7 @@ export class ScenarioInstallation {
       TASKELITH_NATS_CA: integrationSecretPath('ca.pem'),
     };
     const initialized = await admin(environment, ['init', '--actor', 'root@scenario', '--reason', 'g2 scenarios']) as {
-      identity: { installationId: string }; operatorSecret: string; installationCa: string;
+      identity: { installationId: string }; operatorSecret: string; installationCa: string; ownerPrincipalId: string;
     };
     trustCertificateAuthority(readFileSync(initialized.installationCa, 'utf8'));
     const logs = new InMemoryLogSink();
@@ -111,7 +112,8 @@ export class ScenarioInstallation {
       },
     });
     await installation.start();
-    assert.equal((await installation.call('POST', '/runs', { runId: RUN_ID, projectId: 'project-1', binding: BINDING })).status, 201);
+    const projectId = await createOperatedProject(installation.operatorApi(), initialized.ownerPrincipalId, 'Scenario project');
+    assert.equal((await installation.call('POST', '/runs', { runId: RUN_ID, projectId, binding: BINDING })).status, 201);
     return installation;
   }
 
@@ -163,6 +165,10 @@ export class ScenarioInstallation {
       throw requestFailure('control plane', method, url, sent, error);
     });
     return { status: response.status, body: await response.json() as Record<string, unknown> };
+  }
+
+  operatorApi(): OperatorApi {
+    return { post: (path, body) => this.call('POST', path, body), put: (path, body) => this.call('PUT', path, body), get: (path) => this.call('GET', path) };
   }
 
   async submitTask(taskId: string): Promise<void> {

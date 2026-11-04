@@ -168,13 +168,6 @@ Setting a principal's password SHALL end every session of that principal in the 
 - **WHEN** the password of a principal with two live sessions is set
 - **THEN** both sessions end in the write that stores the new hash
 
-### Requirement: Temporary G2 bridge
-Until `createRun` requires an existing project, an `installation-owner` SHALL also pass the project requirements of the G2 execution and SDLC operator operations, through one requirement kind of the `Access` module named as the bridge. This requirement is temporary; sub-change 11c of item 11 SHALL remove it.
-
-#### Scenario: Owner on a G2 operation
-- **WHEN** an `installation-owner` without a project role calls a G2 operation that requires `project-operator`
-- **THEN** the bridge passes it, while another principal without the role is denied with `role-required`
-
 ### Requirement: Projects behind the Access port
 The `Access` module SHALL keep projects, their defaults, and their initial auto-merge setting behind its `AccessStore` port with conformance cases, and SHALL check the actor's role again inside each project or member command's transaction, so a role removed meanwhile writes nothing.
 

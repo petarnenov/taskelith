@@ -75,6 +75,8 @@ export { RetrySchedule, type BackoffTiming } from './application/retry-schedule.
 export type { EvidenceView } from './application/evidence-view.js';
 export { LaunchAuthority, type LaunchAuthoritySettings } from './application/launch-authority.js';
 export { RunService } from './application/run-service.js';
+export type { ProjectDirectory } from './application/project-directory.js';
+export { projectDirectory } from './composition/project-directory.js';
 export {
   SlotCredentialDeliveryService,
   type RevealedSlotDelivery,

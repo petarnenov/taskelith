@@ -24,6 +24,7 @@ import {
 } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 import { inMemoryCapacity } from './in-memory-capacity.ts';
+import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
 
 const WORKFLOW_DIGEST = `sha256:${'ab'.repeat(32)}`;
 const definition = value(parseWorkflowDefinition({
@@ -80,7 +81,7 @@ async function fixture(): Promise<Fixture> {
     now: async () => clock.now,
   };
   const store: ControlPlaneStore = { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
-  value(await new RunService(store, new WorkflowRegistry([{ definition, digest: WORKFLOW_DIGEST }])).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
+  value(await new RunService(store, new WorkflowRegistry([{ definition, digest: WORKFLOW_DIGEST }]), EVERY_PROJECT_EXISTS).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
   const tasks = new TaskService(store);
   value(await tasks.submitTask('run-1', { taskId: 'task-1', kind: 'planning', stageId: 'specs' }, 'corr-1' as never));
   const opened = value(await transaction.tasks.get('task-1' as TaskId));

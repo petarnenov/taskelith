@@ -20,6 +20,7 @@ import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/
 import { endAssignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
+import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_placement_${process.pid}`;
@@ -74,7 +75,7 @@ beforeEach(async () => {
   placement = new PlacementService(database, TIMING);
   await sql(`TRUNCATE ${TABLES.join(', ')}`);
   await sql('INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
-  const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]));
+  const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS);
   value(await runs.createRun({ runId: 'run-1', projectId: 'project-1', binding }));
 });
 
@@ -96,7 +97,7 @@ async function submit(taskId: string, runId = 'run-1'): Promise<void> {
 }
 
 async function createSecondRun(): Promise<void> {
-  value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
+  value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
 }
 
 // Two slots; task-1 and task-2 wait in project-1, task-3 in project-2.
@@ -329,7 +330,7 @@ describe('placement', () => {
 
   test('a later pass reaches the next project once a full batch of blocked tasks backs off', async () => {
     await enroll('worker-a');
-    const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]));
+    const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS);
     const projects = Array.from({ length: PLACEMENT_BATCH + 1 }, (_, index) => String(index + 1).padStart(3, '0'));
     for (const project of projects) {
       value(await runs.createRun({ runId: `run-${project}`, projectId: `project-${project}`, binding }));

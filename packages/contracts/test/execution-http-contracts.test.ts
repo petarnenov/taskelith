@@ -17,12 +17,12 @@ interface Operation {
   readonly security: SecurityRequirement[];
   readonly parameters?: { readonly name: string; readonly in: string; readonly required?: boolean }[];
   readonly requestBody?: { readonly content: Record<string, { schema?: Json }> };
-  readonly responses: Record<string, { headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
+  readonly responses: Record<string, { description?: string; headers?: Record<string, Json>; content?: Record<string, { schema: Json }> }>;
 }
 
 interface Document {
   readonly openapi: string;
-  readonly info: { readonly version: string };
+  readonly info: { readonly version: string; readonly description?: string };
   readonly paths: Record<string, Record<string, Operation>>;
   readonly components: { readonly schemas: Record<string, Json>; readonly securitySchemes: Record<string, Json> };
 }
@@ -42,6 +42,10 @@ function violations<T>(result: Result<T, SchemaViolations>): SchemaViolations {
 
 const EXECUTION = document('execution.openapi.json');
 const CONTROL_PLANE = document('control-plane.openapi.json');
+const SUBMIT_TASK_NOT_FOUND =
+  'The stage does not exist in a run that the caller may command; an unknown run is refused with 403.';
+const SDLC_PATH = 'packages/contracts/documents/sdlc.openapi.json';
+const UNKNOWN_RUN_CHANGE = 'submitTask: an unknown run, which answered the owner 404, is refused with 403 role-required';
 const SCHEMAS = EXECUTION.components.schemas;
 const AT = '2026-10-28T10:00:00.000Z';
 const REMOTE = 'https://scm.example/acme/project.git';
@@ -94,18 +98,19 @@ function refusal(reason: string) {
   return { code: 'precondition-failed', message: `refused: ${reason}`, details: { reason } };
 }
 
-test('the execution document is OpenAPI 3.1.0 at version 0.9.0 with the 9c operations', () => {
+test('the execution document is OpenAPI 3.1.0 at version 0.10.0 with the 9c operations', () => {
   assert.equal(EXECUTION.openapi, '3.1.0');
-  assert.equal(EXECUTION.info.version, '0.9.0');
+  assert.equal(EXECUTION.info.version, '0.10.0');
   for (const reference of referencesIn(EXECUTION)) assert.ok(reference.replace('#/components/schemas/', '') in SCHEMAS, reference);
   for (const id of NEW_OPERATIONS) operation(id);
   assert.equal(operation('retireEvidence').method, 'delete');
   assert.equal(operation('readmitTask').method, 'post');
 });
 
-test('the role-checked G2 operator operations declare the 403 AccessDenial, the SDLC document at version 0.4.0', () => {
+test('the role-checked G2 operator operations declare the 403 AccessDenial, the SDLC document at version 0.5.0', () => {
   const sdlc = document('sdlc.openapi.json');
-  assert.equal(sdlc.info.version, '0.4.0');
+  assert.equal(sdlc.info.version, '0.5.0');
+  assert.match(sdlc.info.description ?? '', /createRun` and `submitTask` also require `project-operator`/);
   assert.deepEqual(sdlc.components.schemas.AccessDenial, CONTROL_PLANE.components.schemas.AccessDenial);
   const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
   for (const id of ['createRun', 'submitTask', 'readAdmission']) {
@@ -115,6 +120,26 @@ test('the role-checked G2 operator operations declare the 403 AccessDenial, the 
   for (const id of ['readTaskResult', 'listQuarantine', 'redriveQuarantined']) {
     assert.deepEqual(responseSchema(id, '403'), { $ref: '#/components/schemas/AccessDenial' }, id);
   }
+});
+
+test('createRun answers 404 for an unknown project, and no 403 names the retired G2 bridge', () => {
+  const sdlc = document('sdlc.openapi.json');
+  const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
+  const createRun = sdlcOperations.find((candidate) => candidate.operationId === 'createRun')!;
+  assert.deepEqual(createRun.responses['404']?.content?.['application/json']?.schema, { $ref: '#/components/schemas/Failure' });
+  const denials = [...sdlcOperations.map((found) => found.responses['403']), operation('readTaskResult').responses['403']];
+  for (const denial of denials.filter((found) => found !== undefined)) assert.doesNotMatch(denial.description ?? '', /bridge/i);
+});
+
+test('submitTask answers 404 only for an unknown stage, and 403 for an unknown run', () => {
+  const sdlc = document('sdlc.openapi.json');
+  const sdlcOperations = Object.values(sdlc.paths).flatMap((item) => Object.values(item));
+  const submitTask = sdlcOperations.find((candidate) => candidate.operationId === 'submitTask')!;
+  assert.equal(submitTask.responses['404']?.description, SUBMIT_TASK_NOT_FOUND);
+  assert.match(submitTask.responses['403']?.description ?? '', /unknown run/);
+  const declarations = JSON.parse(readFileSync(new URL('../breaking-changes.json', import.meta.url), 'utf8'));
+  const entry = declarations.declarations.find((found: Json) => found.path === SDLC_PATH && found.version === '0.5.0');
+  assert.ok(entry.behaviorChanges.includes(UNKNOWN_RUN_CHANGE));
 });
 
 test('the session schemes and the shared failures are those of the control-plane document', () => {
