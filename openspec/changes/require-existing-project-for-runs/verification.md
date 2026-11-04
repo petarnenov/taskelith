@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G3 plan item 11 (`docs/g3-plan.md`, row 11), sub-change 11c, developed by a briefed subagent from `dev` `aca63889` (#438) under the coordinator (Niki) decisions Q1 to Q10 of 2026-11-04: `createRun` refuses a project that does not exist with 404 after the role check (Q1, Q7, Q8); the temporary G2 bridge is removed (Q6); `createRun` and `submitTask` need `project-operator` without an owner pass, and `readAdmission` and `readTaskResult` are section 3 reads (Q2); the four routes answer a role refusal with 403 (Q5); an unbound project may get a run (Q3); existing runs keep their identifiers and no foreign key is added (Q4); `sdlc.openapi.json` 0.5.0 and `execution.openapi.json` 0.10.0 with a declared behavior break (Q9); and the operator flows on a project the owner operates (Q10). Excluded: a foreign key or migration of runs, a narrower `projectId`, a run's link to the repository binding (item 21), and any UI.
+G3 plan item 11 (`docs/g3-plan.md`, row 11), sub-change 11c, developed by a briefed subagent from `dev` `aca63889` (#438) under the coordinator (Niki) decisions Q1 to Q10 of 2026-11-04: `createRun` refuses a project that does not exist with 404 after the role check (Q1, Q7, Q8); the temporary G2 bridge is removed (Q6); `createRun` and `submitTask` need `project-operator` without an owner pass, and `readAdmission` and `readTaskResult` are section 3 reads (Q2); the four routes answer a role refusal with 403 (Q5); an unbound project may get a run (Q3); existing runs keep their identifiers and no foreign key is added (Q4); `sdlc.openapi.json` 0.5.0 and `execution.openapi.json` 0.10.0 with a declared behavior break of `sdlc.openapi.json` 0.5.0 only (Q9); and the operator flows on a project the owner operates (Q10). Only `sdlc.openapi.json` 0.5.0 has a `breaking-changes.json` entry: `execution.openapi.json` 0.10.0 changes only the `readTaskResult` 403 description, and no caller's answer of `readTaskResult` changes, because the owner keeps its read pass (`design.md` decision 9). Excluded: a foreign key or migration of runs, a narrower `projectId`, a run's link to the repository binding (item 21), and any UI.
 
 ## Revision
 
@@ -22,7 +22,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), Docker 29.5.2, Node.js v24.22.1 (the `.nvm
 
 ## Author self-check
 
-- Scope: only the brief's items. `git diff --shortstat aca63889 9b380f56 -- '*.ts' '*.sql'`: 36 files, 436 insertions, 135 deletions, within the guard of about 40 code files and 5000 lines; all files: 56 files, 755 insertions, 148 deletions.
+- Scope: only the brief's items. `git diff --shortstat aca63889 9b380f56 -- '*.ts' '*.sql'`: 36 files, 436 insertions, 135 deletions, within the guard of about 40 code files and 5000 lines; all files: 57 files, 866 insertions, 148 deletions, `route.json` (111 lines) included, which `9b380f56` added; at `90ddd310`, before it, 56 files, 755 insertions, 148 deletions. After the pass 2 fixes, `aca63889..b33acd3d`: code 37 files, 480 insertions, 138 deletions; all files 58 files, 1087 insertions, 154 deletions.
 - Coordinator decisions, each with its test:
   - Q1, Q7: `RunService` takes the port `ProjectDirectory` (`apps/control-plane/src/application/project-directory.ts`); the composition adapts it onto `ProjectSetupService.readProject` (`composition/project-directory.ts`), which `bindableProjects` now reuses. `run-service.test.ts` covers an unknown project (`not-found`, nothing stored, checked before the workflow), a failed lookup, and the adapter; `api-server.test.ts` maps `not-found` of `createRun` to 404. The direct fixtures use the one shared `EVERY_PROJECT_EXISTS` (`project-fixtures.ts`).
   - Q2, Q5: `browser-session.test.ts` (owner bearer refused `createRun` and `submitTask` with 403 for an existing, a missing, a foreign, and an unknown resource; 401 for a wrong bearer; the owner passes the reads of foreign and unknown runs), `api-server.test.ts` (403 `AccessDenial` on all four routes), `access-requirements.test.ts` (the rule rows), and `control-plane-api.integration.test.ts` (over PostgreSQL: after its role is removed the owner gets 403 on both commands, for an existing and a missing project, and 200 on both reads; no run is stored).
@@ -75,6 +75,8 @@ Each mutation was restored; `git status` showed no change.
 
 The pass 1 fixes changed the diff, so `route.json` was deleted and routed again (`18dcb7b1`, unedited): again elevated (lines, files, capabilities, security, contracts), rule version 5, the same reviewers, and the shadow router `jev-1.14.0` agrees (P(third) 0.73).
 
+That route named `headCommit` `6ffbb1df`, which is not in the branch (pass 2, L1). The reflog shows how: `6ffbb1df` was a local commit that deleted `route.json`; the route was generated at it, and the new `route.json` was then committed with `git commit --amend`, which replaced `6ffbb1df` by `18dcb7b1` with the same parent `d351c5fb`. The same happened earlier to a docs commit of `design.md` (`19a3d3c2`, amended to `5655acf9`). Both were the tip commit, both only docs, and neither SHA is named elsewhere in the records; no test or implementation commit was rewritten, so every test commit still precedes its implementation commit. The branch was never pushed before (no `origin/require-existing-project-for-runs`), so no published history changed. The pass 2 round adds only new commits: `376d4e74` deletes the stale route, and the route is generated again at the then head and committed unedited in the next commit, whose `headCommit` is its parent.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -122,6 +124,22 @@ Branch coverage of `make verify` on `dist`, before (`verify-11c-2.log`) and afte
 | `apps/control-plane/dist/application/run-service.js` | 73.53 % (25 of 34) | 73.53 % | The branches this change added, `#knownProject` and its result check in `createRun`, are covered; the 9 uncovered ones predate it (invalid identifiers and store failures) and are outside its scope |
 | `packages/modules/access/dist/domain/requirement.js` | 71.43 % (5 of 7) | 100 % | Removing the covered `g2BridgeRequirement` left the two untested `requiredRoleOf` paths; `c5952e53` tests both |
 
+### Pass 2
+
+- Reviewer: Claude Code, model `claude-fable-5-1`, effort `medium`, role B, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=require-existing-project-for-runs PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the reviewer reported model `claude-fable-5-1` and session `7692c8cf-9d1f-4b62-9212-6a315e2cd32a`.
+- Reviewed `aca63889..87184424`; the snapshot was unchanged after the pass.
+- Counts: Critical 0, High 0, Medium 1, Low 5, recorded in `passes.jsonl` and `findings.jsonl`. Every finding is fixed; because of the Medium, pass 3 reviews the fixes.
+
+| # | Severity | Finding | Test | Fix |
+| --- | --- | --- | --- | --- |
+| M1 | Medium | The `submitTask` 404 said "The run or the stage does not exist", but an unknown run is refused 403 for every caller since the owner pass is gone, and the owner's 404 to 403 switch was not declared | `46f75053`, fail-before `fb-11c-p2-1.log`: tests 22, pass 21, fail 1 | `75dfba67`: the 404 reads "The stage does not exist in a run that the caller may command; an unknown run is refused with 403.", the 403 says every caller gets it for an unknown run, `breaking-changes.json` adds the behavior change "submitTask: an unknown run, which answered the owner 404, is refused with 403 role-required", execution wire contracts section 7 says so, and the `sdlc-wire-contracts` delta "Run project refusals on the wire" (482 characters) gains the scenario "Unknown run of a submission"; `make contract-compatibility` passes |
+| L1 | Low | `route.json` named `headCommit` `6ffbb1df`, not an ancestor of the branch | Record only | `376d4e74` deletes it, the route is generated again unedited at the current head; the reflog explanation is under "Route" |
+| L2 | Low | The all-files shortstat at `9b380f56` was that of `90ddd310` | Record only | This record: 57 files, 866 insertions, 148 deletions, with both revisions named |
+| L3 | Low | `installation.sh` `bootstrap_operator` requires `ownerPrincipalId` with no test | `b33acd3d`: a fake `admin init` answer without `ownerPrincipalId` stops the smoke with status 2 before the start and without the secret; mutation control `fb-11c-p2-3.log` (the `require` removed): tests 1, fail 1 | None: the `require` of `73eaf978` is unchanged |
+| L4 | Low | The `sdlc.openapi.json` info description named only the owner credential | `c0fba8a2`, fail-before `fb-11c-p2-2.log`: tests 22, pass 21, fail 1 | `ad7fc004`: since 0.5.0, `createRun` and `submitTask` also require `project-operator` or above on the run's project, which the owner must assign itself |
+| L5 | Low | "Scope and source" read as if both documents declared a behavior break | Record only | This record: only `sdlc.openapi.json` 0.5.0 has an entry, and why `execution.openapi.json` 0.10.0 has none |
+
 ## Deviations
 
 1. Q9 asked for a `breaking-changes.json` entry, but the check reports no change and the schema required at least one. `breaking-changes.schema.json` gains an optional `behaviorChanges` list, with `breakingChanges` empty only beside it; `make contract-compatibility` compares only the tool-reported list. The `sdlc-wire-contracts` requirement "Breaking-change declarations" is MODIFIED for it.
@@ -135,11 +153,11 @@ Branch coverage of `make verify` on `dist`, before (`verify-11c-2.log`) and afte
 
 ## Follow-ups
 
+- Coordinator (Niki, 2026-11-04, pass 2 round): the older uncovered branches of `apps/control-plane/dist/application/run-service.js`, invalid identifiers and store errors, 73.53 % branches (25 of 34), predate this change and are outside its scope; a later change could test them.
 - Coordinator (Niki, 2026-11-04): `make contract-compatibility` could require `behaviorChanges` on a minor bump of a document for which it detects no breaking change, so that such a bump states what breaks; not part of this change.
 
 ## Remaining gates
 
-- Review pass 2 (role B), and pass 3 (role A) only after a pass 2 with a Medium or worse finding.
-- Run `make verify-linux-crash-windows` on a Linux host (coordinator: Zaki, hpz600) before integration.
-- Run `make verify-linux-g2-scenarios` on a Linux host (coordinator: Zaki, hpz600) before integration.
+- Review pass 3 (role A, `agy gemini-4-argon-medium#medium`), because pass 2 reported a Medium finding; it reviews the pass 2 fixes.
+- Run `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` on a Linux host before integration: the coordinator has Zaki run them on hpz600 against the final pushed archive head.
 - Integration into dev by the coordinator (single pull request).
