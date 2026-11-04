@@ -1,0 +1,14 @@
+## Context
+
+The worker image installs and checks the Linux Git pin in its worker stage (`infra/installation/Dockerfile:61-69`). The Linux test image (`tools/linux-cgroup/Dockerfile`) installs only Node.js. The scenario harnesses compose a real worker in that image, and since #409 that worker checks `/usr/bin/git` against `GIT_CLIENT_PINS.linux` before it starts.
+
+## Decisions
+
+- **Same package, same checks.** The test image copies the worker stage's `ARG GIT_PACKAGE_VERSION=1:2.43.0-1ubuntu7.4`, the `git=${GIT_PACKAGE_VERSION}` install without recommended packages, and the `dpkg-query` and `/usr/bin/git --version` checks, and removes the apt lists. It builds on the same digest-pinned `UBUNTU_BASE`, Ubuntu 24.04 (noble), so the package resolves the same way. The worker stage's `SOURCE_DATE_EPOCH` clamping is left out: the test image is not reproducible today and is never published.
+- **One pin, checked by a test.** No mechanism shares a Dockerfile pin today: the `Makefile` passes only the base and the Node.js pins as build arguments, and the worker image is also built by `scripts/installation.sh` and other scripts that would all need a new argument. A test is the smaller mechanism: `test/git-package-pin.test.ts` requires the same `GIT_PACKAGE_VERSION` default in both images and, in the same stage, one `RUN` that installs `git=${GIT_PACKAGE_VERSION}` and checks the package and `git --version` against `GIT_CLIENT_PINS.linux.version`. A later change can move the pin into the `Makefile` and pass it to both builds.
+- **Instructions, not text.** The test reads Dockerfile instructions as Docker does for these files: it drops comment lines, joins `\` continuations, collapses whitespace, splits each `RUN` at `&&`, and reads only the worker stage (`AS worker`) of `infra/installation/Dockerfile` and the last, only, stage of `tools/linux-cgroup/Dockerfile`. A commented-out check or a check in another stage no longer counts, and extra spaces or a trailing space after the `ARG` no longer fail it (pass 1 L1). It is no full Dockerfile parser: it does not expand variables or follow heredocs, which neither file uses for the pin.
+- **Spec delta in `native-worker-acceptance`.** The change has a test-tooling behavior that a spec should state (pass 1 M1): the Linux test image provides the worker's pinned Git client. `native-worker-acceptance` already owns the image in "Linux test image per architecture" and the runs of `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` in native acceptance, so the new requirement goes there. `g2-failure-scenarios` describes the scenarios that run in the image, not the image, and `git-workspace-port` describes the worker image and the adapter's pin, which do not change.
+
+## Risks / Trade-offs
+
+- The image build now needs the Ubuntu mirror; a withdrawn package revision fails the build, as it already does for the worker image.

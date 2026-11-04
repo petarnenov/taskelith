@@ -1,0 +1,103 @@
+{
+  "change": "fix-linux-cgroup-test-git-pin",
+  "generatedAt": "2026-11-04T08:35:11.679Z",
+  "devCommit": "163fe9e56e439e7612a39bc170da48e3aa8f93a0",
+  "query": {
+    "capabilities": [
+      "infrastructure-tooling",
+      "git-workspace-port",
+      "engineering-principles"
+    ],
+    "files": [
+      "tools/linux-cgroup/**",
+      "infra/installation/**",
+      "Makefile"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "error-handling",
+        "count": 32
+      },
+      {
+        "category": "contract-drift",
+        "count": 31
+      },
+      {
+        "category": "spec-wording",
+        "count": 19
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 16
+      },
+      {
+        "category": "redaction",
+        "count": 13
+      },
+      {
+        "category": "docs",
+        "count": 10
+      },
+      {
+        "category": "test-flakiness",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 996,
+        "inChecklist": 813
+      },
+      "mediumOrWorse": {
+        "findings": 488,
+        "inChecklist": 418
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 156
+      },
+      {
+        "category": "spec-wording",
+        "count": 102
+      },
+      {
+        "category": "docs",
+        "count": 81
+      },
+      {
+        "category": "stale-citation",
+        "count": 59
+      },
+      {
+        "category": "contract-drift",
+        "count": 26
+      },
+      {
+        "category": "process",
+        "count": 25
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 9
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 465,
+        "inChecklist": 458
+      },
+      "mediumOrWorse": {
+        "findings": 73,
+        "inChecklist": 73
+      }
+    }
+  }
+}
