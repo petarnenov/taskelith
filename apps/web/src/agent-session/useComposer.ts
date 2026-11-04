@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../board/board';
 import { useBoardServices } from '../board/BoardServices';
 import { useSession } from '../session/SessionProvider';
-import { outcomeOf, restoredSubmissions, type Outcome, type Submission, type SubmissionState } from './composer-model';
+import { outcomeOf, recordOf, restoredSubmissions, type Outcome, type Submission, type SubmissionState } from './composer-model';
 import type { TurnRecord } from './turn-records';
 import { useTurnRecords } from './TurnRecordsProvider';
 
@@ -59,7 +59,7 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
     (record: TurnRecord): TurnRecord => {
       const spent = { ...record, tokenRefreshed: true };
       records.add(projectId, sessionId, spent);
-      if (mounted.current) setSubmissions((known) => known.map((entry) => (entry.key === record.key ? { ...entry, ...spent } : entry)));
+      if (mounted.current) setSubmissions((known) => known.map((entry) => (entry.key === record.key ? { ...entry, tokenRefreshed: true } : entry)));
       return spent;
     },
     [records, projectId, sessionId],
@@ -135,8 +135,8 @@ export function useComposer({ projectId, sessionId, showTurn }: ComposerOptions)
 
   const retry = useCallback(
     (key: string) => {
-      const record = submissions.find((entry) => entry.key === key);
-      if (record !== undefined) void deliver(record);
+      const submission = submissions.find((entry) => entry.key === key);
+      if (submission !== undefined) void deliver(recordOf(submission));
     },
     [submissions, deliver],
   );

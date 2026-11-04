@@ -59,6 +59,12 @@ export function restoredSubmissions(records: readonly TurnRecord[]): Submission[
   return records.map((record) => ({ ...record, state: { status: 'unconfirmed' } }));
 }
 
+// The record of a submission, without its shown state: what a retry sends
+// and what the store keeps.
+export function recordOf({ key, text, sentAt, tokenRefreshed }: Submission): TurnRecord {
+  return tokenRefreshed === undefined ? { key, text, sentAt } : { key, text, sentAt, tokenRefreshed };
+}
+
 // A CSRF refusal has the session read again and the key sent once more;
 // a second one is shown, as every other refusal.
 export function outcomeOf(result: SubmitResult, tokenRefreshed: boolean): Outcome {
