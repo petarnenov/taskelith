@@ -102,7 +102,21 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Review
 
-No review pass has run yet.
+### Pass 1
+
+- Reviewer: Codex CLI, model `gpt-6-astra`, effort `medium`, role A, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=audit-scm-integration-changes PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the reviewer reported model `gpt-6-astra` and session `01a1a3ed-9608-71b3-8fe3-6fce07b0ddca`.
+- Reviewed `2700c16a..f2fa35ee`; the snapshot (`5a5459a6…`) was unchanged after the pass.
+- Counts: Critical 0, High 1, Medium 2, Low 1, recorded in `passes.jsonl` and `findings.jsonl` (`8278862e`). H1 and M2 concern the 20f service code that this change's requirement extends; the coordinator (Niki, 2026-11-04) put both in scope. Every finding is fixed; pass 2 checks the fixes.
+
+| # | Severity | Finding | Test (fail-before) | Fix |
+| --- | --- | --- | --- | --- |
+| H1 | High | `checkSettings` and `checkSecret` and their result envelopes had no exception boundary, so a plugin's thrown message reached the 500 answer | `7be13fe5`; `fb-11b2-p1-1.log`: tests 31, pass 29, fail 2 (the service test of four misbehaviours of each check on create and update, and the HTTP test that checks the answer, the log records, and the audit trail) | `91d6008e`: `pluginAnswer` and `pluginDefect` move unchanged from `repository-binding-service.ts` into `application/plugin-answer.ts`, which both services use, so the two boundaries cannot drift; each check's envelope is read once inside the `try`; a throw, a throwing getter, or a bad envelope is the fixed `internal` failure and one `scm.plugin.defect` record through `ScmPluginDefects`, whose `ScmPluginOperation` adds `checkSettings` and `checkSecret`; a creation mints its identifier before the checks so the record names it. `after-11b2-p1-1.log`: 201 of 201 |
+| M2 | Medium | A plugin-controlled `details.setting` was copied into the public failure, so a setting value or free text could be quoted | `bb2e5c97`; `fb-11b2-p1-2.log`: tests 19, pass 17, fail 2 (a reported value; and a missing setting on create, which the existing case now expects as `settings`) | `a641b00d`: a reported setting is kept only when the request or the integration holds that name, otherwise `settings`; an update keeps naming a held setting that the request drops; malformed details are the plugin defect; wire contracts section 4 says so. `after-11b2-p1-2.log`: 204 of 204 |
+| M3 | Medium | The in-memory store published the audit row before the integration, so a reader between them saw one without the other | `7ed7fd15`; `fb-11b2-p1-3.log`: tests 10, pass 9, fail 1 (the torn reads `[undefined, 1]` and `[1, 2]`) | `552465c6`: `InMemoryScmIntegrationAudit.stage` accepts a row without showing it, and the store publishes it and the integration in one synchronous step, as the access store replaces its state on commit; the test reads the store and the trail after every microtask of a create and an update, with no sleep. `after-11b2-p1-3.log`: 48 of 48 |
+| L4 | Low | The PostgreSQL retry tests did not show that an attempt which appended its audit row leaves no duplicate | Test only, `149d0c7a`: the gated race asserts the rows `created` 1 and `updated` 2, and a new test throws a serialization failure (`40001`) after the append and before the commit and expects one `updated` row after the retry (`after-11b2-p1-4.log`: 23 of 23); negative control `fb-11b2-p1-4.log`: with the update's append in a second transaction, tests 23, fail 2 (the new test, with 4 attempts, and the read-only transaction test) | `149d0c7a` |
+
+- Follow-up of 11b1 "Audit other control-plane reads of plugin results (20f integration operations, the credential issue) for throwing getters": the 20f part is done by H1; the credential issue part stays open (item 21).
 
 ## Limitations
 
@@ -112,8 +126,7 @@ No review pass has run yet.
 
 ## Remaining gates
 
-- Review pass 1, reviewer A, assigned by the coordinator.
-- Review pass 2, reviewer B.
+- Review pass 2, reviewer B, assigned by the coordinator; it checks the pass 1 fixes.
 - Review pass 3, reviewer A, only after a pass 2 with a Medium or worse finding.
 - Architect check by the coordinator of any fix that no later pass reviews.
 - Archive of the change in the last commit of the branch.
