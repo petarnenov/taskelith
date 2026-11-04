@@ -1,10 +1,10 @@
 {
   "change": "audit-scm-integration-changes",
-  "generatedAt": "2026-11-04T01:20:56.709Z",
+  "generatedAt": "2026-11-04T01:34:21.471Z",
   "devCommit": "fa3fbce73c999c7ba920119a0cab5ea8060837a4",
-  "headCommit": "22b482f4c2ea5280a0c586ae6ec01008fdfb42fb",
+  "headCommit": "2c647d316f2cb8075a4b168cbb838e2e44fd6272",
   "features": {
-    "linesChanged": 1723,
+    "linesChanged": 1861,
     "filesChanged": 38,
     "capabilities": [
       "control-plane-api",
@@ -103,6 +103,6 @@
         }
       }
     ],
-    "latencyMs": 296
+    "latencyMs": 283
   }
 }
