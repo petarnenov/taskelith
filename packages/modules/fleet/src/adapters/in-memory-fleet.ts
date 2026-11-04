@@ -15,21 +15,33 @@ import {
   credentialGenerations,
   isExpired,
   revocationOf,
+  revocationRefusal,
+  rotationRefusal,
+  tokenRecord,
   unrenewedPastDeadline,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
   type EnrollmentToken,
+  type EnrollmentTokenRecord,
+  type EnrollmentTokenState,
   type RotationRequest,
 } from '../domain/enrollment.js';
 import type { InstallationIdentity } from '../domain/installation.js';
 import type { FleetRegistry } from '../ports/fleet-registry.js';
 import type { InstallationRecord, InstallationTable } from '../ports/installation-records.js';
 
+// A stored token with what happened to it since; `state` is mutated in
+// place, as a row is.
+interface StoredToken {
+  readonly token: EnrollmentToken;
+  state: EnrollmentTokenState;
+}
+
 // Each method checks and writes without awaiting, so that concurrent writers
 // cannot both pass a check, as a SERIALIZABLE store guarantees.
 export class InMemoryFleetRegistry implements FleetRegistry {
-  readonly #tokens = new Map<SecretHash, { token: EnrollmentToken; used: boolean }>();
+  readonly #tokens = new Map<SecretHash, StoredToken>();
   readonly #workers = new Map<WorkerId, EnrolledWorker>();
   readonly #revocations = new Map<string, { revocation: BrokerRevocation; published: boolean }>();
   readonly #audit: AuditEvent[] = [];
@@ -42,26 +54,60 @@ export class InMemoryFleetRegistry implements FleetRegistry {
   }
 
   addToken(token: EnrollmentToken): Promise<Result<void>> {
-    if (this.#tokens.has(token.hash)) return settle(err(failure('conflict', 'the enrollment token exists')));
-    this.#tokens.set(token.hash, { token: Object.freeze({ ...token }), used: false });
-    return settle(ok(undefined));
+    return settle(this.#add(token));
   }
 
   unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>> {
     const stored = this.#tokens.get(hash);
-    return settle(ok(stored === undefined || stored.used ? undefined : stored.token));
+    return settle(ok(stored === undefined || !isPending(stored.state) ? undefined : stored.token));
   }
 
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
     const stored = this.#tokens.get(tokenHash);
-    if (stored === undefined || stored.used) return settle(err(failure('conflict', 'the token was used', { reason: 'token-used' })));
-    if (isExpired(stored.token, this.#now())) return settle(err(failure('conflict', 'the token expired', { reason: 'token-expired' })));
+    if (stored === undefined || stored.state.usedAt !== undefined) return settle(err(failure('conflict', 'the token was used', { reason: 'token-used' })));
+    if (stored.state.revokedAt !== undefined) return settle(err(failure('conflict', 'the token was revoked', { reason: 'token-revoked' })));
+    const now = this.#now();
+    if (isExpired(stored.token, now)) return settle(err(failure('conflict', 'the token expired', { reason: 'token-expired' })));
     if ([...this.#workers.values()].some((known) => known.journalId === worker.journalId)) {
       return settle(err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' })));
     }
     if (this.#workers.has(worker.workerId)) return settle(err(failure('conflict', 'the worker exists')));
-    stored.used = true;
+    stored.state = { ...stored.state, usedAt: now };
     this.#workers.set(worker.workerId, Object.freeze({ ...worker }));
+    return settle(ok(undefined));
+  }
+
+  pendingTokens(after: string | undefined, limit: number): Promise<Result<readonly EnrollmentTokenRecord[]>> {
+    const now = this.#now();
+    const pending = [...this.#tokens.values()]
+      .filter((stored) => isPending(stored.state) && !isExpired(stored.token, now) && (after === undefined || stored.token.tokenId > after))
+      .map((stored) => tokenRecord(stored.token))
+      .sort((a, b) => (a.tokenId < b.tokenId ? -1 : 1));
+    return settle(ok(Object.freeze(pending.slice(0, limit))));
+  }
+
+  tokenById(tokenId: string): Promise<Result<EnrollmentTokenRecord | undefined>> {
+    const stored = this.#byId(tokenId);
+    return settle(ok(stored === undefined ? undefined : tokenRecord(stored.token)));
+  }
+
+  revokeToken(tokenId: string, at: Instant): Promise<Result<void>> {
+    const stored = this.#byId(tokenId);
+    if (stored === undefined) return settle(err(unknownToken(tokenId)));
+    const refusal = revocationRefusal(stored.state);
+    if (refusal !== undefined) return settle(err(refusal));
+    if (stored.state.revokedAt === undefined) stored.state = { ...stored.state, revokedAt: at };
+    return settle(ok(undefined));
+  }
+
+  rotateToken(tokenId: string, replacement: EnrollmentToken, at: Instant): Promise<Result<void>> {
+    const stored = this.#byId(tokenId);
+    if (stored === undefined) return settle(err(unknownToken(tokenId)));
+    const refusal = rotationRefusal(stored.state, isExpired(stored.token, this.#now()));
+    if (refusal !== undefined) return settle(err(refusal));
+    const added = this.#add(replacement);
+    if (!added.ok) return settle(added);
+    stored.state = { ...stored.state, revokedAt: at, replacementTokenId: replacement.tokenId };
     return settle(ok(undefined));
   }
 
@@ -178,6 +224,17 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return ok(unpublished.length);
   }
 
+  // The hash and the identifier are each unique, as the table's columns are.
+  #add(token: EnrollmentToken): Result<void> {
+    if (this.#tokens.has(token.hash) || this.#byId(token.tokenId) !== undefined) return err(failure('conflict', 'the enrollment token exists'));
+    this.#tokens.set(token.hash, { token: Object.freeze({ ...token }), state: {} });
+    return ok(undefined);
+  }
+
+  #byId(tokenId: string): StoredToken | undefined {
+    return [...this.#tokens.values()].find((stored) => stored.token.tokenId === tokenId);
+  }
+
   #activeWorker(workerId: WorkerId): Result<EnrolledWorker> {
     const worker = this.#workers.get(workerId);
     if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
@@ -218,6 +275,14 @@ export class InMemoryInstallationRecord implements InstallationRecord, Installat
   initialize(identity: InstallationIdentity): Promise<Result<void>> {
     return this.create(identity);
   }
+}
+
+function isPending(state: EnrollmentTokenState): boolean {
+  return state.usedAt === undefined && state.revokedAt === undefined;
+}
+
+function unknownToken(tokenId: string) {
+  return failure('not-found', `no enrollment token ${tokenId} exists`, { tokenId });
 }
 
 function settle<T>(result: Result<T>): Promise<Result<T>> {

@@ -24,6 +24,7 @@ import type {
   CredentialGeneration,
   EnrolledWorker,
   EnrollmentToken,
+  EnrollmentTokenRecord,
   FleetRegistry,
   InstallationIdentity,
   InstallationTable,
@@ -228,6 +229,22 @@ export class CommittingFleetRegistry implements FleetRegistry {
 
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
     return this.#database.transaction((tx) => tx.fleet.enroll(tokenHash, worker));
+  }
+
+  pendingTokens(after: string | undefined, limit: number): Promise<Result<readonly EnrollmentTokenRecord[]>> {
+    return this.#database.readOnly((tx) => tx.fleet.pendingTokens(after, limit));
+  }
+
+  tokenById(tokenId: string): Promise<Result<EnrollmentTokenRecord | undefined>> {
+    return this.#database.readOnly((tx) => tx.fleet.tokenById(tokenId));
+  }
+
+  revokeToken(tokenId: string, at: Instant): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.revokeToken(tokenId, at));
+  }
+
+  rotateToken(tokenId: string, replacement: EnrollmentToken, at: Instant): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.rotateToken(tokenId, replacement, at));
   }
 
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {

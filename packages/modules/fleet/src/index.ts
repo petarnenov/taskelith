@@ -10,6 +10,14 @@ export {
   type WorkerRevocation,
 } from './application/enrollment-service.js';
 export {
+  ENROLLMENT_TOKEN_PAGE_SIZE,
+  EnrollmentTokenService,
+  type EnrollmentTokenPage,
+  type EnrollmentTokenRegistry,
+  type EnrollmentTokenServiceDependencies,
+  type IssuedEnrollmentToken,
+} from './application/enrollment-token-service.js';
+export {
   InstallationService,
   type InitializedInstallation,
   type InstallationServiceDependencies,
@@ -24,6 +32,9 @@ export {
   renewCredentials,
   requestRotation,
   revocationOf,
+  revocationRefusal,
+  rotationRefusal,
+  tokenRecord,
   unrenewedPastDeadline,
   validGenerations,
   type Confirmation,
@@ -32,6 +43,8 @@ export {
   type EnrolledWorker,
   type EnrollmentRequest,
   type EnrollmentToken,
+  type EnrollmentTokenRecord,
+  type EnrollmentTokenState,
   type HostArchitecture,
   type HostConstraints,
   type HostPlatform,
