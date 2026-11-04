@@ -14,7 +14,7 @@ G3 plan item 33 (`docs/g3-plan.md`, row 33), change 1 of the item (backend, size
 - `3c273b4c` the wire contracts note (task 2.4), `0d4f28c9` this record and the tasks, `0cc99e5b` `route.json` (unedited), `d20ee8bb` the typecheck fix of two test files after `make verify` run 1, `cced19bf` its record and the stale route's removal, `91352dd7` the second route (unedited), `4e02394e` the `make record` output with the coverage notes and task 3.1.
 - Pass 1 fixes (see "Pass 1 fixes"): `9bce1a9e` (finding 1), `63b5bc06` (finding 2), `b035cf3f` (finding 3), `2168ff07` (findings 4 and 6, the PostgreSQL side of 5), `3e27dcac` (the in-memory side of 5, the failure-path tests of 10), `b9344064` (finding 8), then the record corrections (findings 7, 9, 10), the review record, the third route, and the `make record` output.
 - Pass 2 fixes (see "Pass 2 fixes"): `e5fe2f47` (test) and `d61bc9dc` (finding 1), `d271e0be` (the tests of findings 2 and 5), `a8eedb0e` (finding 2 and the `spentTokenFailure` nit), `eaf13da4` (findings 3 and 4, the test of 7), `fc8780fa` (finding 7), then the record corrections and the spec wording (findings 6 and 8), the review record, the fourth route, and the `make record` output.
-- Pass 3 fix (see "Pass 3"): `5cce95ba` (the design's decisions 2 and 8), then the review record (`passes.jsonl`, `findings.jsonl`, this record), the merge of `origin/dev`, and the `make record` output of the merged tree.
+- Pass 3 fix (see "Pass 3"): `5cce95ba` (the design's decisions 2 and 8), then `5f132df2` the review record (`passes.jsonl`, `findings.jsonl`, this record), then `bd498af4`, the merge of `origin/dev` `6dab1d26` (#444: the stabilize placement capacity decline test change, its archive, and `placement.integration.test.ts`) without a conflict; the merge touches nothing under this change or its sources, so no evidence is invalidated. `make setup` passed after it. `make verify` run 6 of the merged tree is under "Checks"; the generated part records it, with the new merge base.
 
 ## Environment
 
@@ -93,6 +93,7 @@ Each mutation was restored (`git checkout`) and the `dist` rebuilt; `git status`
 | `make verify` run 3 (`verify-33-1-3.log`) | `91352dd7`, tree `9b30b5f2`, clean | Passed, profile full, stamp written, logged with the brief's plain redirection: tests 4833, pass 4824, fail 0, skipped 9 |
 | `make verify` run 4, after the pass 1 fixes (`verify-33-1-p1.log`) | `b3f1aa5b`, tree `f878856e`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4850, pass 4841, fail 0, skipped 9; all files 99.45 % lines, 92.89 % branches, 98.88 % functions |
 | `make verify` run 5, after the pass 2 fixes (`verify-33-1-p2.log`) | `0df7239b`, tree `97f7bb11`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4852, pass 4843, fail 0, skipped 9; all files 99.45 % lines, 92.87 % branches, 98.88 % functions; no `tken_` in the log; recorded below |
+| `make verify` run 6, after the pass 3 fix and the merge of `origin/dev` (`verify-33-1-merged.log`) | `bd498af4`, tree `a798c792`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4852, pass 4843, fail 0, skipped 9; all files 99.45 % lines, 92.89 % branches, 98.88 % functions; `apps/web` Vitest 717 tests, 100 % lines; no `tken_` in the log; recorded below |
 
 No run hit the known flakes (`installation-script` base-ten bound, `web-app.test.ts:279`).
 
@@ -145,10 +146,10 @@ The pass 2 fixes changed the diff again, so `route.json` was deleted and routed 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `97f7bb11c7bb25b605e59d4d66486e35838fef01`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.87% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `a798c7929d99ed0d7d328336eb0e813191b99dfb`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.89% branches, 98.88% functions.
 - `npm run openspec -- validate serve-workers-and-enrollment-tokens --strict`: passed, `Change 'serve-workers-and-enrollment-tokens' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 120 file(s); every pass summary file is valid: 100 file(s); every route file is valid: 53 file(s).`.
-- Spec diff against the merge base `79fb71308766` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 121 file(s); every pass summary file is valid: 101 file(s); every route file is valid: 54 file(s).`.
+- Spec diff against the merge base `6dab1d26b271` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
