@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { inspect } from 'node:util';
 import { OPERATOR_CREDENTIALS_CONFORMANCE } from '@taskelith/access';
 import {
   FLEET_REGISTRY_CONFORMANCE,
@@ -85,14 +86,13 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
   assert.deepEqual(await query(steppedClock.credentials, 'SELECT clock_timestamp() AS at'), [{ at: new Date(STEPPED_AT) }]);
   const registry = new CommittingFleetRegistry(steppedDatabase);
   value(await registry.addToken(fleetToken('t1', {}, STEPPED_EXPIRY)));
-  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
-  await Promise.all([holder.connect(), observer.connect()]);
+  const [holder, observer] = await connectedPair();
   let enrolling: Promise<Result<void>> | undefined;
   try {
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
     enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
-    await waitForWaitingStatement(observer, steppedClock.credentials.username, 'UPDATE enrollment_tokens %');
+    await waitForWaitingStatement(enrolling, observer, steppedClock.credentials.username, 'UPDATE enrollment_tokens %');
     await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
     await holder.query('COMMIT');
     const enrolled = await enrolling;
@@ -111,14 +111,13 @@ test('a token that expires while its rotation waits for the row lock is not rota
   await steppedClock.stepTo(0);
   const registry = new CommittingFleetRegistry(steppedDatabase);
   value(await registry.addToken(fleetToken('t1', {}, STEPPED_EXPIRY)));
-  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
-  await Promise.all([holder.connect(), observer.connect()]);
+  const [holder, observer] = await connectedPair();
   let rotating: Promise<Result<void>> | undefined;
   try {
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE token_id = 'id-t1' FOR UPDATE");
     rotating = registry.rotateToken('id-t1', fleetToken('t2'), AT);
-    await waitForWaitingStatement(observer, steppedClock.credentials.username, 'SELECT used_at%');
+    await waitForWaitingStatement(rotating, observer, steppedClock.credentials.username, 'SELECT used_at%');
     await steppedClock.stepTo(2 * TOKEN_LIFETIME_MILLISECONDS);
     await holder.query('COMMIT');
     const rotated = await rotating;
@@ -236,14 +235,15 @@ for (const race of ROW_LOCK_RACES) {
 // Runs `first`, then `second` once `first` waits for the locked token row,
 // and releases the row when both wait; the observer polls outside them.
 async function racedForTokenRow<A, B>(first: () => Promise<A>, second: () => Promise<B>): Promise<[A, B]> {
-  const [holder, observer] = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })];
-  await Promise.all([holder.connect(), observer.connect()]);
+  const [holder, observer] = await connectedPair();
   let racing: Promise<[A, B]> | undefined;
   try {
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE token_id = 'id-t1' FOR UPDATE");
-    racing = Promise.all([first(), waitForLockWaiters(observer, 1).then(second)]);
-    await waitForLockWaiters(observer, 2);
+    const holderPid = await backendPid(holder);
+    const firstCall = first();
+    racing = Promise.all([firstCall, waitForLockWaiters(firstCall, observer, holderPid, 1).then(second)]);
+    await waitForLockWaiters(racing, observer, holderPid, 2);
     await holder.query('COMMIT');
     return await racing;
   } finally {
@@ -271,31 +271,62 @@ test('a rotation whose link to the inserted replacement fails is rolled back who
   }
 });
 
-async function waitForLockWaiters(client: pg.Client, count: number): Promise<void> {
-  for (let tries = 0; tries < 500; tries++) {
-    const { rows } = await client.query<{ waiting: string }>(
-      `SELECT count(*) AS waiting FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-         AND query LIKE '%enrollment_tokens%'`,
-    );
-    if (Number(rows[0]?.waiting) >= count) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`fewer than ${count} statements wait for the token row`);
+// Connects a holder and an observer; when one attempt fails, the other
+// client is ended once it settles, so no connection stays open.
+async function connectedPair(): Promise<[pg.Client, pg.Client]> {
+  const clients = [new pg.Client({ connectionString: url.href }), new pg.Client({ connectionString: url.href })] as const;
+  const connections = await Promise.allSettled(clients.map((client) => client.connect()));
+  const failure = connections.find((connection) => connection.status === 'rejected');
+  if (failure === undefined) return [...clients];
+  await Promise.allSettled(clients.filter((_, index) => connections[index]!.status === 'fulfilled').map((client) => client.end()));
+  throw failure.reason;
 }
 
-// Polled outside any transaction: a snapshot of the activity view is kept
-// for a transaction's duration.
-async function waitForWaitingStatement(client: pg.Client, role: string, statement: string): Promise<void> {
+async function backendPid(client: pg.Client): Promise<number> {
+  return (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+}
+
+// Polls `isWaiting` until it holds. Handles `call` at once, so its error is
+// never unhandled; if `call` settles first, fails with its error or result.
+async function waitUntilWaiting(call: Promise<unknown>, isWaiting: () => Promise<boolean>, failure: string): Promise<void> {
+  let settled = false;
+  call.then(() => { settled = true; }, () => { settled = true; });
   for (let tries = 0; tries < 500; tries++) {
-    const { rows } = await client.query<{ waiting: boolean }>(
+    if (await isWaiting()) return;
+    if (settled) throw new Error(`${failure}: the call ended first with ${inspect(await call)}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(failure);
+}
+
+// Counts the waiters that the holder blocks, directly or, for a later one
+// queued for the same row, through an earlier waiter.
+function waitForLockWaiters(call: Promise<unknown>, observer: pg.Client, holderPid: number, count: number): Promise<void> {
+  return waitUntilWaiting(call, async () => {
+    const { rows } = await observer.query<{ waiting: number }>(
+      `WITH RECURSIVE blocked (pid) AS (
+         SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid))
+         UNION
+         SELECT waiter.pid FROM pg_stat_activity waiter JOIN blocked ON blocked.pid = ANY(pg_blocking_pids(waiter.pid))
+           WHERE waiter.datname = current_database()
+       ) SELECT count(*)::int AS waiting FROM blocked`,
+      [holderPid],
+    );
+    return rows[0]!.waiting >= count;
+  }, `fewer than ${count} statements wait for the token row`);
+}
+
+// Polled outside any transaction, which would keep the backends and query
+// texts of its first read of the activity view and miss a later waiter.
+function waitForWaitingStatement(call: Promise<unknown>, observer: pg.Client, role: string, statement: string): Promise<void> {
+  return waitUntilWaiting(call, async () => {
+    const { rows } = await observer.query<{ waiting: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
          AND usename = $1 AND query LIKE $2) AS waiting`,
       [role, statement],
     );
-    if (rows[0]!.waiting) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`no statement like ${statement} waited for the row lock`);
+    return rows[0]!.waiting;
+  }, `no statement like ${statement} waited for the row lock`);
 }
 
 test('a publisher that waited for the lock pushes every entry committed meanwhile', { concurrency: false }, async () => {
@@ -306,24 +337,28 @@ test('a publisher that waited for the lock pushes every entry committed meanwhil
     value(await registry.enroll(fleetToken(`t-${workerId}`).hash, fleetWorker(workerId, journalId)));
   }
   value(await registry.revoke(fleetWorker('w1', 'j1').workerId, fleetWorker('w1', 'j1').enrolledAt));
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
-  await holder.query('SELECT pg_advisory_lock(1792930400)');
+  const [holder, observer] = await connectedPair();
   const pushes: string[][] = [];
   const push = async (revocations: readonly { userKey: string }[]) => {
     pushes.push(revocations.map((revocation) => revocation.userKey));
     return ok(undefined);
   };
-  const publishing = registry.publishRevocations(push);
-  // The barrier: the publisher is waiting for the advisory lock.
-  await waitForWaitingLock(holder);
-  value(await registry.revoke(fleetWorker('w2', 'j2').workerId, fleetWorker('w2', 'j2').enrolledAt));
-  await holder.query('SELECT pg_advisory_unlock(1792930400)');
-  await holder.end();
-
-  assert.equal(value(await publishing), 2);
-  assert.deepEqual(pushes, [['U-w1-1', 'U-w2-1']]);
-  assert.equal(value(await registry.publishRevocations(push)), 0);
+  let publishing: ReturnType<CommittingFleetRegistry['publishRevocations']> | undefined;
+  try {
+    await holder.query('SELECT pg_advisory_lock(1792930400)');
+    publishing = registry.publishRevocations(push);
+    await waitForWaitingLock(publishing, observer);
+    value(await registry.revoke(fleetWorker('w2', 'j2').workerId, fleetWorker('w2', 'j2').enrolledAt));
+    await holder.query('SELECT pg_advisory_unlock(1792930400)');
+    assert.equal(value(await publishing), 2);
+    assert.deepEqual(pushes, [['U-w1-1', 'U-w2-1']]);
+    assert.equal(value(await registry.publishRevocations(push)), 0);
+  } finally {
+    // Releases the lock also after a failed step; a repeat release is a no-op.
+    await Promise.allSettled([holder.query('SELECT pg_advisory_unlock_all()')]);
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([publishing]);
+  }
 });
 
 test('a renewal that waits for the row lock until past the deadline is refused', { concurrency: false }, async () => {
@@ -334,45 +369,37 @@ test('a renewal that waits for the row lock until past the deadline is refused',
   const deadline = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
   value(await registry.requestRotation(worker.workerId, { requestedAt: worker.enrolledAt, deadline, actor: 'ops', reason: 'test' }));
   let now = worker.enrolledAt;
-  const holder = new pg.Client({ connectionString: url.href });
-  await holder.connect();
-  await holder.query('BEGIN');
-  await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
-  const renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
-  // The barrier: the renewal is waiting for the row lock.
-  await waitForWaitingRowLock(holder);
-  now = deadline;
-  await holder.query('COMMIT');
-  await holder.end();
-
-  const late = await renewing;
-  assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
-  assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
-  assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+  const [holder, observer] = await connectedPair();
+  let renewing: ReturnType<CommittingFleetRegistry['renew']> | undefined;
+  try {
+    await holder.query('BEGIN');
+    await holder.query("SELECT 1 FROM workers WHERE worker_id = 'w1' FOR UPDATE");
+    renewing = registry.renew(worker.workerId, nextGeneration(worker), 'jwt', { now: () => now });
+    await waitForWaitingStatement(renewing, observer, url.username, 'SELECT enrollment FROM workers %FOR UPDATE');
+    now = deadline;
+    await holder.query('COMMIT');
+    const late = await renewing;
+    assert.deepEqual(!late.ok && [late.error.code, late.error.details.reason], ['forbidden', 'rotation-expired']);
+    assert.equal(value(await registry.worker(worker.workerId))?.credentials.rotation?.brokerUserJwt, undefined);
+    assert.deepEqual(value(await registry.unrenewedRotations(deadline)), [worker.workerId]);
+  } finally {
+    // A ROLLBACK outside a transaction only warns, so it is safe after COMMIT.
+    await Promise.allSettled([holder.query('ROLLBACK')]);
+    await Promise.allSettled([holder.end(), observer.end()]);
+    await Promise.allSettled([renewing]);
+  }
 });
 
-async function waitForWaitingRowLock(client: pg.Client): Promise<void> {
-  for (let tries = 0; tries < 200; tries++) {
-    const { rows } = await client.query<{ waiting: number }>(
-      `SELECT count(*)::int AS waiting FROM pg_stat_activity
-         WHERE wait_event_type = 'Lock' AND datname = current_database() AND pid <> pg_backend_pid()`,
+// The bigint key 1792930400 of the lock: high half `classid`, low half
+// `objid`, and `objsubid` 1, which tells it from a key of two integers.
+function waitForWaitingLock(call: Promise<unknown>, observer: pg.Client): Promise<void> {
+  return waitUntilWaiting(call, async () => {
+    const { rows } = await observer.query<{ waiting: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = 0 AND objid = 1792930400
+         AND objsubid = 1 AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())) AS waiting`,
     );
-    if (rows[0]!.waiting > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('the renewal never waited for the row lock');
-}
-
-async function waitForWaitingLock(client: pg.Client): Promise<void> {
-  for (let tries = 0; tries < 200; tries++) {
-    const { rows } = await client.query<{ waiting: number }>(
-      `SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND objid = 1792930400 AND NOT granted
-         AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
-    );
-    if (rows[0]!.waiting > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('the publisher never waited for the advisory lock');
+    return rows[0]!.waiting;
+  }, 'the publisher never waited for the advisory lock');
 }
 
 async function enrollAll(registry: CommittingFleetRegistry, ...workers: ReturnType<typeof fleetWorker>[]): Promise<void> {
