@@ -22,7 +22,7 @@ Under `/app/` the SPA SHALL route the board, agent sessions, reviews, workers an
 ## ADDED Requirements
 
 ### Requirement: Web SPA agent session timeline
-The agent session screen SHALL show the session as `readAgentSession` answers it (harness, task, run, running generation, attempt, limit, handoff) and its turns in position order with author, state, outcome or failure, generation, and text, reading first the up to 100 turns before `lastTurnPosition`, then each earlier window on demand; it SHALL show loading, a failed read or earlier read with why, the role a 403 names, and a retry, no turn, and no data it did not read.
+The agent session screen SHALL show the session as `readAgentSession` answers it (harness, task, run, running generation, attempt, limit, handoff) and its turns in position order with author, state, outcome or failure, generation, and text, reading first the up to 100 turns ending at `lastTurnPosition`, then each earlier window on demand; it SHALL show loading, a failed read or earlier read with why, the role a 403 names, and a retry, no turn, and no data it did not read.
 
 #### Scenario: Last window first
 - **WHEN** `readAgentSession` answers `lastTurnPosition` 250
