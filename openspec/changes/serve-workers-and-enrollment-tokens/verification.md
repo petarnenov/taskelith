@@ -90,17 +90,18 @@ Each mutation was restored (`git checkout`) and the `dist` rebuilt; `git status`
 | `make verify` run 1 (`verify-33-1-1.log`) | `0cc99e5b`, clean | Failed in `check:boundaries` before any test: `tsc -p tsconfig.check.json` rejected the five `ApiServices` fixtures of `api-server.test.ts` without `fleet` and two result types in `enrollment-token-service.test.ts`; fixed in the `test:` commit after `0cc99e5b`, which the route of the next commit covers |
 | `make verify` run 2 (`verify-33-1-2.log`) | `91352dd7`, tree `9b30b5f2`, clean | Passed, profile full, stamp written: tests 4833, pass 4824, fail 0, skipped 9; all files 99.45 % lines, 92.85 % branches, 98.87 % functions. `make record` refused the log because the subagent's wrapper appended an `exit 0` line after the stamp line, so the log was left as it is and the run repeated |
 | `make verify` run 3 (`verify-33-1-3.log`) | `91352dd7`, tree `9b30b5f2`, clean | Passed, profile full, stamp written, logged with the brief's plain redirection: tests 4833, pass 4824, fail 0, skipped 9 |
-| `make verify` run 4, after the pass 1 fixes (`verify-33-1-p1.log`) | `b3f1aa5b`, tree `f878856e`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4850, pass 4841, fail 0, skipped 9; all files 99.45 % lines, 92.89 % branches, 98.88 % functions; recorded below |
+| `make verify` run 4, after the pass 1 fixes (`verify-33-1-p1.log`) | `b3f1aa5b`, tree `f878856e`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4850, pass 4841, fail 0, skipped 9; all files 99.45 % lines, 92.89 % branches, 98.88 % functions |
+| `make verify` run 5, after the pass 2 fixes (`verify-33-1-p2.log`) | `0df7239b`, tree `97f7bb11`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4852, pass 4843, fail 0, skipped 9; all files 99.45 % lines, 92.87 % branches, 98.88 % functions; no `tken_` in the log; recorded below |
 
 No run hit the known flakes (`installation-script` base-ten bound, `web-app.test.ts:279`).
 
 ### Coverage
 
-Per-file coverage of the changed `dist` files in `make verify` run 4, after the pass 1 fixes (lines, branches, functions):
+Per-file coverage of the changed `dist` files in `make verify` run 5, after the pass 2 fixes (lines, branches, functions):
 
 | File | Lines | Branches | Functions | Note |
 | --- | --- | --- | --- | --- |
-| `apps/control-plane/dist/api/fleet-api.js` | 100 % | 91.89 % | 100 % | New |
+| `apps/control-plane/dist/api/fleet-api.js` | 100 % | 94.87 % | 100 % | New. The two uncovered branches are the failed pending-list read and the `?? ''` default of a missing path parameter, both before pass 2; `issuedAnswer` (pass 2, finding 7) is fully covered |
 | `apps/control-plane/dist/api/routes.js` | 100 % | 100 % | 100 % | |
 | `apps/control-plane/dist/api/control-plane-api.js` | 97.47 % | 87.43 % | 97.06 % | The uncovered lines predate the change |
 | `apps/control-plane/dist/api/project-api.js` | 100 % | 90.67 % | 100 % | |
@@ -110,9 +111,9 @@ Per-file coverage of the changed `dist` files in `make verify` run 4, after the 
 | `packages/modules/fleet/dist/domain/enrollment.js` | 100 % | 100 % | 100 % | |
 | `packages/modules/fleet/dist/application/enrollment-token-service.js` | 100 % | 100 % | 100 % | New. The record before pass 1 called the uncovered branches `??` defaults; they were the failure paths, a failed insertion, a failed pending-list read, a failed token lookup, and an invalid expiry conversion (pass 1, finding 10), which "a registry failure is answered as it is, and names no secret" and "a clock past the representable expiry makes an issue throw before any token is stored" now cover |
 | `packages/modules/fleet/dist/application/enrollment-service.js` | 99.60 % | 81.25 % | 100 % | |
-| `packages/modules/fleet/dist/adapters/in-memory-fleet.js` | 100 % | 99.30 % | 100 % | |
-| `packages/modules/fleet/dist/ports/fleet-conformance.js` | 99.12 % | 86.42 % | 100 % | Lines 546-550: the `else` branch of the conformance race case (redemption first) stays uncovered: both adapters let the revocation of a `Promise.all` win. The redemption-first order is covered elsewhere, by the gated service test "a redemption written before a revocation wins, and the revocation is refused as used" and the PostgreSQL race "under the row lock a redemption that waits first wins over a revocation" (pass 1, finding 5); the claim before pass 1 that the service test covered it was wrong, as its "either order" reversed only the call order |
-| `packages/adapters/postgres/dist/fleet-repositories.js` | 100 % | 97.73 % | 100 % | |
+| `packages/modules/fleet/dist/adapters/in-memory-fleet.js` | 100 % | 99.31 % | 100 % | |
+| `packages/modules/fleet/dist/ports/fleet-conformance.js` | 99.13 % | 86.42 % | 100 % | Lines 550-554 (546-550 before the pass 2 cursor checks): the `else` branch of the conformance race case (redemption first) stays uncovered: both adapters let the revocation of a `Promise.all` win. The redemption-first order is covered elsewhere, by the gated service test "a redemption written before a revocation wins, and the revocation is refused as used" and the PostgreSQL race "under the row lock a redemption that waits first wins over a revocation" (pass 1, finding 5); the claim before pass 1 that the service test covered it was wrong, as its "either order" reversed only the call order |
+| `packages/adapters/postgres/dist/fleet-repositories.js` | 100 % | 97.66 % | 100 % | The three uncovered branches predate pass 2 |
 | `packages/adapters/postgres/dist/committing-repositories.js` | 100 % | 99.39 % | 100 % | |
 | `packages/adapters/secrets/dist/node-secrets.js` | 100 % | 100 % | 100 % | |
 
@@ -143,7 +144,7 @@ The pass 2 fixes changed the diff again, so `route.json` was deleted and routed 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f878856e4c56998cdd16e012a59bd77cb8fe8bab`; tests 4850, pass 4841, fail 0, skipped 9; all files 99.45% lines, 92.89% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `97f7bb11c7bb25b605e59d4d66486e35838fef01`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.87% branches, 98.88% functions.
 - `npm run openspec -- validate serve-workers-and-enrollment-tokens --strict`: passed, `Change 'serve-workers-and-enrollment-tokens' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 120 file(s); every pass summary file is valid: 100 file(s); every route file is valid: 53 file(s).`.
 - Spec diff against the merge base `79fb71308766` with `origin/dev`: no change under `openspec/specs`.
@@ -152,6 +153,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a670-bde1-7300-8a45-7256ab7eace8` | 0 | 2 | 6 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `43a64494-e177-409f-833a-da18370b7371` | 0 | 0 | 1 | 7 |
 <!-- make record: end -->
 
 ## Independent review
