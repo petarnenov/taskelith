@@ -150,6 +150,32 @@ describe('the composer', () => {
     expect(storedRecords()).toEqual([]);
   });
 
+  it('returns the keyboard focus to the field once a sent turn is answered', async () => {
+    const gateway = new FakeBoardGateway();
+    const held = deferred<SubmitResult>();
+    gateway.submitTurn.mockReturnValueOnce(held.promise);
+    openSession(gateway);
+    await shownSession();
+    await send('Fix the build');
+    await composerAlert('Sending');
+    expect(document.activeElement).not.toBe(message());
+    await act(async () =>
+      held.resolve({ kind: 'recorded', turn: turn({ turnId: 'turn-3', position: 3, text: 'Fix the build', state: 'queued' }) }),
+    );
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    expect(document.activeElement).toBe(message());
+  });
+
+  it('returns the keyboard focus to the field once a retried turn is answered', async () => {
+    sessionStorage.setItem(RECORD_NAME, JSON.stringify([{ key: 'key-restored', text: 'Sent before the reload', sentAt: SENT_AT }]));
+    openSession();
+    await shownSession();
+    const unconfirmed = await composerAlert('Not confirmed');
+    await userEvent.click(within(unconfirmed).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    expect(document.activeElement).toBe(message());
+  });
+
   it('shows the recorded turn once when the stream later delivers it in a new state', async () => {
     const gateway = new FakeBoardGateway();
     openSession(gateway);
