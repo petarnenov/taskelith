@@ -21,6 +21,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - Pass 2 fixes, each a test commit then a fix commit (`c0cc94ef`/`7080b1ae` finding 1, `73d75d38`/`154c8db5` finding 2, `008b0b16`/`a4d111a1` finding 3, `f27728b6`/`df015a0b` finding 7), `04e5236d` `test: look for the session token in the message and stack of an Error the console is given` (finding 6, a test change), then `9d0768e6` `docs: record the pass 2 fixes in the build-agent-session-composer design, and name the dropped records, the sign-in generation, and the spent read in the spec delta, the proposal, and the record` (findings 4 and 5 and the design notes of the other fixes).
 - `db95288d` `docs: record the build-agent-session-composer pass 2 summary, findings, and fixes`, then `cb4b82a8` `docs: route the build-agent-session-composer change after the pass 2 fixes`: the fixes changed the diff, so the old `route.json` was deleted and the change routed again at head `db95288d` (`route.json` unedited): "route: elevated (lines, files)", rule version 5, 2,539 lines in 34 files, size M; the same reviewers and efforts as before; shadow `jev-1.14.0` elevated (P(third) 0.60) and agrees; recommendation only, the brief's effort medium applies (policy version 11).
 - `docs: name the route after the pass 2 fixes in the build-agent-session-composer record`, then `docs: record the make verify run of the build-agent-session-composer change after the pass 2 fixes`: this record commit, with the generated part below; pass 3 reviews `743f4661..` that commit.
+- `bbb725aa` `docs: record review pass 3 of the build agent session composer change` (`passes.jsonl`, this record, and the `make record` output of `verify-31b-p2.log`), then `fa21b7b9`, the merge of `origin/dev` `44bd3592` (#441 and #442: the admission base-ten test, the Linux test image's Git pin, `installation.sh`, their records) without a conflict; the merge touches nothing under `apps/web` or this change, so no evidence is invalidated. `make setup` passed after it. `make verify` of the merged tree (`fa21b7b9`, tree `ffd21e48`), `verify-31b-merged.log` in the session scratchpad: passed at the first run, profile full, no rerun of any suite, 4,802 tests, 4,793 passed, 0 failed, 9 skipped; `apps/web` Vitest 717 tests in 26 files, 100% lines. The generated part below records it, with the new merge base.
 
 ## Environment
 
@@ -86,10 +87,10 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `83d306784f65578008a60580618bcb5588810a90`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `ffd21e480a16bd86a1887ad793aafc6f8d3d8a82`; tests 4802, pass 4793, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.88% functions.
 - `npm run openspec -- validate build-agent-session-composer --strict`: passed, `Change 'build-agent-session-composer' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 117 file(s); every pass summary file is valid: 97 file(s); every route file is valid: 50 file(s).`.
-- Spec diff against the merge base `743f4661b786` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 119 file(s); every pass summary file is valid: 99 file(s); every route file is valid: 52 file(s).`.
+- Spec diff against the merge base `44bd35924520` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
