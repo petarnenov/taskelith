@@ -21,8 +21,11 @@ export function TurnRecordsProvider({ store, children }: TurnRecordsProviderProp
   const { view } = useSession();
   const signedOut = view.status === 'signed-out';
   const [dropped, setDropped] = useState(false);
+  // A drop holds while the shell stays signed out, also when StrictMode
+  // runs the effect twice; the next sign-in forgets it.
   useEffect(() => {
-    if (signedOut) setDropped(store.clearAll());
+    if (signedOut) setDropped((was) => was || store.clearAll());
+    else setDropped(false);
   }, [signedOut, store]);
   return <TurnRecordsContext.Provider value={{ store, dropped }}>{children}</TurnRecordsContext.Provider>;
 }

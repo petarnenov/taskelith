@@ -106,7 +106,7 @@ function SignedOutMessage({ notice, turnUnconfirmed }: { readonly notice: Signed
   }
   return (
     <Text size="sm" c="dimmed">
-      Sign in with your login name and password.
+      Sign in with your login name and password.{turnNote}
     </Text>
   );
 }
