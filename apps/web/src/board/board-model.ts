@@ -47,6 +47,6 @@ function withCard(cards: readonly BoardCard[], card: BoardCard): BoardCard[] {
   return cards.map((known, index) => (index === at ? card : known));
 }
 
-function later(first: string, second: string): string {
+export function later(first: string, second: string): string {
   return Date.parse(second) > Date.parse(first) ? second : first;
 }

@@ -1,5 +1,5 @@
 import type { AgentSession, AgentSessionView, BoardCard, StreamChange, Turn, TurnPage } from '../board/board';
-import { isAfter } from '../board/board-model';
+import { isAfter, later } from '../board/board-model';
 
 // The session, its read turns in position order, the count of earlier
 // ones, the run's card the stream last showed, and the lowest read position.
@@ -26,11 +26,11 @@ export function viewOf(view: AgentSessionView, pages: readonly TurnPage[], befor
 }
 
 // An event not above the view's position is already in it; one of another
-// session or card leaves the view as it is, so nothing is shown again.
+// session or card leaves the view as it is. The known time never moves back.
 export function applySessionChange(view: SessionTimelineView, change: StreamChange): SessionTimelineView {
   if (change.kind === 'board-changed' || !isAfter(change.position, view.position)) return view;
   const { session } = view;
-  const stamp = { position: change.position, knownAt: change.occurredAt };
+  const stamp = { position: change.position, knownAt: later(view.knownAt, change.occurredAt) };
   if (change.kind === 'turn-changed') {
     if (change.sessionId !== session.sessionId) return view;
     return { ...view, ...stamp, turns: withTurn(view.turns, change.turn) };
