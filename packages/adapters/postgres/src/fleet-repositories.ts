@@ -10,11 +10,15 @@ import {
   renewalStep,
   requestStep,
   revocationOf,
+  revocationRefusal,
   rotationExpiryStep,
+  rotationRefusal,
   type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
   type EnrollmentToken,
+  type EnrollmentTokenRecord,
+  type EnrollmentTokenState,
   type FleetRegistry,
   type HostConstraints,
   type InstallationIdentity,
@@ -35,11 +39,22 @@ import type { Session } from './session.js';
 const REVOCATION_LOCK = 1_792_930_400;
 
 interface TokenRow {
+  readonly token_id: string;
   readonly secret_hash: string;
   readonly issued_at: Date;
   readonly expires_at: Date;
   readonly constraints: string;
 }
+
+// A token's locked row beyond its record; `expired` is read after the lock.
+interface TokenStateRow {
+  readonly used_at: Date | null;
+  readonly revoked_at: Date | null;
+  readonly replacement_token_id: string | null;
+  readonly expired: boolean;
+}
+
+const TOKEN_COLUMNS = 'token_id, secret_hash, issued_at, expires_at, constraints';
 
 export class PostgresFleetRegistry implements FleetRegistry {
   readonly #session: Session;
@@ -50,36 +65,29 @@ export class PostgresFleetRegistry implements FleetRegistry {
 
   async addToken(token: EnrollmentToken): Promise<Result<void>> {
     const inserted = await this.#session.query(
-      `INSERT INTO enrollment_tokens (secret_hash, issued_at, expires_at, constraints) VALUES ($1, $2, $3, $4)
+      `INSERT INTO enrollment_tokens (token_id, secret_hash, issued_at, expires_at, constraints) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT DO NOTHING`,
-      [token.hash, token.issuedAt, token.expiresAt, encodeRecord(token.constraints)],
+      [token.tokenId, token.hash, token.issuedAt, token.expiresAt, encodeRecord(token.constraints)],
     );
     return inserted.rowCount === 0 ? err(failure('conflict', 'the enrollment token exists')) : ok(undefined);
   }
 
   async unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>> {
     const { rows } = await this.#session.query<TokenRow>(
-      'SELECT secret_hash, issued_at, expires_at, constraints FROM enrollment_tokens WHERE secret_hash = $1 AND used_at IS NULL',
+      `SELECT ${TOKEN_COLUMNS} FROM enrollment_tokens WHERE secret_hash = $1 AND used_at IS NULL AND revoked_at IS NULL`,
       [hash],
     );
-    const row = rows[0];
-    if (row === undefined) return ok(undefined);
-    return ok(Object.freeze({
-      hash: row.secret_hash as SecretHash,
-      issuedAt: instant(row.issued_at),
-      expiresAt: instant(row.expires_at),
-      constraints: decodeRecord<HostConstraints>(row.constraints),
-    }));
+    return ok(rows[0] === undefined ? undefined : tokenOf(rows[0]));
   }
 
   async enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
     const { rows } = await this.#session.query<{ expired: boolean }>(
       // clock_timestamp() is read after the row lock, unlike now().
-      `UPDATE enrollment_tokens SET used_at = clock_timestamp() WHERE secret_hash = $1 AND used_at IS NULL
+      `UPDATE enrollment_tokens SET used_at = clock_timestamp() WHERE secret_hash = $1 AND used_at IS NULL AND revoked_at IS NULL
        RETURNING expires_at <= clock_timestamp() AS expired`,
       [tokenHash],
     );
-    if (rows[0] === undefined) return err(failure('conflict', 'the enrollment token was used', { reason: 'token-used' }));
+    if (rows[0] === undefined) return err(await this.#spentToken(tokenHash));
     if (rows[0].expired) return err(failure('conflict', 'the enrollment token expired', { reason: 'token-expired' }));
     const journal = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [worker.journalId]);
     if (journal.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
@@ -93,6 +101,44 @@ export class PostgresFleetRegistry implements FleetRegistry {
         encodeRecord(worker), worker.protocolVersion, current.controlPlaneHash, previous?.controlPlaneHash ?? null, previous?.validUntil ?? null],
     );
     return inserted.rowCount === 0 ? err(failure('conflict', `worker ${worker.workerId} exists`)) : ok(undefined);
+  }
+
+  async pendingTokens(after: string | undefined, limit: number): Promise<Result<readonly EnrollmentTokenRecord[]>> {
+    const { rows } = await this.#session.query<TokenRow>(
+      `SELECT ${TOKEN_COLUMNS} FROM enrollment_tokens WHERE used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+       AND ($1::text IS NULL OR token_id > $1) ORDER BY token_id COLLATE "C" LIMIT $2`,
+      [after ?? null, limit],
+    );
+    return ok(Object.freeze(rows.map((row) => recordOf(row))));
+  }
+
+  async tokenById(tokenId: string): Promise<Result<EnrollmentTokenRecord | undefined>> {
+    const { rows } = await this.#session.query<TokenRow>(`SELECT ${TOKEN_COLUMNS} FROM enrollment_tokens WHERE token_id = $1`, [tokenId]);
+    return ok(rows[0] === undefined ? undefined : recordOf(rows[0]));
+  }
+
+  async revokeToken(tokenId: string, at: Instant): Promise<Result<void>> {
+    const state = await this.#lockedToken(tokenId);
+    if (state === undefined) return err(unknownToken(tokenId));
+    const refusal = revocationRefusal(state);
+    if (refusal !== undefined) return err(refusal);
+    await this.#session.query('UPDATE enrollment_tokens SET revoked_at = $2 WHERE token_id = $1 AND revoked_at IS NULL', [tokenId, at]);
+    return ok(undefined);
+  }
+
+  // The replacement is inserted first, so the link to it is never dangling.
+  async rotateToken(tokenId: string, replacement: EnrollmentToken, at: Instant): Promise<Result<void>> {
+    const state = await this.#lockedToken(tokenId);
+    if (state === undefined) return err(unknownToken(tokenId));
+    const refusal = rotationRefusal(state, state.expired);
+    if (refusal !== undefined) return err(refusal);
+    const added = await this.addToken(replacement);
+    if (!added.ok) return added;
+    await this.#session.query(
+      'UPDATE enrollment_tokens SET revoked_at = $2, replacement_token_id = $3 WHERE token_id = $1',
+      [tokenId, at, replacement.tokenId],
+    );
+    return ok(undefined);
   }
 
   async worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
@@ -239,6 +285,34 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(unpublished.length);
   }
 
+  // The row lock serializes a command with a redemption of the same token.
+  async #lockedToken(tokenId: string): Promise<(EnrollmentTokenState & { expired: boolean }) | undefined> {
+    const { rows } = await this.#session.query<TokenStateRow>(
+      `SELECT used_at, revoked_at, replacement_token_id, expires_at <= clock_timestamp() AS expired FROM enrollment_tokens
+       WHERE token_id = $1 FOR UPDATE`,
+      [tokenId],
+    );
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return {
+      ...(row.used_at === null ? {} : { usedAt: instant(row.used_at) }),
+      ...(row.revoked_at === null ? {} : { revokedAt: instant(row.revoked_at) }),
+      ...(row.replacement_token_id === null ? {} : { replacementTokenId: row.replacement_token_id }),
+      expired: row.expired,
+    };
+  }
+
+  // Why a redemption updated no row: the token was revoked, or else used or
+  // unknown, which read alike.
+  async #spentToken(tokenHash: SecretHash): Promise<ReturnType<typeof failure>> {
+    const { rows } = await this.#session.query<{ revoked: boolean }>(
+      'SELECT revoked_at IS NOT NULL AS revoked FROM enrollment_tokens WHERE secret_hash = $1',
+      [tokenHash],
+    );
+    if (rows[0]?.revoked) return failure('conflict', 'the enrollment token was revoked', { reason: 'token-revoked' });
+    return failure('conflict', 'the enrollment token was used', { reason: 'token-used' });
+  }
+
   async #record(workerId: WorkerId, revocations: readonly BrokerRevocation[]): Promise<void> {
     for (const { userKey, revokedAt } of revocations) {
       await this.#session.query(
@@ -279,6 +353,20 @@ export class PostgresFleetRegistry implements FleetRegistry {
     );
     return rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment);
   }
+}
+
+function recordOf(row: TokenRow): EnrollmentTokenRecord {
+  return Object.freeze({
+    tokenId: row.token_id, issuedAt: instant(row.issued_at), expiresAt: instant(row.expires_at), constraints: decodeRecord<HostConstraints>(row.constraints),
+  });
+}
+
+function tokenOf(row: TokenRow): EnrollmentToken {
+  return Object.freeze({ ...recordOf(row), hash: row.secret_hash as SecretHash });
+}
+
+function unknownToken(tokenId: string) {
+  return failure('not-found', `no enrollment token ${tokenId} exists`, { tokenId });
 }
 
 // Each column is unique, but one hash may still be current for one worker
