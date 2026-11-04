@@ -153,8 +153,17 @@ Pass 2 was the last pass. The six commits below fix its Low findings and were re
 
 The commits after them change only the records of this change (`route.json`, `passes.jsonl`, `findings.jsonl`, `tasks.md`, `design.md`, this record, and the `make record` output) or archive the change, which applies the reviewed delta with the pinned CLI.
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section's `make verify` line added, after tasks 4.1 to 4.3 were ticked, as the protocol's step 7 asks (4.2, the coordinator's architect check of the pass 2 fixes, is ticked for the archive and stays a remaining gate below), and `npm run openspec -- archive build-agent-session-timeline --yes` moved the change to `openspec/changes/archive/2026-11-04-build-agent-session-timeline/` (`product-ui` 4 added, 1 modified; totals + 4, ~ 1, - 0). A probe of the same archive in a scratch copy of `openspec/` at `f994bdb7` passed `validate --all --strict` (71 of 71) first (`archive-probe-31a-p2.log`); the command output of the archive and its checks is `archive-31a.log` in the session scratchpad.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-04-build-agent-session-timeline`; the command fails as a whole on older archived changes (276 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `46cd51b3`): only this change's edits, in `product-ui` (89 insertions, 1 deletion: the MODIFIED "Web SPA screen routes" and the added "Web SPA agent session timeline", "Web SPA live agent session", "Web SPA agent session activity", and "Web SPA agent session address").
+- The moved change has `findings.jsonl` (the 15 findings of passes 1 and 2) and `passes.jsonl` (two passes); `make findings ARGS="validate"`: `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`
+- `make verify` (`verify-31a-final.log`): passed, profile full, uncommitted working tree, no stamp written: tests 4783, suites 50, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.87% functions; `apps/web` 590 tests in 20 files, 98.88% statements, 97.53% branches, 99.76% functions, 100% lines. No rerun. The `pre-push` hook verifies the committed tree again.
+
 ## Remaining gates
 
 - Architect check by the coordinator (Niki) of the six pass 2 fixes listed under "Fixes no later pass reviewed" (task 4.2).
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
