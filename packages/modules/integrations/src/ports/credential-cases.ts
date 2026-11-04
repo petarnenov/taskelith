@@ -1,7 +1,7 @@
 import { parseInstant, type Result } from '@taskelith/kernel';
 import { failsWith, fixtureResult, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
 import { isSameSet, isSubset } from './conformance-steps.js';
-import { awaitRefusals } from './revocation-window.js';
+import { awaitRefusals, type ObservedEnding } from './revocation-window.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
 import {
@@ -295,15 +295,18 @@ async function expectEnded(
   const probes = versions.flatMap(({ credential, when }) =>
     SCM_PERMISSIONS.map((permission) => ({ permission, credential, repository: fixture.projectRepository, when })));
   const endings = await awaitRefusals(probes.map((probe) => () => attempt(run, fixture, probe)), fixture.clock, endedAt);
-  for (const [index, ending] of endings.entries()) {
-    // No refusal within the window counts as the version still working.
-    const answer: Result<unknown> = ending.refusal === undefined ? { ok: true, value: undefined } : { ok: false, error: ending.refusal };
-    expectForbidden(run, fixture, probes[index]!, answer);
-  }
+  for (const [index, ending] of endings.entries()) expectEndedRefusal(run, fixture, probes[index]!, ending);
   for (const { when, credential } of versions) {
     const latencies = endings.filter((_, index) => probes[index]!.credential === credential).map((ending) => ending.latencyMs);
     run.recordEnding(when, Math.max(0, ...latencies));
   }
+}
+
+// Names what went wrong: no refusal, a late answer, or another code.
+function expectEndedRefusal(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe, ending: ObservedEnding): void {
+  if (ending.refusal !== undefined) return expectForbidden(run, fixture, probe, { ok: false, error: ending.refusal });
+  const outcome = ending.answeredLate ? 'answered only after' : 'was not refused within';
+  run.report('outcome', `${describeProbe(fixture, probe)} ${outcome} REVOCATION_PROPAGATION_SECONDS`);
 }
 
 async function expectAllowed(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<void> {

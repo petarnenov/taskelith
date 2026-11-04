@@ -21,6 +21,8 @@ export interface ObservedEnding {
   readonly refusal: Failure | undefined;
   // From the ending to the last answer, or to the window's end.
   readonly latencyMs: number;
+  // True when the last attempt had no answer before the window's end.
+  readonly answeredLate: boolean;
 }
 
 type Attempt = () => Promise<Result<unknown>>;
@@ -51,11 +53,11 @@ export async function awaitRefusals(
 // within the window.
 async function observe(attempt: Attempt, clock: ConformanceClock, endedAt: number): Promise<ObservedEnding | undefined> {
   const remainingMs = WINDOW_MS - (clock.now() - endedAt);
-  if (remainingMs <= 0) return { refusal: undefined, latencyMs: clock.now() - endedAt };
+  if (remainingMs <= 0) return { refusal: undefined, latencyMs: clock.now() - endedAt, answeredLate: false };
   const result = await within(attempt(), clock, remainingMs);
   const latencyMs = clock.now() - endedAt;
-  if (result === TIMED_OUT || latencyMs > WINDOW_MS) return { refusal: undefined, latencyMs };
-  return result.ok ? undefined : { refusal: result.error, latencyMs };
+  if (result === TIMED_OUT || latencyMs > WINDOW_MS) return { refusal: undefined, latencyMs, answeredLate: true };
+  return result.ok ? undefined : { refusal: result.error, latencyMs, answeredLate: false };
 }
 
 async function within<Value>(

@@ -49,19 +49,19 @@ function answering(clock: FakeClock, durationMs: number, result: Result<unknown>
 test('a refusal within the window is observed with its latency', async () => {
   const clock = new FakeClock();
   const probe = answering(clock, WINDOW_MS, FORBIDDEN);
-  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: FORBIDDEN.error, latencyMs: WINDOW_MS });
+  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: FORBIDDEN.error, latencyMs: WINDOW_MS, answeredLate: false });
 });
 
 test('a refusal that answers after the window is late', async () => {
   const clock = new FakeClock();
   const probe = answering(clock, WINDOW_MS + 1, FORBIDDEN);
-  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1 });
+  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1, answeredLate: true });
 });
 
 test('a sleep that overshoots the window ends the wait without another attempt', async () => {
   const clock = new FakeClock(WINDOW_MS);
   const probe = answering(clock, 0, ok(undefined));
-  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1000 });
+  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1000, answeredLate: false });
   assert.equal(probe.attempts(), 1);
 });
 
@@ -69,7 +69,7 @@ test('an already expired window makes no attempt', async () => {
   const clock = new FakeClock();
   clock.time = WINDOW_MS;
   const probe = answering(clock, 0, FORBIDDEN);
-  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS });
+  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS, answeredLate: false });
   assert.equal(probe.attempts(), 0);
 });
 
@@ -78,19 +78,19 @@ test('later probes share the ending of the first', async () => {
   const slow = answering(clock, WINDOW_MS - 1, FORBIDDEN);
   assert.equal((await awaitRefusal(slow.attempt, clock, 0)).refusal, FORBIDDEN.error);
   const later = answering(clock, 2, FORBIDDEN);
-  assert.deepEqual(await awaitRefusal(later.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1 });
+  assert.deepEqual(await awaitRefusal(later.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS + 1, answeredLate: true });
 });
 
 test('a probe that never answers is bounded by the window', { timeout: 5000 }, async () => {
   const clock = new FakeClock();
   const ending = await awaitRefusal(() => new Promise<Result<unknown>>(() => {}), clock, 0);
-  assert.deepEqual(ending, { refusal: undefined, latencyMs: WINDOW_MS });
+  assert.deepEqual(ending, { refusal: undefined, latencyMs: WINDOW_MS, answeredLate: true });
   assert.equal(clock.timeouts, 1);
 });
 
 test('an accepted version is retried until the window has passed', async () => {
   const clock = new FakeClock();
   const probe = answering(clock, 0, ok(undefined));
-  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS });
+  assert.deepEqual(await awaitRefusal(probe.attempt, clock, 0), { refusal: undefined, latencyMs: WINDOW_MS, answeredLate: false });
   assert.equal(probe.attempts(), REVOCATION_PROPAGATION_SECONDS);
 });

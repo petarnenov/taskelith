@@ -5,6 +5,7 @@ import {
   REVOCATION_POLL_MS,
   REVOCATION_PROPAGATION_SECONDS,
   runSourceControlConformance,
+  type SourceControlConformanceFixture,
 } from '@taskelith/integrations';
 import { err, failure, ok } from '@taskelith/kernel';
 import { defective, findings, headings } from './conformance-findings.ts';
@@ -84,7 +85,7 @@ test('a refresh that returns the same secret with a later expiry is reported', a
   assert.equal(lines[0], 'refreshed credential outcome: refreshRunCredential must return a new secret');
   assert.equal(lines[1], 'refreshed credential outcome: refreshRunCredential must return a new authorization');
   assert.ok(lines.includes(
-    'refreshed credential outcome: write-code to the project repository after the adoption of its successor must fail with forbidden',
+    'refreshed credential outcome: write-code to the project repository after the adoption of its successor was not refused within REVOCATION_PROPAGATION_SECONDS',
   ));
 });
 
@@ -121,17 +122,17 @@ test('a credential that reads outside the project is reported', async () => {
 
 test('a refreshed or revoked credential that still reads is reported', async () => {
   const lines = await defective({ endedCanRead: true });
-  const successor = 'read-code to the project repository after the adoption of its successor must fail with forbidden';
-  const later = 'read-code to the project repository after the adoption of a later version must fail with forbidden';
+  const successor = 'read-code to the project repository after the adoption of its successor was not refused within REVOCATION_PROPAGATION_SECONDS';
+  const later = 'read-code to the project repository after the adoption of a later version was not refused within REVOCATION_PROPAGATION_SECONDS';
   assert.deepEqual(lines, [
     `refreshed credential outcome: ${successor}`,
     `refreshed credential outcome: ${successor}`,
     `adopted credential outcome: ${later}`,
     `adopted credential outcome: ${later}`,
     'adopted credential outcome: read-code to the project repository after a stale adoption must fail with forbidden',
-    'revoked credential outcome: read-code to the project repository after the revocation of its credential must fail with forbidden',
-    'revoked credential outcome: read-code to the project repository after its revocation must fail with forbidden',
-    'credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden',
+    'revoked credential outcome: read-code to the project repository after the revocation of its credential was not refused within REVOCATION_PROPAGATION_SECONDS',
+    'revoked credential outcome: read-code to the project repository after its revocation was not refused within REVOCATION_PROPAGATION_SECONDS',
+    'credential isolation outcome: read-code to the project repository after its revocation was not refused within REVOCATION_PROPAGATION_SECONDS',
   ]);
 });
 
@@ -270,10 +271,51 @@ test('a version that still works after the propagation window is reported', asyn
     'revoked credential outcome',
     'credential isolation outcome',
   ]);
-  assert.ok(lines.every((line) => line.endsWith('must fail with forbidden')));
-  const isolation = 'credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden';
+  const windowed = lines.filter((line) => !line.includes('after a stale adoption'));
+  assert.ok(windowed.every((line) => line.endsWith('was not refused within REVOCATION_PROPAGATION_SECONDS')));
+  const isolation = 'credential isolation outcome: read-code to the project repository after its revocation was not refused within REVOCATION_PROPAGATION_SECONDS';
   assert.ok(lines.includes(isolation));
   assert.ok(report.endings.every((ending) => ending.latencyMs === WINDOW_MS));
+});
+
+// Every refusal arrives only after the propagation window.
+function refusingLate(fixture: SourceControlConformanceFixture): SourceControlConformanceFixture {
+  return {
+    ...fixture,
+    attemptAction: async (credential, repository, permission) => {
+      const result = await fixture.attemptAction(credential, repository, permission);
+      if (!result.ok) await fixture.clock.sleep(WINDOW_MS + 1);
+      return result;
+    },
+  };
+}
+
+// Every refusal of the project repository names another code.
+function refusingAsMissing(fixture: SourceControlConformanceFixture): SourceControlConformanceFixture {
+  return {
+    ...fixture,
+    attemptAction: async (credential, repository, permission) => {
+      const result = await fixture.attemptAction(credential, repository, permission);
+      const elsewhere = result.ok || repository !== fixture.projectRepository;
+      return elsewhere ? result : err(failure('not-found', 'missing'));
+    },
+  };
+}
+
+test('an ended version refused only after the propagation window is reported', async () => {
+  const fixture = refusingLate(new InMemoryScm({}, { now: () => FIXED_NOW }).fixture());
+  const lines = await findings(fixture);
+  const late = 'revoked credential outcome: read-code to the project repository'
+    + ' after the revocation of its credential answered only after REVOCATION_PROPAGATION_SECONDS';
+  assert.ok(lines.includes(late));
+  assert.ok(lines.every((line) => !line.includes('must fail with forbidden')));
+});
+
+test('an ended version refused with another code than forbidden is reported', async () => {
+  const lines = await findings(refusingAsMissing(new InMemoryScm({}, { now: () => FIXED_NOW }).fixture()));
+  const revoked = 'revoked credential outcome: read-code to the project repository after its revocation must fail with forbidden';
+  assert.ok(lines.includes(revoked));
+  assert.ok(lines.every((line) => !line.includes('REVOCATION_PROPAGATION_SECONDS')));
 });
 
 test('a conforming provider ends every version at once', async () => {
@@ -292,7 +334,8 @@ test('the wait for a refusal stops at once on any failure, without loosening', a
     timeout: () => new Promise<void>(() => {}),
   };
   const unavailable = failure('unavailable', 'down');
-  assert.deepEqual(await awaitRefusal(async () => err(unavailable), clock, 0), { refusal: unavailable, latencyMs: 0 });
+  const refused = { refusal: unavailable, latencyMs: 0, answeredLate: false };
+  assert.deepEqual(await awaitRefusal(async () => err(unavailable), clock, 0), refused);
   const allowed = await awaitRefusal(async () => ok(undefined), clock, 0);
   assert.equal(allowed.refusal, undefined);
   assert.equal(slept, WINDOW_MS);
