@@ -1,6 +1,6 @@
 ## Context
 
-The worker image installs and checks the Linux Git pin in its worker stage (`infra/installation/Dockerfile:58-67`). The Linux test image (`tools/linux-cgroup/Dockerfile`) installs only Node.js. The scenario harnesses compose a real worker in that image, and since #409 that worker checks `/usr/bin/git` against `GIT_CLIENT_PINS.linux` before it starts.
+The worker image installs and checks the Linux Git pin in its worker stage (`infra/installation/Dockerfile:61-69`). The Linux test image (`tools/linux-cgroup/Dockerfile`) installs only Node.js. The scenario harnesses compose a real worker in that image, and since #409 that worker checks `/usr/bin/git` against `GIT_CLIENT_PINS.linux` before it starts.
 
 ## Decisions
 

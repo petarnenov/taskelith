@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Pinned Git client in the Linux test image
-The Linux test image of `make verify-linux-cgroup`, in which `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` compose the worker, SHALL install the worker image's pinned Git package and fail its build unless that package and the Linux Git client pin are installed. `make verify` SHALL fail when the two images pin different packages.
+The Linux test image of `make verify-linux-cgroup`, in which `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` compose the worker, SHALL install the worker image's pinned Git package and fail its build unless that package is installed and `/usr/bin/git --version` prints the Linux Git client pin, `git version 2.43.0`. `make verify` SHALL fail when the two images pin different packages.
 
 #### Scenario: Crash windows on Linux
 - **WHEN** `make verify-linux-crash-windows` runs on a Linux host
