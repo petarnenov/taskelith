@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_TURN_PAGES, startSessionFeed, TURN_WINDOW, type SessionFeedState } from '../src/agent-session/session-feed';
-import type { ReadResult, Turn, TurnPage } from '../src/board/board';
-import { RESYNC_DELAY_MILLISECONDS, STREAM_RETRY_MILLISECONDS } from '../src/board/live-feed';
+import type { AgentSessionView, BoardStreamEvent, ReadResult, Turn, TurnPage } from '../src/board/board';
+import { MAX_CHANGES_DURING_READ, RESYNC_DELAY_MILLISECONDS, STREAM_RETRY_MILLISECONDS } from '../src/board/live-feed';
 import { agentSession, agentSessionView, card, FakeBoardGateway, ManualClock, PROJECT, turn, turnPage } from './fakes';
 
 // A promise the test resolves when it chooses, so no read races it.
@@ -220,6 +220,55 @@ describe('the session feed', () => {
     await settled();
     expect(feed.positions()).toEqual([1, 2, 3]);
     expect(feed.shown().view.position).toBe('41');
+  });
+});
+
+// Worker and other-run card changes, alternating, at each position after 40.
+function emitBoardChanges(stream: { emit: (event: BoardStreamEvent) => void }, count: number): void {
+  for (let offset = 1; offset <= count; offset += 1) {
+    const stamp = at(String(40 + offset));
+    if (offset % 2 === 0) stream.emit({ kind: 'board-changed', ...stamp, workersOnline: offset });
+    else stream.emit({ kind: 'card-changed', ...stamp, card: card({ runId: 'run-2' }) });
+  }
+}
+
+describe('the session feed under board events', () => {
+  it('keeps a session read running however many board events of other runs arrive during it', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    feed.gateway.readAgentSession.mockReturnValueOnce(new Promise<ReadResult<AgentSessionView>>(() => {}));
+    stream.emit({ kind: 'stream-ended' });
+    emitBoardChanges(stream, MAX_CHANGES_DURING_READ + 1);
+    expect(stream.isClosed()).toBe(false);
+    expect(feed.gateway.readAgentSession).toHaveBeenCalledTimes(2);
+    expect(feed.states).toHaveLength(1);
+  });
+
+  it('applies a card change of its own run that arrives during a read', async () => {
+    const feed = start();
+    await settled();
+    const stream = feed.gateway.lastStream();
+    const held = deferred<ReadResult<AgentSessionView>>();
+    feed.gateway.readAgentSession.mockReturnValueOnce(held.promise);
+    stream.emit({ kind: 'stream-ended' });
+    stream.emit({ kind: 'card-changed', ...at('41'), card: card({ title: 'Changed' }) });
+    held.resolve(read(agentSessionView()));
+    await settled();
+    expect(feed.shown().view.card?.title).toBe('Changed');
+    expect(feed.shown().view.position).toBe('41');
+  });
+
+  it('waits before a repeated resync as before when only board events of other runs came between', async () => {
+    const feed = start();
+    await settled();
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    emitBoardChanges(feed.gateway.lastStream(), 2);
+    feed.gateway.lastStream().emit({ kind: 'resync' });
+    await settled();
+    expect(feed.clock.pendingDelays()).toEqual([RESYNC_DELAY_MILLISECONDS]);
+    expect(feed.gateway.readAgentSession).toHaveBeenCalledTimes(2);
   });
 });
 
