@@ -63,11 +63,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `885f09089d89935583c209844cef6a1e0c77943d`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.83% branches, 98.87% functions.
+- `make verify`: passed, profile full, tree `b23276e6c3da85f4db57e9459707b7194b041e0a`; tests 4783, pass 4774, fail 0, skipped 9; all files 99.45% lines, 92.85% branches, 98.87% functions.
 - `npm run openspec -- validate build-agent-session-timeline --strict`: passed, `Change 'build-agent-session-timeline' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`.
 - Spec diff against the merge base `46cd51b3050a` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a541-0625-72a1-b222-aded605c19c7` | 0 | 0 | 6 | 3 |
 <!-- make record: end -->
 
 ## Independent review
@@ -102,6 +106,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 8 (`4afe6298`, design in `bcd0f8b2`): `startBoardFeed` wraps its listener in `boardEventsOnly`, which drops `agent-session-changed` and `turn-changed` before the core, so the board's resync delay and during-read cap see only board events (design, decision 4 and "Risks and trade-offs"); the new `board-feed-session-events.test.ts` checks the cap under 1,001 session events during a held read and the backoff after a resync with only session events between, and `board-feed.test.ts` is unmodified. Fail-before `fb-31a-p1-8.log`: both tests fail, the stream closed by a resync and no delay pending.
 - Finding 9 (`bcd0f8b2`): task 3.2 is ticked; the review, architect check, and archive tasks stay open.
 - After the fixes the whole `apps/web` suite passes: 584 tests in 20 files (`coverage-31a-p1.log` in the session scratchpad), 98.87% statements, 97.6% branches, 99.76% functions, and 100% lines; `tsc` of `apps/web/tsconfig.tooling.json` and `npm run verify:comments` pass.
+- `make verify` of the fixed and recorded tree (`2013d46e`, tree `b23276e6`), `verify-31a-p1.log` in the session scratchpad: passed at the first run, profile full, no rerun, 4,783 tests, 4,774 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 584 tests in 20 files, all passing, with 100% lines. The generated part above records it.
 
 ## Remaining gates
 
