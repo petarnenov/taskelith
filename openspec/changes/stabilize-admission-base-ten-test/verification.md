@@ -148,6 +148,7 @@ Under load: the nine touched and clock tests (pattern `a wait between reads|a cl
 | `env -u NODE_ENV make verify` | `971be0e9` | Passed on the first run, no known flake, profile full, tree `4930a67e`, stamp written; the totals are in "Generated checks"; "a bound with a leading zero is read in base 10" passed (12266 ms) and the new test passed (3133 ms) |
 | `env -u NODE_ENV make verify` | `42234dce` (tree `e6f27e57`), the return fix | Passed on the first run, no known flake, profile full, stamp written (totals and coverage in "Generated checks"); the decision test on the `node` clock passed in 7677 ms, "the first read starts ..." in 42 ms, the leading-zero test in 11240 ms |
 | `env -u NODE_ENV make verify` | `b6028c6a` (tree `42326ce0`), the pass 3 fixes | Passed on the first run, no known flake, profile full, stamp written (totals and coverage in "Generated checks"); "a clock that fails while a read runs stops that read" passed in 43 ms, "a clock that prints a time but fails ..." in 36 ms, "a wait between reads ..." in 474 ms, the leading-zero test in 11239 ms |
+| `env -u NODE_ENV make verify` | `932ae1c5` (tree `f4985a1e`), the fixed-unreviewed outcomes of pass 3 | Passed on the first run, no known flake, profile full, stamp written (totals and coverage in "Generated checks") |
 
 ### Route
 
@@ -158,7 +159,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `42326ce03c75df6f2319a489b66a1df3b7ee734a`; tests 4813, pass 4766, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `f4985a1ec3b7d0272a939fe58812292330eb6384`; tests 4813, pass 4766, fail 0, skipped 47; all files 99.42% lines, 92.90% branches, 98.86% functions.
 - `npm run openspec -- validate stabilize-admission-base-ten-test --strict`: passed, `Change 'stabilize-admission-base-ten-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`.
 - Spec diff against the merge base `46cd51b3050a` with `origin/dev`: no change under `openspec/specs`.
