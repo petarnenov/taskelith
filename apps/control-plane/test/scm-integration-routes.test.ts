@@ -15,7 +15,9 @@ import {
   InMemoryScmIntegrationAudit, InMemoryScmIntegrations, ScmSecrets, normalizeOrigin,
   type DeliveryRecording, type ScmIntegrationId, type ScmIntegrations, type ScmWebhookDeliveries, type SourceControlPlugin, type SourceControlProvider, type WebhookDelivery,
 } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type Instant } from '@taskelith/kernel';
+import {
+  FAILURE_CODES, err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Instant,
+} from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { githubSourceControlPlugin } from '@taskelith/scm-github';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
@@ -461,4 +463,84 @@ test('the plugin registry reads the plugin identifier once, so a lookup never ru
   assert.equal(plugins.pluginOf('scm-github'), plugin);
   assert.equal(plugins.pluginOf('scm-other'), undefined);
   assert.equal(reads, 1);
+});
+
+// The GitHub plugin whose checks refuse with the code a test sets, quoting
+// the value under check in the message and the details.
+function refusingGithub() {
+  const github = githubSourceControlPlugin();
+  const state: { refusing?: 'settings' | 'secret'; code: FailureCode } = { code: 'invalid' };
+  const refusal = (quoted: string) => err(failure(state.code, `refused ${quoted}`, { quoted }));
+  const plugin: SourceControlPlugin = {
+    ...github,
+    checkSettings: (settings) => (state.refusing === 'settings' ? refusal(WEBHOOK_SECRET) : github.checkSettings(settings)),
+    checkSecret: (name, secret) => (state.refusing === 'secret' ? refusal(secret) : github.checkSecret(name, secret)),
+  };
+  return { plugin, state };
+}
+
+test('a plugin check refusal of any code quoting a secret answers 400 with neither its message nor the secret', async (t) => {
+  const { plugin, state } = refusingGithub();
+  const { call, created, sink, audit } = await fixture(t, plugin);
+  const integrationId = await created();
+  const update = { expectedRevision: 1, settings: CREATION.settings, secrets: { 'webhook-secret': ROTATED_SECRET } };
+  for (const refusing of ['settings', 'secret'] as const) {
+    for (const code of FAILURE_CODES) {
+      Object.assign(state, { refusing, code });
+      const answers = [
+        await call('POST', '/scm-integrations', BEARER, CREATION),
+        await call('PATCH', `/scm-integrations/${integrationId}`, BEARER, update),
+      ];
+      for (const answer of answers) {
+        assert.deepEqual([answer.status, answer.body.code], [400, 'invalid'], `${refusing} ${code}`);
+        assert.ok(holdsNoSecret(answer.text) && !answer.text.includes('refused'), answer.text);
+      }
+    }
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(value(await audit.trail()).map((event) => event.kind), ['created']);
+});
+
+// The GitHub plugin whose providers refuse every verification with the
+// code a test sets, quoting the webhook secret in the message and details.
+function verifyRefusingGithub() {
+  const github = githubSourceControlPlugin();
+  const state: { code: FailureCode } = { code: 'invalid' };
+  const plugin: SourceControlPlugin = {
+    ...github,
+    createProvider: (configuration) => {
+      const secret = configuration.secrets['webhook-secret']!;
+      const verifyWebhookDelivery = async () => err(failure(state.code, `refused ${secret}`, { quoted: secret }));
+      return ok({ verifyWebhookDelivery } as unknown as SourceControlProvider);
+    },
+  };
+  return { plugin, state };
+}
+
+// The webhook route declares no 404, 409, or 422, so those codes answer 500.
+const VERIFICATION_STATUSES: Readonly<Record<FailureCode, number>> = {
+  invalid: 400, forbidden: 401, 'not-found': 500, conflict: 500, 'precondition-failed': 500, internal: 500, unavailable: 503,
+};
+
+test('a verification refusal of any code quoting a secret keeps its status, with neither its message nor the secret', async (t) => {
+  const { plugin, state } = verifyRefusingGithub();
+  const { base, created, sink, recorded } = await fixture(t, plugin);
+  const integrationId = await created();
+  const body = JSON.stringify({ repository: { full_name: 'acme/project' } });
+  for (const code of FAILURE_CODES) {
+    state.code = code;
+    const answer = await fetch(`${base}/scm-integrations/${integrationId}/webhooks`, {
+      method: 'POST', body, headers: {
+        'content-type': 'application/json', 'x-github-event': 'push', 'x-github-delivery': `d-${code}`,
+        'x-hub-signature-256': `sha256=${createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')}`,
+      },
+    });
+    const text = await answer.text();
+    assert.equal(answer.status, VERIFICATION_STATUSES[code], `${code} ${text}`);
+    assert.ok(holdsNoSecret(text) && !text.includes('refused'), text);
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
+  assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
+  assert.deepEqual(recorded, []);
 });

@@ -22,7 +22,7 @@ import {
   type SourceControlPlugin,
   type SourceControlProvider,
 } from '@taskelith/integrations';
-import { err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
+import { FAILURE_CODES, err, failure, instantFromEpochMilliseconds, ok, parseIdentifier, type FailureCode, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
@@ -312,6 +312,27 @@ test('an integration whose plugin cannot build a provider from its stored config
   assert.deepEqual(refusalOf(answer), [503, 'integration-configuration-unusable']);
   assert.ok(checkHttpSchema('Failure', answer.body).ok);
   assert.ok(!answer.text.includes(SECRET));
+  assert.ok(!JSON.stringify(sink.records).includes(SECRET));
+  assert.equal(await stored(), undefined);
+});
+
+test('a resolver or provider refusal of any code quoting a secret reaches neither the answer nor the logs', async (t) => {
+  const { call, path, stored, scm, sink, MARIA } = await fixture(t);
+  const answers: Answer[] = [];
+  for (const code of FAILURE_CODES) {
+    scm.resolver = async () => err(failure(code, `the service said ${SECRET}`, { quoted: SECRET }));
+    answers.push(await call('PUT', path, MARIA, { binding: BINDING }));
+  }
+  scm.resolver = async (repository) => ok({ repository, remoteUrl: `https://scm.example/${repository}.git` });
+  for (const code of FAILURE_CODES) {
+    scm.factory = () => err(failure(code, `the plugin refused ${SECRET}`, { quoted: SECRET }));
+    answers.push(await call('PUT', path, MARIA, { binding: BINDING }));
+  }
+  for (const answer of answers) {
+    assert.ok(answer.status >= 400 && !answer.text.includes(SECRET), answer.text);
+    assert.ok(checkHttpSchema('Failure', answer.body).ok, answer.text);
+  }
+  assert.ok(sink.records.length > 0, 'the request log was captured');
   assert.ok(!JSON.stringify(sink.records).includes(SECRET));
   assert.equal(await stored(), undefined);
 });

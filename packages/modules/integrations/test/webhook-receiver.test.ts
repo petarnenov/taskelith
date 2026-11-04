@@ -11,7 +11,7 @@ import {
   type WebhookEvent,
   type WebhookVerifier,
 } from '@taskelith/integrations';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { FAILURE_CODES, err, failure, ok, type Result } from '@taskelith/kernel';
 
 const KNOWN = `i${'a'.repeat(32)}`;
 const EVENT: WebhookEvent = { deliveryId: 'd-1', kind: 'change-request', repository: 'owner/repository', changeRequest: '7' };
@@ -173,4 +173,14 @@ test('a lookup or verification that is unavailable stays unavailable', async () 
   const unreachable = testbed(() => err(failure('unavailable', 'the service is down')));
   const verified = await unreachable.receiver.receive(KNOWN, DELIVERY);
   assert.equal(!verified.ok && verified.error.code, 'unavailable');
+});
+
+test('a verification refusal of any code keeps its code, never the plugin message or details', async () => {
+  for (const code of FAILURE_CODES) {
+    const { receiver, deliveries } = testbed(() => err(failure(code, `refused ${SECRET}`, { quoted: SECRET })));
+    const answer = await receiver.receive(KNOWN, PUSH);
+    assert.equal(!answer.ok && answer.error.code, code);
+    assert.ok(!JSON.stringify(answer).includes(SECRET), code);
+    assert.equal(deliveries.recorded.size, 0);
+  }
 });
