@@ -20,7 +20,7 @@ This is a product fix of the installation script, not only a test fix: before it
 - `308e5dd4` `docs: restore the active stabilize admission base ten test change to merge dev` and `0ffb4b57`, the merge of `origin/dev` at `46cd51b3` ("Return").
 - `42234dce` `chore: start the first admission read whatever the clock says` (the return fix) and `30684a4f` (its record).
 - `e24f01f0` `chore: stop a running admission read when the clock fails and await the read in the capped-poll test` (pass 3 fixes and the pass 3 line of `passes.jsonl`).
-- The record of the pass 3 fix round follows; the archive comes after it.
+- `b6028c6a` `docs: record the pass 3 fix round of the stabilize admission base ten test change`; its `make verify` record follows, then the archive.
 
 ## Environment
 
@@ -147,6 +147,7 @@ Under load: the nine touched and clock tests (pattern `a wait between reads|a cl
 | `npm run openspec -- validate stabilize-admission-base-ten-test --strict` | `78345789` | `Change 'stabilize-admission-base-ten-test' is valid` |
 | `env -u NODE_ENV make verify` | `971be0e9` | Passed on the first run, no known flake, profile full, tree `4930a67e`, stamp written; the totals are in "Generated checks"; "a bound with a leading zero is read in base 10" passed (12266 ms) and the new test passed (3133 ms) |
 | `env -u NODE_ENV make verify` | `42234dce` (tree `e6f27e57`), the return fix | Passed on the first run, no known flake, profile full, stamp written (totals and coverage in "Generated checks"); the decision test on the `node` clock passed in 7677 ms, "the first read starts ..." in 42 ms, the leading-zero test in 11240 ms |
+| `env -u NODE_ENV make verify` | `b6028c6a` (tree `42326ce0`), the pass 3 fixes | Passed on the first run, no known flake, profile full, stamp written (totals and coverage in "Generated checks"); "a clock that fails while a read runs stops that read" passed in 43 ms, "a clock that prints a time but fails ..." in 36 ms, "a wait between reads ..." in 474 ms, the leading-zero test in 11239 ms |
 
 ### Route
 
@@ -157,7 +158,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `e6f27e57a49b75bb37408b4bdbd4a2641b62d483`; tests 4811, pass 4764, fail 0, skipped 47; all files 99.42% lines, 92.90% branches, 98.83% functions.
+- `make verify`: passed, profile full, tree `42326ce03c75df6f2319a489b66a1df3b7ee734a`; tests 4813, pass 4766, fail 0, skipped 47; all files 99.42% lines, 92.91% branches, 98.83% functions.
 - `npm run openspec -- validate stabilize-admission-base-ten-test --strict`: passed, `Change 'stabilize-admission-base-ten-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 116 file(s); every pass summary file is valid: 96 file(s); every route file is valid: 49 file(s).`.
 - Spec diff against the merge base `46cd51b3050a` with `origin/dev`: no change under `openspec/specs`.
@@ -167,6 +168,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a4f4-9535-7802-adee-165439e57aa9` | 0 | 0 | 3 | 1 |
 | 2 | B | `claude claude-fable-5-1#medium` | `9a3afe82-cef1-4bd1-897e-611e2e507c77` | 0 | 0 | 0 | 4 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1a576-f162-7a60-bb43-a13a2c31de6f` | 0 | 0 | 1 | 2 |
 <!-- make record: end -->
 
 ## Independent review
