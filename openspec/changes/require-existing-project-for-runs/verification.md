@@ -96,6 +96,10 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 - The 404 of `createRun` is reachable only with a role on an identifier without a project (G2 role rows); it is tested through the service and the route mapping, not over PostgreSQL.
 - `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` need a Linux host (privileged image on the host network, which Docker Desktop gives only inside its virtual machine) and were not run on this macOS host; their macOS counterparts above passed.
 
+## Follow-ups
+
+- Coordinator (Niki, 2026-11-04): `make contract-compatibility` could require `behaviorChanges` on a minor bump of a document for which it detects no breaking change, so that such a bump states what breaks; not part of this change.
+
 ## Remaining gates
 
 - Review pass 1 (role A), then pass 2 (role B), and pass 3 (role A) only after a pass 2 with a Medium or worse finding.
