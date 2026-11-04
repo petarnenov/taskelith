@@ -284,14 +284,20 @@ describe('earlier turns', () => {
     expect(gateway.listAgentSessionTurns).toHaveBeenLastCalledWith(PROJECT.projectId, 'session-1', 0);
   });
 
-  it('shows why the earlier turns could not be loaded, with a retry, and keeps the shown turns', async () => {
+  it.each([
+    [{ kind: 'unavailable' }, 'did not answer with the earlier turns'],
+    [{ kind: 'denied', requiredRole: 'project-viewer' }, 'no role on this project that lets you read its agent sessions. Reading it needs the role project-viewer.'],
+    [{ kind: 'denied' }, 'no role on this project that lets you read its agent sessions.'],
+    [{ kind: 'not-found' }, 'knows no such agent session'],
+  ] as const)('shows why the earlier turns could not be loaded after %o, with a retry, and keeps the shown turns', async (failure, text) => {
     const gateway = windowed();
-    gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'unavailable' });
+    gateway.listAgentSessionTurns.mockResolvedValueOnce(failure);
     openSession(gateway);
     const region = await shownSession();
     await userEvent.click(region.getByRole('button', { name: 'Load earlier turns (50 before these)' }));
     const alert = await region.findByRole('alert');
     expect(alert.textContent).toContain('Earlier turns cannot be loaded');
+    expect(alert.textContent).toContain(text);
     expect(turnEntries()).toHaveLength(100);
     gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'read', value: turnPage({ turns: turnsAt(1, 50) }) });
     await userEvent.click(region.getByRole('button', { name: 'Retry' }));

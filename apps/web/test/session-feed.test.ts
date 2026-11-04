@@ -52,7 +52,7 @@ describe('the session feed', () => {
     expect(view).toMatchObject({ before: 150, position: '44', knownAt: '2026-11-03T08:59:00.000Z' });
     expect(feed.positions()).toEqual(Array.from({ length: 100 }, (_, offset) => 151 + offset));
     expect(liveness).toBe('connecting');
-    expect(earlier).toBe('ready');
+    expect(earlier).toEqual({ status: 'ready' });
     feed.gateway.lastStream().emit({ kind: 'opened' });
     expect(feed.shown().liveness).toBe('live');
   });
@@ -177,10 +177,10 @@ describe('earlier turns', () => {
     const feed = await startWindowed();
     feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ turns: turnsAt(51, 150), next: 150 })));
     feed.feed.loadEarlier();
-    expect(feed.shown().earlier).toBe('reading');
+    expect(feed.shown().earlier).toEqual({ status: 'reading' });
     await settled();
     expect(feed.gateway.listAgentSessionTurns).toHaveBeenLastCalledWith(PROJECT.projectId, 'session-1', 50);
-    expect(feed.shown()).toMatchObject({ earlier: 'ready', view: { before: 50 } });
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'ready' }, view: { before: 50 } });
     expect(feed.positions()).toEqual(Array.from({ length: 200 }, (_, offset) => 51 + offset));
     feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ turns: turnsAt(1, 50), next: 50 })));
     feed.feed.loadEarlier();
@@ -208,17 +208,21 @@ describe('earlier turns', () => {
     expect(feed.positions()).toHaveLength(200);
   });
 
-  it('shows a failed earlier read, whose retry reads it again, and keeps the shown turns', async () => {
+  it.each([
+    [{ kind: 'unavailable' }],
+    [{ kind: 'denied', requiredRole: 'project-viewer' }],
+    [{ kind: 'not-found' }],
+  ] as const)('shows a failed earlier read as %o, whose retry reads it again, and keeps the shown turns', async (failure) => {
     const feed = await startWindowed();
-    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce({ kind: 'unavailable' });
+    feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(failure);
     feed.feed.loadEarlier();
     await settled();
-    expect(feed.shown()).toMatchObject({ earlier: 'failed', view: { before: 150 } });
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'failed', failure }, view: { before: 150 } });
     expect(feed.positions()).toHaveLength(100);
     feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ turns: turnsAt(51, 150) })));
     feed.feed.loadEarlier();
     await settled();
-    expect(feed.shown()).toMatchObject({ earlier: 'ready', view: { before: 50 } });
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'ready' }, view: { before: 50 } });
   });
 
   it('drops an earlier read that a new snapshot overtook, which shows the last window again', async () => {
@@ -230,7 +234,7 @@ describe('earlier turns', () => {
     feed.gateway.listAgentSessionTurns.mockResolvedValueOnce(read(turnPage({ turns: turnsAt(152, 251) })));
     feed.gateway.lastStream().emit({ kind: 'resync' });
     await settled();
-    expect(feed.shown()).toMatchObject({ earlier: 'ready', view: { before: 151 } });
+    expect(feed.shown()).toMatchObject({ earlier: { status: 'ready' }, view: { before: 151 } });
     held.resolve(read(turnPage({ turns: turnsAt(51, 150) })));
     await settled();
     expect(feed.shown().view.before).toBe(151);
