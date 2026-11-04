@@ -12,7 +12,8 @@ Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, first as si
 - `be3fbe4d` `docs: propose the stabilize g2 cancellation races change` (proposal, design, tasks, the spec delta, `checklist.json`, `.openspec.yaml`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `a7a2d000` `docs: record the review route of the stabilize g2 cancellation races change` (`route.json` unedited).
 - `d543ef0d` `docs: record the checks of the stabilize g2 cancellation races change`.
-- Pass 1 fix round: `98318b66` `docs: record pass 1 of the stabilize g2 cancellation races review` (`passes.jsonl`), `558dc21f` `chore: log a contact transaction that throws after its observation committed`, `b50db636` `test: cover a thrown contact and a reachable worker revoked before its contact`; the commit of these records follows.
+- Pass 1 fix round: `98318b66` `docs: record pass 1 of the stabilize g2 cancellation races review` (`passes.jsonl`), `558dc21f` `chore: log a contact transaction that throws after its observation committed`, `b50db636` `test: cover a thrown contact and a reachable worker revoked before its contact`, `183b577e` `docs: record the pass 1 findings of the stabilize g2 cancellation races change`, `fbc92e5e` `docs: record the checks of the pass 1 fix round of the stabilize g2 cancellation races change`.
+- Pass 2 fix round: `9dad73d6` `docs: record pass 2 of the stabilize g2 cancellation races review` (`passes.jsonl`), `1fec1cfa` `chore: log a thrown contact as an error and name the unconsumed contact`, `29862807` `test: cover the thrown contact's level and the heartbeat contact's outages`, `114be9b2` `docs: correct the citations and the known-flake list of the stabilize g2 cancellation races records`; the commit of these records follows, then the archive.
 
 ## Environment
 
@@ -57,6 +58,16 @@ Logs in `sgcr/fix1/`. The new tests were written before the fix and run on the b
 - After (`sgcr/fix1/after-pg.log`), `heartbeat.integration.test.ts` and `observation.integration.test.ts` in `bash scripts/services.sh run sgcr ...`: `tests 76, pass 76, fail 0`.
 - M2, L2, and L3 change only records and specifications.
 
+## Pass 2 fix round
+
+Pass 2 reported only Low findings, so the review ended there and pass 3 did not run. No later pass reviewed these five fixes (`fixed-unreviewed` in `findings.jsonl`); they are left to the coordinator's check as solution architect. Logs in `sgcr/fix2/`.
+
+- L1, `1fec1cfa`: a thrown contact transaction is logged at error level with `reason: 'threw'`, a returned failure stays at warn (`apps/control-plane/src/application/observation-service.ts:136-146`), and `apply` keeps the consumed outcome. Fail-before (`sgcr/fix2/fail-before-unit.log`), the source of `9dad73d6` with the new tests: `tests 31, pass 30, fail 1`; the thrown-contact test (`apps/control-plane/test/observation-service.test.ts:618`) failed with actual `'warn'`, expected `'error'`.
+- L2, `1fec1cfa`: `recordContactOf` is `recordUnconsumedContact`, and its comment says that it goes through `authenticateObserver` (`observation-service.ts:175-181`).
+- L3, `29862807`: `apps/control-plane/test/heartbeat-service.test.ts:92` covers the two failure branches of `recordCurrentContact` (`apps/control-plane/src/application/journal-reconciliation.ts:93`, `:95`). The branches existed already, so a mutation check instead (`sgcr/fix2/mutation-unit.log`): with both branches answering success, `tests 5, pass 4, fail 1`, actual `'forbidden'`, expected `'unavailable'`. The source was restored and rebuilt.
+- After (`sgcr/fix2/after-unit.log`), `observation-service.test.ts` and `heartbeat-service.test.ts`: `tests 36, pass 36, fail 0`.
+- L4 and L5, `114be9b2`, change only records: the citation of `apply` is `:51-59`, and every other line citation of the change was checked against the tree, which corrected the shifted `observation-service.ts` ranges and the held-row test's `try`/`finally` range; the known-flake list is named as the coordinator's, with a follow-up.
+
 ## make verify
 
 - Run 1, `env -u NODE_ENV make verify` on `a7a2d000` (tree `3202ccdc`, clean), profile full (`sgcr/verify-1.log`): passed, `make verify: passed, profile full, tree 3202ccdc8a961d0a892b7e088b0055eb4a0ac37c; stamp written`; tests 4827, pass 4780, fail 0, skipped 47; all files 99.42% lines, 92.93% branches, 98.83% functions. None of the known flakes failed, so no rerun was needed. `make record` read `sgcr/verify-1.make.log`, the same log without the `exit 0` line that the run's wrapper appended.
@@ -86,7 +97,8 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-- Pass 1, role A, `codex gpt-6-astra` at effort medium (owner decision 2026-11-02), session `01a1a694-ceb1-7c13-a34e-6d5f27353c64`, on `d543ef0d`: Critical 0, High 0, Medium 2, Low 3. All five were fixed in the pass 1 fix round ("Pass 1 fix round"; `findings.jsonl`). Pass 2 follows per `route.json`.
+- Pass 1, role A, `codex gpt-6-astra` at effort medium (owner decision 2026-11-02), session `01a1a694-ceb1-7c13-a34e-6d5f27353c64`, on `d543ef0d`: Critical 0, High 0, Medium 2, Low 3. All five were fixed in the pass 1 fix round ("Pass 1 fix round"; `findings.jsonl`). Pass 2 followed per `route.json`.
+- Pass 2, role B, `claude claude-fable-5-1` at effort medium (owner decision 2026-11-02), session `a8861d47-c92c-4c6a-abf9-13662e865f43`, on `fbc92e5e`: Critical 0, High 0, Medium 0, Low 5. A Low-only pass ends the review, so pass 3 did not run; the five were fixed without another review ("Pass 2 fix round").
 
 ## Limitations
 
@@ -99,5 +111,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review (passes per `route.json`), its records, and the archive.
+- The coordinator's check, as solution architect, of the five pass 2 fixes that no later pass reviewed.
 - Integration into dev by the coordinator (single pull request).
