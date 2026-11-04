@@ -7,10 +7,10 @@ The test "a renewal that waits for the row lock until past the deadline is refus
 - The renewal test uses the file's observer-based barrier `waitForWaitingStatement` with its bound of 500 tries, as its sibling lock-wait tests do, matching the renewal's role and its locking `SELECT enrollment FROM workers ... FOR UPDATE`.
 - The publisher test "a publisher that waited for the lock pushes every entry committed meanwhile" polls `pg_locks` from an observer connection instead of the holder, matching the advisory lock's full key, and its barrier `waitForWaitingLock` gets the same bound of 500 tries.
 - `waitForLockWaiters` counts only the waiters that the holder's lock blocks, directly or through an earlier waiter for the same row, instead of any waiting statement that mentions `enrollment_tokens`.
-- Every barrier of the file handles its waiting call at once and fails with that call's error when it ends first; the file's tests connect their holder and observer through one helper that ends the connected client when the other connection fails.
+- Every barrier of the file handles its waiting call at once and fails with that call's error, or with its result, when it ends first; the file's tests connect their holder and observer through one helper that ends the connected client when the other connection fails.
 - Both changed tests release the held lock and end their connections in a `finally` block, and wait for the waiting call, so a failed step cannot block later tests.
 - The bounds are not widened for their own sake: both barriers now use the bound of their siblings, which stays finite.
-- A new `deterministic-test-harness` requirement states the rule for lock-wait barriers that a change adds or modifies. No product code changes.
+- A new `deterministic-test-harness` requirement states the rule for lock-wait barriers added or modified by a change. No product code changes.
 
 ## Capabilities
 

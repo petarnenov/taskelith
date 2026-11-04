@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { inspect } from 'node:util';
 import { OPERATOR_CREDENTIALS_CONFORMANCE } from '@taskelith/access';
 import {
   FLEET_REGISTRY_CONFORMANCE,
@@ -239,10 +240,10 @@ async function racedForTokenRow<A, B>(first: () => Promise<A>, second: () => Pro
   try {
     await holder.query('BEGIN');
     await holder.query("SELECT 1 FROM enrollment_tokens WHERE token_id = 'id-t1' FOR UPDATE");
-    const blockers = { observer, holderPid: await backendPid(holder) };
+    const holderPid = await backendPid(holder);
     const firstCall = first();
-    racing = Promise.all([firstCall, waitForLockWaiters(firstCall, blockers, 1).then(second)]);
-    await waitForLockWaiters(racing, blockers, 2);
+    racing = Promise.all([firstCall, waitForLockWaiters(firstCall, observer, holderPid, 1).then(second)]);
+    await waitForLockWaiters(racing, observer, holderPid, 2);
     await holder.query('COMMIT');
     return await racing;
   } finally {
@@ -286,16 +287,13 @@ async function backendPid(client: pg.Client): Promise<number> {
 }
 
 // Polls `isWaiting` until it holds. Handles `call` at once, so its error is
-// never unhandled, and fails with that error if `call` settles first.
+// never unhandled; if `call` settles first, fails with its error or result.
 async function waitUntilWaiting(call: Promise<unknown>, isWaiting: () => Promise<boolean>, failure: string): Promise<void> {
   let settled = false;
   call.then(() => { settled = true; }, () => { settled = true; });
   for (let tries = 0; tries < 500; tries++) {
     if (await isWaiting()) return;
-    if (settled) {
-      await call;
-      throw new Error(`${failure}: the call ended first`);
-    }
+    if (settled) throw new Error(`${failure}: the call ended first with ${inspect(await call)}`);
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(failure);
@@ -303,16 +301,16 @@ async function waitUntilWaiting(call: Promise<unknown>, isWaiting: () => Promise
 
 // Counts the waiters that the holder blocks, directly or, for a later one
 // queued for the same row, through an earlier waiter.
-function waitForLockWaiters(call: Promise<unknown>, blockers: { observer: pg.Client; holderPid: number }, count: number): Promise<void> {
+function waitForLockWaiters(call: Promise<unknown>, observer: pg.Client, holderPid: number, count: number): Promise<void> {
   return waitUntilWaiting(call, async () => {
-    const { rows } = await blockers.observer.query<{ waiting: number }>(
+    const { rows } = await observer.query<{ waiting: number }>(
       `WITH RECURSIVE blocked (pid) AS (
          SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid))
          UNION
          SELECT waiter.pid FROM pg_stat_activity waiter JOIN blocked ON blocked.pid = ANY(pg_blocking_pids(waiter.pid))
            WHERE waiter.datname = current_database()
        ) SELECT count(*)::int AS waiting FROM blocked`,
-      [blockers.holderPid],
+      [holderPid],
     );
     return rows[0]!.waiting >= count;
   }, `fewer than ${count} statements wait for the token row`);

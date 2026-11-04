@@ -1,1 +1,2 @@
 {"change":"stabilize-fleet-renewal-lock-test","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a7e4-71eb-7770-80f0-e2cbc365e98b","counts":{"critical":0,"high":0,"medium":4,"low":1}}
+{"change":"stabilize-fleet-renewal-lock-test","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"69ca03a3-4ce9-4de3-aa72-bf479c793322","counts":{"critical":0,"high":0,"medium":0,"low":3}}
