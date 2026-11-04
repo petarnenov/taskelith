@@ -192,6 +192,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 2 | B | `claude claude-fable-5-1#medium` | `f0eb27e3-9371-4ba0-8d13-d3ccec1487a2` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive run-github-scm-conformance --yes`, which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-run-github-scm-conformance`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `2700c16a`): only this change's deltas, in `scm-port` (version `0.3.0`, the propagation window in four modified requirements, the new requirement "Credential end propagation window") and `scm-qualification` (five new requirements); `dev`'s "Repository binding store" stays.
+- The moved change has `findings.jsonl` (14 pass 1 and 7 pass 2 findings) and `passes.jsonl` (passes 1 and 2); `make findings ARGS="validate"`: every findings file is valid, 113 files.
+- `env -u NODE_ENV make verify` (run 7): passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4738, suites 50, pass 4691, fail 0, cancelled 0, skipped 47. All files: 99.41 % lines, 92.86 % branches, 98.81 % functions.
+
 ## Independent review
 
 - Pass 1, reviewer A: Codex CLI `gpt-6-astra` at effort medium, session `01a1a361-8932-7770-9eac-c24aaf5229a3`, against `d0d59478`: 3 High, 10 Medium, 1 Low. All 14 are fixed in the pass 1 fix round and recorded in `findings.jsonl`; the coordinator's decisions above are listed apart.
