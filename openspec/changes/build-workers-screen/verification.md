@@ -12,8 +12,8 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - `c09e8d4c` `chore: start the build-workers-screen change`: `.openspec.yaml` and the brief's `checklist.json` saved with `--save build-workers-screen --at d0acd304ef722a5a9fec036a66bbb8060db9eb76 --size M` (unedited); the empty `findings.jsonl` and `passes.jsonl` were added with the records commit below, not with this one.
 - `01451efc` `test: expect the web workers screen, its installation-owner gate, the self-check results, and listWorkers`: the tests, before the implementation.
 - `4499056b` `chore: build the web workers screen over a workers gateway with the installation-owner gate and the self-check results`. The first `npm run verify:comments` of the committed implementation failed on three three-line comments (`expiring-call.ts`, `useWorkers.ts`, `workers-wire.ts`); each was shortened and, because the branch was never pushed, the implementation commit was amended instead of a fix commit, so one route record describes the reviewed diff. The targeted mutations below ran against the commit before the amendment (`40599a91`), whose code differs only in those comments.
-- `docs: record the build-workers-screen proposal, design, spec delta, and SPA status`: the proposal, the design, the spec delta, `tasks.md`, the empty `findings.jsonl` and `passes.jsonl`, this record's hand-written part, and the README status.
-- `docs: route the build-workers-screen change` (`route.json`, unedited, at the head of the records commit).
+- `52ab84bd` `docs: record the build-workers-screen proposal, design, spec delta, and SPA status`: the proposal, the design, the spec delta, `tasks.md`, the empty `findings.jsonl` and `passes.jsonl`, this record's hand-written part, and the README status.
+- `a05ed32c` `docs: route the build-workers-screen change` (`route.json`, unedited, at head `52ab84bd`): "route: elevated (lines, files), rule version 5", 1,172 lines in 25 files, size M; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium`, which governance runs only after a pass 2 with a Medium or worse finding; shadow `jev-1.14.0` elevated (P(third) 0.62) and agrees; recommendation only, the brief's effort medium applies.
 - `docs: record the make verify run of the build-workers-screen change`: this record commit, with the generated part below; pass 1 reviews `d0acd304..` that commit.
 
 ## Environment
@@ -38,7 +38,7 @@ macOS 26.6 on x86_64 (the iMac); Node.js 24.22.1 (`.nvmrc`) and the `Makefile`'s
 
 ## Evidence check
 
-The generated part below matches the tree (`make record-check`). The `make verify` run before pass 1 is `verify-33a-1.log` in the session scratchpad, the run of the clean committed tree after the route commit; the record commit adds the generated part from it.
+The generated part below matches the tree (`make record-check`). The `make verify` run before pass 1 is `verify-33a-1.log` in the session scratchpad, the run of the clean committed tree of `a05ed32c` (profile full, tree `7440f214`, 4,852 tests, 4,843 passed, 0 failed, 9 skipped; `apps/web` Vitest 780 tests in 30 files, 100% lines): passed at the first run, no rerun of any suite, nothing appended to the log; the record commit adds the generated part from it.
 
 ## Fail-before
 
@@ -57,6 +57,12 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 ## Generated checks
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `7440f214334489797beb3b6098d740dcd6c52074`; tests 4852, pass 4843, fail 0, skipped 9; all files 99.45% lines, 92.87% branches, 98.87% functions.
+- `npm run openspec -- validate build-workers-screen --strict`: passed, `Change 'build-workers-screen' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 122 file(s); every pass summary file is valid: 102 file(s); every route file is valid: 55 file(s).`.
+- Spec diff against the merge base `d0acd304ef72` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review
