@@ -2,7 +2,7 @@ import { Anchor, Paper, Stack, Text } from '@mantine/core';
 import { Link } from 'react-router';
 import { LoadingStatus } from '../shell/LoadingStatus';
 import { sessionPath } from '../screens';
-import type { AgentSession, AttemptOutcome, TaskEnd, TaskView } from './board';
+import type { AgentSession, AttemptOutcome, ReadFailure, TaskEnd, TaskView } from './board';
 import { ADMISSION_STATE_LABELS, END_LABELS, formatInstant, OUTCOME_LABELS } from './board-labels';
 import { LoadError, withRequiredRole } from './LoadError';
 import { ObstacleText } from './ObstacleText';
@@ -26,12 +26,19 @@ export function TaskList({ tasks, links }: { readonly tasks: readonly TaskView[]
       {state.status === 'loading' ? <LoadingStatus text="Looking up the agent sessions…" /> : null}
       {state.status === 'failed' ? (
         <LoadError title="The agent sessions cannot be listed" onRetry={links.retry}>
-          {withRequiredRole('The control plane did not answer with the agent sessions of this run.', state.failure)}
+          {withRequiredRole(LIST_FAILURES[state.failure.kind], state.failure)}
         </LoadError>
       ) : null}
     </Stack>
   );
 }
+
+const LIST_FAILURES: Readonly<Record<ReadFailure, string>> = {
+  unauthenticated: 'The control plane answered the agent sessions read as one without a session. Retry reads them again.',
+  unavailable: 'The control plane did not answer with the agent sessions of this run.',
+  denied: 'You hold no role on this project that lets you read its agent sessions.',
+  'not-found': 'The control plane knows no such card in this project.',
+};
 
 function sessionsOf(links: SessionLinks, taskId: string): readonly AgentSession[] {
   if (links.state.status !== 'listed') return [];
