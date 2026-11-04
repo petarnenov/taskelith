@@ -120,7 +120,7 @@ export class ObservationService {
   // Decision 3: an authenticated one still counts as first contact, which
   // commits on its own; its sequence stays unrecorded.
   async #leaveUnconsumed(observation: Observation): Promise<Result<never>> {
-    const contact = await this.#transaction('refused', (tx, context) => recordContactOf(tx, context, observation));
+    const contact = await this.#transaction('refused', (tx, context) => recordUnconsumedContact(tx, context, observation));
     return contact.ok || isNotConsumed(contact.error) ? notConsumed(`${observation.type} is left to a later change`) : contact;
   }
 
@@ -134,21 +134,20 @@ export class ObservationService {
   // A duplicate is contact too; a failure is only logged, as the consumed
   // observation stays acknowledged and the next contact replaces this one.
   async #recordContact(observation: Observation): Promise<void> {
-    const contact = await this.#contactTransaction(observation);
-    if (contact.ok) return;
-    const { workerId, observationId } = observation.position;
-    this.#logger.with({ workerId, observationId, correlationId: observation.correlationId }).warn('execution.observation.contact-unrecorded', {
-      type: observation.type, code: contact.error.code, message: contact.error.message,
-    });
+    const event = 'execution.observation.contact-unrecorded';
+    const log = this.#contactLogger(observation);
+    try {
+      const contact = await this.#store.transaction((tx) => recordCurrentContact(tx, producerOf(observation)));
+      if (!contact.ok) log.warn(event, { type: observation.type, code: contact.error.code, message: contact.error.message });
+    } catch (error) {
+      // A store throws only for a defect, such as a statement error.
+      log.error(event, { type: observation.type, code: 'internal', reason: 'threw', message: thrownMessage(error) });
+    }
   }
 
-  // A store that throws, as on a statement error, fails the contact too.
-  async #contactTransaction(observation: Observation): Promise<Result<boolean>> {
-    try {
-      return await this.#store.transaction((tx) => recordCurrentContact(tx, producerOf(observation)));
-    } catch (error) {
-      return err(failure('internal', `the contact threw: ${error instanceof Error ? error.message : String(error)}`));
-    }
+  #contactLogger(observation: Observation): Logger {
+    const { workerId, observationId } = observation.position;
+    return this.#logger.with({ workerId, observationId, correlationId: observation.correlationId });
   }
 
   // Writes the warnings of the attempt that settled: one that committed,
@@ -173,7 +172,9 @@ export class ObservationService {
   }
 }
 
-async function recordContactOf(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
+// Through `authenticateObserver`, which may replace the producer's journal;
+// a revoked producer makes no contact.
+async function recordUnconsumedContact(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
   const standing = await authenticateObserver(tx, producerOf(observation), context);
   if (!standing.ok) return standing;
   return standing.value === 'enrolled' ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : ok(undefined);
@@ -212,6 +213,10 @@ async function recordPosition(
   const advanced = await advanceCursor(tx, observation, cursor, at);
   if (!advanced.ok) return advanced;
   return advanced.value ? evaluateSnapshots(tx, workerId, journalId, context) : ok(undefined);
+}
+
+function thrownMessage(error: unknown): string {
+  return `the contact threw: ${error instanceof Error ? error.message : String(error)}`;
 }
 
 function producerOf(observation: Observation) {
