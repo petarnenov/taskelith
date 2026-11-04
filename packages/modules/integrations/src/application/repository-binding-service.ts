@@ -7,7 +7,7 @@ import type {
 } from '../ports/scm-integrations.js';
 import type { MergeMethod, RepositoryRemote, SourceControlProvider } from '../ports/source-control.js';
 import { readCapabilities, readRepositoryRemote } from '../ports/source-control-readers.js';
-import { readResult, type Reading } from '../ports/untrusted-shapes.js';
+import { readUntrustedResult, type Reading } from '../ports/untrusted-shapes.js';
 
 // The binding a maintainer sends: no remote URL, which the plugin resolves.
 export interface RepositoryBindingRequest {
@@ -122,7 +122,7 @@ async function pluginAnswer<Value>(
   call: () => Result<unknown> | Promise<Result<unknown>>, read: (value: unknown) => Reading<Value>, defect: DefectOfCall,
 ): Promise<Result<Result<Value>>> {
   try {
-    const envelope = readResult(await call());
+    const envelope = readUntrustedResult(await call());
     if (!envelope.ok) return err(defect('malformed-envelope'));
     if (!envelope.value.ok) return ok(err(envelope.value.error));
     const value = read(envelope.value.value);

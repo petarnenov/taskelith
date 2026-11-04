@@ -1,5 +1,5 @@
 import type { FailureCode, Result } from '@taskelith/kernel';
-import { describeThrown, readResult, type Reading } from './untrusted-shapes.js';
+import { describeThrown, readUntrustedResult, type Reading } from './untrusted-shapes.js';
 
 export type SourceControlConformanceCheck = 'threw' | 'result' | 'shape' | 'outcome' | 'bypass' | 'fixture';
 
@@ -99,7 +99,7 @@ async function settle(run: ConformanceCase, operation: string, call: () => Promi
   } catch (error) {
     run.abort('threw', `${operation} threw instead of returning a Result: ${describeThrown(error)}`);
   }
-  const result = readResult(raw);
+  const result = readUntrustedResult(raw);
   if (!result.ok) run.abort('result', `${operation}: ${result.error.join('; ')}`);
   return result.value;
 }
@@ -116,7 +116,7 @@ export async function fixtureStep<Value>(run: ConformanceCase, step: string, cal
 // A fixture step that returns a Result, read as untrusted as a plugin's.
 export async function fixtureResult(run: ConformanceCase, step: string, call: () => Promise<unknown>): Promise<Result<unknown>> {
   const raw = await fixtureStep(run, step, call);
-  const result = readResult(raw);
+  const result = readUntrustedResult(raw);
   if (!result.ok) run.abort('fixture', `${step}: ${result.error.join('; ')}`);
   return result.value;
 }
