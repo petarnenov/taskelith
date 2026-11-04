@@ -396,6 +396,30 @@ describe('a submission refused for its token', () => {
     expect(message().disabled).toBe(false);
   });
 
+  it.each([
+    ['could not be read', { kind: 'unavailable' } as const],
+    ['read threw', new Error('offline')],
+  ])('keeps the key for a retry when the session %s again, and sends nothing meanwhile', async (_, read) => {
+    const session = fakeGateway(AUTHENTICATED);
+    if (read instanceof Error) session.read.mockResolvedValueOnce(AUTHENTICATED).mockRejectedValueOnce(read);
+    else session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(read);
+    const gateway = new FakeBoardGateway();
+    gateway.submitTurn.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    openSession(gateway, session);
+    await shownSession();
+    await send('Fix the build');
+    const alert = await composerAlert('Not sent');
+    expect(alert.textContent).toContain('the session could not be read again to renew it');
+    expect(gateway.submitTurn).toHaveBeenCalledTimes(1);
+    expect(session.read).toHaveBeenCalledTimes(2);
+    const [, , first] = gateway.submitTurn.mock.calls[0]!;
+    expect(storedRecords().map((record) => record.key)).toEqual([first.idempotencyKey]);
+    await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    expect(gateway.submitTurn.mock.calls[1]![2]).toEqual(first);
+    expect(storedRecords()).toEqual([]);
+  });
+
   it('shows the sign-in page when the session had ended by the time it was read again', async () => {
     const session = fakeGateway(AUTHENTICATED);
     session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValue({ kind: 'anonymous' });
@@ -500,5 +524,33 @@ describe('the token on the wire', () => {
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
+  });
+
+  it('sends the key again only with a token a renewed session read gave, never the refused one', async () => {
+    const plane = controlPlane();
+    const RENEWED = 'd'.repeat(43);
+    const csrfRefusal = () => json(403, { code: 'forbidden', message: 'Refused.', details: { reason: 'csrf-token-invalid' } });
+    const sessionReads: Response[] = [json(200, SESSION), json(503, { code: 'unavailable', message: 'Later.', details: {} })];
+    const posts: Response[] = [csrfRefusal(), csrfRefusal()];
+    const fallback = plane.send.getMockImplementation()!;
+    plane.send.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === '/session') return sessionReads.shift() ?? json(200, { ...SESSION, csrfToken: RENEWED });
+      if ((init?.method ?? 'GET') === 'POST' && url.endsWith('/turns')) {
+        plane.posts.push(new Headers(init?.headers));
+        return posts.shift() ?? json(201, { effect: 'recorded', turn: turn({ turnId: 'turn-3', position: 3, text: 'Fix the build', state: 'queued' }) });
+      }
+      return fallback(input, init);
+    });
+    const session = createSessionGateway(plane.send);
+    const board = createBoardGateway({ fetch: plane.send, csrfToken: session.csrfToken, openEventSource: plane.openEventSource });
+    renderApp(SESSION_PATH, session, new ManualClock(), board);
+    await shownSession();
+    await send('Fix the build');
+    const alert = await composerAlert('Not sent');
+    expect(plane.posts.map((headers) => headers.get(CSRF_HEADER))).toEqual([TOKEN]);
+    await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(turnEntries()).toHaveLength(3));
+    expect(plane.posts.map((headers) => headers.get(CSRF_HEADER))).toEqual([TOKEN, TOKEN, RENEWED]);
   });
 });
