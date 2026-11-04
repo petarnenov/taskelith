@@ -22,9 +22,10 @@
 
 - [x] 5.1 Independent review pass 1 (codex gpt-6-astra, medium): 3 Medium, 1 Low
 - [x] 5.2 Pass 1 fixes: a millisecond clock with reusable deadline functions and sleeps capped at the deadline, a test clock seam with deterministic tests, the fail-before against `fa3fbce7`, and corrected latency claims
-- [ ] 5.3 Further passes as `route.json` assigns
-- [ ] 5.4 Archive the change
+- [x] 5.3 Independent review pass 2 (claude claude-fable-5-1, medium): 4 Low; the review ends there, pass 3 is not run
+- [x] 5.4 Pass 2 fixes: an unread clock fails the wait, the capped-poll test sums its sleeps, comment placeholders, and line citations
+- [ ] 5.5 Archive the change
 
 ## 6. Follow-up
 
-Not a task of this change, out of scope (coordinator's architect decision, 2026-11-04): `await_served_certificates` (`scripts/installation.sh:508` at `fa3fbce7`) and `await_contact_since` (`:522` at `fa3fbce7`) still end up to 1 s early through the whole-second `SECONDS` clock; a later change can adopt `deadline_in`, `deadline_passed`, and `sleep_within`
+Not a task of this change, out of scope (coordinator's architect decision, 2026-11-04): `await_served_certificates` (`scripts/installation.sh:505` at `fa3fbce7`) and `await_contact_since` (`:519` at `fa3fbce7`) still end up to 1 s early through the whole-second `SECONDS` clock; a later change can adopt `deadline_in`, `deadline_passed`, and `sleep_within`

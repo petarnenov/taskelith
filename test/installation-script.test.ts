@@ -647,6 +647,8 @@ test('a wait between reads never sleeps past the bound', () => {
   assert.equal(outcome.status, 3);
   assert.equal(admissionReads(outcome).length, 1);
   assert.ok(!sleeps.includes('5.000'), 'the poll of 5 s is cut to the bound');
+  const slept = sleeps.reduce((sum, sleep) => sum + Math.round(Number(sleep) * 1000), 0);
+  assert.equal(slept, 3000, 'the sleeps add up to the bound exactly');
   assert.equal(elapsed, 3000);
 });
 
@@ -665,6 +667,24 @@ test('an admission decided 1 ms after the bound is a timeout', () => {
   assert.equal(outcome.status, 3);
   assert.equal(outcome.stdout, '', 'no view time is printed');
   assert.match(outcome.stderr, /the worker was not admitted within 2s/);
+});
+
+test('a clock that prints no time fails the admission check before any read', () => {
+  const outcome = checkAdmission([admissionView('admitted', 'passed')], { TASKELITH_TEST_CLOCK: 'true' });
+  assert.equal(outcome.status, 2, outcome.stderr);
+  assert.equal(admissionReads(outcome).length, 0);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /installation\.sh: the clock could not be read/);
+});
+
+test('a clock that stops printing a time during the wait fails the admission check, not as a timeout', () => {
+  const { outcome } = checkAdmissionOnClock([admissionView('admitted', 'passed')], {
+    TASKELITH_ADMISSION_SECONDS: '2', FAKE_DECIDED_AT: 'not-a-time',
+  });
+  assert.equal(outcome.status, 2, outcome.stderr);
+  assert.equal(outcome.stdout, '', 'no view time is printed');
+  assert.match(outcome.stderr, /installation\.sh: the clock could not be read/);
+  assert.doesNotMatch(outcome.stderr, /not admitted within/);
 });
 
 test('a shell without EPOCHREALTIME reads the clock through node and never ends before its bound', () => {

@@ -32,6 +32,8 @@ ADMISSION_SECONDS="${TASKELITH_ADMISSION_SECONDS:-300}"
 ADMISSION_POLL_SECONDS=5
 # WAITING of scripts/installation-admission.ts; the wait's timeout status.
 ADMISSION_WAITING=3
+# An unread clock; like a usage error, not the timeout status.
+ADMISSION_CLOCK_FAILED=2
 
 compose() {
   docker compose "${compose_files[@]}" --project-name "$project" "$@"
@@ -423,7 +425,7 @@ read_worker_admission() {
 
 # Wall-clock milliseconds, from bash 5's EPOCHREALTIME or else from node;
 # TASKELITH_TEST_CLOCK, set only by tests, names a command printing them.
-clock_milliseconds() {
+read_clock() {
   if [ -n "${TASKELITH_TEST_CLOCK:-}" ]; then
     "$TASKELITH_TEST_CLOCK"
   elif [ -n "${EPOCHREALTIME:-}" ]; then
@@ -433,26 +435,43 @@ clock_milliseconds() {
   fi
 }
 
-# The clock time, in milliseconds, SECONDS whole seconds from now.
+# The clock's milliseconds; fails with a message on any other output.
+clock_milliseconds() {
+  local now
+  now="$(read_clock)"
+  if ! [[ "$now" =~ ^[0-9]+$ ]]; then
+    echo "installation.sh: the clock could not be read" >&2
+    return 1
+  fi
+  echo "$((10#$now))"
+}
+
+# The clock time, in milliseconds, N whole seconds from now.
 deadline_in() {
-  echo "$(($(clock_milliseconds) + $1 * 1000))"
+  local now
+  now="$(clock_milliseconds)" || return 1
+  echo "$((now + $1 * 1000))"
 }
 
 # Milliseconds left until DEADLINE, 0 once it has passed.
 milliseconds_left() {
-  local left
-  left=$(($1 - $(clock_milliseconds)))
+  local now left
+  now="$(clock_milliseconds)" || return 1
+  left=$(($1 - now))
   echo "$((left > 0 ? left : 0))"
 }
 
+# Exits the admission wait with ADMISSION_CLOCK_FAILED on an unread clock.
 deadline_passed() {
-  [ "$(milliseconds_left "$1")" -eq 0 ]
+  local left
+  left="$(milliseconds_left "$1")" || exit "$ADMISSION_CLOCK_FAILED"
+  [ "$left" -eq 0 ]
 }
 
-# Sleeps SECONDS, but never past DEADLINE.
+# Sleeps N seconds, but never past DEADLINE.
 sleep_within() {
   local wanted=$(($2 * 1000)) left
-  left="$(milliseconds_left "$1")"
+  left="$(milliseconds_left "$1")" || exit "$ADMISSION_CLOCK_FAILED"
   if [ "$left" -lt "$wanted" ]; then wanted="$left"; fi
   sleep "$((wanted / 1000)).$(printf '%03d' "$((wanted % 1000))")"
 }
@@ -484,7 +503,7 @@ await_worker_admission() (
     exit 2
   fi
   bound=$((10#$ADMISSION_SECONDS))
-  deadline="$(deadline_in "$bound")"
+  deadline="$(deadline_in "$bound")" || exit "$ADMISSION_CLOCK_FAILED"
   files="$(mktemp -d "${TMPDIR:-/tmp}/taskelith-admission.XXXXXX")"
   trap 'rm -rf "$files"' EXIT
   : > "$files/log"
