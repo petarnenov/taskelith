@@ -1,4 +1,4 @@
-import type { BoardGateway, ReadFailed, ReadResult, TurnPage } from '../board/board';
+import type { BoardGateway, BoardStreamEvent, BoardStreamListener, ReadFailed, ReadResult, TurnPage } from '../board/board';
 import { startLiveFeed, type ShownView } from '../board/live-feed';
 import type { Clock } from '../session/clock';
 import { applySessionChange, viewOf, withEarlierTurns, type SessionTimelineView } from './session-model';
@@ -49,6 +49,8 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
   let stopped = false;
   let shown: ShownView<SessionTimelineView> | undefined;
   let earlier: EarlierRead = READY;
+  // The run of the session, from its last read; its stream opens after one.
+  let runId: string | undefined;
 
   function showSession(): void {
     if (shown !== undefined) show({ ...shown, earlier });
@@ -57,6 +59,7 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
   async function read(): Promise<ReadResult<SessionTimelineView>> {
     const session = await gateway.readAgentSession(projectId, sessionId);
     if (session.kind !== 'read') return session;
+    runId = session.value.session.runId;
     const before = Math.max(0, session.value.session.lastTurnPosition - TURN_WINDOW);
     const pages = await readTurnPages(before, Number.POSITIVE_INFINITY);
     if (pages.kind !== 'read') return pages;
@@ -80,7 +83,7 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
 
   const feed = startLiveFeed<SessionTimelineView>({
     source: { read, positionOf: (view) => view.position, apply: applySessionChange },
-    openEvents: (after, listener) => gateway.openEvents(projectId, after, listener),
+    openEvents: (after, listener) => gateway.openEvents(projectId, after, sessionEventsOnly(listener)),
     clock,
     show: (state) => {
       if (state.status !== 'shown') {
@@ -95,6 +98,14 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
       showSession();
     },
   });
+
+  // The board events of other runs never reach the reconnect accounting,
+  // so a busy project does not resync a session view they do not touch.
+  function sessionEventsOnly(listener: BoardStreamListener): BoardStreamListener {
+    return (event) => {
+      if (!isOtherRunEvent(event, runId)) listener(event);
+    };
+  }
 
   function loadEarlier(): void {
     if (stopped || shown === undefined || earlier.status === 'reading' || shown.view.before === 0) return;
@@ -122,4 +133,9 @@ export function startSessionFeed({ projectId, sessionId, gateway, clock, show }:
       feed.stop();
     },
   };
+}
+
+function isOtherRunEvent(event: BoardStreamEvent, runId: string | undefined): boolean {
+  if (event.kind === 'board-changed') return true;
+  return event.kind === 'card-changed' && event.card.runId !== runId;
 }
