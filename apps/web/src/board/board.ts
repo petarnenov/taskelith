@@ -91,9 +91,18 @@ export type StreamChange = BoardChange | SessionChange | TurnChange;
 
 // opened: the stream is connected; interrupted: the browser reconnects;
 // failed: it closed for good, as after an error status.
-export type StreamSignal = 'opened' | 'interrupted' | 'failed' | 'resync' | 'stream-ended';
+export type StreamSignal = 'opened' | 'interrupted' | 'failed' | 'stream-ended';
 
-export type BoardStreamEvent = StreamChange | { readonly [K in StreamSignal]: { readonly kind: K } }[StreamSignal];
+// A read of the view again; for a frame the SPA could not read, it names
+// the frame's event, so a feed the frame never concerns can drop it.
+export interface Resync {
+  readonly kind: 'resync';
+  readonly unreadable?: SessionEventName;
+}
+
+export type SessionEventName = 'agent-session-changed' | 'turn-changed';
+
+export type BoardStreamEvent = StreamChange | Resync | { readonly [K in StreamSignal]: { readonly kind: K } }[StreamSignal];
 
 export type BoardStreamListener = (event: BoardStreamEvent) => void;
 

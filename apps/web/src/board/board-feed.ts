@@ -40,8 +40,8 @@ export function startBoardFeed({ projectId, gateway, clock, show }: BoardFeedOpt
   return feed.stop;
 }
 
-// Decision Q8: a session event never reaches the board's reconnect
-// accounting, so the board behaves as before the stream carried them.
+// Decision Q8: a session event, readable or not, never reaches the board's
+// reconnect accounting, so the board behaves as before the stream carried them.
 function boardEventsOnly(listener: BoardStreamListener): BoardStreamListener {
   return (event) => {
     if (!isSessionEvent(event)) listener(event);
@@ -49,5 +49,6 @@ function boardEventsOnly(listener: BoardStreamListener): BoardStreamListener {
 }
 
 function isSessionEvent(event: BoardStreamEvent): boolean {
+  if (event.kind === 'resync') return event.unreadable !== undefined;
   return event.kind === 'agent-session-changed' || event.kind === 'turn-changed';
 }

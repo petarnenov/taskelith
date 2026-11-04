@@ -36,8 +36,11 @@ export type OpenEventSource = (url: string) => EventSourceLike;
 // EventSource.CLOSED: the browser gave up and will not reconnect.
 const CLOSED = 2;
 
-// An event the SPA cannot read makes the board read its snapshot again.
+// A board event the SPA cannot read makes the board read its snapshot
+// again; a session one names itself, so only the session feed reads again.
 const UNREADABLE: BoardStreamEvent = { kind: 'resync' };
+const UNREADABLE_SESSION: BoardStreamEvent = { kind: 'resync', unreadable: 'agent-session-changed' };
+const UNREADABLE_TURN: BoardStreamEvent = { kind: 'resync', unreadable: 'turn-changed' };
 
 // A server that names new cursors beyond this many pages reads as unreachable.
 export const MAX_PROJECT_PAGES = 100;
@@ -168,8 +171,8 @@ export function createBoardGateway({
     source.addEventListener('error', () => emit({ kind: source.readyState === CLOSED ? 'failed' : 'interrupted' }));
     source.addEventListener('card-changed', (event) => emit(cardChangeOf(dataOf(event)) ?? UNREADABLE));
     source.addEventListener('board-changed', (event) => emit(workersChangeOf(dataOf(event)) ?? UNREADABLE));
-    source.addEventListener('agent-session-changed', (event) => emit(sessionChangeOf(dataOf(event)) ?? UNREADABLE));
-    source.addEventListener('turn-changed', (event) => emit(turnChangeOf(dataOf(event)) ?? UNREADABLE));
+    source.addEventListener('agent-session-changed', (event) => emit(sessionChangeOf(dataOf(event)) ?? UNREADABLE_SESSION));
+    source.addEventListener('turn-changed', (event) => emit(turnChangeOf(dataOf(event)) ?? UNREADABLE_TURN));
     source.addEventListener('resync', () => emit({ kind: 'resync' }));
     source.addEventListener('stream-ended', () => emit({ kind: 'stream-ended' }));
     return () => {
