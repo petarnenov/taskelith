@@ -312,3 +312,18 @@ test('no secret value of a create, an update, or a secret change reaches the req
   assert.ok(holdsNoSecret(JSON.stringify(sink.records)));
   assert.ok(holdsNoSecret(JSON.stringify(trail)));
 });
+
+test('a create or update handler without a principal fails as internal and never reaches the service', async () => {
+  const reached: string[] = [];
+  const reach = (operation: string) => async () => { reached.push(operation); return err(failure('unavailable', 'reached')); };
+  const api = new ControlPlaneApi({
+    scmIntegrations: { list: reach('list'), read: reach('read'), create: reach('create'), update: reach('update') },
+  } as unknown as ApiServices);
+  const request = { parameters: [MISSING], body: { expectedRevision: 1 }, query: new URLSearchParams(), correlationId: 'c' as never };
+  for (const operationId of ['createScmIntegration', 'updateScmIntegration']) {
+    const anonymous = await api.handle(operationId, request, '');
+    assert.deepEqual(!anonymous.ok && [anonymous.error.code, anonymous.error.message],
+      ['internal', 'an SCM integration command reached its handler without a principal'], operationId);
+  }
+  assert.deepEqual(reached, []);
+});
