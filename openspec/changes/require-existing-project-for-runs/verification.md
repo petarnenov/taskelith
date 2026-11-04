@@ -15,6 +15,9 @@ G3 plan item 11 (`docs/g3-plan.md`, row 11), sub-change 11c, developed by a brie
 - Scripts: `0900d2f7` (tests), `73eaf978` `chore: run the installation smoke and scenarios in a project the owner operates`.
 - Harnesses: `2b0659c4` and `bfdcedb3` (integration and scenario harnesses; tests only).
 - `15c3c7ab` documents, `90ddd310` tasks, `9b380f56` `route.json` (unedited), `e22650ce` the `make record` output.
+- Pass 1 round: `143aa6fd` this record, the fixes and coordinator items under "Pass 1", `d351c5fb` the pass records, `18dcb7b1` the second route (`route.json` unedited), `7be20375` and `9b87dd1d` the route and coverage notes, and `87184424` the `make record` output of `verify-11c-p1.log`.
+- Pass 2 round: the fixes under "Pass 2", `376d4e74` drops the stale route, `28a2c56b` and `23fcfee3` record the pass, `f535f44b` the third route (`route.json` unedited, generated at `23fcfee3`), `42922779` corrects the route paragraph, and `047a875d` records `make verify` run `verify-11c-p2b.log`; its tree `a99259ca` is the one that pass 3 reviewed, apart from this record.
+- After pass 3 (no findings): one commit with the pass 3 records (`passes.jsonl`, this record, and the `make record` output), then the archive commit.
 
 ## Environment
 
@@ -79,6 +82,8 @@ The pass 1 fixes changed the diff, so `route.json` was deleted and routed again 
 
 That route named `headCommit` `6ffbb1df`, which is not in the branch (pass 2, L1). The reflog shows how: `6ffbb1df` was a local commit that deleted `route.json`; the route was generated at it, and the new `route.json` was then committed with `git commit --amend`, which replaced `6ffbb1df` by `18dcb7b1` with the same parent `d351c5fb`. The same happened earlier to a docs commit of `design.md` (`19a3d3c2`, amended to `5655acf9`). Both were the tip commit, both only docs, and neither SHA is named in the records except in this explanation and the L1 finding (`findings.jsonl` line 5); no test or implementation commit was rewritten, so every test commit still precedes its implementation commit. The branch was never pushed before (no `origin/require-existing-project-for-runs`), so no published history changed. The pass 2 round adds only new commits: `376d4e74` deletes the stale route, and the route is generated again at the then head and committed unedited in the next commit, whose `headCommit` is its parent, `23fcfee3`: again elevated, rule version 5, the same reviewers, and the shadow router `jev-1.14.0` agrees (P(third) 0.72).
 
+Pass 3 reported no finding, so nothing changed the diff after that route; `route.json` of `f535f44b` stays and was not routed again.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -94,6 +99,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a495-42d8-7780-82d5-25d605a0491a` | 0 | 0 | 2 | 1 |
 | 2 | B | `claude claude-fable-5-1#medium` | `7692c8cf-9d1f-4b62-9212-6a315e2cd32a` | 0 | 0 | 1 | 5 |
+| 3 | A | `agy gemini-4-argon-medium#medium` | `7671369b-7d5d-44c2-91c9-7294b0322e0e` | 0 | 0 | 0 | 0 |
 <!-- make record: end -->
 
 ## Review
@@ -143,6 +149,18 @@ Branch coverage of `make verify` on `dist`, before (`verify-11c-2.log`) and afte
 | L4 | Low | The `sdlc.openapi.json` info description named only the owner credential | `c0fba8a2`, fail-before `fb-11c-p2-2.log`: tests 22, pass 21, fail 1 | `ad7fc004`: since 0.5.0, `createRun` and `submitTask` also require `project-operator` or above on the run's project, which the owner must assign itself |
 | L5 | Low | "Scope and source" read as if both documents declared a behavior break | Record only | This record: only `sdlc.openapi.json` 0.5.0 has an entry, and why `execution.openapi.json` 0.10.0 has none |
 
+### Pass 3
+
+- Reviewer: Antigravity CLI, model `gemini-4-argon-medium`, effort `medium`, role A, read-only.
+- Invocation: `env -u JEV_MAF_LAB make review CHANGE=require-existing-project-for-runs PASS=3 REVIEWER='agy gemini-4-argon-medium#medium' PROMPT=<scratchpad prompt> LOG=<scratchpad log>`; the CLI log resolved model `gemini-4-argon-medium`, and the reviewer reported session `7671369b-7d5d-44c2-91c9-7294b0322e0e`.
+- Reviewed `aca63889..047a875d`; the snapshot was unchanged after the pass. The pass found the pass 1 and pass 2 fixes correct and complete: the `ProjectDirectory` port and its adapter, the order of the `createRun` and `submitTask` checks, the retired bridge, the 0.5.0 and 0.10.0 documents with their declarations and deltas, `bootstrap_operator`, and the records.
+- Counts: Critical 0, High 0, Medium 0, Low 0, recorded in `passes.jsonl`; `findings.jsonl` gains no line. The review loop ends here.
+- No fix followed, so `make verify` was not run again for this pass: the tree `a99259ca` of run `verify-11c-p2b.log` (`047a875d`) differs from the tree after the pass 3 records only in `passes.jsonl` and this record, which `make record-check` leaves out of its comparison, and `make record` of that log rewrote the generated part with the pass 3 row.
+
+## Fixes no later pass reviewed
+
+None. Pass 3 reviewed `047a875d`, and every commit after it changes only the records of this change (`passes.jsonl`, this record, and the `make record` output) or archives the change, which applies the reviewed deltas with the pinned CLI. Architect check by the coordinator (Niki): not needed, nothing to check.
+
 ## Deviations
 
 1. Q9 asked for a `breaking-changes.json` entry, but the check reports no change and the schema required at least one. `breaking-changes.schema.json` gains an optional `behaviorChanges` list, with `breakingChanges` empty only beside it; `make contract-compatibility` compares only the tool-reported list. The `sdlc-wire-contracts` requirement "Breaking-change declarations" is MODIFIED for it.
@@ -161,6 +179,5 @@ Branch coverage of `make verify` on `dist`, before (`verify-11c-2.log`) and afte
 
 ## Remaining gates
 
-- Review pass 3 (role A, `agy gemini-4-argon-medium#medium`), because pass 2 reported a Medium finding; it reviews the pass 2 fixes.
 - Run `make verify-linux-crash-windows` and `make verify-linux-g2-scenarios` on a Linux host before integration: the coordinator has Zaki run them on hpz600 against the final pushed archive head.
 - Integration into dev by the coordinator (single pull request).

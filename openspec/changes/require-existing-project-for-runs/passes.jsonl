@@ -1,2 +1,3 @@
 {"change":"require-existing-project-for-runs","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1a495-42d8-7780-82d5-25d605a0491a","counts":{"critical":0,"high":0,"medium":2,"low":1}}
 {"change":"require-existing-project-for-runs","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"7692c8cf-9d1f-4b62-9212-6a315e2cd32a","counts":{"critical":0,"high":0,"medium":1,"low":5}}
+{"change":"require-existing-project-for-runs","pass":3,"role":"A","reviewer":{"harness":"agy","model":"gemini-4-argon-medium","variant":"medium"},"session":"7671369b-7d5d-44c2-91c9-7294b0322e0e","counts":{"critical":0,"high":0,"medium":0,"low":0}}
