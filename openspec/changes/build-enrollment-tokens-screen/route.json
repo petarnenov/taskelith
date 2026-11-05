@@ -1,10 +1,10 @@
 {
   "change": "build-enrollment-tokens-screen",
-  "generatedAt": "2026-11-05T05:14:12.615Z",
+  "generatedAt": "2026-11-05T05:47:54.923Z",
   "devCommit": "3191c26217da161ce28c9738adf21d87493cfba6",
-  "headCommit": "1096ba7c39e1a9c2a8bf0a075d86756c1b5cec60",
+  "headCommit": "059b25fd50f04e73348566e2fbbd4b9b87b5af07",
   "features": {
-    "linesChanged": 3027,
+    "linesChanged": 3091,
     "filesChanged": 28,
     "capabilities": [
       "product-ui"
@@ -69,7 +69,7 @@
     "status": "answered",
     "model": "jev-1.14.0",
     "tier": "elevated",
-    "thirdPassProbability": 0.63,
+    "thirdPassProbability": 0.62,
     "threshold": 0.4,
     "passes": [
       {
@@ -100,6 +100,6 @@
         }
       }
     ],
-    "latencyMs": 267
+    "latencyMs": 278
   }
 }
