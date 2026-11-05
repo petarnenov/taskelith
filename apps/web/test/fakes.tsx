@@ -23,7 +23,18 @@ import { createTurnRecordStore, type TurnRecordStore } from '../src/agent-sessio
 import { APP_BASENAME, appRoutes } from '../src/routes';
 import type { Clock } from '../src/session/clock';
 import type { LoginOutcome, LogoutOutcome, Operator, SessionGateway, SessionRead } from '../src/session/session';
-import type { WorkerAdmissionEntry, WorkersGateway, WorkersView } from '../src/workers/workers';
+import type {
+  EnrollmentToken,
+  EnrollmentTokenList,
+  HostConstraints,
+  IssuedEnrollmentToken,
+  IssueResult,
+  RevokeResult,
+  RotateResult,
+  WorkerAdmissionEntry,
+  WorkersGateway,
+  WorkersView,
+} from '../src/workers/workers';
 
 export const NOW = Date.parse('2026-11-02T10:00:00.000Z');
 export const HOUR = 3_600_000;
@@ -271,8 +282,39 @@ export function workersView(overrides: Partial<WorkersView> = {}): WorkersView {
   return { asOf: '2026-11-03T09:10:00.000Z', workers: [worker()], ...overrides };
 }
 
+export function enrollmentToken(overrides: Partial<EnrollmentToken> = {}): EnrollmentToken {
+  return {
+    tokenId: 'token-1',
+    issuedAt: '2026-11-03T09:00:00.000Z',
+    expiresAt: '2026-11-03T09:15:00.000Z',
+    constraints: {},
+    ...overrides,
+  };
+}
+
+// A secret of the documented shape, which lives in the tests alone.
+export const TOKEN_SECRET = `tken_${'s'.repeat(43)}`;
+
+export function issuedToken(overrides: Partial<IssuedEnrollmentToken> = {}): IssuedEnrollmentToken {
+  return { token: enrollmentToken(), secret: TOKEN_SECRET, ...overrides };
+}
+
+export function tokenList(tokens: readonly EnrollmentToken[] = [], truncated = false): ReadResult<EnrollmentTokenList> {
+  return { kind: 'read', value: { tokens, truncated } };
+}
+
 export class FakeWorkersGateway implements WorkersGateway {
   readonly listWorkers = vi.fn(async (): Promise<ReadResult<WorkersView>> => ({ kind: 'read', value: workersView() }));
+
+  readonly listEnrollmentTokens = vi.fn(async (): Promise<ReadResult<EnrollmentTokenList>> => tokenList());
+
+  readonly issueEnrollmentToken = vi.fn(async (_constraints: HostConstraints): Promise<IssueResult> => ({ kind: 'issued', value: issuedToken() }));
+
+  readonly revokeEnrollmentToken = vi.fn(async (_tokenId: string): Promise<RevokeResult> => ({ kind: 'revoked' }));
+
+  readonly rotateEnrollmentToken = vi.fn(
+    async (tokenId: string): Promise<RotateResult> => ({ kind: 'issued', value: issuedToken({ token: enrollmentToken({ tokenId: `${tokenId}-rotated` }) }) }),
+  );
 }
 
 export function renderApp(

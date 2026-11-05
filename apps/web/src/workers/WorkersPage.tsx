@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { useId } from 'react';
 import type { ReadFailed, ReadFailure } from '../api/read-result';
 import { formatInstant } from '../board/board-labels';
@@ -7,6 +7,7 @@ import { LoadError, withRequiredRole } from '../board/LoadError';
 import { WORKERS } from '../screens';
 import { useSession } from '../session/SessionProvider';
 import { LoadingStatus } from '../shell/LoadingStatus';
+import { EnrollmentTokens, TOKENS_SECTION_ID } from './EnrollmentTokens';
 import { INSTALLATION_OWNER, type SelfCheckResult, type WorkerAdmissionEntry, type WorkersView } from './workers';
 import { ADMISSION_LABELS, failedFirst, OUTCOME_LABELS, PLATFORM_LABELS, REASON_LABELS } from './workers-labels';
 import { useWorkers } from './useWorkers';
@@ -16,14 +17,22 @@ import { useWorkers } from './useWorkers';
 const ERROR_COLOR = 'var(--mantine-color-error)';
 
 // The workers of the installation (product UI "Automatic worker
-// admission"): one snapshot of listWorkers, read again on Refresh.
+// admission"), one snapshot read again on Refresh, and the enrollment tokens.
 export function WorkersPage() {
-  const { view } = useSession();
+  const { view, signedInGeneration } = useSession();
   const owner = view.status === 'signed-in' && view.operator.installationRoles.includes(INSTALLATION_OWNER);
   return (
     <Stack>
       <Title order={1}>{WORKERS.title}</Title>
-      {owner ? <Workers /> : <RoleNotice />}
+      {owner ? (
+        <>
+          <Workers />
+          {/* Each sign-in mounts its own section; no reveal outlives it. */}
+          <EnrollmentTokens key={signedInGeneration()} />
+        </>
+      ) : (
+        <RoleNotice />
+      )}
     </Stack>
   );
 }
@@ -64,7 +73,9 @@ function ShownWorkers({ view, refreshing, onRefresh }: ShownWorkersProps) {
         {refreshing ? <LoadingStatus text="Refreshing the workers…" /> : null}
       </Group>
       {view.workers.length === 0 ? (
-        <Text c="dimmed">No worker is enrolled. Enroll one with an enrollment token.</Text>
+        <Text c="dimmed">
+          No worker is enrolled. Enroll one with an <Anchor href={`#${TOKENS_SECTION_ID}`}>enrollment token</Anchor>.
+        </Text>
       ) : (
         <SimpleGrid component="section" aria-label="Workers" cols={{ base: 1, sm: 2, xl: 4 }}>
           {view.workers.map((worker) => (

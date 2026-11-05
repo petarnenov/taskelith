@@ -29,7 +29,12 @@ export function denialOf(requiredRole: string | undefined): ReadFailed {
 }
 
 export function failureReason(body: unknown): unknown {
-  return detailsOf(body)?.reason;
+  return failureDetail(body, 'reason');
+}
+
+// One named entry of a Failure's details, as received.
+export function failureDetail(body: unknown, name: string): unknown {
+  return detailsOf(body)?.[name];
 }
 
 export function requiredRoleOf(body: unknown): string | undefined {

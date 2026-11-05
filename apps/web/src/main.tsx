@@ -14,7 +14,8 @@ import { createWorkersGateway } from './workers/control-plane-workers';
 const root = document.getElementById('root');
 if (root === null) throw new Error('The page has no #root element.');
 const router = createBrowserRouter(appRoutes(), { basename: APP_BASENAME });
-// The board gateway reads the session's CSRF token through the getter alone.
+// The board and workers gateways read the session's CSRF token through
+// the getter alone.
 const session = createSessionGateway();
 createRoot(root).render(
   <StrictMode>
@@ -22,7 +23,7 @@ createRoot(root).render(
       router={router}
       gateway={session}
       board={createBoardGateway({ csrfToken: session.csrfToken })}
-      workers={createWorkersGateway()}
+      workers={createWorkersGateway({ csrfToken: session.csrfToken })}
       turnRecords={createTurnRecordStore()}
       clock={browserClock}
       styleNonce={pageStyleNonce(document)}
