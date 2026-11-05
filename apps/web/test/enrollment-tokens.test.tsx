@@ -58,6 +58,7 @@ afterEach(() => {
 
 const WORKERS_PATH = '/app/workers';
 const VIEWER: SessionRead = { kind: 'authenticated', operator: { ...OPERATOR, installationRoles: [] } };
+const OTHER_OWNER: SessionRead = { kind: 'authenticated', operator: { ...OPERATOR, loginName: 'other-owner' } };
 const EXPIRY_CHECK = HOUR + EXPIRY_MARGIN_MILLISECONDS;
 const SECRET_SHAPE = 'tken_';
 
@@ -540,6 +541,37 @@ describe('the revealed secret', () => {
     expectNoSecret();
   });
 
+  it('is dropped when another owner signs in, with the notice of the earlier one', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(OTHER_OWNER);
+    const { clock } = openTokens(new FakeWorkersGateway(), session);
+    await issueToken();
+    act(() => clock.advance(EXPIRY_CHECK));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await shownTokens();
+    expect(screen.queryByText('Token issued')).toBeNull();
+    expectNoSecret();
+  });
+
+  it('is never written by an answer that settles after another owner signed in', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(OTHER_OWNER);
+    const later = deferred<IssueResult>();
+    const gateway = new FakeWorkersGateway();
+    gateway.issueEnrollmentToken.mockReturnValueOnce(later.promise);
+    const { clock } = openTokens(gateway, session);
+    const { user, form } = await openForm();
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    await screen.findByText('Issuing a token…');
+    act(() => clock.advance(EXPIRY_CHECK));
+    await waitFor(() => expect(screen.queryByText('Issuing a token…')).toBeNull());
+    await act(async () => later.resolve({ kind: 'issued', value: issuedToken() }));
+    await shownTokens();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('Token issued')).toBeNull();
+    expectNoSecret();
+  });
+
   it('is never written by an answer that settles after the operator left', async () => {
     const later = deferred<IssueResult>();
     const gateway = new FakeWorkersGateway();
@@ -778,14 +810,17 @@ describe('the stale CSRF token', () => {
     expect(gateway.issueEnrollmentToken).toHaveBeenCalledTimes(1);
   });
 
-  it('sends nothing again when the session read finds another operator', async () => {
+  it('sends nothing again when the session read finds another owner, whose section starts afresh', async () => {
     const session = fakeGateway(AUTHENTICATED);
-    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce({ kind: 'authenticated', operator: { ...OPERATOR, loginName: 'other' } });
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(OTHER_OWNER);
     const gateway = rejectedOnce(new FakeWorkersGateway());
     openTokens(gateway, session);
     const { user, form } = await openForm();
     await user.click(form.getByRole('button', { name: 'Issue token' }));
-    expect((await screen.findByText('Not issued')).closest('[role="status"]')?.textContent).toContain('The session changed while the session token was renewed');
+    await waitFor(() => expect(session.read).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Enroll a worker' })).toBeNull());
+    await shownTokens();
+    expect(screen.queryByText('Not issued')).toBeNull();
     expect(gateway.issueEnrollmentToken).toHaveBeenCalledTimes(1);
   });
 

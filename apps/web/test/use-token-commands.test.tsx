@@ -1,11 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
-import { SessionProvider, useSession } from '../src/session/SessionProvider';
+import { EXPIRY_MARGIN_MILLISECONDS, SessionProvider, useSession } from '../src/session/SessionProvider';
+import type { SessionGateway } from '../src/session/session';
 import { useTokenCommands } from '../src/workers/useTokenCommands';
-import type { RevokeResult } from '../src/workers/workers';
+import type { IssueResult, RevokeResult } from '../src/workers/workers';
 import { WorkersServicesProvider } from '../src/workers/WorkersServices';
-import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, ManualClock, TOKEN_SECRET } from './fakes';
+import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, HOUR, issuedToken, ManualClock, OPERATOR, TOKEN_SECRET } from './fakes';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -16,9 +17,9 @@ function deferred<T>() {
 }
 
 // The hook under the providers the workers page gives it, once signed in.
-async function commandsHook(gateway: FakeWorkersGateway, onListChanged: () => void) {
+async function commandsHook(gateway: FakeWorkersGateway, onListChanged: () => void, session: SessionGateway = fakeGateway(AUTHENTICATED), clock = new ManualClock()) {
   const wrapper = ({ children }: { readonly children: ReactNode }) => (
-    <SessionProvider gateway={fakeGateway(AUTHENTICATED)} clock={new ManualClock()}>
+    <SessionProvider gateway={session} clock={clock}>
       <WorkersServicesProvider gateway={gateway}>{children}</WorkersServicesProvider>
     </SessionProvider>
   );
@@ -72,5 +73,25 @@ describe('useTokenCommands', () => {
     expect(hook.result.current.commands.reveal).toBeUndefined();
     expect(hook.result.current.commands.status?.kind).toBe('issued');
     expect(JSON.stringify(hook.result.current.commands)).not.toContain(TOKEN_SECRET);
+  });
+
+  it('drops an answer that settles under another sign-in than the one it was sent under', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const other = { ...OPERATOR, loginName: 'other-owner' };
+    session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce({ kind: 'authenticated', operator: other });
+    const clock = new ManualClock();
+    const gateway = new FakeWorkersGateway();
+    const later = deferred<IssueResult>();
+    gateway.issueEnrollmentToken.mockReturnValueOnce(later.promise);
+    const changes: string[] = [];
+    const hook = await commandsHook(gateway, () => changes.push('refresh'), session, clock);
+    act(() => hook.result.current.commands.run({ name: 'issue', constraints: {} }));
+    act(() => clock.advance(HOUR + EXPIRY_MARGIN_MILLISECONDS));
+    await waitFor(() => expect(hook.result.current.session.view).toMatchObject({ operator: { loginName: 'other-owner' } }));
+    await act(async () => later.resolve({ kind: 'issued', value: issuedToken() }));
+    expect(hook.result.current.commands.running).toBeUndefined();
+    expect(hook.result.current.commands.reveal).toBeUndefined();
+    expect(hook.result.current.commands.status).toBeUndefined();
+    expect(changes).toEqual([]);
   });
 });
