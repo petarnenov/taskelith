@@ -64,15 +64,16 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8072cdb64b59932bf7602b9856b9e53885fabbcb`; tests 4861, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.91% branches, 98.88% functions.
+- `make verify`: passed, profile full, tree `04b1319dae87e3323e0674f1924d3691acaaacc4`; tests 4882, pass 4873, fail 0, skipped 9; all files 99.45% lines, 92.91% branches, 98.88% functions.
 - `npm run openspec -- validate build-enrollment-tokens-screen --strict`: passed, `Change 'build-enrollment-tokens-screen' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 124 file(s); every pass summary file is valid: 104 file(s); every route file is valid: 57 file(s).`.
-- Spec diff against the merge base `3191c26217da` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 127 file(s); every pass summary file is valid: 107 file(s); every route file is valid: 60 file(s).`.
+- Spec diff against the merge base `6738a8f963fe` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1aa0b-ef11-7242-9a9f-861006199bf9` | 0 | 2 | 4 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `2dcb0e4a-09e7-41c1-936a-44a589fa151b` | 0 | 0 | 0 | 16 |
 <!-- make record: end -->
 
 ## Independent review
@@ -145,6 +146,9 @@ No later pass reviews these fixes (see "Fixes no later pass reviewed"). Fail-bef
 - Findings 11 to 14 (`c94cc6f7`): the delta adds "Web SPA enrollment tokens access" (404 characters) with the scenarios "Operator without the role", "Role refused by the control plane", and "List unavailable", which the page and adapter tests already cover (`reads nothing without the installation-owner role`, the denied and failed read tests, and the adapter's 403 tests of pass 1 finding 1); "Risks" cites `answerRoute` of `apps/control-plane/src/api/api-server.ts` (authenticate, CSRF, role, then the body); decision 7 names `red.1` and `red.2` and the dark scheme's darkened `red.9`, checked against `get-css-color-variables.mjs` of Mantine 9.7.4; "Departures" records the list rereads against Q8 (a)'s wording, a deliberate departure that decision 4 explains, so the behaviour is unchanged.
 - Findings 5, 15, and 16 (`3e6fb05a`): "Limitations" and the design's "Risks" state the dropped 201 of another sign-in; the self-check gives the requirement lengths after the pass 2 fixes; "Revision" names `1096ba7c` as the temporary commit of the pass 1 route, whose features equal those of `8e5338bc`, and the route after the pass 2 fixes was made without a temporary commit (`headCommit` `059b25fd`).
 - After the fixes the whole `apps/web` suite passes: 1,042 tests in 38 files (`coverage-33b-p2.log` in the session scratchpad), 99.28% statements, 98.12% branches, 100% functions, and 100% lines, every file of `src/workers` at 100 on each metric; `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `npm run verify:links`, and `npm run openspec -- validate build-enrollment-tokens-screen --strict` pass, the requirements at 484, 456, 480, 404, and 492 characters; every comment the fixes add to a `.tsx` file was checked by hand against the rule; `git diff 3191c262 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
+
+- The merge `faa999ec` of `origin/dev` `6738a8f9` (#448, #449, and #450, the archived `stabilize-g2-partition`, `stabilize-fleet-renewal-lock-test`, and `stabilize-secrets-linear-time-test`) touched no file of this change and no file under `apps/web` or `openspec/specs/product-ui`, and merged without conflict; `package-lock.json` is unchanged, so no `make setup` or dependency inventory was needed.
+- `make verify` of the fixed, recorded, and merged tree (`faa999ec`, tree `04b1319d`), `verify-33b-merged.log` in the session scratchpad with its exit code `0` in `verify-33b-merged.exit`: passed at the first run, profile full, no rerun of any suite (neither known flake, the installation-script base-ten test nor `web-app.test.ts:279`, failed), nothing appended to the log; 4,882 Node tests, 4,873 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 1,042 tests in 38 files, all passing, 99.28% statements, 98.12% branches, 100% functions, and 100% lines. The generated part above records it.
 
 ## Fixes no later pass reviewed
 
