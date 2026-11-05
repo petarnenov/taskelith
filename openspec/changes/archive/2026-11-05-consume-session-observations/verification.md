@@ -246,6 +246,22 @@ UNREVIEWED: no reviewer has seen the seven fixes of pass 2; `findings.jsonl` hol
 
 Architect check of unreviewed fixes (coordinator): not done yet; the coordinator records it here or, since the branch is archived, in the pull request body.
 
+## Archive
+
+After `f1b11693`, every task in `tasks.md` was ticked and `npm run openspec -- archive consume-session-observations --yes` moved the change to `openspec/changes/archive/2026-11-05-consume-session-observations/` and applied the deltas: `execution-wire-contracts` 1 modified, `nats-transport` 1 added, `observation-consumption` 6 added (`Totals: + 7, ~ 1, - 0, → 0`). The checked state is the tree of the archive commit, which is the working tree these checks ran on; only this section was written after them.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 71 passed, 0 failed (71 items)` |
+| `make verify`, first run (log `verify-4-failed.log`, outside the repository) | failed: the Node.js suites passed (tests 4956, pass 4909, fail 0, skipped 47), then one of 816 tests of `apps/web` failed, `test/board-page.test.tsx` "an unauthenticated answer of a request sent before a logout leaves the session of a later login signed in", with `Unable to find role="menuitem" and name "Sign out"` after 5507 ms, at a host load average of about 8 on 8 CPUs. This change touches no file of `apps/web`. |
+| `make verify`, second run on the same unchanged tree (log `verify-4.log`) | `make verify: passed, profile full, uncommitted working tree; no stamp written`; tests 4956, pass 4909, fail 0, skipped 47; all files 99.42% lines, 93.02% branches, 98.86% functions; `apps/web` 816 of 816 tests passed |
+| This change's line in `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-11-05-consume-session-observations` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `6738a8f963fe` | only this change's edits: the `Protocol version` requirement of `execution-wire-contracts` (6 lines changed), the added requirement of `nats-transport` (27 lines), and the six added requirements of `observation-consumption` (102 lines); 3 files, 134 insertions, 1 deletion |
+| The moved change has `findings.jsonl` (11 findings) and `passes.jsonl` (2 passes) | yes |
+| `make findings ARGS="validate"` | `Every findings file is valid: 127 file(s); every pass summary file is valid: 107 file(s); every route file is valid: 60 file(s).` |
+
+The first `make verify` failure is reported to the coordinator as a possibly flaky web test; nothing was changed between the two runs. "Generated checks" above is the record of `63353925`, before the archive; `make record` does not run on an archived change.
+
 ## Limitations
 
 - Nothing in production opens or binds a session, so no session observation changes a session outside tests until item 18's first sub-change (decision Q4).

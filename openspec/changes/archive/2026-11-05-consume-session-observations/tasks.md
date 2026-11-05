@@ -49,5 +49,5 @@
 
 ## 9. Review and archive
 
-- [ ] 9.1 Independent review
-- [ ] 9.2 Archive the change
+- [x] 9.1 Independent review
+- [x] 9.2 Archive the change

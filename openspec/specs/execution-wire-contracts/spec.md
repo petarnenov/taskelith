@@ -159,7 +159,7 @@ The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDel
 - **THEN** validation fails
 
 ### Requirement: Protocol version
-Every execution command, observation, and report SHALL carry a positive integer protocol version. `VersionedCommand` SHALL accept every command whose metadata is valid and whose payload names a version. The package SHALL export `EXECUTION_PROTOCOL_VERSION`, `SESSION_PROTOCOL_VERSION`, `SUPPORTED_PROTOCOL_VERSIONS`, `supportsProtocolVersion`, and `commonProtocolVersion`.
+Every execution command, observation, and report SHALL carry a positive integer protocol version. `VersionedCommand` SHALL accept every command whose metadata is valid and whose payload names a version. The package SHALL export `EXECUTION_PROTOCOL_VERSION`, `SESSION_PROTOCOL_VERSION`, `SUPPORTED_PROTOCOL_VERSIONS`, the worker's window, `CONTROL_PLANE_PROTOCOL_VERSIONS`, the control plane's window of versions 1 to 2, `supportsProtocolVersion`, and `commonProtocolVersion`.
 
 #### Scenario: Later version
 - **WHEN** a worker supporting version 1 receives an offer of version 2 with unknown payload fields
@@ -168,6 +168,10 @@ Every execution command, observation, and report SHALL carry a positive integer 
 #### Scenario: No common version
 - **WHEN** the worker supports only version 1 and the control plane versions 2 to 3
 - **THEN** `commonProtocolVersion` returns no version
+
+#### Scenario: Control plane window
+- **WHEN** the common version of `CONTROL_PLANE_PROTOCOL_VERSIONS` is taken with `SUPPORTED_PROTOCOL_VERSIONS`, with a window of versions 1 to 2, and with a window of version 3 only
+- **THEN** it is 1, then 2, then no version
 
 ### Requirement: Declared capacity bounds
 The `WorkerCapacity` schema SHALL bound `slots`, `cpuMillicores`, and `memoryMebibytes` to at most `2147483647`, the largest PostgreSQL `integer`, in both the OpenAPI and the AsyncAPI execution document.
