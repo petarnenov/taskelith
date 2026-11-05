@@ -787,7 +787,7 @@ describe('rotating a token', () => {
     openTokens(gateway);
     const user = await confirm('token-1', 'Rotate');
     const notice = within(await screen.findByText('Not rotated, or rotated but not shown').then((title) => title.closest('[role="status"]') as HTMLElement));
-    expect(notice.getByText(/if token token-1 is still listed, it was not rotated/)).toBeDefined();
+    expect(notice.getByText(/^The control plane gave no usable answer\. Refresh the list: if token token-1 is still listed, it was not rotated/)).toBeDefined();
     expect(notice.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(1);
     await user.click(notice.getByRole('button', { name: 'Refresh the list' }));

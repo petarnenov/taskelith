@@ -151,9 +151,9 @@ describe('statusTextOf', () => {
     [
       NO_ANSWER_ISSUE,
       'Not issued, or issued but not shown',
-      'The control plane did not answer, so a token may have been issued even though its secret was not shown. Refresh the list: a pending token you do not recognise may be that one, and it can be revoked or rotated. A token missing from the list may still have been issued, since the list shows only pending tokens and may be cut short.',
+      'The control plane gave no usable answer, so a token may have been issued even though its secret was not shown. Refresh the list: a pending token you do not recognise may be that one, and it can be revoked or rotated. A token missing from the list may still have been issued, since the list shows only pending tokens and may be cut short.',
     ],
-    [NO_ANSWER_REVOKE, 'Not revoked', 'The control plane did not answer, so token token-1 may still be pending. Retry revokes it again.'],
+    [NO_ANSWER_REVOKE, 'Not revoked', 'The control plane gave no usable answer, so token token-1 may still be pending. Retry revokes it again.'],
   ])('words %o', (settled, title, text) => {
     expect(statusTextOf(settled)).toEqual({ title, text });
   });
