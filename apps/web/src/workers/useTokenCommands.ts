@@ -22,7 +22,7 @@ export interface TokenCommands {
 }
 
 // The token commands of the section: one at a time, with the CSRF resend
-// of the composer, the secret of a 201 held in this state alone.
+// of the composer; an answer under another sign-in is dropped.
 export function useTokenCommands(onListChanged: () => void): TokenCommands {
   const gateway = useWorkersGateway();
   const { refresh, signedInGeneration } = useSession();
@@ -41,8 +41,7 @@ export function useTokenCommands(onListChanged: () => void): TokenCommands {
   // After a CSRF refusal the session is read again once and the command
   // sent again with the renewed token under the same sign-in.
   const answerOf = useCallback(
-    async (command: Command): Promise<Settled> => {
-      const sentUnder = signedInGeneration();
+    async (command: Command, sentUnder: number | undefined): Promise<Settled> => {
       let tokenRefreshed = false;
       for (;;) {
         const outcome = outcomeOf(command, await send(gateway, command), tokenRefreshed);
@@ -61,17 +60,19 @@ export function useTokenCommands(onListChanged: () => void): TokenCommands {
       if (inFlight.current) return;
       inFlight.current = true;
       setRunning(command);
-      void answerOf(command).then((settled) => {
+      const sentUnder = signedInGeneration();
+      void answerOf(command, sentUnder).then((settled) => {
         inFlight.current = false;
         if (!mounted.current) return;
         setRunning(undefined);
+        if (signedInGeneration() !== sentUnder) return;
         const notice = noticeOf(settled);
         setStatus(notice);
         if (settled.kind === 'issued') setReveal(revealOf(settled.issued, command));
         if (changesList(notice)) onListChanged();
       });
     },
-    [answerOf, onListChanged],
+    [answerOf, onListChanged, signedInGeneration],
   );
 
   const closeReveal = useCallback(() => setReveal(undefined), []);

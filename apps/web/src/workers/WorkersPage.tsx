@@ -19,7 +19,7 @@ const ERROR_COLOR = 'var(--mantine-color-error)';
 // The workers of the installation (product UI "Automatic worker
 // admission"), one snapshot read again on Refresh, and the enrollment tokens.
 export function WorkersPage() {
-  const { view } = useSession();
+  const { view, signedInGeneration } = useSession();
   const owner = view.status === 'signed-in' && view.operator.installationRoles.includes(INSTALLATION_OWNER);
   return (
     <Stack>
@@ -27,7 +27,8 @@ export function WorkersPage() {
       {owner ? (
         <>
           <Workers />
-          <EnrollmentTokens />
+          {/* Each sign-in mounts its own section; no reveal outlives it. */}
+          <EnrollmentTokens key={signedInGeneration()} />
         </>
       ) : (
         <RoleNotice />
