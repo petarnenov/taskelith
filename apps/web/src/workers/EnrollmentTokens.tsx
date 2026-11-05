@@ -98,7 +98,6 @@ function ConstraintsFields({ busy, onIssue }: IssueFormProps) {
       setHostnameError(HOSTNAME_ERROR);
       return;
     }
-    setHostnameError(undefined);
     onIssue(check.constraints);
   };
   return (
@@ -135,7 +134,10 @@ function ConstraintsFields({ busy, onIssue }: IssueFormProps) {
           description="Leave empty to accept any hostname."
           value={form.hostname}
           error={hostnameError}
-          onChange={(event) => setForm({ ...form, hostname: event.currentTarget.value })}
+          onChange={(event) => {
+            setForm({ ...form, hostname: event.currentTarget.value });
+            setHostnameError(undefined);
+          }}
         />
         <Group>
           <CommandButton type="submit" busy={busy}>
