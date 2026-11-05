@@ -19,6 +19,10 @@ The schema tables SHALL name the schema of every message of the execution channe
 - **WHEN** `execution.scm-credential.adopted` or `execution.scm-credential.not-adopted` is read from the observation subject
 - **THEN** it is refused as an unknown observation type, which quarantines it
 
+#### Scenario: Command of items 21 and 38
+- **WHEN** a worker whose window is version 1 reads `execution.scm-credential.refreshed` or `session.delegation-result.deliver`
+- **THEN** one of version 2 passes with its type and `commandId` only, so that the worker rejects it, and one of version 1 is refused as an unknown command type, which quarantines it
+
 #### Scenario: Session command at a worker of version 1
 - **WHEN** a worker whose window is version 1 reads a session command of version 2
 - **THEN** the command passes with its type and `commandId` only, unchecked against its schema, so that the worker rejects it

@@ -32,7 +32,15 @@
 - [x] 6.1 Fail-before runs and mutation controls
 - [x] 6.2 Route, `make verify`, `make record`, and `make record-check`
 
-## 7. Review and archive
+## 7. Fix round after review pass 1
 
-- [ ] 7.1 Independent review
-- [ ] 7.2 Archive the change
+- [x] 7.1 Finding 1: tell a failure of the timeline's stores from a refusal through `WatchedTimelineStores`; unit tests and a Postgres test of a store conflict after the timeline wrote; design and spec corrected
+- [x] 7.2 Finding 2: a protocol rejection with a window of versions 2 to 3, with its mutation control
+- [x] 7.3 Finding 3: the fields of each kind of evidence log in the spec
+- [x] 7.4 Finding 4: the deferred commands of items 21 and 38 at a worker of version 1, in the comments, the design, and a test
+- [ ] 7.5 `make verify`, `make record`, and `make record-check` again
+
+## 8. Review and archive
+
+- [ ] 8.1 Independent review
+- [ ] 8.2 Archive the change

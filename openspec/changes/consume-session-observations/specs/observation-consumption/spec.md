@@ -43,7 +43,7 @@ A session observation SHALL change a session only when the attempt it names is t
 - **THEN** the session is unchanged, and it is confirmed and logged with the reason `attempt-not-held`
 
 ### Requirement: Session observation refusals
-A session observation that the timeline refuses with `invalid`, `not-found`, `conflict`, or `precondition-failed` SHALL be applied without effect in the same transaction and confirmed. It SHALL be logged as `execution.observation.evidence`, unless the session already holds the reported fact, which is a repeat. Any other failure SHALL be returned, so that the observation is delivered again.
+A session observation that the timeline refuses with `invalid`, `not-found`, `conflict`, or `precondition-failed` before any of its store calls failed or wrote SHALL be confirmed without effect and logged as `execution.observation.evidence`, unless the session already holds the reported fact, a repeat. Any other failure, also one with such a code, SHALL be returned, so that the transaction rolls back and the observation is delivered again.
 
 #### Scenario: Output of a turn whose acceptance is unknown
 - **WHEN** `session.output.appended`, `session.request.recorded`, or `session.turn.ended` arrives for a turn that is `outcome-unknown`
@@ -61,8 +61,20 @@ A session observation that the timeline refuses with `invalid`, `not-found`, `co
 - **WHEN** the timeline fails with `internal`, or the store fails while the session is read
 - **THEN** the failure is returned and nothing is logged as evidence
 
+#### Scenario: Store failure with a refusal's code
+- **WHEN** a store of the timeline answers `conflict` after the timeline wrote a request's key, its session, and its events
+- **THEN** the failure is returned as `internal`, nothing is logged as evidence, and no session change, key, item, event, inbox entry, or cursor is committed
+
+#### Scenario: Refusal's code from the first write or from a read
+- **WHEN** the timeline's first write, or one of its reads, fails with `conflict` or `precondition-failed`
+- **THEN** the failure is returned as `internal` and nothing is logged as evidence
+
 ### Requirement: Session observation logs
-An evidence log of a session observation SHALL name only the observation's type, its session, a reason, and the failure code, beside the worker, the observation, and the correlation. It SHALL NOT hold a text of the payload or the message of a failure.
+An evidence log of a session observation SHALL name, beside the worker, the observation, and the correlation, only: for an ownership refusal the observation's type, its session, and the reason; for a timeline refusal those and the failure code; for the epoch gate the type, the observation's and the current recovery epoch, and the quarantine state. It SHALL NOT hold a text of the payload or the message of a failure.
+
+#### Scenario: Fields of each kind of evidence
+- **WHEN** an ownership refusal, a timeline refusal, and an observation stopped by the epoch gate are logged
+- **THEN** the first names `observationType`, `sessionId`, and `reason`; the second those and `code`; the third `observationType`, `recoveryEpoch`, `currentEpoch`, and `quarantined`
 
 #### Scenario: Refused output and request
 - **WHEN** a refused `session.output.appended` and a refused `session.request.recorded` are logged
@@ -81,6 +93,10 @@ The control plane SHALL take a worker's common protocol version against `CONTROL
 #### Scenario: Worker window that reaches version 2
 - **WHEN** a worker enrolls or declares its capacity with a window of versions 1 to 2
 - **THEN** its protocol version is 2
+
+#### Scenario: Protocol rejection with a window that reaches version 2
+- **WHEN** a worker rejects an offer for `protocol-not-supported` with a window of versions 2 to 3
+- **THEN** the assignment is refused, and the worker's protocol version is 2
 
 #### Scenario: Worker window above the control plane's
 - **WHEN** a worker rejects an offer for `protocol-not-supported` with a window of versions 3 to 4
