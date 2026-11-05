@@ -56,6 +56,13 @@ describe('readPagesUpTo', () => {
     expect(await readPagesUpTo(send, pageOf)).toEqual(failure);
   });
 
+  it('maps a failed page with the failure mapping it is given', async () => {
+    const send = vi.fn(async (after: string | undefined) => (after === undefined ? { status: 200, body: { items: ['a'], next: 'p2' } } : { status: 403, body: {} }));
+    const unavailable = vi.fn(() => ({ kind: 'unavailable' }) as const);
+    expect(await readPagesUpTo(send, pageOf, unavailable)).toEqual({ kind: 'unavailable' });
+    expect(unavailable.mock.calls).toEqual([[{ status: 403, body: {} }]]);
+  });
+
   it('reads a send that throws as unreachable', async () => {
     const send = vi.fn(async () => {
       throw new TypeError('offline');

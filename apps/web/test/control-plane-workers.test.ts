@@ -120,12 +120,26 @@ describe('listEnrollmentTokens', () => {
     ['400, which only a cursor the control plane itself named could cause', json(400, INVALID), 'unavailable'],
     ['401 unauthenticated', json(401, UNAUTHENTICATED), 'unauthenticated'],
     ['403 with the role', json(403, ROLE_REQUIRED), 'denied'],
+    ['403 csrf-token-invalid, which a GET never earns', json(403, CSRF_REJECTED), 'unavailable'],
+    ['403 with an unknown reason', json(403, { code: 'forbidden', message: 'No.', details: { reason: 'unexpected' } }), 'unavailable'],
+    ['403 without a reason', json(403, { code: 'forbidden', message: 'No.', details: {} }), 'unavailable'],
+    ['403 without a body', new Response(null, { status: 403 }), 'unavailable'],
     ['404, which the list does not document', json(404, NOT_FOUND), 'unavailable'],
     ['503', json(503, { code: 'unavailable', message: 'Later.', details: {} }), 'unavailable'],
     ['a page with a token that fails its check', json(200, { tokens: [enrollmentToken({ tokenId: 'token 1' })] }), 'unavailable'],
     ['a page over the maximum', json(200, { tokens: Array.from({ length: 101 }, () => enrollmentToken()) }), 'unavailable'],
   ])('reads %s as %s', async (_, answer, kind) => {
     expect(await gateway(sendAnswers(answer)).listEnrollmentTokens()).toMatchObject({ kind });
+  });
+
+  it.each([
+    ['403 with the role', ROLE_REQUIRED, { kind: 'denied', requiredRole: 'installation-owner' }],
+    ['403 csrf-token-invalid', CSRF_REJECTED, { kind: 'unavailable' }],
+    ['403 with an unknown reason', { code: 'forbidden', message: 'No.', details: { reason: 'unexpected' } }, { kind: 'unavailable' }],
+  ])('reads %s on a later page as on the first', async (_, body, failure) => {
+    const send = sendAnswers(json(200, { tokens: [enrollmentToken()], next: 'token-1' }), json(403, body));
+    expect(await gateway(send).listEnrollmentTokens()).toEqual(failure);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });
 
