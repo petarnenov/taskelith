@@ -90,12 +90,12 @@ function turnAcceptanceUnknown(payload: Payload<'TurnAcceptanceUnknownPayload'>)
 }
 
 function turnEnded(payload: Payload<'TurnEndedPayload'>): SessionReport {
-  const failure = 'failure' in payload ? payload.failure : undefined;
-  const end = { ...turnReport(payload), outcome: payload.outcome, ...(failure === undefined ? {} : { failure }) };
+  const turnFailure = 'failure' in payload ? payload.failure : undefined;
+  const end = { ...turnReport(payload), outcome: payload.outcome, ...(turnFailure === undefined ? {} : { failure: turnFailure }) };
   return {
     apply: (timeline, sessionId) => timeline.recordTurnOutcome(sessionId, end),
     isHeldBy: (session) => session.turns.some((turn) => (
-      turn.id === end.turnId && turn.state === 'ended' && turn.generation === end.generation && turn.outcome === end.outcome && turn.failure === failure
+      turn.id === end.turnId && turn.state === 'ended' && turn.generation === end.generation && turn.outcome === end.outcome && turn.failure === turnFailure
     )),
   };
 }
