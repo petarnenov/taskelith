@@ -376,7 +376,9 @@ describe('issuing a token', () => {
     openTokens(gateway);
     const { user, form } = await openForm();
     await user.click(form.getByRole('button', { name: 'Issue token' }));
-    expect(noticeOf('No access to issue tokens').textContent).toContain('It needs the role installation-owner.');
+    expect(noticeOf('No access to issue tokens').textContent).toBe(
+      'No access to issue tokensYour session holds no role that lets you issue enrollment tokens; nothing was issued. It needs the role installation-owner.',
+    );
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(1);
   });
 
@@ -703,7 +705,9 @@ describe('revoking a token', () => {
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'denied', requiredRole: 'installation-owner' });
     openTokens(gateway);
     await confirm('token-1', 'Revoke');
-    expect((await screen.findByText('No access to revoke tokens')).closest('[role="status"]')?.textContent).toContain('needs the role installation-owner');
+    expect((await screen.findByText('No access to revoke tokens')).closest('[role="status"]')?.textContent).toBe(
+      'No access to revoke tokensYour session holds no role that lets you revoke enrollment tokens; nothing was revoked. It needs the role installation-owner.',
+    );
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(1);
     expect((await cardOf('token-1')).getByRole('button', { name: 'Revoke' }).getAttribute('aria-disabled')).toBeNull();
   });
