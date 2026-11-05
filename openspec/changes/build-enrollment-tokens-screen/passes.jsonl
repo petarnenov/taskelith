@@ -1,1 +1,2 @@
 {"change": "build-enrollment-tokens-screen", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1aa0b-ef11-7242-9a9f-861006199bf9", "counts": {"critical": 0, "high": 2, "medium": 4, "low": 2}}
+{"change": "build-enrollment-tokens-screen", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "2dcb0e4a-09e7-41c1-936a-44a589fa151b", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 16}}

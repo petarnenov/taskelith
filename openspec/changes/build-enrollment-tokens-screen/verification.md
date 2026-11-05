@@ -15,6 +15,7 @@ Commit type: `apps/web` is a private workspace; the published `taskelith` packag
 - The records commit `docs: record the build-enrollment-tokens-screen proposal, design, spec delta, and SPA status`: the proposal, the design, the spec delta, `tasks.md`, the empty `findings.jsonl` and `passes.jsonl`, this record's hand-written part, and the README status.
 - The route commit `docs: route the build-enrollment-tokens-screen change` (`route.json`, unedited) and the record commit of the `make verify` run, whose generated part is below; the commit identifiers of these three are named in "Evidence check" once made. Pass 1 reviewed `3191c262..7f686ff0`.
 - Pass 1 fixes, each test in its own commit before its fix ("Pass 1 fixes" below): `ad1782a5` test and `19d3f278` fix (finding 5), `578d8e86` and `59fcc4e0` (3), `c5351563` and `7f3f0d2a` (1), `7af8c54c` and `0fa7bf3e` (2), `26564385` and `3f80f4dc` (6), `102cbc4a` test (7), `9d4ed55c` and `b2e169ef` (4), `4b7e2c98` and `71039a30` (8), `8e5338bc` `docs: describe the secret-free status, the per-sign-in section, the list 403, and the settled replacement link in the build-enrollment-tokens-screen design and spec delta`, and `8b54d1cc` `docs: route the build-enrollment-tokens-screen change after the pass 1 fixes` (`route.json` regenerated, unedited, because the fixes changed the diff; its `headCommit` `1096ba7c` is a temporary commit that is not on the branch, `8e5338bc` with the old `route.json` removed, so its features equal those of `8e5338bc`: still elevated (lines, files, security), 3,027 lines in 28 files, size M, the same reviewers and recommendation, shadow `jev-1.14.0` elevated with P(third) 0.63); then the pass 1 records commit `docs: record the build-enrollment-tokens-screen pass 1 summary, findings, and fixes` and the record commit of the `make verify` run after the fixes.
+- Pass 2 reviewed `3191c262..fd6403a0`. Pass 2 fixes, each test in its own commit before its fix where behaviour changed ("Pass 2 fixes" below): `28574e77` test and `f119ea98` fix (finding 2), `a5fe035f` and `10634dc3` (3), `f386b77e` and `2bdcb972` (4), `f7b2a293` and `0471a732` (7), `6847739e` test (10), `a3294fa9` test (9), `662a1c08` (1), `a9f02479` (6), `56f569ed` and its later test `059b25fd` (8), `c94cc6f7` `docs: add the enrollment tokens access requirement and describe the pass 2 fixes, the list rereads departure, and the CSRF order in the build-enrollment-tokens-screen design and spec delta` (11, 12, 13, 14, and the design wording of 1 to 8), `3e6fb05a` `docs: correct the requirement lengths and the route head, and state the dropped 201 of another sign-in, in the build-enrollment-tokens-screen record` (5, 15, 16), and `e4b04861` `docs: route the build-enrollment-tokens-screen change after the pass 2 fixes` (`route.json` regenerated, unedited, with the old one deleted in the working tree only, so its `headCommit` is `059b25fd` on the branch: still elevated (lines, files, security), 3,091 lines in 28 files, the same reviewers and recommendation, shadow `jev-1.14.0` elevated with P(third) 0.62); then the pass 2 records commit, the merge of `origin/dev`, the record commit of the `make verify` run of the merged tree, and the archive commit.
 
 ## Environment
 
@@ -106,6 +107,66 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - After the fixes the whole `apps/web` suite passes: 1,039 tests in 38 files (`coverage-33b-p1.log`); `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `npm run verify:links`, and `npm run openspec -- validate build-enrollment-tokens-screen --strict` pass, the requirements at 484, 456, 480, and 492 characters; every comment the fixes add to a `.tsx` file was checked by hand against the rule; `git diff 3191c262 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
 - `make verify` of the fixed and recorded tree (`c9e4ab69`, tree `8072cdb6`), `verify-33b-p1.log` in the session scratchpad with its exit code `0` in `verify-33b-p1.exit`: passed at the first run, profile full, no rerun of any suite (neither known flake, the installation-script base-ten test nor `web-app.test.ts:279`, failed), nothing appended to the log; 4,861 Node tests, 4,852 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 1,039 tests in 38 files, all passing, 99.28% statements, 98.12% branches, 100% functions, and 100% lines. The generated part above records it.
 
+### Pass 2
+
+- Reviewer B `claude claude-fable-5-1#medium`, run by the worker session on `3191c262..fd6403a0` with `make review` (`env -u JEV_MAF_LAB`): `make review` printed "recommends effort high; the authorized medium applies (policy version 11)" and ran `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit`; Claude Code reported model `claude-fable-5-1` and session `2dcb0e4a-09e7-41c1-936a-44a589fa151b`. The worktree snapshot was `4453f17e…` before and after the run (`snap-33b-p2-before.txt`, `snap-33b-p2-after.txt`), so the worktree remained unchanged. The prompt, the log, the command output, and the report are in the session scratchpad (`review-33b-p2.md`, `review-33b-p2.log`, `review-33b-p2.out`, `review-33b-p2-report.md`).
+- The pass found all eight pass 1 fixes correct and complete, each matching its `findings.jsonl` resolution, the design, and the recorded logs, and judged the twelve departures of the design and the record acceptable; the secret path, the single send, the records, and the hygiene of the diff with no finding.
+- Findings: Critical 0, High 0, Medium 0, Low 16, as in `passes.jsonl`; one line per finding in `findings.jsonl`, numbered as in the report. A Low-only pass ends the review (governance "Review sequence"): no pass 3 runs, the sixteen findings are fixed without another review, and the coordinator checks the fixes as solution architect. Every finding was checked against the code, Mantine 9.7.4's sources, and the control plane before its fix and held; none was declined.
+  1. Low, `EnrollmentTokens.tsx`: `CommandNotice` received the whole `commands` object, so the status region's props held the revealed secret while the dialog was open.
+  2. Low, `tokens-model.ts`: "which is still pending" stayed in the replaced-token notice after the refreshed list no longer held the replacement.
+  3. Low, `tokens-model.ts`: "The control plane did not answer" was shown for a 5xx, a 403 without a documented reason, and a malformed 201 as well.
+  4. Low, `EnrollmentTokens.tsx`: the hostname error stayed on a corrected field until the next submit.
+  5. Low, `useTokenCommands.ts`: a 201 that settles after another sign-in is dropped, minting a token whose secret nobody saw, which "Limitations" did not state.
+  6. Low, `EnrollmentTokens.tsx`: `ConfirmDialog` mirrored its prop into state through an effect, so the first commit of an opening dialog had an empty title and no question.
+  7. Low, `EnrollmentTokens.tsx`: "Close anyway" was a red light button inside a red light alert, both on the same background, so it had no visible boundary at rest.
+  8. Low, `EnrollmentTokens.tsx`: the selects cast their values and listed literal options, so a new enum value would silently miss the form.
+  9. Low, `enrollment-tokens.test.tsx`: a test titled "…with the notice of the earlier one" asserted that notice absent.
+  10. Low, `enrollment-tokens.test.tsx`: no test clicked outside the reveal, so removing `closeOnClickOutside={false}` would pass.
+  11. Low, the spec delta: no requirement covered the token list's gate or its failed reads.
+  12. Low, `design.md` "Risks": the CSRF order was credited to `routes.ts` instead of `api-server.ts`.
+  13. Low, `design.md` decision 7: "`red.9` on `red.0`" instead of `red.1`, and the dark scheme's use of `red.9` unstated.
+  14. Low, `design.md`: the list is read again only after answers that changed it, against Q8 (a)'s wording, not listed under "Departures".
+  15. Low, this record: the self-check gave the secret requirement as 436 characters instead of 456.
+  16. Low, this record and `route.json`: `headCommit` `1096ba7c` is not on the branch, while the record said "regenerated at head `8e5338bc`".
+
+### Pass 2 fixes
+
+No later pass reviews these fixes (see "Fixes no later pass reviewed"). Fail-before logs are in the session scratchpad (`fb-33b-p2-<n>.log`, `<n>` the finding); each ran the test file(s) of the test commit against the sources before the fix, and the whole `apps/web` suite passed after the fixes.
+
+- Finding 2 (`f119ea98`, test `28574e77`): the notice says "Token <id> was replaced by token <replacement>." and the section adds "It is still pending." (`REPLACEMENT_PENDING_TEXT`) with the "Show it" link only while the list read after the answer holds the replacement (design, decision 7). Fail-before `fb-33b-p2-2.log`: 4 tests fail, the model text and the three page tests of a held, a missing, and a still-refreshing list.
+- Finding 3 (`10634dc3`, test `a5fe035f`): the issue, rotate, and revoke no-answer notices say "The control plane gave no usable answer" (design, decision 5); the read failures of the list keep their own text. Fail-before `fb-33b-p2-3.log`: 3 tests fail, the two model texts and the rotate page test.
+- Finding 4 (`2bdcb972`, test `f386b77e`): the hostname field clears its error in `onChange`, and the submit, which can no longer meet a stale error, stops clearing it (design, decision 8). Fail-before `fb-33b-p2-4.log`: the new page test fails on the error left after an edit.
+- Finding 7 (`0471a732`, test `f7b2a293`): the close question keeps its red light alert for "Close without copying?" and its text, and Keep open and Close anyway sit below it on the dialog's surface, so the Close anyway button is the "danger light" pair the contrast matrix already holds in both schemes (design, decision 6). Fail-before `fb-33b-p2-7.log`: the close-question page test fails on the buttons inside the alert.
+- Finding 10 (`6847739e`, no source change): a new page test clicks the reveal's overlay, and the Escape test, retitled, now also expects no close question, which it did not check before; both expect the dialog still open. They pass on the unchanged code; their fail-before evidence is two mutations, each restored with `git checkout`: removing `closeOnClickOutside={false}` fails the overlay test (`mut-33b-p2-10-closeOnClickOutside.log`), and removing `closeOnEscape={false}` fails the Escape test (`mut-33b-p2-10-closeOnEscape.log`), which the old Escape test would have let pass, since the dialog stayed open with the question.
+- Finding 9 (`a3294fa9`, test title only): the test reads "is dropped when another owner signs in, and the earlier one’s notice does not reach the new owner".
+- Finding 1 (`662a1c08`): `CommandNotice` takes the notice, a busy flag, whether a reveal is open, the listed identifiers, and the retry and refresh callbacks, so none of its props holds the secret (design, decision 6). No behaviour changed and no prop is observable in the DOM, so no fail-before test; the hook tests of pass 1 finding 5 still assert no secret in the status, and the page tests of every close path pass.
+- Finding 6 (`a9f02479`): `ConfirmDialog` sets its kept question during render when a new confirmation arrives, React's pattern for state that follows a prop, so the first commit of an opening dialog holds its title and question (design, decision 7). No fail-before test: in the test environment `act` flushes the effect before any assertion, so the empty first commit is not observable; the confirmation and focus-return tests pass.
+- Finding 8 (`56f569ed`, test `059b25fd`): `workers-wire.ts` exports `PLATFORMS` and `ARCHITECTURES`, the selects' options are built from them, and `platformOf` and `architectureOf` narrow the chosen value with `isPlatform` and `isArchitecture` instead of a cast (design, decision 8). No behaviour changed for the current values; the test, committed after the fix because coverage showed the narrowing's fallback branches uncovered, pins the options "Any, Linux, macOS" and "Any, x64, arm64" and that choosing Any again sends no constraint, and it passes on the code before the fix as well.
+- Findings 11 to 14 (`c94cc6f7`): the delta adds "Web SPA enrollment tokens access" (404 characters) with the scenarios "Operator without the role", "Role refused by the control plane", and "List unavailable", which the page and adapter tests already cover (`reads nothing without the installation-owner role`, the denied and failed read tests, and the adapter's 403 tests of pass 1 finding 1); "Risks" cites `answerRoute` of `apps/control-plane/src/api/api-server.ts` (authenticate, CSRF, role, then the body); decision 7 names `red.1` and `red.2` and the dark scheme's darkened `red.9`, checked against `get-css-color-variables.mjs` of Mantine 9.7.4; "Departures" records the list rereads against Q8 (a)'s wording, a deliberate departure that decision 4 explains, so the behaviour is unchanged.
+- Findings 5, 15, and 16 (`3e6fb05a`): "Limitations" and the design's "Risks" state the dropped 201 of another sign-in; the self-check gives the requirement lengths after the pass 2 fixes; "Revision" names `1096ba7c` as the temporary commit of the pass 1 route, whose features equal those of `8e5338bc`, and the route after the pass 2 fixes was made without a temporary commit (`headCommit` `059b25fd`).
+- After the fixes the whole `apps/web` suite passes: 1,042 tests in 38 files (`coverage-33b-p2.log` in the session scratchpad), 99.28% statements, 98.12% branches, 100% functions, and 100% lines, every file of `src/workers` at 100 on each metric; `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `npm run verify:links`, and `npm run openspec -- validate build-enrollment-tokens-screen --strict` pass, the requirements at 484, 456, 480, 404, and 492 characters; every comment the fixes add to a `.tsx` file was checked by hand against the rule; `git diff 3191c262 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
+
+## Fixes no later pass reviewed
+
+Pass 2 was the last pass. The commits below fix its Low findings and were reviewed by no pass; the coordinator (Niki) checks them as solution architect (task 4.2), each with its test commit, where one exists, and its fail-before log named under "Pass 2 fixes".
+
+| Finding | Test commit | Fix commit |
+| --- | --- | --- |
+| 1 | none (props only) | `662a1c08` |
+| 2 | `28574e77` | `f119ea98` |
+| 3 | `a5fe035f` | `10634dc3` |
+| 4 | `f386b77e` | `2bdcb972` |
+| 5 | none (record wording) | `3e6fb05a` |
+| 6 | none (not observable under `act`) | `a9f02479` |
+| 7 | `f7b2a293` | `0471a732` |
+| 8 | `059b25fd` (after the fix) | `56f569ed` |
+| 9 | `a3294fa9` (the fix itself) | `a3294fa9` |
+| 10 | `6847739e` (the fix itself) | `6847739e` |
+| 11 to 14 | none (spec and design wording) | `c94cc6f7` |
+| 15, 16 | none (record wording) | `3e6fb05a` |
+
+The commits after them change only the records of this change (`route.json`, `passes.jsonl`, `findings.jsonl`, `tasks.md`, this record, and the `make record` output), merge `origin/dev`, or archive the change, which applies the reviewed delta and the unreviewed requirement of finding 11 with the pinned CLI.
+
 ## Limitations
 
 - The secret of a token whose 201 was lost is unrecoverable; the status says so and the list shows the token for a revoke or a rotation (design, decision 5 and "Risks").
@@ -125,7 +186,6 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 
 ## Remaining gates
 
-- Independent review pass 2 (reviewer B) of the pass 1 fixes, and pass 3 only after a pass 2 with a Medium or worse finding, run by the worker session.
-- Architect check by the coordinator (Niki) of any fix no later pass reviews.
+- Architect check by the coordinator (Niki) of the pass 2 fixes listed under "Fixes no later pass reviewed" (task 4.2); no pass 3 runs, since pass 2 was Low-only.
 - Archive of the change in the last commit of the branch (protocol step 7).
 - Integration into dev by the coordinator (single pull request).
