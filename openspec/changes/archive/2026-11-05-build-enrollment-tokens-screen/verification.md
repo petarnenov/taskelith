@@ -188,6 +188,16 @@ The commits after them change only the records of this change (`route.json`, `pa
 - `listWorkers` of 33a still maps every 403 through `failureOf` to a denial, as the list of tokens did before pass 1 finding 1; it is outside this change's scope and unchanged.
 - Since pass 1 finding 3 the `session-changed` refusal text is never shown: a changed sign-in mounts a fresh section, and no session unmounts the page; the model keeps the reason as the hook's answer.
 
+## Archive checks
+
+Run on the working tree of the archive commit, whose tree is that working tree with this section added, after tasks 4.1 to 4.3 were ticked, as the protocol's step 7 asks (4.2, the coordinator's architect check of the pass 2 fixes, is ticked for the archive and stays a remaining gate below), and `npm run openspec -- archive build-enrollment-tokens-screen --yes` moved the change to `openspec/changes/archive/2026-11-05-build-enrollment-tokens-screen/` (`product-ui` 4 added, 1 modified; totals + 4, ~ 1, - 0). A probe of the same archive in a scratch copy of `openspec/` at `5eb30b00` passed `validate --all --strict` (71 of 71) first (`archive-probe-33b-p2.log`); the command output of the archive and its checks is `archive-33b.log` in the session scratchpad.
+
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-11-05-build-enrollment-tokens-screen`; the command fails as a whole on older archived changes (287 passed, 14 failed).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `6738a8f9`): only this change's edits, in `product-ui` (73 insertions, 1 deletion: the added "Web SPA enrollment tokens", "Web SPA enrollment token secret", "Web SPA enrollment token answers", and "Web SPA enrollment tokens access", at 484, 456, 480, and 404 characters, and the "No worker" scenario of "Web SPA workers screen", whose requirement text stays at 492).
+- The moved change has `findings.jsonl` (the 24 findings of passes 1 and 2) and `passes.jsonl` (two passes); `make findings ARGS="validate"`: `Every findings file is valid: 127 file(s); every pass summary file is valid: 107 file(s); every route file is valid: 60 file(s).`
+- `make verify` (`verify-33b-final.log`, exit code 0 in `verify-33b-final.exit`): passed, profile full, uncommitted working tree, no stamp written: tests 4882, suites 50, pass 4873, fail 0, skipped 9; all files 99.45% lines, 92.92% branches, 98.88% functions; `apps/web` 1,042 tests in 38 files, 99.28% statements, 98.12% branches, 100% functions, 100% lines. No rerun; neither known flake failed. The `pre-push` hook verifies the committed tree again.
+
 ## Remaining gates
 
 - Architect check by the coordinator (Niki) of the pass 2 fixes listed under "Fixes no later pass reviewed" (task 4.2); no pass 3 runs, since pass 2 was Low-only.
