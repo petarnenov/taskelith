@@ -5,11 +5,11 @@
 
 ## 2. Implementation and tests
 
-- [ ] 2.1 Scheduling: `list` and `listForProject` in both adapters with conformance cases, and the slot commands by expected revision, with tests failing before them
-- [ ] 2.2 `RandomIdentifiers.newSlotId`, `SlotCredentialKeyFile`, and the key at initialization, with tests failing before them
-- [ ] 2.3 The OpenAPI descriptions of the slot commands and their contract test
-- [ ] 2.4 The control plane: settings, `AccountSlotService`, `AccountSlotApi`, the routes, the endpoint split, and the composition with the key, the store, the admitted pair, the delivery, the sweep loop, and the slot signals, with unit and Docker tests failing before them
-- [ ] 2.5 Account pool contract sections 6.1, 13, and 14, and control-plane wire contracts "Account slots"
+- [x] 2.1 Scheduling: `list` and `listForProject` in both adapters with conformance cases, and the slot commands by expected revision, with tests failing before them
+- [x] 2.2 `RandomIdentifiers.newSlotId`, `SlotCredentialKeyFile`, and the key at initialization, with tests failing before them
+- [x] 2.3 The OpenAPI descriptions of the slot commands and their contract test
+- [x] 2.4 The control plane: settings, `AccountSlotService`, `AccountSlotApi`, the routes, the endpoint split, and the composition with the key, the store, the admitted pair, the delivery, the sweep loop, and the slot signals, with unit and Docker tests failing before them
+- [x] 2.5 Account pool contract sections 6.1, 13, and 14, and control-plane wire contracts "Account slots"
 
 ## 3. Records and checks
 
