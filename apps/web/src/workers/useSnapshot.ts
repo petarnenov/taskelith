@@ -21,7 +21,7 @@ export function useSnapshot<T>(read: () => Promise<ReadResult<T>>): Snapshot<T> 
   // refresh overtook.
   useEffect(() => {
     let current = true;
-    setState((shown) => (shown.status === 'shown' ? { ...shown, refreshing: true } : { status: 'loading' }));
+    setState(whileRead);
     void read().then((result) => {
       if (!current) return;
       setState(result.kind === 'read' ? { status: 'shown', view: result.value, refreshing: false } : { status: 'failed', failure: result });
@@ -31,6 +31,14 @@ export function useSnapshot<T>(read: () => Promise<ReadResult<T>>): Snapshot<T> 
     };
   }, [read, loads]);
 
-  const refresh = useCallback(() => setLoads((count) => count + 1), []);
+  // Marked at once, so no render shows the old value as the fresh one.
+  const refresh = useCallback(() => {
+    setState(whileRead);
+    setLoads((count) => count + 1);
+  }, []);
   return { state, refresh };
+}
+
+function whileRead<T>(shown: SnapshotState<T>): SnapshotState<T> {
+  return shown.status === 'shown' ? { ...shown, refreshing: true } : { status: 'loading' };
 }

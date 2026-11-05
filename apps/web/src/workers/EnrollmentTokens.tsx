@@ -51,7 +51,8 @@ export function EnrollmentTokens() {
   const { state, refresh } = useEnrollmentTokens();
   const commands = useTokenCommands(refresh);
   const busy = commands.running !== undefined;
-  const listed = state.status === 'shown' ? state.view.tokens.map((token) => token.tokenId) : [];
+  // A list still being read again may predate the answer it would confirm.
+  const listed = state.status === 'shown' && !state.refreshing ? state.view.tokens.map((token) => token.tokenId) : [];
   return (
     <Stack component="section" id={TOKENS_SECTION_ID} aria-labelledby={headingId}>
       <Title order={2} id={headingId}>
