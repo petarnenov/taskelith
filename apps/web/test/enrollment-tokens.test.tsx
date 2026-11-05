@@ -650,30 +650,32 @@ describe('revoking a token', () => {
     expect(await screen.findByText('No pending token.')).toBeDefined();
   });
 
-  it('names and links the replacement of a rotated token when the refreshed list holds it', async () => {
+  it('names and links the replacement of a rotated token, still pending, when the refreshed list holds it', async () => {
     const replacement = enrollmentToken({ tokenId: 'token-2' });
     const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList([replacement]));
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'token-rotated', replacementTokenId: 'token-2' });
     openTokens(gateway);
     await confirm('token-1', 'Revoke');
-    const notice = within(await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement));
-    expect(notice.getByText(/was replaced by token token-2, which is still pending\./)).toBeDefined();
+    const region = await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement);
+    const notice = within(region);
     const link = await notice.findByRole('link', { name: 'Show it' });
+    expect(region.textContent).toContain('Token token-1 was replaced by token token-2. It is still pending. Show it');
     expect(link.getAttribute('href')).toBe('#enrollment-token-token-2');
     expect(link.style.color).toBe('inherit');
     expect(link.getAttribute('data-underline')).toBe('always');
     expect((await cardOf('token-2')).getByRole('heading', { level: 3 }).closest('article')?.id).toBe('enrollment-token-token-2');
   });
 
-  it('names the replacement without a link when the refreshed list no longer holds it', async () => {
+  it('names the replacement without a link or a pending claim when the refreshed list no longer holds it', async () => {
     const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList());
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'token-rotated', replacementTokenId: 'token-2' });
     openTokens(gateway);
     await confirm('token-1', 'Revoke');
-    const notice = within(await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement));
+    const region = await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement);
     await screen.findByText('No pending token.');
-    expect(notice.queryByRole('link')).toBeNull();
-    expect(notice.getByText(/token-2/)).toBeDefined();
+    expect(within(region).queryByRole('link')).toBeNull();
+    expect(region.textContent).toContain('Token token-1 was replaced by token token-2.');
+    expect(region.textContent).not.toContain('pending');
   });
 
   it('links the replacement only once the list read after the answer holds it', async () => {
@@ -683,12 +685,14 @@ describe('revoking a token', () => {
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'token-rotated', replacementTokenId: 'token-2' });
     openTokens(gateway);
     await confirm('token-1', 'Revoke');
-    const notice = within(await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement));
+    const region = await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement);
     await screen.findByText('Refreshing the tokens…');
-    expect(notice.queryByRole('link')).toBeNull();
+    expect(within(region).queryByRole('link')).toBeNull();
+    expect(region.textContent).not.toContain('still pending');
     await act(async () => refreshed.resolve(tokenList()));
     await screen.findByText('No pending token.');
-    expect(notice.queryByRole('link')).toBeNull();
+    expect(within(region).queryByRole('link')).toBeNull();
+    expect(region.textContent).not.toContain('still pending');
   });
 
   it('says that a token no longer exists after a 404', async () => {

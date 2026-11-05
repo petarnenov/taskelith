@@ -139,7 +139,7 @@ describe('statusTextOf', () => {
     [ROTATED, 'Token rotated', 'Token token-1 stops working now; its replacement token-2 was shown once with its secret.'],
     [REVOKED, 'Token revoked', 'Token token-1 was revoked; a worker can no longer enroll with it.'],
     [USED, 'Token already redeemed', 'Token token-1 was already redeemed by a worker; it is no longer pending. To stop that worker, revoke it with the CLI.'],
-    [REPLACED, 'Token already replaced', 'Token token-1 was replaced by token token-2, which is still pending.'],
+    [REPLACED, 'Token already replaced', 'Token token-1 was replaced by token token-2.'],
     [NOT_PENDING, 'Token not pending', 'Token token-1 is used, expired, or revoked, so it cannot be rotated.'],
     [GONE, 'Token not found', 'Token token-1 no longer exists.'],
     [CSRF_FINAL, 'Not issued', 'The control plane refused the session token twice, so nothing was issued. Reload the page before you issue again.'],
