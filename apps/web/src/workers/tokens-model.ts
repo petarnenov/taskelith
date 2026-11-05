@@ -172,7 +172,7 @@ function refusalTextOf(command: Command, reason: RefusalReason): StatusText {
 }
 
 // After no usable answer, an issue or a rotation may have taken effect
-// without its secret ever being shown; only the list says which.
+// without its secret ever being shown; the list can only hint which.
 function failureTextOf(command: Command, failure: 'unavailable' | 'unauthenticated'): StatusText {
   const effect = EFFECTS[command.name];
   if (failure === 'unauthenticated') {
@@ -182,7 +182,10 @@ function failureTextOf(command: Command, failure: 'unavailable' | 'unauthenticat
     case 'issue':
       return {
         title: 'Not issued, or issued but not shown',
-        text: 'The control plane did not answer. Refresh the list: a token you do not see here was not issued, and one you see without its secret can be revoked or rotated.',
+        text:
+          'The control plane did not answer, so a token may have been issued even though its secret was not shown. ' +
+          'Refresh the list: a pending token you do not recognise may be that one, and it can be revoked or rotated. ' +
+          'A token missing from the list may still have been issued, since the list shows only pending tokens and may be cut short.',
       };
     case 'rotate':
       return {
