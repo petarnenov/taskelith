@@ -24,7 +24,7 @@ The workers screen SHALL show the pending enrollment tokens of every page `listE
 - **THEN** every issue, revoke, rotate, and retry button says so and ignores a click, and a status line names the command
 
 ### Requirement: Web SPA enrollment token secret
-The SPA SHALL hold the secret of a 201 of issuing or rotating in the tokens section's component state alone, show it once in a dialog with a copy to the clipboard, text naming `TASKELITH_ENROLLMENT_TOKEN`, and no command line, ask before a close without a copy, and drop it on every close, on a rotation, on leaving the screen, and on a sign-out, so that it never reaches a context, a store, a storage, a URL, a log, or a later request.
+The SPA SHALL hold the secret of a 201 of issuing or rotating in the tokens section's component state alone, show it once in a dialog with a copy to the clipboard, text naming `TASKELITH_ENROLLMENT_TOKEN`, and no command line, ask before a close without a copy, and drop it on every close, on a rotation, on leaving the screen, on a sign-out, and on another sign-in, so that it never reaches a context, a store, a storage, a URL, a log, or a later request.
 
 #### Scenario: Copied
 - **WHEN** the operator copies the shown secret
@@ -39,8 +39,8 @@ The SPA SHALL hold the secret of a 201 of issuing or rotating in the tokens sect
 - **THEN** the dialog asks once, Keep open keeps the secret, and Close anyway drops it; Escape does not close it
 
 #### Scenario: Secret gone after the close
-- **WHEN** the dialog closed, a rotation replaced the secret, the operator left the screen, the session ended, or the operator signed out
-- **THEN** the page's HTML holds no secret shape, both storages are empty, no console output holds one, and no later request carries it
+- **WHEN** the dialog closed, a rotation replaced the secret, the operator left the screen, the session ended, the operator signed out, or another operator signed in
+- **THEN** the page's HTML and the section's state hold no secret, both storages are empty, no console output holds one, no later request carries it, and an answer that settles later shows none
 
 ### Requirement: Web SPA enrollment token answers
 The tokens section SHALL show each command's answer honestly in one status region: the token redeemed, replaced with its replacement named and linked when listed, or not pending, not found, refused as invalid, the role a 403 names, and after no usable answer that an issue or rotation may have taken effect without its secret, with a Refresh, while only a revoke offers a Retry; after a 403 for the CSRF token it SHALL read the session once and resend only under the same sign-in.
@@ -55,7 +55,7 @@ The tokens section SHALL show each command's answer honestly in one status regio
 
 #### Scenario: Stale CSRF token
 - **WHEN** a command answers 403 with the reason `csrf-token-invalid`
-- **THEN** the SPA reads the session again and sends the command once more only when the same operator is still signed in, and shows a second refusal, a session read without an answer, or a changed sign-in as final with nothing sent again
+- **THEN** the SPA reads the session again and sends the command once more only when the same operator is still signed in, shows a second refusal or a session read without an answer as final with nothing sent again, and after a changed sign-in sends nothing again and shows the new operator a fresh section
 
 ## MODIFIED Requirements
 
