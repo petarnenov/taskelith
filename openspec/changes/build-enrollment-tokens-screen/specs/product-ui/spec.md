@@ -57,6 +57,21 @@ The tokens section SHALL show each command's answer honestly in one status regio
 - **WHEN** a command answers 403 with the reason `csrf-token-invalid`
 - **THEN** the SPA reads the session again and sends the command once more only when the same operator is still signed in, shows a second refusal or a session read without an answer as final with nothing sent again, and after a changed sign-in sends nothing again and shows the new operator a fresh section
 
+### Requirement: Web SPA enrollment tokens access
+Without `installation-owner` among the session's installation roles the workers screen SHALL send no `listEnrollmentTokens`; with it, a failed read of any page SHALL show why and a retry, with a 403 `role-required` naming its role, any other 403, a 503, a 404, a 5xx, an undocumented status, a body without the page, or no answer read as unavailable, and a 401 `unauthenticated` showing the sign-in page.
+
+#### Scenario: Operator without the role
+- **WHEN** an operator whose session names no `installation-owner` role opens the workers screen
+- **THEN** the page shows no enrollment tokens section and sends no `listEnrollmentTokens` request
+
+#### Scenario: Role refused by the control plane
+- **WHEN** a page of `listEnrollmentTokens` answers 403 with the reason `role-required` and a role
+- **THEN** the section says that it cannot list the tokens, names the role, and offers a retry
+
+#### Scenario: List unavailable
+- **WHEN** a page of `listEnrollmentTokens` answers 403 without `role-required`, 503, a 5xx, a 404, an undocumented status, a body without the page, or nothing
+- **THEN** the section says that the tokens cannot be loaded, shows no token, and offers a retry
+
 ## MODIFIED Requirements
 
 ### Requirement: Web SPA workers screen
