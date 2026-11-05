@@ -7,6 +7,7 @@ import {
   turnSubmittedOf,
 } from './agent-session-wire';
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
+import { MAX_PAGES, readPages } from '../api/read-pages';
 import { denialOf, failureOf, failureReason, reachable, requiredRoleOf } from '../api/read-result';
 import type {
   AgentSession,
@@ -46,17 +47,10 @@ const UNREADABLE: BoardStreamEvent = { kind: 'resync' };
 const UNREADABLE_SESSION: BoardStreamEvent = { kind: 'resync', unreadable: 'agent-session-changed' };
 const UNREADABLE_TURN: BoardStreamEvent = { kind: 'resync', unreadable: 'turn-changed' };
 
-// A project list or a session list whose server names new cursors beyond
-// this many pages reads as unreachable.
-export const MAX_PAGES = 100;
-
-// The name the board's tests of the project list know the limit by.
+// The page limit of api/read-pages.ts, under both names the board's tests
+// know it by.
+export { MAX_PAGES };
 export const MAX_PROJECT_PAGES = MAX_PAGES;
-
-interface Page<T> {
-  readonly items: readonly T[];
-  readonly next?: string;
-}
 
 // An answer as the typed fetch returns it, whatever its operation.
 interface Answer {
@@ -100,32 +94,6 @@ export function createBoardGateway({
         return { items: page.sessions, next: page.next };
       },
     );
-  }
-
-  // Follows a paged read to its end; a cursor already followed loops, and
-  // the page limit stops endless new ones, so both read as unreachable.
-  async function readPages<T>(
-    send: (after: string | undefined) => Promise<Answer>,
-    pageOf: (body: unknown) => Page<T> | undefined,
-  ): Promise<ReadResult<readonly T[]>> {
-    const items: T[] = [];
-    const visited = new Set<string>();
-    let after: string | undefined;
-    do {
-      const result = await reachable(() => send(after));
-      if (result === undefined) return { kind: 'unavailable' };
-      if (result.status !== 200) return failureOf(result);
-      const page = pageOf(result.body);
-      if (page === undefined || cannotFollow(page.next, visited)) return { kind: 'unavailable' };
-      items.push(...page.items);
-      after = page.next;
-      if (after !== undefined) visited.add(after);
-    } while (after !== undefined);
-    return { kind: 'read', value: items };
-  }
-
-  function cannotFollow(next: string | undefined, visited: ReadonlySet<string>): boolean {
-    return next !== undefined && (visited.has(next) || visited.size + 1 >= MAX_PAGES);
   }
 
   // A session other than the one asked for is a wrong answer.

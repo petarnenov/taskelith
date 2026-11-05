@@ -17,6 +17,12 @@ export function useWorkersGateway(): WorkersGateway {
   const { expiryOfRequest } = useSession();
   return useMemo(() => {
     const checked = expiringCall(expiryOfRequest);
-    return { listWorkers: () => checked(gateway.listWorkers) };
+    return {
+      listWorkers: () => checked(gateway.listWorkers),
+      listEnrollmentTokens: () => checked(gateway.listEnrollmentTokens),
+      issueEnrollmentToken: (constraints) => checked(() => gateway.issueEnrollmentToken(constraints)),
+      revokeEnrollmentToken: (tokenId) => checked(() => gateway.revokeEnrollmentToken(tokenId)),
+      rotateEnrollmentToken: (tokenId) => checked(() => gateway.rotateEnrollmentToken(tokenId)),
+    };
   }, [gateway, expiryOfRequest]);
 }

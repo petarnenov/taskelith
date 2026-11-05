@@ -1,0 +1,103 @@
+{
+  "change": "build-enrollment-tokens-screen",
+  "generatedAt": "2026-11-04T15:41:13.547Z",
+  "devCommit": "3191c26217da161ce28c9738adf21d87493cfba6",
+  "query": {
+    "capabilities": [
+      "product-ui",
+      "installation-enrollment",
+      "control-plane-wire-contracts"
+    ],
+    "files": [
+      "apps/web/**",
+      "docs/ui-poc/**",
+      "openspec/specs/product-ui/**"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 46
+      },
+      {
+        "category": "error-handling",
+        "count": 27
+      },
+      {
+        "category": "concurrency-race",
+        "count": 21
+      },
+      {
+        "category": "docs",
+        "count": 16
+      },
+      {
+        "category": "redaction",
+        "count": 14
+      },
+      {
+        "category": "spec-wording",
+        "count": 13
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 7
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1038,
+        "inChecklist": 809
+      },
+      "mediumOrWorse": {
+        "findings": 511,
+        "inChecklist": 439
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 164
+      },
+      {
+        "category": "spec-wording",
+        "count": 107
+      },
+      {
+        "category": "docs",
+        "count": 87
+      },
+      {
+        "category": "stale-citation",
+        "count": 60
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 488,
+        "inChecklist": 481
+      },
+      "mediumOrWorse": {
+        "findings": 78,
+        "inChecklist": 78
+      }
+    }
+  }
+}
