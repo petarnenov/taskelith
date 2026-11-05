@@ -38,7 +38,7 @@
 - [x] 7.2 Finding 2: a protocol rejection with a window of versions 2 to 3, with its mutation control
 - [x] 7.3 Finding 3: the fields of each kind of evidence log in the spec
 - [x] 7.4 Finding 4: the deferred commands of items 21 and 38 at a worker of version 1, in the comments, the design, and a test
-- [ ] 7.5 `make verify`, `make record`, and `make record-check` again
+- [x] 7.5 `make verify`, `make record`, and `make record-check` again
 
 ## 8. Review and archive
 
