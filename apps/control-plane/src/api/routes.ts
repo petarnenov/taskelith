@@ -56,6 +56,8 @@ const INBOX_ANSWER: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, co
 const PROJECT_UPDATE: Partial<Record<FailureCode, number>> = { ...PROJECT_READ, conflict: 409 };
 // A token command refusal: unknown is 404, and not pending is 422.
 const TOKEN_COMMAND: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404, 'precondition-failed': 422 };
+// A slot command refusal: unknown or removed is 404, a moved revision 409.
+const SLOT_COMMAND: Partial<Record<FailureCode, number>> = { ...COMMON, 'not-found': 404, conflict: 409 };
 // A role lost after the server's check is denied by the command's own.
 const ROLE_DENIAL: Readonly<Record<string, number>> = Object.freeze({ 'role-required': 403 });
 const BROWSER_OR_OPERATOR: readonly SecurityScheme[] = ['browserSession', 'operatorToken'];
@@ -308,6 +310,40 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     body: 'RepositoryBindingUpdate', response: 'RepositoryBinding', success: 200,
     statuses: { ...PROJECT_UPDATE, 'precondition-failed': 422 },
   },
+  // Control-plane wire contracts section 4: the account slots, whose
+  // credential no answer carries (account pool contract section 2).
+  {
+    operationId: 'listAccountSlots', method: 'GET', pattern: /^\/account-slots$/, security: BROWSER_OR_OPERATOR, query: ['after'],
+    response: 'AccountSlotPage', success: 200, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'listProjectAccountSlots', method: 'GET', pattern: new RegExp(`${PROJECT_PATH}/account-slots$`), security: BROWSER_OR_OPERATOR,
+    query: ['after'], response: 'ProjectAccountSlotPage', success: 200, statuses: PROJECT_READ,
+  },
+  {
+    operationId: 'addAccountSlot', method: 'POST', pattern: /^\/account-slots$/, security: BROWSER_OR_OPERATOR, body: 'AccountSlotAddition',
+    writeOnlyBody: true, response: 'AccountSlot', success: 201, statuses: COMMON, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'updateAccountSlot', method: 'PATCH', pattern: new RegExp(`^/account-slots/${SEGMENT}$`), security: BROWSER_OR_OPERATOR,
+    body: 'AccountSlotUpdate', response: 'AccountSlot', success: 200, statuses: SLOT_COMMAND, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'revokeAccountSlot', method: 'POST', pattern: new RegExp(`^/account-slots/${SEGMENT}/revocation$`), security: BROWSER_OR_OPERATOR,
+    body: 'SlotTransition', response: 'AccountSlot', success: 200, statuses: SLOT_COMMAND, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'reinstateAccountSlot', method: 'POST', pattern: new RegExp(`^/account-slots/${SEGMENT}/reinstatement$`), security: BROWSER_OR_OPERATOR,
+    body: 'SlotTransition', response: 'AccountSlot', success: 200, statuses: SLOT_COMMAND, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'rotateSlotCredential', method: 'PUT', pattern: new RegExp(`^/account-slots/${SEGMENT}/credential$`), security: BROWSER_OR_OPERATOR,
+    body: 'SlotCredentialRotation', writeOnlyBody: true, response: 'AccountSlot', success: 200, statuses: SLOT_COMMAND, reasons: ROLE_DENIAL,
+  },
+  {
+    operationId: 'removeAccountSlot', method: 'POST', pattern: new RegExp(`^/account-slots/${SEGMENT}/removal$`), security: BROWSER_OR_OPERATOR,
+    body: 'SlotTransition', response: 'AccountSlot', success: 200, statuses: SLOT_COMMAND, reasons: ROLE_DENIAL,
+  },
   {
     operationId: 'readSession', method: 'GET', pattern: /^\/session$/, security: ['browserSession', 'none'], browserOnly: true,
     response: 'SessionState', success: 200, statuses: { unavailable: 503, internal: 500 },
@@ -321,3 +357,15 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'empty', success: 204, statuses: { forbidden: 401, unavailable: 503, internal: 500 },
   },
 ]);
+
+// Decision Q11: a route whose every credential is a worker's or an
+// enrollment token is never a browser's, whatever flags it carries.
+const WORKER_SCHEMES: ReadonlySet<SecurityScheme> = new Set(['workerCredential', 'enrollmentToken']);
+
+export function browserEndpointRoutes(routes: readonly RouteDefinition[]): readonly RouteDefinition[] {
+  return routes.filter((route) => !route.confidential && !route.security.every((scheme) => WORKER_SCHEMES.has(scheme)));
+}
+
+export function workerEndpointRoutes(routes: readonly RouteDefinition[]): readonly RouteDefinition[] {
+  return routes.filter((route) => !route.browserOnly);
+}

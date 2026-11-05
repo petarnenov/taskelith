@@ -24,6 +24,7 @@ import type { RunService } from '../application/run-service.js';
 import type { RevealedSlotDelivery, SlotCredentialFetchRequest } from '../application/slot-credential-delivery.js';
 import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Caller, type SignedBody, type Upload } from './api-server.js';
+import { AccountSlotApi, type AccountSlotOperations } from './account-slot-api.js';
 import { AgentSessionApi, type AgentSessionOperations } from './agent-session-api.js';
 import { ruleOf, type RequirementRule } from './access-requirements.js';
 import { EventStreamApi, type EventStreamOperations } from './event-stream-api.js';
@@ -71,8 +72,7 @@ export interface ApiServices {
   readonly launches: {
     authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
   };
-  // Slot credential delivery; until 12d wires the key and the admitted pairs
-  // it is absent, and the route answers 503.
+  // Slot credential delivery; without it the route answers 503.
   readonly slotCredentials?: {
     fetch(principal: WorkerPrincipal, request: SlotCredentialFetchRequest): Promise<Result<RevealedSlotDelivery>>;
   };
@@ -99,6 +99,8 @@ export interface ApiServices {
   readonly repositoryBindings: RepositoryBindingOperations;
   // The workers view and the enrollment token commands (wire section 4).
   readonly fleet: FleetOperations;
+  // The account slots of the account pool (wire section 4).
+  readonly accountSlots: AccountSlotOperations;
 }
 
 // Maps each operation of the route table to its use case, and the contract
@@ -113,6 +115,7 @@ export class ControlPlaneApi implements ApiHandlers {
   readonly #scmIntegrations: ScmIntegrationApi;
   readonly #repositoryBindings: RepositoryBindingApi;
   readonly #fleet: FleetApi;
+  readonly #accountSlots: AccountSlotApi;
 
   constructor(services: ApiServices) {
     this.#services = services;
@@ -124,6 +127,7 @@ export class ControlPlaneApi implements ApiHandlers {
     this.#scmIntegrations = new ScmIntegrationApi(services.scmIntegrations);
     this.#repositoryBindings = new RepositoryBindingApi(services.repositoryBindings);
     this.#fleet = new FleetApi(services.fleet);
+    this.#accountSlots = new AccountSlotApi(services.accountSlots);
   }
 
   authenticateOperator(secret: string): Promise<Result<PrincipalId>> {
@@ -269,6 +273,29 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#fleet.revokeEnrollmentToken(request);
       case 'rotateEnrollmentToken':
         return this.#fleet.rotateEnrollmentToken(request);
+      default:
+        return this.#dispatchAccountSlots(operationId, request);
+    }
+  }
+
+  #dispatchAccountSlots(operationId: string, request: ApiRequest): Promise<Result<unknown>> {
+    switch (operationId) {
+      case 'listAccountSlots':
+        return this.#accountSlots.listAccountSlots(request);
+      case 'listProjectAccountSlots':
+        return this.#accountSlots.listProjectAccountSlots(request);
+      case 'addAccountSlot':
+        return this.#accountSlots.addAccountSlot(request);
+      case 'updateAccountSlot':
+        return this.#accountSlots.updateAccountSlot(request);
+      case 'revokeAccountSlot':
+        return this.#accountSlots.revokeAccountSlot(request);
+      case 'reinstateAccountSlot':
+        return this.#accountSlots.reinstateAccountSlot(request);
+      case 'rotateSlotCredential':
+        return this.#accountSlots.rotateSlotCredential(request);
+      case 'removeAccountSlot':
+        return this.#accountSlots.removeAccountSlot(request);
       default:
         return this.#dispatchBoard(operationId, request);
     }
