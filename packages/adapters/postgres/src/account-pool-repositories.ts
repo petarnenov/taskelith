@@ -74,6 +74,25 @@ export class PostgresAccountSlots implements AccountSlots {
     return Object.freeze(rows.map(slotOf));
   }
 
+  async list(after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    const { rows } = await this.#session.query<SlotRow>(
+      `SELECT ${COLUMNS} FROM account_slots WHERE ($1::text IS NULL OR slot_id COLLATE "C" > $1)
+       ORDER BY slot_id COLLATE "C" LIMIT $2`,
+      [after ?? null, limit],
+    );
+    return Object.freeze(rows.map(slotOf));
+  }
+
+  async listForProject(projectId: ProjectId, after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    const { rows } = await this.#session.query<SlotRow>(
+      `SELECT ${COLUMNS} FROM account_slots WHERE state = 'active' AND $1 = ANY (allowed_projects)
+         AND ($2::text IS NULL OR slot_id COLLATE "C" > $2)
+       ORDER BY slot_id COLLATE "C" LIMIT $3`,
+      [projectId, after ?? null, limit],
+    );
+    return Object.freeze(rows.map(slotOf));
+  }
+
   // The checks run in the contract's order: not-found, invalid, conflict.
   async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
     const stored = await this.#row(slot.id);
