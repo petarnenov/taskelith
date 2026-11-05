@@ -674,6 +674,21 @@ describe('revoking a token', () => {
     expect(notice.getByText(/token-2/)).toBeDefined();
   });
 
+  it('links the replacement only once the list read after the answer holds it', async () => {
+    const refreshed = deferred<ReadResult<EnrollmentTokenList>>();
+    const gateway = gatewayWith(tokenList([enrollmentToken(), enrollmentToken({ tokenId: 'token-2' })]));
+    gateway.listEnrollmentTokens.mockReturnValueOnce(refreshed.promise);
+    gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'token-rotated', replacementTokenId: 'token-2' });
+    openTokens(gateway);
+    await confirm('token-1', 'Revoke');
+    const notice = within(await screen.findByText('Token already replaced').then((title) => title.closest('[role="status"]') as HTMLElement));
+    await screen.findByText('Refreshing the tokens…');
+    expect(notice.queryByRole('link')).toBeNull();
+    await act(async () => refreshed.resolve(tokenList()));
+    await screen.findByText('No pending token.');
+    expect(notice.queryByRole('link')).toBeNull();
+  });
+
   it('says that a token no longer exists after a 404', async () => {
     const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList());
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'not-found' });
