@@ -159,7 +159,44 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       return problems;
     },
   },
+  {
+    name: 'lists every slot after a cursor in code point order, removed ones included',
+    async check(slots: AccountSlots) {
+      const problems: string[] = [];
+      expectSame(problems, 'empty', await slots.list(undefined, 10), []);
+      for (const stored of POOL_FIXTURES) expectSuccess(problems, `add ${stored.id}`, await slots.add(stored));
+      const all = await slots.list(undefined, 100);
+      expectSame(problems, 'all', ids(all), [
+        'slot-Z-upper', 'slot-a-plain', 'slot-b-cooling', 'slot-c-shared', 'slot-d-other-project', 'slot-e-other-harness',
+        'slot-f-revoked', 'slot-g-removed',
+      ]);
+      expectSame(problems, 'records', all[7], POOL_FIXTURES[6]);
+      expectSame(problems, 'limit', ids(await slots.list(undefined, 2)), ['slot-Z-upper', 'slot-a-plain']);
+      expectSame(problems, 'after', ids(await slots.list(slotId('slot-a-plain'), 2)), ['slot-b-cooling', 'slot-c-shared']);
+      expectSame(problems, 'past the end', await slots.list(slotId('slot-g-removed'), 10), []);
+      return problems;
+    },
+  },
+  {
+    name: 'lists the active slots that allow a project, of any harness, after a cursor',
+    async check(slots: AccountSlots) {
+      const problems: string[] = [];
+      for (const stored of POOL_FIXTURES) expectSuccess(problems, `add ${stored.id}`, await slots.add(stored));
+      const project = await slots.listForProject(PROJECT, undefined, 100);
+      expectSame(problems, 'project', ids(project), ['slot-Z-upper', 'slot-a-plain', 'slot-b-cooling', 'slot-c-shared', 'slot-e-other-harness']);
+      expectSame(problems, 'records', project[2], POOL_FIXTURES[2]);
+      expectSame(problems, 'other project', ids(await slots.listForProject(OTHER_PROJECT, undefined, 100)), ['slot-c-shared', 'slot-d-other-project']);
+      expectSame(problems, 'after', ids(await slots.listForProject(PROJECT, slotId('slot-b-cooling'), 1)), ['slot-c-shared']);
+      const none = id('ProjectId', 'project-none') as ProjectId;
+      expectSame(problems, 'no slot', await slots.listForProject(none, undefined, 100), []);
+      return problems;
+    },
+  },
 ]);
+
+function slotId(text: string): ProviderCredentialId {
+  return id('ProviderCredentialId', text) as ProviderCredentialId;
+}
 
 const secret = (text: string) => must(SlotSecret.of(text));
 const CREDENTIAL_SLOT = id('ProviderCredentialId', 'slot-a-plain') as ProviderCredentialId;
