@@ -40,7 +40,14 @@
 - [x] 7.4 Finding 4: the deferred commands of items 21 and 38 at a worker of version 1, in the comments, the design, and a test
 - [x] 7.5 `make verify`, `make record`, and `make record-check` again
 
-## 8. Review and archive
+## 8. Fix round after review pass 2
 
-- [ ] 8.1 Independent review
-- [ ] 8.2 Archive the change
+- [x] 8.1 Findings 1 and 2: the watch wraps only object members and classifies each store call in a table the compiler checks; a unit test of a member that is no store
+- [x] 8.2 Finding 3: rename the local that shadowed the kernel's `failure`
+- [x] 8.3 Findings 4 to 7: the proposal, the design's domain calls after a write and ignored fields, and the wording of the `nats-transport` delta
+- [ ] 8.4 `make verify` and `make record` again
+
+## 9. Review and archive
+
+- [ ] 9.1 Independent review
+- [ ] 9.2 Archive the change
