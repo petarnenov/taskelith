@@ -160,7 +160,7 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
     },
   },
   {
-    name: 'lists every slot after a cursor in code point order, removed ones included',
+    name: 'lists every slot after a given identifier in code point order, removed ones included',
     async check(slots: AccountSlots) {
       const problems: string[] = [];
       expectSame(problems, 'empty', await slots.list(undefined, 10), []);
@@ -178,7 +178,7 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
     },
   },
   {
-    name: 'lists the active slots that allow a project, of any harness, after a cursor',
+    name: 'lists the active slots that allow a project, of any harness, after a given identifier',
     async check(slots: AccountSlots) {
       const problems: string[] = [];
       for (const stored of POOL_FIXTURES) expectSuccess(problems, `add ${stored.id}`, await slots.add(stored));

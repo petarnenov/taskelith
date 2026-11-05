@@ -148,9 +148,14 @@ function slotRecord(overrides: Partial<AccountSlot> = {}): AccountSlot {
   }));
 }
 
+// A later revision is reached by a replace, as the port allows no other.
 async function withSlot(overrides: Partial<AccountSlot> = {}): Promise<Fixture> {
   const made = await fixture();
-  value(await made.slots.add(slotRecord(overrides)));
+  const { revision = FIRST_SLOT_REVISION, ...rest } = overrides;
+  value(await made.slots.add(slotRecord(rest)));
+  for (let current = FIRST_SLOT_REVISION; current < revision; current++) {
+    value(await made.slots.replace(slotRecord({ ...rest, revision: current + 1 }), current));
+  }
   return made;
 }
 

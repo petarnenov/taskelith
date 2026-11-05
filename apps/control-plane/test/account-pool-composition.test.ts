@@ -55,7 +55,7 @@ function ports(tx: ControlPlaneTransaction, minutes = 30): AccountPoolPorts {
 }
 
 const addition = (mechanismId = 'subscription-token', harnessId: string = CLAUDE_CODE_HARNESS_ID) => ({
-  harnessId, mechanismId, allowedProjects: ['project-1'], credential: `fixture-${randomBytes(12).toString('hex')}`,
+  harnessId, mechanismId, allowedProjects: ['project-1'], secret: value(SlotSecret.of(`fixture-${randomBytes(12).toString('hex')}`)),
 });
 
 test('Claude Code admits one subscription-token slot, and no other mechanism or harness', async () => {

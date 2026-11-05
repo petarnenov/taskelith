@@ -265,7 +265,7 @@ test('the account slots suite rejects an adapter without compare-and-set', async
   ]);
 });
 
-test('the in-memory slots list every slot, and a project\'s active ones, by identifier after a cursor', async () => {
+test('the in-memory slots list every slot, and a project\'s active ones, after a given identifier', async () => {
   const slots = new InMemoryAccountSlots();
   const slot = (text: string, changes: Partial<AccountSlot> = {}): AccountSlot => ({
     ...VALID_SLOT, id: identifier('ProviderCredentialId', text) as ProviderCredentialId, ...changes,
@@ -297,10 +297,10 @@ class CarelessListingAccountSlots extends InMemoryAccountSlots {
   }
 }
 
-test('the account slots suite rejects a listing out of order, without its cursor, or with other states', async () => {
+test('the account slots suite rejects a listing out of order, without its start, or with other states', async () => {
   assert.deepEqual(await failingCases(ACCOUNT_SLOTS_CONFORMANCE, () => new CarelessListingAccountSlots()), [
-    'lists every slot after a cursor in code point order, removed ones included',
-    'lists the active slots that allow a project, of any harness, after a cursor',
+    'lists every slot after a given identifier in code point order, removed ones included',
+    'lists the active slots that allow a project, of any harness, after a given identifier',
   ]);
 });
 
