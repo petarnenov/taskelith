@@ -380,18 +380,24 @@ describe('issuing a token', () => {
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(1);
   });
 
-  it('says that a token may have been issued but not shown after no answer, with a Refresh and no Retry', async () => {
-    const gateway = new FakeWorkersGateway();
+  it.each([
+    ['a list cut short', tokenList([DARWIN_ARM], true)],
+    ['a list the token already left, as when it expired', tokenList()],
+  ])('says that a token may have been issued but not shown after no answer, with a Refresh and no Retry, also after %s', async (_, refreshed) => {
+    const gateway = gatewayWith(tokenList(), refreshed);
     gateway.issueEnrollmentToken.mockResolvedValueOnce({ kind: 'unavailable' });
     openTokens(gateway);
     const { user, form } = await openForm();
     await user.click(form.getByRole('button', { name: 'Issue token' }));
     const notice = within(await screen.findByText('Not issued, or issued but not shown').then((title) => title.closest('[role="status"]') as HTMLElement));
-    expect(notice.getByText(/a token you do not see here was not issued/)).toBeDefined();
+    expect(notice.getByText(/a token may have been issued even though its secret was not shown/)).toBeDefined();
     expect(notice.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(1);
     await user.click(notice.getByRole('button', { name: 'Refresh the list' }));
     expect(gateway.listEnrollmentTokens).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.queryByText('Refreshing the tokens…')).toBeNull());
+    expect(notice.getByText(/A token missing from the list may still have been issued/)).toBeDefined();
+    expect(notice.queryByText(/was not issued/)).toBeNull();
   });
 
   it('shows the sign-in page after a 401 unauthenticated', async () => {
