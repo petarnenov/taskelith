@@ -30,6 +30,12 @@ test('random identifiers are valid subject tokens', () => {
   assert.notEqual(ids.newWorkerId(), ids.newWorkerId());
 });
 
+test('a slot identifier is s and 32 lowercase hexadecimal digits, new each time', () => {
+  const ids = new RandomIdentifiers();
+  assert.match(ids.newSlotId(), /^s[0-9a-f]{32}$/);
+  assert.notEqual(ids.newSlotId(), ids.newSlotId());
+});
+
 test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   const secret = new NodeSecrets().issue('worker').secret;
   const seed = new TextDecoder().decode(createUser().getSeed());
