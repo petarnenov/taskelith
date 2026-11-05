@@ -106,7 +106,7 @@ Route (`route.json`, rule version 5): standard, no trigger; pass 1 reviewer A `c
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f33e77279d62e3dbcb76ad8e8c29231ee15c756c`; tests 4896, pass 4849, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `def002dae382cac9d333abb2be76e559e9b2d888`; tests 4901, pass 4854, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.84% functions.
 - `npm run openspec -- validate stabilize-secrets-linear-time-test --strict`: passed, `Change 'stabilize-secrets-linear-time-test' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).`.
 - Spec diff against the merge base `1ef0cb4263e3` with `origin/dev`: no change under `openspec/specs`.
@@ -116,6 +116,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1a863-3102-7202-bef8-a517aab3fb55` | 0 | 0 | 1 | 2 |
 | 2 | B | `claude claude-fable-5-1#medium` | `daeb4593-d738-4245-908c-b2da8f77056a` | 0 | 0 | 0 | 5 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1a8ec-fde7-7dc0-9288-93548079beae` | 0 | 0 | 0 | 3 |
 <!-- make record: end -->
 
 ## Pass 1 fix round
@@ -201,6 +202,9 @@ Pass 3 (`codex gpt-6.1-sol#medium`, role A, the replacement for `gemini-4-argon-
 | `npm run openspec -- validate stabilize-secrets-linear-time-test --strict` | `b7d9a671` | `Change 'stabilize-secrets-linear-time-test' is valid` |
 | `npm run verify:comments` | the round's working tree | `Every comment is within the comment length rule.` |
 | `make findings ARGS="validate"` | the round's working tree, with the 3 pass 3 lines | `Every findings file is valid: 126 file(s); every pass summary file is valid: 106 file(s); every route file is valid: 59 file(s).` |
+| `env -u NODE_ENV make verify`, round run 1 | `66bb6682` | Failed on the known flake `apps/web` `test/app.test.tsx` "session expiry > stops waiting for the end once the operator signed out" (`Unable to find role="menuitem" and name "Sign out"`), 815 of 816 passed; Node.js tests 4901, pass 4854, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.84% functions. Rerun once |
+| `env -u NODE_ENV make verify`, round run 2 | `66bb6682` | Passed, profile full, tree `def002dae382cac9d333abb2be76e559e9b2d888`; tests 4901, pass 4854, fail 0, skipped 47; `apps/web` 816 of 816 passed; all files 99.42% lines, 92.96% branches, 98.84% functions; `redaction-rules.js` 100.00% lines, branches, and functions, `linear-time.js` 100.00%, 96.00%, and 100.00%; `duration_ms` 303319.1. The secrets linear-time tests took 3508.1, 22759.9, and 7611.0 ms, the observability ones 8592.4 and 29446.1 ms |
+| `make record` and `make record-check CHANGE=stabilize-secrets-linear-time-test` | `66bb6682`, the log of round run 2 | `make record-check: the generated part matches the tree` |
 
 ## Independent review
 
