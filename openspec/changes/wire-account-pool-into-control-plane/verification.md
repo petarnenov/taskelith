@@ -65,10 +65,17 @@ Each mutant built (`build exit 0` in its log), and each source was restored and 
 | --- | --- | --- |
 | Focused unit, PostgreSQL, and composition runs | `7ee39718` | Listed under "Fail-before": all pass |
 | `npm run check:boundaries` | `7ee39718` | Failed: five `ApiServices` fixtures of `api-server.test.ts` without `accountSlots` and `fakeRunning` without `slotSignals`; fixed in `7b955dca`, after which it passes |
+| `make verify` run 1 (`verify-12dB1-1.log`) | `932774b7`, tree `487cb867`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4933, pass 4924, fail 0, skipped 9; all files 99.45 % lines, 92.88 % branches, 98.90 % functions; no `fixture-` credential in the log; recorded below |
+
+No run hit the known flakes (`installation-script` base-ten bound, `web-app.test.ts:279`).
+
+### Coverage
+
+Changed `dist` files in `make verify` run 1 (lines, branches, functions): `api/account-slot-api.js` 100 / 74.00 / 100 (new); `application/account-slot-service.js` 100 / 84.62 / 100 (new); `application/slot-signals.js` 100 / 100 / 100 (new); `composition/account-pool.js` 100 / 93.33 / 100 (new); `api/routes.js` 100 / 100 / 100; `composition/settings.js` 98.82 / 95.79 / 100 (uncovered lines 168-169); `control-plane-store/slot-credential-key.js` 100 / 100 / 100; `postgres/account-pool-repositories.js` 100 / 96.70 / 100; `secrets/node-secrets.js` 100 / 100 / 100; scheduling `in-memory-account-pool.js` 100 / 96.59 / 100 and `account-slot-commands.js` 100 / 93.10 / 100. The uncovered branches of `account-slot-api.js` are mostly the failure arms of the handlers' `ok ? ... : failure` returns and the `?? ''` default of a missing path parameter.
 
 ### Route
 
-`route.json` (rule version 5) at `cb67e824`, committed unedited (`a0a7c85f`): elevated (lines, files, security, contracts, size); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.72). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers.
+`route.json` (rule version 5) at `cb67e824`, committed unedited (`a0a7c85f`); the typecheck fix and this record changed the diff, so it was deleted (`ab7c63f9`) and routed again at that commit, committed unedited (`932774b7`) with the same result (P(third) 0.71). The first route: elevated (lines, files, security, contracts, size); pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding; the shadow router `jev-1.14.0` agrees (P(third) 0.72). Reviews run at effort medium (owner decision 2026-11-02); the coordinator assigns the reviewers.
 
 ## Deviations
 
@@ -83,6 +90,18 @@ Each mutant built (`build exit 0` in its log), and each source was restored and 
 - The slot rejecting reasons on the wire and OpenAPI 0.6.0 (B2).
 - A placement writes `lastReservedAt` and moves the slot's revision, so a revocation of a busy slot by the client's revision can meet `conflict` again and again; emergency revocation may need a revision-free path or a retry rule (the PostgreSQL race test now expects the `conflict` and a revocation at the new revision).
 - `SlotSignals` has no caller until item 18.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `487cb8679aa80eb46c25feacc8643c93eb913bb6`; tests 4933, pass 4924, fail 0, skipped 9; all files 99.45% lines, 92.88% branches, 98.90% functions.
+- `npm run openspec -- validate wire-account-pool-into-control-plane --strict`: passed, `Change 'wire-account-pool-into-control-plane' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 128 file(s); every pass summary file is valid: 108 file(s); every route file is valid: 61 file(s).`.
+- Spec diff against the merge base `686888cf91e6` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
 
 ## Independent review
 
