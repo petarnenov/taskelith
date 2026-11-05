@@ -9,9 +9,10 @@ import {
   statusTextOf,
   suggestsRefresh,
   TRUNCATED_TEXT,
+  noticeOf,
   validityMinutesOf,
   type Command,
-  type Settled,
+  type Notice,
 } from '../src/workers/tokens-model';
 import { enrollmentToken, issuedToken } from './fakes';
 
@@ -78,25 +79,37 @@ describe('outcomeOf', () => {
   });
 });
 
-const ISSUED: Settled = { kind: 'issued', command: ISSUE, issued: issuedToken() };
-const ROTATED: Settled = { kind: 'issued', command: ROTATE, issued: issuedToken({ token: enrollmentToken({ tokenId: 'token-2' }) }) };
-const REVOKED: Settled = { kind: 'revoked', command: REVOKE };
-const USED: Settled = { kind: 'refused', command: REVOKE, reason: 'token-used' };
-const NOT_PENDING: Settled = { kind: 'refused', command: ROTATE, reason: 'token-not-pending' };
-const GONE: Settled = { kind: 'refused', command: ROTATE, reason: 'not-found' };
-const REPLACED: Settled = { kind: 'token-rotated', command: REVOKE, replacementTokenId: 'token-2' };
-const CSRF_FINAL: Settled = { kind: 'refused', command: ISSUE, reason: 'csrf-rejected' };
-const DENIED: Settled = { kind: 'denied', command: ROTATE, requiredRole: 'installation-owner' };
-const NO_ANSWER_ISSUE: Settled = { kind: 'failed', command: ISSUE, failure: 'unavailable' };
-const NO_ANSWER_ROTATE: Settled = { kind: 'failed', command: ROTATE, failure: 'unavailable' };
-const NO_ANSWER_REVOKE: Settled = { kind: 'failed', command: REVOKE, failure: 'unavailable' };
+const ISSUED: Notice = { kind: 'issued', command: ISSUE, tokenId: 'token-1' };
+const ROTATED: Notice = { kind: 'issued', command: ROTATE, tokenId: 'token-2' };
+const REVOKED: Notice = { kind: 'revoked', command: REVOKE };
+const USED: Notice = { kind: 'refused', command: REVOKE, reason: 'token-used' };
+const NOT_PENDING: Notice = { kind: 'refused', command: ROTATE, reason: 'token-not-pending' };
+const GONE: Notice = { kind: 'refused', command: ROTATE, reason: 'not-found' };
+const REPLACED: Notice = { kind: 'token-rotated', command: REVOKE, replacementTokenId: 'token-2' };
+const CSRF_FINAL: Notice = { kind: 'refused', command: ISSUE, reason: 'csrf-rejected' };
+const DENIED: Notice = { kind: 'denied', command: ROTATE, requiredRole: 'installation-owner' };
+const NO_ANSWER_ISSUE: Notice = { kind: 'failed', command: ISSUE, failure: 'unavailable' };
+const NO_ANSWER_ROTATE: Notice = { kind: 'failed', command: ROTATE, failure: 'unavailable' };
+const NO_ANSWER_REVOKE: Notice = { kind: 'failed', command: REVOKE, failure: 'unavailable' };
+
+describe('noticeOf', () => {
+  it('keeps an issued token by its identifier alone, without its secret', () => {
+    const settled = { kind: 'issued', command: ROTATE, issued: issuedToken({ token: enrollmentToken({ tokenId: 'token-2' }) }) } as const;
+    expect(noticeOf(settled)).toEqual(ROTATED);
+    expect(JSON.stringify(noticeOf(settled))).not.toContain('tken_');
+  });
+
+  it('keeps every other answer as it settled', () => {
+    expect(noticeOf(REPLACED)).toBe(REPLACED);
+  });
+});
 
 describe('the answers that change the list', () => {
   it.each([ISSUED, ROTATED, REVOKED, USED, NOT_PENDING, GONE, REPLACED])('read the list again after %o', (settled) => {
     expect(changesList(settled)).toBe(true);
   });
 
-  it.each([CSRF_FINAL, DENIED, NO_ANSWER_ISSUE, NO_ANSWER_REVOKE, { kind: 'refused', command: ISSUE, reason: 'invalid' } as Settled])(
+  it.each([CSRF_FINAL, DENIED, NO_ANSWER_ISSUE, NO_ANSWER_REVOKE, { kind: 'refused', command: ISSUE, reason: 'invalid' } as Notice])(
     'leave the list as shown after %o, which took no known effect',
     (settled) => {
       expect(changesList(settled)).toBe(false);

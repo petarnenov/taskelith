@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../session/SessionProvider';
-import { changesList, outcomeOf, refused, type Command, type CommandResult, type Settled } from './tokens-model';
+import { changesList, noticeOf, outcomeOf, refused, type Command, type CommandResult, type Notice, type Settled } from './tokens-model';
 import type { IssuedEnrollmentToken, WorkersGateway } from './workers';
 import { useWorkersGateway } from './WorkersServices';
 
@@ -14,8 +14,8 @@ export interface Reveal {
 export interface TokenCommands {
   // The one command in flight, while one is.
   readonly running?: Command;
-  // The last answer, while its notice stands.
-  readonly status?: Settled;
+  // The last answer, without a secret, while its notice stands.
+  readonly status?: Notice;
   readonly reveal?: Reveal;
   readonly run: (command: Command) => void;
   readonly closeReveal: () => void;
@@ -27,7 +27,7 @@ export function useTokenCommands(onListChanged: () => void): TokenCommands {
   const gateway = useWorkersGateway();
   const { refresh, signedInGeneration } = useSession();
   const [running, setRunning] = useState<Command>();
-  const [status, setStatus] = useState<Settled>();
+  const [status, setStatus] = useState<Notice>();
   const [reveal, setReveal] = useState<Reveal>();
   const mounted = useRef(true);
   useEffect(() => {
@@ -65,9 +65,10 @@ export function useTokenCommands(onListChanged: () => void): TokenCommands {
         inFlight.current = false;
         if (!mounted.current) return;
         setRunning(undefined);
-        setStatus(settled);
+        const notice = noticeOf(settled);
+        setStatus(notice);
         if (settled.kind === 'issued') setReveal(revealOf(settled.issued, command));
-        if (changesList(settled)) onListChanged();
+        if (changesList(notice)) onListChanged();
       });
     },
     [answerOf, onListChanged],

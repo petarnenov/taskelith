@@ -57,6 +57,17 @@ export type Settled =
 
 export type Outcome = Settled | { readonly kind: 'retry-with-new-token' };
 
+// What the status region keeps of an answer: an issued token by its
+// identifier alone, since its secret lives in the reveal only.
+export type Notice =
+  | Exclude<Settled, { readonly kind: 'issued' }>
+  | { readonly kind: 'issued'; readonly command: Command; readonly tokenId: string };
+
+export function noticeOf(settled: Settled): Notice {
+  if (settled.kind !== 'issued') return settled;
+  return { kind: 'issued', command: settled.command, tokenId: settled.issued.token.tokenId };
+}
+
 // A CSRF refusal has the session read again and the command sent once
 // more, since nothing took effect; a second one is final.
 export function outcomeOf(command: Command, result: CommandResult, tokenRefreshed: boolean): Outcome {
@@ -85,18 +96,18 @@ export function refused(command: Command, reason: RefusalReason): Settled {
 
 // The answers after which the control plane's list differs from the shown
 // one, or may: the list is read again after each of them.
-export function changesList(settled: Settled): boolean {
+export function changesList(settled: Notice): boolean {
   if (settled.kind === 'refused') return settled.reason === 'token-used' || settled.reason === 'token-not-pending' || settled.reason === 'not-found';
   return settled.kind !== 'denied' && settled.kind !== 'failed';
 }
 
 // Only a revoke may be sent again on its own: a repeat answers 204.
-export function retryable(settled: Settled): boolean {
+export function retryable(settled: Notice): boolean {
   return settled.kind === 'failed' && settled.failure === 'unavailable' && settled.command.name === 'revoke';
 }
 
 // Reading the list again tells what took effect; the failure texts say so.
-export function suggestsRefresh(settled: Settled): boolean {
+export function suggestsRefresh(settled: Notice): boolean {
   return settled.kind === 'failed' && settled.command.name !== 'revoke';
 }
 
@@ -114,14 +125,14 @@ export interface StatusText {
   readonly text: string;
 }
 
-export function statusTextOf(settled: Settled): StatusText {
+export function statusTextOf(settled: Notice): StatusText {
   const { command } = settled;
   const id = command.name === 'issue' ? undefined : command.tokenId;
   switch (settled.kind) {
     case 'issued':
       return command.name === 'rotate'
-        ? { title: 'Token rotated', text: `Token ${id} stops working now; its replacement ${settled.issued.token.tokenId} was shown once with its secret.` }
-        : { title: 'Token issued', text: `Token ${settled.issued.token.tokenId} was issued and shown once with its secret.` };
+        ? { title: 'Token rotated', text: `Token ${id} stops working now; its replacement ${settled.tokenId} was shown once with its secret.` }
+        : { title: 'Token issued', text: `Token ${settled.tokenId} was issued and shown once with its secret.` };
     case 'revoked':
       return { title: 'Token revoked', text: `Token ${id} was revoked; a worker can no longer enroll with it.` };
     case 'token-rotated':

@@ -32,7 +32,7 @@ import {
   validityMinutesOf,
   type Command,
   type ConstraintsForm,
-  type Settled,
+  type Notice,
 } from './tokens-model';
 import type { EnrollmentToken, EnrollmentTokenList, HostConstraints } from './workers';
 import { PLATFORM_LABELS } from './workers-labels';
@@ -201,11 +201,11 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
   );
 }
 
-function withRole(text: string, status: Settled): string {
+function withRole(text: string, status: Notice): string {
   return status.kind === 'denied' ? withRequiredRole(text, status) : text;
 }
 
-function colorOf(status: Settled): string {
+function colorOf(status: Notice): string {
   return status.kind === 'issued' || status.kind === 'revoked' ? 'indigo' : 'red';
 }
 
