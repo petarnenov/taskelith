@@ -331,6 +331,18 @@ describe('issuing a token', () => {
     expect(gateway.issueEnrollmentToken).not.toHaveBeenCalled();
   });
 
+  it('clears the hostname error once the field is changed', async () => {
+    const gateway = new FakeWorkersGateway();
+    openTokens(gateway);
+    const { user, form } = await openForm();
+    await user.type(form.getByLabelText('Hostname'), 'build\u0007');
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    await form.findByText('A hostname is 1 to 1,024 characters without control characters.');
+    await user.type(form.getByLabelText('Hostname'), '{Backspace}');
+    expect(form.queryByText('A hostname is 1 to 1,024 characters without control characters.')).toBeNull();
+    expect(gateway.issueEnrollmentToken).not.toHaveBeenCalled();
+  });
+
   it('runs one command at a time: every button says so and a second click sends nothing', async () => {
     const later = deferred<IssueResult>();
     const gateway = gatewayWith(tokenList([enrollmentToken()]));
