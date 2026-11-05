@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto';
 import { EXECUTION_PROTOCOL_VERSION, type MessageSchemas } from '@taskelith/contracts';
-import { classifyObservation, recordAppliedSequence, type ProducerCursor } from '@taskelith/execution';
+import { classifyObservation, recordAppliedSequence, type ProducerCursor, type SessionTimelineTransaction } from '@taskelith/execution';
 import { err, failure, ok, parseEventMetadata, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { evaluateSnapshots } from './inventory-reconciliation.js';
 import { authenticateObserver, recordCurrentContact, retireJournal, type ReconciliationContext } from './journal-reconciliation.js';
-import { OBSERVATION_EFFECTS, rejectedEffect, type ObservationEffect } from './observation-effects.js';
+import { OBSERVATION_EFFECTS, rejectedEffect, type ObservationContext, type ObservationEffect } from './observation-effects.js';
 import { isNotConsumed, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
 import { PendingLog } from './pending-log.js';
+import type { SessionObservationTimeline } from './session-observation-effects.js';
+import { WatchedTimelineStores } from './watched-timeline-stores.js';
 
 // The durable consumer of every worker's observations, and its inbox.
 export const OBSERVATION_CONSUMER = 'control-plane-observations';
@@ -28,6 +30,9 @@ export interface ObservationServiceOptions {
   readonly newConfirmationId: () => string;
   // The `requestId` of each inventory request: random in production.
   readonly newRequestId: () => string;
+  // The session timeline service over one transaction's timelines, so that
+  // a session observation's change commits with its inbox row and cursor.
+  readonly timelineOver: (transaction: SessionTimelineTransaction) => SessionObservationTimeline;
   readonly logger?: Logger;
 }
 
@@ -39,12 +44,14 @@ export class ObservationService {
   readonly #store: ControlPlaneStore;
   readonly #newConfirmationId: () => string;
   readonly #newRequestId: () => string;
+  readonly #timelineOver: ObservationServiceOptions['timelineOver'];
   readonly #logger: Logger;
 
   constructor(store: ControlPlaneStore, options: ObservationServiceOptions) {
     this.#store = store;
     this.#newConfirmationId = options.newConfirmationId;
     this.#newRequestId = options.newRequestId;
+    this.#timelineOver = options.timelineOver;
     this.#logger = options.logger ?? SILENT_LOGGER;
   }
 
@@ -76,7 +83,7 @@ export class ObservationService {
   // Decision 1 without the contact, which `apply` records after it, and the
   // pending snapshots that a grown prefix may complete (21c decision 7).
   async #record(
-    tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, effect: ObservationEffect,
+    tx: ControlPlaneTransaction, context: ObservationContext, observation: Observation, effect: ObservationEffect,
     outcome: 'applied' | 'rejected',
   ): Promise<Result<ObservationOutcome>> {
     const standing = await authenticateObserver(tx, producerOf(observation), context);
@@ -98,7 +105,7 @@ export class ObservationService {
 
   // 21c decision 2: a known identity at a sequence new to its journal is a
   // fact derived again, whose position is recorded without its effect.
-  async #recordKnown(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<ObservationOutcome>> {
+  async #recordKnown(tx: ControlPlaneTransaction, context: ObservationContext, observation: Observation): Promise<Result<ObservationOutcome>> {
     const { workerId, journalId, observationId } = observation.position;
     const cursor = await tx.cursors.get(workerId, journalId);
     // No identity is kept per sequence, so a known one there is a repeat.
@@ -153,12 +160,14 @@ export class ObservationService {
   // Writes the warnings of the attempt that settled: one that committed,
   // and with `refused` one that refused the observation too.
   async #transaction<Value>(
-    settled: Settled, work: (tx: ControlPlaneTransaction, context: ReconciliationContext) => Promise<Result<Value>>,
+    settled: Settled, work: (tx: ControlPlaneTransaction, context: ObservationContext) => Promise<Result<Value>>,
   ): Promise<Result<Value>> {
     let log = new PendingLog();
     const result = await this.#store.transaction((tx) => {
       log = new PendingLog();
-      return work(tx, { log, newRequestId: this.#newRequestId, requested: new Set() });
+      const timelineStores = new WatchedTimelineStores(tx.sessionTimeline);
+      const timeline = this.#timelineOver(timelineStores.transaction);
+      return work(tx, { log, newRequestId: this.#newRequestId, requested: new Set(), timeline, timelineStores });
     });
     if (result.ok || (settled === 'refused' && isNotConsumed(result.error))) log.writeTo(this.#logger);
     return result;
@@ -204,7 +213,7 @@ async function retireRolledBack(tx: ControlPlaneTransaction, observation: Observ
 // The effect and the cursor; then the pending snapshots, once the confirmed
 // prefix grew.
 async function recordPosition(
-  tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, cursor: ProducerCursor, effect: ObservationEffect,
+  tx: ControlPlaneTransaction, context: ObservationContext, observation: Observation, cursor: ProducerCursor, effect: ObservationEffect,
 ): Promise<Result<void>> {
   const { workerId, journalId } = observation.position;
   const at = await tx.now();

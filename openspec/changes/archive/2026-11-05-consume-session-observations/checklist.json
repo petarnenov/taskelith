@@ -1,0 +1,109 @@
+{
+  "change": "consume-session-observations",
+  "generatedAt": "2026-11-05T05:03:59.372Z",
+  "devCommit": "6738a8f963fe5e42b9d3a11bb5760f90cb7d6bdf",
+  "query": {
+    "capabilities": [
+      "session-turn-model",
+      "nats-transport",
+      "execution-wire-contracts",
+      "worker-contact",
+      "harness-account-pools",
+      "postgres-state"
+    ],
+    "files": [
+      "packages/adapters/nats/**",
+      "packages/modules/execution/**",
+      "packages/adapters/postgres/**",
+      "packages/adapters/secrets/**",
+      "apps/control-plane/src/composition/**",
+      "docs/contracts/worker-messages-and-terminal.md"
+    ],
+    "top": 7
+  },
+  "size": "M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 70
+      },
+      {
+        "category": "error-handling",
+        "count": 30
+      },
+      {
+        "category": "docs",
+        "count": 16
+      },
+      {
+        "category": "spec-wording",
+        "count": 15
+      },
+      {
+        "category": "concurrency-race",
+        "count": 13
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 13
+      },
+      {
+        "category": "naming",
+        "count": 11
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1051,
+        "inChecklist": 871
+      },
+      "mediumOrWorse": {
+        "findings": 516,
+        "inChecklist": 414
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 171
+      },
+      {
+        "category": "spec-wording",
+        "count": 111
+      },
+      {
+        "category": "docs",
+        "count": 90
+      },
+      {
+        "category": "stale-citation",
+        "count": 61
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 503,
+        "inChecklist": 496
+      },
+      "mediumOrWorse": {
+        "findings": 80,
+        "inChecklist": 80
+      }
+    }
+  }
+}

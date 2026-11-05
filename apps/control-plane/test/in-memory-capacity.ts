@@ -66,6 +66,8 @@ export function inMemoryCapacity(
     inventoryReports: new InMemoryInventoryReports(),
     unrecordedProcesses,
     reconciliation: new InMemoryReconciliationQueue(() => tasks.all(), unrecordedProcesses),
+    // Only a session observation reads it; its tests bind a timeline store.
+    sessionTimeline: {} as never,
   };
 }
 

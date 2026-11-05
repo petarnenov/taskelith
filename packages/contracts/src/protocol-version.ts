@@ -10,9 +10,18 @@ export const EXECUTION_PROTOCOL_VERSION = 1;
 // only to a worker whose common version is at least this one.
 export const SESSION_PROTOCOL_VERSION = 2;
 
+// The worker's window, which stays at version 1 until the worker executes
+// session work.
 export const SUPPORTED_PROTOCOL_VERSIONS: ProtocolVersionWindow = Object.freeze({
   minimum: EXECUTION_PROTOCOL_VERSION,
   maximum: EXECUTION_PROTOCOL_VERSION,
+});
+
+// The control plane's window: its current version and the previous one,
+// which it keeps accepting (worker messages contract, section 2).
+export const CONTROL_PLANE_PROTOCOL_VERSIONS: ProtocolVersionWindow = Object.freeze({
+  minimum: EXECUTION_PROTOCOL_VERSION,
+  maximum: SESSION_PROTOCOL_VERSION,
 });
 
 export function supportsProtocolVersion(window: ProtocolVersionWindow, version: number): boolean {

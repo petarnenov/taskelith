@@ -1,0 +1,53 @@
+## 1. Change
+
+- [x] 1.1 Create the change `consume-session-observations` and save the brief's checklist
+
+## 2. Schema tables (scope 1)
+
+- [x] 2.1 Name the two session commands and the ten session observations in `COMMAND_SCHEMAS` and `OBSERVATION_SCHEMAS`
+- [x] 2.2 Replace the filtered table test with one that names the four messages of items 21 and 38 left out
+- [x] 2.3 Add session builders with the derived `observationId` to `packages/adapters/nats/test/messages.ts`, and tests of each session observation, a malformed one, an item 21 observation, and a session command at a worker of version 1
+
+## 3. Control plane protocol window (scope 2)
+
+- [x] 3.1 Export `CONTROL_PLANE_PROTOCOL_VERSIONS`, versions 1 to 2, from `@taskelith/contracts`
+- [x] 3.2 Use it at enrollment, at a capacity declaration, and at a protocol rejection of an offer
+- [x] 3.3 Tests of the window, of a worker window that reaches version 2, and of windows above it
+
+## 4. Session observations through the timeline (scopes 3, 4, 5)
+
+- [x] 4.1 Give `ControlPlaneTransaction` the timeline stores and `ObservationService` a timeline bound per transaction
+- [x] 4.2 Add `session-observation-effects.ts`: the ownership check, one report per observation type, refusals and repeats
+- [x] 4.3 Register the ten effects behind the recovery epoch gate
+- [x] 4.4 Unit tests: each type, `turn-invalid`, the other not-delivered reasons, acceptance unknown, refusals, repeats, ownership, the epoch gate, the log's content, and failures that are returned
+- [x] 4.5 Postgres integration tests: one commit, the wire paths, ownership, the epoch gate, a store failure, the kill points before and after the three commits, and two races under SERIALIZABLE retry
+
+## 5. Plan and specs (scope 6)
+
+- [x] 5.1 Record the split of 13c, the promotion guard, and the lifecycle wiring of item 18 in `docs/g3-plan.md` rows 13 and 18
+- [x] 5.2 Spec deltas of `observation-consumption`, `execution-wire-contracts`, and `nats-transport`; strict validation
+
+## 6. Verification
+
+- [x] 6.1 Fail-before runs and mutation controls
+- [x] 6.2 Route, `make verify`, `make record`, and `make record-check`
+
+## 7. Fix round after review pass 1
+
+- [x] 7.1 Finding 1: tell a failure of the timeline's stores from a refusal through `WatchedTimelineStores`; unit tests and a Postgres test of a store conflict after the timeline wrote; design and spec corrected
+- [x] 7.2 Finding 2: a protocol rejection with a window of versions 2 to 3, with its mutation control
+- [x] 7.3 Finding 3: the fields of each kind of evidence log in the spec
+- [x] 7.4 Finding 4: the deferred commands of items 21 and 38 at a worker of version 1, in the comments, the design, and a test
+- [x] 7.5 `make verify`, `make record`, and `make record-check` again
+
+## 8. Fix round after review pass 2
+
+- [x] 8.1 Findings 1 and 2: the watch wraps only object members and classifies each store call in a table the compiler checks; a unit test of a member that is no store
+- [x] 8.2 Finding 3: rename the local that shadowed the kernel's `failure`
+- [x] 8.3 Findings 4 to 7: the proposal, the design's domain calls after a write and ignored fields, and the wording of the `nats-transport` delta
+- [x] 8.4 `make verify` and `make record` again
+
+## 9. Review and archive
+
+- [x] 9.1 Independent review
+- [x] 9.2 Archive the change
