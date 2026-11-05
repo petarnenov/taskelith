@@ -488,6 +488,19 @@ describe('acceptance and refusal', () => {
     });
     assert.equal(value(other), 'rejected');
   });
+
+  test('a rejected offer of a worker whose window reaches version 2 refuses the assignment and gives the worker version 2', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    assert.equal(value(await observe('execution.command.rejected', { sequence: 2 }, {
+      commandId: at.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
+      supportedProtocolVersions: { minimum: 2, maximum: 3 },
+    })), 'applied');
+    const refused = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([refused.end?.refusal, refused.reservation.state], ['protocol-not-supported', 'released']);
+    assert.equal((await worker()).protocol_version, 2, 'the highest version the control plane window of 1 to 2 shares');
+  });
 });
 
 describe('refusal after a grant', () => {
