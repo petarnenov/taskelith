@@ -342,12 +342,10 @@ const CONFIRM_TITLES = { revoke: 'Revoke token', rotate: 'Rotate token' } as con
 const CONFIRM_LABELS = { revoke: 'Revoke', rotate: 'Rotate' } as const;
 
 // The dialog stays mounted, so Mantine returns the focus when it closes;
-// the last question is kept for the closing transition.
+// the last question, kept during render, stays for the closing transition.
 function ConfirmDialog({ confirmation, onConfirm, onCancel }: ConfirmDialogProps) {
   const [shown, setShown] = useState(confirmation);
-  useEffect(() => {
-    if (confirmation !== undefined) setShown(confirmation);
-  }, [confirmation]);
+  if (confirmation !== undefined && confirmation !== shown) setShown(confirmation);
   return (
     <Modal opened={confirmation !== undefined} onClose={onCancel} title={shown === undefined ? '' : CONFIRM_TITLES[shown.name]}>
       {shown === undefined ? null : (
