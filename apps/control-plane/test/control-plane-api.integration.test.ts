@@ -842,8 +842,11 @@ describe('enrollment and quarantine', () => {
     const fresh = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const huge = { ...body, journalId: 'journal-3', capacity: { ...body.capacity, slots: 2_147_483_648 } };
     assert.equal((await call('POST', '/workers/enrollments', { bearer: fresh.enrollmentToken as string, body: huge })).status, 400);
-    const kept = await call('POST', '/workers/enrollments', { bearer: fresh.enrollmentToken as string, body: { ...body, journalId: 'journal-3' } });
+    const sessionCapable = { ...body, journalId: 'journal-3', protocolVersions: { minimum: 1, maximum: 2 } };
+    const kept = await call('POST', '/workers/enrollments', { bearer: fresh.enrollmentToken as string, body: sessionCapable });
     assert.equal(kept.status, 201, 'a refused capacity does not consume the token');
+    const [capable] = await sql<{ protocol_version: number }>(database, 'SELECT protocol_version FROM workers WHERE worker_id = $1', [kept.body.workerId]);
+    assert.equal(capable?.protocol_version, 2, 'the control plane window of 1 to 2 shares version 2 with the worker');
   });
 
   test('the owner lists the workers and issues, lists, rotates, and revokes enrollment tokens over the API', async () => {

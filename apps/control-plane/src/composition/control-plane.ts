@@ -279,7 +279,9 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
   const newRequestId = () => randomUUID();
   const services = {
-    observations: new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, newRequestId, logger }),
+    observations: new ObservationService(database, {
+      newConfirmationId: () => `o${randomUUID()}`, newRequestId, timelineOver: agentSessions.value.timelineIn, logger,
+    }),
     inventory: new InventoryService(database, { newRequestId, logger }),
   };
   await requestStartInventories(registry, services.inventory, logger);

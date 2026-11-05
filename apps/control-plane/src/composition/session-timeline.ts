@@ -36,6 +36,9 @@ export interface AgentSessionServices {
   // The same source over one transaction's timeline, which a view reads
   // and an inbox answer writes.
   sourceIn(transaction: SessionTimelineTransaction, positions: ViewPositions): NeedsYouSource;
+  // The timeline over one transaction, which a session observation's
+  // change shares with its inbox row and cursor.
+  timelineIn(transaction: SessionTimelineTransaction): SessionTimelineService;
 }
 
 // The session timeline over PostgreSQL; a missing or malformed digest or
@@ -58,12 +61,18 @@ export function startAgentSessionServices(namespace: ControlPlaneNamespace, data
   const positions = new LogViewPositions(new PostgresUiEventLog(database));
   const source = new NativeRequestSource({ id: NATIVE_REQUEST_SOURCE_ID, store, timeline, digest: digest.value, clock, positions });
   const sourceIn = (transaction: SessionTimelineTransaction, snapshotPositions: ViewPositions) => {
-    const bound: SessionTimelineStore = { transaction: (work) => work(transaction) };
+    const bound = boundTo(transaction);
     return new NativeRequestSource({
       id: NATIVE_REQUEST_SOURCE_ID, timeline: timelineOver(bound), digest: digest.value, clock, store: bound, positions: snapshotPositions,
     });
   };
-  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, digest: digest.value, source, sourceIn });
+  const timelineIn = (transaction: SessionTimelineTransaction) => timelineOver(boundTo(transaction));
+  return ok({ timeline, scopes: new PostgresSessionScopes(database), positions, clock, digest: digest.value, source, sourceIn, timelineIn });
+}
+
+// A store whose every transaction is the given one, already open.
+function boundTo(transaction: SessionTimelineTransaction): SessionTimelineStore {
+  return { transaction: (work) => work(transaction) };
 }
 
 // `t` and 32 lowercase hexadecimal digits from 128 random bits (wire

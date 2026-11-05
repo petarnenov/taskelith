@@ -1,6 +1,7 @@
 export { checkHttpSchema, checkMessageSchema, type HttpSchemas, type MessageSchemas, type SchemaViolations } from './schema-check.js';
 export {
   commonProtocolVersion,
+  CONTROL_PLANE_PROTOCOL_VERSIONS,
   EXECUTION_PROTOCOL_VERSION,
   SESSION_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
