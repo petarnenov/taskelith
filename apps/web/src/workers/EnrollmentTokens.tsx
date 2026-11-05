@@ -179,7 +179,7 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
     <Alert ref={notice} tabIndex={-1} role="status" color={colorOf(status)} variant="light" title={title}>
       <Stack align="flex-start" gap="xs">
         <Text component="div">
-          <Breakable text={withRole(text, status)} />
+          <Breakable text={text} />
           {status.kind === 'token-rotated' && listed.includes(status.replacementTokenId) ? (
             <>
               {' '}
@@ -202,10 +202,6 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
       </Stack>
     </Alert>
   );
-}
-
-function withRole(text: string, status: Notice): string {
-  return status.kind === 'denied' ? withRequiredRole(text, status) : text;
 }
 
 function colorOf(status: Notice): string {
