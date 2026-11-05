@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { SessionTimelineService, parseTurnId, type SessionTimelineStore, type SessionTimelineTransaction } from '@taskelith/execution';
-import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, parseIdentifier, type FailureCode } from '@taskelith/kernel';
 import { HmacInputDigest, SecretOutputRedactor, SecretTextRedactor, outputTailCipher } from '@taskelith/secrets';
 import { value } from '@taskelith/testing';
 
@@ -22,6 +22,20 @@ export function timelineService(store: SessionTimelineStore): SessionTimelineSer
 // The service over one open transaction, as an observation's effect gets it.
 export function timelineOver(transaction: SessionTimelineTransaction): SessionTimelineService {
   return timelineService({ transaction: (work) => work(transaction) });
+}
+
+type TimelineStoreName = keyof SessionTimelineTransaction;
+
+// The transaction's timelines with one call of one store answered as a
+// failure of the given code, as a store that refuses a row answers.
+export function failingAt(store: TimelineStoreName, call: string, code: FailureCode) {
+  const fails = async () => err(failure(code, `the store refused ${store}.${call}`));
+  const failingStore = (records: object) => new Proxy(records, {
+    get: (target, name) => (name === call ? fails : (Reflect.get(target, name) as (...values: unknown[]) => unknown).bind(target)),
+  });
+  return (stores: SessionTimelineTransaction): SessionTimelineTransaction => new Proxy(stores, {
+    get: (target, name) => (name === store ? failingStore(Reflect.get(target, name) as object) : Reflect.get(target, name)),
+  });
 }
 
 export interface SessionObservationSource {

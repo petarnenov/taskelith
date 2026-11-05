@@ -10,6 +10,7 @@ import { OBSERVATION_EFFECTS, rejectedEffect, type ObservationContext, type Obse
 import { isNotConsumed, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
 import { PendingLog } from './pending-log.js';
 import type { SessionObservationTimeline } from './session-observation-effects.js';
+import { WatchedTimelineStores } from './watched-timeline-stores.js';
 
 // The durable consumer of every worker's observations, and its inbox.
 export const OBSERVATION_CONSUMER = 'control-plane-observations';
@@ -164,8 +165,9 @@ export class ObservationService {
     let log = new PendingLog();
     const result = await this.#store.transaction((tx) => {
       log = new PendingLog();
-      const timeline = this.#timelineOver(tx.sessionTimeline);
-      return work(tx, { log, newRequestId: this.#newRequestId, requested: new Set(), timeline });
+      const timelineStores = new WatchedTimelineStores(tx.sessionTimeline);
+      const timeline = this.#timelineOver(timelineStores.transaction);
+      return work(tx, { log, newRequestId: this.#newRequestId, requested: new Set(), timeline, timelineStores });
     });
     if (result.ok || (settled === 'refused' && isNotConsumed(result.error))) log.writeTo(this.#logger);
     return result;

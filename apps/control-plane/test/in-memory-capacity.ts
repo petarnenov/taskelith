@@ -67,7 +67,7 @@ export function inMemoryCapacity(
     unrecordedProcesses,
     reconciliation: new InMemoryReconciliationQueue(() => tasks.all(), unrecordedProcesses),
     // Only a session observation reads it; its tests bind a timeline store.
-    sessionTimeline: undefined as never,
+    sessionTimeline: {} as never,
   };
 }
 

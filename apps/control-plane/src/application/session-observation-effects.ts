@@ -9,7 +9,7 @@ import {
   type SessionTimelineService,
   type TurnId,
 } from '@taskelith/execution';
-import { ok, type FailureCode, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type FailureCode, type Instant, type Result } from '@taskelith/kernel';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
 import type { ObservationContext, ObservationEffect } from './observation-effects.js';
 import type { Observation } from './observation.js';
@@ -40,7 +40,8 @@ interface SessionPayload {
 type OwnershipRefusal = 'session-unknown' | 'attempt-not-current' | 'attempt-not-held';
 const TIMELINE_REFUSED = 'timeline-refused';
 
-// Every code the timeline refuses a report with (contract, section 2).
+// Every code the timeline refuses a report with (contract, section 2); its
+// stores fail with the same codes, so a code alone names no refusal.
 const TIMELINE_REFUSALS: ReadonlySet<FailureCode> = new Set(['invalid', 'not-found', 'conflict', 'precondition-failed']);
 
 const NEVER_HELD = (): boolean => false;
@@ -148,7 +149,7 @@ function requestKey(request: Payload<'NativeRequestKey'>): RequestKey {
 }
 
 // Worker messages section 9: the report is applied through the timeline; a
-// refusal that is no repeat is kept as evidence and holds no sequence.
+// refusal that is no repeat is evidence, kept only when no store was touched.
 function sessionEffect<Reported extends SessionPayload>(reportOf: (payload: Reported) => SessionReport): ObservationEffect {
   return async (tx, observation, _at, context) => {
     const payload = observation.payload as Reported;
@@ -159,10 +160,18 @@ function sessionEffect<Reported extends SessionPayload>(reportOf: (payload: Repo
     const report = reportOf(payload);
     const applied = await report.apply(context.timeline, sessionId);
     if (applied.ok) return ok(undefined);
+    if (!context.timelineStores.isUntouched()) return storeFailure(sessionId, applied.error);
     if (!TIMELINE_REFUSALS.has(applied.error.code)) return applied;
     if (report.isHeldBy(owned.value)) return ok(undefined);
     return keptAsEvidence(context, observation, { sessionId, reason: TIMELINE_REFUSED, code: applied.error.code });
   };
+}
+
+// A refusal's code would confirm the observation (G2 path), so the failure
+// is returned as `internal`: the transaction rolls back and runs again.
+function storeFailure(sessionId: SessionId, failed: Failure): Result<never> {
+  if (!TIMELINE_REFUSALS.has(failed.code)) return err(failed);
+  return err(failure('internal', `the timeline of session ${sessionId} failed after its store was touched`, { session: sessionId, code: failed.code }));
 }
 
 // The session, only when the observed attempt is its active bound attempt at

@@ -45,11 +45,13 @@ import { grantIn, installationState } from './launch-authority.js';
 import type { Observation } from './observation.js';
 import { SESSION_OBSERVATION_EFFECTS, type SessionObservationTimeline } from './session-observation-effects.js';
 import { followAttemptEnd } from './task-ending.js';
+import type { TimelineStoreWatch } from './watched-timeline-stores.js';
 
 // What one transaction attempt gives its effect: the reconciliation's
-// shared state and the session timeline over that transaction.
+// shared state, the session timeline over it, and what its stores saw.
 export interface ObservationContext extends ReconciliationContext {
   readonly timeline: SessionObservationTimeline;
+  readonly timelineStores: TimelineStoreWatch;
 }
 
 // What each consumed observation type changes, inside the transaction that

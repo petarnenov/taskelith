@@ -23,7 +23,7 @@ import {
 } from '@taskelith/sdlc';
 import { failed, id, value } from '@taskelith/testing';
 import { inMemoryCapacity } from './in-memory-capacity.ts';
-import { sessionObservationMessage, timelineOver, timelineService } from './session-timeline-fixtures.ts';
+import { failingAt, sessionObservationMessage, timelineOver, timelineService } from './session-timeline-fixtures.ts';
 
 const WORKER = 'worker-1' as WorkerId;
 const JOURNAL = 'journal-1';
@@ -53,6 +53,8 @@ interface FixtureOptions {
   // The ownership generations at which the worker held the attempt.
   readonly held?: readonly number[];
   readonly timeline?: SessionTimelineTransaction;
+  // What the effects get in place of each transaction's own timelines.
+  readonly timelineStores?: (stores: SessionTimelineTransaction) => SessionTimelineTransaction;
   readonly timelineOver?: typeof timelineOver;
 }
 
@@ -75,8 +77,9 @@ async function fixture(options: FixtureOptions = {}) {
     fleet, revisions: new InMemoryCurrentRevisions(), launches: undefined as never, now: async () => AT,
   };
   const timelines = new InMemorySessionTimelineStore();
+  const timelineStores = options.timelineStores ?? ((stores) => stores);
   const transaction: ControlPlaneStore['transaction'] = (work) => (
-    timelines.transaction((sessionTimeline) => work({ ...members, sessionTimeline: options.timeline ?? sessionTimeline }))
+    timelines.transaction((sessionTimeline) => work({ ...members, sessionTimeline: options.timeline ?? timelineStores(sessionTimeline) }))
   );
   const logs = new InMemoryLogSink();
   const service = new ObservationService({ transaction, readCommitted: transaction }, {
@@ -434,4 +437,45 @@ test('a failure of the timeline that is no refusal is returned, not kept as evid
 
   assert.deepEqual(at.evidence(), []);
   assert.deepEqual((await at.session()).generations, []);
+});
+
+test('a store conflict after the timeline wrote is returned as a failure, and nothing of the request is kept as evidence or stored', async () => {
+  const at = await fixture({ timelineStores: failingAt('items', 'add', 'conflict') });
+  const [first] = await runningSession(at, 'turn-1');
+  value(await at.observe('session.turn.delivered', turn(first!)));
+
+  const recorded = failed(await at.observe('session.request.recorded', request(first!)));
+
+  assert.deepEqual([recorded.code, recorded.details], ['internal', { session: SESSION, code: 'conflict' }]);
+  assert.deepEqual(at.evidence(), []);
+  assert.deepEqual((await at.session()).requests, [], 'the timeline rolled back');
+});
+
+test('a refusal\'s code from the first write of the timeline is a failure, not a refusal', async () => {
+  const at = await fixture({ timelineStores: failingAt('sessions', 'replace', 'precondition-failed') });
+  await boundSession(at);
+
+  assert.equal(failed(await at.observe('session.generation.started', started())).code, 'internal');
+
+  assert.deepEqual(at.evidence(), []);
+  assert.deepEqual((await at.session()).generations, []);
+});
+
+test('a refusal\'s code from a read of the timeline is a failure, not a refusal', async () => {
+  const at = await fixture({ timelineStores: failingAt('idempotency', 'find', 'conflict') });
+  const [first] = await runningSession(at, 'turn-1');
+  value(await at.observe('session.turn.delivered', turn(first!)));
+
+  assert.equal(failed(await at.observe('session.request.recorded', request(first!))).code, 'internal');
+
+  assert.deepEqual(at.evidence(), []);
+});
+
+test('a store failure of another code after the timeline wrote is returned as it is', async () => {
+  const at = await fixture({ timelineStores: failingAt('sessions', 'replace', 'unavailable') });
+  await boundSession(at);
+
+  assert.equal(failed(await at.observe('session.generation.started', started())).code, 'unavailable');
+
+  assert.deepEqual(at.evidence(), []);
 });

@@ -19,7 +19,7 @@ import { PostgresDatabase, PostgresSessionTimelineStore, migrate, type PostgresT
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { ScenarioProcess, crashEnvironment, failed, id, integrationEndpoint, uncoveredEnvironment, value } from '@taskelith/testing';
 import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
-import { sessionObservationMessage, timelineOver, timelineService } from './session-timeline-fixtures.ts';
+import { failingAt, sessionObservationMessage, timelineOver, timelineService } from './session-timeline-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_session_observation_${process.pid}`;
@@ -279,6 +279,39 @@ test('a store failure after the timeline changed commits nothing, and the redeli
   assert.deepEqual([await committed(), (await session()).generations], [before, []]);
   assert.equal(value(await service.apply(start)), 'applied');
   assert.equal((await session()).generations.length, 1);
+});
+
+// What a recorded request writes beside its session: its idempotency key,
+// its inbox item, and the events of both.
+async function requestRows() {
+  const count = async (table: string) => (await sql(`SELECT 1 FROM ${table}`)).length;
+  return { keys: await count('session_idempotency_keys'), items: await count('session_inbox_items'), events: await count('ui_events') };
+}
+
+test('a store conflict after the timeline wrote a request commits nothing, and the redelivery records the request once', async () => {
+  const at = await boundSession();
+  value(await service.apply(message(at, 2, 'session.generation.started', started())));
+  const first = await submitted('turn-1');
+  value(await service.apply(message(at, 3, 'session.turn.delivered', turn(first))));
+  const before = { ...await committed(), ...await requestRows() };
+  const refuseItem = failingAt('items', 'add', 'conflict');
+  const failing: ControlPlaneStore = {
+    transaction: (work) => database.transaction((tx) => work({ ...tx, now: () => tx.now(), sessionTimeline: refuseItem(tx.sessionTimeline) })),
+    readCommitted: (work) => database.readCommitted((tx) => work(tx)),
+  };
+  const request = { generation: 1, nativeRequestId: 'request-1' };
+  const recorded = message(at, 4, 'session.request.recorded', {
+    sessionId: SESSION, request, kind: 'permission-request', turnId: first, text: 'may the agent run the linter', ...EPOCH,
+  });
+
+  assert.equal(failed(await observationService(failing).apply(recorded)).code, 'internal');
+
+  assert.deepEqual([{ ...await committed(), ...await requestRows() }, (await session()).requests, evidence()], [before, [], []]);
+  assert.equal(value(await service.apply(recorded)), 'applied');
+  assert.deepEqual((await session()).requests.map((held) => [held.key, held.state]), [[request, 'open']]);
+  const after = { ...await committed(), ...await requestRows() };
+  assert.deepEqual([after.version, after.inbox, after.confirmedThrough, after.keys - before.keys, after.items], [before.version! + 1, before.inbox + 1, 4, 1, 1]);
+  assert.ok(after.events > before.events, 'the request and its item are published once it commits');
 });
 
 interface StepRun {
