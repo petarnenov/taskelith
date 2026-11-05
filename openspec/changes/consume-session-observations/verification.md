@@ -82,6 +82,15 @@ A first attempt at the fourth mutation did not compile, so its run tested the un
 Route (`route.json`, rule version 5): elevated, triggers lines, files, capabilities, and contracts; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router agreed (P(third) 0.78, threshold 0.4). The route is a recommendation: the coordinator names the reviewers and the effort of each pass.
 
 <!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `a63db33a58ce2d40f1b471865388e81505e83362`; tests 4947, pass 4900, fail 0, skipped 47; all files 99.43% lines, 93.02% branches, 98.86% functions.
+- `npm run openspec -- validate consume-session-observations --strict`: passed, `Change 'consume-session-observations' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 127 file(s); every pass summary file is valid: 107 file(s); every route file is valid: 60 file(s).`.
+- Spec diff against the merge base `6738a8f963fe` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
 ## Independent review

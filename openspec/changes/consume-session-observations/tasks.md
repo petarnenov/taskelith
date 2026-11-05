@@ -30,7 +30,7 @@
 ## 6. Verification
 
 - [x] 6.1 Fail-before runs and mutation controls
-- [ ] 6.2 Route, `make verify`, `make record`, and `make record-check`
+- [x] 6.2 Route, `make verify`, `make record`, and `make record-check`
 
 ## 7. Review and archive
 
