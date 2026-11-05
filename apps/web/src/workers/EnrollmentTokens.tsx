@@ -37,6 +37,7 @@ import {
 } from './tokens-model';
 import type { EnrollmentToken, EnrollmentTokenList, HostConstraints } from './workers';
 import { PLATFORM_LABELS } from './workers-labels';
+import { ARCHITECTURES, isArchitecture, isPlatform, PLATFORMS } from './workers-wire';
 import { useEnrollmentTokens, type EnrollmentTokensState } from './useEnrollmentTokens';
 import { useTokenCommands, type Reveal } from './useTokenCommands';
 
@@ -111,23 +112,15 @@ function ConstraintsFields({ busy, onIssue }: IssueFormProps) {
           label="Platform"
           size="lg"
           value={form.platform}
-          onChange={(event) => setForm({ ...form, platform: event.currentTarget.value as ConstraintsForm['platform'] })}
-          data={[
-            { value: '', label: 'Any' },
-            { value: 'linux', label: PLATFORM_LABELS.linux },
-            { value: 'darwin', label: PLATFORM_LABELS.darwin },
-          ]}
+          onChange={(event) => setForm({ ...form, platform: platformOf(event.currentTarget.value) })}
+          data={PLATFORM_OPTIONS}
         />
         <NativeSelect
           label="Architecture"
           size="lg"
           value={form.architecture}
-          onChange={(event) => setForm({ ...form, architecture: event.currentTarget.value as ConstraintsForm['architecture'] })}
-          data={[
-            { value: '', label: 'Any' },
-            { value: 'x64', label: 'x64' },
-            { value: 'arm64', label: 'arm64' },
-          ]}
+          onChange={(event) => setForm({ ...form, architecture: architectureOf(event.currentTarget.value) })}
+          data={ARCHITECTURE_OPTIONS}
         />
         <TextInput
           label="Hostname"
@@ -147,6 +140,18 @@ function ConstraintsFields({ busy, onIssue }: IssueFormProps) {
       </Stack>
     </Card>
   );
+}
+
+// The options follow the values the wire accepts; '' is any.
+const PLATFORM_OPTIONS = [{ value: '', label: 'Any' }, ...PLATFORMS.map((platform) => ({ value: platform, label: PLATFORM_LABELS[platform] }))];
+const ARCHITECTURE_OPTIONS = [{ value: '', label: 'Any' }, ...ARCHITECTURES.map((architecture) => ({ value: architecture, label: architecture }))];
+
+function platformOf(value: string): ConstraintsForm['platform'] {
+  return isPlatform(value) ? value : '';
+}
+
+function architectureOf(value: string): ConstraintsForm['architecture'] {
+  return isArchitecture(value) ? value : '';
 }
 
 interface CommandButtonProps extends ButtonProps {

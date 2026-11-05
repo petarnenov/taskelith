@@ -10,8 +10,8 @@ const IDENTIFIER = /^[\x21-\x7e]{1,128}$/;
 const DISPLAY_TEXT = /^[^\u0000-\u001f\u007f-\u009f]{1,1024}$/u;
 const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-const PLATFORMS = ['linux', 'darwin'] as const;
-const ARCHITECTURES = ['x64', 'arm64'] as const;
+export const PLATFORMS = ['linux', 'darwin'] as const;
+export const ARCHITECTURES = ['x64', 'arm64'] as const;
 const ADMISSION_STATES = ['awaiting-self-check', 'admitted', 'self-check-failed'] as const;
 const NOT_APPLICABLE_REASONS: readonly NotApplicableReason[] = ['platform-not-covered', 'no-launch-command'];
 const SELF_CHECK_ID = /^[a-z][a-z0-9-]{0,63}$/;
