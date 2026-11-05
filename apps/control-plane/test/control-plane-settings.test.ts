@@ -229,7 +229,7 @@ function fakeRunning(outcome: 'stopped' | 'failed') {
   let finish!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { finish = resolve; });
   return {
-    running: { api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, stopped, stop: async () => { stops += 1; } },
+    running: { api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, slotSignals: undefined as never, stopped, stop: async () => { stops += 1; } },
     stops: () => stops,
     finish: () => finish(outcome),
   };
