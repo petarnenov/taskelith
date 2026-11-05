@@ -5,7 +5,7 @@ import { SessionProvider, useSession } from '../src/session/SessionProvider';
 import { useTokenCommands } from '../src/workers/useTokenCommands';
 import type { RevokeResult } from '../src/workers/workers';
 import { WorkersServicesProvider } from '../src/workers/WorkersServices';
-import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, ManualClock } from './fakes';
+import { AUTHENTICATED, fakeGateway, FakeWorkersGateway, ManualClock, TOKEN_SECRET } from './fakes';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -58,5 +58,19 @@ describe('useTokenCommands', () => {
     hook.unmount();
     await act(async () => held.resolve({ kind: 'revoked' }));
     expect(changes).toEqual([]);
+  });
+
+  it.each([
+    ['an issue', { name: 'issue', constraints: {} }],
+    ['a rotation', { name: 'rotate', tokenId: 'token-1' }],
+  ] as const)('holds the secret of %s in the reveal alone, and nowhere once it closed', async (_, command) => {
+    const hook = await commandsHook(new FakeWorkersGateway(), () => {});
+    act(() => hook.result.current.commands.run(command));
+    await waitFor(() => expect(hook.result.current.commands.reveal?.issued.secret).toBe(TOKEN_SECRET));
+    expect(JSON.stringify(hook.result.current.commands.status)).not.toContain(TOKEN_SECRET);
+    act(() => hook.result.current.commands.closeReveal());
+    expect(hook.result.current.commands.reveal).toBeUndefined();
+    expect(hook.result.current.commands.status?.kind).toBe('issued');
+    expect(JSON.stringify(hook.result.current.commands)).not.toContain(TOKEN_SECRET);
   });
 });
