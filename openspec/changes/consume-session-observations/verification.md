@@ -176,9 +176,10 @@ Architect check of unreviewed fixes (coordinator): none yet.
 - A report that arrives after its attempt's bind ended is evidence, not a timeline change (`design.md`, "Open questions").
 - The `chunk` of an output and the `generation` of a limit signal are not checked for continuity; the timeline holds neither.
 - The `operation` of `session.request.recorded` is ignored until 13c2.
+- The `cause` of `session.generation.ended` and the `reason` of `session.turn.acceptance-unknown` are ignored; the timeline takes and holds neither.
 - The integration tests ran on one host; the races are forced by a barrier, not by load.
 - A failure of the timeline after its stores were touched is delivered again until the consumer quarantines the observation; a store row that persistently conflicts therefore ends in quarantine, not in evidence.
-- The watch tells a read from a write by the store call's name; a name it does not know counts as a write, so a new read added to a timeline store without the list would turn a refusal after it into a failure, never the reverse.
+- The watch tells a read from a write by a table of each store's calls that the compiler checks against `SessionTimelineTransaction`, so a new call of a timeline store does not compile until it is classified. The table is a judgement per call, not derived from the adapters: a read wrongly listed as a write would turn a refusal after it into a failure, and a write wrongly listed as a read could keep a partial application as evidence. A member the table does not name counts as a write.
 - A failure of the effect's own ownership reads is returned with its code. No adapter fails those reads with a refusal's code; one would be confirmed as a G2 rejection, with nothing written (`design.md`, "Risks").
 
 ## Follow-ups

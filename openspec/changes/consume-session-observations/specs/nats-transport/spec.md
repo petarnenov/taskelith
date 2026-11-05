@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Session messages in the schema tables
-The schema tables SHALL name the schema of every message of the execution channels, the commands `session.turn.deliver` and `session.response.deliver` and the ten `session.*` observations included. Only `execution.scm-credential.refreshed`, `session.delegation-result.deliver`, `execution.scm-credential.adopted`, and `execution.scm-credential.not-adopted` SHALL stay out, until G3 items 21 and 38.
+The schema tables SHALL name the schema of every message of the execution channels except the command subject notices and the inventory report, which have their own schemas; the commands `session.turn.deliver` and `session.response.deliver` and the ten `session.*` observations are included. Only `execution.scm-credential.refreshed`, `session.delegation-result.deliver`, `execution.scm-credential.adopted`, and `execution.scm-credential.not-adopted` SHALL stay out, until G3 items 21 and 38.
 
 #### Scenario: Every message of the channels
 - **WHEN** the schemas of the messages of the worker command and observation channels of the AsyncAPI document are listed
-- **THEN** they are the schemas of the tables and of the four messages left out, and each table key is the message type its schema names
+- **THEN** they are the schemas of the tables, of the command subject notices, of the inventory report, and of the four messages left out, and each table key is the message type its schema names
 
 #### Scenario: Session observation
 - **WHEN** a valid observation of each `session.*` type is read from the observation subject
