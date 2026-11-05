@@ -38,7 +38,7 @@ import {
 import type { EnrollmentToken, EnrollmentTokenList, HostConstraints } from './workers';
 import { PLATFORM_LABELS } from './workers-labels';
 import { useEnrollmentTokens, type EnrollmentTokensState } from './useEnrollmentTokens';
-import { useTokenCommands, type Reveal, type TokenCommands } from './useTokenCommands';
+import { useTokenCommands, type Reveal } from './useTokenCommands';
 
 // The address of the section, which the workers' empty state links to.
 export const TOKENS_SECTION_ID = 'enrollment-tokens';
@@ -61,7 +61,7 @@ export function EnrollmentTokens() {
       </Title>
       <IssueForm busy={busy} onIssue={(constraints) => commands.run({ name: 'issue', constraints })} />
       {commands.running === undefined ? null : <LoadingStatus text={RUNNING_TEXTS[commands.running.name]} />}
-      <CommandNotice commands={commands} listed={listed} onRefresh={refresh} />
+      <CommandNotice status={commands.status} busy={busy} revealOpen={commands.reveal !== undefined} listed={listed} onRetry={commands.run} onRefresh={refresh} />
       <TokenList state={state} busy={busy} onRefresh={refresh} onCommand={commands.run} />
       {commands.reveal === undefined ? null : <RevealDialog reveal={commands.reveal} onClose={commands.closeReveal} />}
     </Stack>
@@ -162,20 +162,23 @@ function CommandButton({ busy, onClick, ...props }: CommandButtonProps) {
   return <Button {...props} {...disabled} onClick={busy ? undefined : onClick} />;
 }
 
+// No prop holds the secret: the reveal is passed on as open or not.
 interface CommandNoticeProps {
-  readonly commands: TokenCommands;
+  readonly status: Notice | undefined;
+  readonly busy: boolean;
+  readonly revealOpen: boolean;
   readonly listed: readonly string[];
+  readonly onRetry: (command: Command) => void;
   readonly onRefresh: () => void;
 }
 
 // Decision Q7 (a): one status region above the list, which takes the focus
 // once an answer came and the reveal, if any, closed.
-function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
-  const { status, reveal, run } = commands;
+function CommandNotice({ status, busy, revealOpen, listed, onRetry, onRefresh }: CommandNoticeProps) {
   const notice = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (status !== undefined && reveal === undefined) notice.current?.focus();
-  }, [status, reveal]);
+    if (status !== undefined && !revealOpen) notice.current?.focus();
+  }, [status, revealOpen]);
   if (status === undefined) return null;
   const { title, text } = statusTextOf(status);
   return (
@@ -194,7 +197,7 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
           ) : null}
         </Text>
         {retryable(status) ? (
-          <CommandButton busy={commands.running !== undefined} onClick={() => run(status.command)}>
+          <CommandButton busy={busy} onClick={() => onRetry(status.command)}>
             Retry
           </CommandButton>
         ) : null}
