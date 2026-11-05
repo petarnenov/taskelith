@@ -1,0 +1,139 @@
+# Verification: stabilize-g2-partition
+
+## Scope and source
+
+Assigned on 2026-11-04 by the coordinator (Niki) to the worker Zaki, size S, developed by a briefed subagent. Source: the intermittent G2 partition scenario file `test/g2-partition.test.ts`, which `make verify` and `make verify-linux-g2-scenarios` run. The brief asked first whether #446 (merge `3d40034c`) already removed the cause. Scope: the broker while-running scenario of that file, the `g2-failure-scenarios` delta (no `skip_specs`, coordinator decision), and this change. Excluded: product code, the other scenarios, other flaky tests. Commit types `test` and `docs`.
+
+## Revision
+
+- Base: `dev` `3d40034c` (#446); the checklist was saved with `--at 3d40034c1262af4430aa4709c9395753246a7ec3 --size S` and capabilities `g2-failure-scenarios` and `deterministic-test-harness`, unchanged, as the cause is in the test.
+- `7ecbfa3a` `test: hold the process of the broker partition scenario until the worker is offline` (the fix).
+- `b3d642c2` `docs: propose the stabilize g2 partition change` (proposal, design, tasks, the spec delta, `checklist.json`, `.openspec.yaml`, and the empty `findings.jsonl` and `passes.jsonl`).
+- `fcc8afd5` `docs: record the review route of the stabilize g2 partition change` (`route.json` unedited).
+- `27e251f3` `docs: record the checks of the stabilize g2 partition change`.
+- `87eb24f5` `docs: separate the start timeouts and correct the counts of the stabilize g2 partition records` (pass 1 fixes and the pass 1 line of `passes.jsonl`).
+- `8bbcca37` `docs: record the pass 1 review of the stabilize g2 partition change` (`findings.jsonl`).
+- `7e3c5939` `docs: record the checks of the pass 1 fix round of the stabilize g2 partition change`.
+- `e64dfd03` `test: release the held process of the broker partition scenario once the worker is online again` (pass 2 fixes in the test, and the pass 2 line of `passes.jsonl`).
+- `dc80c346` `docs: word the offline exit scenario as asserted and correct the stabilize g2 partition records` (pass 2 record fixes).
+- `3d265a7b` `docs: record the pass 2 review of the stabilize g2 partition change` (`findings.jsonl`).
+- `5ec03ed7` `docs: record the pass 2 fix round of the stabilize g2 partition change`.
+- `c98923f7` `docs: record the checks of the pass 2 fix round of the stabilize g2 partition change`.
+- `2a0be5f6` `docs: record the pass 3 review of the stabilize g2 partition change` (the pass 3 line of `passes.jsonl`).
+- The commit of the pass 3 checks follows, then the archive commit.
+
+## Environment
+
+Zaki's host `hpz600`: Linux 6.8.0-147-generic, x86_64, 8 logical CPUs, Docker Engine 27.3.1. All runs used Node.js 24.22.1, the `.nvmrc` pin; the targeted runs ran after `npm run build`, inside `bash scripts/services.sh run sg2p ...` from the worktree, with the process-group launch host of `make verify`. The logs and scripts are in Zaki's session scratchpad `/tmp/claude-1000/-home-petar-taskelith/b2f59113-7371-431b-8ca7-f0f5db414984/scratchpad/sg2p/`.
+
+## Diagnosis
+
+Past failures of the file in the session scratchpads under `/tmp/claude-1000/-home-petar-taskelith/`, all before #446 was merged (2026-11-04 16:03 +0200):
+
+| Log | Scenario | Message |
+| --- | --- | --- |
+| `b4ff37b6-…/scratchpad/rr-verify-2-failed.log`, seed 1948878807 | broker, while running | `AssertionError [ERR_ASSERTION]: the exit waits in the local outbox`, `'ended' !== 'pending'`, `g2-partition.test.ts:108` |
+| `b2f59113-…/scratchpad/20c/verify-pass2fix.log`, seed 3736254888 | broker, while running | the same, `:108` |
+| `b2f59113-…/scratchpad/20e/verify-p3-r1.log`, seed 2975354216 | broker, while running | the same, `:108` |
+| `8482e89c-…/scratchpad/eehc-verify-1.log`, seed 1686208801 | broker, while running | `Error: the start is recorded not met within 20000 ms`, `:103` |
+| `b2f59113-…/scratchpad/20b/verify7.log`, seed 2757380422 | database, while running | `Error: the start is journaled not met within 20000 ms`, `:168` |
+| `b2f59113-…/scratchpad/sabt/verify4.log`, seed 1146846054 | database, while running | the same, `:168` |
+
+`f9647f91-…/scratchpad/sim1.log`, a debugger session that timed out on the Toxiproxy lock, is not counted.
+
+- The broker start timeout (`the start is recorded`, `:103`) waits until the control plane records the start. Attributing it to the class that #446 removed, a start that waited for a redelivery after `postgres.serialization.exhausted`, is a hypothesis: its log holds no control plane log.
+- The PostgreSQL start timeout (`the start is journaled`, `:168`) waits until the worker's local journal shows `started`. The worker's execution watch writes that state (`apps/worker/src/execution-watch.ts:149-158`) independently of the control plane applying the published observation, so #446 does not explain it. It is unreproduced and unexplained. One untested candidate: `started` is transient, and a watch read that sees the start and the exit together commits both in one step (`:149-161`), so the 50 ms poll (`test/g2-scenarios/waiting.ts:3`) can miss it.
+- The outbox assertion does not need that mechanism. At the base the scripted process ran 2.5 s from its launch (`connectedWorker`, `test/g2-partition.test.ts:35` at `3d40034c`), and the scenario cut the route only after the control plane recorded the start (`:103-104`). When the record and the cut took longer than the run, the exit was published and applied before the cut, so the task had ended when the scenario asserted `pending` (`:108`). After the cut nothing reaches the broker: `disconnect` closes the proxy's connections and refuses new ones (`packages/testing/src/toxiproxy.ts:55-58`), and the worker reports offline only after its contact timeout (`apps/worker/src/worker-contact.ts:77-81`).
+- Measured on `3d40034c` with a copy of the file that saves the control plane's and the worker's logs (`sg2p/zz-diag-partition.test.ts`, `sg2p/load.sh`, logs `sg2p/dev-load/`): from the `authorizeLaunch` grant to `worker.broker.disconnected`, 933 to 1026 ms in 15 plain runs and 1560 to 1859 ms in 15 runs under 8 busy-loop processes, against the 2.5 s run. #446 removed the redelivery wait, but any delay of the start record past that margin still fails the assertion.
+
+## Was the cause removed by #446?
+
+Not completely. On `3d40034c` the base file passed all 30 load runs (`sg2p/dev-load/summary.txt`: 15 plain and 15 under 8 hogs, each `tests 6, pass 6, fail 0`), and the saved logs show one `postgres.serialization.exhausted`, in the database beyond-redelivery scenario, none in the while-running scenarios. Five parallel loops of three runs of that copy under 4 hogs (`sg2p/par.sh`, logs `sg2p/dev-par/`): 11 of 15 runs `tests 6, pass 6, fail 0`; the 4 others failed only with `Lock toxiproxy-34671 (port 24649) is still held after 240000 ms`, 5 scenarios in all (`par-p3-1.log` two, `par-p1-1.log`, `par-p5-1.log`, and `par-p5-2.log` one each), as five copies of one file queue for one Toxiproxy; every scenario that got the lock passed. So neither start timeout recurred, but the ordering that the outbox assertion depends on is not pinned, and the injected delay of "Fail-before" reproduced the assertion on `3d40034c` in all six recorded base runs of a seed that heals after the exit.
+
+A run on the parent of the #446 merge (`d0acd304`) under the same load was not done: on the base the failure needs a start record more than about 0.6 s later than under 8 hogs, which the past logs show only rarely, and a rate difference would need far more than 30 runs of about two minutes each. The injected-delay reproduction stands in for it.
+
+## Author self-check
+
+- Fix (`test/g2-partition.test.ts:102-126`, lines as of the pass 2 fix round): the scenario holds its scripted process (`HELD_RUN`) and asserts that the journal still shows `started` once the worker is offline (`:110`). When the seed heals after the exit, it releases the process, waits for the exit in the journal, asserts `pending`, then heals (`:111-115`); otherwise it heals, waits until the worker's latest contact record is `worker.contact.online` (`lastContactEvent`, `:242-245`), then releases (`:116-120`). The `finally` releases the process before the worker's stop (`:124-126`). `connectedWorker` takes `runMilliseconds`, default 2.5 s, so the other two broker scenarios are unchanged (`:33-38`). No timeout, retry, or seed draw changed, and no assertion was weakened; one was added.
+- Spec delta: MODIFIED "Worker broker partition" copies the requirement (249 characters, unchanged) and both its scenarios, and adds "Exit while the worker is offline", whose THEN the pass 2 fix round worded as asserted. Archive probe, repeated after that round in `sg2p/archive-probe2` with the same result: a copy of `openspec/` in `sg2p/archive-probe`, `openspec archive stabilize-g2-partition --yes` with the worktree's pinned CLI (`Totals: + 0, ~ 1, - 0, → 0`), then `openspec validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate stabilize-g2-partition --strict`: `Change 'stabilize-g2-partition' is valid`.
+- `npx tsc -p tsconfig.check.json`: exit 0. `npm run verify:comments`: `Every comment is within the comment length rule.` No AI attribution in commits.
+
+## Fail-before
+
+`sg2p/repro.sh` ran copies of the base and the fixed file in which the worker's transport delays the publication of `execution.started` by 3 s (`sg2p/delayed-start.ts.txt`, the test-side `transport` seam of `ScenarioWorker`), so the control plane records the start after the 2.5 s process has exited. Command per copy: `TASKELITH_TEST_SEED=<seed> node --experimental-strip-types --test --test-reporter=spec '--test-name-pattern=a partition while the process runs keeps its observations' test/zz-repro-<base|fixed>-partition.test.ts`; the copies were then deleted (kept as `sg2p/zz-repro-*.ts`).
+
+- Base, seed 1948878807, which heals after the exit, the seed of the first past failure (`sg2p/repro/base-1948878807.log`): `tests 1, pass 0, fail 1`, `AssertionError [ERR_ASSERTION]: the exit waits in the local outbox`, `'ended' !== 'pending'`, at the copy's line 109, the base's line 108: the message of the past failures.
+- Base, seed 3, which heals before the exit (`sg2p/repro/base-3.log`): `tests 1, pass 1, fail 0`, as that branch makes no outbox assertion.
+- Pass 1 fix round: five more base runs at seed 1948878807 (`sg2p/repro-base5.sh`, logs `sg2p/repro-base5/`, `summary.txt` exit 1 for runs 1 to 5): each `tests 1, pass 0, fail 1` with `the exit waits in the local outbox`, `'ended' !== 'pending'` at the copy's line 109. So six of six base runs of that seed reproduced the assertion.
+- Pass 2 fix round, the heal-before-the-exit branch (`sg2p/m1.sh`, copies `sg2p/m1/zz-m1-before-partition.test.ts` and `sg2p/m1/zz-m1-after-partition.test.ts`, logs `sg2p/m1/out/`): seed 3 heals before the exit; each copy asserts `lastContactEvent(worker) === 'worker.contact.online'`, `the worker is online at the release`, right before the release. The copy of `7e3c5939` without the wait for the reconnect: 3 of 3 runs `tests 1, pass 0, fail 1`, `AssertionError [ERR_ASSERTION]: the worker is online at the release`, `actual: 'worker.contact.offline'`, at the copy's line 118. So before the fix that branch released the process, and journaled the exit, while the worker was still offline. The copy of `e64dfd03` with the wait: 3 of 3 runs `tests 1, pass 1, fail 0`. The copies were then deleted from `test/`.
+- The delay makes the late start likely, not certain: observations publish in order, but no barrier makes the control plane apply the exit before the scenario cuts the route. Only the fixed scenario's hold and release order is deterministic.
+
+## After
+
+- The same delayed start on the fixed copy: seed 1948878807 (`sg2p/repro/fixed-1948878807.log`) and seed 3 (`sg2p/repro/fixed-3.log`), each `tests 1, pass 1, fail 0`.
+- The fixed file on `fcc8afd5`'s tree, 30 runs with random seeds (`sg2p/load.sh`, logs `sg2p/fixed-load/`): 15 plain and 15 under 8 busy-loop processes on the 8 logical CPUs, each `tests 6, pass 6, fail 0`; 16 of the seeds healed after the exit and 14 before. The while-running broker scenario took 11120 to 11523 ms plain and 12434 to 18154 ms under the hogs. The hogs were killed by their saved PIDs; `ps` showed none afterwards.
+- Pass 2 fix round, the fixed file on `e64dfd03`'s tree, 20 runs with random seeds (`sg2p/load20.sh`, the 15/15 `load.sh` at 10/10; logs `sg2p/fix2-load/`, `summary.txt` exit 0 for all 20): 10 plain and 10 under 8 busy-loop processes, each `tests 6, pass 6, fail 0`. By the seeds (`sg2p/split.mts`), 8 healed after the exit and 12 before. The while-running broker scenario took 7204 to 8452 ms plain and 8658 to 9051 ms under the hogs when it healed before the exit, and 11270 to 11388 ms plain and 12570 to 15943 ms under the hogs when it healed after it. Afterwards `ps` showed no hog.
+
+## make verify
+
+- Run 1, `env -u NODE_ENV make verify` on `fcc8afd5` (tree `94939924`, clean), profile full (`sg2p/verify-1.log`; `sg2p/verify-1.make.log` is the same log without the exit line added by the run script, which `make record` read): passed, `make verify: passed, profile full, tree 94939924a9ef76a0ec81790d888995731b7be69a; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun. Both while-running partition scenarios passed in it.
+- `env -u NODE_ENV make verify-linux-g2-scenarios` on the same tree, through the Linux cgroup supervisor (`sg2p/g2-scenarios-1.log`): `tests 18, pass 17, fail 0, skipped 1` (g, macOS only); cancellation races, worker to NATS, control plane to PostgreSQL, and stale generations passed; exit 0.
+- Run 2, pass 1 fix round, `env -u NODE_ENV make verify` on `8bbcca37` (tree `8f1c56d9`, clean), profile full (`sg2p/verify-2.make.log`, which `make record` read): passed, `make verify: passed, profile full, tree 8f1c56d94f69dc006fc59123610e41e57ec0cfab; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
+- Run 3, pass 2 fix round, `env -u NODE_ENV make verify` on `5ec03ed7` (tree `f5fc4db1`, clean), profile full (`sg2p/verify-3.make.log`): failed only with the known flake secrets linear-time, `✖ value redaction takes linear time on long runs`, `AssertionError [ERR_ASSERTION]: "a b" repeated took 226 ms` (`packages/adapters/secrets/test/secrets.test.ts:220`); tests 4880, pass 4832, fail 1, skipped 47. Both while-running partition scenarios passed in it.
+- Run 4, its one rerun on the same tree (`sg2p/verify-4.make.log`, which `make record` read): passed, `make verify: passed, profile full, tree f5fc4db16643c08e2771ba5d25130742fe532cb7; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 93.00% branches, 98.84% functions; the web suite `Tests  717 passed (717)`. Both while-running partition scenarios passed in it.
+- Run 5, after the pass 3 record, `env -u NODE_ENV make verify` on `2a0be5f6` (tree `eb3d96b6`, clean), profile full (`sg2p/verify-5.make.log`, which `make record` read): passed on the first run, `make verify: passed, profile full, tree eb3d96b6749216316bf82b9a3254e97d7aa3d0de; stamp written`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.84% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
+
+### Route
+
+`route.json` of `fcc8afd5`, rule version 5: standard (no trigger); pass 1 reviewer A `codex gpt-6-astra#medium`, pass 2 reviewer B `claude claude-fable-5-1#medium`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router (jev-1.14.0) agrees: standard, P(third) 0.35, threshold 0.4. The route is a recommendation only. Review effort medium: owner decision 2026-11-02.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `eb3d96b6749216316bf82b9a3254e97d7aa3d0de`; tests 4880, pass 4833, fail 0, skipped 47; all files 99.42% lines, 92.96% branches, 98.84% functions.
+- `npm run openspec -- validate stabilize-g2-partition --strict`: passed, `Change 'stabilize-g2-partition' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`.
+- Spec diff against the merge base `3d40034c1262` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1a750-6d97-78b0-90f6-5ada4c73e952` | 0 | 0 | 1 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `4331c26b-17f0-4231-89b9-1e231f5532e8` | 0 | 0 | 1 | 5 |
+| 3 | A | `codex gpt-6.1-sol#medium` | `01a1a790-f7dc-7023-96b1-03f0d9187798` | 0 | 0 | 0 | 0 |
+<!-- make record: end -->
+
+## Archive
+
+The checks of protocol worker step 7 ran on the working tree after `npm run openspec -- archive stabilize-g2-partition --yes` (`Totals: + 0, ~ 1, - 0, → 0`), which is the tree of the archive commit apart from this section:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-11-04-stabilize-g2-partition`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `3d40034c`): only this change's delta in `g2-failure-scenarios`, the modified requirement "Worker broker partition" with the new scenario "Exit while the worker is offline" (4 insertions).
+- The moved change has `findings.jsonl` (3 pass 1 and 6 pass 2 findings) and `passes.jsonl` (passes 1 to 3); `make findings ARGS="validate"`: `Every findings file is valid: 123 file(s); every pass summary file is valid: 103 file(s); every route file is valid: 56 file(s).`
+- Run 6, `env -u NODE_ENV make verify` (`sg2p/verify-6-archive.make.log`): passed, profile full, on the uncommitted archive tree, so no stamp written. Tests 4880, suites 50, pass 4833, fail 0, cancelled 0, skipped 47; all files 99.43% lines, 92.97% branches, 98.85% functions; the web suite `Tests  717 passed (717)`. No known flake failed, so none was rerun.
+
+## Independent review
+
+Review effort medium: owner decision 2026-11-02.
+
+- Pass 1, reviewer A, Codex CLI `gpt-6-astra` at effort medium, session `01a1a750-6d97-78b0-90f6-5ada4c73e952`, on `27e251f3`: Critical 0, High 0, Medium 1, Low 2 (`passes.jsonl` line 1, `findings.jsonl` lines 1 to 3). The reviewer modified no file; its run of the comment check failed with `spawnSync git EPERM` in its sandbox.
+- Pass 1 fix round, records only, `87eb24f5`: the Medium (both start timeouts attributed to #446) and the two Lows (the parallel-run counts, "every time") were fixed as recorded in `findings.jsonl`; five more injected-delay base runs were made for the second Low ("Fail-before"). No code changed.
+- Pass 2, reviewer B, Claude Code `claude-fable-5-1` at effort medium, session `4331c26b-17f0-4231-89b9-1e231f5532e8`, on `7e3c5939`: Critical 0, High 0, Medium 1, Low 5 (`passes.jsonl` line 2, `findings.jsonl` lines 4 to 9). The reviewer modified no file.
+- Pass 2 fix round, `e64dfd03` and `dc80c346`: the Medium (the heal-before-the-exit branch released the process before the reconnect) and the Low on the `finally` were fixed in the test; the Lows on the spec THEN, the `worker-contact.ts` citation, `tasks.md`, and `proposal.md` in the records, as recorded in `findings.jsonl`. The reviewer's second citation for the `finally`, `test/g2-cancellation-races.test.ts:502`, is a release in `settleRace`, not in a `finally`, so `design.md` cites `:391` only.
+- Pass 3, reviewer A, Codex CLI `gpt-6.1-sol` at effort medium, session `01a1a790-f7dc-7023-96b1-03f0d9187798`, on `c98923f7` (diff `3d40034c..c98923f7`): Critical 0, High 0, Medium 0, Low 0 (`passes.jsonl` line 3). The pass 2 Medium called for it under the route. Argon unavailable on hpz600: agy binary needs PCLMUL, which the CPU lacks, so `codex gpt-6.1-sol#medium` replaced `agy gemini-4-argon-medium#medium`. The reviewer modified no file; its standard comment check failed with `spawnSync git EPERM` in its sandbox, and the same check on a separately supplied tracked-file list found no violation.
+- The review ended with pass 3, a pass without findings. No fix is unreviewed: pass 3 reviewed all pass 1 and pass 2 fixes, so `findings.jsonl` has no `fixed-unreviewed` outcome.
+
+## Limitations
+
+- The two start timeouts of the past logs were not reproduced, before or after the fix, and their logs hold no control plane log. The broker one's attribution to the mechanism #446 removed is a hypothesis; the PostgreSQL one is unexplained, and #446 is not claimed to have removed its cause.
+- The outbox failure was reproduced by delaying the start publication, not by the load that caused it in the past runs.
+- No run on the parent of #446 (see "Was the cause removed by #446?").
+
+## Remaining gates
+
+- The coordinator's architect check.
+- Integration into dev by the coordinator (single pull request).

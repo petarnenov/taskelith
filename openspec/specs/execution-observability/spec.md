@@ -21,7 +21,7 @@ The observability module SHALL write each log record through a `LogSink` port as
 
 ### Requirement: Logs without secrets
 
-The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, GitHub App installation tokens, `Authorization: Basic` credentials, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys from text in fields and correlation, in time linear in the text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
+The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, GitHub App installation tokens, `Authorization: Basic` credentials, NKey seeds, NATS JWTs, `.creds` blocks, and PEM private keys from text in fields and correlation, in time linear in any scannable text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
 
 #### Scenario: A failure message quotes a connection URL
 
@@ -173,3 +173,22 @@ The Node adapter SHALL report the p99 event-loop delay of each sample window wit
 
 - **WHEN** the output throws on write, or fails a write after it returned
 - **THEN** the logger's caller and the process continue, and later records are dropped
+
+### Requirement: Redaction of text of any length
+Redacting text, in log records and in the secrets adapter's redaction of failures and output, SHALL NOT throw for a text of any length. A text on which a rule throws a `RangeError`, of any cause, as the regular expression engine does when a text overflows its backtrack stack, SHALL be replaced whole with `[redacted]`, since a secret may span words; any other rule error SHALL propagate.
+
+#### Scenario: A logged field too long to scan
+- **WHEN** a logged field holds `ghs_` repeated 1,400,000 times
+- **THEN** the logger writes the record without throwing, and the field holds `[redacted]`
+
+#### Scenario: A failure message too long to scan
+- **WHEN** a failure's message is `a` repeated 2^23 + 1 times
+- **THEN** redacting the failure does not throw, its message is `[redacted]`, and its details stay
+
+#### Scenario: A rule's RangeError of another cause
+- **WHEN** a redaction rule that uses no regular expression throws `RangeError('invalid array length')` on the text `keep`
+- **THEN** redacting with that rule returns `[redacted]`
+
+#### Scenario: Another rule failure
+- **WHEN** a redaction rule throws a `TypeError`
+- **THEN** redacting with that rule throws the same error

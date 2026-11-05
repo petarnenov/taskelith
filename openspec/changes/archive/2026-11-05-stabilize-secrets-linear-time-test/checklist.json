@@ -1,0 +1,100 @@
+{
+  "change": "stabilize-secrets-linear-time-test",
+  "generatedAt": "2026-11-04T20:21:49.533Z",
+  "devCommit": "1ef0cb4263e386a16ad7a282160b637e742a4120",
+  "query": {
+    "capabilities": [
+      "secrets-port",
+      "deterministic-test-harness"
+    ],
+    "files": [
+      "packages/adapters/secrets/**"
+    ],
+    "top": 7
+  },
+  "size": "S",
+  "review": {
+    "categories": [
+      {
+        "category": "redaction",
+        "count": 8
+      },
+      {
+        "category": "naming",
+        "count": 5
+      },
+      {
+        "category": "docs",
+        "count": 4
+      },
+      {
+        "category": "contract-drift",
+        "count": 3
+      },
+      {
+        "category": "error-handling",
+        "count": 3
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 3
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 3
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1046,
+        "inChecklist": 848
+      },
+      "mediumOrWorse": {
+        "findings": 515,
+        "inChecklist": 412
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 170
+      },
+      {
+        "category": "spec-wording",
+        "count": 109
+      },
+      {
+        "category": "docs",
+        "count": 87
+      },
+      {
+        "category": "stale-citation",
+        "count": 61
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 497,
+        "inChecklist": 490
+      },
+      "mediumOrWorse": {
+        "findings": 80,
+        "inChecklist": 80
+      }
+    }
+  }
+}

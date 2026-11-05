@@ -141,6 +141,10 @@ On a test-side composition against the `make` services, a Toxiproxy partition of
 - **WHEN** the worker reconnects after the control plane marked it lost and the task has ended
 - **THEN** the control plane sends at most one further inventory request in the following three seconds
 
+#### Scenario: Exit while the worker is offline
+- **WHEN** the process exits after the cut, once the worker reports its broker contact offline, and before the heal
+- **THEN** the task stays pending until the heal, and after the heal the attempt exits once with one started execution
+
 ### Requirement: Control plane database partition
 A Toxiproxy partition of the control plane's PostgreSQL connection SHALL not lose, duplicate, or reorder an attempt's facts into a wrong state: the worker repeats the same authorization operation until it is granted, redelivered observations are applied once, and observations quarantined past the redelivery budget still end the attempt once.
 
