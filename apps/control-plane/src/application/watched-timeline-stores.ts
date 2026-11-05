@@ -1,9 +1,29 @@
 import type { SessionTimelineTransaction } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 
-// The store calls that only read; a call of any other name counts as a
-// write, so that a new write is never taken for a read.
-const READS: ReadonlySet<string> = new Set(['get', 'find', 'listByTask', 'listOpen', 'scopeOf', 'isCard', 'listByCard']);
+type StoreCallKind = 'read' | 'write';
+
+type StoreCallKinds = {
+  readonly [Store in keyof SessionTimelineTransaction]: Readonly<Record<keyof SessionTimelineTransaction[Store], StoreCallKind>>;
+};
+
+// Every call of every timeline store: the compiler asks for a new one. A
+// call that is not listed counts as a write, never the reverse.
+const STORE_CALLS = {
+  sessions: { get: 'read', add: 'write', replace: 'write', listByTask: 'read' },
+  idempotency: { find: 'read', record: 'write' },
+  items: { find: 'read', get: 'read', add: 'write', settle: 'write', listOpen: 'read' },
+  audit: { append: 'write' },
+  scopes: { scopeOf: 'read', isCard: 'read', listByCard: 'read' },
+  tails: { get: 'read', put: 'write', clear: 'write' },
+  events: { append: 'write' },
+} as const satisfies StoreCallKinds;
+
+const CALL_KINDS: Readonly<Record<string, Readonly<Record<string, StoreCallKind>>>> = STORE_CALLS;
+
+function isRead(store: string, call: string): boolean {
+  return Object.hasOwn(CALL_KINDS, store) && CALL_KINDS[store]![call] === 'read';
+}
 
 type StoreCall = (...values: unknown[]) => Promise<Result<unknown>>;
 
@@ -21,7 +41,10 @@ export class WatchedTimelineStores implements TimelineStoreWatch {
 
   constructor(transaction: SessionTimelineTransaction) {
     this.transaction = new Proxy(transaction, {
-      get: (stores, name) => this.#watched(Reflect.get(stores, name) as object),
+      get: (stores, name) => {
+        const member: unknown = Reflect.get(stores, name);
+        return typeof member === 'object' && member !== null ? this.#watched(String(name), member) : member;
+      },
     });
   }
 
@@ -30,18 +53,18 @@ export class WatchedTimelineStores implements TimelineStoreWatch {
     return !this.#failed && !this.#wrote;
   }
 
-  #watched<Store extends object>(store: Store): Store {
+  #watched<Store extends object>(storeName: string, store: Store): Store {
     return new Proxy(store, {
       get: (records, name) => {
         const call: unknown = Reflect.get(records, name);
-        return typeof call === 'function' ? this.#noted(String(name), (call as StoreCall).bind(records)) : call;
+        return typeof call === 'function' ? this.#noted(isRead(storeName, String(name)), (call as StoreCall).bind(records)) : call;
       },
     });
   }
 
-  #noted(name: string, call: StoreCall): StoreCall {
+  #noted(reads: boolean, call: StoreCall): StoreCall {
     return async (...values) => {
-      if (!READS.has(name)) this.#wrote = true;
+      if (!reads) this.#wrote = true;
       const result = await call(...values);
       if (!result.ok) this.#failed = true;
       return result;

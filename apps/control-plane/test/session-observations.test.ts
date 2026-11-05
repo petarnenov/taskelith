@@ -494,3 +494,20 @@ test('a refusal after the timeline wrote is a failure, though no store call fail
 
   assert.deepEqual(at.evidence(), []);
 });
+
+test('a member of the transaction that is no store reaches the timeline as it is', async () => {
+  const changedFlag = (stores: SessionTimelineTransaction) => new Proxy(stores, {
+    get: (target, name) => (name === 'changed' ? true : Reflect.get(target, name)),
+  });
+  const members: unknown[] = [];
+  const readingMembers = (stores: SessionTimelineTransaction) => {
+    members.push(Reflect.get(stores, 'changed'), Reflect.get(stores, 'then'));
+    return timelineOver(stores);
+  };
+  const at = await fixture({ timelineStores: changedFlag, timelineOver: readingMembers });
+  await boundSession(at);
+
+  assert.equal(value(await at.observe('session.generation.started', started())), 'applied');
+
+  assert.deepEqual(members, [true, undefined]);
+});
