@@ -136,7 +136,7 @@ export function statusTextOf(settled: Notice): StatusText {
     case 'revoked':
       return { title: 'Token revoked', text: `Token ${id} was revoked; a worker can no longer enroll with it.` };
     case 'token-rotated':
-      return { title: 'Token already replaced', text: `Token ${id} was replaced by token ${settled.replacementTokenId}, which is still pending.` };
+      return { title: 'Token already replaced', text: `Token ${id} was replaced by token ${settled.replacementTokenId}.` };
     case 'refused':
       return refusalTextOf(command, settled.reason);
     case 'denied':
@@ -200,6 +200,9 @@ function failureTextOf(command: Command, failure: 'unavailable' | 'unauthenticat
 function withRole(text: string, requiredRole: string | undefined): string {
   return requiredRole === undefined ? text : `${text} It needs the role ${requiredRole}.`;
 }
+
+// Said of a replacement only while the list read after the answer holds it.
+export const REPLACEMENT_PENDING_TEXT = 'It is still pending.';
 
 export const TRUNCATED_TEXT = `Only the first ${MAX_PAGES} pages of pending tokens are shown; the list is cut short.`;
 

@@ -24,6 +24,7 @@ import { LoadingStatus } from '../shell/LoadingStatus';
 import {
   checkConstraints,
   EMPTY_FORM,
+  REPLACEMENT_PENDING_TEXT,
   retryable,
   RUNNING_TEXTS,
   statusTextOf,
@@ -183,6 +184,7 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
           {status.kind === 'token-rotated' && listed.includes(status.replacementTokenId) ? (
             <>
               {' '}
+              {REPLACEMENT_PENDING_TEXT}{' '}
               <Anchor href={`#${anchorOf(status.replacementTokenId)}`} c="inherit" underline="always">
                 Show it
               </Anchor>
