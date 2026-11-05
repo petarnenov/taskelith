@@ -1,6 +1,6 @@
 import { createApiClient, hasStatus, type ApiRequest } from '../api/client';
 import { readPagesUpTo } from '../api/read-pages';
-import { denialOf, failureDetail, failureOf, failureReason, reachable, requiredRoleOf, type ReadResult } from '../api/read-result';
+import { denialOf, failureDetail, failureOf, failureReason, reachable, requiredRoleOf, type ReadFailed, type ReadResult } from '../api/read-result';
 import { enrollmentTokenPageOf, issuedEnrollmentTokenOf } from './tokens-wire';
 import { isIdentifier, workersViewOf } from './workers-wire';
 import type {
@@ -46,7 +46,8 @@ export function createWorkersGateway({ fetch: send, csrfToken = () => undefined 
   // Every page of the pending tokens; a 404, which the list does not
   // document, and a 400 for a cursor the control plane named are wrong answers.
   async function listEnrollmentTokens(): Promise<ReadResult<EnrollmentTokenList>> {
-    const result = await readPagesUpTo((after) => request('get', '/enrollment-tokens', { query: { after } }), enrollmentTokenPageOf);
+    const send = (after: string | undefined) => request('get', '/enrollment-tokens', { query: { after } });
+    const result = await readPagesUpTo(send, enrollmentTokenPageOf, listFailureOf);
     if (result.kind !== 'read') return withoutNotFound(result);
     return { kind: 'read', value: { tokens: result.value, truncated: result.truncated } };
   }
@@ -102,6 +103,13 @@ function revokeRefusalOf(body: unknown): RevokeResult {
   if (reason !== 'token-rotated') return UNAVAILABLE;
   const replacementTokenId = failureDetail(body, 'replacementTokenId');
   return isIdentifier(replacementTokenId) ? { kind: 'token-rotated', replacementTokenId } : UNAVAILABLE;
+}
+
+// The list documents one 403, role-required; any other reason is a wrong
+// answer, never a denial.
+function listFailureOf(result: Answer): ReadFailed {
+  if (result.status !== 403) return failureOf(result);
+  return failureReason(result.body) === 'role-required' ? denialOf(requiredRoleOf(result.body)) : UNAVAILABLE;
 }
 
 // An operation that documents no 404 answered one: an undocumented status.

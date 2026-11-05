@@ -20,20 +20,21 @@ interface Answer {
 
 export type SendPage = (after: string | undefined) => Promise<Answer>;
 export type PageOf<T> = (body: unknown) => Page<T> | undefined;
+export type FailureOf = (answer: Answer) => ReadFailed;
 
 // The pages read, and whether the page limit stopped the read before its end.
 export type PagesRead<T> = { readonly kind: 'read'; readonly value: readonly T[]; readonly truncated: boolean } | ReadFailed;
 
 // Follows a paged read to its end; a cursor already followed loops, which
 // reads as unreachable, and the page limit stops endless new ones.
-export async function readPagesUpTo<T>(send: SendPage, pageOf: PageOf<T>): Promise<PagesRead<T>> {
+export async function readPagesUpTo<T>(send: SendPage, pageOf: PageOf<T>, failedPageOf: FailureOf = failureOf): Promise<PagesRead<T>> {
   const items: T[] = [];
   const visited = new Set<string>();
   let after: string | undefined;
   do {
     const result = await reachable(() => send(after));
     if (result === undefined) return { kind: 'unavailable' };
-    if (result.status !== 200) return failureOf(result);
+    if (result.status !== 200) return failedPageOf(result);
     const page = pageOf(result.body);
     if (page === undefined || loops(page.next, visited)) return { kind: 'unavailable' };
     items.push(...page.items);
