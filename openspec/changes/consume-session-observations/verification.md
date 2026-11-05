@@ -129,7 +129,7 @@ The development services were stopped with `make services-down` before `make ver
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `c3c4bf7e470ddaf30d0cbabfec77793e55a26ad8`; tests 4955, pass 4908, fail 0, skipped 47; all files 99.42% lines, 93.03% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `06681cc62c68f11febd93a60fd6ede5c1059553b`; tests 4956, pass 4909, fail 0, skipped 47; all files 99.42% lines, 93.03% branches, 98.85% functions.
 - `npm run openspec -- validate consume-session-observations --strict`: passed, `Change 'consume-session-observations' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 127 file(s); every pass summary file is valid: 107 file(s); every route file is valid: 60 file(s).`.
 - Spec diff against the merge base `6738a8f963fe` with `origin/dev`: no change under `openspec/specs`.
@@ -138,6 +138,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1aa4a-3c9b-71c1-8f38-9d209a2ad453` | 0 | 1 | 1 | 2 |
+| 2 | B | `claude claude-fable-5-1#medium` | `904709de-4236-413a-ad20-eb44ba50e316` | 0 | 0 | 0 | 7 |
 <!-- make record: end -->
 
 ## Independent review
