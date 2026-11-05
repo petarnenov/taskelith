@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JetStreamApiCodes, JetStreamApiError, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
+import { checkMessageSchema } from '@taskelith/contracts';
 import { InMemoryInbox, type WorkerId } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -31,7 +32,19 @@ import {
   WORKER_HEARTBEAT,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
-import { capacityDeclared, confirmation, heartbeat, inventoryPart, inventoryRequest, offer } from './messages.ts';
+import {
+  SESSION_COMMAND_PAYLOADS,
+  SESSION_OBSERVATION_PAYLOADS,
+  capacityDeclared,
+  confirmation,
+  heartbeat,
+  inventoryPart,
+  inventoryRequest,
+  offer,
+  sessionCommand,
+  sessionObservation,
+  sessionObservationId,
+} from './messages.ts';
 
 const ADDRESS = TransportAddress.of('install-1');
 assert.ok(ADDRESS.ok);
@@ -172,26 +185,67 @@ test('a self-check report with a malformed reason is refused at the wire; a repe
   assert.deepEqual(repeated.ok && [repeated.value.type, repeated.value.identity], ['worker.self-check.reported', 'observation-9']);
 });
 
-// Item 13 adds the session messages of protocol version 2.
-test('the schema tables cover every protocol version 1 message of the execution channels', () => {
+// Left to G3 items 21 and 38 (coordinator decision Q9, 2026-11-05): until
+// then each is quarantined as an unknown type, never silently discarded.
+const DEFERRED_COMMANDS = { 'execution.scm-credential.refreshed': 'ScmCredentialRefreshedCommand', 'session.delegation-result.deliver': 'DelegationResultDeliveryCommand' };
+const DEFERRED_OBSERVATIONS = {
+  'execution.scm-credential.adopted': 'ScmCredentialAdoptedObservation', 'execution.scm-credential.not-adopted': 'ScmCredentialNotAdoptedObservation',
+};
+
+test('the schema tables cover every message of the execution channels except the four named for items 21 and 38', () => {
   const document = JSON.parse(readFileSync(new URL('../../../contracts/documents/execution.asyncapi.json', import.meta.url), 'utf8'));
-  const schemas = document.components.schemas;
-  const versionRefs = (name: string): unknown[] => [
-    schemas[`${name.replace(/Command$/, '')}Payload`]?.properties?.protocolVersion?.$ref,
-    ...(schemas[name]?.properties?.metadata?.allOf ?? []).map((part: { properties?: { protocolVersion?: { $ref?: string } } }) => part.properties?.protocolVersion?.$ref),
-  ];
-  const sessionWork = (name: string) => versionRefs(name).includes('#/components/schemas/SessionProtocolVersion');
   const schemaOf = (channel: string) =>
     Object.values<{ payload: { $ref: string } }>(document.components.messages)
       .filter((message) => Object.values<{ $ref: string }>(document.channels[channel].messages).some((ref) => document.components.messages[ref.$ref.split('/').pop()!] === message))
       .map((message) => message.payload.$ref.split('/').pop()!)
-      .filter((name) => !sessionWork(name))
       .sort();
-  assert.deepEqual(schemaOf('workerCommands'), [...Object.values(COMMAND_SCHEMAS), ...Object.values(COMMAND_SUBJECT_NOTICES)].sort());
-  assert.deepEqual(schemaOf('workerObservations'), [...Object.values(OBSERVATION_SCHEMAS), 'InventoryReported'].sort());
+  const commands = [...Object.values(COMMAND_SCHEMAS), ...Object.values(COMMAND_SUBJECT_NOTICES), ...Object.values(DEFERRED_COMMANDS)];
+  const observations = [...Object.values(OBSERVATION_SCHEMAS), 'InventoryReported', ...Object.values(DEFERRED_OBSERVATIONS)];
+  assert.deepEqual(schemaOf('workerCommands'), commands.sort());
+  assert.deepEqual(schemaOf('workerObservations'), observations.sort());
   assert.deepEqual(schemaOf('workerHeartbeats'), ['WorkerHeartbeat']);
   assert.equal(document.channels.workerHeartbeats.address.replace('{installationId}', 'install-1').replace('{workerId}', 'worker-1'),
     value(address.heartbeatSubject('worker-1')));
+});
+
+test('each table entry names the schema whose message type constant is its key', () => {
+  const document = JSON.parse(readFileSync(new URL('../../../contracts/documents/execution.asyncapi.json', import.meta.url), 'utf8'));
+  const typeOf = (schema: string, field: string): unknown => document.components.schemas[schema].properties.metadata.allOf
+    .map((part: { properties?: Record<string, { const?: string }> }) => part.properties?.[field]?.const).find((named: unknown) => named !== undefined);
+  for (const [type, schema] of Object.entries({ ...COMMAND_SCHEMAS, ...DEFERRED_COMMANDS })) assert.equal(typeOf(schema, 'commandType'), type, schema);
+  for (const [type, schema] of Object.entries({ ...OBSERVATION_SCHEMAS, ...DEFERRED_OBSERVATIONS })) assert.equal(typeOf(schema, 'observationType'), type, schema);
+});
+
+test('an observation of item 21 is quarantined as an unknown type, not discarded', () => {
+  for (const type of Object.keys(DEFERRED_OBSERVATIONS)) {
+    const adoption = sessionObservation(type, { runId: 'run-1', credentialId: 'credential-1', version: 3, recoveryEpoch: 1 });
+    assert.deepEqual(readObservationSubjectMessage(bytes(adoption)), err(`unknown observation type ${type}`));
+  }
+});
+
+test('each session observation passes its schema with its derived identity, and a malformed one is refused', () => {
+  for (const [type, payload] of Object.entries(SESSION_OBSERVATION_PAYLOADS)) {
+    const read = readObservationSubjectMessage(bytes(sessionObservation(type, payload)));
+    assert.deepEqual(read.ok && [read.value.type, read.value.identity], [type, sessionObservationId(type, payload)], type);
+    const { recoveryEpoch: _epoch, ...unepoched } = payload as { recoveryEpoch: number };
+    assert.match(rejection(readObservationSubjectMessage(bytes(sessionObservation(type, unepoched)))), new RegExp(`^violates ${OBSERVATION_SCHEMAS[type]}: `), type);
+    const versionOne = sessionObservation(type, payload);
+    versionOne.metadata.protocolVersion = 1;
+    assert.match(rejection(readObservationSubjectMessage(bytes(versionOne))), new RegExp(`^violates ${OBSERVATION_SCHEMAS[type]}: `), type);
+  }
+  assert.deepEqual(Object.keys(SESSION_OBSERVATION_PAYLOADS).sort(), Object.keys(OBSERVATION_SCHEMAS).filter((type) => type.startsWith('session.')).sort());
+});
+
+test('a worker of protocol version 1 passes a session command with its stable part only, so that it rejects it', () => {
+  for (const [type, payload] of Object.entries(SESSION_COMMAND_PAYLOADS)) {
+    const command = sessionCommand(type, payload);
+    assert.equal(checkMessageSchema(COMMAND_SCHEMAS[type] as never, command).ok, true, type);
+    const read = readCommandSubjectMessage(bytes(command));
+    assert.deepEqual(read.ok && [read.value.type, read.value.identity], [type, command.metadata.commandId], type);
+    const unread = readCommandSubjectMessage(bytes({ ...command, payload: { protocolVersion: 2, unknown: true } }));
+    assert.equal(unread.ok, true, `${type} of an unsupported version is not checked against its schema`);
+  }
+  assert.deepEqual(Object.keys(SESSION_COMMAND_PAYLOADS).sort(), Object.keys(COMMAND_SCHEMAS).filter((type) => type.startsWith('session.')).sort());
 });
 
 test('a heartbeat subject message passes only the heartbeat schema and has no identity', () => {
