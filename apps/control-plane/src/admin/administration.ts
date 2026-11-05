@@ -19,6 +19,7 @@ import {
   ScmIntegrationSecretKeyFile,
   SessionInputDigestKeyFile,
   SessionOutputTailKeyFile,
+  SlotCredentialKeyFile,
 } from '@taskelith/control-plane-store';
 import type { WorkerId } from '@taskelith/execution';
 import {
@@ -154,12 +155,8 @@ export class Administration {
     if (!record.ok) return record;
     const installed = record.value !== undefined;
     // Also on a rerun, so an installation initialized without one gets it.
-    const digestKey = new SessionInputDigestKeyFile(this.#namespace).ensure();
-    if (!digestKey.ok) return digestKey;
-    const tailKey = new SessionOutputTailKeyFile(this.#namespace).ensure();
-    if (!tailKey.ok) return tailKey;
-    const scmKey = new ScmIntegrationSecretKeyFile(this.#namespace).ensure();
-    if (!scmKey.ok) return scmKey;
+    const keys = ensureKeyFiles(this.#namespace);
+    if (!keys.ok) return keys;
     const trust = ensureBrokerTrust(this.#namespace, installed, this.#epochSeconds());
     if (!trust.ok) return trust;
     const authority = await ensureInstallationAuthority(this.#namespace, installed, this.#issuer, this.#clock.now());
@@ -419,4 +416,15 @@ function systemNow(): Instant {
   const now = instantFromEpochMilliseconds(Date.now());
   if (!now.ok) throw new RangeError(now.error.message);
   return now.value;
+}
+
+// The keys of the control-plane namespace; the slot credential key is never
+// created at start, so only initialization makes it (12d B1, answer Q9).
+function ensureKeyFiles(namespace: ControlPlaneNamespace): Result<void> {
+  const files = [SessionInputDigestKeyFile, SessionOutputTailKeyFile, ScmIntegrationSecretKeyFile, SlotCredentialKeyFile];
+  for (const KeyFile of files) {
+    const ensured = new KeyFile(namespace).ensure();
+    if (!ensured.ok) return ensured;
+  }
+  return ok(undefined);
 }
