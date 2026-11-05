@@ -321,6 +321,22 @@ describe('issuing a token', () => {
     expect(gateway.issueEnrollmentToken).toHaveBeenCalledWith({ platform: 'darwin', architecture: 'arm64', hostname: 'mac-1.example' });
   });
 
+  it('offers the platforms and architectures of the wire, and sends none once Any is chosen again', async () => {
+    const gateway = new FakeWorkersGateway();
+    openTokens(gateway);
+    const { user, form } = await openForm();
+    const optionsOf = (label: string) => Array.from((form.getByLabelText(label) as HTMLSelectElement).options, (option) => option.textContent);
+    expect(optionsOf('Platform')).toEqual(['Any', 'Linux', 'macOS']);
+    expect(optionsOf('Architecture')).toEqual(['Any', 'x64', 'arm64']);
+    await user.selectOptions(form.getByLabelText('Platform'), 'darwin');
+    await user.selectOptions(form.getByLabelText('Architecture'), 'arm64');
+    await user.selectOptions(form.getByLabelText('Platform'), '');
+    await user.selectOptions(form.getByLabelText('Architecture'), '');
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    await screen.findByRole('dialog', { name: 'Enrollment token issued' });
+    expect(gateway.issueEnrollmentToken).toHaveBeenCalledWith({});
+  });
+
   it('refuses a hostname with a control character before it is sent', async () => {
     const gateway = new FakeWorkersGateway();
     openTokens(gateway);
