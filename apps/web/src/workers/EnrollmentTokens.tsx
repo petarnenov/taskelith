@@ -182,7 +182,9 @@ function CommandNotice({ commands, listed, onRefresh }: CommandNoticeProps) {
           {status.kind === 'token-rotated' && listed.includes(status.replacementTokenId) ? (
             <>
               {' '}
-              <Anchor href={`#${anchorOf(status.replacementTokenId)}`}>Show it</Anchor>
+              <Anchor href={`#${anchorOf(status.replacementTokenId)}`} c="inherit" underline="always">
+                Show it
+              </Anchor>
             </>
           ) : null}
         </Text>
