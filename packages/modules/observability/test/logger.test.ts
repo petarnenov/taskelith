@@ -8,6 +8,7 @@ import {
   pickCorrelation,
   REDACTED,
   redactText,
+  redactWith,
   SILENT_LOGGER,
 } from '@taskelith/observability';
 import { parseInstant } from '@taskelith/kernel';
@@ -159,9 +160,38 @@ test('a marked secret in front of a PEM key leaves no part of the key', () => {
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
   assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'ghs_', 'SA', 'a://', 'a://b@']);
-  assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], 400_000);
+  assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], { length: 400_000 });
   const keyBegin = pem('BEGIN', 'PRIVATE KEY');
-  assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], 400_000);
+  assertLinearOnRuns(redactText, [keyBegin, `${keyBegin}${pem('END', 'PRIVATE KEY')}`, '-----BEGIN A', '-----BEGIN ', 'PRIVATE KEY-----'], { length: 400_000 });
+});
+
+// Past the regular expression stack of V8, about 2^23 backtrack entries.
+const UNSCANNABLE_TEXT = 'ghs_'.repeat(1_400_000);
+
+test('a text too long to scan is redacted whole instead of throwing', () => {
+  assert.doesNotThrow(() => redactText(UNSCANNABLE_TEXT));
+  assert.equal(redactText(UNSCANNABLE_TEXT), REDACTED);
+});
+
+test('a logged field too long to scan is redacted whole', () => {
+  const { sink, logger: log } = logger();
+  assert.doesNotThrow(() => log.warn('push.failed', { output: UNSCANNABLE_TEXT }));
+  assert.deepEqual(sink.records.map((record) => record.fields), [{ output: REDACTED }]);
+});
+
+// Fail closed: a RangeError of any cause redacts the whole text.
+test('a RangeError of a rule that is not a regular expression redacts the text whole', () => {
+  const failing = () => {
+    throw new RangeError('invalid array length');
+  };
+  assert.equal(redactWith('keep', [failing]), REDACTED);
+});
+
+test('a rule failure other than a RangeError is rethrown', () => {
+  const failing = () => {
+    throw new TypeError('rule failed');
+  };
+  assert.throws(() => redactWith('text', [failing]), TypeError);
 });
 
 test('a name redacts only by whole segments', () => {

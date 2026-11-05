@@ -10,8 +10,15 @@ export function textRule(pattern: RegExp, replacement: string): TextRule {
   return (text) => text.replace(pattern, replacement);
 }
 
+// V8 throws a RangeError on a run past its regular expression stack; a text
+// that cannot be scanned is redacted whole, as rules match across words.
 export function redactWith(text: string, rules: readonly TextRule[]): string {
-  return rules.reduce((redacted, rule) => rule(redacted), text);
+  try {
+    return rules.reduce((redacted, rule) => rule(redacted), text);
+  } catch (error) {
+    if (error instanceof RangeError) return REDACTED;
+    throw error;
+  }
 }
 
 // Name segments of a field that may hold a secret (architecture section 11).
