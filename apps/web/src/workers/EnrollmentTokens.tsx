@@ -414,19 +414,19 @@ function RevealDialog({ reveal, onClose }: RevealDialogProps) {
           installation's CLI enrollment bundle prints.
         </Text>
         {asking ? (
-          <Alert color="red" variant="light" title="Close without copying?">
-            <Stack align="flex-start" gap="xs">
-              <Text>The secret cannot be shown again.</Text>
-              <Group>
-                <Button variant="default" onClick={() => setAsking(false)}>
-                  Keep open
-                </Button>
-                <Button color="red" variant="light" onClick={onClose}>
-                  Close anyway
-                </Button>
-              </Group>
-            </Stack>
-          </Alert>
+          <>
+            <Alert color="red" variant="light" title="Close without copying?">
+              The secret cannot be shown again.
+            </Alert>
+            <Group>
+              <Button variant="default" onClick={() => setAsking(false)}>
+                Keep open
+              </Button>
+              <Button color="red" variant="light" onClick={onClose}>
+                Close anyway
+              </Button>
+            </Group>
+          </>
         ) : (
           <Group>
             <Button variant="default" onClick={close}>
