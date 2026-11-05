@@ -658,6 +658,8 @@ describe('revoking a token', () => {
     expect(notice.getByText(/was replaced by token token-2, which is still pending\./)).toBeDefined();
     const link = await notice.findByRole('link', { name: 'Show it' });
     expect(link.getAttribute('href')).toBe('#enrollment-token-token-2');
+    expect(link.style.color).toBe('inherit');
+    expect(link.getAttribute('data-underline')).toBe('always');
     expect((await cardOf('token-2')).getByRole('heading', { level: 3 }).closest('article')?.id).toBe('enrollment-token-token-2');
   });
 

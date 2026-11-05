@@ -89,6 +89,8 @@ function screenPairs(colors: SchemeColors, scheme: Scheme): Pair[] {
     ['a failed self-check on a worker card', ERROR, surfaces.card],
     ['a card title link on a board card', ANCHOR, surfaces.card],
     ['a link on the page', ANCHOR, BODY],
+    // The link of a red alert takes the alert's text color (see below).
+    ['a link in a red alert', surfaces.alertText, colors.variant('light', 'red').background],
   ];
 }
 
@@ -123,6 +125,12 @@ describe('contrastRatio', () => {
     const page = defaults.resolve(BODY);
     expect(contrastRatio(defaults.resolve(ERROR), page, page)).toBeLessThan(MINIMUM);
     expect(contrastRatio(defaults.resolve(ERROR), defaults.resolve(SURFACES[scheme].input), page)).toBeLessThan(MINIMUM);
+  });
+
+  it('fails the theme link color on a light red alert, so a link there takes its text color', () => {
+    const colors = schemeColors(theme, 'light', cssVariablesResolver);
+    const page = colors.resolve(BODY);
+    expect(contrastRatio(colors.resolve(ANCHOR), colors.resolve(colors.variant('light', 'red').background), page)).toBeLessThan(MINIMUM);
   });
 
   it('refuses an unknown variable and an unsupported color', () => {
