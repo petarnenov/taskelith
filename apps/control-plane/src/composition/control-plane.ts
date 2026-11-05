@@ -45,13 +45,16 @@ import {
   PostgresUiEventLog,
   PostgresUiEventNotifications,
 } from '@taskelith/postgres';
+import { SLOT_COOLDOWN_DEFAULT_MINUTES, parseDefaultCooldownMinutes, type DefaultCooldownMinutes } from '@taskelith/scheduling';
 import { RandomIdentifiers } from '@taskelith/secrets';
 import { Administration, START_OWNER_INVOCATION, type AdministrationSettings } from '../admin/administration.js';
 import { createApiRequestListener, createTlsApiServer, type ApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
-import { ROUTES } from '../api/routes.js';
+import { ROUTES, browserEndpointRoutes, workerEndpointRoutes } from '../api/routes.js';
 import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
+import type { SlotSignals } from '../application/slot-signals.js';
+import { SLOT_CREDENTIAL_SWEEP_MILLISECONDS, startAccountPoolServices } from './account-pool.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { EventLogKeeper, WakeableLoop, numberingPass } from '../application/event-log-keeper.js';
 import { startBoardServices } from './board-views.js';
@@ -126,12 +129,17 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   // The built SPA that the browser endpoint serves under /app/; without
   // it, /app/ answers 404 like any other path without an operation.
   readonly webAppDirectory?: string;
+  // The cooldown of a limit without a reset, 60 minutes unless set (Q7).
+  readonly slotDefaultCooldown?: DefaultCooldownMinutes;
+  readonly slotCredentialSweepMilliseconds?: number;
 }
 
 export interface RunningControlPlane {
   readonly api: ApiEndpoint;
   readonly browser: ApiEndpoint;
   readonly metrics: InMemoryMetrics;
+  // The account signals, which item 18 relays from the sessions.
+  readonly slotSignals: SlotSignals;
   // Settles when the service has stopped: `failed` after a loop defect.
   readonly stopped: Promise<'stopped' | 'failed'>;
   stop(): Promise<void>;
@@ -223,6 +231,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     { namespace: admin.value.namespace, database, projects: bindableProjects(projectSetup), clock }, logger,
   );
   if (!scm.ok) return scm;
+  const pool = startAccountPoolServices({
+    namespace: admin.value.namespace, database, projects: projectSetup, defaultCooldown: settings.slotDefaultCooldown ?? DEFAULT_SLOT_COOLDOWN,
+  });
+  if (!pool.ok) return pool;
   const api = new ControlPlaneApi({
     runs,
     tasks: new TaskService(database),
@@ -235,6 +247,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     logger,
     enrollment: enrollment.value.service,
     launches,
+    slotCredentials: pool.value.delivery,
+    accountSlots: pool.value.slots,
     installationCa: installationCa.value,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
@@ -254,10 +268,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     },
   });
   // The session operations are served on the browser endpoint only, and a
-  // secret only on the worker endpoint, under the installation CA.
-  const workerRequests = createApiRequestListener(api, { logger, routes: ROUTES.filter((route) => !route.browserOnly) });
+  // secret or a worker-only route only on the worker endpoint.
+  const workerRequests = createApiRequestListener(api, { logger, routes: workerEndpointRoutes(ROUTES) });
   const browserRequests = createApiRequestListener(api, {
-    logger, routes: ROUTES.filter((route) => !route.confidential), ...(webApp.value === undefined ? {} : { webApp: webApp.value }),
+    logger, routes: browserEndpointRoutes(ROUTES), ...(webApp.value === undefined ? {} : { webApp: webApp.value }),
   });
   const servers = [createTlsApiServer(workerRequests, tls.value.worker), createTlsApiServer(browserRequests, tls.value.browser)];
   // The streams end before their connections close.
@@ -334,13 +348,23 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
       settings.eventPollMilliseconds ?? EVENT_POLL_MILLISECONDS)),
     supervise('event-pruning', runPeriodically(async () => logFailure(logger, 'events.pruning.failed', await keeper.prune()), controller.signal,
       EVENT_PRUNE_MILLISECONDS)),
+    supervise('slot-credential-sweep', runPeriodically(async () => logFailure(logger, 'scheduling.slot-credentials.sweep-failed', await pool.value.sweep()),
+      controller.signal, settings.slotCredentialSweepMilliseconds ?? SLOT_CREDENTIAL_SWEEP_MILLISECONDS)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
   logger.info('control-plane.started', {
     host: listening.value.host, port: listening.value.port, browserHost: browser.value.host, browserPort: browser.value.port,
   });
-  return ok({ api: listening.value, browser: browser.value, metrics, stopped, stop });
+  return ok({ api: listening.value, browser: browser.value, metrics, slotSignals: pool.value.signals, stopped, stop });
+}
+
+const DEFAULT_SLOT_COOLDOWN = mustCooldown(SLOT_COOLDOWN_DEFAULT_MINUTES.provisional);
+
+function mustCooldown(minutes: number): DefaultCooldownMinutes {
+  const parsed = parseDefaultCooldownMinutes(minutes);
+  if (!parsed.ok) throw new RangeError(parsed.error.message);
+  return parsed.value;
 }
 
 const REISSUE = 'run make installation-certificates';
