@@ -185,8 +185,8 @@ test('a self-check report with a malformed reason is refused at the wire; a repe
   assert.deepEqual(repeated.ok && [repeated.value.type, repeated.value.identity], ['worker.self-check.reported', 'observation-9']);
 });
 
-// Left to G3 items 21 and 38 (coordinator decision Q9, 2026-11-05): until
-// then each is quarantined as an unknown type, never silently discarded.
+// Left to items 21 and 38 (decision Q9, 2026-11-05): an observation is
+// quarantined as unknown; a version 2 command passes for a worker to reject.
 const DEFERRED_COMMANDS = { 'execution.scm-credential.refreshed': 'ScmCredentialRefreshedCommand', 'session.delegation-result.deliver': 'DelegationResultDeliveryCommand' };
 const DEFERRED_OBSERVATIONS = {
   'execution.scm-credential.adopted': 'ScmCredentialAdoptedObservation', 'execution.scm-credential.not-adopted': 'ScmCredentialNotAdoptedObservation',
@@ -220,6 +220,16 @@ test('an observation of item 21 is quarantined as an unknown type, not discarded
   for (const type of Object.keys(DEFERRED_OBSERVATIONS)) {
     const adoption = sessionObservation(type, { runId: 'run-1', credentialId: 'credential-1', version: 3, recoveryEpoch: 1 });
     assert.deepEqual(readObservationSubjectMessage(bytes(adoption)), err(`unknown observation type ${type}`));
+  }
+});
+
+test('a command of items 21 and 38 passes at version 2 for a version 1 worker to reject, and is quarantined as unknown at version 1', () => {
+  for (const type of Object.keys(DEFERRED_COMMANDS)) {
+    const command = sessionCommand(type, {});
+    const read = readCommandSubjectMessage(bytes(command));
+    assert.deepEqual(read.ok && [read.value.type, read.value.identity], [type, command.metadata.commandId], type);
+    const supported = { ...command, payload: { protocolVersion: 1 } };
+    assert.deepEqual(readCommandSubjectMessage(bytes(supported)), err(`unknown command type ${type}`));
   }
 });
 

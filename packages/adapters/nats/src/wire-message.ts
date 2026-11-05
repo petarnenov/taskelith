@@ -8,8 +8,8 @@ import { err, ok, type Result } from '@taskelith/kernel';
 
 type SchemaName = keyof MessageSchemas & string;
 
-// The schema of each message type this build reads on a subject; those of
-// G3 items 21 and 38 are left out, so one is quarantined as an unknown type.
+// What this build reads. Items 21 and 38 are left out: an observation is
+// quarantined as unknown, a version 2 command passes for a worker to reject.
 export const COMMAND_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.freeze({
   'execution.assignment.offer': 'AssignmentOfferCommand',
   'execution.cancellation.request': 'CancellationCommand',
