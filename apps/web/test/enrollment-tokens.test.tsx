@@ -493,11 +493,22 @@ describe('the revealed secret', () => {
     expectNoSecret();
   });
 
-  it('does not close on Escape', async () => {
+  it('does not close or ask on Escape', async () => {
     openTokens();
-    const { user } = await issueToken();
+    const { user, dialog } = await issueToken();
     await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog', { name: 'Enrollment token issued' })).toBeDefined();
+    expect(dialog.queryByText('Close without copying?')).toBeNull();
+  });
+
+  it('does not close or ask on a click outside it', async () => {
+    openTokens();
+    const { user, dialog } = await issueToken();
+    const overlay = document.querySelector('.mantine-Modal-overlay');
+    if (!(overlay instanceof HTMLElement)) throw new Error('The reveal has no overlay.');
+    await user.click(overlay);
+    expect(screen.getByRole('dialog', { name: 'Enrollment token issued' })).toBeDefined();
+    expect(dialog.queryByText('Close without copying?')).toBeNull();
   });
 
   it('is replaced by the secret of a rotation, and no earlier secret stays on the page', async () => {
