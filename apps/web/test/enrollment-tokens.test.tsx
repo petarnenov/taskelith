@@ -843,14 +843,26 @@ describe('the stale CSRF token', () => {
     expect(gateway.issueEnrollmentToken).toHaveBeenCalledTimes(1);
   });
 
-  it('applies to a revoke and a rotation as well', async () => {
-    const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList(), tokenList([enrollmentToken({ tokenId: 'token-1-rotated' })]));
-    gateway.rotateEnrollmentToken.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+  it('applies to a revoke as well', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList());
     gateway.revokeEnrollmentToken.mockResolvedValueOnce({ kind: 'csrf-rejected' });
-    openTokens(gateway);
+    openTokens(gateway, session);
     await confirm('token-1', 'Revoke');
     await screen.findByText('Token revoked');
-    expect(gateway.revokeEnrollmentToken).toHaveBeenCalledTimes(2);
+    expect(gateway.revokeEnrollmentToken.mock.calls).toEqual([['token-1'], ['token-1']]);
+    expect(session.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies to a rotation as well', async () => {
+    const session = fakeGateway(AUTHENTICATED);
+    const gateway = gatewayWith(tokenList([enrollmentToken()]), tokenList([enrollmentToken({ tokenId: 'token-1-rotated' })]));
+    gateway.rotateEnrollmentToken.mockResolvedValueOnce({ kind: 'csrf-rejected' });
+    openTokens(gateway, session);
+    await confirm('token-1', 'Rotate');
+    await screen.findByRole('dialog', { name: 'Token rotated' });
+    expect(gateway.rotateEnrollmentToken.mock.calls).toEqual([['token-1'], ['token-1']]);
+    expect(session.read).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -936,5 +948,112 @@ describe('redaction over the real gateways', () => {
     await cardOf('token-1');
     expectNoSecret();
     expect(document.documentElement.outerHTML).not.toContain(TOKEN);
+  });
+});
+
+// The resend over the real gateways: the header of each command request
+// shows which session token it carried.
+describe('the stale CSRF token over the real gateways', () => {
+  const FIRST = 'a'.repeat(43);
+  const RENEWED = 'b'.repeat(43);
+  const CSRF_INVALID = { code: 'forbidden', message: 'Stale.', details: { reason: 'csrf-token-invalid' } };
+
+  function session(csrfToken: string) {
+    return {
+      state: 'authenticated',
+      csrfToken,
+      principal: { principalId: 'p-1', loginName: 'operator' },
+      installationRoles: ['installation-owner'],
+      expiresAt: '2026-11-04T11:00:00.000Z',
+    };
+  }
+
+  function json(status: number, body: unknown): Response {
+    return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  interface Sent {
+    readonly method: string;
+    readonly url: string;
+    readonly csrf: string | null;
+  }
+
+  // The first session read answers FIRST, the next ones the renewal, which
+  // a test may hold; each command answers from its script in turn.
+  function controlPlane(commandAnswers: Response[], renewal: Promise<Response> = Promise.resolve(json(200, session(RENEWED)))) {
+    const sent: Sent[] = [];
+    let sessionReads = 0;
+    const send = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      sent.push({ method, url, csrf: new Headers(init?.headers).get(CSRF_HEADER) });
+      if (url === '/session' && method === 'GET') {
+        sessionReads += 1;
+        return sessionReads === 1 ? json(200, session(FIRST)) : renewal;
+      }
+      if (url === '/session' && method === 'DELETE') return new Response(null, { status: 204 });
+      if (url === '/workers') return json(200, workersView({ workers: [] }));
+      if (url === '/enrollment-tokens' && method === 'GET') return json(200, { tokens: [enrollmentToken()] });
+      const answer = method === 'GET' ? undefined : commandAnswers.shift();
+      if (answer === undefined) throw new Error(`Unexpected request ${method} ${url}`);
+      return answer;
+    });
+    const sessionGateway = createSessionGateway(send);
+    const board = createBoardGateway({ fetch: send, csrfToken: sessionGateway.csrfToken });
+    const workers = createWorkersGateway({ fetch: send, csrfToken: sessionGateway.csrfToken });
+    const app = renderApp(WORKERS_PATH, sessionGateway, new ManualClock(), board, undefined, workers);
+    const commands = () => sent.filter((request) => request.method !== 'GET');
+    return { ...app, sent, commands };
+  }
+
+  it.each([
+    ['an issue', 'POST /enrollment-tokens', issueToken],
+    ['a rotation', 'POST /enrollment-tokens/token-1/rotation', () => confirm('token-1', 'Rotate')],
+  ] as const)('sends %s once more with the renewed token after a refusal of the first', async (_, request, act) => {
+    const plane = controlPlane([json(403, CSRF_INVALID), json(201, issuedToken())]);
+    await act();
+    await screen.findByRole('dialog');
+    const commands = plane.commands();
+    expect(commands.map(({ method, url }) => `${method} ${url}`)).toEqual([request, request]);
+    expect(commands.map(({ csrf }) => csrf)).toEqual([FIRST, RENEWED]);
+    const renewalRead = plane.sent.findIndex((sent, index) => index > plane.sent.indexOf(commands[0]!) && sent.url === '/session');
+    expect(renewalRead).toBeLessThan(plane.sent.indexOf(commands[1]!));
+    expect(renewalRead).toBeGreaterThan(-1);
+  });
+
+  it('shows a second refusal as final after exactly one resend with the renewed token', async () => {
+    const plane = controlPlane([json(403, CSRF_INVALID), json(403, CSRF_INVALID)]);
+    const { user, form } = await openForm();
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    expect((await screen.findByText('Not issued')).closest('[role="status"]')?.textContent).toContain('refused the session token twice');
+    expect(plane.commands().map(({ csrf }) => csrf)).toEqual([FIRST, RENEWED]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('sends nothing again when the operator leaves while the session is read again', async () => {
+    const renewal = deferred<Response>();
+    const plane = controlPlane([json(403, CSRF_INVALID)], renewal.promise);
+    const { user, form } = await openForm();
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    await waitFor(() => expect(plane.sent.filter(({ url }) => url === '/session')).toHaveLength(2));
+    await act(async () => {
+      await plane.router.navigate('/');
+    });
+    await act(async () => renewal.resolve(json(200, session(RENEWED))));
+    expect(plane.commands()).toHaveLength(1);
+    expectNoSecret();
+  });
+
+  it('sends nothing again when the operator signs out while the session is read again', async () => {
+    const renewal = deferred<Response>();
+    const plane = controlPlane([json(403, CSRF_INVALID)], renewal.promise);
+    const { user, form } = await openForm();
+    await user.click(form.getByRole('button', { name: 'Issue token' }));
+    await waitFor(() => expect(plane.sent.filter(({ url }) => url === '/session')).toHaveLength(2));
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign out' }));
+    expect(await screen.findByRole('heading', { name: 'Sign in to Taskelith' })).toBeDefined();
+    await act(async () => renewal.resolve(json(200, session(RENEWED))));
+    expect(plane.commands().map(({ method, url }) => `${method} ${url}`)).toEqual(['POST /enrollment-tokens', 'DELETE /session']);
   });
 });
