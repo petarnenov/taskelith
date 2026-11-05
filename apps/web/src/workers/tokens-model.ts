@@ -183,17 +183,17 @@ function failureTextOf(command: Command, failure: 'unavailable' | 'unauthenticat
       return {
         title: 'Not issued, or issued but not shown',
         text:
-          'The control plane did not answer, so a token may have been issued even though its secret was not shown. ' +
+          'The control plane gave no usable answer, so a token may have been issued even though its secret was not shown. ' +
           'Refresh the list: a pending token you do not recognise may be that one, and it can be revoked or rotated. ' +
           'A token missing from the list may still have been issued, since the list shows only pending tokens and may be cut short.',
       };
     case 'rotate':
       return {
         title: 'Not rotated, or rotated but not shown',
-        text: `The control plane did not answer. Refresh the list: if token ${command.tokenId} is still listed, it was not rotated; if a new token replaced it, that token can be revoked or rotated.`,
+        text: `The control plane gave no usable answer. Refresh the list: if token ${command.tokenId} is still listed, it was not rotated; if a new token replaced it, that token can be revoked or rotated.`,
       };
     default:
-      return { title: 'Not revoked', text: `The control plane did not answer, so token ${command.tokenId} may still be pending. Retry revokes it again.` };
+      return { title: 'Not revoked', text: `The control plane gave no usable answer, so token ${command.tokenId} may still be pending. Retry revokes it again.` };
   }
 }
 
