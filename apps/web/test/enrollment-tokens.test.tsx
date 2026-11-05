@@ -480,6 +480,10 @@ describe('the revealed secret', () => {
     await user.click(dialog.getByRole('button', { name: 'Close' }));
     expect(dialog.getByText('Close without copying?')).toBeDefined();
     expect(dialog.getByText('The secret cannot be shown again.')).toBeDefined();
+    // The red light button would have no boundary on the red light alert.
+    for (const name of ['Keep open', 'Close anyway']) {
+      expect(dialog.getByRole('button', { name }).closest('.mantine-Alert-root')).toBeNull();
+    }
     await user.click(dialog.getByRole('button', { name: 'Keep open' }));
     expect(dialog.queryByText('Close without copying?')).toBeNull();
     expect(dialog.getByLabelText('Enrollment token secret')).toHaveProperty('value', TOKEN_SECRET);
