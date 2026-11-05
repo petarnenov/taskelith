@@ -298,6 +298,7 @@ export {
   type RevocationCommandIdFor,
   type RevokeAccountSlotInput,
   type RotateSlotCredentialInput,
+  type SlotCommandTarget,
   type SlotCredentialCommandPorts,
   type SlotRevocationPorts,
   type SlotRevocationStore,
