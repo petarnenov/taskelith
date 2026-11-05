@@ -63,11 +63,15 @@ Logs in the session scratchpad (`/private/tmp/claude-503/-Users-petarnenov-taske
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `62908d3ae7c367309b4e163e851c960506045a41`; tests 4861, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.91% branches, 98.90% functions.
+- `make verify`: passed, profile full, tree `8072cdb64b59932bf7602b9856b9e53885fabbcb`; tests 4861, pass 4852, fail 0, skipped 9; all files 99.45% lines, 92.91% branches, 98.88% functions.
 - `npm run openspec -- validate build-enrollment-tokens-screen --strict`: passed, `Change 'build-enrollment-tokens-screen' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 124 file(s); every pass summary file is valid: 104 file(s); every route file is valid: 57 file(s).`.
 - Spec diff against the merge base `3191c26217da` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1aa0b-ef11-7242-9a9f-861006199bf9` | 0 | 2 | 4 | 2 |
 <!-- make record: end -->
 
 ## Independent review
@@ -100,6 +104,7 @@ Pass 2 reviews these fixes. Fail-before logs are in the session scratchpad (`fb-
 - Finding 4 (`b2e169ef`, test `9d4ed55c`): `useSnapshot`'s `refresh` marks the shown list as refreshing in the same render as the change that asked for it, and the section offers "Show it" only from a list not being read again (design, decisions 4 and 7). Fail-before `fb-33b-p1-4.log`: the deferred-refresh page test fails on the link from the old list; `fb-33b-p1-4b.log`: with both source changes stashed, the new `use-snapshot.test.tsx` test, which records every render, fails too, so it pins the at-once marking that the page test cannot observe.
 - Finding 8 (`71039a30`, test `4b7e2c98`): `CommandNotice` shows `statusTextOf`'s text, which names the role once, and the read-only `withRequiredRole` suffix is gone from command notices (design, decision 7). Fail-before `fb-33b-p1-8.log`: both page tests of the whole denial text (issue and revoke) fail on the doubled role.
 - After the fixes the whole `apps/web` suite passes: 1,039 tests in 38 files (`coverage-33b-p1.log`); `tsc -p apps/web/tsconfig.json`, `tsc -p apps/web/tsconfig.tooling.json`, `npm run verify:comments`, `npm run verify:links`, and `npm run openspec -- validate build-enrollment-tokens-screen --strict` pass, the requirements at 484, 456, 480, and 492 characters; every comment the fixes add to a `.tsx` file was checked by hand against the rule; `git diff 3191c262 HEAD -- packages apps/control-plane apps/worker package-lock.json` is still empty.
+- `make verify` of the fixed and recorded tree (`c9e4ab69`, tree `8072cdb6`), `verify-33b-p1.log` in the session scratchpad with its exit code `0` in `verify-33b-p1.exit`: passed at the first run, profile full, no rerun of any suite (neither known flake, the installation-script base-ten test nor `web-app.test.ts:279`, failed), nothing appended to the log; 4,861 Node tests, 4,852 passed, 0 failed, 9 skipped; in it `apps/web` Vitest ran 1,039 tests in 38 files, all passing, 99.28% statements, 98.12% branches, 100% functions, and 100% lines. The generated part above records it.
 
 ## Limitations
 
