@@ -15,7 +15,9 @@ Not in scope and not done: the session commands the control plane writes (13c2),
 - `b4519fd5` `chore: route the consume session observations change` (`route.json` unedited).
 - `36f17a30` and `812d085f`: this record and the generated checks of `make record` before pass 1. Pass 1 reviewed `812d085f`.
 - The pass 1 fix round: `41b629e7` `chore: return a store failure of the session timeline instead of keeping it as evidence`, `2d5f3d29` `test: reject an offer with a protocol window that reaches version 2`, `afb01cb1` `test: pin how a command of items 21 and 38 reaches a version 1 worker`, `3776af92` `docs: correct the refusal rule, the evidence fields, and the deferred commands of the consume session observations change`, `bfd21ad9` `test: return a refusal of the session timeline after a write as a failure`.
-- Then the record of pass 1 and the generated checks of `make record` after the fix round.
+- Then the record of pass 1 and the generated checks of `make record` after the fix round (`7768cd9d`, `2d6e2d3a`, `c95636f0`). Pass 2 reviewed `c95636f0`.
+- The pass 2 fix round: `091f95f5` `chore: watch only the stores of a timeline transaction and classify each store call in a checked table`, `5ac4b5af` `chore: rename the local of a turn's failure that shadowed the kernel's failure`, `892289b5` `docs: correct the deferred commands, the domain calls after a write, the ignored fields, and the schema table wording of the consume session observations change`.
+- Then `5964e2c6`, the findings record of pass 2, `63353925`, the generated checks of `make record` after the fix round, and the commit of this record's pass 2 sections. The archive commit is the last commit of the branch.
 
 ## Environment
 
@@ -124,6 +126,42 @@ The first row is the fail-before of finding 1 and the sixth the mutation control
 
 The development services were stopped with `make services-down` before `make verify`, whose result is in "Generated checks".
 
+## Pass 2 fix round
+
+Line references are at `892289b5`. Each finding is in `findings.jsonl`; "Independent review" has the pass. Pass 2 reported only Low findings, so no later pass reviewed these fixes ("Fixes that no later pass reviewed").
+
+1. **Low, error-handling: a member that is no object** (`091f95f5`). The watch's outer trap wraps a member of the transaction only when it is an object and returns any other as it is (`apps/control-plane/src/application/watched-timeline-stores.ts:44-47`). Test: `apps/control-plane/test/session-observations.test.ts:498` reads a boolean member, as the PostgreSQL transaction's `changed` is, and a missing one through the watch.
+2. **Low, naming: reads as bare strings** (`091f95f5`). `STORE_CALLS` (`watched-timeline-stores.ts:12-20`) names each call of each of the seven stores as a read or a write and `satisfies` a type derived from `SessionTimelineTransaction` (`:6-8`), so a missing or an unknown call does not compile. `isRead` (`:24-26`) answers by store and call; a call the table does not name counts as a write, as before. The classification of the existing calls is unchanged.
+3. **Low, naming: a shadowing local** (`5ac4b5af`). `turnFailure` in `turnEnded` (`apps/control-plane/src/application/session-observation-effects.ts:93`).
+4. **Low, docs: the proposal** (`892289b5`). `proposal.md:9` states the deferred observations and commands as design decision Q9 does, `:12` the condition that the stores are untouched, and `:33` names `watched-timeline-stores.ts`.
+5. **Low, docs: two domain calls after a write** (`892289b5`). `design.md:63` names both, the change applied again after `tails.clear` and the output appended after `tails.put`, and why neither can refuse; `:59` describes the checked table.
+6. **Low, docs: ignored fields** (`892289b5`). `design.md:95` and "Limitations" name the `cause` of `session.generation.ended` and the `reason` of `session.turn.acceptance-unknown`.
+7. **Low, spec-wording: the notices and the inventory report** (`892289b5`). The requirement (`specs/nats-transport/spec.md:4`, 492 characters) excepts the command subject notices and the inventory report, and the scenario (`:8`) lists them, as the table test does. No code or contract text changed.
+
+### Mutation controls of the pass 2 fix round
+
+Run on the working tree that became `5ac4b5af`, whose code is that commit's. Each made one edit to `watched-timeline-stores.ts`, then restored the file from a copy; `cmp` found the restored file equal to the copy. The first two rebuilt `apps/control-plane` and ran `session-observations.test.ts` (29 tests); the last two ran `npx tsc -p tsconfig.check.json`.
+
+| Mutation | Result |
+| --- | --- |
+| Every member is wrapped, as at the reviewed `c95636f0` | pass 28, fail 1: "a member of the transaction that is no store reaches the timeline as it is" |
+| `sessions.get` listed as a write | pass 23, fail 6: the six unit tests of refusals, repeats, and the log |
+| `listByTask` removed from the table | `TS2741`: the property is missing |
+| A call `peek` that `SessionAuditRecords` does not have added to the table | `TS2353`: the property is not known |
+
+The first row is the fail-before of finding 1; the last two show the compiler check of finding 2.
+
+### Checks of the pass 2 fix round
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| `session-observations.test.ts` | the working tree that became `5ac4b5af` | tests 29, pass 29, fail 0 |
+| `npx tsc -p tsconfig.check.json` | the same | no error |
+| `npm run openspec -- validate consume-session-observations --strict`, `npm run verify:comments`, `npm run verify:archive` | the working tree that became `892289b5` | `Change 'consume-session-observations' is valid`; `Every comment is within the comment length rule.`; `Every active OpenSpec change archives into strictly valid specs.` |
+| `make record-check CHANGE=consume-session-observations` | `63353925` | `make record-check: the generated part matches the tree` |
+
+No PostgreSQL or Docker test was run apart from `make verify`, whose result is in "Generated checks" (log `verify-3.log`, outside the repository). `route.json` was not routed again ("Route after pass 1").
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -163,12 +201,50 @@ The coordinator assigns the reviewers and runs the passes; each pass is recorded
 | 3. The log requirement gave every evidence log the same fields | Low, spec-wording | `openspec/changes/consume-session-observations/specs/observation-consumption/spec.md:65` | Fixed: the fields of each kind of evidence, `code` only for a timeline refusal | `3776af92` |
 | 4. Two comments and the design said every deferred message is quarantined as unknown | Low, docs | `packages/adapters/nats/src/wire-message.ts:12` | Fixed: the three places state how a version 2 command reaches a version 1 worker; a test pins it | `afb01cb1`, `3776af92` |
 
-No later pass has checked these fixes, so `findings.jsonl` holds each as `fixed-unreviewed` until pass 2 checks it. "Pass 1 fix round" describes the fixes and their evidence.
+Pass 2 checked these four fixes and confirmed each as resolved, so `findings.jsonl` holds each as `fixed`. "Pass 1 fix round" describes the fixes and their evidence.
 
-- Pass 2: not run.
-- Pass 3: not run.
+### Pass 2
 
-Architect check of unreviewed fixes (coordinator): none yet.
+- Reviewer: Claude Code `claude-fable-5-1`, effort medium, role B, read-only (permission mode `plan`, the editing tools disallowed).
+- Invocation: `make review CHANGE=consume-session-observations PASS=2 REVIEWER='claude claude-fable-5-1#medium' PROMPT=<scratch>/pass2-prompt.md LOG=<scratch>/pass2.log`, run under `env -u JEV_MAF_LAB`. It printed `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose -- <prompt>` and the start time 2026-11-05T06:27:24.535Z.
+- Route line: `recommends effort high; the authorized medium applies (policy version 11)`.
+- Model confirmation: `claude-fable-5-1` is the only key of `modelUsage` in the last `"type":"result"` line of the log.
+- Session: `904709de-4236-413a-ad20-eb44ba50e316`.
+- Reviewed revision: `c95636f0`.
+- Snapshot before and after the pass: both `d86ac97cc20ccbdb247b64f7423e72c77b46cd3190ca65857c2d3f906c88f78d`.
+- The prompt named the session of pass 1 and asked the reviewer to check each fix of pass 1 and then to review the whole change independently. It confirmed all four fixes of pass 1 as resolved.
+- The reviewer ran `npm run verify:comments`, the strict OpenSpec validation, and `session-observations.test.ts` (28 of 28) on the existing build. It ran no PostgreSQL or Docker suite and no `make verify`, and it could not mutate the tree, so its statements that a test fails without a fix rest on reading the tests and on the recorded mutation controls.
+- Findings: Critical 0, High 0, Medium 0, Low 7, as `passes.jsonl` counts them.
+
+| Finding | Severity, category | File at `c95636f0` | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1. The watch wrapped every member of the transaction in a proxy, so reading a member that is no object would throw | Low, error-handling | `apps/control-plane/src/application/watched-timeline-stores.ts:24` | Fixed: only an object member is wrapped; a unit test reads a member that is no store | `091f95f5` |
+| 2. The reads were a set of bare call names shared by all stores, unchecked against the port interfaces | Low, naming | `apps/control-plane/src/application/watched-timeline-stores.ts:6` | Fixed: a table per store that the compiler checks against `SessionTimelineTransaction` | `091f95f5` |
+| 3. A local `failure` in `turnEnded` shadowed the kernel's `failure` | Low, naming | `apps/control-plane/src/application/session-observation-effects.ts:93` | Fixed: renamed `turnFailure` | `5ac4b5af` |
+| 4. The proposal kept the corrected statement about the deferred messages, gave the refusal rule without its condition, and left the watch file out of "Impact" | Low, docs | `openspec/changes/consume-session-observations/proposal.md:9` | Fixed: the three places | `892289b5` |
+| 5. The design named one domain call after a write; there are two | Low, docs | `openspec/changes/consume-session-observations/design.md:63` | Fixed: both calls and why neither can refuse | `892289b5` |
+| 6. The ignored payload fields left out `cause` and `reason` | Low, docs | `openspec/changes/consume-session-observations/design.md:93` | Fixed: both in the design's risks and in "Limitations" | `892289b5` |
+| 7. The requirement and scenario of the schema tables left out the command subject notices and the inventory report | Low, spec-wording | `openspec/changes/consume-session-observations/specs/nats-transport/spec.md:8` | Fixed: both sentences name them | `892289b5` |
+
+A pass with only Low findings ends the review: the fixes are made without another review.
+
+- Pass 3: not run, because pass 2 reported no Medium or worse finding.
+
+### Fixes that no later pass reviewed
+
+UNREVIEWED: no reviewer has seen the seven fixes of pass 2; `findings.jsonl` holds each as `fixed-unreviewed`. "Pass 2 fix round" has their line references and evidence.
+
+| Fix of pass 2 finding | Commit |
+| --- | --- |
+| 1. Only an object member of the transaction is wrapped | `091f95f5` |
+| 2. The checked table of store calls | `091f95f5` |
+| 3. The local `turnFailure` | `5ac4b5af` |
+| 4. The proposal | `892289b5` |
+| 5. The two domain calls after a write in the design | `892289b5` |
+| 6. The ignored `cause` and `reason` | `892289b5` |
+| 7. The wording of the `nats-transport` requirement and scenario | `892289b5` |
+
+Architect check of unreviewed fixes (coordinator): not done yet; the coordinator records it here or, since the branch is archived, in the pull request body.
 
 ## Limitations
 
@@ -192,5 +268,5 @@ Architect check of unreviewed fixes (coordinator): none yet.
 
 ## Remaining gates
 
-- Review pass 2, and pass 3 only after a pass 2 with a Medium or worse finding, by the reviewers the coordinator assigns; pass 2 checks the four fixes of the pass 1 fix round.
+- The coordinator's architect check of the seven fixes that no later pass reviewed.
 - Integration into dev by the coordinator (single pull request).
