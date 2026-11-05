@@ -4,7 +4,7 @@
 
 Assigned on 2026-11-05 by the coordinator (Niki) to the worker Zaki, size M, developed by a briefed subagent. Source: G3 item 13, sub-change 13c1 (`docs/g3-plan.md` row 13), from the [worker messages and terminal contract](/docs/contracts/worker-messages-and-terminal.md) section 12 "Item 13". Scope, the brief's six points: (1) the session messages in the NATS adapter's schema tables, without the messages of items 21 and 38; (2) the control plane's protocol window of 1 to 2; (3) the section 9 observations applied through the session timeline after the recovery epoch check; (4) the wire paths of the 13a operations proven by tests; (5) refusals applied without effect and logged as evidence; (6) the notes in `docs/g3-plan.md` rows 13 and 18.
 
-Not in scope and not done: the session commands the control plane writes (13c2), revealed credentials in the output redactor (13c3), session lifecycle wiring and the worker's side (item 18), effects of the messages of items 21 and 38, any HTTP, OpenAPI, or UI change, and any contract text under `docs/contracts/`. All packages touched are private; commit types `chore` and `docs`.
+Not in scope and not done: the session commands the control plane writes (13c2), revealed credentials in the output redactor (13c3), session lifecycle wiring and the worker's side (item 18), effects of the messages of items 21 and 38, any HTTP, OpenAPI, or UI change, and any contract text under `docs/contracts/`. All packages touched are private; commit types `chore`, `test`, and `docs`.
 
 ## Revision
 
@@ -13,7 +13,9 @@ Not in scope and not done: the session commands the control plane writes (13c2),
 - `210f3b49` `chore: apply session observations through the session timeline` (`packages/contracts`, `apps/control-plane`, their tests, proposal, design, tasks, the spec deltas, `checklist.json`, and the empty `findings.jsonl` and `passes.jsonl`).
 - `9b0249cb` `docs: record the split of g3 item 13c and the lifecycle wiring of item 18` (`docs/g3-plan.md` rows 13 and 18).
 - `b4519fd5` `chore: route the consume session observations change` (`route.json` unedited).
-- Then this record and the generated checks of `make record`.
+- `36f17a30` and `812d085f`: this record and the generated checks of `make record` before pass 1. Pass 1 reviewed `812d085f`.
+- The pass 1 fix round: `41b629e7` `chore: return a store failure of the session timeline instead of keeping it as evidence`, `2d5f3d29` `test: reject an offer with a protocol window that reaches version 2`, `afb01cb1` `test: pin how a command of items 21 and 38 reaches a version 1 worker`, `3776af92` `docs: correct the refusal rule, the evidence fields, and the deferred commands of the consume session observations change`, `bfd21ad9` `test: return a refusal of the session timeline after a write as a failure`.
+- Then the record of pass 1 and the generated checks of `make record` after the fix round.
 
 ## Environment
 
@@ -81,6 +83,47 @@ A first attempt at the fourth mutation did not compile, so its run tested the un
 
 Route (`route.json`, rule version 5): elevated, triggers lines, files, capabilities, and contracts; pass 1 reviewer A `codex gpt-6-astra#high`, pass 2 reviewer B `claude claude-fable-5-1#high`, pass 3 reviewer A `agy gemini-4-argon-medium#medium` only after a pass 2 with a Medium or worse finding. The shadow router agreed (P(third) 0.78, threshold 0.4). The route is a recommendation: the coordinator names the reviewers and the effort of each pass.
 
+## Pass 1 fix round
+
+Line references are at `bfd21ad9`. Each finding is in `findings.jsonl`; "Independent review" has the pass.
+
+1. **High, error-handling: a store failure taken for a refusal** (`41b629e7`, `bfd21ad9`, `3776af92`). `apps/control-plane/src/application/watched-timeline-stores.ts` is new: `WatchedTimelineStores` passes the transaction's timeline stores on and notes every store call that failed and every call that is not a known read. `ObservationService` binds the timeline over it (`observation-service.ts:168-170`) and gives the effect the watch (`observation-effects.ts:54`). `sessionEffect` keeps a failure as evidence only when the stores are untouched (`session-observation-effects.ts:163`); otherwise `storeFailure` (`:172-175`) returns it, as `internal` when its code is a refusal's, because `ObservationService` would confirm a `conflict`, `not-found`, or `precondition-failed` as a G2 rejection. No contract text, port, or the timeline service changed. `design.md`, "Refusal, repeat, and failure", replaces the wrong assumption that every such failure precedes the writes and lists which operations can fail after a write: all ten, since each writes; the spec's refusal requirement and two scenarios follow. Tests: `session-observations.test.ts:442` (the reviewer's case, `items.add` answers `conflict` under the real timeline service), `:454` (the first write), `:464` (a read), `:474` (another code is returned as it is), `:483` (a refusal after a write, with no failed store call), and against PostgreSQL `session-observation.integration.test.ts:291`, which checks the session row's version and requests, the idempotency keys, the inbox items, the events, the inbox, the cursor, the confirmations, and the evidence log, and then that the redelivery records the request once.
+2. **Medium, missing-fail-before-test: the protocol rejection's window** (`2d5f3d29`). `observation.integration.test.ts:492` rejects an offer with a window of versions 2 to 3: the assignment is refused and the worker's protocol version is 2. The spec's window requirement has the scenario.
+3. **Low, spec-wording: the fields of an evidence log** (`3776af92`). The requirement "Session observation logs" names the fields of an ownership refusal, of a timeline refusal, which alone has `code`, and of the epoch gate, with a scenario; `design.md`, "Outcome and log", follows. The behaviour is unchanged and was already tested (`session-observations.test.ts:234`, `:318`, `:386`).
+4. **Low, docs: deferred commands at a version 1 worker** (`afb01cb1`, `3776af92`). `packages/adapters/nats/src/wire-message.ts:11-12`, `packages/adapters/nats/test/transport.test.ts:188-189`, and `design.md` decision Q9 state that an observation of item 21 is quarantined as unknown, while a version 2 command of items 21 and 38 passes at a version 1 worker with its stable part for the worker to reject, and is quarantined as unknown only at a version the worker supports. The behaviour is unchanged; `transport.test.ts:226` and a scenario of the `nats-transport` delta pin it.
+
+Beside the findings: `apps/control-plane/test/in-memory-capacity.ts:70` gives the fixtures without a timeline an empty object instead of `undefined`, because the watch wraps the transaction's timelines for every observation.
+
+### Route after pass 1
+
+`route.json` was not routed again. Worker step 4 routes again only when the fixes of the `make verify` run before pass 1 change the diff, and the route gate of `make review` runs before pass 1 only: "Later passes never route" (`docs/agent-task-protocol.md`, "Reviewer invocations"). The record stays the one of `b4519fd5`, made for the tree that pass 1 reviewed.
+
+### Mutation controls of the fix round
+
+Each run started from the clean committed tree of `bfd21ad9`, made one edit, rebuilt `dist/`, ran the named files once against the worktree's development services, restored the file with `git checkout`, and rebuilt; `git status` was empty after each. They ran one after another.
+
+| Mutation | Files run | Result | Tests that failed |
+| --- | --- | --- | --- |
+| The effect no longer asks whether the stores are untouched, as at the reviewed `812d085f` | the two session test files | tests 46, pass 41, fail 5 | the five new tests of finding 1 that expect `internal`, the PostgreSQL one among them |
+| The watch notes no write | the same | pass 45, fail 1 | "a refusal after the timeline wrote is a failure, though no store call failed" |
+| The watch notes no failed store call | the same | pass 45, fail 1 | "a refusal's code from a read of the timeline is a failure, not a refusal" |
+| The watch knows no read, so every call counts as a write | the same | pass 39, fail 7 | the six unit tests of refusals, repeats, and the log, and the integration test of acceptance unknown |
+| `storeFailure` returns a refusal's code as it is | the same | pass 41, fail 5 | the same five as the first row: the observation is confirmed as a G2 rejection instead of failing |
+| Only `commandRejection` takes the common version against a window of version 1 | `observation.integration.test.ts`, `control-plane-api.integration.test.ts` | tests 101, pass 100, fail 1 | "a rejected offer of a worker whose window reaches version 2 refuses the assignment and gives the worker version 2" |
+| The worker's reader looks for a schema before it checks the version | `transport.test.ts` | tests 26, pass 25, fail 1 | "a command of items 21 and 38 passes at version 2 for a version 1 worker to reject, and is quarantined as unknown at version 1" |
+
+The first row is the fail-before of finding 1 and the sixth the mutation control that finding 2 asks for.
+
+### Checks of the fix round
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| Every test file of `apps/control-plane/test` and `transport.test.ts`, one run | the working tree before `41b629e7`, without the later tests of `afb01cb1` and `bfd21ad9` | tests 809, pass 780, fail 0, skipped 29 |
+| The two session test files, `observation.integration.test.ts`, and `transport.test.ts`, one run | the tree of `3776af92` | tests 139, pass 139, fail 0 |
+| `session-observations.test.ts` | the tree of `bfd21ad9` | tests 28, pass 28, fail 0 |
+
+The development services were stopped with `make services-down` before `make verify`, whose result is in "Generated checks".
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -95,9 +138,28 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-No review pass has run. The coordinator assigns the reviewers and runs the passes; each pass is recorded here with its reviewer and role, invocation, model confirmation, session, snapshot result, findings by severity, and resolutions.
+The coordinator assigns the reviewers and runs the passes; each pass is recorded here with its reviewer and role, invocation, model confirmation, session, snapshot result, findings by severity, and resolutions.
 
-- Pass 1: not run.
+### Pass 1
+
+- Reviewer: Codex CLI `gpt-6-astra`, effort medium, role A, sandbox read-only; the output header reported the model, the effort, and the sandbox.
+- Invocation: `make review CHANGE=consume-session-observations PASS=1 REVIEWER='codex gpt-6-astra#medium' PROMPT=<scratch>/pass1-prompt.md LOG=<scratch>/pass1.log`, run under `env -u JEV_MAF_LAB`. It printed `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only -C <worktree> -`, the environment `PATH HOME USER LANG TERM`, and the start time 2026-11-05T05:59:14.178Z.
+- Route gate: `route.json was made for this tree`; `recommends effort high; the authorized medium applies (policy version 11)`.
+- Session: `01a1aa4a-3c9b-71c1-8f38-9d209a2ad453`.
+- Reviewed revision: `812d085f`.
+- Snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) before and after the pass: both `38dfdd9e0a36a1126ba9355e9550e9c2ae012df805ab53d02ecc6247fc35a3c8`.
+- The reviewer ran 74 tests on the existing build and the comment check; it did not run the PostgreSQL or Docker tests or `make verify`.
+- Findings: Critical 0, High 1, Medium 1, Low 2, as `passes.jsonl` counts them.
+
+| Finding | Severity, category | File at `812d085f` | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1. A session effect took any timeline failure with a refusal's code as a refusal, so a store `conflict` after the timeline wrote committed a partial application as evidence | High, error-handling | `apps/control-plane/src/application/session-observation-effects.ts:162` | Fixed: a failure is a refusal only while the watched stores are untouched; otherwise it is returned and rolls back | `41b629e7`, tests also `bfd21ad9`, records `3776af92` |
+| 2. No test failed when only the protocol rejection went back to the worker's window | Medium, missing-fail-before-test | `apps/control-plane/test/observation.integration.test.ts:480` | Fixed: a rejection with a window of 2 to 3, with its mutation control | `2d5f3d29` |
+| 3. The log requirement gave every evidence log the same fields | Low, spec-wording | `openspec/changes/consume-session-observations/specs/observation-consumption/spec.md:65` | Fixed: the fields of each kind of evidence, `code` only for a timeline refusal | `3776af92` |
+| 4. Two comments and the design said every deferred message is quarantined as unknown | Low, docs | `packages/adapters/nats/src/wire-message.ts:12` | Fixed: the three places state how a version 2 command reaches a version 1 worker; a test pins it | `afb01cb1`, `3776af92` |
+
+No later pass has checked these fixes, so `findings.jsonl` holds each as `fixed-unreviewed` until pass 2 checks it. "Pass 1 fix round" describes the fixes and their evidence.
+
 - Pass 2: not run.
 - Pass 3: not run.
 
@@ -111,6 +173,9 @@ Architect check of unreviewed fixes (coordinator): none yet.
 - The `chunk` of an output and the `generation` of a limit signal are not checked for continuity; the timeline holds neither.
 - The `operation` of `session.request.recorded` is ignored until 13c2.
 - The integration tests ran on one host; the races are forced by a barrier, not by load.
+- A failure of the timeline after its stores were touched is delivered again until the consumer quarantines the observation; a store row that persistently conflicts therefore ends in quarantine, not in evidence.
+- The watch tells a read from a write by the store call's name; a name it does not know counts as a write, so a new read added to a timeline store without the list would turn a refusal after it into a failure, never the reverse.
+- A failure of the effect's own ownership reads is returned with its code. No adapter fails those reads with a refusal's code; one would be confirmed as a G2 rejection, with nothing written (`design.md`, "Risks").
 
 ## Follow-ups
 
@@ -121,5 +186,5 @@ Architect check of unreviewed fixes (coordinator): none yet.
 
 ## Remaining gates
 
-- Independent review by the reviewers the coordinator assigns.
+- Review pass 2, and pass 3 only after a pass 2 with a Medium or worse finding, by the reviewers the coordinator assigns; pass 2 checks the four fixes of the pass 1 fix round.
 - Integration into dev by the coordinator (single pull request).
