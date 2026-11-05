@@ -576,7 +576,7 @@ describe('the revealed secret', () => {
     expectNoSecret();
   });
 
-  it('is dropped when another owner signs in, with the notice of the earlier one', async () => {
+  it('is dropped when another owner signs in, and the earlier one’s notice does not reach the new owner', async () => {
     const session = fakeGateway(AUTHENTICATED);
     session.read.mockResolvedValueOnce(AUTHENTICATED).mockResolvedValueOnce(OTHER_OWNER);
     const { clock } = openTokens(new FakeWorkersGateway(), session);
