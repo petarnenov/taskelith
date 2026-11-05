@@ -479,3 +479,18 @@ test('a store failure of another code after the timeline wrote is returned as it
 
   assert.deepEqual(at.evidence(), []);
 });
+
+test('a refusal after the timeline wrote is a failure, though no store call failed', async () => {
+  const refusingAfterWrite = (stores: SessionTimelineTransaction) => ({
+    startGeneration: async (sessionId: typeof SESSION) => {
+      value(await stores.tails.clear(sessionId));
+      return err(failure('precondition-failed', 'the domain refused after a write'));
+    },
+  });
+  const at = await fixture({ timelineOver: refusingAfterWrite as never });
+  await boundSession(at);
+
+  assert.equal(failed(await at.observe('session.generation.started', started())).code, 'internal');
+
+  assert.deepEqual(at.evidence(), []);
+});
