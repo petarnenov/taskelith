@@ -1,5 +1,5 @@
 import { AssertionError } from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   BEFORE_ANY_EVENT,
   NativeRequestSource,
@@ -11,6 +11,7 @@ import {
   type RequestKey,
   type RequestRecording,
   type ResponseCommand,
+  type SessionCommands,
   type SessionGeneration,
   type SessionId,
   type SessionTimelineStore,
@@ -19,7 +20,7 @@ import {
   type TurnCommand,
   type TurnId,
 } from '@taskelith/execution';
-import { instantFromEpochMilliseconds, parseIdentifier } from '@taskelith/kernel';
+import { instantFromEpochMilliseconds, ok, parseIdentifier } from '@taskelith/kernel';
 import { PostgresSessionTimelineStore, type PostgresDatabase } from '@taskelith/postgres';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { HmacInputDigest, SecretOutputRedactor, SecretTextRedactor, outputTailCipher } from '@taskelith/secrets';
@@ -58,7 +59,10 @@ export function requestKey(native: string, at = 1): RequestKey {
 }
 
 export function permissionRequest(native: string, turnName: string, at = 1): RequestRecording {
-  return { key: requestKey(native, at), kind: 'permission-request', turnId: turnId(turnName), text: `may I ${native}` };
+  return {
+    key: requestKey(native, at), kind: 'permission-request', turnId: turnId(turnName), text: `may I ${native}`,
+    operation: { kind: 'push', ref: `refs/heads/taskelith/${TASK}` },
+  };
 }
 
 export function allow(name: string, native = 'request-1', decision: 'allow' | 'deny' = 'allow'): ResponseCommand {
@@ -74,12 +78,22 @@ export function allow(name: string, native = 'request-1', decision: 'allow' | 'd
 // random turn and item IDs, as each process mints its own.
 export function timelineService(store: SessionTimelineStore): SessionTimelineService {
   return new SessionTimelineService({
-    store, digest: value(HmacInputDigest.fromKey(DIGEST_KEY)), redactor: new SecretTextRedactor(),
+    store: withCommandReader(store), digest: value(HmacInputDigest.fromKey(DIGEST_KEY)), redactor: new SecretTextRedactor(),
     outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(TAIL_KEY)),
     turnIds: { next: () => value(parseTurnId(`t${randomUUID().replaceAll('-', '')}`)) },
     clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
     itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
+    commandIdDigest: (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex'),
+    commandLog: { turnWithoutReader: () => undefined },
+    taskBranchRef: (taskId) => `refs/heads/taskelith/${taskId}`,
   });
+}
+
+// These suites hold sessions without assignments: a reader answers every
+// command, so that a response is not refused as unavailable.
+function withCommandReader(store: SessionTimelineStore): SessionTimelineStore {
+  const commands: SessionCommands = { append: async () => ok('written') };
+  return { transaction: (work) => store.transaction((tx) => work({ ...tx, commands })) };
 }
 
 // The native request source over the store, as the composition builds it.
@@ -176,6 +190,7 @@ function gated(tx: SessionTimelineTransaction, afterRead: () => Promise<void>): 
     scopes: tx.scopes,
     tails: tx.tails,
     events: tx.events,
+    commands: tx.commands,
     sessions: {
       get: async (id) => {
         const read = await tx.sessions.get(id);

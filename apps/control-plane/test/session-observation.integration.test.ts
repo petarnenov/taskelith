@@ -11,9 +11,10 @@ import {
   type ControlPlaneStore,
   type ControlPlaneTransaction,
 } from '@taskelith/control-plane';
-import type { AttemptId, SessionRecords, SessionTimelineStore, SessionView } from '@taskelith/execution';
+import type { AttemptId, SessionCommand, SessionRecords, SessionTimelineStore, SessionView } from '@taskelith/execution';
 import { fleetToken, fleetWorker } from '@taskelith/fleet';
-import { err, failure, type CorrelationId, type Result } from '@taskelith/kernel';
+import { checkMessageSchema } from '@taskelith/contracts';
+import { err, failure, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { PostgresDatabase, PostgresSessionTimelineStore, migrate, type PostgresTransaction } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
@@ -73,6 +74,7 @@ const SESSION = id('SessionId', 'session-1');
 const PERSON = { kind: 'principal' as const, principalId: id('PrincipalId', 'person-1') };
 const EPOCH = { recoveryEpoch: 1 };
 const EVIDENCE = 'execution.observation.evidence';
+const AT = '2026-11-10T09:00:00.000Z' as Instant;
 const registry = new WorkflowRegistry([{ definition, digest: DIGEST }]);
 const timelines = new PostgresSessionTimelineStore(database);
 const timeline = timelineService(timelines);
@@ -146,6 +148,24 @@ const turn = (turnId: string, generation = 1) => ({ sessionId: SESSION, turnId, 
 
 async function submitted(name: string, through = timeline): Promise<string> {
   return value(await through.submitTurn(SESSION, { key: id('IdempotencyKey', name), author: PERSON, text: `please do ${name}` })).turn.id;
+}
+
+interface StoredCommand {
+  readonly subject: string;
+  readonly metadata: { readonly eventId: string };
+  readonly payload: { readonly metadata: Record<string, unknown>; readonly payload: Record<string, unknown> };
+}
+
+// Every session command in the outbox, in append order.
+async function sessionCommands(): Promise<readonly StoredCommand[]> {
+  const rows = await sql<{ message: string }>("SELECT message FROM outbox WHERE event_type LIKE 'session.%' ORDER BY position");
+  return rows.map((row) => JSON.parse(row.message) as StoredCommand);
+}
+
+const commandTurnId = (command: StoredCommand): unknown => (command.payload.payload.turn as { turnId: string }).turnId;
+
+async function workerReadsSessionCommands(): Promise<void> {
+  await sql('UPDATE workers SET protocol_version = 2');
 }
 
 const session = async (): Promise<SessionView> => value(await timeline.readSession(SESSION));
@@ -314,6 +334,120 @@ test('a store conflict after the timeline wrote a request commits nothing, and t
   assert.ok(after.events > before.events, 'the request and its item are published once it commits');
 });
 
+test('the end of a turn commits the next turn\'s delivery with the observation, addressed to the assignment\'s worker', async () => {
+  const at = await boundSession();
+  await workerReadsSessionCommands();
+  value(await service.apply(message(at, 2, 'session.generation.started', started())));
+  const first = await submitted('turn-1');
+  const second = await submitted('turn-2');
+  value(await service.apply(message(at, 3, 'session.turn.delivered', turn(first))));
+  const before = await committed();
+
+  value(await service.apply(message(at, 4, 'session.turn.ended', { ...turn(first), outcome: 'completed' })));
+
+  const commands = await sessionCommands();
+  assert.deepEqual(commands.map(commandTurnId), [first, second]);
+  const command = commands[1]!;
+  assert.ok(checkMessageSchema('TurnDeliveryCommand', command.payload).ok, JSON.stringify(command));
+  assert.equal(command.subject, `workers.${WORKER}.commands`);
+  assert.deepEqual(
+    [command.payload.metadata.commandType, command.payload.metadata.commandId, command.payload.metadata.attemptId, command.payload.metadata.workerId, command.payload.metadata.ownershipGeneration],
+    ['session.turn.deliver', command.metadata.eventId, at.attemptId, WORKER, at.ownershipGeneration],
+  );
+  assert.deepEqual([command.payload.payload.protocolVersion, command.payload.payload.generation], [2, 1]);
+  assert.deepEqual((await session()).turns.find((held) => held.id === second)?.deliveryCommands, [{ generation: 1, commandId: command.metadata.eventId }]);
+  assert.deepEqual([(await committed()).confirmedThrough, (await committed()).version], [4, before.version! + 1]);
+});
+
+test('a generation start without a reader commits with no command and no stored ID, and the next start with one writes it', async () => {
+  const at = await boundSession();
+  const queued = await submitted('turn-1');
+
+  value(await service.apply(message(at, 2, 'session.generation.started', started())));
+
+  assert.deepEqual([await sessionCommands(), (await session()).turns[0]?.deliveryCommands], [[], undefined]);
+  value(await service.apply(message(at, 3, 'session.generation.ended', { sessionId: SESSION, generation: 1, cause: 'session-ended', ...EPOCH })));
+  await workerReadsSessionCommands();
+  value(await service.apply(message(at, 4, 'session.generation.started', started(2))));
+  assert.deepEqual((await sessionCommands()).map(commandTurnId), [queued]);
+});
+
+test('a consumed response commits its command with the request answered, and a repeat of its key writes none', async () => {
+  const at = await boundSession();
+  await workerReadsSessionCommands();
+  value(await service.apply(message(at, 2, 'session.generation.started', started())));
+  const first = await submitted('turn-1');
+  value(await service.apply(message(at, 3, 'session.turn.delivered', turn(first))));
+  const request = { generation: 1 as never, nativeRequestId: 'request-1' as never };
+  value(await service.apply(message(at, 4, 'session.request.recorded', { sessionId: SESSION, request, kind: 'permission-request', turnId: first, text: 'may the agent run the linter', ...EPOCH })));
+  const answer = {
+    key: id('IdempotencyKey', 'answer-1'),
+    response: { request, answer: { kind: 'permission' as const, decision: 'allow' as const }, responder: PERSON, attemptId: at.attemptId, ownershipGeneration: at.ownershipGeneration as never },
+  };
+
+  value(await timeline.consumeResponse(SESSION, answer));
+  value(await timeline.consumeResponse(SESSION, answer));
+
+  const commands = (await sessionCommands()).filter((command) => command.payload.metadata.commandType === 'session.response.deliver');
+  assert.equal(commands.length, 1);
+  assert.ok(checkMessageSchema('ResponseDeliveryCommand', commands[0]!.payload).ok, JSON.stringify(commands[0]));
+  assert.equal((await sql('SELECT 1 FROM session_idempotency_keys WHERE key = $1', ['answer-1'])).length, 1);
+  const [answered] = (await session()).requests;
+  assert.equal(answered?.state === 'answered' && answered.response.commandId, commands[0]!.metadata.eventId);
+});
+
+test('a response with no worker to read it is unavailable and rolls back', async () => {
+  const at = await boundSession();
+  value(await service.apply(message(at, 2, 'session.generation.started', started())));
+  const first = await submitted('turn-1');
+  value(await service.apply(message(at, 3, 'session.turn.delivered', turn(first))));
+  const request = { generation: 1 as never, nativeRequestId: 'request-1' as never };
+  value(await service.apply(message(at, 4, 'session.request.recorded', { sessionId: SESSION, request, kind: 'permission-request', turnId: first, text: 'may the agent run the linter', ...EPOCH })));
+  const answer = {
+    key: id('IdempotencyKey', 'answer-1'),
+    response: { request, answer: { kind: 'permission' as const, decision: 'allow' as const }, responder: PERSON, attemptId: at.attemptId, ownershipGeneration: at.ownershipGeneration as never },
+  };
+
+  assert.equal(failed(await timeline.consumeResponse(SESSION, answer)).code, 'unavailable');
+
+  assert.deepEqual((await session()).requests.map((held) => held.state), ['open']);
+  assert.deepEqual([await sessionCommands(), await sql('SELECT 1 FROM session_idempotency_keys WHERE key = $1', ['answer-1'])], [[], []]);
+});
+
+function commandAt(at: Placed, commandId: string): SessionCommand {
+  return {
+    commandId, commandType: 'session.turn.deliver', sessionId: SESSION, attemptId: at.attemptId, ownershipGeneration: at.ownershipGeneration as never,
+    payload: { sessionId: SESSION, generation: 1, turn: { turnId: 'turn-1', position: 1, author: PERSON, text: 'do it' } },
+  };
+}
+
+const appendCommand = (command: SessionCommand) => database.transaction((tx) => tx.sessionTimeline.commands.append(command, AT));
+
+test('the commands port writes only through the attempt\'s running assignment to a worker of a session protocol version', async () => {
+  const at = await boundSession();
+  assert.equal(value(await appendCommand(commandAt(at, 'c-version-one'))), 'no-reader', 'version 1');
+  await sql('UPDATE workers SET protocol_version = NULL');
+  assert.equal(value(await appendCommand(commandAt(at, 'c-no-version'))), 'no-reader', 'no version');
+  await workerReadsSessionCommands();
+
+  assert.equal(value(await appendCommand(commandAt(at, 'c-reader'))), 'written');
+
+  await sql("UPDATE assignments SET state = 'ended', record = (record::jsonb || '{\"state\": \"ended\"}'::jsonb)::text");
+  assert.equal(value(await appendCommand(commandAt(at, 'c-ended'))), 'no-reader', 'an ended assignment');
+  await sql("UPDATE assignments SET state = 'offered', record = (record::jsonb || '{\"state\": \"offered\"}'::jsonb)::text");
+  assert.equal(value(await appendCommand({ ...commandAt(at, 'c-other'), attemptId: id('AttemptId', 'attempt-without-assignment') })), 'no-reader', 'no assignment');
+  assert.equal(value(await appendCommand({ ...commandAt(at, 'c-generation'), ownershipGeneration: (at.ownershipGeneration + 1) as never })), 'no-reader', 'another generation');
+  assert.deepEqual((await sessionCommands()).map((command) => command.metadata.eventId), ['c-reader']);
+});
+
+test('a derived command ID that a bug repeats is refused by the outbox', async () => {
+  const at = await boundSession();
+  await workerReadsSessionCommands();
+  value(await appendCommand(commandAt(at, 'c-twice')));
+
+  assert.equal(failed(await appendCommand(commandAt(at, 'c-twice'))).code, 'conflict');
+});
+
 interface StepRun {
   readonly signal: string | null;
   readonly stdout: string;
@@ -337,6 +471,36 @@ async function runStep(observation: object, crashPoint?: string): Promise<StepRu
 }
 
 const KILLED: StepRun = { signal: 'SIGKILL', stdout: '' };
+
+for (const point of ['SessionTimelineCommit', 'OutboxCommit']) {
+  test(`a due command killed before ${point} commits nothing, and its redelivery writes it`, async () => {
+    const at = await boundSession();
+    await workerReadsSessionCommands();
+    const queued = await submitted('turn-1');
+    const start = message(at, 2, 'session.generation.started', started());
+
+    assert.deepEqual(await runStep(start, `${point}.before`), KILLED);
+
+    assert.deepEqual([await sessionCommands(), (await session()).turns[0]?.deliveryCommands], [[], undefined]);
+    assert.deepEqual(JSON.parse((await runStep(start)).stdout), { ok: true, value: 'applied' });
+    assert.deepEqual((await sessionCommands()).map(commandTurnId), [queued]);
+  });
+
+  test(`a due command killed after ${point} is stored with its ID and its redelivery writes no other`, async () => {
+    const at = await boundSession();
+    await workerReadsSessionCommands();
+    const queued = await submitted('turn-1');
+    const start = message(at, 2, 'session.generation.started', started());
+
+    assert.deepEqual(await runStep(start, `${point}.after`), KILLED);
+
+    const written = await sessionCommands();
+    assert.deepEqual(written.map(commandTurnId), [queued]);
+    assert.deepEqual((await session()).turns[0]?.deliveryCommands, [{ generation: 1, commandId: written[0]!.metadata.eventId }]);
+    assert.deepEqual(JSON.parse((await runStep(start)).stdout), { ok: true, value: 'duplicate' });
+    assert.deepEqual((await sessionCommands()).map(commandTurnId), [queued]);
+  });
+}
 
 for (const point of ['SessionTimelineCommit', 'InboxCommit', 'OutboxCommit']) {
   test(`an observation killed before ${point} stores no timeline change, inbox row, or cursor, and the redelivery applies it`, async () => {
@@ -405,8 +569,8 @@ function heldSessions(records: SessionRecords, wait: () => Promise<void>): Sessi
 // The observation's store, whose session reads wait at the barrier.
 function observingStore(wait: () => Promise<void>): ControlPlaneStore {
   const held = (tx: PostgresTransaction): ControlPlaneTransaction => {
-    const { idempotency, items, audit, scopes, tails, events } = tx.sessionTimeline;
-    const sessionTimeline = { sessions: heldSessions(tx.sessionTimeline.sessions, wait), idempotency, items, audit, scopes, tails, events };
+    const { idempotency, items, audit, scopes, tails, events, commands } = tx.sessionTimeline;
+    const sessionTimeline = { sessions: heldSessions(tx.sessionTimeline.sessions, wait), idempotency, items, audit, scopes, tails, events, commands };
     attempts += 1;
     return { ...tx, now: () => tx.now(), sessionTimeline };
   };
@@ -419,9 +583,9 @@ function observingStore(wait: () => Promise<void>): ControlPlaneStore {
 // A person's submission over the timeline store, held at the same barrier.
 function submittingStore(wait: () => Promise<void>): SessionTimelineStore {
   return {
-    transaction: (work) => timelines.transaction(({ sessions, idempotency, items, audit, scopes, tails, events }) => {
+    transaction: (work) => timelines.transaction(({ sessions, idempotency, items, audit, scopes, tails, events, commands }) => {
       attempts += 1;
-      return work({ sessions: heldSessions(sessions, wait), idempotency, items, audit, scopes, tails, events });
+      return work({ sessions: heldSessions(sessions, wait), idempotency, items, audit, scopes, tails, events, commands });
     }),
   };
 }

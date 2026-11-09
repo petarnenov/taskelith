@@ -170,6 +170,31 @@ test('each session observation is applied through its timeline operation', async
   assert.equal(await at.confirmedThrough(), 8);
 });
 
+test('a recorded request keeps its classified operation, and a repeat with another one is evidence', async () => {
+  const at = await fixture();
+  const [first] = await runningSession(at, 'turn-1');
+  value(await at.observe('session.turn.delivered', turn(first!)));
+  const push = { kind: 'push', ref: 'refs/heads/taskelith/task-1' };
+
+  assert.equal(value(await at.observe('session.request.recorded', { ...request(first!), operation: push })), 'applied');
+  assert.deepEqual((await at.session()).requests[0]?.operation, push);
+  assert.equal(value(await at.observe('session.request.recorded', { ...request(first!), operation: { ...push, ref: 'refs/heads/other' } }, AGAIN)), 'applied');
+
+  assert.deepEqual((await at.session()).requests[0]?.operation, push);
+  assert.deepEqual(at.evidence(), [{ observationType: 'session.request.recorded', sessionId: SESSION, reason: 'timeline-refused', code: 'conflict' }]);
+});
+
+test('a session command\'s store failure during an observation rolls the observation back', async () => {
+  const at = await fixture({ timelineStores: failingAt('commands', 'append', 'conflict') });
+  await boundSession(at);
+  await submitted(at, 'turn-1');
+
+  assert.equal(failed(await at.observe('session.generation.started', started())).code, 'internal');
+
+  assert.deepEqual((await at.session()).generations, []);
+  assert.deepEqual(at.evidence(), []);
+});
+
 test('a limit signal without a reset time stops the session, and a repeated end of a generation changes nothing', async () => {
   const at = await fixture();
   await runningSession(at);

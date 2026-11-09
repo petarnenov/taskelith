@@ -26,6 +26,7 @@ import {
   SECOND_ATTEMPT,
   SESSION,
   TASK,
+  COMMAND_DEPENDENCIES,
   allow,
   binding,
   generation,
@@ -53,6 +54,7 @@ function timeline(store = new InMemorySessionTimelineStore()) {
   const service = new SessionTimelineService({
     store, digest, redactor, outputRedactor: trailingRunRedactor(redactor.redact), tailCipher: FLIPPING_CIPHER,
     turnIds: sequentialIds('TurnId', 'turn'), clock: FIXED_CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    ...COMMAND_DEPENDENCIES,
   });
   return { store, service };
 }

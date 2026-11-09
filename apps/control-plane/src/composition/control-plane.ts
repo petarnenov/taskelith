@@ -212,7 +212,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   });
   const projectSetup = new ProjectSetupService({ store: access.store, random: access.secrets, clock });
   const runs = new RunService(database, workflows, projectDirectory(projectSetup));
-  const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock);
+  const agentSessions = startAgentSessionServices(admin.value.namespace, database, clock, logger);
   if (!agentSessions.ok) return agentSessions;
   const authorization = new AuthorizationService(access.store);
   const eventLog = new PostgresUiEventLog(database);

@@ -16,7 +16,18 @@ export function timelineService(store: SessionTimelineStore): SessionTimelineSer
     turnIds: { next: () => value(parseTurnId(`t${randomUUID().replaceAll('-', '')}`)) },
     clock: { now: () => value(instantFromEpochMilliseconds(Date.now())) },
     itemIds: { next: () => value(parseIdentifier('NeedsYouItemId', `n${randomUUID()}`)) },
+    ...commandDependencies(),
   });
+}
+
+// As the composition gives them, with the test's own log of unread turns.
+export function commandDependencies(unread: readonly string[] = []) {
+  const log: string[] = [...unread];
+  return {
+    commandIdDigest: (identifier: string): string => createHash('sha256').update(identifier, 'utf8').digest('hex'),
+    commandLog: { turnWithoutReader: (turn: { readonly turnId: string }): void => void log.push(turn.turnId) },
+    taskBranchRef: (taskId: string): string => `refs/heads/taskelith/${taskId}`,
+  };
 }
 
 // The service over one open transaction, as an observation's effect gets it.

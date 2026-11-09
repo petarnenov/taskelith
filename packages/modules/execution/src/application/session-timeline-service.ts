@@ -1,10 +1,11 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
-import type { Clock, EvidenceReference } from '@taskelith/sdlc';
+import type { Clock, EvidenceReference, TaskId } from '@taskelith/sdlc';
 import { splitToLength, truncatedToLength, truncatedToUtf8Bytes, utf8Length } from '../domain/bounded-text.js';
 import { MAX_HARNESS_TEXT_LENGTH } from '../domain/harness-values.js';
 import type { AttemptId, IdempotencyKey, SessionGeneration, SessionId } from '../domain/identifiers.js';
 import { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from '../domain/session-attempts.js';
 import { recordLimitSignal, takeHandoff, writeHandoff } from '../domain/session-handoff.js';
+import { dueCommands, withCommandId, type CommandIdDigest } from '../domain/session-commands.js';
 import { appendOutput, checkOutputTurn, liveTurnOf, readOutputAfter } from '../domain/session-output.js';
 import {
   isSameRequestKey,
@@ -32,6 +33,7 @@ import {
   type TurnSubmitted,
 } from '../domain/session-records.js';
 import {
+  checkStandingRuleOperation,
   consumeResponse,
   isAnswerWithinBounds,
   recordDeliveryReport,
@@ -54,6 +56,7 @@ import type { SessionScope } from '../ports/session-scopes.js';
 import type {
   HeldKey,
   IdempotencyRecord,
+  SessionCommandLog,
   SessionTimelineStore,
   SessionTimelineTransaction,
   StoredSession,
@@ -77,6 +80,10 @@ export interface SessionTimelineDependencies {
   readonly turnIds: TurnIdSource;
   readonly clock: Clock;
   readonly itemIds: { next(): NeedsYouItemId };
+  readonly commandIdDigest: CommandIdDigest;
+  readonly commandLog: SessionCommandLog;
+  // The full ref of the branch the task's change pushes (`refs/heads/...`).
+  readonly taskBranchRef: (taskId: TaskId) => string;
 }
 
 // A page of retained output after a cursor (wire contracts, section 9).
@@ -128,6 +135,9 @@ export class SessionTimelineService {
   readonly #turnIds: TurnIdSource;
   readonly #clock: Clock;
   readonly #itemIds: { next(): NeedsYouItemId };
+  readonly #commandIdDigest: CommandIdDigest;
+  readonly #commandLog: SessionCommandLog;
+  readonly #taskBranchRef: (taskId: TaskId) => string;
 
   constructor(dependencies: SessionTimelineDependencies) {
     this.#store = dependencies.store;
@@ -138,6 +148,9 @@ export class SessionTimelineService {
     this.#turnIds = dependencies.turnIds;
     this.#clock = dependencies.clock;
     this.#itemIds = dependencies.itemIds;
+    this.#commandIdDigest = dependencies.commandIdDigest;
+    this.#commandLog = dependencies.commandLog;
+    this.#taskBranchRef = dependencies.taskBranchRef;
   }
 
   openSession(start: SessionStart): Promise<Result<SessionView>> {
@@ -264,6 +277,8 @@ export class SessionTimelineService {
   async #consumed(tx: SessionTimelineTransaction, stored: StoredSession, response: ResponseSubmission): Promise<Result<SessionView>> {
     const consumed = consumeResponse(stored.session, { ...response, answer: this.#redactedAnswer(response.answer) });
     if (!consumed.ok) return withReason(consumed.error, RESPONSE_REASONS);
+    const operation = checkStandingRuleOperation(stored.session, response, this.#taskBranchRef(stored.session.taskId));
+    if (!operation.ok) return operation;
     return this.#written(tx, stored, consumed);
   }
 
@@ -417,15 +432,35 @@ export class SessionTimelineService {
   async #written(tx: SessionTimelineTransaction, stored: StoredSession, changed: Result<Session>): Promise<Result<SessionView>> {
     if (!changed.ok) return changed;
     if (changed.value === stored.session) return ok(viewOf(changed.value));
-    const replaced = await tx.sessions.replace(stored, changed.value);
+    const commanded = await this.#withDueCommands(tx, stored.session, changed.value);
+    if (!commanded.ok) return commanded;
+    const replaced = await tx.sessions.replace(stored, commanded.value);
     if (!replaced.ok) return replaced;
-    const published = await this.#published(tx, stored.session, changed.value);
+    const published = await this.#published(tx, stored.session, commanded.value);
     if (!published.ok) return published;
-    for (const item of itemChanges(stored.session, changed.value, this.#clock.now())) {
-      const applied = await this.#applyItemChange(tx, changed.value, item, published.value);
+    for (const item of itemChanges(stored.session, commanded.value, this.#clock.now())) {
+      const applied = await this.#applyItemChange(tx, commanded.value, item, published.value);
       if (!applied.ok) return applied;
     }
-    return ok(viewOf(changed.value));
+    return ok(viewOf(commanded.value));
+  }
+
+  // Writes the commands the change made due, and answers the session that
+  // stores their IDs; a command that no worker reads stores none.
+  async #withDueCommands(tx: SessionTimelineTransaction, before: Session, after: Session): Promise<Result<Session>> {
+    let session = after;
+    for (const due of dueCommands(before, after, this.#commandIdDigest)) {
+      const appended = await tx.commands.append(due.command, this.#clock.now());
+      if (!appended.ok) return appended;
+      if (appended.value === 'written') {
+        session = withCommandId(session, due);
+      } else if (due.kind === 'response') {
+        return responseWithoutReader(after.id);
+      } else {
+        this.#commandLog.turnWithoutReader({ sessionId: after.id, turnId: due.turnId, generation: due.generation, attemptId: due.command.attemptId });
+      }
+    }
+    return ok(session);
   }
 
   // The session's events, none for a session outside any project's scope;
@@ -533,6 +568,12 @@ function repeatedTurn(session: Session, prior: IdempotencyRecord, digest: string
   return ok(Object.freeze({ session: viewOf(session), turn, effect: 'duplicate' as const }));
 }
 
+// Only the open request's change makes a response due, so a response that
+// no worker can read is refused and stays open (contract, section 5.2 rule 9).
+function responseWithoutReader(sessionId: SessionId): Result<never> {
+  return err(failure('unavailable', `session ${sessionId} has no worker that can read a response now`, { session: sessionId }));
+}
+
 // A held request key with another digest fails as the domain's conflict.
 function repeatedRequest(session: Session, prior: IdempotencyRecord, digest: string): Result<SessionView> {
   if (prior.digest === digest) return ok(viewOf(session));
@@ -596,7 +637,8 @@ function turnInput(command: TurnCommand): string {
 }
 
 function requestInput(recording: RequestRecording): string {
-  return JSON.stringify(['request', recording.kind, recording.turnId, recording.text]);
+  const { kind, turnId, text, operation } = recording;
+  return JSON.stringify(['request', kind, turnId, text, ...(operation === undefined ? [] : [operation.kind, operation.ref])]);
 }
 
 function responseInput(response: ResponseSubmission): string {

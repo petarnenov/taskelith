@@ -1,4 +1,4 @@
-import { ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { MAX_HARNESS_TEXT_LENGTH, type HarnessRequestKind } from './harness-values.js';
 import type { SessionGeneration, TurnId } from './identifiers.js';
 import {
@@ -35,6 +35,8 @@ const ANSWERS_BY_RESPONDER: Readonly<Record<Responder['kind'], readonly Answer['
 
 const MAX_DELEGATION_ID_LENGTH = 128;
 
+export const OPERATION_NOT_MATCHED = 'operation-not-matched';
+
 // Records a native request in the returned session (contract, section 5.1).
 export function recordRequest(session: Session, recording: RequestRecording): Result<Session> {
   if (!isTextWithin(recording.text, 0, MAX_HARNESS_TEXT_LENGTH)) return sessionFailure('invalid', session, 'got request text out of bounds');
@@ -67,6 +69,17 @@ export function consumeResponse(session: Session, response: ResponseSubmission):
   if (!isAnswerFrom(answer, responder)) return sessionFailure('invalid', session, `cannot take a ${answer.kind} answer from ${responder.kind}`);
   const consumed = { answer, responder, attemptId, ownershipGeneration, delivery: 'pending' as const };
   return ok(withChanges(session, { requests: replaced(session.requests, index, { ...request, state: 'answered', response: consumed }) }));
+}
+
+// A standing rule matches only a push to its task's branch, checked in the
+// use transaction (worker messages, section 9; contract, section 5.2 rule 8).
+export function checkStandingRuleOperation(session: Session, response: ResponseSubmission, taskBranchRef: string): Result<void> {
+  if (response.responder.kind !== 'standing-rule') return ok(undefined);
+  const operation = session.requests[indexOfRequest(session, response.request)]?.operation;
+  if (operation?.kind === 'push' && operation.ref === taskBranchRef) return ok(undefined);
+  return err(failure('precondition-failed', `session ${session.id} has no standing rule match for the request's operation`, {
+    session: session.id, reason: OPERATION_NOT_MATCHED,
+  }));
 }
 
 // Records the host's single report of a response's delivery (section 5.4).
@@ -132,5 +145,6 @@ function indexOfRequest(session: Session, key: RequestKey): number {
 }
 
 function isSameRecording(request: NativeRequest, recording: RequestRecording): boolean {
-  return request.kind === recording.kind && request.turnId === recording.turnId && request.text === recording.text;
+  return request.kind === recording.kind && request.turnId === recording.turnId && request.text === recording.text
+    && request.operation?.kind === recording.operation?.kind && request.operation?.ref === recording.operation?.ref;
 }

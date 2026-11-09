@@ -10,7 +10,9 @@ export interface CommandIdentity {
 }
 
 // The command types of the execution wire contract (item 8), section 4.
-export type WorkerCommandType = 'execution.assignment.offer' | 'execution.assignment.end' | 'execution.cancellation.request';
+export type WorkerCommandType =
+  | 'execution.assignment.offer' | 'execution.assignment.end' | 'execution.cancellation.request'
+  | 'session.turn.deliver' | 'session.response.deliver';
 
 // What a command's payload needs from the installation and the worker; only
 // an offer carries the recovery epoch.

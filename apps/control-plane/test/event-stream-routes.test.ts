@@ -26,6 +26,7 @@ import {
   type ApiRequest,
   type ApiServices,
 } from '@taskelith/control-plane';
+import { commandDependencies } from './session-timeline-fixtures.ts';
 import {
   INSTALLATION_SCOPE,
   InMemorySessionTimelineStore,
@@ -209,7 +210,7 @@ test('the events of a session\'s changes carry the records that its reads return
   const timeline = new SessionTimelineService({
     store: new InMemorySessionTimelineStore(lineage, log), digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
     outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(randomBytes(32))),
-    turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'), ...commandDependencies(),
   });
   const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
   const taskId = id('TaskId', 'task-events') as TaskId;
@@ -373,7 +374,7 @@ test('an inbox item without an attempt is skipped, logged by identifiers only, a
   const timeline = new SessionTimelineService({
     store: new InMemorySessionTimelineStore(lineage, log), digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
     outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(randomBytes(32))),
-    turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'), ...commandDependencies(),
   });
   const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
   const taskId = id('TaskId', 'task-no-attempt') as TaskId;

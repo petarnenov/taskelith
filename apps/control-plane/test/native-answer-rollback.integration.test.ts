@@ -15,9 +15,10 @@ import {
 } from '@taskelith/control-plane';
 import { ControlPlaneNamespace, SessionInputDigestKeyFile, SessionOutputTailKeyFile } from '@taskelith/control-plane-store';
 import { parseSessionGeneration, type NeedsYouScope, type SessionId } from '@taskelith/execution';
-import { err, failure, parseIdentifier, parseInstant } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, parseInstant } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
@@ -56,7 +57,13 @@ const GENERATION = value(parseSessionGeneration(1));
 const space = value(ControlPlaneNamespace.open({ dataRoot: join(base, 'root'), ownerUid: process.getuid!() }));
 value(new SessionInputDigestKeyFile(space).create());
 value(new SessionOutputTailKeyFile(space).create());
-const sessions = value(startAgentSessionServices(space, database, CLOCK));
+const composed = value(startAgentSessionServices(space, database, CLOCK, new Logger(new InMemoryLogSink(), CLOCK)));
+// The test holds its sessions without assignments: a reader answers every
+// command, so that an answer is not refused as unavailable.
+const sessions: typeof composed = {
+  ...composed,
+  sourceIn: (transaction, positions) => composed.sourceIn({ ...transaction, commands: { append: async () => ok('written') } }, positions),
+};
 
 // Alpha's card `run-<n>` with `task-<n>`, whose session `session-<n>`
 // holds at generation 1 the open native permission request `request-1`.

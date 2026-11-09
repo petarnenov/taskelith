@@ -1,0 +1,2 @@
+{"change":"write-session-commands","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6-astra","variant":"medium"},"session":"01a1c28e-02ab-71e1-bd2b-2309d5f86d19","counts":{"critical":0,"high":0,"medium":2,"low":3}}
+{"change":"write-session-commands","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-fable-5-1","variant":"medium"},"session":"931ed9e8-6d4d-4b5d-a210-ce092a8642c8","counts":{"critical":0,"high":0,"medium":0,"low":4}}

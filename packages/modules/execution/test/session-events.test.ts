@@ -34,6 +34,7 @@ import {
   trailingRunRedactor,
   turnId,
   turnKey,
+  COMMAND_DEPENDENCIES,
 } from './session-fixtures.ts';
 
 const CLOCK = { now: () => value(parseInstant('2026-11-03T09:00:00.000Z')) };
@@ -54,6 +55,7 @@ function timeline() {
   const service = new SessionTimelineService({
     store, digest, redactor: { redact }, outputRedactor: trailingRunRedactor(redact),
     tailCipher: FLIPPING_CIPHER, turnIds: sequentialIds('TurnId', 'turn'), clock: CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    ...COMMAND_DEPENDENCIES,
   });
   return { log, store, service, digest };
 }
@@ -93,6 +95,18 @@ test('each change of a session publishes its events in its transaction, in the o
   const delivered = records(entries)[4] as Extract<UiEventRecord, { type: 'turn-changed' }>;
   assert.deepEqual([delivered.sessionId, delivered.turn.state], [SESSION, 'delivered']);
   assert.ok(entries.every((entry) => entry.kind === 'event' && entry.event.occurredAt === CLOCK.now()));
+});
+
+test('a stored command ID adds no event: a generation start publishes the session change alone', async () => {
+  const { log, service } = timeline();
+  value(await service.openSession({ id: SESSION, taskId: TASK, harness: HARNESS }));
+  value(await service.bindAttempt(SESSION, binding()));
+  value(await service.submitTurn(SESSION, { key: turnKey('key-1'), author: PERSON, text: 'go' }));
+  const before = (await published(log)).length;
+
+  value(await service.startGeneration(SESSION, { generation: FIRST, nativeSessionId: NATIVE }));
+
+  assert.deepEqual(records(await published(log)).slice(before).map((record) => record.type), ['agent-session-changed']);
 });
 
 test('a recorded request publishes its record with its place and its open inbox item, and an answer both changes', async () => {

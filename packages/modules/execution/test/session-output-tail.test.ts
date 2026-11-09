@@ -22,6 +22,7 @@ import {
   trailingRunRedactor,
   turnId,
   turnKey,
+  COMMAND_DEPENDENCIES,
 } from './session-fixtures.ts';
 
 const CLOCK = { now: () => value(parseInstant('2026-10-29T09:00:00.000Z')) };
@@ -33,6 +34,7 @@ function timeline(store = new InMemorySessionTimelineStore()) {
   const service = new SessionTimelineService({
     store, digest: { digest: (input) => `digest:${input}` }, redactor: { redact }, outputRedactor: trailingRunRedactor(redact),
     tailCipher: FLIPPING_CIPHER, turnIds: sequentialIds('TurnId', 'turn'), clock: CLOCK, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    ...COMMAND_DEPENDENCIES,
   });
   return { store, service };
 }

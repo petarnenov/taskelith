@@ -1,7 +1,8 @@
-import type { Result } from '@taskelith/kernel';
+import type { Instant, Result } from '@taskelith/kernel';
 import type { TaskId } from '@taskelith/sdlc';
-import type { IdempotencyKey, NativeRequestId, SessionGeneration, SessionId, TurnId } from '../domain/identifiers.js';
+import type { AttemptId, IdempotencyKey, NativeRequestId, SessionGeneration, SessionId, TurnId } from '../domain/identifiers.js';
 import type { Session } from '../domain/session-records.js';
+import type { SessionCommand } from '../domain/session-commands.js';
 import type { SessionAuditRecords, SessionInboxItems } from './session-inbox-items.js';
 import type { SessionScopes } from './session-scopes.js';
 import type { UiEventOutbox } from './ui-events.js';
@@ -21,6 +22,30 @@ export interface SessionTimelineTransaction {
   readonly tails: SessionOutputTails;
   // The events of the transaction's changes (wire contracts section 10).
   readonly events: UiEventOutbox;
+  readonly commands: SessionCommands;
+}
+
+// A session command needs a worker of at least this protocol version.
+export const MINIMUM_SESSION_COMMAND_PROTOCOL = 2;
+
+// `no-reader` writes nothing: the attempt has no running assignment, or its
+// worker no protocol version that reads the command (worker messages, 2).
+export type SessionCommandAppend = 'written' | 'no-reader';
+
+export interface SessionCommands {
+  append(command: SessionCommand, issuedAt: Instant): Promise<Result<SessionCommandAppend>>;
+}
+
+// A turn's due delivery without a reader, in identifiers only (section 10).
+export interface SessionCommandLog {
+  turnWithoutReader(turn: UnreadTurnCommand): void;
+}
+
+export interface UnreadTurnCommand {
+  readonly sessionId: SessionId;
+  readonly turnId: TurnId;
+  readonly generation: SessionGeneration;
+  readonly attemptId: AttemptId;
 }
 
 // A stored session with the version that a replacement must name.

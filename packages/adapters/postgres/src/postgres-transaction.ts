@@ -34,7 +34,7 @@ import { PostgresRepositoryBindingRecords } from './repository-bindings.js';
 import { PostgresScmIntegrationAuditRecords } from './scm-integration-audit.js';
 import { PostgresScmIntegrationRecords } from './scm-integrations.js';
 import { PostgresScmWebhookDeliveryRecords } from './scm-webhook-deliveries.js';
-import { PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
+import { PostgresSessionCommands, PostgresSessionTimelineTransaction } from './session-timeline-repositories.js';
 import { PostgresSlotCredentialDeliveries } from './slot-credential-deliveries.js';
 import { PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 import type { Session } from './session.js';
@@ -137,7 +137,7 @@ export class PostgresTransaction {
     this.accountSlots = new PostgresAccountSlots(session);
     this.slotCredentialRecords = new PostgresSlotCredentialRecords(session);
     this.slotCredentialDeliveries = new PostgresSlotCredentialDeliveries(session);
-    this.sessionTimeline = new PostgresSessionTimelineTransaction(session, this.uiEvents);
+    this.sessionTimeline = new PostgresSessionTimelineTransaction(session, this.uiEvents, new PostgresSessionCommands(this));
     this.scmWebhookDeliveries = new PostgresScmWebhookDeliveryRecords(session);
     this.cards = new PostgresCardCatalog(session);
     this.cardProjections = new PostgresCardProjections(session);

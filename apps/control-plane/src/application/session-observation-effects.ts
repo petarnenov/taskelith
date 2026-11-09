@@ -100,10 +100,13 @@ function turnEnded(payload: Payload<'TurnEndedPayload'>): SessionReport {
   };
 }
 
-// The timeline answers an equal recording as a repeat itself; the request's
-// classified operation is left to the standing rule check (item 13c2).
+// The timeline answers an equal recording as a repeat itself; it keeps the
+// classified operation that a standing rule is later checked against.
 function requestRecorded(payload: Payload<'RequestRecordedPayload'>): SessionReport {
-  const recording = { key: requestKey(payload.request), kind: payload.kind, turnId: payload.turnId as TurnId, text: payload.text };
+  const recording = {
+    key: requestKey(payload.request), kind: payload.kind, turnId: payload.turnId as TurnId, text: payload.text,
+    ...(payload.operation === undefined ? {} : { operation: payload.operation }),
+  };
   return {
     apply: (timeline, sessionId) => timeline.recordRequest(sessionId, recording),
     isHeldBy: NEVER_HELD,

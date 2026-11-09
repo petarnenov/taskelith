@@ -35,6 +35,13 @@ export const nativeRequestId = (text: string): NativeRequestId => value(parseIde
 export const taskId = (text: string): TaskId => value(parseIdentifier('TaskId', text));
 export const generation = (number: number): SessionGeneration => value(parseSessionGeneration(number));
 
+// The digest as a label, so that a test reads each identity it covers.
+export const COMMAND_DEPENDENCIES = {
+  commandIdDigest: (identifier: string): string => `digest:${identifier}`,
+  commandLog: { turnWithoutReader: (): void => undefined },
+  taskBranchRef: (task: string): string => `refs/heads/task-branch-of-${task}`,
+};
+
 export const SESSION = sessionId('session-1');
 export const OTHER_SESSION = sessionId('session-2');
 export const TASK = taskId('task-1');
