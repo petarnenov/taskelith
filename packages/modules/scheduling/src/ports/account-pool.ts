@@ -48,6 +48,15 @@ export interface StoredSlotCredential {
   readonly version: SlotCredentialVersion;
 }
 
+// The store cannot be reached and a retry may succeed. Fixed text, so no
+// credential travels with it; any other rejection is a defect.
+export class SlotCredentialsUnavailable extends Error {
+  constructor() {
+    super('the slot credential store is unavailable');
+    this.name = 'SlotCredentialsUnavailable';
+  }
+}
+
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;
 // not part of CapacityTransaction (contract sections 1, 6.2, and 7.1).
 export interface SlotCredentials {

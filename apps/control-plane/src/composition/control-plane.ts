@@ -54,7 +54,7 @@ import { ROUTES, browserEndpointRoutes, workerEndpointRoutes } from '../api/rout
 import { checkServerTls, type ServerTls } from '../api/server-tls.js';
 import { DelegationService } from '../application/delegation-service.js';
 import type { SlotSignals } from '../application/slot-signals.js';
-import { SLOT_CREDENTIAL_SWEEP_MILLISECONDS, startAccountPoolServices } from './account-pool.js';
+import { SLOT_CREDENTIAL_SWEEP_MILLISECONDS, logSlotCredentialSweep, startAccountPoolServices } from './account-pool.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { EventLogKeeper, WakeableLoop, numberingPass } from '../application/event-log-keeper.js';
 import { startBoardServices } from './board-views.js';
@@ -350,7 +350,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
       settings.eventPollMilliseconds ?? EVENT_POLL_MILLISECONDS)),
     supervise('event-pruning', runPeriodically(async () => logFailure(logger, 'events.pruning.failed', await keeper.prune()), controller.signal,
       EVENT_PRUNE_MILLISECONDS)),
-    supervise('slot-credential-sweep', runPeriodically(async () => logFailure(logger, 'scheduling.slot-credentials.sweep-failed', await pool.value.sweep()),
+    supervise('slot-credential-sweep', runPeriodically(async () => logSlotCredentialSweep(logger, await pool.value.sweep()),
       controller.signal, settings.slotCredentialSweepMilliseconds ?? SLOT_CREDENTIAL_SWEEP_MILLISECONDS)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),

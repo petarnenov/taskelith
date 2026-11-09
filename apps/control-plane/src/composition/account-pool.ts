@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { SlotCredentialKeyFile, type ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import type { AssignmentId, HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
+import type { Logger } from '@taskelith/observability';
 import { PostgresSlotCredentials, type PostgresDatabase } from '@taskelith/postgres';
 import {
   StaticAdmittedDeliveries,
@@ -84,6 +85,10 @@ export function accountPoolServices({ store, credentials, projects, defaultCoold
 // the one a worker revocation sends (decision 14).
 export function slotRevocationCommandId(assignmentId: AssignmentId): EventId {
   return `v${createHash('sha256').update(JSON.stringify([assignmentId, 'slot-revocation'])).digest('hex')}` as EventId;
+}
+
+export function logSlotCredentialSweep(logger: Logger, sweep: Result<SlotCredentialSweep>): void {
+  if (!sweep.ok) logger.warn('scheduling.slot-credentials.sweep-failed', { code: sweep.error.code, message: sweep.error.message });
 }
 
 async function settledSweep(sweep: () => Promise<Result<SlotCredentialSweep>>): Promise<Result<SlotCredentialSweep>> {

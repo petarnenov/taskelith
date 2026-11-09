@@ -240,6 +240,7 @@ export {
 export { SlotSecret } from './domain/slot-secret.js';
 export {
   SLOT_DELIVERIES,
+  SlotCredentialsUnavailable,
   type AccountSlots,
   type AdmittedDeliveries,
   type AdmittedDelivery,

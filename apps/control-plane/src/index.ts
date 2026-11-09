@@ -62,6 +62,7 @@ export {
   CLAUDE_CODE_HARNESS_ID,
   SLOT_CREDENTIAL_SWEEP_MILLISECONDS,
   accountPoolServices,
+  logSlotCredentialSweep,
   slotRevocationCommandId,
   startAccountPoolServices,
   type AccountPoolPorts,
