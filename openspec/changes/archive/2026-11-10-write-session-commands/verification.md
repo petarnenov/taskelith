@@ -136,6 +136,16 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 `origin/dev` at `687c10f7` (#453, `wire-account-pool-into-control-plane`) was merged into this branch by the merge commit `99f73428`, after both review passes, with no conflict. It touched the control-plane API, routes, and composition (`apps/control-plane/src/composition/control-plane.ts`, `settings.ts`, the new `account-pool.ts`), the account slot commands of Scheduling, the slot credential key, the secrets adapter, `control-plane.openapi.json`, one sentence of `docs/contracts/control-plane-wire-contracts.md`, and the living specs `account-pool-port` and `control-plane-api`; it did not touch `package-lock.json` or the living specs of this change's deltas. The reviewers saw the pre-merge tree: pass 1 reviewed `dee4a32d` and pass 2 `71d8b782`, and neither reviewed the merge nor the pass 2 fixes.
 
+## Archive
+
+The archive commit `docs: archive the write session commands change` applies the deltas with the pinned CLI (`npm run openspec -- archive write-session-commands --yes`, totals + 4, ~ 2, - 0) after every task was ticked and the resume point removed; the pass 2 fixes await the coordinator's architect check recorded above. Checked on the tree of the archive commit, the working tree the checks ran on:
+
+- `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: the line `change/2026-11-10-write-session-commands` passes; the command fails as a whole on older archived changes (`Totals: 290 passed, 14 failed (304 items)`).
+- `make findings ARGS="validate"`: passed; the moved change has its `findings.jsonl` (9 findings) and `passes.jsonl` (2 passes).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `687c10f7`: only `observation-consumption` (one modified requirement and its added scenario) and `session-turn-model` (one modified requirement with two added scenarios and four added requirements), the requirements of this change; no other text changes.
+- `make verify` (`verify-archive.log` in the session scratchpad): passed, profile full, on the uncommitted working tree, so no stamp was written; tests 5064, pass 5017, fail 0, skipped 47; all files 99.43% lines, 93.10% branches, 98.87% functions.
+
 ## Limitations
 
 - Test fixtures that hold sessions without assignments use a `commands` port that answers `written` (`packages/adapters/postgres/test/session-timeline-fixtures.ts`, `apps/control-plane/test/native-answer-rollback.integration.test.ts`); only the integration tests named above use the real port.
