@@ -86,11 +86,11 @@ export class AccountSlotService {
     if (!allowedProjects.ok) return allowedProjects;
     const id = parseIdentifier('ProviderCredentialId', this.#ports.newSlotId());
     if (!id.ok) return err(failure('internal', 'the minted slot identifier is not an identifier'));
-    return addAccountSlot(this.#ports, {
+    return storingCredential(() => addAccountSlot(this.#ports, {
       id: id.value as ProviderCredentialId, harnessId: harnessId.value as HarnessPluginId,
       mechanismId: mechanismId.value as SubscriptionMechanismId, allowedProjects: allowedProjects.value, secret: addition.secret,
       ...(addition.concurrencyLimit === undefined ? {} : { concurrencyLimit: addition.concurrencyLimit }),
-    });
+    }));
   }
 
   async update(change: SlotSettingsChange): Promise<Result<AccountSlot>> {
@@ -114,7 +114,7 @@ export class AccountSlotService {
   }
 
   rotate(rotation: SlotRotation): Promise<Result<AccountSlot>> {
-    return rotateSlotCredential(this.#ports, rotation);
+    return storingCredential(() => rotateSlotCredential(this.#ports, rotation));
   }
 
   // One more than a page is read, so `next` names a page that exists.
@@ -135,5 +135,14 @@ export class AccountSlotService {
       return err(failure('invalid', 'allowedProjects names an unknown project', { field: 'allowedProjects' }));
     }
     return ok(projectIds as readonly ProjectId[]);
+  }
+}
+
+// A store's rejection can quote what it was given, so only fixed text leaves.
+async function storingCredential(command: () => Promise<Result<AccountSlot>>): Promise<Result<AccountSlot>> {
+  try {
+    return await command();
+  } catch {
+    return err(failure('internal', 'the slot credential could not be stored'));
   }
 }
