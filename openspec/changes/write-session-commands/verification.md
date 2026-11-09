@@ -17,7 +17,7 @@ No production path reaches these commands until item 18 adds `openSession` and `
 
 ## Environment
 
-The host `hpz600` (Linux 7.0.0-42-generic, x86_64), Node.js v24.22.1, the `.nvmrc` pin, Docker. The targeted runs used `node --experimental-strip-types --test` on the built `dist/` packages, the integration files against the worktree's development services (`make services-up`, PostgreSQL, NATS, and Toxiproxy), stopped with `make services-down` before `make verify`.
+The host `GEO-PetarPetrov` (Linux 7.0.0-42-generic), Node.js v24.22.1, the `.nvmrc` pin, Docker 29.8.2. The targeted runs used `node --experimental-strip-types --test` on the built `dist/` packages, the integration files against the worktree's development services (`make services-up`, PostgreSQL, NATS, and Toxiproxy), stopped with `make services-down` before `make verify`.
 
 ## What was done
 
@@ -34,7 +34,7 @@ The host `hpz600` (Linux 7.0.0-42-generic, x86_64), Node.js v24.22.1, the `.nvmr
 
 ## Fail-before
 
-Each row mutated the named code in the source of the tree (then uncommitted), rebuilt with `npx tsc --build apps/control-plane/tsconfig.json`, ran the named files once, and restored the source from a copy, compared by `git diff --quiet` and a rebuild.
+Each row mutated the named code in the source of the tree (then uncommitted), rebuilt with `npx tsc --build apps/control-plane/tsconfig.json`, ran the named files once, and restored the source from a copy taken just before it, then rebuilt.
 
 | Mutation | Files run | Result |
 | --- | --- | --- |
