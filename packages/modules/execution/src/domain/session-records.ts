@@ -101,7 +101,14 @@ export type TurnProgress =
     readonly failure?: HarnessFailure;
   };
 
-export type Turn = TurnIdentity & TurnProgress;
+// The command that carries a turn to a generation (worker messages, section
+// 3), stored with the turn so that a resend reuses its identity.
+export interface TurnCommandRecord {
+  readonly generation: SessionGeneration;
+  readonly commandId: string;
+}
+
+export type Turn = TurnIdentity & TurnProgress & { readonly deliveryCommands?: readonly TurnCommandRecord[] };
 
 export interface TurnSubmitted {
   readonly session: Session;
@@ -133,11 +140,18 @@ export interface RequestKey {
   readonly nativeRequestId: NativeRequestId;
 }
 
+// The plugin's classification of a permission request's native action.
+export interface ClassifiedPush {
+  readonly kind: 'push';
+  readonly ref: string;
+}
+
 export interface RequestRecording {
   readonly key: RequestKey;
   readonly kind: HarnessRequestKind;
   readonly turnId: TurnId;
   readonly text: string;
+  readonly operation?: ClassifiedPush;
 }
 
 export const REQUEST_STATES = Object.freeze(['open', 'answered', 'expired', 'unresolved'] as const);
@@ -185,6 +199,8 @@ export interface ConsumedResponse {
   readonly attemptId: AttemptId;
   readonly ownershipGeneration: OwnershipGeneration;
   readonly delivery: DeliveryState;
+  // Its delivery's command; a host's delegation result has none here.
+  readonly commandId?: string;
 }
 
 export interface OutputAppend {

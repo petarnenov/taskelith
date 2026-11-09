@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
+import { SESSION_PROTOCOL_VERSION } from '@taskelith/contracts';
 import { startAgentSessionServices } from '@taskelith/control-plane';
+import { MINIMUM_SESSION_COMMAND_PROTOCOL } from '@taskelith/execution';
+import { sha256IdentifierDigest } from '@taskelith/git-workspace';
+import { taskBranchName } from '@taskelith/workspace';
 import {
   ControlPlaneNamespace,
   SESSION_INPUT_DIGEST_KEY_FILE,
@@ -12,11 +16,14 @@ import {
   SessionOutputTailKeyFile,
 } from '@taskelith/control-plane-store';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { ok, parseInstant } from '@taskelith/kernel';
+import { ok, parseIdentifier, parseInstant } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import type { TaskId } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 
 const ownerUid = process.getuid!();
 const CLOCK = { now: () => value(parseInstant('2026-10-29T09:00:00.000Z')) };
+const LOGGER = new Logger(new InMemoryLogSink(), CLOCK);
 let base: string;
 let database: PostgresDatabase;
 
@@ -40,14 +47,14 @@ test('the session timeline service starts with the installation digest and outpu
   const space = namespace();
   value(new SessionInputDigestKeyFile(space).create());
   value(new SessionOutputTailKeyFile(space).create());
-  assert.ok(value(startAgentSessionServices(space, unusedDatabase(), CLOCK)));
+  assert.ok(value(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER)));
 });
 
 test('the inbox source over one snapshot lists that snapshot\'s items at its position', async () => {
   const space = namespace();
   value(new SessionInputDigestKeyFile(space).create());
   value(new SessionOutputTailKeyFile(space).create());
-  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
   const listed: string[] = [];
   const snapshot = { items: { listOpen: async (projectId: string) => (listed.push(projectId), ok([])) } };
   const source = services.sourceIn(snapshot as never, { current: async () => ok('12') });
@@ -59,7 +66,7 @@ test('the inbox source over one transaction answers through that transaction, ne
   const space = namespace();
   value(new SessionInputDigestKeyFile(space).create());
   value(new SessionOutputTailKeyFile(space).create());
-  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
   const reads: string[] = [];
   const item = {
     id: 'n-1', kind: 'permission-request', state: 'open', sessionId: 's-1', taskId: 'task-1', attemptId: 'a-1', attemptGeneration: 1,
@@ -80,7 +87,7 @@ test('the inbox source over one transaction answers through that transaction, ne
 });
 
 test('a missing digest key refuses the service start and names init, which creates it', () => {
-  const refused = failed(startAgentSessionServices(namespace(), unusedDatabase(), CLOCK));
+  const refused = failed(startAgentSessionServices(namespace(), unusedDatabase(), CLOCK, LOGGER));
   assert.equal(refused.code, 'precondition-failed');
   assert.equal(refused.message, 'session-input-digest.key is missing; run init');
 });
@@ -90,7 +97,7 @@ test('a digest key of the wrong size refuses the service start with a reason tha
   const key = Buffer.from('sentinel-key-bytes');
   const encoded = key.toString('base64');
   writeFileSync(join(space.directory, SESSION_INPUT_DIGEST_KEY_FILE), JSON.stringify({ format: 1, key: encoded }), { mode: 0o600 });
-  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
   assert.deepEqual([refused.code, refused.message], ['precondition-failed', `the input digest key has ${key.length} bytes, not 32`]);
   const reason = JSON.stringify(refused);
   for (const form of [encoded, key.toString('hex'), 'sentinel']) assert.equal(reason.includes(form), false);
@@ -99,7 +106,7 @@ test('a digest key of the wrong size refuses the service start with a reason tha
 test('a missing output tail key refuses the service start and names init', () => {
   const space = namespace();
   value(new SessionInputDigestKeyFile(space).create());
-  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
   assert.deepEqual([refused.code, refused.message], ['precondition-failed', 'session-output-tail.key is missing; run init']);
 });
 
@@ -109,8 +116,19 @@ test('an output tail key of the wrong size refuses the service start with a reas
   const key = Buffer.from('sentinel-tail-bytes');
   const encoded = key.toString('base64');
   writeFileSync(join(space.directory, SESSION_OUTPUT_TAIL_KEY_FILE), JSON.stringify({ format: 1, key: encoded }), { mode: 0o600 });
-  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK));
+  const refused = failed(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
   assert.deepEqual([refused.code, refused.message], ['precondition-failed', `the session output tail key has ${key.length} bytes, not 32`]);
   const reason = JSON.stringify(refused);
   for (const form of [encoded, key.toString('hex'), 'sentinel']) assert.equal(reason.includes(form), false);
+});
+
+test('a standing rule is checked against the workspace\'s own branch name, and the session commands against the wire contract\'s version', () => {
+  const space = namespace();
+  value(new SessionInputDigestKeyFile(space).create());
+  value(new SessionOutputTailKeyFile(space).create());
+  const services = value(startAgentSessionServices(space, unusedDatabase(), CLOCK, LOGGER));
+  const taskId = value(parseIdentifier('TaskId', 'task-with-a-branch')) as TaskId;
+
+  assert.equal(services.taskBranchRef(taskId), `refs/heads/${taskBranchName(taskId, sha256IdentifierDigest)}`);
+  assert.equal(MINIMUM_SESSION_COMMAND_PROTOCOL, SESSION_PROTOCOL_VERSION);
 });

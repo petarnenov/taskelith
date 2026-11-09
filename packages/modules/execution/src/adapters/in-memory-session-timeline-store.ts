@@ -1,6 +1,7 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
 import type { AttemptId, SessionId } from '../domain/identifiers.js';
+import type { SessionCommand } from '../domain/session-commands.js';
 import { isSameRequestKey, type RequestKey, type Session } from '../domain/session-records.js';
 import type { NeedsYouItemId } from '../ports/needs-you.js';
 import type {
@@ -17,6 +18,8 @@ import type {
   HeldKey,
   IdempotencyRecord,
   IdempotencyRecords,
+  SessionCommandAppend,
+  SessionCommands,
   SessionOutputTails,
   SessionRecords,
   SessionTimelineStore,
@@ -67,19 +70,26 @@ interface State {
   readonly items: Map<NeedsYouItemId, SessionInboxItem>;
   readonly audit: SessionAuditEvent[];
   readonly tails: Map<SessionId, StoredOutputTail>;
+  readonly commands: WrittenSessionCommand[];
+}
+
+export interface WrittenSessionCommand {
+  readonly command: SessionCommand;
+  readonly issuedAt: Instant;
 }
 
 function copy(state: State): State {
   return {
     sessions: new Map(state.sessions), attempts: new Map(state.attempts), keys: new Map(state.keys), items: new Map(state.items),
-    audit: [...state.audit], tails: new Map(state.tails),
+    audit: [...state.audit], tails: new Map(state.tails), commands: [...state.commands],
   };
 }
 
 // One transaction at a time over a copy of the state, kept only when the
 // work answers ok; scopes from `lineage`, committed events into `log`.
 export class InMemorySessionTimelineStore implements SessionTimelineStore, SessionScopes {
-  #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [], tails: new Map() };
+  #state: State = { sessions: new Map(), attempts: new Map(), keys: new Map(), items: new Map(), audit: [], tails: new Map(), commands: [] };
+  readonly #withoutReader = new Set<AttemptId>();
   #queue: Promise<unknown> = Promise.resolve();
   readonly #lineage: InMemoryTaskLineage;
   readonly #log: InMemoryUiEventLog;
@@ -97,6 +107,7 @@ export class InMemorySessionTimelineStore implements SessionTimelineStore, Sessi
       const result = await work({
         sessions: new MemorySessionRecords(draft), idempotency: new MemoryIdempotencyRecords(draft),
         items: new MemorySessionInboxItems(draft, scopes), audit: new MemoryAuditRecords(draft), scopes, tails: new MemoryOutputTails(draft), events,
+        commands: new MemorySessionCommands(draft, this.#withoutReader),
       });
       if (!result.ok) return result;
       this.#state = draft;
@@ -106,6 +117,16 @@ export class InMemorySessionTimelineStore implements SessionTimelineStore, Sessi
     const next = this.#queue.then(run, run);
     this.#queue = next.catch(() => undefined);
     return next;
+  }
+
+  // The session commands committed so far, oldest first.
+  writtenCommands(): readonly WrittenSessionCommand[] {
+    return Object.freeze([...this.#state.commands]);
+  }
+
+  // From now on the attempt's commands have no reader.
+  removeReaderOf(attemptId: AttemptId): void {
+    this.#withoutReader.add(attemptId);
   }
 
   // The audit events committed so far, oldest first.
@@ -245,6 +266,16 @@ class MemoryAuditRecords implements SessionAuditRecords {
   async append(event: SessionAuditEvent): Promise<Result<void>> {
     this.state.audit.push(Object.freeze({ ...event }));
     return ok(undefined);
+  }
+}
+
+class MemorySessionCommands implements SessionCommands {
+  constructor(private readonly state: State, private readonly withoutReader: ReadonlySet<AttemptId>) {}
+
+  async append(command: SessionCommand, issuedAt: Instant): Promise<Result<SessionCommandAppend>> {
+    if (this.withoutReader.has(command.attemptId)) return ok('no-reader');
+    this.state.commands.push(Object.freeze({ command, issuedAt }));
+    return ok('written');
   }
 }
 

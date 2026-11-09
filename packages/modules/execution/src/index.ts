@@ -76,6 +76,7 @@ export {
   openSession,
   runningGeneration,
   type Answer,
+  type ClassifiedPush,
   type AttemptBinding,
   type BoundAttempt,
   type ConsumedResponse,
@@ -100,6 +101,7 @@ export {
   type SessionStart,
   type Turn,
   type TurnAuthor,
+  type TurnCommandRecord,
   type TurnDelivery,
   type TurnEnd,
   type TurnIdentity,
@@ -109,6 +111,7 @@ export {
   type TurnSubmission,
   type TurnSubmitted,
 } from './domain/session-records.js';
+export type { CommandIdDigest, SessionCommand } from './domain/session-commands.js';
 export { bindAttempt, endBoundAttempt, endGeneration, startGeneration } from './domain/session-attempts.js';
 export {
   deliverTurn,
@@ -119,6 +122,7 @@ export {
   submitTurn,
 } from './domain/session-turns.js';
 export {
+  OPERATION_NOT_MATCHED,
   consumeResponse,
   recordDeliveryReport,
   recordRequest,
@@ -508,7 +512,7 @@ export {
   type SubmittedTurn,
   type TurnCommand,
 } from './application/session-timeline-service.js';
-export { InMemorySessionTimelineStore, InMemoryTaskLineage } from './adapters/in-memory-session-timeline-store.js';
+export { InMemorySessionTimelineStore, InMemoryTaskLineage, type WrittenSessionCommand } from './adapters/in-memory-session-timeline-store.js';
 export {
   SCOPES_LINEAGE,
   SESSION_SCOPES_CONFORMANCE,
@@ -545,16 +549,21 @@ export type {
   TurnIdSource,
 } from './ports/session-input.js';
 export { SESSION_TIMELINE_STORE_CONFORMANCE } from './ports/session-timeline-conformance.js';
-export type {
-  HeldKey,
-  IdempotencyRecord,
-  IdempotencyRecords,
-  SessionOutputTails,
-  SessionRecords,
-  SessionTimelineStore,
-  SessionTimelineTransaction,
-  StoredOutputTail,
-  StoredSession,
+export {
+  MINIMUM_SESSION_COMMAND_PROTOCOL,
+  type HeldKey,
+  type IdempotencyRecord,
+  type IdempotencyRecords,
+  type SessionCommandAppend,
+  type SessionCommandLog,
+  type SessionCommands,
+  type SessionOutputTails,
+  type SessionRecords,
+  type SessionTimelineStore,
+  type SessionTimelineTransaction,
+  type StoredOutputTail,
+  type StoredSession,
+  type UnreadTurnCommand,
 } from './ports/session-timeline-store.js';
 export {
   INSTALLATION_SCOPE,

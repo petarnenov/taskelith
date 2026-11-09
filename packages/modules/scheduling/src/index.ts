@@ -107,7 +107,7 @@ export {
   type ReleaseOutcome,
   type ReleaseRequest,
 } from './application/capacity-operations.js';
-export type { CommandIdentity, WorkerCommandType } from './application/capacity-commands.js';
+export { appendWorkerCommand, type CommandIdentity, type CommandPayload, type CommandSetting, type WorkerCommandType } from './application/capacity-commands.js';
 export {
   invalidateLaunches,
   invalidateWorkerLaunches,

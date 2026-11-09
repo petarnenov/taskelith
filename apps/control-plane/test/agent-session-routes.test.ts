@@ -11,6 +11,7 @@ import {
   SessionService,
 } from '@taskelith/access';
 import { ControlPlaneApi, createApiServer, mintTurnId, type ApiServices } from '@taskelith/control-plane';
+import { commandDependencies } from './session-timeline-fixtures.ts';
 import {
   BEFORE_ANY_EVENT,
   InMemorySessionTimelineStore,
@@ -63,7 +64,7 @@ const timelineStore = new InMemorySessionTimelineStore(LINEAGE);
 const timeline = new SessionTimelineService({
   store: timelineStore, digest: { digest: (input) => `digest:${input}` }, redactor: { redact: (text) => text },
   outputRedactor: new SecretOutputRedactor(), tailCipher: value(outputTailCipher(randomBytes(32))),
-  turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'),
+  turnIds: { next: mintTurnId }, clock, itemIds: sequentialIds('NeedsYouItemId', 'item'), ...commandDependencies(),
 });
 const api = new ControlPlaneApi({
   operator: { authenticate: async (secret: string) => (secret === OPERATOR ? ok(owner) : err(failure('forbidden', 'not the operator'))) },

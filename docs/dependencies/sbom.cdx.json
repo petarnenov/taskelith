@@ -28613,6 +28613,7 @@
         "@taskelith/evidence-volume@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
+        "@taskelith/git-workspace@0.0.0",
         "@taskelith/integrations@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/nats@0.0.0",
@@ -28627,6 +28628,7 @@
         "@taskelith/worker-journal@0.0.0",
         "@taskelith/worker-supervisor@0.0.0",
         "@taskelith/worker@0.0.0",
+        "@taskelith/workspace@0.0.0",
         "@types/pg@8.23.1",
         "cookie@2.0.1",
         "pg@8.23.1"

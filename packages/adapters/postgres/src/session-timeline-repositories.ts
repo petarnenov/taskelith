@@ -1,29 +1,34 @@
-import type {
-  HeldKey,
-  IdempotencyRecord,
-  IdempotencyRecords,
-  NeedsYouItemId,
-  OutputEntry,
-  RequestKey,
-  ScopedInboxItem,
-  Session as TimelineSession,
-  SessionAuditEvent,
-  SessionAuditRecords,
-  SessionId,
-  SessionInboxItem,
-  SessionInboxItems,
-  SessionItemKind,
-  SessionOutputTails,
-  SessionRecords,
-  SessionScope,
-  SessionScopes,
-  SessionTimelineStore,
-  SessionTimelineTransaction,
-  StoredOutputTail,
-  StoredSession,
-  UiEventOutbox,
+import {
+  MINIMUM_SESSION_COMMAND_PROTOCOL,
+  type HeldKey,
+  type IdempotencyRecord,
+  type IdempotencyRecords,
+  type NeedsYouItemId,
+  type OutputEntry,
+  type RequestKey,
+  type ScopedInboxItem,
+  type Session as TimelineSession,
+  type SessionAuditEvent,
+  type SessionAuditRecords,
+  type SessionCommand,
+  type SessionCommandAppend,
+  type SessionCommands,
+  type SessionId,
+  type SessionInboxItem,
+  type SessionInboxItems,
+  type SessionItemKind,
+  type SessionOutputTails,
+  type SessionRecords,
+  type SessionScope,
+  type SessionScopes,
+  type SessionTimelineStore,
+  type SessionTimelineTransaction,
+  type StoredOutputTail,
+  type StoredSession,
+  type UiEventOutbox,
 } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
+import { appendWorkerCommand, type CapacityTransaction } from '@taskelith/scheduling';
 import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
 import type { PostgresDatabase } from './postgres-database.js';
 import { decodeRecord, encodeRecord } from './record-codec.js';
@@ -39,9 +44,11 @@ export class PostgresSessionTimelineTransaction implements SessionTimelineTransa
   readonly scopes: PostgresSessionScopeReads;
   readonly tails: PostgresSessionOutputTails;
   readonly events: UiEventOutbox;
+  readonly commands: SessionCommands;
 
-  constructor(session: Session, events: UiEventOutbox) {
+  constructor(session: Session, events: UiEventOutbox, commands: SessionCommands) {
     this.events = events;
+    this.commands = commands;
     this.sessions = new PostgresSessionRecords(session);
     this.idempotency = new PostgresIdempotencyRecords(session);
     this.items = new PostgresSessionInboxItems(session);
@@ -66,6 +73,29 @@ export class PostgresSessionTimelineStore implements SessionTimelineStore {
 
   transaction<Value>(work: (tx: SessionTimelineTransaction) => Promise<Result<Value>>): Promise<Result<Value>> {
     return this.#database.transaction((tx) => work(tx.sessionTimeline));
+  }
+}
+
+// Writes each command through the attempt's running assignment; a worker
+// that cannot read it answers `no-reader` (worker messages, section 2).
+export class PostgresSessionCommands implements SessionCommands {
+  readonly #transaction: CapacityTransaction;
+
+  constructor(transaction: CapacityTransaction) {
+    this.#transaction = transaction;
+  }
+
+  async append(command: SessionCommand, issuedAt: Instant): Promise<Result<SessionCommandAppend>> {
+    const assignments = await this.#transaction.assignments.listByAttempt(command.attemptId);
+    const assignment = assignments.find((held) => held.ownershipGeneration === command.ownershipGeneration && held.state !== 'ended');
+    if (assignment === undefined) return ok('no-reader');
+    const worker = await this.#transaction.workers.get(assignment.workerId);
+    if ((worker?.protocolVersion ?? 0) < MINIMUM_SESSION_COMMAND_PROTOCOL) return ok('no-reader');
+    const identity = { commandId: command.commandId as EventId, correlationId: command.sessionId as string as CorrelationId };
+    const appended = await appendWorkerCommand(this.#transaction, identity, command.commandType, assignment, issuedAt, ({ protocolVersion }) => ({
+      protocolVersion, ...command.payload,
+    }));
+    return appended.ok ? ok('written') : appended;
   }
 }
 

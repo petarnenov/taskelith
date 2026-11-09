@@ -17,6 +17,7 @@ const STORE_CALLS = {
   scopes: { scopeOf: 'read', isCard: 'read', listByCard: 'read' },
   tails: { get: 'read', put: 'write', clear: 'write' },
   events: { append: 'write' },
+  commands: { append: 'write' },
 } as const satisfies StoreCallKinds;
 
 const CALL_KINDS: Readonly<Record<string, Readonly<Record<string, StoreCallKind>>>> = STORE_CALLS;

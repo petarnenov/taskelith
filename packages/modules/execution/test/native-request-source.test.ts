@@ -45,6 +45,7 @@ import {
   trailingRunRedactor,
   turnId,
   turnKey,
+  COMMAND_DEPENDENCIES,
 } from './session-fixtures.ts';
 
 const AT = value(parseInstant('2026-10-29T09:00:00.000Z'));
@@ -68,6 +69,7 @@ function timeline() {
     store, digest, redactor: { redact: (text: string) => text }, outputRedactor: trailingRunRedactor((text) => text), tailCipher: FLIPPING_CIPHER,
     turnIds: sequentialIds('TurnId', 'turn'), clock,
     itemIds: sequentialIds('NeedsYouItemId', 'item'),
+    ...COMMAND_DEPENDENCIES,
   });
   const source = new NativeRequestSource({
     id: id('NeedsYouSourceId', 'native-requests') as NeedsYouSourceId, store, timeline: service, digest, clock, positions: BEFORE_ANY_EVENT,
@@ -84,7 +86,9 @@ async function withOpenRequest({ service }: Timeline, kind: HarnessRequestKind =
   value(await service.startGeneration(SESSION, { generation: generation(1), nativeSessionId: NATIVE }));
   value(await service.submitTurn(SESSION, { key: turnKey('key-1'), author: PERSON, text: 'first turn' }));
   value(await service.deliverTurn(SESSION, { turnId: turnId('turn-1'), generation: generation(1) }));
-  value(await service.recordRequest(SESSION, { ...permissionRequest('request-1'), kind }));
+  // A push to the task's branch: a standing rule may answer it.
+  const operation = kind === 'permission-request' ? { operation: { kind: 'push' as const, ref: COMMAND_DEPENDENCIES.taskBranchRef(TASK) } } : {};
+  value(await service.recordRequest(SESSION, { ...permissionRequest('request-1'), kind, ...operation }));
 }
 
 async function items({ store }: Timeline) {

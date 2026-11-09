@@ -35,8 +35,15 @@ function sessionFields(session: Session): readonly unknown[] {
 function changedTurns(before: Session | undefined, after: Session): readonly Turn[] {
   return after.turns.filter((turn) => {
     const earlier = before?.turns.find((candidate) => candidate.id === turn.id);
-    return earlier !== turn && JSON.stringify(earlier) !== JSON.stringify(turn);
+    return earlier !== turn && JSON.stringify(withoutCommandIds(earlier)) !== JSON.stringify(withoutCommandIds(turn));
   });
+}
+
+// A stored command ID changes nothing that a turn's event shows.
+function withoutCommandIds(turn: Turn | undefined): Omit<Turn, 'deliveryCommands'> | undefined {
+  if (turn === undefined) return undefined;
+  const { deliveryCommands: _commands, ...shown } = turn;
+  return shown;
 }
 
 function changedRequests(before: Session | undefined, after: Session): UiEventRecord[] {
