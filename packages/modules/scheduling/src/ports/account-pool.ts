@@ -12,6 +12,11 @@ export interface AccountSlots {
   get(id: ProviderCredentialId): Promise<Result<AccountSlot>>;
   // Active slots of the harness allowed for the project, by code point of id.
   pool(projectId: ProjectId, harnessId: HarnessPluginId): Promise<readonly AccountSlot[]>;
+  // Up to `limit` slots after `after` by id in code-unit order, tombstones
+  // kept.
+  list(after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]>;
+  // As `list`, only the active slots that allow the project, of any harness.
+  listForProject(projectId: ProjectId, after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]>;
   // Compare-and-set: `not-found`, then `invalid` for a bad revision step,
   // harness change, or slot leaving removed, then `conflict` (section 6.1).
   replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>>;
@@ -42,6 +47,15 @@ export interface AdmittedDeliveries {
 export interface StoredSlotCredential {
   readonly slotId: ProviderCredentialId;
   readonly version: SlotCredentialVersion;
+}
+
+// The store cannot be reached and a retry may succeed. Fixed text, so no
+// credential travels with it; any other rejection is a defect.
+export class SlotCredentialsUnavailable extends Error {
+  constructor() {
+    super('the slot credential store is unavailable');
+    this.name = 'SlotCredentialsUnavailable';
+  }
 }
 
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;

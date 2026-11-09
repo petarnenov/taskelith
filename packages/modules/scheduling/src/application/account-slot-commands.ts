@@ -12,19 +12,22 @@ import { invalidateLaunches, type InvalidationTransaction } from './launch-inval
 // The slot commands of account pool contract section 8 besides adding; the
 // Access module checked the installation owner's role before each one.
 
-export interface UpdateAccountSlotInput {
+// The slot a command names and the revision its client read (decision Q3).
+export interface SlotCommandTarget {
   readonly id: ProviderCredentialId;
+  readonly expectedRevision: number;
+}
+
+export interface UpdateAccountSlotInput extends SlotCommandTarget {
   readonly allowedProjects?: readonly ProjectId[];
   readonly concurrencyLimit?: number;
 }
 
-export interface RevokeAccountSlotInput {
-  readonly id: ProviderCredentialId;
+export interface RevokeAccountSlotInput extends SlotCommandTarget {
   readonly correlationId: CorrelationId;
 }
 
-export interface RotateSlotCredentialInput {
-  readonly id: ProviderCredentialId;
+export interface RotateSlotCredentialInput extends SlotCommandTarget {
   readonly secret: SlotSecret;
 }
 
@@ -49,25 +52,30 @@ export interface SlotCredentialCommandPorts {
 
 // A revoked slot keeps its settings until it is reinstated (coordinator Q2).
 export function updateAccountSlot(store: CapacityStore, input: UpdateAccountSlotInput): Promise<Result<AccountSlot>> {
-  const { id, allowedProjects, concurrencyLimit } = input;
+  const { id, expectedRevision, allowedProjects, concurrencyLimit } = input;
   if (allowedProjects === undefined && concurrencyLimit === undefined) {
     return Promise.resolve(err(failure('invalid', `the update of slot ${id} names no change`, { slot: id })));
   }
   return store.transaction(async (tx) => {
-    const stored = await commandSlot(tx, id);
+    const stored = await updatableSlot(tx, { id, expectedRevision });
     if (!stored.ok) return stored;
-    if (stored.value.state === 'revoked') return err(revokedConflict(id));
     const changes = { allowedProjects: allowedProjects ?? stored.value.allowedProjects, concurrencyLimit: concurrencyLimit ?? stored.value.concurrencyLimit };
     if (sameSettings(stored.value, changes)) return stored;
     return replaceSlot(tx, stored.value, changes);
   });
 }
 
+// Read only, so that a caller can answer not-found, then the revision, then
+// the state rule first; the update itself still compares and sets.
+export function readUpdatableSlot(store: CapacityStore, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
+  return store.transaction((tx) => updatableSlot(tx, target));
+}
+
 // Section 8.1: the slot leaves its pools and every attempt that holds it is
 // cancelled in the same transaction; a revoked slot is answered unchanged.
 export function revokeAccountSlot(ports: SlotRevocationPorts, input: RevokeAccountSlotInput): Promise<Result<AccountSlot>> {
   return ports.store.transaction(async (tx) => {
-    const stored = await commandSlot(tx, input.id);
+    const stored = await commandSlot(tx, input);
     if (!stored.ok || stored.value.state === 'revoked') return stored;
     const revoked = await replaceSlot(tx, stored.value, { state: 'revoked' });
     if (!revoked.ok) return revoked;
@@ -81,9 +89,9 @@ export function revokeAccountSlot(ports: SlotRevocationPorts, input: RevokeAccou
 }
 
 // Section 8: back to its pools with its health, cooldown, and usage.
-export function reinstateAccountSlot(store: CapacityStore, id: ProviderCredentialId): Promise<Result<AccountSlot>> {
+export function reinstateAccountSlot(store: CapacityStore, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
   return store.transaction(async (tx) => {
-    const stored = await commandSlot(tx, id);
+    const stored = await commandSlot(tx, target);
     if (!stored.ok || stored.value.state === 'active') return stored;
     return replaceSlot(tx, stored.value, { state: 'active' });
   });
@@ -91,19 +99,19 @@ export function reinstateAccountSlot(store: CapacityStore, id: ProviderCredentia
 
 // Section 8: the record stays as a tombstone; destroy runs after the commit,
 // and the sweep destroys what a failed or unconfirmed one leaves.
-export async function removeAccountSlot(ports: SlotCredentialCommandPorts, id: ProviderCredentialId): Promise<Result<AccountSlot>> {
+export async function removeAccountSlot(ports: SlotCredentialCommandPorts, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
   const removed = await ports.store.transaction(async (tx) => {
-    const stored = await commandSlot(tx, id);
+    const stored = await commandSlot(tx, target);
     return stored.ok ? replaceSlot(tx, stored.value, { state: 'removed' }) : stored;
   });
-  if (removed.ok) await settled(() => ports.credentials.destroy(id));
+  if (removed.ok) await settled(() => ports.credentials.destroy(target.id));
   return removed;
 }
 
 // Section 8.1: store, then switch by compare-and-set on what was read; the
 // answer is the switch, and a failed cleanup is left to the sweep.
 export async function rotateSlotCredential(ports: SlotCredentialCommandPorts, input: RotateSlotCredentialInput): Promise<Result<AccountSlot>> {
-  const read = await ports.store.transaction((tx) => rotatableSlot(tx, input.id));
+  const read = await ports.store.transaction((tx) => rotatableSlot(tx, input));
   if (!read.ok) return read;
   const version = await ports.credentials.store(input.id, input.secret);
   const switched = await ports.store.transaction((tx) => switchCredential(tx, read.value, version));
@@ -111,11 +119,22 @@ export async function rotateSlotCredential(ports: SlotCredentialCommandPorts, in
   return switched;
 }
 
-// A removed slot is a tombstone that no command changes (coordinator Q2).
-async function commandSlot(tx: CapacityTransaction, id: ProviderCredentialId): Promise<Result<AccountSlot>> {
+// A removed slot is a tombstone that no command changes (coordinator Q2);
+// a revision moved since the client's read is a conflict (Q3).
+async function commandSlot(tx: CapacityTransaction, { id, expectedRevision }: SlotCommandTarget): Promise<Result<AccountSlot>> {
   const stored = await tx.accountSlots.get(id);
-  if (!stored.ok || stored.value.state !== 'removed') return stored;
-  return err(failure('not-found', `slot ${id} is removed`, { slot: id }));
+  if (!stored.ok) return stored;
+  if (stored.value.state === 'removed') return err(failure('not-found', `slot ${id} is removed`, { slot: id }));
+  if (stored.value.revision !== expectedRevision) {
+    return err(failure('conflict', `slot ${id} is at revision ${stored.value.revision}, not ${expectedRevision}`, { slot: id }));
+  }
+  return stored;
+}
+
+async function updatableSlot(tx: CapacityTransaction, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
+  const stored = await commandSlot(tx, target);
+  if (!stored.ok) return stored;
+  return stored.value.state === 'revoked' ? err(revokedConflict(target.id)) : stored;
 }
 
 async function replaceSlot(tx: CapacityTransaction, stored: AccountSlot, changes: Partial<AccountSlot>): Promise<Result<AccountSlot>> {
@@ -158,8 +177,9 @@ interface CommandIdentity {
 
 // Section 8.1: only a revoked slot is rotated; its version and revision are
 // read before the store, so the switch can compare them.
-async function rotatableSlot(tx: CapacityTransaction, id: ProviderCredentialId): Promise<Result<AccountSlot>> {
-  const stored = await commandSlot(tx, id);
+async function rotatableSlot(tx: CapacityTransaction, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
+  const { id } = target;
+  const stored = await commandSlot(tx, target);
   if (!stored.ok || stored.value.state === 'revoked') return stored;
   return err(failure('conflict', `slot ${id} must be revoked before its credential is rotated`, { slot: id }));
 }

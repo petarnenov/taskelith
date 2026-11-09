@@ -523,11 +523,15 @@ The worker SHALL obtain a run's slot credential only through `RunSlotCredentials
 - **THEN** nothing is held, and the log names the execution, attempt, slot, and reason or code only
 
 ### Requirement: Slot commands besides adding
-The pool SHALL update a slot's allowed projects or concurrency limit, revoke, reinstate, remove, and rotate a slot by compare-and-set in `SERIALIZABLE` transactions. A repeat that changes nothing SHALL return the slot at its current revision; an update of a revoked slot or a rotation of an active one SHALL fail with `conflict`; a command on a removed or unknown slot SHALL fail with `not-found`.
+The pool SHALL update a slot's allowed projects or concurrency limit, revoke, reinstate, remove, and rotate a slot by compare-and-set on the caller's expected revision in `SERIALIZABLE` transactions. A removed or unknown slot SHALL fail with `not-found`, then another stored revision with `conflict`; a repeat that changes nothing SHALL return the slot unchanged; an update of a revoked slot or a rotation of an active one SHALL fail with `conflict`.
 
 #### Scenario: Repeated revocation or reinstatement
-- **WHEN** an operator revokes a revoked slot or reinstates an active one
+- **WHEN** an operator revokes a revoked slot or reinstates an active one at its current revision
 - **THEN** the command succeeds, writes nothing, and returns the slot at its current revision
+
+#### Scenario: Moved revision
+- **WHEN** an operator runs any of these commands with a revision other than the stored one
+- **THEN** the command fails with `conflict`, writes nothing, and a rotation stores no credential
 
 #### Scenario: Update of a revoked slot
 - **WHEN** an operator changes the allowed projects or the concurrency limit of a revoked slot
@@ -589,3 +593,10 @@ The add-slot command SHALL measure on its process's monotonic clock the time fro
 #### Scenario: Add at the deadline
 - **WHEN** exactly half the least grace age passes between an add's store and the end of its transaction
 - **THEN** the slot is added with its version
+
+### Requirement: Slot listing
+`AccountSlots.list(after, limit)` SHALL return at most `limit` slots in every state, removed ones included, and `listForProject(projectId, after, limit)` at most `limit` active slots of any harness that allow the project; both SHALL order by identifier in code-unit order, start after `after`, and pass their conformance case in both adapters.
+
+#### Scenario: Listing order and states
+- **WHEN** slots whose identifiers differ in case are active, revoked, and removed
+- **THEN** `list` names all of them in code-unit order, and `listForProject` only the active ones that allow the project

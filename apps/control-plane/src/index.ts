@@ -25,7 +25,7 @@ export {
 } from './admin/installation-authority.js';
 export { LOCAL_SERVER_HOSTS, MAX_SERVER_HOSTS, readServerHosts } from './admin/server-hosts.js';
 export { readBrokerTls } from './broker-tls.js';
-export { ROUTES, type RouteDefinition, type SecurityScheme } from './api/routes.js';
+export { ROUTES, browserEndpointRoutes, workerEndpointRoutes, type RouteDefinition, type SecurityScheme } from './api/routes.js';
 export { ACCESS_REQUIREMENTS, requirementBeforeBody, ruleOf, type RequirementRule } from './api/access-requirements.js';
 export { requestLogFields, type RequestFacts } from './api/request-log.js';
 export { SESSION_COOKIE, expiredSessionCookie, sessionCookie, sessionSetCookie } from './api/session-cookie.js';
@@ -57,6 +57,29 @@ export {
   type ScmIntegrationServices,
   type StartedScmIntegrationServices,
 } from './composition/scm-integrations.js';
+export {
+  ADMITTED_SLOT_DELIVERIES,
+  CLAUDE_CODE_HARNESS_ID,
+  SLOT_CREDENTIAL_SWEEP_MILLISECONDS,
+  accountPoolServices,
+  logSlotCredentialSweep,
+  slotRevocationCommandId,
+  startAccountPoolServices,
+  type AccountPoolPorts,
+  type AccountPoolServices,
+  type AccountPoolStartPorts,
+} from './composition/account-pool.js';
+export {
+  ACCOUNT_SLOT_PAGE_SIZE,
+  AccountSlotService,
+  type AccountSlotServicePorts,
+  type SlotAddition,
+  type SlotPage,
+  type SlotProjects,
+  type SlotRotation,
+  type SlotSettingsChange,
+} from './application/account-slot-service.js';
+export { SlotSignals, type SlotLimitSignal } from './application/slot-signals.js';
 export { bindableProjects, repositoryBindingService, type RepositoryBindingPorts } from './composition/repository-bindings.js';
 export { singlePlugin } from './composition/scm-plugins.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
@@ -111,6 +134,7 @@ export {
   DEFAULT_API_PORT,
   DEFAULT_BROWSER_HOST,
   DEFAULT_BROWSER_PORT,
+  SLOT_DEFAULT_COOLDOWN_VARIABLE,
   readControlPlaneSettings,
 } from './composition/settings.js';
 export { controlPlaneMain, serveUntilStopped, type ServiceProcess } from './main.js';

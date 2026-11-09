@@ -1,0 +1,105 @@
+{
+  "change": "wire-account-pool-into-control-plane",
+  "generatedAt": "2026-11-05T06:18:44.424Z",
+  "devCommit": "686888cf91e60958cdec60a398b916de13ce4fb5",
+  "query": {
+    "capabilities": [
+      "harness-account-pools",
+      "account-pool-port",
+      "control-plane-api",
+      "control-plane-wire-contracts",
+      "postgres-state"
+    ],
+    "files": [
+      "apps/control-plane/**",
+      "packages/modules/**",
+      "packages/adapters/postgres/**"
+    ],
+    "top": 7
+  },
+  "size": "M-L",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 134
+      },
+      {
+        "category": "error-handling",
+        "count": 61
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 49
+      },
+      {
+        "category": "naming",
+        "count": 43
+      },
+      {
+        "category": "docs",
+        "count": 41
+      },
+      {
+        "category": "concurrency-race",
+        "count": 34
+      },
+      {
+        "category": "redaction",
+        "count": 34
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 1069,
+        "inChecklist": 926
+      },
+      "mediumOrWorse": {
+        "findings": 522,
+        "inChecklist": 468
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 173
+      },
+      {
+        "category": "spec-wording",
+        "count": 112
+      },
+      {
+        "category": "docs",
+        "count": 92
+      },
+      {
+        "category": "stale-citation",
+        "count": 62
+      },
+      {
+        "category": "contract-drift",
+        "count": 27
+      },
+      {
+        "category": "process",
+        "count": 26
+      },
+      {
+        "category": "missing-fail-before-test",
+        "count": 10
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 509,
+        "inChecklist": 502
+      },
+      "mediumOrWorse": {
+        "findings": 80,
+        "inChecklist": 80
+      }
+    }
+  }
+}

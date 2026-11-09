@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
-import { ControlPlaneNamespace, SLOT_CREDENTIAL_KEY_FILE, openSlotCredentialKey } from '@taskelith/control-plane-store';
+import { ControlPlaneNamespace, SLOT_CREDENTIAL_KEY_FILE, SlotCredentialKeyFile } from '@taskelith/control-plane-store';
 import { failed, value } from '@taskelith/testing';
 
 const ownerUid = process.getuid!();
@@ -18,48 +18,47 @@ afterEach(() => rmSync(base, { recursive: true, force: true }));
 
 const keyPath = (opened: ControlPlaneNamespace) => join(opened.directory, SLOT_CREDENTIAL_KEY_FILE);
 
-test('the slot credential key is created once, owner-only, and read back unchanged', () => {
+test('the slot credential key is ensured once, owner-only, and read back unchanged', () => {
   const opened = namespace();
-  let generated = 0;
-  const generate = () => {
-    generated++;
-    return new Uint8Array(32).fill(generated);
-  };
-  const first = value(openSlotCredentialKey(opened, generate));
-  assert.deepEqual([...first], new Array(32).fill(1));
+  const file = new SlotCredentialKeyFile(opened);
+  value(file.ensure());
   assert.equal(statSync(keyPath(opened)).mode & 0o777, 0o600);
-  assert.deepEqual(value(openSlotCredentialKey(opened, generate)), first);
-  assert.equal(generated, 1);
-  assert.equal(openSlotCredentialKey(opened).ok, true);
+  const first = value(file.read());
+  assert.equal(first.length, 32);
+  value(file.ensure());
+  assert.deepEqual(value(new SlotCredentialKeyFile(opened).read()), first, 'a rerun keeps the key');
 });
 
-test('a key that another process created first is the one used', () => {
+test('a missing slot credential key is refused, names init, and is not created by the read', () => {
   const opened = namespace();
-  const winner = Buffer.alloc(32, 9);
-  const created = openSlotCredentialKey(opened, () => {
-    value(opened.create(SLOT_CREDENTIAL_KEY_FILE, { key: winner.toString('base64') }));
-    return new Uint8Array(32);
-  });
-  assert.deepEqual(Buffer.from(value(created)), winner);
+  const refused = failed(new SlotCredentialKeyFile(opened).read());
+  assert.deepEqual([refused.code, refused.message], ['precondition-failed', 'slot-credential-key is missing; run init']);
+  assert.equal(existsSync(keyPath(opened)), false);
 });
 
-test('a malformed key file is refused without its content', () => {
-  const secretLooking = Buffer.alloc(16, 5).toString('base64');
-  for (const content of [{ key: secretLooking }, { key: 7 }, { key: `${Buffer.alloc(32, 5).toString('base64')}x` }]) {
+test('a slot credential key that is not 32 bytes or not base64 is refused without its content', () => {
+  for (const content of [{ key: Buffer.alloc(16, 5).toString('base64') }, { key: 7 }, { key: `${Buffer.alloc(32, 5).toString('base64')}x` }]) {
     const opened = namespace();
     writeFileSync(keyPath(opened), `${JSON.stringify({ format: 1, ...content })}\n`, { mode: 0o600 });
-    const refused = failed(openSlotCredentialKey(opened));
+    const refused = failed(new SlotCredentialKeyFile(opened).read());
     assert.equal(refused.code, 'precondition-failed');
-    assert.ok(!JSON.stringify(refused).includes(String(content.key)), JSON.stringify(refused));
+    assert.ok(refused.message.startsWith(`${SLOT_CREDENTIAL_KEY_FILE} `), refused.message);
+    assert.ok(!JSON.stringify(refused).includes(String(content.key)), 'the reason holds no key text');
     assert.ok(readFileSync(keyPath(opened), 'utf8').includes(String(content.key)), 'the file is left as it was');
     rmSync(base, { recursive: true, force: true });
   }
   namespace();
 });
 
+test('a short key names its size', () => {
+  const opened = namespace();
+  writeFileSync(keyPath(opened), JSON.stringify({ format: 1, key: Buffer.alloc(16, 5).toString('base64') }), { mode: 0o600 });
+  assert.equal(failed(new SlotCredentialKeyFile(opened).read()).message, 'slot-credential-key has 16 bytes, not 32');
+});
+
 test('a key file readable by others is refused', () => {
   const opened = namespace();
-  value(openSlotCredentialKey(opened));
+  value(new SlotCredentialKeyFile(opened).ensure());
   chmodSync(keyPath(opened), 0o644);
-  assert.equal(openSlotCredentialKey(opened).ok, false);
+  assert.equal(new SlotCredentialKeyFile(opened).read().ok, false);
 });
