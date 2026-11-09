@@ -30,7 +30,7 @@ The host `GEO-PetarPetrov` (Linux 7.0.0-42-generic), Node.js v24.22.1, the `.nvm
 ## Dependency and file limits
 
 - `apps/control-plane` gains the production dependency `@taskelith/workspace` and the devDependency `@taskelith/git-workspace`, in `package.json` and `tsconfig.json` (the workspace contract requires its references), with `package-lock.json` and the regenerated `docs/dependencies/licenses.json` and `sbom.cdx.json` (`make dependency-inventory`). The boundary check accepted them.
-- Non-test code files: 16, as forecast (the execution eight, the Scheduling two, the Postgres two, and the control plane four: `composition/control-plane.ts` passes the `Logger`). Their non-test lines: `git diff --numstat` of those directories and the new `session-commands.ts`: 396 lines added and 65 removed, within the limit of 500.
+- Non-test code files: 16, as forecast (the execution eight, the Scheduling two, the Postgres two, and the control plane four: `composition/control-plane.ts` passes the `Logger`). Their non-test lines: `git diff --numstat` of those directories and the new `session-commands.ts`: 396 lines added and 65 removed before pass 1 and 399 and 65 after its fixes, counting the two `package.json` and `tsconfig.json` files of `apps/control-plane` (395 and 65 without them), within the limit of 500.
 
 ## Fail-before
 
@@ -57,12 +57,38 @@ The row "A turn or response ID stored" replaces a first mutation that did not co
 - Real PostgreSQL covers the commands port (`session-observation.integration.test.ts`): a written turn and response command checked against `TurnDeliveryCommand` and `ResponseDeliveryCommand` with `checkMessageSchema`; the worker's address; a turn's end through `ObservationService` committing the next turn's command, the cursor, and the session together; the port's refusals (version 1, no version, an ended assignment, no assignment, another ownership generation); the outbox backstop for a repeated ID; and a due command killed before and after `SessionTimelineCommit` and `OutboxCommit`.
 - `npm run check:boundaries` passed; `npm run verify:comments` passed; `npm run openspec -- validate write-session-commands --strict` passed.
 - `npm run openspec -- archive write-session-commands --yes` and `npm run openspec -- validate --all --strict` in a scratch copy of the tree passed (71 items passed, 0 failed), so no requirement of this change exceeds the validator's limit after archive; each requirement body is under 500 characters.
-- `make verify` on the committed tree `f439dc5d` is in the generated part below; `make record` read its log without the one line that the run's wrapper appended after the stamp line.
+- `make verify` on the committed tree is in the generated part below.
 
 ## Author self-check and evidence check
 
 - Self-check, by the briefing session before pass 1: it read `domain/session-commands.ts`, the diff of `session-timeline-service.ts`, and the edit of `session-timeline.md` against the brief's decisions and the review checklist in `checklist.json`, and checked the design note's load-bearing citations against the code. It did not read every test.
 - Evidence check: `npm run verify:links` passed ("Every checked link conforms.") and `npm run verify:comments` passed. This change's records have no external links.
+
+## Review
+
+### Pass 1
+
+- Reviewer: Codex CLI, model `gpt-6-astra`, effort `medium`, role A, read-only.
+- Invocation: `make review CHANGE=write-session-commands PASS=1 ROLE=A REVIEWER='codex gpt-6-astra#medium'`, which printed `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only`. The model confirmation reported `gpt-6-astra`, effort `medium`, sandbox `read-only`. Session `01a1c28e-02ab-71e1-bd2b-2309d5f86d19`.
+- Reviewed head `dee4a32d`. The snapshot before and after the pass was equal: `4a9e60cba4b646dec1e8734fd9fb10e916a4bcefcbe17dc84a9c2451b7ea3a23`.
+- `route.json` recommended effort `high`; the authorized `medium` applied.
+- Counts: Critical 0, High 0, Medium 2, Low 3, in `passes.jsonl` and `findings.jsonl`. Each finding was checked against the code and is correct; all five are fixed, and pass 2 checks the fixes.
+
+| # | Severity | Finding | Test | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | Medium | The delta left "Durable session timeline service" accepting a repeat on equal kind, turn, and text, while the code refuses a differing operation | Spec only; the tests "a recorded classified operation is stored, and a repeat with another operation is a conflict" and "a request recorded without an operation keeps the digest" already pin both digests | `3226eb30`: a MODIFIED requirement with the full living text, the optional operation in the digest, the old digest when absent, and two new scenarios; 489 characters in the requirement body; `proposal.md` names it |
+| 2 | Medium | The in-memory adapter appended a repeated command ID that the PostgreSQL outbox refuses, and the old-record test relied on that | Fail-before below | `5e4a9987`: the adapter answers `conflict` for a held ID, after the no-reader check as in PostgreSQL; the fixture of "a stored session whose queued turn has neither an ID nor a command" has neither; "a written command whose stored ID was lost" covers the refusal |
+| 3 | Low | The scenario said a stopped session or a turn of unknown acceptance writes no command | Mutation below | `3226eb30`: three scenarios, a failed change (no command), a stopped session, and a turn of unknown acceptance, the last two limited to `session.turn.deliver`; the last in that generation. New test "a stopped session writes no turn command but still delivers a response to its current turn" |
+| 4 | Low | The no-reader rule covered every response, though the code skips a host's delegation result | Text only; `responseDue` skips it, and the test of the host's delegation result pins that no command is written | `3226eb30`: rule 9 of `docs/contracts/session-timeline.md` section 5.2, the requirement, and its scenario name a response of a principal or a standing rule, which produces `session.response.deliver` |
+| 5 | Low | The commands port test restored the assignment as `running`, not an assignment state | No fail-before: the adapter only tests `state !== 'ended'`, so `running` and `offered` behave alike; mutation below | `9a0dac49`: the test restores `offered`, the state of the placed assignment, confirmed by a temporary `SELECT state FROM assignments` assertion during the integration run |
+
+Fix round evidence, on the source rebuilt with `npx tsc --build apps/control-plane/tsconfig.json`, each change restored afterwards:
+
+- Finding 2, the old test relied on the gap: the adapter's check alone, `session-commands.test.ts`: tests 26, fail 1, the old-record test, `expected success, got {"code":"conflict","message":"the outbox holds the command ...`.
+- Finding 2, fail-before: the new tests against the adapter without the check: tests 28, pass 27, fail 1, "a written command whose stored ID was lost is refused by the outbox and the change rolls back", `expected a failure`. With the check: tests 28, pass 28.
+- Finding 3, the new test is a characterization of behavior the code already had. Mutation control: `responseDue` returning nothing for a stopped session: tests 28, pass 27, fail 1, that test.
+- Finding 5, mutation control: `PostgresSessionCommands.append` without the ownership generation check, `session-observation.integration.test.ts` against `scripts/services.sh run` services: tests 28, pass 27, fail 1, `another generation`; unmutated: tests 28, pass 28, also with the temporary state assertion, removed afterwards.
+- `npm run openspec -- validate write-session-commands --strict`: valid. Scratch copy at `3226eb30` (`git archive`, with the worktree's `node_modules`): `npm run openspec -- archive write-session-commands --yes` applied `session-turn-model` `+ 4 added`, `~ 1 modified` and `observation-consumption` `~ 1 modified`; `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -84,5 +110,5 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review, passes per `docs/governance.md`, run by the briefing session; not done here.
+- Independent review: pass 1 is recorded in "Review"; pass 2 (role B, Claude Code `claude-fable-5-1`, medium) and, only if it finds Medium or worse, pass 3 remain.
 - `make record`, this record's review sections, the archive commit, and the handoff, by the briefing session.

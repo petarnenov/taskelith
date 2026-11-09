@@ -34,4 +34,4 @@
 
 ## Resume point
 
-Pass 1 (role A, Codex CLI gpt-6-astra, medium, session 01a1c28e-02ab-71e1-bd2b-2309d5f86d19) reported 2 Medium and 3 Low on dee4a32d; snapshot unchanged. Next: record and fix them, `make verify`, `make record`, pass 2 (role B, Claude Code claude-fable-5-1, medium), then pass 3 (Antigravity gemini-4-argon-medium) only if pass 2 finds Medium or worse, archive as the last commit, hand off to Niki, and stop (owner order). The coordinator set the size guard at 16 non-test files and +500 lines.
+Pass 1 (role A, Codex CLI gpt-6-astra, medium, session 01a1c28e-02ab-71e1-bd2b-2309d5f86d19) reported 2 Medium and 3 Low on dee4a32d; all five are fixed and recorded in `findings.jsonl` and `verification.md`. Next: pass 2 (role B, Claude Code claude-fable-5-1, medium), then pass 3 (Antigravity gemini-4-argon-medium) only if pass 2 finds Medium or worse, archive as the last commit, hand off to Niki, and stop (owner order). The coordinator set the size guard at 16 non-test files and +500 lines.
