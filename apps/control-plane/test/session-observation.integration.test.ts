@@ -434,7 +434,7 @@ test('the commands port writes only through the attempt\'s running assignment to
 
   await sql("UPDATE assignments SET state = 'ended', record = (record::jsonb || '{\"state\": \"ended\"}'::jsonb)::text");
   assert.equal(value(await appendCommand(commandAt(at, 'c-ended'))), 'no-reader', 'an ended assignment');
-  await sql("UPDATE assignments SET state = 'running', record = (record::jsonb || '{\"state\": \"running\"}'::jsonb)::text");
+  await sql("UPDATE assignments SET state = 'offered', record = (record::jsonb || '{\"state\": \"offered\"}'::jsonb)::text");
   assert.equal(value(await appendCommand({ ...commandAt(at, 'c-other'), attemptId: id('AttemptId', 'attempt-without-assignment') })), 'no-reader', 'no assignment');
   assert.equal(value(await appendCommand({ ...commandAt(at, 'c-generation'), ownershipGeneration: (at.ownershipGeneration + 1) as never })), 'no-reader', 'another generation');
   assert.deepEqual((await sessionCommands()).map((command) => command.metadata.eventId), ['c-reader']);
