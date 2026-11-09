@@ -241,6 +241,18 @@ test('a change that fails writes no command, and neither does a turn whose accep
   assert.deepEqual(stopped.store.writtenCommands(), []);
 });
 
+test('a stopped session writes no turn command but still delivers a response to its current turn', async () => {
+  const subject = timeline();
+  await withOpenRequest(subject);
+  await submitted(subject, 'key-2');
+  value(await subject.service.recordLimitSignal(SESSION, {}));
+
+  value(await subject.service.consumeResponse(SESSION, response('answer-1')));
+
+  assert.equal(responseCommands(subject).length, 1);
+  assert.equal(turnCommands(subject).length, 1, 'only the turn delivered before the stop');
+});
+
 test('consuming a response writes one delivery command, and a repeat with its key writes none', async () => {
   const subject = timeline();
   await withOpenRequest(subject);
@@ -409,21 +421,36 @@ for (const [path, answer] of ANSWER_PATHS) {
   });
 }
 
-test('a stored session whose queued turn holds no ID, as before these fields, is written on its next change', async () => {
+test('a stored session whose queued turn has neither an ID nor a command, as before these fields, is written on its next change', async () => {
+  const subject = timeline();
+  await open(subject);
+  await submitted(subject, 'key-1');
+  const old = value(await subject.store.transaction((tx) => tx.sessions.get(SESSION)))!;
+  const running = { generation: generation(1), attemptId: FIRST_ATTEMPT, ended: false };
+  value(await subject.store.transaction((tx) => tx.sessions.replace(old, { ...old.session, nativeSessionId: NATIVE, generations: [running] })));
+  assert.deepEqual(subject.store.writtenCommands(), []);
+  assert.equal((await storedSession(subject)).turns[0]!.deliveryCommands, undefined);
+
+  await submitted(subject, 'key-2');
+
+  assert.deepEqual(turnIdsOf(turnCommands(subject)), ['turn-1']);
+  assert.equal((await storedSession(subject)).turns[0]!.deliveryCommands?.length, 1);
+});
+
+test('a written command whose stored ID was lost is refused by the outbox and the change rolls back', async () => {
   const subject = timeline();
   await open(subject);
   await started(subject);
   await submitted(subject, 'key-1');
   const old = value(await subject.store.transaction((tx) => tx.sessions.get(SESSION)))!;
-  const { deliveryCommands: _gone, ...withoutCommands } = old.session.turns[0]!;
-  value(await subject.store.transaction((tx) => tx.sessions.replace(old, { ...old.session, turns: [withoutCommands] })));
+  const { deliveryCommands: _lost, ...withoutId } = old.session.turns[0]!;
+  value(await subject.store.transaction((tx) => tx.sessions.replace(old, { ...old.session, turns: [withoutId] })));
 
-  await submitted(subject, 'key-2');
+  const repeated = failed(await subject.service.submitTurn(SESSION, { key: key('key-2'), ...submit('text of key-2') }));
 
-  const commands = turnCommands(subject);
-  assert.equal(commands.length, 2);
-  assert.equal(commands[0]!.command.commandId, commands[1]!.command.commandId, 'the derived ID is the same');
-  assert.equal((await storedSession(subject)).turns[0]!.deliveryCommands?.length, 1);
+  assert.equal(repeated.code, 'conflict');
+  assert.equal(turnCommands(subject).length, 1);
+  assert.equal((await storedSession(subject)).turns.length, 1, 'the change rolled back');
 });
 
 test('a recorded classified operation is stored, and a repeat with another operation is a conflict', async () => {

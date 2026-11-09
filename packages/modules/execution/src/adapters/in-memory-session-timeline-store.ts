@@ -274,6 +274,9 @@ class MemorySessionCommands implements SessionCommands {
 
   async append(command: SessionCommand, issuedAt: Instant): Promise<Result<SessionCommandAppend>> {
     if (this.withoutReader.has(command.attemptId)) return ok('no-reader');
+    if (this.state.commands.some((written) => written.command.commandId === command.commandId)) {
+      return err(failure('conflict', `the outbox holds the command ${command.commandId}`, { session: command.sessionId }));
+    }
     this.state.commands.push(Object.freeze({ command, issuedAt }));
     return ok('written');
   }
