@@ -170,6 +170,17 @@ Fail-before evidence of the fix round. Each test was committed in `00d0db64` and
 
 The four fixes of pass 2 above had no later pass. Coordinator's architect check: pending.
 
+## Archive checks
+
+Run on the working tree of the archive, which is the tree of the archive commit apart from this section.
+
+- `npm run openspec -- archive wire-account-pool-into-control-plane --yes`: archived as `2026-11-10-wire-account-pool-into-control-plane`.
+- `npm run openspec -- validate --all --strict`: 71 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `account-pool-port` and `control-plane-api`, the edits of this change's two deltas.
+- `findings.jsonl` and `passes.jsonl` moved with the change; `make findings ARGS="validate"`, run by `make verify`, passes.
+- `make verify` on that tree: passed, profile full, uncommitted tree so no stamp; tests 5003, pass 4994, fail 0, skipped 9; all files 99.45 % lines, 93.04 % branches, 98.92 % functions.
+
 ## Remaining gates
 
 - The coordinator's architect check of the unreviewed fixes of pass 2.
