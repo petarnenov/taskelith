@@ -57,13 +57,18 @@ export function updateAccountSlot(store: CapacityStore, input: UpdateAccountSlot
     return Promise.resolve(err(failure('invalid', `the update of slot ${id} names no change`, { slot: id })));
   }
   return store.transaction(async (tx) => {
-    const stored = await commandSlot(tx, { id, expectedRevision });
+    const stored = await updatableSlot(tx, { id, expectedRevision });
     if (!stored.ok) return stored;
-    if (stored.value.state === 'revoked') return err(revokedConflict(id));
     const changes = { allowedProjects: allowedProjects ?? stored.value.allowedProjects, concurrencyLimit: concurrencyLimit ?? stored.value.concurrencyLimit };
     if (sameSettings(stored.value, changes)) return stored;
     return replaceSlot(tx, stored.value, changes);
   });
+}
+
+// Read only, so that a caller can answer not-found, then the revision, then
+// the state rule first; the update itself still compares and sets.
+export function readUpdatableSlot(store: CapacityStore, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
+  return store.transaction((tx) => updatableSlot(tx, target));
 }
 
 // Section 8.1: the slot leaves its pools and every attempt that holds it is
@@ -124,6 +129,12 @@ async function commandSlot(tx: CapacityTransaction, { id, expectedRevision }: Sl
     return err(failure('conflict', `slot ${id} is at revision ${stored.value.revision}, not ${expectedRevision}`, { slot: id }));
   }
   return stored;
+}
+
+async function updatableSlot(tx: CapacityTransaction, target: SlotCommandTarget): Promise<Result<AccountSlot>> {
+  const stored = await commandSlot(tx, target);
+  if (!stored.ok) return stored;
+  return stored.value.state === 'revoked' ? err(revokedConflict(target.id)) : stored;
 }
 
 async function replaceSlot(tx: CapacityTransaction, stored: AccountSlot, changes: Partial<AccountSlot>): Promise<Result<AccountSlot>> {

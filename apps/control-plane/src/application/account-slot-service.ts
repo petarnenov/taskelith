@@ -2,6 +2,7 @@ import type { HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
 import {
   addAccountSlot,
+  readUpdatableSlot,
   reinstateAccountSlot,
   removeAccountSlot,
   revokeAccountSlot,
@@ -97,6 +98,8 @@ export class AccountSlotService {
   async update(change: SlotSettingsChange): Promise<Result<AccountSlot>> {
     const { allowedProjects, ...rest } = change;
     if (allowedProjects === undefined) return updateAccountSlot(this.#ports.store, rest);
+    const updatable = await readUpdatableSlot(this.#ports.store, rest);
+    if (!updatable.ok) return updatable;
     const known = await this.#knownProjects(allowedProjects);
     return known.ok ? updateAccountSlot(this.#ports.store, { ...rest, allowedProjects: known.value }) : known;
   }

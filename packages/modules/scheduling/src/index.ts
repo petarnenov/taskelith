@@ -291,6 +291,7 @@ export {
   type AddAccountSlotInput,
 } from './application/add-account-slot.js';
 export {
+  readUpdatableSlot,
   reinstateAccountSlot,
   removeAccountSlot,
   revokeAccountSlot,
