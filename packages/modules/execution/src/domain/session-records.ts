@@ -103,12 +103,12 @@ export type TurnProgress =
 
 // The command that carries a turn to a generation (worker messages, section
 // 3), stored with the turn so that a resend reuses its identity.
-export interface TurnCommandRecord {
+export interface TurnDeliveryRecord {
   readonly generation: SessionGeneration;
   readonly commandId: string;
 }
 
-export type Turn = TurnIdentity & TurnProgress & { readonly deliveryCommands?: readonly TurnCommandRecord[] };
+export type Turn = TurnIdentity & TurnProgress & { readonly deliveryCommands?: readonly TurnDeliveryRecord[] };
 
 export interface TurnSubmitted {
   readonly session: Session;
