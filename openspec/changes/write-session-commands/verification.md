@@ -131,6 +131,10 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 1 | A | `codex gpt-6-astra#medium` | `01a1c28e-02ab-71e1-bd2b-2309d5f86d19` | 0 | 0 | 2 | 3 |
 <!-- make record: end -->
 
+## Merge of dev
+
+`origin/dev` at `687c10f7` (#453, `wire-account-pool-into-control-plane`) was merged into this branch by the merge commit `99f73428`, after both review passes, with no conflict. It touched the control-plane API, routes, and composition (`apps/control-plane/src/composition/control-plane.ts`, `settings.ts`, the new `account-pool.ts`), the account slot commands of Scheduling, the slot credential key, the secrets adapter, `control-plane.openapi.json`, one sentence of `docs/contracts/control-plane-wire-contracts.md`, and the living specs `account-pool-port` and `control-plane-api`; it did not touch `package-lock.json` or the living specs of this change's deltas. The reviewers saw the pre-merge tree: pass 1 reviewed `dee4a32d` and pass 2 `71d8b782`, and neither reviewed the merge nor the pass 2 fixes.
+
 ## Limitations
 
 - Test fixtures that hold sessions without assignments use a `commands` port that answers `written` (`packages/adapters/postgres/test/session-timeline-fixtures.ts`, `apps/control-plane/test/native-answer-rollback.integration.test.ts`); only the integration tests named above use the real port.
