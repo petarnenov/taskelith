@@ -51,7 +51,7 @@ The control plane SHALL derive a `commandId` from the session, the kind, and the
 - **THEN** it reads as it did, and a queued turn without an ID is written when the next change evaluates it
 
 ### Requirement: A session command without a reader
-A due turn delivery whose attempt has no running assignment, or whose worker has no protocol version of at least 2, SHALL commit with no command and no stored ID and SHALL log one line of identifiers. A response of a principal or a standing rule, which produces `session.response.deliver`, SHALL in that state fail with `unavailable`, leave its request open, and record no idempotency key, so that it can be retried.
+A due turn delivery whose attempt has no assignment that has not ended, or whose worker has no protocol version of at least 2, SHALL commit with no command and no stored ID and SHALL log one line of identifiers. A response of a principal or a standing rule, which produces `session.response.deliver`, SHALL in that state fail with `unavailable`, leave its request open, and record no idempotency key, so that it can be retried.
 
 #### Scenario: A turn without a reader
 - **WHEN** a turn is due and the attempt's assignment or worker cannot read a session command
