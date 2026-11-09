@@ -38,6 +38,7 @@ The coordinator (Niki) decided Q1 to Q12 on 2026-11-05; each decision below name
 - **Rotation answer.** The rotation answers the slot at its switch revision, and its cleanup then advances the revision once more, so a client reads the slot again before its next command.
 - **Signals.** `SlotSignals` has no caller until item 18 relays the limit signals.
 - **Revocation of a busy slot (Q13).** The coordinator kept compare-and-swap on the revision. A placement writes `lastReservedAt` and moves the slot's revision, so a revocation by the client's revision can meet `conflict` again and again on a busy slot; a revision-free path or a retry rule is a follow-up that goes with item 12e.
+- **Project reads of a slot (Q5).** `allowedProjects` is checked one project per store read, and `AllowedProjects` allows 1000 unique items, so one add or one update that names `allowedProjects` can cost 1000 sequential reads. The bound is accepted because only an installation owner can run these operations, so no ordinary caller can drive the load.
 
 ## Risks / Trade-offs
 
