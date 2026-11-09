@@ -1,5 +1,6 @@
 import type { HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
+import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
   addAccountSlot,
   readUpdatableSlot,
@@ -57,15 +58,18 @@ export interface AccountSlotServicePorts extends Omit<AccountSlotCommandPorts, '
   readonly projects: SlotProjects;
   readonly newSlotId: () => string;
   readonly revocationCommandIdFor: RevocationCommandIdFor;
+  readonly logger?: Logger;
 }
 
 // The account slot operations of wire contracts section 4 over the 12d A
 // commands; the server checked each caller's role before the body.
 export class AccountSlotService {
   readonly #ports: AccountSlotServicePorts;
+  readonly #logger: Logger;
 
   constructor(ports: AccountSlotServicePorts) {
     this.#ports = ports;
+    this.#logger = ports.logger ?? SILENT_LOGGER;
   }
 
   list(after: ProviderCredentialId | undefined): Promise<Result<SlotPage>> {
@@ -88,7 +92,7 @@ export class AccountSlotService {
     if (!allowedProjects.ok) return allowedProjects;
     const id = parseIdentifier('ProviderCredentialId', this.#ports.newSlotId());
     if (!id.ok) return err(failure('internal', 'the minted slot identifier is not an identifier'));
-    return storingCredential(() => addAccountSlot(this.#ports, {
+    return this.#storingCredential(() => addAccountSlot(this.#ports, {
       id: id.value as ProviderCredentialId, harnessId: harnessId.value as HarnessPluginId,
       mechanismId: mechanismId.value as SubscriptionMechanismId, allowedProjects: allowedProjects.value, secret: addition.secret,
       ...(addition.concurrencyLimit === undefined ? {} : { concurrencyLimit: addition.concurrencyLimit }),
@@ -118,7 +122,7 @@ export class AccountSlotService {
   }
 
   rotate(rotation: SlotRotation): Promise<Result<AccountSlot>> {
-    return storingCredential(() => rotateSlotCredential(this.#ports, rotation));
+    return this.#storingCredential(() => rotateSlotCredential(this.#ports, rotation));
   }
 
   // One more than a page is read, so `next` names a page that exists.
@@ -140,14 +144,20 @@ export class AccountSlotService {
     }
     return ok(projectIds as readonly ProjectId[]);
   }
+
+  // A rejection can quote what the store was given, so it is logged by type
+  // only; the request log already records the fixed 503.
+  async #storingCredential(command: () => Promise<Result<AccountSlot>>): Promise<Result<AccountSlot>> {
+    try {
+      return await command();
+    } catch (error) {
+      if (error instanceof SlotCredentialsUnavailable) return err(failure('unavailable', 'the slot credential store is unavailable'));
+      this.#logger.error('scheduling.slot-credentials.store-failed', { errorType: errorTypeOf(error) });
+      return err(failure('internal', 'the slot credential could not be stored'));
+    }
+  }
 }
 
-// A store's rejection can quote what it was given, so only fixed text leaves.
-async function storingCredential(command: () => Promise<Result<AccountSlot>>): Promise<Result<AccountSlot>> {
-  try {
-    return await command();
-  } catch (error) {
-    if (error instanceof SlotCredentialsUnavailable) return err(failure('unavailable', 'the slot credential store is unavailable'));
-    return err(failure('internal', 'the slot credential could not be stored'));
-  }
+function errorTypeOf(error: unknown): string {
+  return error instanceof Error ? error.constructor.name : 'non-error';
 }

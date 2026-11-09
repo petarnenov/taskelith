@@ -194,6 +194,47 @@ for (const { code, message, rejection } of CREDENTIAL_STORE_REFUSALS) {
   });
 }
 
+const STORE_FAILED = 'scheduling.slot-credentials.store-failed';
+const quotingMessage = (secret: SlotSecret) => `the insert of ${secret.reveal()} failed`;
+
+class SlotStoreFault extends Error {}
+
+// Add and rotate a slot over a store that rejects each write as told.
+async function logsOfRejectedStores(rejection: (secret: SlotSecret) => unknown) {
+  const { sink, logger } = logs();
+  const credentials = new InMemorySlotCredentials(() => AT);
+  const { slots } = accountPoolServices({ ...ports(transaction()), credentials, logger });
+  const slot = value(await slots.add(addition()));
+  value(await slots.revoke({ id: slot.id, expectedRevision: 1 }, id('CorrelationId', 'correlation-1') as CorrelationId));
+  credentials.store = async (_slotId, secret) => {
+    throw rejection(secret);
+  };
+  const credential = `fixture-${randomBytes(12).toString('hex')}`;
+  const secret = value(SlotSecret.of(credential));
+  failed(await slots.add({ ...addition(), secret }));
+  failed(await slots.rotate({ id: slot.id, expectedRevision: 2, secret }));
+  return { credential, records: sink.records.filter(({ event }) => event === STORE_FAILED), written: JSON.stringify(sink.records) };
+}
+
+const UNEXPECTED_STORE_REJECTIONS = [
+  { thrown: 'an Error', errorType: 'SlotStoreFault', rejection: (secret: SlotSecret) => new SlotStoreFault(quotingMessage(secret)) },
+  { thrown: 'a non-Error', errorType: 'non-error', rejection: quotingMessage },
+];
+
+for (const { thrown, errorType, rejection } of UNEXPECTED_STORE_REJECTIONS) {
+  test(`${thrown} from the credential store is logged by constructor name only`, async () => {
+    const { credential, records, written } = await logsOfRejectedStores(rejection);
+    assert.deepEqual(records.map(({ level, fields }) => [level, fields]), [['error', { errorType }], ['error', { errorType }]]);
+    assert.equal(written.includes(credential), false, 'a log record holds the credential');
+    assert.equal(written.includes('the insert of'), false, 'a log record holds the message');
+  });
+}
+
+test('an unavailable credential store is not logged here, the request log has its failure', async () => {
+  const { records } = await logsOfRejectedStores(() => new SlotCredentialsUnavailable());
+  assert.deepEqual(records, []);
+});
+
 test('the revocation command of an assignment is stable, its own, and bounded', () => {
   const first = id('AssignmentId', 'assignment-1') as AssignmentId;
   const longest = id('AssignmentId', 'a'.repeat(MAX_IDENTIFIER_LENGTH)) as AssignmentId;
@@ -210,7 +251,7 @@ function namespace(): ControlPlaneNamespace {
 // The pool connects on first use only, so no server is needed here.
 function startPorts(space: ControlPlaneNamespace) {
   database = new PostgresDatabase(new URL('postgres://nobody@127.0.0.1:9/none'));
-  return { namespace: space, database, projects: EVERY_PROJECT, defaultCooldown: value(parseDefaultCooldownMinutes(60)) };
+  return { namespace: space, database, projects: EVERY_PROJECT, defaultCooldown: value(parseDefaultCooldownMinutes(60)), logger: logs().logger };
 }
 
 test('the account pool starts with the slot credential key that initialization created', () => {

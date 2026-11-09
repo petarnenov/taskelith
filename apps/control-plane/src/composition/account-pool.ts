@@ -38,6 +38,7 @@ export interface AccountPoolPorts {
   readonly credentials: SlotCredentials;
   readonly projects: SlotProjects;
   readonly defaultCooldown: DefaultCooldownMinutes;
+  readonly logger?: Logger;
 }
 
 export interface AccountPoolServices {
@@ -53,25 +54,27 @@ export interface AccountPoolStartPorts {
   readonly database: PostgresDatabase;
   readonly projects: SlotProjects;
   readonly defaultCooldown: DefaultCooldownMinutes;
+  readonly logger: Logger;
 }
 
 // The pool over PostgreSQL with the key that initialization created; a
 // missing or malformed key refuses the start and is never created here.
-export function startAccountPoolServices({ namespace, database, projects, defaultCooldown }: AccountPoolStartPorts): Result<AccountPoolServices> {
+export function startAccountPoolServices({ namespace, database, projects, defaultCooldown, logger }: AccountPoolStartPorts): Result<AccountPoolServices> {
   const key = new SlotCredentialKeyFile(namespace).read();
   if (!key.ok) return key;
   const cipher = AesGcmSlotCredentialCipher.of(key.value);
   if (!cipher.ok) return cipher;
   const credentials = new PostgresSlotCredentials((work) => database.transaction(work), cipher.value);
-  return ok(accountPoolServices({ store: database, credentials, projects, defaultCooldown }));
+  return ok(accountPoolServices({ store: database, credentials, projects, defaultCooldown, logger }));
 }
 
-export function accountPoolServices({ store, credentials, projects, defaultCooldown }: AccountPoolPorts): AccountPoolServices {
+export function accountPoolServices({ store, credentials, projects, defaultCooldown, logger }: AccountPoolPorts): AccountPoolServices {
   const deliveries = new StaticAdmittedDeliveries(ADMITTED_SLOT_DELIVERIES);
   const ids = new RandomIdentifiers();
   const slots = new AccountSlotService({
     store, credentials, deliveries, projects, newSlotId: () => ids.newSlotId(),
     monotonicMilliseconds: () => performance.now(), revocationCommandIdFor: slotRevocationCommandId,
+    ...(logger === undefined ? {} : { logger }),
   });
   return {
     slots,

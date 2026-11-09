@@ -232,7 +232,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   );
   if (!scm.ok) return scm;
   const pool = startAccountPoolServices({
-    namespace: admin.value.namespace, database, projects: projectSetup, defaultCooldown: settings.slotDefaultCooldown ?? DEFAULT_SLOT_COOLDOWN,
+    namespace: admin.value.namespace, database, projects: projectSetup, defaultCooldown: settings.slotDefaultCooldown ?? DEFAULT_SLOT_COOLDOWN, logger,
   });
   if (!pool.ok) return pool;
   const api = new ControlPlaneApi({
