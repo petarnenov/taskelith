@@ -57,7 +57,24 @@ The row "A turn or response ID stored" replaces a first mutation that did not co
 - Real PostgreSQL covers the commands port (`session-observation.integration.test.ts`): a written turn and response command checked against `TurnDeliveryCommand` and `ResponseDeliveryCommand` with `checkMessageSchema`; the worker's address; a turn's end through `ObservationService` committing the next turn's command, the cursor, and the session together; the port's refusals (version 1, no version, an ended assignment, no assignment, another ownership generation); the outbox backstop for a repeated ID; and a due command killed before and after `SessionTimelineCommit` and `OutboxCommit`.
 - `npm run check:boundaries` passed; `npm run verify:comments` passed; `npm run openspec -- validate write-session-commands --strict` passed.
 - `npm run openspec -- archive write-session-commands --yes` and `npm run openspec -- validate --all --strict` in a scratch copy of the tree passed (71 items passed, 0 failed), so no requirement of this change exceeds the validator's limit after archive; each requirement body is under 500 characters.
-- The result of `make verify` on the committed tree is recorded by the briefing session (`make record`) at review.
+- `make verify` on the committed tree `f439dc5d` is in the generated part below; `make record` read its log without the one line that the run's wrapper appended after the stamp line.
+
+## Author self-check and evidence check
+
+- Self-check, by the briefing session before pass 1: it read `domain/session-commands.ts`, the diff of `session-timeline-service.ts`, and the edit of `session-timeline.md` against the brief's decisions and the review checklist in `checklist.json`, and checked the design note's load-bearing citations against the code. It did not read every test.
+- Evidence check: `npm run verify:links` passed ("Every checked link conforms.") and `npm run verify:comments` passed. This change's records have no external links.
+
+<!-- make record: begin -->
+## Generated checks
+
+Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
+
+- `make verify`: passed, profile full, tree `f439dc5dc13e10d00740235ecc99760e9afbec48`; tests 4996, pass 4949, fail 0, skipped 47; all files 99.42% lines, 93.04% branches, 98.85% functions.
+- `npm run openspec -- validate write-session-commands --strict`: passed, `Change 'write-session-commands' is valid`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 129 file(s); every pass summary file is valid: 109 file(s); every route file is valid: 62 file(s).`.
+- Spec diff against the merge base `78a267444f4d` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`: none yet.
+<!-- make record: end -->
 
 ## Limitations
 
