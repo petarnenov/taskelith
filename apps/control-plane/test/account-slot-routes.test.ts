@@ -31,9 +31,11 @@ import {
   parseAccountSlot,
   parseDefaultCooldownMinutes,
   parseSlotCredentialVersion,
+  SlotCredentialsUnavailable,
   type AccountSlot,
   type ProjectId,
   type ProviderCredentialId,
+  type SlotSecret,
   type SubscriptionMechanismId,
 } from '@taskelith/scheduling';
 import { Argon2idPasswordHasher, NodeSecrets } from '@taskelith/secrets';
@@ -47,6 +49,7 @@ const INVOCATION = { actor: 'root@control-plane-1', reason: 'account slot route 
 const BEARER = { authorization: `Bearer ${OPERATOR}` };
 const UNKNOWN = `s${'f'.repeat(32)}`;
 const OWNER_DENIAL = { reason: 'role-required', requiredRole: 'installation-owner' };
+const STORE_OUTAGE = failure('unavailable', 'the capacity store is down');
 const hasher = value(Argon2idPasswordHasher.create({ parameters: { memoryKib: 64, passes: 1, parallelism: 1 } }));
 
 interface Answer {
@@ -94,7 +97,11 @@ async function fixture(t: TestContext) {
   const tasks = new InMemoryTaskRepository();
   const lineage = new InMemoryTaskLineage();
   const tx = { tasks, lineage, ...inMemoryCapacity(tasks, lineage), now: async () => clock.now() } as unknown as ControlPlaneTransaction;
-  const capacity: ControlPlaneStore = { transaction: (work) => work(tx), readCommitted: (work) => work(tx) };
+  let storeIsDown = false;
+  const capacity = {
+    transaction: (work: (transaction: ControlPlaneTransaction) => Promise<unknown>) => (storeIsDown ? Promise.resolve(err(STORE_OUTAGE)) : work(tx)),
+    readCommitted: (work: (transaction: ControlPlaneTransaction) => Promise<unknown>) => (storeIsDown ? Promise.resolve(err(STORE_OUTAGE)) : work(tx)),
+  } as unknown as ControlPlaneStore;
   const credentials = new InMemorySlotCredentials(() => clock.now());
   const pool = accountPoolServices({
     store: capacity, credentials, projects: new ProjectSetupService({ store, random: secrets, clock }), defaultCooldown: value(parseDefaultCooldownMinutes(60)),
@@ -136,7 +143,7 @@ async function fixture(t: TestContext) {
     for (const answer of answers) assert.equal(answer.headers.get('cache-control'), 'no-store');
   };
   return {
-    call, added, sent, tx, credentials, sink, leakFree, OWNER: await browser(base, 'owner'), VERA: await browser(base, 'vera'),
+    call, added, sent, tx, credentials, sink, leakFree, takeStoreDown: () => { storeIsDown = true; }, OWNER: await browser(base, 'owner'), VERA: await browser(base, 'vera'),
   };
 }
 
@@ -312,6 +319,120 @@ test('the lists page by identifier at 100 slots and name the next page', async (
   const project = await call('GET', '/projects/project-1/account-slots?after=s050', OWNER);
   assert.deepEqual([(project.body.slots as unknown[]).length, 'next' in project.body], [50, false]);
   assert.equal((await call('GET', '/account-slots?after=a%20b', OWNER)).status, 400);
+  leakFree();
+});
+
+// Each way the credential store can refuse, and the answer it must give.
+const STORE_REFUSALS = [
+  {
+    name: 'an unexpected credential store exception', status: 500, code: 'internal', message: 'the slot credential could not be stored',
+    rejection: (secret: SlotSecret) => new Error(`the insert of ${secret.reveal()} failed`),
+  },
+  {
+    name: 'an unavailable credential store', status: 503, code: 'unavailable', message: 'the slot credential store is unavailable',
+    rejection: () => new SlotCredentialsUnavailable(),
+  },
+];
+
+// Every store rejects until the returned function restores it.
+function breakCredentialStore(credentials: InMemorySlotCredentials, rejection: (secret: SlotSecret) => Error): () => void {
+  const working = credentials.store;
+  credentials.store = async (_slotId, secret) => {
+    throw rejection(secret);
+  };
+  return () => {
+    credentials.store = working;
+  };
+}
+
+for (const { name, status, code, message, rejection } of STORE_REFUSALS) {
+  test(`${name} answers ${status} with fixed text on add and rotate, and no answer or log record holds the credential`, async (t) => {
+    const { call, added, sent, credentials, sink, leakFree, OWNER } = await fixture(t);
+    const credential = newCredential();
+    sent.push(credential);
+    const restore = breakCredentialStore(credentials, rejection);
+    const body = { harnessId: CLAUDE_CODE_HARNESS_ID, mechanismId: 'subscription-token', allowedProjects: ['project-1'], credential };
+    const refusedAdd = await call('POST', '/account-slots', BEARER, body);
+    assert.deepEqual([refusedAdd.status, refusedAdd.body], [status, { code, message, details: {} }]);
+    restore();
+    const slot = await added();
+    const path = slotPath(slot.slotId);
+    assert.equal((await call('POST', `${path}/revocation`, OWNER, { expectedRevision: 1 })).status, 200);
+    breakCredentialStore(credentials, rejection);
+    const refusedRotation = await call('PUT', `${path}/credential`, OWNER, { expectedRevision: 2, credential });
+    assert.deepEqual([refusedRotation.status, refusedRotation.body], [status, { code, message, details: {} }]);
+    assert.deepEqual(credentials.storedVersions(slot.slotId as ProviderCredentialId), [1], 'the rotation stored no version');
+    assert.equal(sink.records.filter((record) => record.level === 'error').length, 2, 'both refusals are logged');
+    leakFree();
+  });
+}
+
+test('an update that names an unknown project answers not-found, then conflict, then the state rule first', async (t) => {
+  const { call, added, leakFree, OWNER } = await fixture(t);
+  const slot = await added();
+  const path = slotPath(slot.slotId);
+  const unknownProject = (target: string, expectedRevision: number) => call('PATCH', target, OWNER, { expectedRevision, allowedProjects: ['project-9'] });
+  const missing = await unknownProject(slotPath(UNKNOWN), 1);
+  assert.deepEqual([missing.status, missing.body.code], [404, 'not-found'], 'a missing slot');
+  assert.equal((await call('PATCH', path, OWNER, { expectedRevision: 1, concurrencyLimit: 2 })).status, 200);
+  const stale = await unknownProject(path, 1);
+  assert.deepEqual([stale.status, stale.body.code], [409, 'conflict'], 'a stale revision');
+  assert.equal((await call('POST', `${path}/revocation`, OWNER, { expectedRevision: 2 })).status, 200);
+  const revoked = await unknownProject(path, 3);
+  assert.deepEqual([revoked.status, revoked.body.code], [409, 'conflict'], 'a revoked slot');
+  assert.equal((await call('POST', `${path}/removal`, OWNER, { expectedRevision: 3 })).status, 200);
+  const removed = await unknownProject(path, 4);
+  assert.deepEqual([removed.status, removed.body.code], [404, 'not-found'], 'a removed slot');
+  leakFree();
+});
+
+test('a store outage is 503 for every list and command, and a bad identifier or cursor is 400 before the store', async (t) => {
+  const { call, added, sent, takeStoreDown, leakFree, OWNER } = await fixture(t);
+  const slot = await added();
+  const credential = newCredential();
+  sent.push(credential);
+  const commands = COMMANDS(String(slot.slotId), credential);
+  for (const [method, path, body] of commands.slice(1)) {
+    const refused = await call(method, path.replace(String(slot.slotId), 'a%20b'), OWNER, body);
+    assert.deepEqual([refused.status, refused.body.details], [400, { field: 'slotId' }], `${method} ${path}`);
+  }
+  assert.equal((await call('GET', '/projects/project-1/account-slots?after=a%20b', OWNER)).status, 400);
+  takeStoreDown();
+  for (const path of ['/account-slots', '/projects/project-1/account-slots']) {
+    const refused = await call('GET', path, OWNER);
+    assert.deepEqual([refused.status, refused.body.code, refused.body.message], [503, 'unavailable', STORE_OUTAGE.message], path);
+  }
+  for (const [method, path, body] of commands) {
+    const refused = await call(method, path, OWNER, body);
+    assert.deepEqual([refused.status, refused.body.code], [503, 'unavailable'], `${method} ${path}`);
+  }
+  leakFree();
+});
+
+test('a minted identifier that is stored already is 500 with fixed text, and its stored version is discarded', async (t) => {
+  const { call, sent, tx, credentials, leakFree } = await fixture(t);
+  tx.accountSlots.add = async () => err(failure('conflict', 'slot already exists'));
+  const credential = newCredential();
+  sent.push(credential);
+  const refused = await call('POST', '/account-slots', BEARER, { harnessId: CLAUDE_CODE_HARNESS_ID, mechanismId: 'subscription-token', allowedProjects: ['project-1'], credential });
+  assert.deepEqual([refused.status, refused.body], [500, { code: 'internal', message: 'the account slot could not be stored', details: {} }]);
+  assert.deepEqual(await credentials.listStored('2100-01-01T00:00:00.000Z' as Instant), []);
+  leakFree();
+});
+
+test('a slot\'s reservation time, cooldown, and usage reach the owner, and only its signals reach a project reader', async (t) => {
+  const { call, tx, leakFree, OWNER, VERA } = await fixture(t);
+  const cooldown = { until: '2026-11-05T10:00:00.000Z' as Instant, source: 'default' as const };
+  const usage = { fraction: 0.5, windowEndsAt: '2026-11-05T12:00:00.000Z' as Instant };
+  const lastReservedAt = '2026-11-05T08:00:00.000Z' as Instant;
+  value(await tx.accountSlots.add(value(parseAccountSlot({ ...slotRecord('s0', ['project-1'], 'other-harness'), cooldown, usage, lastReservedAt }))));
+  const wireSignals = { cooldown: { endsAt: cooldown.until, source: cooldown.source }, usage };
+  const owner = await call('GET', '/account-slots', OWNER);
+  assert.ok(checkHttpSchema('AccountSlotPage', owner.body).ok);
+  assert.deepEqual((owner.body.slots as Array<Record<string, unknown>>).map((slot) => [slot.cooldown, slot.usage, slot.lastReservedAt]), [[wireSignals.cooldown, usage, lastReservedAt]]);
+  const reader = await call('GET', '/projects/project-1/account-slots', VERA);
+  assert.ok(checkHttpSchema('ProjectAccountSlotPage', reader.body).ok);
+  assert.deepEqual((reader.body.slots as Array<Record<string, unknown>>).map((slot) => [slot.cooldown, slot.usage, 'lastReservedAt' in slot]), [[wireSignals.cooldown, usage, false]]);
   leakFree();
 });
 
