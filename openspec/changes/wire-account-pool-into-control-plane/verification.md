@@ -67,6 +67,7 @@ Each mutant built (`build exit 0` in its log), and each source was restored and 
 | `npm run check:boundaries` | `7ee39718` | Failed: five `ApiServices` fixtures of `api-server.test.ts` without `accountSlots` and `fakeRunning` without `slotSignals`; fixed in `7b955dca`, after which it passes |
 | `make verify` run 1 (`verify-12dB1-1.log`) | `932774b7`, tree `487cb867`, clean | Passed at the first run, profile full, stamp written, no rerun of any suite: tests 4933, pass 4924, fail 0, skipped 9; all files 99.45 % lines, 92.88 % branches, 98.90 % functions; no `fixture-` credential in the log; recorded below |
 | `make verify` run 2 (`verify-12dB1-2.log`), pass 1 fix round with dev `78a26744` merged | `1ffef4d0`, tree `8966bf4c`, clean | Passed, profile full, stamp written; no `fixture-` credential in the log; totals in the generated section below |
+| `make verify` run 3 (`verify-12dB1-3.log`), pass 2 fix round | `542598c4`, tree `a78c737c`, clean | Passed, profile full, stamp written; no `fixture-` credential in the log; totals in the generated section below |
 
 No run hit the known flakes (`installation-script` base-ten bound, `web-app.test.ts:279`).
 
@@ -75,6 +76,8 @@ No run hit the known flakes (`installation-script` base-ten bound, `web-app.test
 Changed `dist` files in `make verify` run 1 (lines, branches, functions): `api/account-slot-api.js` 100 / 74.00 / 100 (new); `application/account-slot-service.js` 100 / 84.62 / 100 (new); `application/slot-signals.js` 100 / 100 / 100 (new); `composition/account-pool.js` 100 / 93.33 / 100 (new); `api/routes.js` 100 / 100 / 100; `composition/settings.js` 98.82 / 95.79 / 100 (uncovered lines 168-169); `control-plane-store/slot-credential-key.js` 100 / 100 / 100; `postgres/account-pool-repositories.js` 100 / 96.70 / 100; `secrets/node-secrets.js` 100 / 100 / 100; scheduling `in-memory-account-pool.js` 100 / 96.59 / 100 and `account-slot-commands.js` 100 / 93.10 / 100. The uncovered branches of `account-slot-api.js` are mostly the failure arms of the handlers' `ok ? ... : failure` returns and the `?? ''` default of a missing path parameter.
 
 Run 2 (lines, branches, functions): `api/account-slot-api.js` 100 / 95.00 / 100; `application/account-slot-service.js` 100 / 89.13 / 100; `postgres/account-pool-repositories.js` 100 / 96.81 / 100; scheduling `account-slot-commands.js` 100 / 93.68 / 100.
+
+Run 3: `api/account-slot-api.js` 100 / 95.00 / 100; `application/account-slot-service.js` 100 / 90.38 / 100.
 
 ### Route
 
@@ -100,7 +103,7 @@ Run 2 (lines, branches, functions): `api/account-slot-api.js` 100 / 95.00 / 100;
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `8966bf4c37252e69cfb15f08ef60b0a2c75b053c`; tests 5000, pass 4991, fail 0, skipped 9; all files 99.45% lines, 93.03% branches, 98.90% functions.
+- `make verify`: passed, profile full, tree `a78c737cf120e93e9ef23f5e0e68f3a1e1619ae0`; tests 5003, pass 4994, fail 0, skipped 9; all files 99.45% lines, 93.04% branches, 98.90% functions.
 - `npm run openspec -- validate wire-account-pool-into-control-plane --strict`: passed, `Change 'wire-account-pool-into-control-plane' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 129 file(s); every pass summary file is valid: 109 file(s); every route file is valid: 62 file(s).`.
 - Spec diff against the merge base `78a267444f4d` with `origin/dev`: no change under `openspec/specs`.
@@ -109,6 +112,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1aa8b-64b9-7563-8c98-3fa8bdde7833` | 0 | 1 | 4 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `cf408484-28ee-440f-875c-a94d881f9ef1` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
 ## Independent review
