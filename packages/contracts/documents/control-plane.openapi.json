@@ -2514,7 +2514,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one.",
+            "description": "The expected revision is not the current one, or the slot is revoked.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2640,7 +2640,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the slot is not active.",
+            "description": "The expected revision is not the current one; a revoked slot at the current revision answers 200 unchanged.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2766,7 +2766,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the slot is not revoked.",
+            "description": "The expected revision is not the current one; an active slot at the current revision answers 200 unchanged.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2835,7 +2835,7 @@
         },
         "responses": {
           "200": {
-            "description": "The slot, healthy, on its new credential, as read after the rotation's final revision advance (account pool contract section 8.1).",
+            "description": "The slot, healthy, on its new credential, as its switch committed it; the cleanup that follows may advance the revision once more (account pool contract section 8.1).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3018,7 +3018,7 @@
             }
           },
           "409": {
-            "description": "The expected revision is not the current one, or the slot is already removed.",
+            "description": "The expected revision is not the current one; a removed slot answers 404.",
             "content": {
               "application/json": {
                 "schema": {

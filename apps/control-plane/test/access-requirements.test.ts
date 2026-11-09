@@ -86,12 +86,16 @@ const BOARD_OPERATIONS = [
   'answerInboxItem', 'answerInstallationInboxItem', 'readBoard', 'readInbox', 'readInboxCounts', 'readInstallationInbox',
   'readInstallationInboxCounts', 'readTaskDetail',
 ];
+const ACCOUNT_SLOT_OPERATIONS = [
+  'addAccountSlot', 'listAccountSlots', 'listProjectAccountSlots', 'reinstateAccountSlot', 'removeAccountSlot', 'revokeAccountSlot',
+  'rotateSlotCredential', 'updateAccountSlot',
+];
 const FLEET_OPERATIONS = ['issueEnrollmentToken', 'listEnrollmentTokens', 'listWorkers', 'revokeEnrollmentToken', 'rotateEnrollmentToken'];
 
 test('a served operation of the control-plane document accepts the schemes the document declares, and only login is browser-only', () => {
   const served = ROUTES.filter((route) => operations.some((operation) => operation.operationId === route.operationId));
   const expected = [
-    ...AGENT_SESSION_OPERATIONS, ...BOARD_OPERATIONS, ...EVENT_STREAM_OPERATIONS, ...FLEET_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS,
+    ...ACCOUNT_SLOT_OPERATIONS, ...AGENT_SESSION_OPERATIONS, ...BOARD_OPERATIONS, ...EVENT_STREAM_OPERATIONS, ...FLEET_OPERATIONS, ...LOGIN_OPERATIONS, ...PROJECT_OPERATIONS,
     ...SCM_INTEGRATION_OPERATIONS, 'receiveScmWebhook',
   ];
   assert.deepEqual(served.map((route) => route.operationId).sort(), expected.sort());

@@ -56,4 +56,9 @@ export class RandomIdentifiers implements IdentifierSource {
   newEnrollmentTokenId(): string {
     return `e${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
   }
+
+  // An account slot's identifier (12d B1, coordinator answer Q10).
+  newSlotId(): string {
+    return `s${randomBytes(IDENTIFIER_BYTES).toString('hex')}`;
+  }
 }

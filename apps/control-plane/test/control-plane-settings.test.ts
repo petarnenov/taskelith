@@ -156,6 +156,18 @@ test('the event log keeps a numbered event 24 hours unless configured in whole h
   }
 });
 
+test('the default slot cooldown is 60 minutes unless configured from 1 to 1440 whole minutes', () => {
+  const minutes = (text?: string) => {
+    const environment = text === undefined ? BASE : { ...BASE, TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES: text };
+    return value(readControlPlaneSettings(environment, 'linux', 501)).slotDefaultCooldown;
+  };
+  assert.deepEqual([minutes(), minutes(''), minutes('1'), minutes('1440'), minutes('90')], [60, 60, 1, 1440, 90]);
+  for (const text of ['0', '1441', '1.5', '-5', ' 30', '1e2', '0x10', 'hour']) {
+    const failure = failed(readControlPlaneSettings({ ...BASE, TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES: text }, 'linux', 501));
+    assert.deepEqual([failure.code, failure.details.variable], ['invalid', 'TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES'], text);
+  }
+});
+
 // The catch-up path of an offline worker: its unacknowledged notice must
 // stay in the command stream until the rotation's deadline.
 test('the command stream keeps a rotation notice at least until the rotation deadline', () => {
@@ -217,7 +229,7 @@ function fakeRunning(outcome: 'stopped' | 'failed') {
   let finish!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { finish = resolve; });
   return {
-    running: { api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, stopped, stop: async () => { stops += 1; } },
+    running: { api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, slotSignals: undefined as never, stopped, stop: async () => { stops += 1; } },
     stops: () => stops,
     finish: () => finish(outcome),
   };

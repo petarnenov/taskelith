@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolveDataRoot } from '@taskelith/data-root';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type TransportLimits } from '@taskelith/nats';
+import { SLOT_COOLDOWN_DEFAULT_MINUTES, parseDefaultCooldownMinutes, type DefaultCooldownMinutes } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type WorkflowDefinitionInput } from '@taskelith/sdlc';
 import type { ServerTls } from '../api/server-tls.js';
 import { DEFAULT_EVENT_RETENTION_HOURS } from '../application/event-log-keeper.js';
@@ -37,6 +38,8 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
   if (!transportLimits.ok) return transportLimits;
   const eventRetentionHours = readRetentionHours(environment[EVENT_RETENTION_VARIABLE]);
   if (!eventRetentionHours.ok) return eventRetentionHours;
+  const slotDefaultCooldown = readSlotDefaultCooldown(environment[SLOT_DEFAULT_COOLDOWN_VARIABLE]);
+  if (!slotDefaultCooldown.ok) return slotDefaultCooldown;
   return ok({
     dataRoot: dataRoot.value, ownerUid, postgres: endpoints.value.postgres, nats: endpoints.value.nats,
     api: { host: environment.TASKELITH_API_HOST || DEFAULT_API_HOST, port: port.value },
@@ -47,6 +50,7 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
     workflows: workflows.value,
     transportLimits: transportLimits.value,
     eventRetentionHours: eventRetentionHours.value,
+    slotDefaultCooldown: slotDefaultCooldown.value,
     ...(environment[WEB_APP_DIR_VARIABLE] ? { webAppDirectory: environment[WEB_APP_DIR_VARIABLE] } : {}),
     ...(natsTls.value === undefined ? {} : { natsTls: natsTls.value }),
   });
@@ -97,6 +101,23 @@ function readRetentionHours(text: string | undefined): Result<number> {
   const hours = Number(text);
   if (Number.isSafeInteger(hours) && hours > 0) return ok(hours);
   return err(failure('invalid', `${EVENT_RETENTION_VARIABLE} must be a positive whole number of hours`, { variable: EVENT_RETENTION_VARIABLE }));
+}
+
+// The cooldown of a slot whose limit names no reset (Q7), in whole minutes.
+export const SLOT_DEFAULT_COOLDOWN_VARIABLE = 'TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES';
+
+function readSlotDefaultCooldown(text: string | undefined): Result<DefaultCooldownMinutes> {
+  const minutes = text === undefined || text === '' ? SLOT_COOLDOWN_DEFAULT_MINUTES.provisional : wholeNumber(text);
+  const parsed = parseDefaultCooldownMinutes(minutes);
+  if (parsed.ok) return parsed;
+  const { minimum, maximum } = SLOT_COOLDOWN_DEFAULT_MINUTES;
+  const reason = `${SLOT_DEFAULT_COOLDOWN_VARIABLE} must be a whole number of minutes from ${minimum} to ${maximum}`;
+  return err(failure('invalid', reason, { variable: SLOT_DEFAULT_COOLDOWN_VARIABLE }));
+}
+
+// Digits only, so a sign, space, exponent, or radix prefix is refused.
+function wholeNumber(text: string): number {
+  return /^[0-9]+$/.test(text) ? Number(text) : Number.NaN;
 }
 
 function readPort(environment: Environment, variable: string, fallback: number): Result<number> {

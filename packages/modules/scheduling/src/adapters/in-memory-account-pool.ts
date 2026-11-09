@@ -42,6 +42,14 @@ export class InMemoryAccountSlots implements AccountSlots {
       .sort((left, right) => byCodeUnits(left.id, right.id));
   }
 
+  async list(after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    return this.#after(after, () => true).slice(0, limit);
+  }
+
+  async listForProject(projectId: ProjectId, after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    return this.#after(after, (slot) => slot.state === 'active' && slot.allowedProjects.includes(projectId)).slice(0, limit);
+  }
+
   async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
     const stored = this.#slots.get(slot.id);
     if (stored === undefined) return err(failure('not-found', 'no such slot', { slot: slot.id }));
@@ -55,6 +63,12 @@ export class InMemoryAccountSlots implements AccountSlots {
 
   async countNotRemoved(harnessId: HarnessPluginId): Promise<number> {
     return [...this.#slots.values()].filter((slot) => slot.harnessId === harnessId && slot.state !== 'removed').length;
+  }
+
+  #after(after: ProviderCredentialId | undefined, kept: (slot: AccountSlot) => boolean): AccountSlot[] {
+    return [...this.#slots.values()]
+      .filter((slot) => (after === undefined || byCodeUnits(slot.id, after) > 0) && kept(slot))
+      .sort((left, right) => byCodeUnits(left.id, right.id));
   }
 
   protected write(slot: AccountSlot): Result<void> {

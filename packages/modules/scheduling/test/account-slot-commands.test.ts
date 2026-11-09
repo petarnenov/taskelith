@@ -148,9 +148,14 @@ function slotRecord(overrides: Partial<AccountSlot> = {}): AccountSlot {
   }));
 }
 
+// A later revision is reached by a replace, as the port allows no other.
 async function withSlot(overrides: Partial<AccountSlot> = {}): Promise<Fixture> {
   const made = await fixture();
-  value(await made.slots.add(slotRecord(overrides)));
+  const { revision = FIRST_SLOT_REVISION, ...rest } = overrides;
+  value(await made.slots.add(slotRecord(rest)));
+  for (let current = FIRST_SLOT_REVISION; current < revision; current++) {
+    value(await made.slots.replace(slotRecord({ ...rest, revision: current + 1 }), current));
+  }
   return made;
 }
 
@@ -181,47 +186,79 @@ async function holdSlot({ tx, task }: Fixture, assignmentId = ASSIGNMENT): Promi
 
 test('an update changes the allowed projects and the concurrency limit by one revision', async () => {
   const { store, slots } = await withSlot();
-  const updated = value(await updateAccountSlot(store, { id: SLOT, allowedProjects: [PROJECT, OTHER_PROJECT], concurrencyLimit: 2 }));
+  const updated = value(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1, allowedProjects: [PROJECT, OTHER_PROJECT], concurrencyLimit: 2 }));
   assert.deepEqual([updated.allowedProjects, updated.concurrencyLimit, updated.revision], [[PROJECT, OTHER_PROJECT], 2, 2]);
   assert.deepEqual(await stored(slots), updated);
-  const limitOnly = value(await updateAccountSlot(store, { id: SLOT, concurrencyLimit: 3 }));
+  const limitOnly = value(await updateAccountSlot(store, { id: SLOT, expectedRevision: 2, concurrencyLimit: 3 }));
   assert.deepEqual([limitOnly.allowedProjects, limitOnly.concurrencyLimit, limitOnly.revision], [[PROJECT, OTHER_PROJECT], 3, 3]);
 });
 
 test('an update to the stored settings changes nothing and answers the current revision', async () => {
   const { store, slots } = await withSlot();
-  const repeated = value(await updateAccountSlot(store, { id: SLOT, allowedProjects: [PROJECT], concurrencyLimit: 4 }));
+  const repeated = value(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1, allowedProjects: [PROJECT], concurrencyLimit: 4 }));
   assert.equal(repeated.revision, 1);
   assert.equal((await stored(slots)).revision, 1);
 });
 
 test('an update naming the stored projects in another order changes nothing', async () => {
   const { store, slots } = await withSlot({ allowedProjects: [PROJECT, OTHER_PROJECT] });
-  const repeated = value(await updateAccountSlot(store, { id: SLOT, allowedProjects: [OTHER_PROJECT, PROJECT] }));
+  const repeated = value(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1, allowedProjects: [OTHER_PROJECT, PROJECT] }));
   assert.deepEqual([repeated.allowedProjects, repeated.revision], [[PROJECT, OTHER_PROJECT], 1]);
   assert.equal((await stored(slots)).revision, 1);
 });
 
 test('an update is invalid without a change or with a bad value, a conflict on a revoked slot, and not found on a removed or unknown one', async () => {
   const { store } = await withSlot();
-  assert.equal(failed(await updateAccountSlot(store, { id: SLOT })).code, 'invalid');
-  assert.equal(failed(await updateAccountSlot(store, { id: SLOT, concurrencyLimit: 0 })).code, 'invalid');
-  assert.equal(failed(await updateAccountSlot(store, { id: SLOT, allowedProjects: [] })).code, 'invalid');
-  assert.equal(failed(await updateAccountSlot(store, { id: UNKNOWN, concurrencyLimit: 2 })).code, 'not-found');
-  assert.equal(failed(await updateAccountSlot((await withSlot({ state: 'revoked' })).store, { id: SLOT, concurrencyLimit: 2 })).code, 'conflict');
-  assert.equal(failed(await updateAccountSlot((await withSlot({ state: 'removed' })).store, { id: SLOT, concurrencyLimit: 2 })).code, 'not-found');
+  assert.equal(failed(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1 })).code, 'invalid');
+  assert.equal(failed(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1, concurrencyLimit: 0 })).code, 'invalid');
+  assert.equal(failed(await updateAccountSlot(store, { id: SLOT, expectedRevision: 1, allowedProjects: [] })).code, 'invalid');
+  assert.equal(failed(await updateAccountSlot(store, { id: UNKNOWN, expectedRevision: 1, concurrencyLimit: 2 })).code, 'not-found');
+  assert.equal(failed(await updateAccountSlot((await withSlot({ state: 'revoked' })).store, { id: SLOT, expectedRevision: 1, concurrencyLimit: 2 })).code, 'conflict');
+  assert.equal(failed(await updateAccountSlot((await withSlot({ state: 'removed' })).store, { id: SLOT, expectedRevision: 1, concurrencyLimit: 2 })).code, 'not-found');
+});
+
+// Each command as a client sends it after reading revision 1.
+const STALE_COMMANDS: ReadonlyArray<readonly [string, Partial<AccountSlot>, (made: Fixture, credentials: InMemorySlotCredentials) => Promise<Result<AccountSlot>>]> = [
+  ['an update', {}, (made) => updateAccountSlot(made.store, { id: SLOT, expectedRevision: 1, concurrencyLimit: 2 })],
+  ['an unchanged update', {}, (made) => updateAccountSlot(made.store, { id: SLOT, expectedRevision: 1, concurrencyLimit: 4 })],
+  ['a revocation', {}, (made) => revokeAccountSlot(revocation(made.store), { id: SLOT, expectedRevision: 1, correlationId: CORRELATION })],
+  ['a repeated revocation', { state: 'revoked' }, (made) => revokeAccountSlot(revocation(made.store), { id: SLOT, expectedRevision: 1, correlationId: CORRELATION })],
+  ['a reinstatement', { state: 'revoked' }, (made) => reinstateAccountSlot(made.store, { id: SLOT, expectedRevision: 1 })],
+  ['a repeated reinstatement', {}, (made) => reinstateAccountSlot(made.store, { id: SLOT, expectedRevision: 1 })],
+  ['a removal', {}, (made, credentials) => removeAccountSlot({ store: made.store, credentials }, { id: SLOT, expectedRevision: 1 })],
+  ['a rotation', { state: 'revoked' }, (made, credentials) => rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) })],
+];
+
+for (const [name, overrides, command] of STALE_COMMANDS) {
+  test(`${name} at a moved revision fails with conflict and writes nothing`, async () => {
+    const made = await withSlot({ ...overrides, revision: 2 });
+    const credentials = new InMemorySlotCredentials();
+    await credentials.store(SLOT, secret(OLD_TEXT));
+    const before = await stored(made.slots);
+    const refused = failed(await command(made, credentials));
+    assert.deepEqual([refused.code, refused.details.slot], ['conflict', SLOT]);
+    assert.deepEqual(await stored(made.slots), before);
+    assert.deepEqual(credentials.storedVersions(SLOT), [1], 'no version is stored or destroyed');
+  });
+}
+
+test('a removed or unknown slot is not found before its revision is compared', async () => {
+  const removed = await withSlot({ state: 'removed', revision: 2 });
+  const refused = failed(await reinstateAccountSlot(removed.store, { id: SLOT, expectedRevision: 1 }));
+  assert.equal(refused.code, 'not-found');
+  assert.equal(failed(await updateAccountSlot(removed.store, { id: UNKNOWN, expectedRevision: 7, concurrencyLimit: 2 })).code, 'not-found');
 });
 
 test('a revocation takes the slot out of its pools, and a repeat changes nothing', async () => {
   const { store, slots } = await withSlot();
-  const revoked = value(await revokeAccountSlot(revocation(store), { id: SLOT, correlationId: CORRELATION }));
+  const revoked = value(await revokeAccountSlot(revocation(store), { id: SLOT, expectedRevision: 1, correlationId: CORRELATION }));
   assert.deepEqual([revoked.state, revoked.revision], ['revoked', 2]);
   assert.deepEqual(await slots.pool(PROJECT, HARNESS), []);
-  const repeated = value(await revokeAccountSlot(revocation(store), { id: SLOT, correlationId: CORRELATION }));
+  const repeated = value(await revokeAccountSlot(revocation(store), { id: SLOT, expectedRevision: 2, correlationId: CORRELATION }));
   assert.deepEqual(repeated, revoked);
-  assert.equal(failed(await revokeAccountSlot(revocation(store), { id: UNKNOWN, correlationId: CORRELATION })).code, 'not-found');
+  assert.equal(failed(await revokeAccountSlot(revocation(store), { id: UNKNOWN, expectedRevision: 1, correlationId: CORRELATION })).code, 'not-found');
   const removed = await withSlot({ state: 'removed' });
-  assert.equal(failed(await revokeAccountSlot(revocation(removed.store), { id: SLOT, correlationId: CORRELATION })).code, 'not-found');
+  assert.equal(failed(await revokeAccountSlot(revocation(removed.store), { id: SLOT, expectedRevision: 1, correlationId: CORRELATION })).code, 'not-found');
 });
 
 
@@ -233,7 +270,7 @@ for (const [name, assignmentId] of [
     const made = await withSlot();
     await holdSlot(made, assignmentId);
     assert.equal(await made.tx.ledger.heldForCredential(SLOT), 1);
-    value(await revokeAccountSlot(revocation(made.store), { id: SLOT, correlationId: CORRELATION }));
+    value(await revokeAccountSlot(revocation(made.store), { id: SLOT, expectedRevision: 2, correlationId: CORRELATION }));
     assert.equal(await made.tx.ledger.heldForCredential(SLOT), 0);
     const assignment = value(await made.tx.assignments.get(assignmentId));
     assert.deepEqual([assignment.state, assignment.end?.reason, assignment.reservation.state], ['ended', 'cancelled', 'released']);
@@ -245,23 +282,23 @@ for (const [name, assignmentId] of [
 test('a reinstatement returns the slot with its health and cooldown, and a repeat changes nothing', async () => {
   const cooldown = { until: value(parseInstant('2026-10-29T12:00:00.000Z')), source: 'default' as const };
   const { store, slots } = await withSlot({ state: 'revoked', health: 'unhealthy', cooldown });
-  const reinstated = value(await reinstateAccountSlot(store, SLOT));
+  const reinstated = value(await reinstateAccountSlot(store, { id: SLOT, expectedRevision: 1 }));
   assert.deepEqual([reinstated.state, reinstated.health, reinstated.cooldown, reinstated.revision], ['active', 'unhealthy', cooldown, 2]);
-  assert.deepEqual(value(await reinstateAccountSlot(store, SLOT)), reinstated);
+  assert.deepEqual(value(await reinstateAccountSlot(store, { id: SLOT, expectedRevision: 2 })), reinstated);
   assert.equal((await stored(slots)).revision, 2);
-  assert.equal(failed(await reinstateAccountSlot(store, UNKNOWN)).code, 'not-found');
-  assert.equal(failed(await reinstateAccountSlot((await withSlot({ state: 'removed' })).store, SLOT)).code, 'not-found');
+  assert.equal(failed(await reinstateAccountSlot(store, { id: UNKNOWN, expectedRevision: 1 })).code, 'not-found');
+  assert.equal(failed(await reinstateAccountSlot((await withSlot({ state: 'removed' })).store, { id: SLOT, expectedRevision: 1 })).code, 'not-found');
 });
 
 test('a removal keeps a tombstone, destroys the credential, and a repeat is not found', async () => {
   const { store, slots } = await withSlot();
   const credentials = new InMemorySlotCredentials();
   await credentials.store(SLOT, secret(OLD_TEXT));
-  const removed = value(await removeAccountSlot({ store, credentials }, SLOT));
+  const removed = value(await removeAccountSlot({ store, credentials }, { id: SLOT, expectedRevision: 1 }));
   assert.deepEqual([removed.state, removed.revision], ['removed', 2]);
   assert.deepEqual(credentials.storedVersions(SLOT), []);
   assert.deepEqual(await stored(slots), removed);
-  assert.equal(failed(await removeAccountSlot({ store, credentials }, SLOT)).code, 'not-found');
+  assert.equal(failed(await removeAccountSlot({ store, credentials }, { id: SLOT, expectedRevision: 2 })).code, 'not-found');
 });
 
 class RejectingCredentials extends InMemorySlotCredentials {
@@ -283,7 +320,7 @@ test('a removal whose destroy fails still succeeds, and the sweep destroys the c
   const credentials = new RejectingCredentials(() => clock.now);
   await credentials.store(SLOT, secret(OLD_TEXT));
   credentials.rejectDestroy = true;
-  assert.equal(value(await removeAccountSlot({ store, credentials }, SLOT)).state, 'removed');
+  assert.equal(value(await removeAccountSlot({ store, credentials }, { id: SLOT, expectedRevision: 1 })).state, 'removed');
   assert.deepEqual(credentials.storedVersions(SLOT), [1]);
   credentials.rejectDestroy = false;
   const sweepStore = storeAt(store, minutesAfter(AT, 61));
@@ -295,7 +332,7 @@ test('a rotation of a revoked slot switches it to the new version, healthy, and 
   const { store, slots } = await withSlot({ state: 'revoked', health: 'unhealthy' });
   const credentials = new InMemorySlotCredentials();
   await credentials.store(SLOT, secret(OLD_TEXT));
-  const switched = value(await rotateSlotCredential({ store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) }));
+  const switched = value(await rotateSlotCredential({ store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) }));
   assert.deepEqual([switched.credentialVersion, switched.health, switched.state, switched.revision], [2, 'healthy', 'revoked', 2]);
   assert.equal((await stored(slots)).revision, 3, 'the cleanup advance is a later revision');
   assert.deepEqual(credentials.storedVersions(SLOT), [2]);
@@ -305,19 +342,19 @@ test('a rotation of a revoked slot switches it to the new version, healthy, and 
 test('a rotation is refused while the slot is active or held, and not found for a removed or unknown slot', async () => {
   const active = await withSlot();
   const credentials = new InMemorySlotCredentials();
-  assert.equal(failed(await rotateSlotCredential({ store: active.store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) })).code, 'conflict');
+  assert.equal(failed(await rotateSlotCredential({ store: active.store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) })).code, 'conflict');
   assert.deepEqual(credentials.storedVersions(SLOT), [], 'an active slot stores nothing');
   const held = await withSlot();
   await holdSlot(held);
   await held.slots.replace({ ...(await stored(held.slots)), state: 'revoked', revision: 3 }, 2);
-  const refused = await rotateSlotCredential({ store: held.store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) });
+  const refused = await rotateSlotCredential({ store: held.store, credentials }, { id: SLOT, expectedRevision: 3, secret: secret(NEW_TEXT) });
   assert.equal(failed(refused).code, 'conflict');
   assert.equal((await stored(held.slots)).credentialVersion, 1, 'the slot keeps its version');
   assert.deepEqual(credentials.storedVersions(SLOT), [1], 'the new version is an orphan for the sweep');
   assert.ok(!JSON.stringify(refused).includes(NEW_TEXT) && !inspect(refused).includes(NEW_TEXT));
   const removed = await withSlot({ state: 'removed' });
-  assert.equal(failed(await rotateSlotCredential({ store: removed.store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) })).code, 'not-found');
-  assert.equal(failed(await rotateSlotCredential({ store: removed.store, credentials }, { id: UNKNOWN, secret: secret(NEW_TEXT) })).code, 'not-found');
+  assert.equal(failed(await rotateSlotCredential({ store: removed.store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) })).code, 'not-found');
+  assert.equal(failed(await rotateSlotCredential({ store: removed.store, credentials }, { id: UNKNOWN, expectedRevision: 1, secret: secret(NEW_TEXT) })).code, 'not-found');
 });
 
 type Interleaved = () => Promise<unknown>;
@@ -346,7 +383,7 @@ class InterleavingCredentials extends InMemorySlotCredentials {
 }
 
 for (const [name, between] of [
-  ['a reinstatement', (made: Fixture) => reinstateAccountSlot(made.store, SLOT)],
+  ['a reinstatement', async (made: Fixture) => reinstateAccountSlot(made.store, { id: SLOT, expectedRevision: (await stored(made.slots)).revision })],
   ['a removal', (made: Fixture) => made.store.transaction(async () => made.slots.replace(slotRecord({ state: 'removed', revision: 2 }), 1))],
 ] as const) {
   test(`${name} between a rotation's store and its switch makes the switch a conflict and keeps the version`, async () => {
@@ -354,14 +391,15 @@ for (const [name, between] of [
     const credentials = new InterleavingCredentials();
     await credentials.store(SLOT, secret(OLD_TEXT));
     credentials.between = () => between(made);
-    assert.equal(failed(await rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) })).code, 'conflict');
+    assert.equal(failed(await rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) })).code, 'conflict');
     assert.equal((await stored(made.slots)).credentialVersion, 1);
     assert.deepEqual(credentials.storedVersions(SLOT), [1, 2]);
   });
 }
 
-const rotate = (made: Fixture, credentials: InMemorySlotCredentials, text: string) =>
-  rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, secret: secret(text) });
+// At the revision stored when it starts, as a client that read it.
+const rotate = async (made: Fixture, credentials: InMemorySlotCredentials, text: string) =>
+  rotateSlotCredential({ store: made.store, credentials }, { id: SLOT, expectedRevision: (await stored(made.slots)).revision, secret: secret(text) });
 
 async function revealedText(credentials: InMemorySlotCredentials, slots: InMemoryAccountSlots): Promise<string> {
   return value(await credentials.reveal(SLOT, (await stored(slots)).credentialVersion)).reveal();
@@ -410,7 +448,7 @@ test('a rotation whose cleanup fails still answers the switch, and the sweep dis
   const credentials = new RejectingCredentials(() => AT);
   await credentials.store(SLOT, secret(OLD_TEXT));
   credentials.rejectDiscard = true;
-  const switched = value(await rotateSlotCredential({ store, credentials }, { id: SLOT, secret: secret(NEW_TEXT) }));
+  const switched = value(await rotateSlotCredential({ store, credentials }, { id: SLOT, expectedRevision: 1, secret: secret(NEW_TEXT) }));
   assert.deepEqual([switched.credentialVersion, switched.revision], [2, 2]);
   assert.equal((await stored(slots)).revision, 2, 'no advance without the discard');
   assert.deepEqual(credentials.storedVersions(SLOT), [1, 2]);

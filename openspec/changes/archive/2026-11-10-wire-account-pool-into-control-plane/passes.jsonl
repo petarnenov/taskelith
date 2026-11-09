@@ -1,0 +1,2 @@
+{"change": "wire-account-pool-into-control-plane", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a1aa8b-64b9-7563-8c98-3fa8bdde7833", "counts": {"critical": 0, "high": 1, "medium": 4, "low": 3}}
+{"change": "wire-account-pool-into-control-plane", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "cf408484-28ee-440f-875c-a94d881f9ef1", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 4}}

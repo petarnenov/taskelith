@@ -240,6 +240,7 @@ export {
 export { SlotSecret } from './domain/slot-secret.js';
 export {
   SLOT_DELIVERIES,
+  SlotCredentialsUnavailable,
   type AccountSlots,
   type AdmittedDeliveries,
   type AdmittedDelivery,
@@ -290,6 +291,7 @@ export {
   type AddAccountSlotInput,
 } from './application/add-account-slot.js';
 export {
+  readUpdatableSlot,
   reinstateAccountSlot,
   removeAccountSlot,
   revokeAccountSlot,
@@ -298,6 +300,7 @@ export {
   type RevocationCommandIdFor,
   type RevokeAccountSlotInput,
   type RotateSlotCredentialInput,
+  type SlotCommandTarget,
   type SlotCredentialCommandPorts,
   type SlotRevocationPorts,
   type SlotRevocationStore,

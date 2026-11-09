@@ -265,6 +265,45 @@ test('the account slots suite rejects an adapter without compare-and-set', async
   ]);
 });
 
+test('the in-memory slots list every slot, and a project\'s active ones, after a given identifier', async () => {
+  const slots = new InMemoryAccountSlots();
+  const slot = (text: string, changes: Partial<AccountSlot> = {}): AccountSlot => ({
+    ...VALID_SLOT, id: identifier('ProviderCredentialId', text) as ProviderCredentialId, ...changes,
+  });
+  const other = identifier('ProjectId', 'project-2') as ProjectId;
+  const stored = [slot('slot-b'), slot('slot-A', { allowedProjects: [other] }), slot('slot-c', { state: 'removed' }), slot('slot-d', { state: 'revoked' })];
+  for (const record of stored) assert.ok((await slots.add(record)).ok);
+  const ids = (listed: readonly AccountSlot[]) => listed.map((record) => record.id);
+  assert.deepEqual(ids(await slots.list(undefined, 100)), ['slot-A', 'slot-b', 'slot-c', 'slot-d']);
+  assert.deepEqual(ids(await slots.list(stored[0]!.id, 1)), ['slot-c']);
+  assert.deepEqual(ids(await slots.listForProject(PROJECT, undefined, 100)), ['slot-b']);
+  assert.deepEqual(ids(await slots.listForProject(other, undefined, 100)), ['slot-A']);
+  assert.deepEqual(ids(await slots.listForProject(PROJECT, stored[0]!.id, 100)), []);
+});
+
+// Lists by locale order and keeps every state, as a careless query would.
+class CarelessListingAccountSlots extends InMemoryAccountSlots {
+  readonly #added: AccountSlot[] = [];
+  override async add(slot: AccountSlot): Promise<Result<void>> {
+    const added = await super.add(slot);
+    if (added.ok) this.#added.push(slot);
+    return added;
+  }
+  override async list(_after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    return [...this.#added].sort((left, right) => left.id.localeCompare(right.id)).slice(0, limit);
+  }
+  override async listForProject(projectId: ProjectId, after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]> {
+    return (await this.list(after, 100)).filter((slot) => slot.allowedProjects.includes(projectId)).slice(0, limit);
+  }
+}
+
+test('the account slots suite rejects a listing out of order, without its start, or with other states', async () => {
+  assert.deepEqual(await failingCases(ACCOUNT_SLOTS_CONFORMANCE, () => new CarelessListingAccountSlots()), [
+    'lists every slot after a given identifier in code point order, removed ones included',
+    'lists the active slots that allow a project, of any harness, after a given identifier',
+  ]);
+});
+
 test('the slot credentials suite rejects an adapter that discloses a credential', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new LeakingSlotCredentials()), [
     'a revealed credential prints and serializes as redacted',

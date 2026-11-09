@@ -94,7 +94,9 @@ function placement(task: Task, index: number): PlacementRequest {
 const reserve = (store: CapacityStore, task: Task, index: number) => new ResourceAdmissionService(store, NO_WAIT).reserve(placement(task, index));
 // A bounded digest of the assignment, as the composition derives it.
 const commandIdFor = (assignmentId: AssignmentId) => id('EventId', `slot-revoked.${createHash('sha256').update(assignmentId).digest('hex')}`);
-const revoke = (store: GatedTransactions) => revokeAccountSlot({ store, commandIdFor }, { id: SLOT, correlationId: CORRELATION });
+// At the revision stored before the command, as a client that read it.
+const revoke = async (store: GatedTransactions) =>
+  revokeAccountSlot({ store, commandIdFor }, { id: SLOT, expectedRevision: (await slotState()).revision, correlationId: CORRELATION });
 
 function kind(result: Result<PlacementOutcome>): string {
   const outcome = value(result);
@@ -126,13 +128,19 @@ test('a revocation racing a placement on its slot commits only in a serial order
   const revoking = gatedStore(database, READ_SLOT(arrive));
   const placing = gatedStore(database, READ_HELD(arrive));
   const [revoked, placed] = await Promise.all([revoke(revoking.store), reserve(placing.store, task, 0)]);
-  assert.equal(value(revoked).state, 'revoked');
-  assert.equal(await heldOnSlot(), 0);
   if (kind(placed) === 'placed') {
+    // The placement moved the revision the revocation read, so the client
+    // reads the slot again and revokes at the current revision.
     assert.ok(revoking.attempts() >= 2, 'the revocation after the placement was not retried');
+    assert.equal(!revoked.ok && revoked.error.code, 'conflict');
+    assert.deepEqual(await slotState(), { state: 'active', revision: 2 });
+    assert.equal(value(await revoke(database)).state, 'revoked');
+    assert.equal(await heldOnSlot(), 0);
     assert.deepEqual(await slotState(), { state: 'revoked', revision: 3 });
     assert.deepEqual(await commandTypes(), ['execution.assignment.end', 'execution.assignment.offer']);
   } else {
+    assert.equal(value(revoked).state, 'revoked');
+    assert.equal(await heldOnSlot(), 0);
     assert.equal(kind(placed), 'waiting:provider-concurrency-exhausted');
     assert.ok(placing.attempts() >= 2, 'the placement after the revocation was not retried');
     assert.deepEqual(await slotState(), { state: 'revoked', revision: 2 });
@@ -250,12 +258,12 @@ test('a rotation on PostgreSQL switches the slot, discards the replaced version,
   const store = credentials();
   await store.store(SLOT, sentinel());
   const next = sentinel();
-  const switched = value(await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: next }));
+  const switched = value(await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, expectedRevision: 1, secret: next }));
   assert.deepEqual([switched.credentialVersion, switched.revision], [2, 2]);
   assert.deepEqual(await slotState(), { state: 'revoked', revision: 3 });
   assert.deepEqual(await storedVersions(SLOT), [2]);
   value(await database.transaction((tx) => tx.accountSlots.replace({ ...switched, state: 'active', revision: 4 }, 3)));
-  const refused = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: next });
+  const refused = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, expectedRevision: 4, secret: next });
   assert.equal(!refused.ok && refused.error.code, 'conflict');
   assert.ok(!JSON.stringify(refused).includes(next.reveal()) && !inspect(refused).includes(next.reveal()));
 });
@@ -277,7 +285,7 @@ test('of two rotations that read the same revision the first switch wins and the
   const arrive = rendezvous(2);
   const racers = [gatedFirstCall(database, READ_HELD(arrive)), gatedFirstCall(database, READ_HELD(arrive))];
   const secrets = [sentinel(), sentinel()];
-  const results = await Promise.all(racers.map((racer, index) => rotateSlotCredential({ store: racer.store, credentials: store }, { id: SLOT, secret: secrets[index]! })));
+  const results = await Promise.all(racers.map((racer, index) => rotateSlotCredential({ store: racer.store, credentials: store }, { id: SLOT, expectedRevision: 1, secret: secrets[index]! })));
   const winner = results.findIndex((result) => result.ok);
   const loser = 1 - winner;
   assert.notEqual(winner, -1);
@@ -308,8 +316,8 @@ test('a rotation that switches before an earlier rotation\'s cleanup keeps its v
   await store.store(SLOT, sentinel());
   const later = sentinel();
   let laterResult: Result<AccountSlot> | undefined;
-  store.beforeCleanup = async () => { laterResult = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: later }); };
-  const earlier = value(await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, secret: sentinel() }));
+  store.beforeCleanup = async () => { laterResult = await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, expectedRevision: 2, secret: later }); };
+  const earlier = value(await rotateSlotCredential({ store: database, credentials: store }, { id: SLOT, expectedRevision: 1, secret: sentinel() }));
   assert.deepEqual([earlier.credentialVersion, value(laterResult!).credentialVersion], [2, 3]);
   assert.deepEqual(await storedVersions(SLOT), [3]);
   assert.deepEqual([await slotVersion(), (await slotState()).revision], [3, 4]);
@@ -320,7 +328,7 @@ test('a removal of a reserved active slot destroys the credential, cancels nothi
   const { task, assignmentId, executionId } = await launchedOnSlot();
   const store = credentials();
   await store.store(SLOT, sentinel());
-  const removed = value(await removeAccountSlot({ store: database, credentials: store }, SLOT));
+  const removed = value(await removeAccountSlot({ store: database, credentials: store }, { id: SLOT, expectedRevision: (await slotState()).revision }));
   assert.equal(removed.state, 'removed');
   assert.deepEqual(await storedVersions(SLOT), []);
   assert.deepEqual(await commandTypes(), ['execution.assignment.offer'], 'the removal writes no command of its own');

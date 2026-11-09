@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { createHash, X509Certificate } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes, X509Certificate } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request as httpsRequest } from 'node:https';
@@ -36,7 +36,7 @@ import {
 } from '@taskelith/nats';
 import { openAttempt, projectScope, type AttemptId, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { createAssignment, parseResourceRequest } from '@taskelith/scheduling';
+import { createAssignment, parseDefaultCooldownMinutes, parseResourceRequest } from '@taskelith/scheduling';
 import { ok, parseInstant } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition, type ProjectId, type TaskId } from '@taskelith/sdlc';
@@ -144,6 +144,7 @@ const SETTINGS: ControlPlaneSettings = {
   dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
   browser: { host: '127.0.0.1', port: 0, tls: BROWSER_TLS },
   workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000, webAppDirectory: webApp,
+  slotCredentialSweepMilliseconds: 200, slotDefaultCooldown: value(parseDefaultCooldownMinutes(45)),
   // The test server keeps JetStream in a small tmpfs.
   transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
 };
@@ -687,6 +688,110 @@ describe('delegation', () => {
     assert.equal((await call('POST', '/delegations', { bearer: stranger.bearer, body: { ...body, delegationId: 'delegation-http-3' } })).status, 403);
     assert.equal((await call('POST', '/delegations', { bearer: operator, body })).status, 401);
     assert.equal((await call('POST', '/delegations', { bearer: holder.bearer, body: { ...body, child: {} } })).status, 400);
+  });
+});
+
+// The status of a request with an empty JSON body on `port`, trusting `ca`.
+function requestStatus(port: number, ca: string, method: string, path: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest({ host: '127.0.0.1', port, path, method, ca, headers: { 'content-type': 'application/json' } }, (response) => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode));
+    });
+    request.once('error', reject);
+    request.end('{}');
+  });
+}
+
+// The worker-only operations, which a browser never calls (12d B1, Q11).
+const WORKER_ONLY = [
+  ['POST', '/workers/enrollments'], ['POST', '/workers/credentials/renewals'], ['POST', '/workers/credentials/confirmations'],
+  ['POST', '/launch-authorizations'], ['POST', '/evidence'], ['POST', '/delegations'],
+] as const;
+
+const newCredential = () => `fixture-${randomBytes(24).toString('hex')}`;
+const CLAUDE_CODE_SLOT = { harnessId: 'claude-code', mechanismId: 'subscription-token' };
+
+describe('account slots', () => {
+  test('the browser endpoint serves no worker-only operation, which the worker endpoint still serves', async () => {
+    for (const [method, path] of WORKER_ONLY) {
+      assert.equal(await requestStatus(running.browser.port, operatorAuthority.certificatePem, method, path), 404, path);
+      assert.notEqual(await requestStatus(running.api.port, installationCa, method, path), 404, path);
+    }
+    assert.equal(await statusOf(running.browser.port, operatorAuthority.certificatePem, '/installation/ca'), 200, 'the public CA read stays');
+  });
+
+  test('an owner adds, lists, revokes, rotates, reinstates, and removes the Claude Code slot over PostgreSQL', async () => {
+    const projectId = await operatedProject('Slot project');
+    const sent = [newCredential(), newCredential()];
+    const added = await call('POST', '/account-slots', { bearer: operator, body: { ...CLAUDE_CODE_SLOT, allowedProjects: [projectId], credential: sent[0] } });
+    assert.equal(added.status, 201, JSON.stringify(added.body));
+    assert.ok(checkHttpSchema('AccountSlot', added.body).ok);
+    const path = `/account-slots/${String(added.body.slotId)}`;
+    const view = await call('GET', `/projects/${projectId}/account-slots`, { bearer: operator });
+    assert.deepEqual((view.body.slots as Array<Record<string, unknown>>).map((slot) => [slot.slotId, slot.sharedWithOtherProjects]), [[added.body.slotId, false]]);
+    assert.equal((await call('POST', `${path}/revocation`, { bearer: operator, body: { expectedRevision: 1 } })).body.state, 'revoked');
+    const rotated = await call('PUT', `${path}/credential`, { bearer: operator, body: { expectedRevision: 2, credential: sent[1] } });
+    assert.deepEqual([rotated.status, rotated.body.health], [200, 'healthy']);
+    const listed = await call('GET', '/account-slots', { bearer: operator });
+    const current = (listed.body.slots as Array<{ slotId: string; revision: number }>).find((slot) => slot.slotId === added.body.slotId)!;
+    assert.equal(current.revision, 4, 'the rotation cleanup advanced the revision');
+    assert.equal((await call('POST', `${path}/reinstatement`, { bearer: operator, body: { expectedRevision: 4 } })).body.state, 'active');
+    assert.equal((await call('POST', `${path}/removal`, { bearer: operator, body: { expectedRevision: 5 } })).body.state, 'removed');
+    const rows = await sql<{ count: number }>(database, 'SELECT count(*)::int AS count FROM slot_credentials WHERE slot_id = $1', [added.body.slotId]);
+    assert.equal(rows[0]!.count, 0, 'the removal destroyed every version');
+    const answered = JSON.stringify([added, view, rotated, listed]);
+    for (const credential of sent) assert.ok(!answered.includes(credential) && !JSON.stringify(logs.records).includes(credential), 'a credential leaked');
+  });
+
+  test('of two concurrent adds for the only Claude Code slot one is stored and the other is 400', async () => {
+    const projectId = await operatedProject('Race project');
+    const adds = await Promise.all([newCredential(), newCredential()].map((credential) => call('POST', '/account-slots', {
+      bearer: operator, body: { ...CLAUDE_CODE_SLOT, allowedProjects: [projectId], credential },
+    })));
+    assert.deepEqual(adds.map((answer) => answer.status).sort(), [201, 400]);
+    const refused = adds.find((answer) => answer.status === 400)!;
+    assert.deepEqual(refused.body.details, { harness: 'claude-code', slotLimit: '1' });
+    const winner = adds.find((answer) => answer.status === 201)!;
+    const versions = await sql<{ slot_id: string }>(database, 'SELECT DISTINCT slot_id FROM slot_credentials');
+    assert.deepEqual(versions.map((row) => row.slot_id), [winner.body.slotId], 'only the added slot keeps a credential');
+    const path = `/account-slots/${String(winner.body.slotId)}/removal`;
+    assert.equal((await call('POST', path, { bearer: operator, body: { expectedRevision: 1 } })).status, 200);
+  });
+
+  test('a slot credential fetch reaches the composed delivery, which refuses a slot that no reservation names', async () => {
+    const { bearer } = await enrolledWorker('journal-slot-fetch');
+    const path = '/executions/execution-1/slot-credentials/slot-1?attemptId=attempt-1&ownershipGeneration=1&recoveryEpoch=1';
+    const refused = await call('GET', path, { bearer });
+    assert.equal(refused.status, 422, JSON.stringify(refused.body));
+    assert.ok(checkHttpSchema('Failure', refused.body).ok);
+  });
+
+  test('the sweep loop discards a version that no record names once it is older than the grace age', async () => {
+    const orphan = `s${randomBytes(16).toString('hex')}`;
+    await sql(database, 'INSERT INTO slot_credential_counters (slot_id, last_version, destroyed) VALUES ($1, 1, false)', [orphan]);
+    await sql(database, `INSERT INTO slot_credentials (slot_id, version, nonce, sealed, stored_at)
+      VALUES ($1, 1, $2, $3, now() - interval '2 hours')`, [orphan, randomBytes(12), randomBytes(32)]);
+    const remaining = async () => (await sql<{ count: number }>(database, 'SELECT count(*)::int AS count FROM slot_credentials WHERE slot_id = $1', [orphan]))[0]!.count;
+    await waitFor(async () => (await remaining()) === 0);
+  });
+
+  test('the configured default cooldown reaches the composed slot signals', () => {
+    assert.equal(running.slotSignals.defaultCooldown, 45);
+  });
+
+  test('a missing slot credential key refuses the start and names init', async () => {
+    const keyPath = join(dataRoot, 'control-plane', 'slot-credential-key');
+    renameSync(keyPath, `${keyPath}.kept`);
+    try {
+      const started = await startControlPlane({ ...SETTINGS, api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 } });
+      if (started.ok) await started.value.stop();
+      const refused = failed(started);
+      assert.deepEqual([refused.code, refused.message], ['precondition-failed', 'slot-credential-key is missing; run init']);
+      assert.throws(() => readFileSync(keyPath), 'the start created no key');
+    } finally {
+      renameSync(`${keyPath}.kept`, keyPath);
+    }
   });
 });
 
