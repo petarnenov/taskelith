@@ -93,6 +93,7 @@ Run 2 (lines, branches, functions): `api/account-slot-api.js` 100 / 95.00 / 100;
 - The slot rejecting reasons on the wire and OpenAPI 0.6.0 (B2).
 - A placement writes `lastReservedAt` and moves the slot's revision, so a revocation of a busy slot by the client's revision can meet `conflict` again and again; emergency revocation may need a revision-free path or a retry rule (the PostgreSQL race test now expects the `conflict` and a revocation at the new revision).
 - `SlotSignals` has no caller until item 18.
+- "code point" remains in the `pool` comment of `ports/account-pool.ts`, in `slot-credential-deliveries.ts`, and in conformance test names; pass 2 finding 4 named only the `list` comment and the contract.
 
 <!-- make record: begin -->
 ## Generated checks
@@ -134,7 +135,7 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 | 7 | Low | spec-wording | Delta `control-plane-api` line 41: the cooldown requirement must say unset or empty, with a scenario | The cooldown requirement says unset or empty is 60 minutes, and a new scenario covers the unset or empty value. (`c17dea2f`) |
 | 8 | Low | docs | `design.md:15`, `proposal.md:10`: four OpenAPI descriptions must read five, keeping the note on the original discrepancy | design.md and proposal.md say five OpenAPI descriptions and the design's test sentence says five texts, keeping a pointer to the Deviations note on the brief's original four. (`110f4a7b`) |
 
-Fail-before evidence of the fix round. Each test was committed in `00d0db64` and run against the `dist` built at that commit, which holds only the port class and the extracted sweep logger of `d710b577`; `make verify` has not run after these fixes.
+Fail-before evidence of the fix round. Each test was committed in `00d0db64` and run against the `dist` built at that commit, which holds only the port class and the extracted sweep logger of `d710b577`;
 
 - H1: "an unexpected credential store exception answers 500 with fixed text on add and rotate, and no answer or log record holds the credential" failed with the submitted credential in the response `message`; "a credential store refusal is the fixed internal failure of add and rotate, never an exception" failed with the exception rejecting out of `add`. Fixed by `335a331d`.
 - M2: "an update that names an unknown project answers not-found, then conflict, then the state rule first" failed at its first target, a missing slot: 400 `invalid` instead of 404 `not-found`. Fixed by `ac0dd05a`.
@@ -143,7 +144,29 @@ Fail-before evidence of the fix round. Each test was committed in `00d0db64` and
 - M5: these route tests changed no product code, so they passed when written: "a store outage is 503 for every list and command, and a bad identifier or cursor is 400 before the store", "a minted identifier that is stored already is 500 with fixed text, and its stored version is discarded", and "a slot's reservation time, cooldown, and usage reach the owner, and only its signals reach a project reader". A focused run of the two account slot test files reads 57 of 60 branches of `account-slot-api.js`; the number of record comes from the next `make verify`.
 - Guards that pass before and after: "a transaction that answers another failure stays a defect, not the typed rejection" and "a sweep that did not finish is logged with its failure".
 
+### Pass 2
+
+- Reviewer and role: Claude Code `claude claude-fable-5-1#medium`, role B, range `78a26744..f7ff41c1`, the whole change after the pass 1 fixes.
+- Invocation: `make review CHANGE=wire-account-pool-into-control-plane PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium'`, which ran `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose`.
+- Model confirmation: the last `result` line of the log has `claude-fable-5-1` in `modelUsage`; `make review` printed the same.
+- Session: `cf408484-28ee-440f-875c-a94d881f9ef1`, started 2026-11-09T22:46:11Z.
+- Snapshot: `0077e2ecd38688416afe49ec108cd0b61b5051bd88757f1932ff0889df86d846` before and after; identical.
+- Pass 1 fixes: the reviewer checked each of the eight and found all resolved, none regressed; their findings are `fixed`.
+- Route: `route.json` recommended effort high for this pass; the authorized medium applied.
+- Counts: Critical 0, High 0, Medium 0, Low 4. A Low-only pass ends the review, so pass 3 did not run.
+
+| # | Severity | Category | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| 1 | Low | evidence-mismatch | `verification.md:137` and `tasks.md:28` said `make verify` had not run after the fixes | Removed the sentence and the resume point (unreviewed) |
+| 2 | Low | error-handling | `account-slot-service.ts:149`: an unexpected store rejection became the 500 with its cause dropped | `6a5fcea6`: one `scheduling.slot-credentials.store-failed` record with the constructor name only (unreviewed); tests failed before it with no record written |
+| 3 | Low | docs | `account-slot-service.ts:134`: up to 1000 sequential project reads per command | `4fc45eb1`: the bound and its acceptance are in `design.md`, no code change (unreviewed) |
+| 4 | Low | naming | "code point" and "code-unit order" name one listing order | `4b8a2e9e`: the port's `list` comment and contract section 6.1 say code-unit order (unreviewed) |
+
+### Unreviewed fixes for the architect check
+
+The four fixes of pass 2 above had no later pass. Coordinator's architect check: pending.
+
 ## Remaining gates
 
-- Independent review passes 1 to 3 as the route and the coordinator decide.
-- Archive of the change and integration into `dev` by the coordinator (single pull request).
+- The coordinator's architect check of the unreviewed fixes of pass 2.
+- Integration into dev by the coordinator (single pull request).
