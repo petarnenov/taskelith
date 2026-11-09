@@ -226,12 +226,16 @@ test('a change that fails writes no command, and neither does a turn whose accep
   await open(subject);
   await started(subject);
   const first = await submitted(subject, 'key-1');
-  await submitted(subject, 'key-2');
+  const second = await submitted(subject, 'key-2');
   const before = subject.store.writtenCommands();
 
   failed(await subject.service.recordTurnOutcome(SESSION, { turnId: first.id, generation: generation(1), outcome: 'completed' }));
   value(await subject.service.recordTurnAcceptanceUnknown(SESSION, { turnId: first.id, generation: generation(1) }));
   assert.deepEqual(subject.store.writtenCommands(), before);
+
+  value(await subject.service.endGeneration(SESSION, generation(1)));
+  await started(subject, 2);
+  assert.deepEqual(turnIdsOf(subject.store.writtenCommands().slice(before.length)), [second.id]);
 
   const stopped = timeline();
   await open(stopped);
