@@ -31,3 +31,7 @@
 - [x] 6.1 Fail-before runs of each new behavior, recorded in `verification.md`
 - [x] 6.2 `make findings ARGS="route --change write-session-commands"`, committed unedited
 - [x] 6.3 `make verify` on the clean tree of the branch
+
+## Resume point
+
+Pass 1 (role A, Codex CLI gpt-6-astra, medium, session 01a1c28e-02ab-71e1-bd2b-2309d5f86d19) reported 2 Medium and 3 Low on dee4a32d; snapshot unchanged. Next: record and fix them, `make verify`, `make record`, pass 2 (role B, Claude Code claude-fable-5-1, medium), then pass 3 (Antigravity gemini-4-argon-medium) only if pass 2 finds Medium or worse, archive as the last commit, hand off to Niki, and stop (owner order). The coordinator set the size guard at 16 non-test files and +500 lines.
