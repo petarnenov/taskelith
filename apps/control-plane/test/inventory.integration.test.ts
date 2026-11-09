@@ -28,6 +28,7 @@ import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 import { issueGrant, launchAuthority } from './launch-fixtures.ts';
 import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
+import { timelineOver } from './session-timeline-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_inventory_${process.pid}`;
@@ -91,7 +92,7 @@ function services(store: ControlPlaneStore) {
   const logger = new Logger(logs, { now: () => AT as never });
   const newRequestId = () => `request-${++identities}`;
   return {
-    observations: new ObservationService(store, { newConfirmationId: () => `confirmation-${++identities}`, newRequestId, logger }),
+    observations: new ObservationService(store, { timelineOver, newConfirmationId: () => `confirmation-${++identities}`, newRequestId, logger }),
     inventory: new InventoryService(store, { newRequestId, logger }),
   };
 }

@@ -6,6 +6,7 @@ import { fleetToken, fleetWorker } from '@taskelith/fleet';
 import { ok } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
+import { timelineOver } from './session-timeline-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_heartbeat_${process.pid}`;
@@ -37,7 +38,7 @@ const heartbeats = new HeartbeatService(database);
 const check = new LostContactCheck(database, { timeoutMilliseconds: 30_000 });
 let confirmations = 0;
 const observations = new ObservationService(database, {
-  newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
+  timelineOver, newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
 });
 
 beforeEach(async () => {
@@ -280,7 +281,7 @@ test('a reachable worker revoked before an observation\'s contact keeps its last
   assert.deepEqual(await candidates(), ['worker-a']);
   const [before] = await sql<{ last_contact_at: Date }>(`SELECT last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
   const revoking = new ObservationService(revokingBeforeContact('worker-a'), {
-    newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
+    timelineOver, newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
   });
   assert.equal(value(await revoking.apply(unrecordedProcess('worker-a', 2))), 'applied');
   const [after] = await sql<{ last_contact_at: Date; reachable: boolean }>(`SELECT last_contact_at, reachable FROM workers WHERE worker_id = 'worker-a'`);

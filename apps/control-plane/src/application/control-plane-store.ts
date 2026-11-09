@@ -8,6 +8,7 @@ import type {
   LaunchRecords,
   ProducerCursors,
   ReconciliationQueue,
+  SessionTimelineTransaction,
   UnrecordedProcesses,
   WorkerId,
 } from '@taskelith/execution';
@@ -55,6 +56,8 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly reconciliation: ReconciliationQueue;
   readonly workerAdmissions: WorkerAdmissions;
   readonly slotCredentialDeliveries: SlotCredentialDeliveries;
+  // The session timelines, which a session observation changes.
+  readonly sessionTimeline: SessionTimelineTransaction;
 }
 
 // An enrolled worker as the transaction reads it, revoked or not, and the

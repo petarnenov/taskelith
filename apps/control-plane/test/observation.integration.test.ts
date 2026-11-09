@@ -34,6 +34,7 @@ import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 import { issueGrant, launchAuthority } from './launch-fixtures.ts';
 import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
+import { timelineOver } from './session-timeline-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_observation_${process.pid}`;
@@ -95,7 +96,7 @@ let confirmationIds = 0;
 
 function observationService(store: ControlPlaneStore, logger?: Logger): ObservationService {
   return new ObservationService(store, {
-    newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
+    timelineOver, newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
     ...(logger === undefined ? {} : { logger }),
   });
 }
@@ -476,7 +477,7 @@ describe('acceptance and refusal', () => {
     const at = await placed();
     assert.equal(value(await observe('execution.command.rejected', { sequence: 2 }, {
       commandId: at.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
-      supportedProtocolVersions: { minimum: 2, maximum: 3 },
+      supportedProtocolVersions: { minimum: 3, maximum: 4 },
     })), 'applied');
     const refused = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
     assert.deepEqual([refused.end?.refusal, refused.reservation.state], ['protocol-not-supported', 'released']);
@@ -486,6 +487,19 @@ describe('acceptance and refusal', () => {
       commandId: 'command-x', commandType: 'execution.assignment.end', reason: 'addressed-to-another-worker', supportedProtocolVersions: { minimum: 1, maximum: 1 },
     });
     assert.equal(value(other), 'rejected');
+  });
+
+  test('a rejected offer of a worker whose window reaches version 2 refuses the assignment and gives the worker version 2', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    assert.equal(value(await observe('execution.command.rejected', { sequence: 2 }, {
+      commandId: at.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
+      supportedProtocolVersions: { minimum: 2, maximum: 3 },
+    })), 'applied');
+    const refused = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([refused.end?.refusal, refused.reservation.state], ['protocol-not-supported', 'released']);
+    assert.equal((await worker()).protocol_version, 2, 'the highest version the control plane window of 1 to 2 shares');
   });
 });
 
@@ -781,7 +795,7 @@ describe('capacity and pressure', () => {
     value(await declare(3));
     value(await observe('execution.command.rejected', { sequence: 2 }, {
       commandId: at.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
-      supportedProtocolVersions: { minimum: 2, maximum: 3 },
+      supportedProtocolVersions: { minimum: 3, maximum: 4 },
     }));
     const refused = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
     assert.deepEqual([refused.end?.refusal, refused.reservation.state], ['protocol-not-supported', 'released']);
@@ -794,10 +808,20 @@ describe('capacity and pressure', () => {
     const at = await placed();
     value(await observe('execution.command.rejected', { sequence: 3 }, {
       commandId: at.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
-      supportedProtocolVersions: { minimum: 2, maximum: 3 },
+      supportedProtocolVersions: { minimum: 3, maximum: 4 },
     }));
     value(await declare(2));
     assert.deepEqual([(await worker()).protocol_version, (await worker()).capacity_sequence], [null, '2']);
+  });
+
+  test('a worker whose window reaches version 2 gets it, the highest the control plane window of 1 to 2 shares', async () => {
+    await enroll();
+    value(await observe('worker.capacity.declared', { sequence: 1 }, { capacity: CAPACITY, protocolVersions: { minimum: 1, maximum: 2 } }));
+    assert.equal((await worker()).protocol_version, 2);
+    value(await observe('worker.capacity.declared', { sequence: 2 }, { capacity: CAPACITY, protocolVersions: { minimum: 2, maximum: 5 } }));
+    assert.equal((await worker()).protocol_version, 2);
+    value(await observe('worker.capacity.declared', { sequence: 3 }, { capacity: CAPACITY, protocolVersions: { minimum: 1, maximum: 1 } }));
+    assert.equal((await worker()).protocol_version, 1);
   });
 
   test('pressure keeps its start while it lasts and clears with no cause', async () => {

@@ -48,6 +48,7 @@ import {
 import { failed, value } from '@taskelith/testing';
 import { inMemoryCapacity } from './in-memory-capacity.ts';
 import { EVERY_PROJECT_EXISTS } from './project-fixtures.ts';
+import { timelineOver } from './session-timeline-fixtures.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
 const definition = value(parseWorkflowDefinition({
@@ -89,7 +90,7 @@ async function fixture(enrolled: EnrolledWorker = fleetWorker(WORKER, JOURNAL)) 
   const store: ControlPlaneStore = { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
   value(await new RunService(store, new WorkflowRegistry([{ definition, digest: DIGEST }]), EVERY_PROJECT_EXISTS).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
   const service = new ObservationService(store, {
-    newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
+    timelineOver, newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
   });
   return { store, transaction, outbox, tasks: new TaskService(store), service, workerAdmissions: capacity.workerAdmissions };
 }
@@ -182,7 +183,7 @@ for (const [loss, lose] of [
   test(`a worker ${loss} before an observation's contact commits gets no contact`, async () => {
     const placed = await fixture();
     const service = new ObservationService(betweenConsumeAndContact(placed.store, () => lose(placed)), {
-      newConfirmationId: () => 'confirmation-z', newRequestId: () => 'request-z',
+      timelineOver, newConfirmationId: () => 'confirmation-z', newRequestId: () => 'request-z',
     });
     assert.equal(value(await service.apply(message('worker.capacity.declared', 1, DECLARATION))), 'applied');
     const worker = await placed.transaction.workers.get(WORKER);
@@ -209,7 +210,7 @@ test('a known identity at a new journal\'s next sequence advances its cursor wit
 test('a journal replaced between finding a rollback and retiring it keeps the new incarnation reachable', async () => {
   const logs = new InMemoryLogSink();
   const { service: plain, store, transaction } = await fixture();
-  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-y', newRequestId: () => 'request-y', logger: new Logger(logs, { now: () => AT }) });
+  const service = new ObservationService(store, { timelineOver, newConfirmationId: () => 'confirmation-y', newRequestId: () => 'request-y', logger: new Logger(logs, { now: () => AT }) });
   value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
   const open = store.transaction;
   let opened = 0;
@@ -578,7 +579,7 @@ test('a refused effect is recorded again without it and logged; an outage is ret
   const stale = err(failure('conflict', 'stale', { reason: 'stale-ownership-generation' }));
   const store = scriptedStore([stale, ok('rejected'), ok(true), err(failure('unavailable', 'down')), err(failure('unavailable', 'down'))]);
   const logs = new InMemoryLogSink();
-  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const service = new ObservationService(store, { timelineOver, newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const accepted = message('execution.assignment.accepted', 1, { commandId: 'c', assignmentId: 's' }, { attemptId: 'a', ownershipGeneration: 2 });
   assert.equal(value(await service.apply(accepted)), 'rejected');
   assert.deepEqual(logs.records.map((record) => [record.event, record.fields.reason, record.correlation.observationId]), [
@@ -592,7 +593,7 @@ test('a refused effect is recorded again without it and logged; an outage is ret
 test('a contact that fails after its observation committed is logged, and the observation stays applied', async () => {
   const store = scriptedStore([ok('applied'), err(failure('unavailable', 'down'))]);
   const logs = new InMemoryLogSink();
-  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const service = new ObservationService(store, { timelineOver, newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const started = message('execution.started', 1, {});
   assert.equal(value(await service.apply(started)), 'applied');
   assert.equal(store.opened, 2, 'the observation, then its contact');
@@ -618,7 +619,7 @@ function throwingContactStore(error: Error): ControlPlaneStore & { opened: numbe
 test('a contact whose transaction throws after its observation committed is logged as an error, redacted, and it stays applied', async () => {
   const store = throwingContactStore(new Error('permission denied, password=hunter2'));
   const logs = new InMemoryLogSink();
-  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
+  const service = new ObservationService(store, { timelineOver, newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const started = message('execution.started', 1, {});
   assert.equal(value(await service.apply(started)), 'applied');
   assert.equal(store.opened, 2, 'the observation, then its contact');
@@ -663,7 +664,7 @@ for (const [type, reason, holder, clears] of REFUSED_EVIDENCE) {
     value(await transaction.reports.markCapacityRefused(WORKER, 2 as never, AT));
     assert.deepEqual(await transaction.workers.candidates(), []);
     const refusal = err(failure('conflict', 'refused', reason === undefined ? {} : { reason }));
-    const refusing = new ObservationService(refusingOnce(store, refusal), { newConfirmationId: () => 'confirmation-r', newRequestId: () => 'request-r' });
+    const refusing = new ObservationService(refusingOnce(store, refusal), { timelineOver, newConfirmationId: () => 'confirmation-r', newRequestId: () => 'request-r' });
     const payload = { assignmentId: assignment.id, executionId: 'execution-r', recoveryEpoch: 1 };
     assert.equal(value(await refusing.apply(message(type, 3, payload, { attemptId, ownershipGeneration: 1 }))), 'rejected');
     assert.deepEqual(await transaction.workers.candidates(), clears ? [WORKER] : []);

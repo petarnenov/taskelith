@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas } from '@taskelith/contracts';
+import { CONTROL_PLANE_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas } from '@taskelith/contracts';
 import {
   decideStartObservation,
   endAttempt,
@@ -43,12 +43,21 @@ import { requestInventory } from './inventory-reconciliation.js';
 import type { ReconciliationContext } from './journal-reconciliation.js';
 import { grantIn, installationState } from './launch-authority.js';
 import type { Observation } from './observation.js';
+import { SESSION_OBSERVATION_EFFECTS, type SessionObservationTimeline } from './session-observation-effects.js';
 import { followAttemptEnd } from './task-ending.js';
+import type { TimelineStoreWatch } from './watched-timeline-stores.js';
+
+// What one transaction attempt gives its effect: the reconciliation's
+// shared state, the session timeline over it, and what its stores saw.
+export interface ObservationContext extends ReconciliationContext {
+  readonly timeline: SessionObservationTimeline;
+  readonly timelineStores: TimelineStoreWatch;
+}
 
 // What each consumed observation type changes, inside the transaction that
 // records it; a domain refusal makes the observation `rejected`.
 export type ObservationEffect = (
-  tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ReconciliationContext,
+  tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ObservationContext,
 ) => Promise<Result<void>>;
 
 type Payload<Name extends keyof MessageSchemas> = MessageSchemas[Name];
@@ -111,7 +120,7 @@ async function commandRejection(tx: ControlPlaneTransaction, observation: Observ
   const refused = await refuse(tx, observation, offered.value, 'protocol-not-supported');
   if (!refused.ok) return refused;
   const { workerId, sequence } = observation.position;
-  return tx.reports.setProtocolVersion(workerId, commonProtocolVersion(payload.supportedProtocolVersions, SUPPORTED_PROTOCOL_VERSIONS), sequence);
+  return tx.reports.setProtocolVersion(workerId, commonProtocolVersion(payload.supportedProtocolVersions, CONTROL_PLANE_PROTOCOL_VERSIONS), sequence);
 }
 
 // The owner's decision for 21b: every exit ends its attempt.
@@ -146,7 +155,7 @@ async function capacityDeclaration(tx: ControlPlaneTransaction, observation: Obs
     slots, cpuMillicores, memoryMebibytes, controls: enforceableControls as HardControl[],
   }, sequence);
   if (!declared.ok) return declared;
-  const versioned = await tx.reports.setProtocolVersion(workerId, commonProtocolVersion(protocolVersions, SUPPORTED_PROTOCOL_VERSIONS), sequence);
+  const versioned = await tx.reports.setProtocolVersion(workerId, commonProtocolVersion(protocolVersions, CONTROL_PLANE_PROTOCOL_VERSIONS), sequence);
   return versioned.ok ? tx.reports.clearCapacityRefusal(workerId, sequence) : versioned;
 }
 
@@ -348,6 +357,12 @@ function forWorkingProducer(effect: ObservationEffect): ObservationEffect {
   };
 }
 
+// Worker messages section 9: no session observation reaches the timeline
+// before its recovery epoch is checked.
+function eachAtCurrentEpoch(effects: Readonly<Record<string, ObservationEffect>>): Record<string, ObservationEffect> {
+  return Object.fromEntries(Object.entries(effects).map(([type, effect]) => [type, atCurrentEpoch(effect)]));
+}
+
 export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = Object.freeze({
   'execution.uncertain': atCurrentEpoch(executionEvidence('uncertain')),
   'execution.termination-unproven': atCurrentEpoch(executionEvidence('termination-unproven')),
@@ -363,6 +378,7 @@ export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = 
   'worker.capacity.declared': forWorkingProducer(capacityDeclaration),
   'worker.admission-pressure.changed': forWorkingProducer(pressureChange),
   'worker.self-check.reported': forWorkingProducer(selfCheckReport),
+  ...eachAtCurrentEpoch(SESSION_OBSERVATION_EFFECTS),
 });
 
 // The assignment the payload names, of the observed attempt, at the

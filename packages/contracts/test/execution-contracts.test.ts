@@ -5,6 +5,7 @@ import {
   checkHttpSchema,
   checkMessageSchema,
   commonProtocolVersion,
+  CONTROL_PLANE_PROTOCOL_VERSIONS,
   EXECUTION_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
   supportsProtocolVersion,
@@ -157,6 +158,15 @@ test('the protocol windows of a worker and the control plane give the version to
   assert.equal(supportsProtocolVersion({ minimum: 1, maximum: 2 }, 2), true);
   assert.equal(supportsProtocolVersion({ minimum: 1, maximum: 2 }, 1.5), false);
   assert.equal(supportsProtocolVersion({ minimum: 2, maximum: 2 }, 1), false);
+});
+
+test('the control plane window covers versions 1 and 2 while the worker window stays at version 1', () => {
+  assert.deepEqual(CONTROL_PLANE_PROTOCOL_VERSIONS, { minimum: 1, maximum: 2 });
+  assert.equal(Object.isFrozen(CONTROL_PLANE_PROTOCOL_VERSIONS), true);
+  assert.deepEqual(SUPPORTED_PROTOCOL_VERSIONS, { minimum: 1, maximum: 1 });
+  assert.equal(commonProtocolVersion(SUPPORTED_PROTOCOL_VERSIONS, CONTROL_PLANE_PROTOCOL_VERSIONS), 1);
+  assert.equal(commonProtocolVersion({ minimum: 1, maximum: 2 }, CONTROL_PLANE_PROTOCOL_VERSIONS), 2);
+  assert.equal(commonProtocolVersion({ minimum: 3, maximum: 3 }, CONTROL_PLANE_PROTOCOL_VERSIONS), undefined);
 });
 
 test('an observation names its producer journal, a gapless sequence, and its attempt', () => {

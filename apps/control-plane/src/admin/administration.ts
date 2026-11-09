@@ -12,7 +12,7 @@ import {
   type ProjectRoleChange,
 } from '@taskelith/access';
 import { X509CertificateIssuer } from '@taskelith/certificates';
-import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
+import { CONTROL_PLANE_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import {
   ControlPlaneNamespace,
   FileInstallationRecord,
@@ -320,7 +320,7 @@ export class Administration {
     if (!system.ok) return system;
     const service = new EnrollmentService({
       installation: identity.value,
-      serverProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+      serverProtocolVersions: CONTROL_PLANE_PROTOCOL_VERSIONS,
       registry: new RotationNoticingFleetRegistry(this.#database),
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),

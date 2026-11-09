@@ -8,11 +8,14 @@ import { err, ok, type Result } from '@taskelith/kernel';
 
 type SchemaName = keyof MessageSchemas & string;
 
-// The schema of each message type the execution contract puts on a subject.
+// What this build reads. Items 21 and 38 are left out: an observation is
+// quarantined as unknown, a version 2 command passes for a worker to reject.
 export const COMMAND_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.freeze({
   'execution.assignment.offer': 'AssignmentOfferCommand',
   'execution.cancellation.request': 'CancellationCommand',
   'execution.assignment.end': 'AssignmentEndCommand',
+  'session.turn.deliver': 'TurnDeliveryCommand',
+  'session.response.deliver': 'ResponseDeliveryCommand',
 });
 
 export const COMMAND_SUBJECT_NOTICES: Readonly<Record<string, SchemaName>> = Object.freeze({
@@ -36,6 +39,16 @@ export const OBSERVATION_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.
   'worker.capacity.declared': 'CapacityDeclaredObservation',
   'worker.admission-pressure.changed': 'AdmissionPressureChangedObservation',
   'worker.self-check.reported': 'SelfCheckReportedObservation',
+  'session.generation.started': 'GenerationStartedObservation',
+  'session.generation.ended': 'GenerationEndedObservation',
+  'session.turn.delivered': 'TurnDeliveredObservation',
+  'session.turn.not-delivered': 'TurnNotDeliveredObservation',
+  'session.turn.acceptance-unknown': 'TurnAcceptanceUnknownObservation',
+  'session.turn.ended': 'TurnEndedObservation',
+  'session.request.recorded': 'RequestRecordedObservation',
+  'session.response.delivery-reported': 'ResponseDeliveryReportedObservation',
+  'session.output.appended': 'OutputAppendedObservation',
+  'session.limit.signaled': 'LimitSignaledObservation',
 });
 
 export const INVENTORY_REPORTED = 'worker.inventory.reported';
