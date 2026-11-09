@@ -87,9 +87,17 @@ export function slotRevocationCommandId(assignmentId: AssignmentId): EventId {
   return `v${createHash('sha256').update(JSON.stringify([assignmentId, 'slot-revocation'])).digest('hex')}` as EventId;
 }
 
+// A failed slot is counted, never named with its error, and the next sweep
+// retries it; so the loop only logs what a sweep left.
 export function logSlotCredentialSweep(logger: Logger, sweep: Result<SlotCredentialSweep>): void {
-  if (!sweep.ok) logger.warn('scheduling.slot-credentials.sweep-failed', { code: sweep.error.code, message: sweep.error.message });
+  if (!sweep.ok) {
+    logger.warn(SWEEP_FAILED_EVENT, { code: sweep.error.code, message: sweep.error.message });
+  } else if (sweep.value.failedSlots.length > 0) {
+    logger.warn(SWEEP_FAILED_EVENT, { failedSlots: sweep.value.failedSlots.length, sweptSlots: sweep.value.sweptSlots.length });
+  }
 }
+
+const SWEEP_FAILED_EVENT = 'scheduling.slot-credentials.sweep-failed';
 
 async function settledSweep(sweep: () => Promise<Result<SlotCredentialSweep>>): Promise<Result<SlotCredentialSweep>> {
   try {
