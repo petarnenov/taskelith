@@ -1,0 +1,106 @@
+{
+  "change": "write-session-commands",
+  "generatedAt": "2026-11-09T22:59:40.230Z",
+  "devCommit": "78a267444f4dd2847989dd37ef12ead78d20cbe4",
+  "headCommit": "f4d76bfaba76e6d117518f988c59ffa079f4be10",
+  "features": {
+    "linesChanged": 1236,
+    "filesChanged": 36,
+    "capabilities": [
+      "observation-consumption",
+      "session-turn-model"
+    ],
+    "touches": {
+      "code": true,
+      "tests": true,
+      "contracts": true,
+      "specs": true,
+      "docker": false,
+      "security": false,
+      "docsOnly": false
+    },
+    "externalFacts": false,
+    "size": "M",
+    "capabilityHistory": {
+      "changes": 9,
+      "thirdPassShare": 0.5555555555555556,
+      "mediumOrWorsePerChange": 6.444444444444445
+    }
+  },
+  "rule": {
+    "version": 5,
+    "tier": "elevated",
+    "triggers": [
+      "lines",
+      "files",
+      "contracts"
+    ],
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ]
+  },
+  "shadow": {
+    "router": "jev",
+    "status": "answered",
+    "model": "jev-1.14.0",
+    "tier": "elevated",
+    "thirdPassProbability": 0.67,
+    "threshold": 0.4,
+    "passes": [
+      {
+        "pass": 1,
+        "role": "A",
+        "reviewer": {
+          "harness": "codex",
+          "model": "gpt-6-astra",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 2,
+        "role": "B",
+        "reviewer": {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "variant": "high"
+        }
+      },
+      {
+        "pass": 3,
+        "role": "A",
+        "reviewer": {
+          "harness": "agy",
+          "model": "gemini-4-argon-medium",
+          "variant": "medium"
+        }
+      }
+    ],
+    "latencyMs": 222
+  }
+}
