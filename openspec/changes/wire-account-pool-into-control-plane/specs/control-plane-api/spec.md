@@ -38,11 +38,19 @@ Installation initialization SHALL create `control-plane/slot-credential-key` wit
 - **THEN** the start fails naming `slot-credential-key` and `init`, and no key is created
 
 ### Requirement: Composed slot credential sweep and default cooldown
-The control plane SHALL run the slot credential sweep with the least grace age every hour, log a sweep that fails without stopping, read `TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES` as a whole number from 1 to 1440, 60 when unset, refusing the start for another value and naming the variable, and pass that value to the limit signal.
+The control plane SHALL run the slot credential sweep with the least grace age every hour, log a sweep that fails without stopping, read `TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES` as a whole number from 1 to 1440, 60 when unset or empty, refusing the start for another value and naming the variable, and pass that value to the limit signal.
 
 #### Scenario: Orphan version swept
-- **WHEN** a stored version that no record names is older than the grace age
+- **WHEN** a stored version of a credential whose slot identifier has no record is older than the grace age
 - **THEN** the running control plane discards it
+
+#### Scenario: Higher orphan version waits
+- **WHEN** a slot's record names a version and a higher stored version of that slot is older than the grace age
+- **THEN** the sweep keeps it, and a later successful rotation or removal of the slot discards it
+
+#### Scenario: Unset or empty default cooldown
+- **WHEN** `TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES` is unset or empty
+- **THEN** the default cooldown is 60 minutes and the start continues
 
 #### Scenario: Invalid default cooldown
 - **WHEN** `TASKELITH_SLOT_DEFAULT_COOLDOWN_MINUTES` is `0`, `1441`, or `1.5`
