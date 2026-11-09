@@ -22,7 +22,7 @@ None.
 
 ### Modified Capabilities
 
-- `session-turn-model`: adds the session commands, their identity, the handling of a command with no reader, and the classified operation check.
+- `session-turn-model`: adds the session commands, their identity, the handling of a command with no reader, and the classified operation check, and modifies "Durable session timeline service" for the optional operation in the request digest.
 - `observation-consumption`: `session.request.recorded` records the request's classified operation.
 
 ## Impact

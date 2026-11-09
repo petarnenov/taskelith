@@ -149,7 +149,7 @@ The request is `open`. A request enters the timeline only this way, so a read of
 6. An answer whose kind does not match the request (`permission` for a permission request, `input` for an input request, `delegation-result` for a delegation request) fails with `invalid`.
 7. An answer that its responder cannot give fails with `invalid`: the host returns every delegation result and answers nothing else, and a standing rule gives only a `permission` answer.
 8. A standing rule's answer to a request whose recorded `operation` is not a `push` to the branch of the session's task, or that has none, fails with `precondition-failed` and the reason `operation-not-matched`; the request stays `open` ([worker messages and terminal contract](worker-messages-and-terminal.md) section 9, "Classified operation").
-9. A response whose attempt has no worker that can read `session.response.deliver` fails with `unavailable`; the request stays `open`, and the same response can be retried ([worker messages and terminal contract](worker-messages-and-terminal.md) section 2).
+9. A response of a principal or a standing rule, which produces `session.response.deliver`, whose attempt has no worker that can read that command fails with `unavailable`; the request stays `open`, and the same response can be retried ([worker messages and terminal contract](worker-messages-and-terminal.md) section 2).
 
 The request becomes `answered`, with the response and its delivery `pending`. A request can be answered only while its generation runs, because a generation's end leaves none `open` (section 6).
 
