@@ -105,7 +105,27 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Not run by the developing subagent; the coordinator assigns the passes.
+### Pass 1
+
+- Reviewer and role: Codex CLI `codex gpt-6-astra#medium`, role A, range `686888cf..24238dcd`.
+- Invocation: `make review` with the fixed Codex row of `scripts/reviewer-invocations.ts`. The output of that command was lost with the coordinator's scratchpad.
+- Model confirmation: the session log's `turn_context` names `gpt-6-astra`, effort `medium`, sandbox `read-only`; `session_meta` names source `exec` and Codex CLI 0.166.0.
+- Session: `01a1aa8b-64b9-7563-8c98-3fa8bdde7833`, started 2026-11-05T07:10:25Z.
+- Snapshot: the before and after values were lost with that scratchpad, so they are not recorded here. The sandbox was read-only, the report says no file was modified, and `git diff 24238dcd ed2354a8` touches only `tasks.md`, the resume note the coordinator added.
+- Source of the findings: the coordinator recovered the report from the session log.
+- Counts: Critical 0, High 1, Medium 4, Low 3.
+- The reviewer ran strict OpenSpec validation, the comment checker, and four focused test files, and confirmed findings 1 to 4 by read-only probes. It did not rerun Docker verification or coverage.
+
+| # | Severity | Category | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| 1 | High | redaction | `account-slot-service.ts:89`: add and rotate propagate credential-store exceptions, and the HTTP server puts their message in the failure body | Open |
+| 2 | Medium | contract-drift | `account-slot-service.ts:99`: update validates `allowedProjects` before the slot and revision checks, so an unknown project answers 400 on a missing, removed, or stale slot | Open |
+| 3 | Medium | error-handling | `account-slot-service.ts:117`: credential-store unavailability answers 500 instead of 503 on add and rotate | Open |
+| 4 | Medium | error-handling | `control-plane.ts:351`: a sweep with `failedSlots` returns `ok`, so no `scheduling.slot-credentials.sweep-failed` record is written | Open |
+| 5 | Medium | evidence-mismatch | `verification.md:74`: branch coverage of the new `account-slot-api.js` is 74.00 %, below the 75 % required for changed files | Open |
+| 6 | Low | spec-wording | Delta `control-plane-api` line 44: the sweep scenario must name a credential whose slot identifier has no record, and keep the rule that a higher orphan waits for a later rotation or removal | Open |
+| 7 | Low | spec-wording | Delta `control-plane-api` line 41: the cooldown requirement must say unset or empty, with a scenario | Open |
+| 8 | Low | docs | `design.md:15`, `proposal.md:10`: four OpenAPI descriptions must read five, keeping the note on the original discrepancy | Open |
 
 ## Remaining gates
 
