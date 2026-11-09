@@ -140,7 +140,7 @@ Read and written inside the reservation transaction; item 12 adds it to `Capacit
 | `pool(projectId, harnessId)` | The project's pool for the harness (section 3.1), ordered by `id`; empty when there is none |
 | `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`. Checked in this order: `not-found` for an unknown slot, `invalid` for a new revision other than `expectedRevision` plus one, a `harnessId` change, or a slot leaving `removed`, then `conflict` when the stored revision differs |
 | `countNotRemoved(harnessId)` | The number of the harness's slots in every project that are not `removed`, revoked ones included; the add-slot command's slot limit reads it (section 7.1). Added by sub-change 12a |
-| `list(after, limit)` | At most `limit` slots in every state, `removed` tombstones included, ordered by `id` in code point order and starting after `after` when it is given. Added by sub-change 12d B1 |
+| `list(after, limit)` | At most `limit` slots in every state, `removed` tombstones included, ordered by `id` in code-unit order and starting after `after` when it is given. Added by sub-change 12d B1 |
 | `listForProject(projectId, after, limit)` | As `list`, only the `active` slots whose allowed projects include the project, of every harness. Added by sub-change 12d B1 |
 
 

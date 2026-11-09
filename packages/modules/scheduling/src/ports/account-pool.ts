@@ -12,7 +12,8 @@ export interface AccountSlots {
   get(id: ProviderCredentialId): Promise<Result<AccountSlot>>;
   // Active slots of the harness allowed for the project, by code point of id.
   pool(projectId: ProjectId, harnessId: HarnessPluginId): Promise<readonly AccountSlot[]>;
-  // Up to `limit` slots after `after` by code point of id, tombstones kept.
+  // Up to `limit` slots after `after` by id in code-unit order, tombstones
+  // kept.
   list(after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]>;
   // As `list`, only the active slots that allow the project, of any harness.
   listForProject(projectId: ProjectId, after: ProviderCredentialId | undefined, limit: number): Promise<readonly AccountSlot[]>;
