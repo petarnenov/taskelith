@@ -95,11 +95,15 @@ Fix round evidence, on the source rebuilt with `npx tsc --build apps/control-pla
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `f439dc5dc13e10d00740235ecc99760e9afbec48`; tests 4996, pass 4949, fail 0, skipped 47; all files 99.42% lines, 93.04% branches, 98.85% functions.
+- `make verify`: passed, profile full, tree `b5078d7058729365f0d48224aefd7c67b98cbf97`; tests 4998, pass 4951, fail 0, skipped 47; all files 99.42% lines, 93.05% branches, 98.86% functions.
 - `npm run openspec -- validate write-session-commands --strict`: passed, `Change 'write-session-commands' is valid`.
 - `make findings ARGS="validate"`: passed, `Every findings file is valid: 129 file(s); every pass summary file is valid: 109 file(s); every route file is valid: 62 file(s).`.
 - Spec diff against the merge base `78a267444f4d` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6-astra#medium` | `01a1c28e-02ab-71e1-bd2b-2309d5f86d19` | 0 | 0 | 2 | 3 |
 <!-- make record: end -->
 
 ## Limitations
