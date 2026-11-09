@@ -6,6 +6,7 @@ import {
   removeAccountSlot,
   revokeAccountSlot,
   rotateSlotCredential,
+  SlotCredentialsUnavailable,
   updateAccountSlot,
   type AccountSlot,
   type AccountSlotCommandPorts,
@@ -142,7 +143,8 @@ export class AccountSlotService {
 async function storingCredential(command: () => Promise<Result<AccountSlot>>): Promise<Result<AccountSlot>> {
   try {
     return await command();
-  } catch {
+  } catch (error) {
+    if (error instanceof SlotCredentialsUnavailable) return err(failure('unavailable', 'the slot credential store is unavailable'));
     return err(failure('internal', 'the slot credential could not be stored'));
   }
 }

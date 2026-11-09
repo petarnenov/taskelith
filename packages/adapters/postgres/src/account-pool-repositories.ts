@@ -5,6 +5,7 @@ import {
   SlotSecret,
   parseAccountSlot,
   parseSlotCredentialVersion,
+  SlotCredentialsUnavailable,
   type AccountSlot,
   type AccountSlots,
   type CooldownSource,
@@ -293,6 +294,7 @@ export class PostgresSlotCredentials implements SlotCredentials {
 
   async #run<Value>(work: (records: PostgresSlotCredentialRecords) => Promise<Value>): Promise<Value> {
     const outcome = await this.#transactions(async (tx) => ok(await work(tx.slotCredentialRecords)));
+    if (!outcome.ok && outcome.error.code === 'unavailable') throw new SlotCredentialsUnavailable();
     if (!outcome.ok) throw new Error(`slot credentials: ${outcome.error.message}`);
     return outcome.value;
   }
