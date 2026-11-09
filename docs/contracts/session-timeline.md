@@ -28,6 +28,7 @@ The domain is pure: it reads no clock, random source, file, or network, and it s
 | `invalid` | Text outside its bound, a cursor that is not a position of the session, an outcome with a failure other than exactly when it is `failed`, an answer of the wrong kind for its request, an answer from the wrong responder, or a host turn for a request that is not a delegation request |
 | `not-found` | An unknown attempt, generation, turn, request, or handoff, or a request that is `expired` or `unresolved` |
 | `conflict` | An attempt of another task, an attempt the session already bound or that another session of the task holds, another native session ID, a repeated idempotency key with another author or text, a repeated turn ID, a request key repeated with other content, a second outcome, a second response, a second handoff, a handoff taken twice, or taken by the same session or by a session of another task |
+| `unavailable` | A response that no worker can read, in the order of section 5.2 |
 | `precondition-failed` | Every other state the change does not allow: a bound attempt that has not ended, a generation that is not the next one or not running, no active bound attempt, a stopped session, a turn that is not the next deliverable one, a turn that is not running in the named generation, a host turn for a delegation request that is neither `expired` nor `unresolved`, a response for an attempt or ownership generation that is not the active bound one, a delivery report for a request that is not answered or whose delivery is no longer pending, or a handoff before the stop or while a generation runs |
 
 ## 3. Sessions, attempts, and generations
@@ -147,6 +148,8 @@ The request is `open`. A request enters the timeline only this way, so a read of
 5. An attempt or ownership generation other than the session's active bound attempt fails with `precondition-failed`.
 6. An answer whose kind does not match the request (`permission` for a permission request, `input` for an input request, `delegation-result` for a delegation request) fails with `invalid`.
 7. An answer that its responder cannot give fails with `invalid`: the host returns every delegation result and answers nothing else, and a standing rule gives only a `permission` answer.
+8. A standing rule's answer to a request whose recorded `operation` is not a `push` to the branch of the session's task, or that has none, fails with `precondition-failed` and the reason `operation-not-matched`; the request stays `open` ([worker messages and terminal contract](worker-messages-and-terminal.md) section 9, "Classified operation").
+9. A response whose attempt has no worker that can read `session.response.deliver` fails with `unavailable`; the request stays `open`, and the same response can be retried ([worker messages and terminal contract](worker-messages-and-terminal.md) section 2).
 
 The request becomes `answered`, with the response and its delivery `pending`. A request can be answered only while its generation runs, because a generation's end leaves none `open` (section 6).
 
