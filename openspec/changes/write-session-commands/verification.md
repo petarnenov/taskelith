@@ -120,15 +120,16 @@ Non-test code against the base `78a26744`, before the merge of `dev`: 16 files, 
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `b5078d7058729365f0d48224aefd7c67b98cbf97`; tests 4998, pass 4951, fail 0, skipped 47; all files 99.42% lines, 93.05% branches, 98.86% functions.
+- `make verify`: passed, profile full, tree `c8062503e3f95a8354770c934140fc0f4a4adc93`; tests 5064, pass 5017, fail 0, skipped 47; all files 99.43% lines, 93.11% branches, 98.87% functions.
 - `npm run openspec -- validate write-session-commands --strict`: passed, `Change 'write-session-commands' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 129 file(s); every pass summary file is valid: 109 file(s); every route file is valid: 62 file(s).`.
-- Spec diff against the merge base `78a267444f4d` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 130 file(s); every pass summary file is valid: 110 file(s); every route file is valid: 63 file(s).`.
+- Spec diff against the merge base `687c10f7f463` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`:
 
 | Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A | `codex gpt-6-astra#medium` | `01a1c28e-02ab-71e1-bd2b-2309d5f86d19` | 0 | 0 | 2 | 3 |
+| 2 | B | `claude claude-fable-5-1#medium` | `931ed9e8-6d4d-4b5d-a210-ce092a8642c8` | 0 | 0 | 0 | 4 |
 <!-- make record: end -->
 
 ## Merge of dev
