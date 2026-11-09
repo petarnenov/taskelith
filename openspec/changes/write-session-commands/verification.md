@@ -90,6 +90,31 @@ Fix round evidence, on the source rebuilt with `npx tsc --build apps/control-pla
 - Finding 5, mutation control: `PostgresSessionCommands.append` without the ownership generation check, `session-observation.integration.test.ts` against `scripts/services.sh run` services: tests 28, pass 27, fail 1, `another generation`; unmutated: tests 28, pass 28, also with the temporary state assertion, removed afterwards.
 - `npm run openspec -- validate write-session-commands --strict`: valid. Scratch copy at `3226eb30` (`git archive`, with the worktree's `node_modules`): `npm run openspec -- archive write-session-commands --yes` applied `session-turn-model` `+ 4 added`, `~ 1 modified` and `observation-consumption` `~ 1 modified`; `npm run openspec -- validate --all --strict`: `Totals: 71 passed, 0 failed (71 items)`.
 
+### Pass 2
+
+- Reviewer: Claude Code, model `claude-fable-5-1`, effort `medium`, role B, read-only.
+- Invocation: `make review CHANGE=write-session-commands PASS=2 ROLE=B REVIEWER='claude claude-fable-5-1#medium'`. The model was confirmed as `claude-fable-5-1` in the `modelUsage` of the last result line. Session `931ed9e8-6d4d-4b5d-a210-ce092a8642c8`.
+- Reviewed head `71d8b782`. The snapshot before and after the pass was equal: `a66984024afe53cbd18c04ce32aeae6e3ec848c57ad40fcac8dad3b9598d4978`.
+- All five fixes of pass 1 were confirmed by the reviewer.
+- Counts: Critical 0, High 0, Medium 0, Low 4, in `passes.jsonl` and `findings.jsonl` with the outcome `fixed-unreviewed`. The pass is Low-only, so under governance no pass 3 runs and no pass reviews the fixes below.
+
+### Pass 2 fixes (unreviewed)
+
+These four fixes were reviewed by no pass; they await the coordinator's architect check (governance "Architect check of unreviewed fixes").
+
+| # | Severity | Finding | Test | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | Low | The records said "no running assignment", while the adapter accepts any assignment whose state is not `ended` | Text only | `6715d801`: `specs/session-turn-model/spec.md`, `proposal.md`, and this record say an assignment that has not ended |
+| 2 | Low | No test asserted the delivery of the next generation after a turn of unknown acceptance | Passed at once; mutation below | `018250ee`: the test of `session-commands.test.ts` continues with `endGeneration(1)` and `started(subject, 2)` and asserts one `session.turn.deliver`, for the second turn, and none for the turn of unknown acceptance |
+| 3 | Low | `TurnCommandRecord` collided with `TurnCommand`, a person's turn submission | Rename only; the compiler checks it | `8336333b`: renamed to `TurnDeliveryRecord` in `session-records.ts` and `index.ts` of the execution module |
+| 4 | Low | The statuses of `respondToNativeRequest` did not name the 503 of a response that no worker can read | Text only | `29625f0a`: one sentence in `docs/contracts/control-plane-wire-contracts.md` section 9 names 503 under rule 9 of session timeline section 5.2 |
+
+Finding 2's mutation control, on the source rebuilt with `npx tsc --build apps/control-plane/tsconfig.json` and restored afterwards: unmutated, `session-commands.test.ts`: tests 28, pass 28. With `dueTurn` picking a turn in state `outcome-unknown` before `nextDeliverableTurn`: tests 28, pass 27, fail 1, the extended test, `actual: [ 'turn-1' ], expected: [ 'turn-2' ]`.
+
+Non-test code against the base `78a26744`, before the merge of `dev`: 16 files, 395 lines added and 65 removed (399 and 65 with the `package.json` and `tsconfig.json` of `apps/control-plane`), within the limits of 16 files and 500 lines.
+
+- Architect check by the coordinator: _pending_.
+
 <!-- make record: begin -->
 ## Generated checks
 
@@ -114,5 +139,6 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Remaining gates
 
-- Independent review: pass 1 is recorded in "Review"; pass 2 (role B, Claude Code `claude-fable-5-1`, medium) and, only if it finds Medium or worse, pass 3 remain.
-- `make record`, this record's review sections, the archive commit, and the handoff, by the briefing session.
+- Independent review: passes 1 and 2 are recorded in "Review". Pass 2 is Low-only, so no pass 3 runs.
+- The coordinator's architect check of the pass 2 fixes, which no pass reviews.
+- Integration into `dev`.
