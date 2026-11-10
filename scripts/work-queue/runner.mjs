@@ -121,7 +121,7 @@ export async function runQueue(config, { host, createAdapter,
     const commit = work => {
       git(work.path, 'add', '--', ...work.scopes, work.directory);
       if (git(work.path, 'diff', '--cached', '--name-only')) {
-        git(work.path, 'commit', '-m', `feat(${project.commitScope ?? 'work-queue'}): implement ${work.id}${project.commitSuffix ?? ''}`);
+        git(work.path, 'commit', '-m', `chore(${project.commitScope ?? 'work-queue'}): implement ${work.id}${project.commitSuffix ?? ''}`);
       }
     };
     const integrateTarget = (work, target) => {
