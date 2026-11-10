@@ -14,6 +14,7 @@
       "scopes": [
         "apps/control-plane",
         "packages/modules/execution",
+        "packages/adapters/secrets",
         "docs/contracts"
       ],
       "dependencies": []
