@@ -1,12 +1,15 @@
 import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { resolve, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runQueue } from './runner.mjs';
+import { resolveConfigPaths } from './model.mjs';
+
+export const workQueueDirectory = dirname(fileURLToPath(import.meta.url));
 
 export async function main(path, runner = runQueue, output = line => process.stdout.write(line), args = []) {
   try {
-    const config = JSON.parse(readFileSync(path, 'utf8'));
+    const config = resolveConfigPaths(JSON.parse(readFileSync(path, 'utf8')), workQueueDirectory);
     if (args.length > 1 || args.some(arg => !/^--harness=(codex|claude)$/u.test(arg))) {
       throw new Error('Expected --harness=codex or --harness=claude');
     }

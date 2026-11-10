@@ -1,15 +1,20 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, lstatSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { hash, digest, within, safePath, validateConfig, validateQueue } from './model.mjs';
 import { command, git, fileAt, receiptAt, GitHubHost } from './git.mjs';
 import { RunStore } from './run-store.mjs';
+import { ClaimLedger } from './claims.mjs';
 import { CodexFiles, brokerTool } from './codex-files.mjs';
 import { resolveHarness, createHarness } from './harness.mjs';
 
 const checkRecords = rows => rows.map(({ command, args, outcome }) => ({ command, args, outcome }));
 const reviewRecord = ({ reviewer, outcome }) => ({ reviewer, outcome });
+const scopesOverlap = (first, second) => first.some(path =>
+  second.some(other => within(path, other) || within(other, path)));
 
 const reportTool = { type: 'function', name: 'outcome_report',
   description: 'Return a private structured result to the automatic controller.',
@@ -86,6 +91,10 @@ export async function runQueue(config, { host, createAdapter,
     store = new RunStore(config.stateDirectory, { ...config, root, leaves: ids }, { repositoryRoot: root });
     writeFileSync(ownershipFile, JSON.stringify(ownership), { mode: 0o600 });
     host ??= new GitHubHost(root, project);
+    const ledger = new ClaimLedger(root, project.target);
+    if (!store.state.claimant) store.update({ claimant: randomUUID() });
+    const claimant = store.state.claimant;
+    const commitSubject = (type, text) => `${type}(${project.commitScope ?? 'work-queue'}): ${text}${project.commitSuffix ?? ''}`;
     const save = fields => store.update({ current: { ...store.state.current, ...fields } });
     const authorized = (queue, id) => {
       const task = queue.tasks.find(item => item.id === id);
@@ -112,8 +121,15 @@ export async function runQueue(config, { host, createAdapter,
     const commit = work => {
       git(work.path, 'add', '--', ...work.scopes, work.directory);
       if (git(work.path, 'diff', '--cached', '--name-only')) {
-        git(work.path, 'commit', '-m', `chore(${project.commitScope ?? 'work-queue'}): implement ${work.id}${project.commitSuffix ?? ''}`);
+        git(work.path, 'commit', '-m', `feat(${project.commitScope ?? 'work-queue'}): implement ${work.id}${project.commitSuffix ?? ''}`);
       }
+    };
+    const integrateTarget = (work, target) => {
+      if (git(work.path, 'merge-base', target, 'HEAD') === target) return;
+      const changed = git(work.path, 'diff', '--name-only', work.base, target).split('\n').filter(Boolean);
+      if (scopesOverlap(changed, [...work.scopes, work.directory])) throw new Error('Target changed outcome scope');
+      git(work.path, 'merge', '--no-edit', '-m', commitSubject('chore', `integrate ${project.target} into ${work.id}`), target);
+      checks(work, project.setup ?? []);
     };
     const session = async (work, purpose, prompt) => {
       let result;
@@ -207,18 +223,26 @@ export async function runQueue(config, { host, createAdapter,
       if (!store.state.current && recovery.length) save(recovery.shift());
       let work = store.state.current;
       if (!work) {
+        const ledgerSnapshot = ledger.pull();
+        const foreignClaims = [...ledgerSnapshot.claims.values()]
+          .filter(claim => claim.claimant !== claimant && !done.has(claim.id));
         const task = queue.tasks.filter(task => remaining.includes(task.id) && !store.state.blocked[task.id] &&
           task.dependencies.every(id => done.has(id)) &&
-          !Object.values(store.state.blocked).some(entry => entry.work?.scopes.some(scope =>
-            task.scopes.some(path => within(path, scope) || within(scope, path)))))
+          !foreignClaims.some(claim => claim.id === task.id || scopesOverlap(claim.scopes, task.scopes)) &&
+          !Object.values(store.state.blocked).some(entry => entry.work && scopesOverlap(entry.work.scopes, task.scopes)))
           .sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id))[0];
         if (!task) return { status: 'incomplete', accepted: newlyAccepted, remaining,
           blockers: Object.fromEntries(Object.entries(store.state.blocked).map(([id, entry]) =>
             [id, { stage: entry.work?.stage, reason: 'operation-incomplete',
-              diagnostics: join(store.directory, 'state.json') }])) };
+              diagnostics: join(store.directory, 'state.json') }])),
+          claimedElsewhere: Object.fromEntries(foreignClaims.map(claim => [claim.id, { host: claim.host }])) };
         const operation = hash({ invocation: config.invocation, id: task.id, authority: config.authority.reference });
-        save({ ...task, taskHash: hash(task), operation, stage: 'claim', base: target,
-          branch: `outcome/${task.id}-${operation.slice(0, 12)}`,
+        const branch = `outcome/${task.id}-${operation.slice(0, 12)}`;
+        if (!ledgerSnapshot.claims.has(task.id) && !ledger.acquire(ledgerSnapshot, {
+          version: 1, id: task.id, taskHash: hash(task), scopes: task.scopes, claimant,
+          host: hostname(), branch, claimedAt: new Date().toISOString(),
+        }, commitSubject('chore', `claim ${task.id}`))) continue;
+        save({ ...task, taskHash: hash(task), operation, stage: 'claim', base: target, branch,
           path: join(dirname(primary), `${primary.split('/').at(-1)}-outcomes`, operation),
           directory: `${project.changes}/${task.change}` });
         work = store.state.current;
@@ -310,7 +334,7 @@ export async function runQueue(config, { host, createAdapter,
         if (store.state.current.stage === 'publish') {
           assertWork(store.state.current);
           const targetNow = refresh().target;
-          if (targetNow !== work.base) throw new Error('Target advanced; result needs integration revalidation');
+          integrateTarget(work, targetNow);
           save({ finalChecks: checks(work, project.checks) });
           if (git(work.path, 'status', '--porcelain')) throw new Error('Final checks changed tracked inputs');
           const head = git(work.path, 'rev-parse', 'HEAD');
@@ -334,8 +358,10 @@ export async function runQueue(config, { host, createAdapter,
           if (!pr) throw new Error('Recorded PR missing');
           if (pr.state !== 'MERGED') {
             assertWork(now);
-            if (refresh().target !== now.testedTarget || git(work.path, 'rev-parse', 'HEAD') !== now.head ||
-                pr.headRefOid !== now.head) throw new Error('Checked head or target changed');
+            if (refresh().target !== now.testedTarget) { save({ stage: 'publish' }); continue; }
+            if (git(work.path, 'rev-parse', 'HEAD') !== now.head || pr.headRefOid !== now.head) {
+              throw new Error('Checked head or target changed');
+            }
             await host.merge(pr, now.head); await afterEffect('merge', pr);
           }
           const targetNow = refresh().target;

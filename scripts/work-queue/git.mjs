@@ -1,10 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { digest, safePath } from './model.mjs';
 
-export const command = (cwd, program, args) => execFileSync(program, args, {
-  cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,
+const runOptions = () => ({ encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
   env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-    !['NODE_TEST_CONTEXT', 'NODE_TEST_WORKER_ID'].includes(key))), CI: 'true', GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' },
+    !['NODE_TEST_CONTEXT', 'NODE_TEST_WORKER_ID'].includes(key))), CI: 'true', GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1' } });
+export const command = (cwd, program, args) => execFileSync(program, args, {
+  ...runOptions(), cwd, stdio: ['ignore', 'pipe', 'pipe'],
+}).trim();
+export const gitWithInput = (cwd, input, ...args) => execFileSync('git', args, {
+  ...runOptions(), cwd, input, stdio: ['pipe', 'pipe', 'pipe'],
 }).trim();
 export const git = (cwd, ...args) => command(cwd, 'git', args);
 export function fileAt(root, revision, path) {
@@ -55,7 +59,7 @@ export class GitHubHost {
   }
   create(work, body) {
     this.gh('pr', 'create', '--base', this.project.target, '--head', work.branch,
-      '--title', `chore(${this.project.commitScope ?? 'work-queue'}): complete ${work.id}${this.project.commitSuffix ?? ''}`, '--body-file', body);
+      '--title', `feat(${this.project.commitScope ?? 'work-queue'}): complete ${work.id}${this.project.commitSuffix ?? ''}`, '--body-file', body);
     return this.find(work.branch);
   }
   merge(pr, head) {

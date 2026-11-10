@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isAbsolute, resolve } from 'node:path';
 
 const canonical = value => Array.isArray(value) ? value.map(canonical) :
   value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort()
@@ -47,6 +48,13 @@ export function validateQueue(queue, project) {
     visiting.delete(id); visited.add(id);
   };
   ids.forEach(visit); return queue;
+}
+export function resolveConfigPaths(config, baseDirectory) {
+  const fields = ['root', 'stateDirectory'];
+  if (fields.some(field => typeof config[field] !== 'string' || !config[field] || isAbsolute(config[field]))) {
+    throw new Error('Configuration paths must be relative to the work-queue directory');
+  }
+  return { ...config, ...Object.fromEntries(fields.map(field => [field, resolve(baseDirectory, config[field])])) };
 }
 export function validateConfig(config) {
   const project = config.project;

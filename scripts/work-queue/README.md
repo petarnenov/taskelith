@@ -5,10 +5,22 @@ OpenSpec CLI, the configured build tools and (for GitHub hosting) authenticated
 `gh`. It imports only Node built-ins and its sibling files. No original project
 package, legacy backlog, Jira identity or enterprise hostname is needed.
 
-This is a single-host runner. Use one operating host per repository. A local
-SQLite lock prevents simultaneous invocations across worktrees and state paths;
-a durable owner record prevents a different invocation taking unfinished work.
-It cannot fence a second machine. Multi-host allocation is not supported.
+Run it on one or more machines over the tasks of one repository. A local SQLite
+lock prevents simultaneous invocations in one clone. Across machines the
+repository is the allocator: before taking a task the runner pulls the target and
+the `work-queue-claims-<target>` branch, selects a task, records it there as
+`<id>.json`, commits and pushes without force. A rejected push means another
+machine won, so the runner pulls and selects again. Any other push failure stops
+the run before work starts.
+
+Give each machine its own clone. `root` and `stateDirectory` in the invocation
+file are relative to this directory, and absolute values are refused, so one
+file serves every machine. Tasks claimed by
+another run, or overlapping its scopes, are skipped until accepted. A run with
+only claimed work left returns incomplete; restart it later with the same
+configuration. Claims are never taken over automatically. After confirming that
+a machine stopped and will not resume, delete its claim file on the claims branch
+in a normal commit and push.
 
 ## Project and authority
 
@@ -17,8 +29,8 @@ Commit a version 1 queue containing `tasks`. Each task has `id`, `title`,
 `dependencies`. Smaller priority values run first. Each result has one OpenSpec
 change and one PR. Scopes cannot overlap queue, receipt or OpenSpec roots.
 
-Keep the invocation JSON outside the checkout. Supply `root`, external
-`stateDirectory`, stable `invocation`, optional selected `leaves` and optional
+Keep the invocation JSON outside the checkout. Supply relative `root`, external
+relative `stateDirectory`, stable `invocation`, optional selected `leaves` and optional
 positive `maxAccepted`. Omitted mode is OFF. `authority` contains the actual
 instruction `reference`, `instruction`, selected `target` and a `tasks` object
 mapping IDs to canonical SHA256 hashes from the exported `hash` function.
@@ -80,8 +92,9 @@ blocked dependencies or protected merges return incomplete without asking a
 person anything. Independent work may proceed only without overlapping held
 scopes. Receipts validate outputs at their first accepted target commit; later ordinary
 changes preserve historical acceptance. Removed or altered receipts do not prove
-completion. A target advance requires integration revalidation and is currently
-reported incomplete rather than automatically rebased.
+completion. A target that advanced without touching the task scopes or change
+directory is merged into the result and all final checks run again. A target
+change inside that scope is reported incomplete.
 
 ## Acceptance limits
 
