@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "G3-13c3",
+      "title": "Redact the run's revealed credentials in session output",
+      "change": "redact-revealed-credentials-in-session-output",
+      "priority": 10,
+      "criteria": [
+        "docs/g3-plan.md row 13: \"13c3 `redact-revealed-credentials-in-session-output`, the run's revealed credentials (12c) in the session output redactor\".",
+        "docs/g3-plan.md row 13: \"13c1 makes a worker's session output reachable while the control plane redacts it by shape only, so 13c3 lands on `dev` before item 18 and before any `dev` to `main` promotion that carries 13c1.\"",
+        "Reuse SecretTextRedactor (apps/control-plane/src/composition/session-timeline.ts) and the per-run delivery record of 12c; do not add a second redactor."
+      ],
+      "scopes": [
+        "apps/control-plane",
+        "packages/modules/execution",
+        "docs/contracts"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "G3-12d-B2",
+      "title": "Add the slot rejecting reasons to the wire",
+      "change": "add-slot-rejecting-reasons-to-the-wire",
+      "priority": 20,
+      "criteria": [
+        "docs/g3-plan.md row 12: 12d B includes \"the wire's slot rejecting reasons\".",
+        "Archived wire-account-pool-into-control-plane design.md: \"B2 adds them with OpenAPI 0.6.0 after B1.\""
+      ],
+      "scopes": [
+        "packages/contracts",
+        "docs/contracts",
+        "apps/control-plane",
+        "packages/modules/scheduling"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "G3-12e",
+      "title": "Apply account pool load and health signals",
+      "change": "apply-account-pool-load-and-health-signals",
+      "priority": 30,
+      "criteria": [
+        "docs/g3-plan.md row 12: \"12e `apply-account-pool-load-and-health-signals`, the usage reports and authentication-failure health of plugin signals, a follow-up of 12b\".",
+        "Reuse SlotUsage and health of packages/modules/scheduling/src/domain/account-slot.ts, least-loaded selection, and apps/control-plane/src/application/slot-signals.ts; add only the missing writers."
+      ],
+      "scopes": [
+        "packages/modules/scheduling",
+        "packages/adapters/postgres",
+        "apps/control-plane",
+        "docs/contracts"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "G3-12f",
+      "title": "Rotate the account pool credential key",
+      "change": "rotate-account-pool-credential-key",
+      "priority": 40,
+      "criteria": [
+        "docs/g3-plan.md row 12: \"C `rotate-account-pool-credential-key` (12f), key rotation and a change of a slot's credential version during a run (account pool contract section 11)\".",
+        "Extend SlotCredentialKeyFile (apps/control-plane/src/composition/account-pool.ts) rather than adding a second key store."
+      ],
+      "scopes": [
+        "apps/control-plane",
+        "packages/modules/scheduling",
+        "packages/adapters/postgres",
+        "packages/adapters/secrets",
+        "docs/contracts"
+      ],
+      "dependencies": [
+        "G3-12d-B2"
+      ]
+    },
+    {
+      "id": "G3-44",
+      "title": "Implement the readmission and reconciliation surface",
+      "change": "implement-readmission-and-reconciliation-surface",
+      "priority": 50,
+      "criteria": [
+        "docs/g3-plan.md row 44: \"Re-admission, through a writer of admissions, of an attempt whose launch was rejected under a stale admission, in place of the G2 release, which can be placed and rejected again; and an HTTP or CLI surface that reads the reconciliation queue.\"",
+        "docs/g3-plan.md row 44: \"It also re-admits, through the same writer, a task whose launch grant a product writer revoked under the launch invalidation protocol (a cancelled attempt), so that it can be placed again\".",
+        "Serve the operations already declared in packages/contracts/documents/execution.openapi.json (readmitTask, /reconciliation/*); do not redefine them.",
+        "docs/g3-plan.md: every new writer of gates or revisions calls invalidateLaunches."
+      ],
+      "scopes": [
+        "apps/control-plane",
+        "packages/modules/execution",
+        "packages/adapters/postgres",
+        "packages/contracts",
+        "docs/contracts"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "G3-20-revocation-constant",
+      "title": "Expose the revocation propagation constant in the plugin SDK",
+      "change": "expose-revocation-propagation-seconds",
+      "priority": 60,
+      "criteria": [
+        "docs/g3-plan.md row 20: \"Follow-up: expose `REVOCATION_PROPAGATION_SECONDS` in the plugin SDK, whose `draft` namespace carries no constants yet\".",
+        "Keep one definition: packages/modules/integrations/src/ports/source-control.ts holds the value today."
+      ],
+      "scopes": [
+        "packages/plugin-sdk",
+        "packages/modules/integrations",
+        "packages/plugins/scm-github"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "G3-33c",
+      "title": "Build the account pools screen",
+      "change": "build-account-pools-screen",
+      "priority": 70,
+      "criteria": [
+        "docs/g3-plan.md row 33: \"account slots with their state, cooldown, and allowed projects, with no credential shown.\"",
+        "docs/g3-plan.md row 33: \"at most one Claude Code slot (account pool contract section 7.1).\"",
+        "Extend the WorkersGateway port and the apps/web/src/workers screens; do not add a parallel gateway."
+      ],
+      "scopes": [
+        "apps/web"
+      ],
+      "dependencies": [
+        "G3-12d-B2",
+        "G3-12e",
+        "G3-12f"
+      ]
+    }
+  ]
+}
