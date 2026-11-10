@@ -55,7 +55,7 @@ export class GitHubHost {
   }
   create(work, body) {
     this.gh('pr', 'create', '--base', this.project.target, '--head', work.branch,
-      '--title', `feat(${this.project.commitScope ?? 'work-queue'}): complete ${work.id}${this.project.commitSuffix ?? ''}`, '--body-file', body);
+      '--title', `chore(${this.project.commitScope ?? 'work-queue'}): complete ${work.id}${this.project.commitSuffix ?? ''}`, '--body-file', body);
     return this.find(work.branch);
   }
   merge(pr, head) {
